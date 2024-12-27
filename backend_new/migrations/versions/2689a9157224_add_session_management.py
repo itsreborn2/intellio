@@ -1,0 +1,168 @@
+"""add_session_management
+
+Revision ID: 2689a9157224
+Revises: 838fb74a58ec
+Create Date: 2024-12-23 22:25:30.592899
+
+"""
+from typing import Sequence, Union
+import uuid
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.sql import table, column
+
+# revision identifiers, used by Alembic.
+revision: str = '2689a9157224'
+down_revision: Union[str, None] = '838fb74a58ec'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # 1. sessions 테이블 생성
+    op.create_table('sessions',
+    sa.Column('id', postgresql.UUID(), nullable=False),
+    sa.Column('session_id', sa.String(length=255), nullable=False),
+    sa.Column('user_id', postgresql.UUID(), nullable=True),
+    sa.Column('is_anonymous', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('last_accessed_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_sessions_session_id'), 'sessions', ['session_id'], unique=True)
+
+    # 2. document_chunks 테이블 생성
+    op.create_table('document_chunks',
+    sa.Column('id', postgresql.UUID(), nullable=False),
+    sa.Column('document_id', postgresql.UUID(), nullable=False),
+    sa.Column('content', sa.String(), nullable=False),
+    sa.Column('embedding', sa.String(), nullable=True),
+    sa.Column('chunk_metadata', sa.String(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(['document_id'], ['documents.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+
+    # 3. documents 테이블 수정
+    op.alter_column('documents', 'file_path',
+               existing_type=sa.VARCHAR(),
+               nullable=False)
+    op.alter_column('documents', 'extracted_text',
+               existing_type=sa.TEXT(),
+               type_=sa.String(),
+               existing_nullable=True)
+    op.alter_column('documents', 'created_at',
+               existing_type=postgresql.TIMESTAMP(),
+               type_=sa.DateTime(timezone=True),
+               existing_nullable=False)
+    op.alter_column('documents', 'updated_at',
+               existing_type=postgresql.TIMESTAMP(),
+               type_=sa.DateTime(timezone=True),
+               existing_nullable=False)
+    op.drop_column('documents', 'name')
+    op.drop_column('documents', 'content')
+
+    # 4. projects 테이블 수정 - 세션 관련
+    # 먼저 nullable한 session_id 컬럼 추가
+    op.add_column('projects', sa.Column('session_id', postgresql.UUID(), nullable=True))
+    
+    # 기존 프로젝트들을 위한 세션 생성 및 연결
+    projects = table('projects',
+        column('id', postgresql.UUID),
+        column('user_id', postgresql.UUID),
+        column('session_id', postgresql.UUID)
+    )
+    sessions = table('sessions',
+        column('id', postgresql.UUID),
+        column('session_id', sa.String),
+        column('user_id', postgresql.UUID),
+        column('is_anonymous', sa.Boolean),
+        column('created_at', sa.DateTime),
+        column('last_accessed_at', sa.DateTime),
+        column('updated_at', sa.DateTime)
+    )
+    
+    # 각 프로젝트에 대해 세션 생성
+    connection = op.get_bind()
+    for project in connection.execute(sa.select(projects)):
+        session_id = uuid.uuid4()
+        # 세션 생성
+        connection.execute(
+            sessions.insert().values(
+                id=session_id,
+                session_id=str(uuid.uuid4()),
+                user_id=project.user_id,
+                is_anonymous=False,
+                created_at=sa.func.now(),
+                last_accessed_at=sa.func.now(),
+                updated_at=sa.func.now()
+            )
+        )
+        # 프로젝트에 세션 연결
+        connection.execute(
+            projects.update().where(projects.c.id == project.id).values(session_id=session_id)
+        )
+    
+    # session_id를 not null로 변경
+    op.alter_column('projects', 'session_id',
+               existing_type=postgresql.UUID(),
+               nullable=False)
+    
+    # user_id는 nullable로 변경 (비로그인 사용자 지원)
+    op.alter_column('projects', 'user_id',
+               existing_type=postgresql.UUID(),
+               nullable=True)
+    
+    # session_id에 대한 외래 키 제약 추가
+    op.create_foreign_key(None, 'projects', 'sessions', ['session_id'], ['id'])
+
+    # 5. users 테이블 수정
+    op.alter_column('users', 'updated_at',
+               existing_type=postgresql.TIMESTAMP(),
+               type_=sa.DateTime(timezone=True),
+               existing_nullable=False)
+    op.create_unique_constraint(None, 'users', ['email'])
+    op.drop_column('users', 'is_active')
+    op.drop_column('users', 'hashed_password')
+
+
+def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.add_column('users', sa.Column('hashed_password', sa.VARCHAR(), autoincrement=False, nullable=True))
+    op.add_column('users', sa.Column('is_active', sa.BOOLEAN(), autoincrement=False, nullable=True))
+    op.drop_constraint(None, 'users', type_='unique')
+    op.alter_column('users', 'updated_at',
+               existing_type=sa.DateTime(timezone=True),
+               type_=postgresql.TIMESTAMP(),
+               existing_nullable=False)
+    op.drop_constraint(None, 'projects', type_='foreignkey')
+    op.alter_column('projects', 'user_id',
+               existing_type=postgresql.UUID(),
+               nullable=False)
+    op.drop_column('projects', 'session_id')
+    op.add_column('documents', sa.Column('content', sa.TEXT(), autoincrement=False, nullable=True))
+    op.add_column('documents', sa.Column('name', sa.VARCHAR(), autoincrement=False, nullable=True))
+    op.alter_column('documents', 'updated_at',
+               existing_type=sa.DateTime(timezone=True),
+               type_=postgresql.TIMESTAMP(),
+               existing_nullable=False)
+    op.alter_column('documents', 'created_at',
+               existing_type=sa.DateTime(timezone=True),
+               type_=postgresql.TIMESTAMP(),
+               existing_nullable=False)
+    op.alter_column('documents', 'extracted_text',
+               existing_type=sa.String(),
+               type_=sa.TEXT(),
+               existing_nullable=True)
+    op.alter_column('documents', 'file_path',
+               existing_type=sa.VARCHAR(),
+               nullable=True)
+    op.drop_table('document_chunks')
+    op.drop_index(op.f('ix_sessions_session_id'), table_name='sessions')
+    op.drop_table('sessions')
+    # ### end Alembic commands ###

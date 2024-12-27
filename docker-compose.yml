@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: intellio
+      POSTGRES_USER: intellio_user
+      POSTGRES_PASSWORD: intellio123
+      # 성능 및 안정성 관련 설정
+      POSTGRES_MAX_CONNECTIONS: "100"
+      PGDATA: /var/lib/postgresql/data/pgdata
+      # 한글 인코딩 설정
+      LANG: ko_KR.utf8
+      # 타임존 설정
+      TZ: Asia/Seoul
+      # 로깅 설정
+      POSTGRES_LOGGING_COLLECTOR: "on"
+      POSTGRES_LOG_DIRECTORY: "pg_log"
+      POSTGRES_LOG_FILENAME: "postgresql-%Y-%m-%d_%H%M%S.log"
+      POSTGRES_LOG_STATEMENT: "ddl"
+      POSTGRES_LOG_CONNECTIONS: "on"
+      POSTGRES_LOG_DISCONNECTIONS: "on"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_logs:/var/lib/postgresql/data/pg_log
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intellio_user -d intellio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  tika:
+    image: apache/tika:latest
+    ports:
+      - "9998:9998"
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9998/tika"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:
+  postgres_logs:
