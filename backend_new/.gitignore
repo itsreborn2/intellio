@@ -49,5 +49,16 @@ cover/
 .ipynb_checkpoints
 
 # Environment variables
+.env
 .env.local
 .env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Credentials
+app/credentials/*.json
+*.pem
+*.key
+credentials.json
+service-account.json
