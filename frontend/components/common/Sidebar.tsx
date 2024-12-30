@@ -21,7 +21,8 @@ import {
   Trash2,
   AlertCircle,
   FileType,
-  PenSquare
+  PenSquare,
+  ScrollText
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -353,8 +354,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
       <div className={`w-[250px] border-r bg-gray-200 ${className || ''}`}>
         <div className="p-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Zap className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold text-primary">Intellio</span>
+            <ScrollText className="h-6 w-6 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">DocEasy</h2>
           </div>
           <TooltipProvider>
             <Tooltip>
