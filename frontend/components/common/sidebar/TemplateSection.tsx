@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from '@/components/ui/button'
-import { FileText, ChevronDown, ChevronRight } from 'lucide-react'
+import { FileType, ChevronDown, ChevronRight } from 'lucide-react'
 
 interface TemplateSectionProps {
   expandedSections: string[]
@@ -19,7 +19,7 @@ export function TemplateSection({
         className="w-full justify-start gap-2 px-2"
         onClick={() => toggleSection('templates')}
       >
-        <FileText className="h-4 w-4 flex-shrink-0" />
+        <FileType className="h-4 w-4 flex-shrink-0" />
         <span className="text-left flex-grow">템플릿</span>
         {expandedSections.includes('templates') ? (
           <ChevronDown className="h-4 w-4" />

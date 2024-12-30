@@ -41,6 +41,12 @@ interface AppState {
   isAnalyzing: boolean
   lastAutosaved: Date | null
   hasUnsavedChanges: boolean
+  recentProjects: {
+    today: any[]
+    yesterday: any[]
+    fourDaysAgo: any[]
+    older: any[]
+  }
 }
 
 type Action =
@@ -63,6 +69,7 @@ type Action =
   | { type: 'ADD_ANALYSIS_COLUMN'; payload: { columnName: string; prompt: string; originalPrompt: string } }
   | { type: 'UPDATE_COLUMN_RESULT'; payload: { documentId: string; columnName: string; result: any } }
   | { type: 'SET_LAST_AUTOSAVED'; payload: Date }
+  | { type: 'UPDATE_RECENT_PROJECTS'; payload: { today: any[], yesterday: any[], four_days_ago: any[] } }
 
 const initialState: AppState = {
   sessionId: null,
@@ -85,7 +92,13 @@ const initialState: AppState = {
   },
   isAnalyzing: false,
   lastAutosaved: null,
-  hasUnsavedChanges: false
+  hasUnsavedChanges: false,
+  recentProjects: {
+    today: [],
+    yesterday: [],
+    fourDaysAgo: [],
+    older: []
+  }
 }
 
 const AppContext = createContext<{
@@ -98,7 +111,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
 
   switch (action.type) {
     case 'SET_INITIAL_STATE':
-      return initialState
+      return {
+        ...initialState,
+        recentProjects: state.recentProjects // 프로젝트 목록 상태 유지
+      }
 
     case 'SET_SESSION':
       return {
@@ -116,7 +132,26 @@ const appReducer = (state: AppState, action: Action): AppState => {
       newState = {
         ...state,
         projectTitle: action.payload,
-        hasUnsavedChanges: true
+        hasUnsavedChanges: true,
+        // 현재 프로젝트의 제목이 최근 프로젝트 목록에 있으면 즉시 업데이트
+        recentProjects: {
+          ...state.recentProjects,
+          today: state.recentProjects.today.map(project => 
+            project.id === state.currentProjectId 
+              ? { ...project, title: action.payload }
+              : project
+          ),
+          yesterday: state.recentProjects.yesterday.map(project => 
+            project.id === state.currentProjectId 
+              ? { ...project, title: action.payload }
+              : project
+          ),
+          fourDaysAgo: state.recentProjects.fourDaysAgo.map(project => 
+            project.id === state.currentProjectId 
+              ? { ...project, title: action.payload }
+              : project
+          )
+        }
       };
       break;
 
@@ -486,6 +521,17 @@ const appReducer = (state: AppState, action: Action): AppState => {
         hasUnsavedChanges: false
       };
       break;
+
+    case 'UPDATE_RECENT_PROJECTS':
+      return {
+        ...state,
+        recentProjects: {
+          today: action.payload.today,
+          yesterday: action.payload.yesterday,
+          fourDaysAgo: action.payload.four_days_ago,
+          older: []
+        }
+      }
 
     default:
       newState = state;

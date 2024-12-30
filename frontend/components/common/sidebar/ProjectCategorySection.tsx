@@ -15,23 +15,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Folder, Plus, Trash2, FileText, ChevronDown, ChevronRight } from 'lucide-react'
-import { AlertCircle } from 'lucide-react'
+import { Folder, Plus, Trash2, FileText, ChevronDown, ChevronRight, History, AlertCircle } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
-import * as api from '@/services/api'
+import { getRecentProjects } from '@/services/api'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Category, Project } from '@/services/api'
+import { useApp } from '@/contexts/AppContext'
 
 interface ProjectCategorySectionProps {
   expandedSections: string[]
   toggleSection: (section: string) => void
-  recentProjects: {
-    today: Project[]
-    yesterday: Project[]
-    fourDaysAgo: Project[]
-    older: Project[]
-  }
   categories: Category[]
   setCategories: (categories: Category[]) => void
   dispatch: any
@@ -40,12 +34,12 @@ interface ProjectCategorySectionProps {
 export function ProjectCategorySection({
   expandedSections,
   toggleSection,
-  recentProjects,
   categories,
   setCategories,
   dispatch
 }: ProjectCategorySectionProps) {
   const router = useRouter()
+  const { state } = useApp()
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [categoryError, setCategoryError] = useState('')
@@ -91,22 +85,22 @@ export function ProjectCategorySection({
     }
   }
 
-  const handleProjectClick = async (projectId: string) => {
-    try {
-      // 1. 먼저 상태 초기화
-      dispatch({ type: 'SET_INITIAL_STATE' })
-      
-      const project = await api.getProject(projectId)
-      
-      // 2. 프로젝트 기본 정보 설정
-      dispatch({ type: 'SET_CURRENT_PROJECT', payload: projectId })
-      dispatch({ type: 'SET_PROJECT_TITLE', payload: project.name })
-      
-      // 3. 페이지 이동
-      router.push(`/projects/${projectId}`)
-    } catch (error) {
-      console.error('프로젝트 로드 실패:', error)
+  useEffect(() => {
+    const fetchRecentProjects = async () => {
+      try {
+        const response = await getRecentProjects()
+        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: response })
+      } catch (error) {
+        console.error('최근 프로젝트 목록을 가져오는데 실패했습니다:', error)
+      }
     }
+
+    // 컴포넌트 마운트 시와 currentProject가 변경될 때 프로젝트 목록 새로고침
+    fetchRecentProjects()
+  }, [dispatch, state.currentProjectId])
+
+  const handleProjectClick = (projectId: string) => {
+    router.push(`/projects/${projectId}`)
   }
 
   const handleDeleteCategory = async () => {
@@ -168,8 +162,10 @@ export function ProjectCategorySection({
             className="w-full justify-start gap-2 px-2"
             onClick={() => toggleSection('recent')}
           >
-            <FileText className="h-4 w-4 flex-shrink-0" />
-            <span className="text-left flex-grow">최근 프로젝트</span>
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              <span className="text-sm font-medium">최근 프로젝트</span>
+            </div>
             {expandedSections.includes('recent') ? (
               <ChevronDown className="h-4 w-4" />
             ) : (
@@ -178,129 +174,111 @@ export function ProjectCategorySection({
           </Button>
           
           {expandedSections.includes('recent') && (
-            <div className="space-y-1">
-              <Droppable droppableId="recent-projects">
-                {(provided) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className="space-y-4"
-                  >
-                    {/* 오늘 */}
-                    {recentProjects.today.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium text-gray-500 pl-4">오늘</div>
-                        {recentProjects.today.map((project, index) => (
-                          <Draggable
-                            key={project.id}
-                            draggableId={project.id}
-                            index={index}
-                          >
-                            {(provided, snapshot) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`
-                                  relative flex items-center
-                                  ${snapshot.isDragging ? 'opacity-50' : ''}
-                                `}
+            <Droppable droppableId="recent-projects">
+              {(provided) => (
+                <div ref={provided.innerRef} {...provided.droppableProps}>
+                  {state.recentProjects.today.length > 0 && (
+                    <div>
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">오늘</div>
+                      {state.recentProjects.today.map((project, index) => (
+                        <Draggable
+                          key={project.id}
+                          draggableId={project.id}
+                          index={index}
+                        >
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`relative flex items-center ${snapshot.isDragging ? 'opacity-50' : ''}`}
+                            >
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start gap-2 px-2"
+                                onClick={() => handleProjectClick(project.id)}
                               >
-                                <Button
-                                  variant="ghost"
-                                  className="w-full justify-start text-sm h-8 pl-4"
-                                  onClick={() => handleProjectClick(project.id)}
-                                >
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  <span className="flex-1 text-left truncate">
-                                    {project.name}
-                                  </span>
-                                </Button>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                      </div>
-                    )}
+                                <FileText className="h-4 w-4 mr-2" />
+                                <span className="flex-1 text-left truncate">
+                                  {project.title}
+                                </span>
+                              </Button>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                    </div>
+                  )}
 
-                    {/* 어제 */}
-                    {recentProjects.yesterday.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium text-gray-500 pl-4">어제</div>
-                        {recentProjects.yesterday.map((project, index) => (
-                          <Draggable
-                            key={project.id}
-                            draggableId={project.id}
-                            index={recentProjects.today.length + index}
-                          >
-                            {(provided, snapshot) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`
-                                  relative flex items-center
-                                  ${snapshot.isDragging ? 'opacity-50' : ''}
-                                `}
+                  {state.recentProjects.yesterday.length > 0 && (
+                    <div>
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">어제</div>
+                      {state.recentProjects.yesterday.map((project, index) => (
+                        <Draggable
+                          key={project.id}
+                          draggableId={project.id}
+                          index={state.recentProjects.today.length + index}
+                        >
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`relative flex items-center ${snapshot.isDragging ? 'opacity-50' : ''}`}
+                            >
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start gap-2 px-2"
+                                onClick={() => handleProjectClick(project.id)}
                               >
-                                <Button
-                                  variant="ghost"
-                                  className="w-full justify-start text-sm h-8 pl-4"
-                                  onClick={() => handleProjectClick(project.id)}
-                                >
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  <span className="flex-1 text-left truncate">
-                                    {project.name}
-                                  </span>
-                                </Button>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                      </div>
-                    )}
+                                <FileText className="h-4 w-4 mr-2" />
+                                <span className="flex-1 text-left truncate">
+                                  {project.title}
+                                </span>
+                              </Button>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                    </div>
+                  )}
 
-                    {/* 4일 전 */}
-                    {recentProjects.fourDaysAgo.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium text-gray-500 pl-4">4일 전</div>
-                        {recentProjects.fourDaysAgo.map((project, index) => (
-                          <Draggable
-                            key={project.id}
-                            draggableId={project.id}
-                            index={recentProjects.today.length + recentProjects.yesterday.length + index}
-                          >
-                            {(provided, snapshot) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`
-                                  relative flex items-center
-                                  ${snapshot.isDragging ? 'opacity-50' : ''}
-                                `}
+                  {state.recentProjects.fourDaysAgo.length > 0 && (
+                    <div>
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">4일전</div>
+                      {state.recentProjects.fourDaysAgo.map((project, index) => (
+                        <Draggable
+                          key={project.id}
+                          draggableId={project.id}
+                          index={state.recentProjects.today.length + state.recentProjects.yesterday.length + index}
+                        >
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`relative flex items-center ${snapshot.isDragging ? 'opacity-50' : ''}`}
+                            >
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start gap-2 px-2"
+                                onClick={() => handleProjectClick(project.id)}
                               >
-                                <Button
-                                  variant="ghost"
-                                  className="w-full justify-start text-sm h-8 pl-4"
-                                  onClick={() => handleProjectClick(project.id)}
-                                >
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  <span className="flex-1 text-left truncate">
-                                    {project.name}
-                                  </span>
-                                </Button>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                      </div>
-                    )}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </div>
+                                <FileText className="h-4 w-4 mr-2" />
+                                <span className="flex-1 text-left truncate">
+                                  {project.title}
+                                </span>
+                              </Button>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                    </div>
+                  )}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
           )}
         </div>
 
@@ -349,7 +327,7 @@ export function ProjectCategorySection({
                       </div>
                       {provided.placeholder}
                     </div>
-                  )}
+                  )} 
                 </Droppable>
               ))}
               

@@ -165,7 +165,7 @@ const sanitizeFileName = (fileName: string): string => {
 
 export const uploadDocument = async (
   projectId: string, 
-  files: File | File[],
+  files: File | File[],// eslint-disable-next-line @typescript-eslint/no-explicit-any
   callbacks?: UploadProgressCallback
 ): Promise<UploadResponse> => {
   // 단일 파일을 배열로 통일
@@ -309,7 +309,7 @@ export const searchTable = async (projectId: string, documentIds: string[], quer
 
 export const chat = async (
   projectId: string,
-  documentIds: string[],
+  documentIds: string[],// eslint-disable-next-line @typescript-eslint/no-explicit-any
   message: string
 ): Promise<{ message: string }> => {
   try {
@@ -403,7 +403,7 @@ export const getRecentProjects = async (): Promise<{
   }>;
 }> => {
   try {
-    const response = await fetch(`${API_ENDPOINT}/projects/recent`, {
+    const response = await fetch(`${API_ENDPOINT}/projects/recent?limit=3`, {
       credentials: 'include'
     })
 

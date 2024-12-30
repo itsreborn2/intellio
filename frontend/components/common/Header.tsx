@@ -5,27 +5,73 @@ import { Settings, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
+import * as api from "@/services/api"
 
 export const Header = ({ className }: { className?: string }) => {
   const { state, dispatch } = useApp()
   const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [editingTitle, setEditingTitle] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   const handleTitleClick = () => {
+    setEditingTitle(state.projectTitle || 'Untitled Project')
     setIsEditingTitle(true)
   }
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch({ type: 'SET_PROJECT_TITLE', payload: e.target.value })
+    setEditingTitle(e.target.value)
+  }
+
+  const handleTitleSubmit = async () => {
+    // 빈 제목이면 기존 제목으로 복원
+    if (editingTitle.trim() === '') {
+      setEditingTitle(state.projectTitle || 'Untitled Project')
+      setIsEditingTitle(false)
+      return
+    }
+    
+    dispatch({ type: 'SET_PROJECT_TITLE', payload: editingTitle.trim() })
+    setIsEditingTitle(false)
+
+    // 현재 프로젝트가 있을 때만 저장
+    if (state.currentProjectId) {
+      try {
+        // 프로젝트 상태 저장
+        await api.autosaveProject(state.currentProjectId, {
+          title: editingTitle.trim(),
+          documents: state.documents,
+          messages: state.messages,
+          analysis: state.analysis,
+          currentView: state.currentView
+        });
+
+        // 프로젝트 목록 새로고침
+        const response = await api.getRecentProjects();
+        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: response });
+      } catch (error) {
+        console.error('Error saving project title:', error);
+      }
+    }
   }
 
   const handleTitleBlur = () => {
-    setIsEditingTitle(false)
+    handleTitleSubmit()
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleTitleSubmit()
+    } else if (e.key === 'Escape') {
+      setIsEditingTitle(false)
+      setEditingTitle(state.projectTitle || 'Untitled Project')
+    }
   }
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
       titleInputRef.current.focus()
+      titleInputRef.current.select() // 텍스트 전체 선택
     }
   }, [isEditingTitle])
 
@@ -35,9 +81,10 @@ export const Header = ({ className }: { className?: string }) => {
         {isEditingTitle ? (
           <Input
             ref={titleInputRef}
-            value={state.projectTitle || 'Untitled Project'}
+            value={editingTitle}
             onChange={handleTitleChange}
             onBlur={handleTitleBlur}
+            onKeyDown={handleKeyDown}
             className="text-lg font-semibold"
           />
         ) : (

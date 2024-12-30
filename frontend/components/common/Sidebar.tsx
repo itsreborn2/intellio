@@ -11,7 +11,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { cn } from "@/lib/utils"
 import {
   Folder,
-  Clock,
+  History,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -20,7 +20,7 @@ import {
   AlertTriangle,
   Trash2,
   AlertCircle,
-  Layout,
+  FileType,
   PenSquare
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -34,6 +34,12 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { ProjectCategorySection } from './sidebar/ProjectCategorySection'
 import { TemplateSection } from './sidebar/TemplateSection'
 
@@ -350,26 +356,63 @@ export const Sidebar = ({ className }: SidebarProps) => {
             <Zap className="h-6 w-6 text-primary" />
             <span className="text-xl font-bold text-primary">Intellio</span>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <PenSquare className="h-4 w-4" />
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8"
+                  onClick={async () => {
+                    setIsLoading(true);
+                    try {
+                      // 현재 프로젝트 상태 저장
+                      if (state.currentProject) {
+                        await api.autosaveProject(state.currentProject, {
+                          title: state.projectTitle,
+                          documents: state.documents,
+                          messages: state.messages,
+                          analysis: state.analysis,
+                          currentView: state.currentView
+                        });
+                      }
+
+                      // 앱 상태 초기화
+                      dispatch({ type: 'SET_INITIAL_STATE' });
+                      
+                    } catch (error) {
+                      console.error('Error saving current project:', error);
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                >
+                  <PenSquare className={cn("h-4 w-4", isLoading && "animate-spin")} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>새로 만들기</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         <div className="flex-1 overflow-auto p-2">
           <div className="space-y-6">
-            <ProjectCategorySection
-              expandedSections={expandedSections}
-              toggleSection={toggleSection}
-              recentProjects={recentProjects}
-              categories={categories}
-              setCategories={setCategories}
-              dispatch={dispatch}
-            />
-            
             <TemplateSection
               expandedSections={expandedSections}
               toggleSection={toggleSection}
             />
+            <div className="my-4">
+              <ProjectCategorySection
+                expandedSections={expandedSections}
+                toggleSection={toggleSection}
+                recentProjects={recentProjects}
+                categories={categories}
+                setCategories={setCategories}
+                dispatch={dispatch}
+              />
+            </div>
           </div>
         </div>
       </div>
