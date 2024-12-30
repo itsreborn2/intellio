@@ -7,7 +7,7 @@ import '@/styles/globals.css'
 
 export const metadata = {
   title: 'DocEasy',
-  description: '문서 분석 및 추출 서비스',
+  description: '문서 분석 및 관리 플랫폼',
 }
 
 export default function RootLayout({
@@ -17,9 +17,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <title>DocEasy</title>
-      </head>
       <body className="bg-background text-foreground">
         <AppProvider>
           <div className="flex h-screen overflow-hidden bg-background">
@@ -30,7 +27,7 @@ export default function RootLayout({
             <div className="flex-1 ml-[250px]">
               {/* 헤더 */}
               <Header className="fixed top-0 right-0 left-[250px] h-[56px] z-40 bg-background border-b" />
-              
+　　 　 　 　
               {/* 메인 콘텐츠 영역 */}
               <main className="fixed top-[56px] right-0 left-[250px] bottom-0 overflow-hidden">
                 {children}
