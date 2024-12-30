@@ -5,6 +5,11 @@ import { Sidebar } from '@/components/common/Sidebar'
 import { AppProvider } from '@/contexts/AppContext'
 import '@/styles/globals.css'
 
+export const metadata = {
+  title: 'DocEasy',
+  description: '문서 분석 및 추출 서비스',
+}
+
 export default function RootLayout({
   children
 }: {
@@ -12,6 +17,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <title>DocEasy</title>
+      </head>
       <body className="bg-background text-foreground">
         <AppProvider>
           <div className="flex h-screen overflow-hidden bg-background">
