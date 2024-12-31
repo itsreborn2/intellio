@@ -24,7 +24,7 @@ export const DefaultTemplate = () => {
       case 'chat':
         return (
           <div className="h-full w-full flex flex-col">
-            <div className={`transition-all duration-300 ${chatExpanded ? 'h-[50%]' : 'h-[50px]'} bg-background`}>
+            <div className={`${chatExpanded ? 'h-[50%]' : 'hidden'} bg-background`}>
               <ChatSection />
             </div>
             <div className="relative">
@@ -39,7 +39,7 @@ export const DefaultTemplate = () => {
                 )}
               </button>
             </div>
-            <div className="flex-1 bg-background">
+            <div className="flex-1 bg-background overflow-auto">
               <TableSection />
             </div>
           </div>
@@ -55,7 +55,7 @@ export const DefaultTemplate = () => {
   }
 
   return (
-    <div className="h-full w-full bg-background">
+    <div className="h-full">
       {renderContent()}
     </div>
   )

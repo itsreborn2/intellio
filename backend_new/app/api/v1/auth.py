@@ -50,7 +50,8 @@ async def register(
         value=session.session_id,
         max_age=30 * 24 * 60 * 60,  # 30일
         httponly=True,
-        samesite="lax"
+        secure=True,  # HTTPS 전용
+        samesite="strict"  # CSRF 방지 강화
     )
     
     return UserResponse(
@@ -90,7 +91,8 @@ async def login(
         value=session.session_id,
         max_age=30 * 24 * 60 * 60,  # 30일
         httponly=True,
-        samesite="lax"
+        secure=True,  # HTTPS 전용
+        samesite="strict"  # CSRF 방지 강화
     )
     
     return UserResponse(

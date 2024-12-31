@@ -34,7 +34,8 @@ async def create_session(
         value=session.session_id,
         max_age=30 * 24 * 60 * 60,  # 30일
         httponly=True,
-        samesite="lax"
+        secure=True,  # HTTPS 전용
+        samesite="strict"  # CSRF 방지 강화
     )
     
     return session
@@ -77,7 +78,8 @@ async def delete_current_session(
     response.delete_cookie(
         key="session_id",
         httponly=True,
-        samesite="lax"
+        secure=True,  # HTTPS 전용
+        samesite="strict"  # CSRF 방지 강화
     )
     
     return {"message": "세션이 삭제되었습니다."}

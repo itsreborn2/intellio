@@ -84,12 +84,6 @@ export const Sidebar = ({ className }: SidebarProps) => {
     { id: 'template2', name: '계약서 분석', description: '계약서 분석 전용 템플릿' },
     { id: 'template3', name: '이력서 분석', description: '이력서 분석 전용 템플릿' },
   ]);
-  const [recentProjects, setRecentProjects] = useState<ProjectGroup>({
-    today: [],
-    yesterday: [],
-    fourDaysAgo: [],
-    older: []
-  })
   const [isLoading, setIsLoading] = useState(true)
   const [expandedSections, setExpandedSections] = useState<string[]>(['recent', 'template'])
   const [newCategoryName, setNewCategoryName] = useState('')
@@ -99,84 +93,42 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
 
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchRecentProjects = async () => {
       try {
         const response = await api.getRecentProjects()
+        console.log('Recent Projects API Response:', {
+          response,
+          today: response.today,
+          yesterday: response.yesterday,
+          four_days_ago: response.four_days_ago
+        })
         
-        const groupedProjects: ProjectGroup = {
-          today: response.today.map(item => ({
-            id: item.id,
-            name: item.title,
-            created_at: item.created_at,
-            formatted_date: item.formatted_date,
-            is_temporary: true,
-            will_be_deleted: false
-          })),
-          yesterday: response.yesterday.map(item => ({
-            id: item.id,
-            name: item.title,
-            created_at: item.created_at,
-            formatted_date: item.formatted_date,
-            is_temporary: true,
-            will_be_deleted: false
-          })),
-          fourDaysAgo: response.four_days_ago.map(item => ({
-            id: item.id,
-            name: item.title,
-            created_at: item.created_at,
-            formatted_date: item.formatted_date,
-            is_temporary: true,
-            will_be_deleted: true
-          })),
-          older: []
-        }
-
-        setRecentProjects(groupedProjects)
+        dispatch({ 
+          type: 'UPDATE_RECENT_PROJECTS', 
+          payload: response 
+        })
+        setIsLoading(false)
       } catch (error) {
-        console.error('프로젝트 목록 조회 실패:', error)
-      } finally {
+        console.error('최근 프로젝트 로딩 실패:', error)
         setIsLoading(false)
       }
     }
 
-    fetchProjects()
-  }, [])
+    // 초기 로딩 시에만 프로젝트 목록을 가져옴
+    if (isLoading) {
+      fetchRecentProjects()
+    }
+  }, [dispatch, isLoading])
 
   useEffect(() => {
     const handleProjectCreated = () => {
       const fetchProjects = async () => {
         try {
           const response = await api.getRecentProjects()
-          
-          const groupedProjects: ProjectGroup = {
-            today: response.today.map(item => ({
-              id: item.id,
-              name: item.title,
-              created_at: item.created_at,
-              formatted_date: item.formatted_date,
-              is_temporary: true,
-              will_be_deleted: false
-            })),
-            yesterday: response.yesterday.map(item => ({
-              id: item.id,
-              name: item.title,
-              created_at: item.created_at,
-              formatted_date: item.formatted_date,
-              is_temporary: true,
-              will_be_deleted: false
-            })),
-            fourDaysAgo: response.four_days_ago.map(item => ({
-              id: item.id,
-              name: item.title,
-              created_at: item.created_at,
-              formatted_date: item.formatted_date,
-              is_temporary: true,
-              will_be_deleted: true
-            })),
-            older: []
-          }
-
-          setRecentProjects(groupedProjects)
+          dispatch({ 
+            type: 'UPDATE_RECENT_PROJECTS', 
+            payload: response.data 
+          })
         } catch (error) {
           console.error('프로젝트 목록 조회 실패:', error)
         } finally {
@@ -191,7 +143,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
     return () => {
       window.removeEventListener('projectCreated', handleProjectCreated)
     }
-  }, [])
+  }, [dispatch])
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -228,10 +180,10 @@ export const Sidebar = ({ className }: SidebarProps) => {
           throw new Error('프로젝트 이동에 실패했습니다.');
         }
 
-        const updatedRecentProjects = recentProjects.filter(
-          project => project.id !== sourceId
-        );
-        setRecentProjects(updatedRecentProjects);
+        dispatch({ 
+          type: 'UPDATE_RECENT_PROJECTS', 
+          payload: state.recentProjects.filter(project => project.id !== sourceId) 
+        })
       } catch (error) {
         console.error('프로젝트 이동 실패:', error);
       }
@@ -408,7 +360,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
               <ProjectCategorySection
                 expandedSections={expandedSections}
                 toggleSection={toggleSection}
-                recentProjects={recentProjects}
+                recentProjects={state.recentProjects}
                 categories={categories}
                 setCategories={setCategories}
                 dispatch={dispatch}

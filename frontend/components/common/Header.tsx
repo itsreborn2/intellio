@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
 import * as api from "@/services/api"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { FontSettings } from "@/components/settings/FontSettings"
 
 export const Header = ({ className }: { className?: string }) => {
   const { state, dispatch } = useApp()
@@ -30,7 +38,8 @@ export const Header = ({ className }: { className?: string }) => {
       return
     }
     
-    dispatch({ type: 'SET_PROJECT_TITLE', payload: editingTitle.trim() })
+    const newTitle = editingTitle.trim()
+    dispatch({ type: 'SET_PROJECT_TITLE', payload: newTitle })
     setIsEditingTitle(false)
 
     // 현재 프로젝트가 있을 때만 저장
@@ -38,18 +47,14 @@ export const Header = ({ className }: { className?: string }) => {
       try {
         // 프로젝트 상태 저장
         await api.autosaveProject(state.currentProjectId, {
-          title: editingTitle.trim(),
+          title: newTitle,
           documents: state.documents,
           messages: state.messages,
           analysis: state.analysis,
           currentView: state.currentView
         });
-
-        // 프로젝트 목록 새로고침
-        const response = await api.getRecentProjects();
-        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: response });
       } catch (error) {
-        console.error('Error saving project title:', error);
+        console.error('프로젝트 저장 실패:', error)
       }
     }
   }
@@ -94,9 +99,19 @@ export const Header = ({ className }: { className?: string }) => {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Settings className="h-4 w-4" />
-        </Button>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>설정</DialogTitle>
+            </DialogHeader>
+            <FontSettings />
+          </DialogContent>
+        </Dialog>
         <Button variant="ghost" size="icon" className="h-8 w-8">
           <User className="h-4 w-4" />
         </Button>
