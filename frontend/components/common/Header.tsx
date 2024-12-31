@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
 import * as api from "@/services/api"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { FontSettings } from "@/components/settings/FontSettings"
 
 export const Header = ({ className }: { className?: string }) => {
   const { state, dispatch } = useApp()
@@ -91,9 +99,19 @@ export const Header = ({ className }: { className?: string }) => {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Settings className="h-4 w-4" />
-        </Button>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>설정</DialogTitle>
+            </DialogHeader>
+            <FontSettings />
+          </DialogContent>
+        </Dialog>
         <Button variant="ghost" size="icon" className="h-8 w-8">
           <User className="h-4 w-4" />
         </Button>

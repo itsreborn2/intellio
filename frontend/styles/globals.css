@@ -75,6 +75,19 @@
   }
 }
 
+/* 폰트 크기 설정 */
+:root[data-font-size="small"] {
+  font-size: 14px;
+}
+
+:root[data-font-size="medium"] {
+  font-size: 16px;
+}
+
+:root[data-font-size="large"] {
+  font-size: 18px;
+}
+
 @layer components {
   .typing-indicator {
     display: flex;
