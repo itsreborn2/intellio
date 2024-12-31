@@ -5,11 +5,13 @@ import { ChatSection } from './components/ChatSection'
 import { TableSection } from './components/TableSection'
 import { UploadSection } from './components/UploadSection'
 import { useState } from 'react'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { Maximize2, Minimize2 } from 'lucide-react'
+import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export const DefaultTemplate = () => {
   const { state } = useApp()
-  const [chatExpanded, setChatExpanded] = useState(true)
+  const [expandedSection, setExpandedSection] = useState<'none' | 'chat' | 'table'>('none')
 
   const renderContent = () => {
     switch (state.currentView) {
@@ -24,22 +26,68 @@ export const DefaultTemplate = () => {
       case 'chat':
         return (
           <div className="h-full w-full flex flex-col">
-            <div className={`${chatExpanded ? 'h-[50%]' : 'hidden'} bg-background`}>
+            <div className={`relative bg-background ${
+              expandedSection === 'chat' 
+                ? 'h-full' 
+                : expandedSection === 'table' 
+                  ? 'hidden' 
+                  : 'h-[50%]'
+            }`}>
+              <div className="absolute right-2 top-2 z-30">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 border bg-background hover:bg-accent"
+                        onClick={() => setExpandedSection(expandedSection === 'chat' ? 'none' : 'chat')}
+                      >
+                        {expandedSection === 'chat' ? (
+                          <Minimize2 className="h-4 w-4" />
+                        ) : (
+                          <Maximize2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{expandedSection === 'chat' ? '복원' : '채팅 영역 최대화'}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <ChatSection />
             </div>
-            <div className="relative">
-              <button
-                className="absolute left-1/2 -translate-x-1/2 -top-3 z-30 bg-background border rounded-full p-1 shadow-md hover:bg-muted/50 transition-colors"
-                onClick={() => setChatExpanded(!chatExpanded)}
-              >
-                {chatExpanded ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-            <div className="flex-1 bg-background overflow-auto">
+            <div className={`relative bg-background ${
+              expandedSection === 'table' 
+                ? 'h-full' 
+                : expandedSection === 'chat' 
+                  ? 'hidden' 
+                  : 'flex-1'
+            } overflow-auto`}>
+              <div className="absolute right-2 top-2 z-30">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 border bg-background hover:bg-accent"
+                        onClick={() => setExpandedSection(expandedSection === 'table' ? 'none' : 'table')}
+                      >
+                        {expandedSection === 'table' ? (
+                          <Minimize2 className="h-4 w-4" />
+                        ) : (
+                          <Maximize2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{expandedSection === 'table' ? '복원' : '테이블 영역 최대화'}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <TableSection />
             </div>
           </div>
@@ -55,7 +103,7 @@ export const DefaultTemplate = () => {
   }
 
   return (
-    <div className="h-full">
+    <div className="w-full h-full">
       {renderContent()}
     </div>
   )
