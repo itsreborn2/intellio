@@ -28,6 +28,9 @@ export const ChatSection = () => {
     const currentInput = input
     setInput('')
 
+    // 분석 시작 상태 설정
+    dispatch({ type: 'SET_IS_ANALYZING', payload: true })
+
     // 사용자 메시지 추가 (모든 모드에서 공통)
     dispatch({
       type: 'ADD_MESSAGE',
@@ -40,6 +43,7 @@ export const ChatSection = () => {
     if (state.analysis.mode === 'table') {
       if (!state.currentProjectId || !state.analysis.selectedDocumentIds.length) {
         console.warn('프로젝트 ID 또는 선택된 문서가 없습니다')
+        dispatch({ type: 'SET_IS_ANALYZING', payload: false })
         return
       }
 
@@ -88,9 +92,11 @@ export const ChatSection = () => {
             content: '죄송합니다. 분석 중 오류가 발생했습니다.'
           }
         })
+      } finally {
+        dispatch({ type: 'SET_IS_ANALYZING', payload: false })
       }
     } else {
-      // 채팅 모드: 기존 로직 유지
+      // 채팅 모드
       try {
         const response = await chat(
           state.currentProjectId!,
@@ -114,6 +120,8 @@ export const ChatSection = () => {
             content: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.'
           }
         })
+      } finally {
+        dispatch({ type: 'SET_IS_ANALYZING', payload: false })
       }
     }
   }
@@ -171,7 +179,7 @@ export const ChatSection = () => {
                     </div>
                   </div>
                 </div>
-                <div className="text-xs text-gray-500 ml-8 mt-1">AI가 응답을 생성하는 중...</div>
+                <div className="text-xs text-gray-500 ml-8 mt-1">분석중...</div>
               </div>
             )}
             <div ref={messagesEndRef} />
