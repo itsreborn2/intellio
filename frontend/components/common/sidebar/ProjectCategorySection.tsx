@@ -22,6 +22,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Category, Project } from '@/services/api'
 import { useApp } from '@/contexts/AppContext'
+import { cn } from '@/lib/utils'
 
 interface ProjectCategorySectionProps {
   expandedSections: string[]
@@ -99,6 +100,19 @@ export function ProjectCategorySection({
     fetchRecentProjects()
   }, [dispatch, state.currentProjectId])
 
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const data = await api.getCategories()
+        setCategories(data)
+      } catch (error) {
+        console.error('카테고리 로드 실패:', error)
+      }
+    }
+
+    loadCategories()
+  }, [setCategories])
+
   const handleProjectClick = (projectId: string) => {
     router.push(`/projects/${projectId}`)
   }
@@ -152,6 +166,51 @@ export function ProjectCategorySection({
     }
   }
 
+  const renderProjects = (projects: any[], sectionTitle: string) => {
+    console.log('Rendering projects:', { sectionTitle, projects });
+    
+    if (!projects || projects.length === 0) return null;
+    
+    return (
+      <div className="space-y-1">
+        <div className="text-xs text-gray-500 px-2">{sectionTitle}</div>
+        {projects.map((project) => {
+          console.log('Rendering project:', project);
+          return (
+            <Draggable
+              key={project.id}
+              draggableId={project.id}
+              index={projects.indexOf(project)}
+            >
+              {(provided, snapshot) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.draggableProps}
+                  {...provided.dragHandleProps}
+                  className={`relative flex items-center ${snapshot.isDragging ? 'opacity-50' : ''}`}
+                >
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "w-full justify-start gap-2 px-2",
+                      state.currentProjectId === project.id && "bg-gray-100"
+                    )}
+                    onClick={() => handleProjectClick(project.id)}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    <span className="flex-1 text-left truncate">
+                      {project.title || project.name || '(제목 없음)'}
+                    </span>
+                  </Button>
+                </div>
+              )}
+            </Draggable>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="space-y-6">
@@ -177,104 +236,9 @@ export function ProjectCategorySection({
             <Droppable droppableId="recent-projects">
               {(provided) => (
                 <div ref={provided.innerRef} {...provided.droppableProps}>
-                  {state.recentProjects.today.length > 0 && (
-                    <div>
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">오늘</div>
-                      {state.recentProjects.today.map((project, index) => (
-                        <Draggable
-                          key={project.id}
-                          draggableId={project.id}
-                          index={index}
-                        >
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`relative flex items-center ${snapshot.isDragging ? 'opacity-50' : ''}`}
-                            >
-                              <Button
-                                variant="ghost"
-                                className="w-full justify-start gap-2 px-2"
-                                onClick={() => handleProjectClick(project.id)}
-                              >
-                                <FileText className="h-4 w-4 mr-2" />
-                                <span className="flex-1 text-left truncate">
-                                  {project.title}
-                                </span>
-                              </Button>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                    </div>
-                  )}
-
-                  {state.recentProjects.yesterday.length > 0 && (
-                    <div>
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">어제</div>
-                      {state.recentProjects.yesterday.map((project, index) => (
-                        <Draggable
-                          key={project.id}
-                          draggableId={project.id}
-                          index={state.recentProjects.today.length + index}
-                        >
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`relative flex items-center ${snapshot.isDragging ? 'opacity-50' : ''}`}
-                            >
-                              <Button
-                                variant="ghost"
-                                className="w-full justify-start gap-2 px-2"
-                                onClick={() => handleProjectClick(project.id)}
-                              >
-                                <FileText className="h-4 w-4 mr-2" />
-                                <span className="flex-1 text-left truncate">
-                                  {project.title}
-                                </span>
-                              </Button>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                    </div>
-                  )}
-
-                  {state.recentProjects.fourDaysAgo.length > 0 && (
-                    <div>
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">4일전</div>
-                      {state.recentProjects.fourDaysAgo.map((project, index) => (
-                        <Draggable
-                          key={project.id}
-                          draggableId={project.id}
-                          index={state.recentProjects.today.length + state.recentProjects.yesterday.length + index}
-                        >
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`relative flex items-center ${snapshot.isDragging ? 'opacity-50' : ''}`}
-                            >
-                              <Button
-                                variant="ghost"
-                                className="w-full justify-start gap-2 px-2"
-                                onClick={() => handleProjectClick(project.id)}
-                              >
-                                <FileText className="h-4 w-4 mr-2" />
-                                <span className="flex-1 text-left truncate">
-                                  {project.title}
-                                </span>
-                              </Button>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                    </div>
-                  )}
+                  {renderProjects(state.recentProjects.today, '오늘')}
+                  {renderProjects(state.recentProjects.yesterday, '어제')}
+                  {renderProjects(state.recentProjects.fourDaysAgo, '4일전')}
                   {provided.placeholder}
                 </div>
               )}

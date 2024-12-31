@@ -30,7 +30,8 @@ export const Header = ({ className }: { className?: string }) => {
       return
     }
     
-    dispatch({ type: 'SET_PROJECT_TITLE', payload: editingTitle.trim() })
+    const newTitle = editingTitle.trim()
+    dispatch({ type: 'SET_PROJECT_TITLE', payload: newTitle })
     setIsEditingTitle(false)
 
     // 현재 프로젝트가 있을 때만 저장
@@ -38,18 +39,14 @@ export const Header = ({ className }: { className?: string }) => {
       try {
         // 프로젝트 상태 저장
         await api.autosaveProject(state.currentProjectId, {
-          title: editingTitle.trim(),
+          title: newTitle,
           documents: state.documents,
           messages: state.messages,
           analysis: state.analysis,
           currentView: state.currentView
         });
-
-        // 프로젝트 목록 새로고침
-        const response = await api.getRecentProjects();
-        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: response });
       } catch (error) {
-        console.error('Error saving project title:', error);
+        console.error('프로젝트 저장 실패:', error)
       }
     }
   }

@@ -19,6 +19,14 @@ interface TableResponse {
   columns: TableColumn[];
 }
 
+interface RecentProject {
+  id: string
+  title: string
+  created_at: string
+  formatted_date?: string
+  description?: string
+}
+
 interface AppState {
   sessionId: string | null
   currentProjectId: string | null
@@ -42,10 +50,10 @@ interface AppState {
   lastAutosaved: Date | null
   hasUnsavedChanges: boolean
   recentProjects: {
-    today: any[]
-    yesterday: any[]
-    fourDaysAgo: any[]
-    older: any[]
+    today: RecentProject[]
+    yesterday: RecentProject[]
+    fourDaysAgo: RecentProject[]
+    older: RecentProject[]
   }
 }
 
@@ -69,7 +77,7 @@ type Action =
   | { type: 'ADD_ANALYSIS_COLUMN'; payload: { columnName: string; prompt: string; originalPrompt: string } }
   | { type: 'UPDATE_COLUMN_RESULT'; payload: { documentId: string; columnName: string; result: any } }
   | { type: 'SET_LAST_AUTOSAVED'; payload: Date }
-  | { type: 'UPDATE_RECENT_PROJECTS'; payload: { today: any[], yesterday: any[], four_days_ago: any[] } }
+  | { type: 'UPDATE_RECENT_PROJECTS'; payload: any[] }
 
 const initialState: AppState = {
   sessionId: null,
@@ -129,13 +137,11 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case 'SET_PROJECT_TITLE':
-      newState = {
+      console.log('SET_PROJECT_TITLE:', action.payload)
+      return {
         ...state,
         projectTitle: action.payload,
-        hasUnsavedChanges: true,
-        // 현재 프로젝트의 제목이 최근 프로젝트 목록에 있으면 즉시 업데이트
         recentProjects: {
-          ...state.recentProjects,
           today: state.recentProjects.today.map(project => 
             project.id === state.currentProjectId 
               ? { ...project, title: action.payload }
@@ -150,10 +156,14 @@ const appReducer = (state: AppState, action: Action): AppState => {
             project.id === state.currentProjectId 
               ? { ...project, title: action.payload }
               : project
+          ),
+          older: state.recentProjects.older.map(project => 
+            project.id === state.currentProjectId 
+              ? { ...project, title: action.payload }
+              : project
           )
         }
-      };
-      break;
+      }
 
     case 'SET_VIEW':
       return {
@@ -177,6 +187,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         const documentCells = action.payload
           .filter(doc => doc.project_id === state.currentProjectId)
           .map(doc => ({
+
             doc_id: doc.id,
             content: doc.filename
           }));
@@ -200,10 +211,11 @@ const appReducer = (state: AppState, action: Action): AppState => {
           const newCells = action.payload
             .filter(doc => doc.project_id === state.currentProjectId && !existingDocIds.has(doc.id))
             .map(doc => ({
+
               doc_id: doc.id,
               content: doc.filename
             }));
-          
+
           documentColumn.cells = [...documentColumn.cells, ...newCells];
         }
       }
@@ -523,12 +535,13 @@ const appReducer = (state: AppState, action: Action): AppState => {
       break;
 
     case 'UPDATE_RECENT_PROJECTS':
+      console.log('UPDATE_RECENT_PROJECTS 액션:', action.payload)
       return {
         ...state,
         recentProjects: {
-          today: action.payload.today,
-          yesterday: action.payload.yesterday,
-          fourDaysAgo: action.payload.four_days_ago,
+          today: action.payload?.today || [],
+          yesterday: action.payload?.yesterday || [],
+          fourDaysAgo: action.payload?.four_days_ago || [],
           older: []
         }
       }
