@@ -128,8 +128,8 @@ export const ChatSection = () => {
 
   return (
     <div className="h-full w-full overflow-y-auto bg-muted/90">
-      <div className="max-w-4xl mx-auto p-2 h-full">
-        <div className="bg-background rounded-lg shadow-sm border p-4 h-full flex flex-col">
+      <div className="max-w-4xl mx-auto p-1 h-full">
+        <div className="bg-background rounded-lg shadow-sm border p-2 h-full flex flex-col">
           <div className="flex items-center gap-1 mb-2">
             <Button
               variant={state.analysis.mode === 'chat' ? 'default' : 'outline'}
@@ -148,21 +148,43 @@ export const ChatSection = () => {
               Table
             </Button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-2">
             {state.messages.map((message, index) => (
               <div
                 key={index}
-                className={`mb-3 ${
+                className={`mb-2 ${
                   message.role === 'user' ? 'text-right' : 'text-left'
                 }`}
               >
                 {message.role === 'user' ? (
-                  <div className="inline-block p-2 rounded-lg bg-blue-500 text-white text-sm">
+                  <div className="inline-block p-2 rounded-lg bg-blue-500 text-white text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed mr-2">
                     {message.content}
                   </div>
                 ) : (
-                  <div className="inline-block p-2 rounded-lg bg-gray-200 text-gray-800 text-sm">
-                    {message.content}
+                  <div className="inline-block p-2 rounded-lg bg-gray-200 text-gray-800 text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed ml-2">
+                    {message.content.split(/(<[mnp][pn]?>.*?<\/[mnp][pn]?>)/).map((part, index) => {
+                      const moneyPlusMatch = part.match(/<mp>(.*?)<\/mp>/);
+                      const moneyMinusMatch = part.match(/<mn>(.*?)<\/mn>/);
+                      const moneyMatch = part.match(/<m>(.*?)<\/m>/);
+                      const numberPlusMatch = part.match(/<np>(.*?)<\/np>/);
+                      const numberMinusMatch = part.match(/<nn>(.*?)<\/nn>/);
+                      const numberMatch = part.match(/<n>(.*?)<\/n>/);
+                      
+                      if (moneyPlusMatch) {
+                        return <span key={index} className="text-blue-600 font-bold">+{moneyPlusMatch[1]}</span>;
+                      } else if (moneyMinusMatch) {
+                        return <span key={index} className="text-red-600 font-bold">-{moneyMinusMatch[1]}</span>;
+                      } else if (moneyMatch) {
+                        return <span key={index} className="font-bold">{moneyMatch[1]}</span>;
+                      } else if (numberPlusMatch) {
+                        return <span key={index} className="text-blue-600 font-bold">+{numberPlusMatch[1]}</span>;
+                      } else if (numberMinusMatch) {
+                        return <span key={index} className="text-red-600 font-bold">-{numberMinusMatch[1]}</span>;
+                      } else if (numberMatch) {
+                        return <span key={index} className="font-bold">{numberMatch[1]}</span>;
+                      }
+                      return part;
+                    })}
                   </div>
                 )}
               </div>
