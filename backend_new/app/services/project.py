@@ -81,6 +81,7 @@ class ProjectService:
 
         # 기본 쿼리 생성
         base_query = select(Project)
+        #base_query = select(Project).where(Project.is_temporary == True)
         if session:
             if session.user_id:
                 base_query = base_query.where(Project.user_id == session.user_id)

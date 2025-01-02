@@ -17,7 +17,7 @@ from app.services.rag import RAGService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["documents"])  # prefix 제거, 태그만 설정
+router = APIRouter()  # prefix 제거, 태그만 설정
 
 @router.post("/projects/{project_id}/upload", response_model=DocumentUploadResponse)
 async def upload_documents(

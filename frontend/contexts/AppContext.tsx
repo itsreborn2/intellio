@@ -25,6 +25,7 @@ interface RecentProject {
   created_at: string
   formatted_date?: string
   description?: string
+  is_temporary: boolean
 }
 
 interface AppState {
@@ -55,6 +56,7 @@ interface AppState {
     fourDaysAgo: RecentProject[]
     older: RecentProject[]
   }
+  categoryProjects: { [key: string]: any[] }
 }
 
 type Action =
@@ -78,6 +80,7 @@ type Action =
   | { type: 'UPDATE_COLUMN_RESULT'; payload: { documentId: string; columnName: string; result: any } }
   | { type: 'SET_LAST_AUTOSAVED'; payload: Date }
   | { type: 'UPDATE_RECENT_PROJECTS'; payload: any[] }
+  | { type: 'UPDATE_CATEGORY_PROJECTS'; payload: any[] }
 
 const initialState: AppState = {
   sessionId: null,
@@ -106,7 +109,8 @@ const initialState: AppState = {
     yesterday: [],
     fourDaysAgo: [],
     older: []
-  }
+  },
+  categoryProjects: {}
 }
 
 const AppContext = createContext<{
@@ -187,7 +191,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
         const documentCells = action.payload
           .filter(doc => doc.project_id === state.currentProjectId)
           .map(doc => ({
-
             doc_id: doc.id,
             content: doc.filename
           }));
@@ -211,7 +214,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
           const newCells = action.payload
             .filter(doc => doc.project_id === state.currentProjectId && !existingDocIds.has(doc.id))
             .map(doc => ({
-
               doc_id: doc.id,
               content: doc.filename
             }));
@@ -539,11 +541,17 @@ const appReducer = (state: AppState, action: Action): AppState => {
       return {
         ...state,
         recentProjects: {
-          today: action.payload?.today || [],
-          yesterday: action.payload?.yesterday || [],
-          fourDaysAgo: action.payload?.four_days_ago || [],
-          older: []
+          today: action.payload.today || [],
+          yesterday: action.payload.yesterday || [],
+          fourDaysAgo: action.payload.fourDaysAgo || [],
+          older: action.payload.older || []
         }
+      }
+
+    case 'UPDATE_CATEGORY_PROJECTS':
+      return {
+        ...state,
+        categoryProjects: action.payload
       }
 
     default:

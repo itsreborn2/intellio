@@ -6,8 +6,8 @@ from app.core.config import settings
 from app.models.base import Base
 
 # PostgreSQL URL 생성
-DATABASE_URL = "postgresql+asyncpg://intellio_user:intellio123@localhost:5432/intellio"
 DATABASE_URL_SYNC = settings.DATABASE_URL
+DATABASE_URL = DATABASE_URL_SYNC.replace('postgresql+psycopg2://', 'postgresql+asyncpg://')
 
 # 엔진 생성
 engine = create_engine(

@@ -1,1 +1,5 @@
-frontend 에 scr 폴더를 사용하지 않아. componets 폴더들을 참고.
+답변을 할때 아래의 폴더에 있는 소스들을 참고해
+backend_new
+frontend
+
+프로젝트 폴더의 구조는 docs/개발_가이드.md의 '2. 프로젝트 폴더 구조'를 참고해

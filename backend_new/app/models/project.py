@@ -19,7 +19,8 @@ class Project(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     session_id = Column(String(255), ForeignKey("sessions.session_id"), nullable=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    
+    category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True)  # 카테고리 ID 추가
+
     project_metadata = Column(Text, nullable=True)
     content_data = Column(Text, nullable=True)
     embedding_refs = Column(Text, nullable=True)

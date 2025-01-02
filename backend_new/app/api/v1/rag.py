@@ -13,7 +13,7 @@ from app.schemas.document import DocumentQueryRequest
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # 디버그 로깅 활성화
 
-router = APIRouter(prefix="/rag", tags=["rag"])
+router = APIRouter()
 
 class TableQueryRequest(BaseModel):
     """테이블 모드 쿼리 요청"""

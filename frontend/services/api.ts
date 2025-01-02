@@ -13,6 +13,7 @@ export interface Project {
   created_at: string
   updated_at: string
   formatted_date?: string;  // 한국어로 포맷된 날짜
+  category_id?: string;  // 카테고리 ID 추가
 }
 
 export interface ProjectListResponse {
@@ -88,6 +89,40 @@ export interface ProjectDetail {
   updated_at: string;
 }
 
+// API 요청을 위한 기본 설정
+const defaultFetchOptions: RequestInit = {
+  credentials: 'include',
+  headers: {
+    'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest'
+  }
+};
+
+// fetch 함수 래퍼
+const apiFetch = async (url: string, options: RequestInit = {}) => {
+  try {
+    const response = await fetch(url, {
+      ...defaultFetchOptions,
+      ...options,
+      headers: {
+        ...defaultFetchOptions.headers,
+        ...options.headers,
+      }
+    });
+
+    if (response.status === 401) {
+      // 세션 만료 이벤트 발생
+      window.dispatchEvent(new CustomEvent('sessionExpired'));
+      throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.');
+    }
+
+    return response;
+  } catch (error) {
+    console.error('API request failed:', error);
+    throw error;
+  }
+};
+
 export const createProject = async (
   name: string, 
   description?: string, 
@@ -96,9 +131,8 @@ export const createProject = async (
   console.log('Creating project with:', { name, description, retention_period })
   
   try {
-    const response = await fetch(`${API_ENDPOINT}/projects/`, {
+    const response = await apiFetch(`${API_ENDPOINT}/projects/`, {
       method: 'POST',
-      credentials: 'include',  // 쿠키 포함
       headers: {
         'Content-Type': 'application/json',
       },
@@ -140,7 +174,7 @@ export const createProject = async (
 }
 
 export const getProjects = async (): Promise<ProjectListResponse> => {
-  const response = await fetch(`${API_ENDPOINT}/projects/`, {
+  const response = await apiFetch(`${API_ENDPOINT}/projects/`, {
     credentials: 'include'  // 쿠키 포함
   })
   
@@ -165,58 +199,62 @@ const sanitizeFileName = (fileName: string): string => {
 
 export const uploadDocument = async (
   projectId: string, 
-  files: File | File[],// eslint-disable-next-line @typescript-eslint/no-explicit-any
+  files: File | File[],
   callbacks?: UploadProgressCallback
 ): Promise<UploadResponse> => {
-  // 단일 파일을 배열로 통일
-  const fileArray = Array.isArray(files) ? files : [files];
-  const formData = new FormData();
-  
-  // 파일명 전처리 후 업로드
-  fileArray.forEach(file => {
-    const sanitizedName = sanitizeFileName(file.name);
-    const sanitizedFile = new File([file], sanitizedName, { type: file.type });
-    formData.append('files', sanitizedFile);
-  });
+  return new Promise(async (resolve, reject) => {
+    try {
+      const formData = new FormData()
+      const fileList = Array.isArray(files) ? files : [files]
+      
+      fileList.forEach(file => {
+        const sanitizedName = sanitizeFileName(file.name)
+        formData.append('files', file, sanitizedName)
+      })
 
-  try {
-    const uploadUrl = `${API_ENDPOINT}/documents/projects/${projectId}/upload`;
-    console.log(`Uploading ${fileArray.length} files to ${uploadUrl}`);
+      const response = await apiFetch(`${API_ENDPOINT}/documents/projects/${projectId}/upload`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData
+      })
 
-    const response = await fetch(uploadUrl, {
-      method: 'POST',
-      credentials: 'include',
-      body: formData,
-    });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null)
+        if (response.status === 401) {
+          // 세션 만료 처리
+          window.dispatchEvent(new CustomEvent('sessionExpired'));
+          throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.');
+        }
+        throw new Error(errorData?.detail || `Upload failed with status ${response.status}`)
+      }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      console.error('Document upload failed:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorData
-      });
-      const error = new Error(
-        errorData?.detail || 
-        `Upload failed with status ${response.status}: ${response.statusText}`
-      );
-      callbacks?.onError?.(error);
-      throw error;
+      const result = await response.json()
+      
+      if (callbacks?.onComplete) {
+        callbacks.onComplete(result)
+      }
+      
+      resolve(result)
+    } catch (error) {
+      console.error('Upload failed:', error)
+      if (callbacks?.onError) {
+        callbacks.onError(error as Error)
+      }
+      reject(error)
     }
-
-    const result = await response.json();
-    console.log('Upload successful:', result);
-    callbacks?.onComplete?.(result);
-    return result;
-  } catch (error: any) {
-    console.error('Document upload request failed:', error);
-    callbacks?.onError?.(error);
-    throw error;
-  }
-};
+  })
+}
+// api.ts에 추가
+export async function getDocumentContent(documentId: string): Promise<string> {
+  const response = await apiFetch(`${API_ENDPOINT}/documents/${documentId}/content`);
+  return response.text();
+}
 
 export const getDocumentStatus = async (documentId: string): Promise<DocumentStatus> => {
-  const response = await fetch(`${API_ENDPOINT}/documents/${documentId}`, {
+  const response = await apiFetch(`${API_ENDPOINT}/documents/${documentId}`, {
     credentials: 'include'  // 쿠키 포함
   })
   
@@ -231,7 +269,7 @@ export const updateProjectToPermanent = async (
   projectId: string, 
   categoryId: string
 ): Promise<Project> => {
-  const response = await fetch(`${API_ENDPOINT}/projects/${projectId}`, {
+  const response = await apiFetch(`${API_ENDPOINT}/projects/${projectId}`, {
     method: 'PUT',
     credentials: 'include',  // 쿠키 포함
     headers: {
@@ -254,7 +292,7 @@ export const searchTable = async (projectId: string, documentIds: string[], quer
   try {
     console.log('테이블 검색 요청:', { query, documentIds, mode: 'table' });
     
-    const response = await fetch(`${API_ENDPOINT}/rag/table/search`, {
+    const response = await apiFetch(`${API_ENDPOINT}/rag/table/search`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -290,12 +328,24 @@ export const searchTable = async (projectId: string, documentIds: string[], quer
 
     // 응답 데이터를 테이블 형식으로 변환
     return {
-      columns: data.columns.map(col => ({
+      columns: data.columns.map((col: { 
+        header?: { 
+          name?: string; 
+          prompt?: string; 
+        }; 
+        cells?: Array<{
+          doc_id?: string;
+          content?: string;
+        }>;
+      }) => ({
         header: {
           name: col.header?.name || '',
           prompt: col.header?.prompt || ''
         },
-        cells: Array.isArray(col.cells) ? col.cells.map(cell => ({
+        cells: Array.isArray(col.cells) ? col.cells.map((cell: {
+          doc_id?: string;
+          content?: string;
+        }) => ({
           doc_id: cell.doc_id || '',
           content: cell.content || ''
         })) : []
@@ -313,7 +363,7 @@ export const chat = async (
   message: string
 ): Promise<{ message: string }> => {
   try {
-    const response = await fetch(`${API_ENDPOINT}/rag/chat`, {
+    const response = await apiFetch(`${API_ENDPOINT}/rag/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -349,7 +399,7 @@ export const autosaveProject = async (
   projectId: string, 
   data: any
 ): Promise<any> => {
-  const response = await fetch(`${API_ENDPOINT}/projects/${projectId}/autosave`, {
+  const response = await apiFetch(`${API_ENDPOINT}/projects/${projectId}/autosave`, {
     method: 'PUT',
     credentials: 'include',
     headers: {
@@ -371,11 +421,22 @@ export const checkSession = async (): Promise<{
   isLoggedIn: boolean;
   userId?: string;
 }> => {
-  const response = await fetch(`${API_ENDPOINT}/session/check`, {
+  const response = await apiFetch(`${API_ENDPOINT}/session/check`, {
     credentials: 'include',
+    headers: {
+      'Cache-Control': 'no-cache',  // 캐시 비활성화
+      'Pragma': 'no-cache'
+    }
   });
 
   if (!response.ok) {
+    // 세션이 없는 경우 기본값 반환
+    if (response.status === 401) {
+      return {
+        sessionId: '',
+        isLoggedIn: false
+      };
+    }
     throw new Error('Failed to check session');
   }
 
@@ -386,24 +447,39 @@ export const getRecentProjects = async (): Promise<{
   today: Array<{
     id: string;
     title: string;
+    name: string;
     created_at: string;
+    updated_at: string;
     formatted_date?: string;
+    is_temporary: boolean;
+    category_id?: string;
+    will_be_deleted: boolean;
   }>;
   yesterday: Array<{
     id: string;
     title: string;
+    name: string;
     created_at: string;
+    updated_at: string;
     formatted_date?: string;
+    is_temporary: boolean;
+    category_id?: string;
+    will_be_deleted: boolean;
   }>;
   four_days_ago: Array<{
     id: string;
     title: string;
+    name: string;
     created_at: string;
+    updated_at: string;
     formatted_date?: string;
+    is_temporary: boolean;
+    category_id?: string;
+    will_be_deleted: boolean;
   }>;
 }> => {
   try {
-    const response = await fetch(`${API_ENDPOINT}/projects/recent?limit=3`, {
+    const response = await apiFetch(`${API_ENDPOINT}/projects/recent?limit=3`, {
       credentials: 'include'
     })
 
@@ -412,16 +488,20 @@ export const getRecentProjects = async (): Promise<{
     }
 
     const data = await response.json()
-
+  
     // 날짜 포맷팅
     const formatProjects = (projects: any[]) => {
       return projects.map(project => ({
         id: project.id,
         title: project.name,
+        name: project.name,
         created_at: project.created_at,
+        updated_at: project.updated_at,
         formatted_date: project.created_at ? 
           format(parseISO(project.created_at), 'PPP', { locale: ko }) : 
           undefined,
+        is_temporary: project.is_temporary,
+        category_id: project.category_id,
         will_be_deleted: project.is_temporary && project.created_at &&
           new Date(project.created_at).getTime() < new Date().getTime() - 4 * 24 * 60 * 60 * 1000
       }))
@@ -444,7 +524,7 @@ export const getRecentProjects = async (): Promise<{
 
 export const getProject = async (projectId: string): Promise<ProjectDetail> => {
   try {
-    const response = await fetch(`${API_ENDPOINT}/projects/${projectId}`, {
+    const response = await apiFetch(`${API_ENDPOINT}/projects/${projectId}`, {
       credentials: 'include'
     });
 
@@ -475,25 +555,34 @@ export interface ProjectCategory {
 
 // 카테고리 생성
 export const createCategory = async (name: string, parent_id?: string): Promise<Category> => {
-  const response = await fetch(`${API_ENDPOINT}/categories`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ name, parent_id }),
-  });
+  try {
+    const response = await apiFetch(`${API_ENDPOINT}/categories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        name, 
+        parent_id,
+        type: "PERMANENT"  // type 명시적 추가
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error('Failed to create category');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || '폴더 생성에 실패했습니다.');
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Category creation failed:', error);
+    throw error;
   }
-
-  return response.json();
 };
 
 // 카테고리 목록 조회
 export const getCategories = async (): Promise<Category[]> => {
-  const response = await fetch(`${API_ENDPOINT}/categories`, {
+  const response = await apiFetch(`${API_ENDPOINT}/categories`, {
     credentials: 'include'
   });
 
@@ -508,35 +597,72 @@ export const getCategories = async (): Promise<Category[]> => {
 export const addProjectToCategory = async (
   projectId: string, 
   categoryId: string
-): Promise<ProjectCategory> => {
-  // 먼저 프로젝트를 영구 프로젝트로 변환
-  await updateProjectToPermanent(projectId, categoryId);
+): Promise<Project> => {
+  return apiFetch(
+    `${API_ENDPOINT}/categories/${categoryId}/projects`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        project_id: projectId
+      })
+    }
+  );
+}
 
+// 카테고리의 프로젝트 목록 조회
+export const getCategoryProjects = async (categoryId: string) => {
   const response = await fetch(`${API_ENDPOINT}/categories/${categoryId}/projects`, {
-    method: 'POST',
-    credentials: 'include',
+    method: 'GET',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ project_id: projectId }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to add project to category');
-  }
-
-  return response.json();
-};
-
-// 카테고리의 프로젝트 목록 조회
-export const getCategoryProjects = async (categoryId: string): Promise<Project[]> => {
-  const response = await fetch(`${API_ENDPOINT}/categories/${categoryId}/projects`, {
     credentials: 'include'
-  });
+  })
 
   if (!response.ok) {
-    throw new Error('Failed to fetch category projects');
+    throw new Error('카테고리 프로젝트 조회 실패')
   }
 
-  return response.json();
+  return response.json()
+}
+
+// 카테고리 삭제 함수 수정
+export const deleteCategory = async (categoryId: string): Promise<void> => {
+  try {
+    /* // 먼저 카테고리에 속한 프로젝트들의 카테고리 연결을 해제
+    const projects = await getCategoryProjects(categoryId);
+    
+    // 각 프로젝트의 카테고리 연결 해제
+    for (const project of projects) {
+      await apiFetch(`${API_ENDPOINT}/categories/${categoryId}/projects/${project.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+    } */
+    //const data = await getCategories();
+    //console.log('before delete, category : ',data);
+    // 그 다음 카테고리 삭제
+    const url = `${API_ENDPOINT}/categories/${categoryId}`;
+    console.log('Category deletion URL: ', url);
+    const response = await apiFetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      console.log('not ok return');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || '폴더 삭제에 실패했습니다.');
+    }
+  } catch (error) {
+    console.error('Category deletion failed:', error);
+    throw error;
+  }
 };

@@ -2,19 +2,45 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 from contextlib import asynccontextmanager
-
+from logging.config import dictConfig
+import sys
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.models.base import Base
 from app.core.database import engine
+from logging.handlers import RotatingFileHandler
+import os
 
 # 모든 모델을 임포트하여 매핑이 이루어지도록 합니다
 from app.models.project import Project
 from app.models.document import Document, DocumentChunk
 
+# 로그 디렉토리 생성 (기존 코드)
+log_dir = "logs"
+try:
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+except Exception as e:
+    print(f"로그 디렉토리 생성 실패: {e}")
+
 # 로깅 설정
-logging.basicConfig(level=logging.DEBUG)
+log_file_path = os.path.join(log_dir, "app.log") # 로그 파일 경로 설정
+log_handler = logging.handlers.RotatingFileHandler( # RotatingFileHandler 추가
+    filename=log_file_path, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8' # 10MB 파일, 5개 백업
+)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+log_handler.setFormatter(formatter)
+
 logger = logging.getLogger("app")
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout), # 콘솔 출력
+        log_handler # 파일 출력 추가
+    ]
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

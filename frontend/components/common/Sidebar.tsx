@@ -85,27 +85,27 @@ export const Sidebar = ({ className }: SidebarProps) => {
     { id: 'template3', name: '이력서 분석', description: '이력서 분석 전용 템플릿' },
   ]);
   const [isLoading, setIsLoading] = useState(true)
-  const [expandedSections, setExpandedSections] = useState<string[]>(['recent', 'template'])
+  const [expandedSections, setExpandedSections] = useState<string[]>(['recent', 'template', 'folders'])
   const [newCategoryName, setNewCategoryName] = useState('')
   const [categoryError, setCategoryError] = useState('')
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
+  const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: Project[] }>({})  
 
   useEffect(() => {
     const fetchRecentProjects = async () => {
       try {
         const response = await api.getRecentProjects()
-        console.log('Recent Projects API Response:', {
-          response,
-          today: response.today,
-          yesterday: response.yesterday,
-          four_days_ago: response.four_days_ago
-        })
         
         dispatch({ 
           type: 'UPDATE_RECENT_PROJECTS', 
-          payload: response 
+          payload: {
+            today: response.today || [],
+            yesterday: response.yesterday || [],
+            fourDaysAgo: response.four_days_ago || [],
+            older: []
+          }
         })
         setIsLoading(false)
       } catch (error) {
@@ -124,11 +124,44 @@ export const Sidebar = ({ className }: SidebarProps) => {
     const handleProjectCreated = () => {
       const fetchProjects = async () => {
         try {
+          // 1. 최근 프로젝트 목록 갱신
           const response = await api.getRecentProjects()
           dispatch({ 
             type: 'UPDATE_RECENT_PROJECTS', 
-            payload: response.data 
+            payload: {
+              today: response.today || [],
+              yesterday: response.yesterday || [],
+              fourDaysAgo: response.four_days_ago || [],
+              older: []
+            }
           })
+
+          // 2. 카테고리 목록 로드
+          const categoriesData = await api.getCategories()
+          setCategories(categoriesData)
+
+          // 3. 각 카테고리의 프로젝트 로드
+          const projectsPromises = categoriesData.map(async (category) => {
+            try {
+              const projects = await api.getCategoryProjects(category.id)
+              return { categoryId: category.id, projects }
+            } catch (error) {
+              console.error(`카테고리 ${category.id}의 프로젝트 로드 실패:`, error)
+              return { categoryId: category.id, projects: [] }
+            }
+          })
+
+          const projectsResults = await Promise.all(projectsPromises)
+          const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
+            acc[categoryId] = projects
+            return acc
+          }, {} as { [key: string]: Project[] })
+
+          dispatch({
+            type: 'UPDATE_CATEGORY_PROJECTS',
+            payload: newCategoryProjects
+          })
+
         } catch (error) {
           console.error('프로젝트 목록 조회 실패:', error)
         } finally {
@@ -159,31 +192,77 @@ export const Sidebar = ({ className }: SidebarProps) => {
 
   const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
+    
+    const { source, destination, draggableId } = result;
+    console.log('Drag ended:', { source, destination, draggableId });
 
-    const sourceId = result.draggableId;
-    const destinationId = result.destination.droppableId;
-
-    if (destinationId.startsWith('category-')) {
-      const categoryId = destinationId.replace('category-', '');
+    // 최근 프로젝트에서 영구 폴더로 이동하는 경우
+    if (source.droppableId === 'recent-projects' && destination.droppableId.startsWith('category-')) {
       try {
-        const response = await fetch(`/api/v1/projects/${sourceId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            category_id: categoryId,
-          }),
-        });
+        // 이동된 프로젝트 찾기
+        const movedProject = [...(state.recentProjects.today || []), 
+                            ...(state.recentProjects.yesterday || []),
+                            ...(state.recentProjects.four_days_ago || [])]
+                            .find(p => p.id === draggableId);
 
-        if (!response.ok) {
-          throw new Error('프로젝트 이동에 실패했습니다.');
+        if (!movedProject) {
+          console.error('이동할 프로젝트를 찾을 수 없습니다.');
+          return;
         }
 
-        dispatch({ 
-          type: 'UPDATE_RECENT_PROJECTS', 
-          payload: state.recentProjects.filter(project => project.id !== sourceId) 
+        const categoryId = destination.droppableId.replace('category-', '');
+
+        // 프로젝트를 영구 프로젝트로 변경
+        await api.updateProjectToPermanent(draggableId, categoryId);
+
+        // 백엔드로 카테고리(영구폴더) 변경 요청
+        await api.addProjectToCategory(draggableId, categoryId);
+
+        // // 최근 프로젝트 목록에서 제거
+        // const updatedRecentProjects = {
+        //   today: (state.recentProjects.today || []).filter(p => p.id !== draggableId),
+        //   yesterday: (state.recentProjects.yesterday || []).filter(p => p.id !== draggableId),
+        //   four_days_ago: (state.recentProjects.four_days_ago || []).filter(p => p.id !== draggableId)
+        // };
+
+        // 카테고리(영구폴더)에 프로젝트 추가
+        setCategoryProjects(prev => ({
+          ...prev,
+          [categoryId]: [...(prev[categoryId] || []), {
+            id: movedProject.id,
+            name: movedProject.title,
+          }]
+        }));
+
+        // UI 업데이트. 최근 프로젝트 영역은 굳이 업데이트할 필요가 없고
+        // 프로젝트 폴더만 업데이트해주면 되겠는걸?
+        // 근데 이렇게 비효율적으로 매번 읽어야하나..
+        // 2. 카테고리 목록 로드
+        const categoriesData = await api.getCategories()
+        setCategories(categoriesData)
+
+        // 3. 각 카테고리의 프로젝트 로드
+        const projectsPromises = categoriesData.map(async (category) => {
+          try {
+            const projects = await api.getCategoryProjects(category.id)
+            return { categoryId: category.id, projects }
+          } catch (error) {
+            console.error(`카테고리 ${category.id}의 프로젝트 로드 실패:`, error)
+            return { categoryId: category.id, projects: [] }
+          }
         })
+
+        const projectsResults = await Promise.all(projectsPromises)
+        const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
+          acc[categoryId] = projects
+          return acc
+        }, {} as { [key: string]: Project[] })
+
+        dispatch({
+          type: 'UPDATE_CATEGORY_PROJECTS',
+          payload: newCategoryProjects
+        })
+
       } catch (error) {
         console.error('프로젝트 이동 실패:', error);
       }
@@ -208,7 +287,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
         },
         body: JSON.stringify({
           name: newCategoryName.trim(),
-          type: "PERMANENT"  // type을 명시적으로 설정
+          type: "PERMANENT"  
         }),
       });
 
@@ -277,22 +356,6 @@ export const Sidebar = ({ className }: SidebarProps) => {
     }
   }
 
-  const loadDocumentContent = async (docId: string) => {
-    try {
-      const content = await api.getDocumentContent(state.currentProjectId, docId)
-      dispatch({
-        type: 'UPDATE_DOCUMENT_CONTENT',
-        payload: {
-          id: docId,
-          content,
-          isLoaded: true
-        }
-      })
-    } catch (error) {
-      console.error('문서 컨텐츠 로드 실패:', error)
-    }
-  }
-
   const toggleSection = (section: string) => {
     setExpandedSections(prev =>
       prev.includes(section)
@@ -302,9 +365,41 @@ export const Sidebar = ({ className }: SidebarProps) => {
   }
 
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <div className={`w-[250px] border-r bg-gray-200 ${className || ''}`}>
-        <div className="p-4 flex items-center justify-between">
+    <DragDropContext
+      onBeforeDragStart={(start) => {
+        console.log('BEFORE Drag Start:', {
+          draggableId: start.draggableId,
+          source: start.source,
+          time: new Date().toISOString()
+        });
+      }}
+      onDragStart={(start) => {
+        console.log('Drag Start in Context:', {
+          draggableId: start.draggableId,
+          source: start.source,
+          time: new Date().toISOString()
+        });
+      }}
+      // onDragUpdate={(update) => {
+      //   console.log('Drag Update:', {
+      //     draggableId: update.draggableId,
+      //     source: update.source,
+      //     destination: update.destination,
+      //     time: new Date().toISOString()
+      //   });
+      // }}
+      onDragEnd={(result) => {
+        console.log('Drag End in Context:', {
+          draggableId: result.draggableId,
+          source: result.source,
+          destination: result.destination,
+          time: new Date().toISOString()
+        });
+        handleDragEnd(result);
+      }}
+    >
+      <div className="w-[250px] border-r bg-gray-200 flex flex-col h-full">
+        <div className="p-4 flex items-center justify-between flex-shrink-0 border-b">
           <div className="flex items-center gap-2">
             <ScrollText className="h-6 w-6 text-primary" />
             <h2 className="text-lg font-semibold tracking-tight">DocEasy</h2>
@@ -350,20 +445,21 @@ export const Sidebar = ({ className }: SidebarProps) => {
           </TooltipProvider>
         </div>
 
-        <div className="flex-1 overflow-auto p-2">
-          <div className="space-y-6">
-            <TemplateSection
-              expandedSections={expandedSections}
-              toggleSection={toggleSection}
-            />
-            <div className="my-4">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="p-2">
+            <div className="space-y-6 w-full">
+              <TemplateSection
+                expandedSections={expandedSections}
+                toggleSection={toggleSection}
+              />
               <ProjectCategorySection
                 expandedSections={expandedSections}
                 toggleSection={toggleSection}
-                recentProjects={state.recentProjects}
                 categories={categories}
                 setCategories={setCategories}
                 dispatch={dispatch}
+                onDragEnd={handleDragEnd}
+                categoryProjects={categoryProjects}  
               />
             </div>
           </div>

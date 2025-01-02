@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app.schemas.project import (
     ProjectCreate,
@@ -16,8 +17,12 @@ from app.models.project import Project
 from app.models.category import Category
 from app.core.deps import get_db, get_current_session, get_project_service
 from app.services.project import ProjectService
-
+import sys
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
+#logger = logging.getLogger("app.api.v1.project")
+logger.setLevel(logging.DEBUG)
 
 @router.post("/", response_model=ProjectResponse)
 async def create_project(
@@ -26,7 +31,15 @@ async def create_project(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """새 프로젝트 생성"""
-    return await project_service.create(project_in, session)
+    logger.info("=== 프로젝트 생성 API 호출 시작 ===")
+    logger.info(f"입력 데이터: {project_in}")
+    try:
+        project = await project_service.create(project_in, session)
+        logger.info(f"프로젝트 생성 성공 - ID: {project.id}")
+        return project
+    except Exception as e:
+        logger.error(f"프로젝트 생성 실패: {str(e)}", exc_info=True)
+        raise
 
 @router.get("/recent", response_model=RecentProjectsResponse)
 async def get_recent_projects(
@@ -51,13 +64,20 @@ async def get_project(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 조회"""
-    project = await project_service.get(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="프로젝트를 찾을 수 없습니다."
-        )
-    return project
+    logger.debug(f"프로젝트 조회 시도: {project_id}")
+    try:
+        project = await project_service.get(project_id)
+        if not project:
+            logger.warning(f"프로젝트를 찾을 수 없음: {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="프로젝트를 찾을 수 없습니다."
+            )
+        logger.debug(f"프로젝트 조회 결과: {project}")
+        return project
+    except Exception as e:
+        logger.error(f"프로젝트 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise
 
 @router.get("/{project_id}/metadata")
 async def get_project_metadata(
@@ -115,13 +135,21 @@ async def update_project(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 수정"""
-    project = await project_service.update(project_id, project_in)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="프로젝트를 찾을 수 없습니다."
-        )
-    return project
+    logger.debug(f"프로젝트 업데이트 시도: {project_id}")
+    logger.debug(f"업데이트 데이터: {project_in}")
+    try:
+        project = await project_service.update(project_id, project_in)
+        if not project:
+            logger.warning(f"프로젝트를 찾을 수 없음: {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="프로젝트를 찾을 수 없습니다."
+            )
+        logger.info(f"프로젝트 업데이트 완료: {project_id}")
+        return project
+    except Exception as e:
+        logger.error(f"프로젝트 업데이트 중 오류 발생: {str(e)}", exc_info=True)
+        raise
 
 @router.put("/{project_id}/autosave")
 async def autosave_project(
@@ -197,10 +225,17 @@ async def delete_project(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 삭제"""
-    success = await project_service.delete(project_id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="프로젝트를 찾을 수 없습니다."
-        )
-    return {"message": "프로젝트가 삭제되었습니다."}
+    logger.debug(f"프로젝트 삭제 시도: {project_id}")
+    try:
+        success = await project_service.delete(project_id)
+        if not success:
+            logger.warning(f"프로젝트를 찾을 수 없음: {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="프로젝트를 찾을 수 없습니다."
+            )
+        logger.info(f"프로젝트 삭제 완료: {project_id}")
+        return {"message": "프로젝트가 삭제되었습니다."}
+    except Exception as e:
+        logger.error(f"프로젝트 삭제 중 오류 발생: {str(e)}", exc_info=True)
+        raise
