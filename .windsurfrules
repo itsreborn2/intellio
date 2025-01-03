@@ -3,3 +3,15 @@ backend_new
 frontend
 
 프로젝트 폴더의 구조는 docs/개발_가이드.md의 '2. 프로젝트 폴더 구조'를 참고해
+
+## TypeScript 인터페이스 정의 규칙: 'I' 접두사 사용
+
+-   **인터페이스 정의 시 이름 앞에 'I'를 접두사로 추가하세요.**
+-   예시:
+    ```typescript
+    export interface IComment {
+        id: string
+        text: string
+        author: string
+    }
+    ```

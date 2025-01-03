@@ -89,6 +89,45 @@ export interface ProjectDetail {
   updated_at: string;
 }
 
+// API 응답의 프로젝트 타입
+interface IApiProject {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  is_temporary: boolean;
+  category_id?: string;
+}
+
+// 프로젝트 타입 정의
+interface IProject {
+  id: string;
+  title: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  formatted_date?: string;
+  is_temporary: boolean;
+  category_id?: string;
+  will_be_deleted: boolean;
+}
+
+// API 응답 타입 정의
+interface IApiRecentProjectsResponse {
+  today: IApiProject[];
+  yesterday: IApiProject[];
+  four_days_ago: IApiProject[];
+  older: IApiProject[];
+}
+
+// 최근 프로젝트 응답 타입 정의
+export interface IRecentProjectsResponse {
+  today: IProject[];
+  yesterday: IProject[];
+  four_days_ago: IProject[];
+  older: IProject[];
+}
+
 // API 요청을 위한 기본 설정
 const defaultFetchOptions: RequestInit = {
   credentials: 'include',
@@ -247,6 +286,7 @@ export const uploadDocument = async (
     }
   })
 }
+
 // api.ts에 추가
 export async function getDocumentContent(documentId: string): Promise<string> {
   const response = await apiFetch(`${API_ENDPOINT}/documents/${documentId}/content`);
@@ -443,41 +483,7 @@ export const checkSession = async (): Promise<{
   return response.json();
 };
 
-export const getRecentProjects = async (): Promise<{
-  today: Array<{
-    id: string;
-    title: string;
-    name: string;
-    created_at: string;
-    updated_at: string;
-    formatted_date?: string;
-    is_temporary: boolean;
-    category_id?: string;
-    will_be_deleted: boolean;
-  }>;
-  yesterday: Array<{
-    id: string;
-    title: string;
-    name: string;
-    created_at: string;
-    updated_at: string;
-    formatted_date?: string;
-    is_temporary: boolean;
-    category_id?: string;
-    will_be_deleted: boolean;
-  }>;
-  four_days_ago: Array<{
-    id: string;
-    title: string;
-    name: string;
-    created_at: string;
-    updated_at: string;
-    formatted_date?: string;
-    is_temporary: boolean;
-    category_id?: string;
-    will_be_deleted: boolean;
-  }>;
-}> => {
+export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
   try {
     const response = await apiFetch(`${API_ENDPOINT}/projects/recent?limit=3`, {
       credentials: 'include'
@@ -487,10 +493,10 @@ export const getRecentProjects = async (): Promise<{
       throw new Error('Failed to fetch recent projects')
     }
 
-    const data = await response.json()
+    const data: IApiRecentProjectsResponse = await response.json()
   
     // 날짜 포맷팅
-    const formatProjects = (projects: any[]) => {
+    const formatProjects = (projects: IApiProject[]): IProject[] => {
       return projects.map(project => ({
         id: project.id,
         title: project.name,
@@ -507,17 +513,21 @@ export const getRecentProjects = async (): Promise<{
       }))
     }
 
-    return {
+    const result: IRecentProjectsResponse = {
       today: formatProjects(data.today || []),
       yesterday: formatProjects(data.yesterday || []),
-      four_days_ago: formatProjects(data.four_days_ago || [])
+      four_days_ago: formatProjects(data.four_days_ago || []),
+      older: formatProjects(data.older || [])
     }
+
+    return result
   } catch (error) {
     console.error('Error fetching recent projects:', error)
     return {
       today: [],
       yesterday: [],
-      four_days_ago: []
+      four_days_ago: [],
+      older: []
     }
   }
 };
@@ -665,4 +675,41 @@ export const deleteCategory = async (categoryId: string): Promise<void> => {
     console.error('Category deletion failed:', error);
     throw error;
   }
+};
+
+// OAuth 로그인 응답 인터페이스
+export interface IOAuthLoginResponse {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    provider: string;
+  };
+  token: string;
+}
+
+// OAuth 로그인 처리
+export const socialLogin = async (code: string, provider: string): Promise<IOAuthLoginResponse> => {
+  const response = await apiFetch(`${API_ENDPOINT}/auth/${provider}/callback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code }),
+  });
+  return response;
+};
+
+// 인증 상태 확인
+export const checkAuth = async (): Promise<IOAuthLoginResponse> => {
+  return await apiFetch(`${API_ENDPOINT}/auth/me`, {
+    method: 'GET',
+  });
+};
+
+// 로그아웃
+export const logout = async (): Promise<void> => {
+  await apiFetch(`${API_ENDPOINT}/auth/logout`, {
+    method: 'POST',
+  });
 };

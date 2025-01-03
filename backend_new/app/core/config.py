@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     # API Settings
     PROJECT_NAME: str = "Intellio API"
     API_V1_STR: str = "/api/v1"
+    FASTAPI_URL:str = "http://localhost:8000"
     
     # 프론트엔드 URL
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     SESSION_EXPIRY_DAYS: int = 30  # 30 days for session expiry
+    
     
     # JWT Settings
     JWT_SECRET: str
@@ -51,6 +53,28 @@ class Settings(BaseSettings):
     GOOGLE_CLOUD_STORAGE_BUCKET: str
     GCS_BUCKET_NAME: str = "intellio-documents"
     
+    # OAuth Settings
+    # Kakao
+    KAKAO_CLIENT_ID: str = os.getenv("KAKAO_CLIENT_ID", "")
+    KAKAO_CLIENT_SECRET: str = os.getenv("KAKAO_CLIENT_SECRET", "")
+    KAKAO_REDIRECT_URI: str = os.getenv("KAKAO_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/kakao/callback")
+
+    # Google OAuth
+    GOOGLE_OAUTH_CLIENT_ID: str = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+    GOOGLE_OAUTH_CLIENT_SECRET: str = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+    GOOGLE_OAUTH_REDIRECT_URI: str = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/google/callback")
+
+    # Naver
+    NAVER_CLIENT_ID: str = os.getenv("NAVER_CLIENT_ID", "")
+    NAVER_CLIENT_SECRET: str = os.getenv("NAVER_CLIENT_SECRET", "")
+    NAVER_REDIRECT_URI: str = os.getenv("NAVER_REDIRECT_URI")
+    NAVER_STATE: str = os.getenv("NAVER_STATE", "RANDOM_STATE")
+
+    # JWT Settings for OAuth
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-oauth-jwt-secret-key")
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION: int = 30 * 24 * 60  # 30 days in minutes
+
     # File Upload Settings
     ALLOWED_EXTENSIONS: set = {
         'txt', 'pdf', 'doc', 'docx', 'hwp', 'hwpx',
@@ -79,9 +103,10 @@ class Settings(BaseSettings):
     
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
-    
+
     class Config:
-        env_file = ".env"
+        env_file = ".env" #예전위치.
+        #env_file = "../../.env"  # 프로젝트 루트의 .env 파일 참조
         env_file_encoding = 'utf-8'
         case_sensitive = True
 

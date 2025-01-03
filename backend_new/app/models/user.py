@@ -14,9 +14,11 @@ class User(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(100))
-    hashed_password: Mapped[str] = mapped_column(String(255))
+    hashed_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # OAuth 사용자는 비밀번호가 없을 수 있음
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
+    oauth_provider: Mapped[str] = mapped_column(String(20))  # google, naver, kakao
+    oauth_provider_id: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 

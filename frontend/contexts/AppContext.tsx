@@ -3,7 +3,7 @@
 import { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react'
 import { TableData, Document, Message, DocumentStatus } from '@/types'
 import * as api from '@/services/api'
-
+import {  IRecentProjectsResponse } from '@/services/api'
 interface TableColumn {
   header: {
     name: string;
@@ -79,7 +79,7 @@ type Action =
   | { type: 'ADD_ANALYSIS_COLUMN'; payload: { columnName: string; prompt: string; originalPrompt: string } }
   | { type: 'UPDATE_COLUMN_RESULT'; payload: { documentId: string; columnName: string; result: any } }
   | { type: 'SET_LAST_AUTOSAVED'; payload: Date }
-  | { type: 'UPDATE_RECENT_PROJECTS'; payload: any[] }
+  | { type: 'UPDATE_RECENT_PROJECTS'; payload: IRecentProjectsResponse }
   | { type: 'UPDATE_CATEGORY_PROJECTS'; payload: any[] }
 
 const initialState: AppState = {
@@ -543,7 +543,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         recentProjects: {
           today: action.payload.today || [],
           yesterday: action.payload.yesterday || [],
-          fourDaysAgo: action.payload.fourDaysAgo || [],
+          fourDaysAgo: action.payload.four_days_ago || [],
           older: action.payload.older || []
         }
       }
@@ -643,3 +643,4 @@ export function useApp() {
   }
   return context
 }
+

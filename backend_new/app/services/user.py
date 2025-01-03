@@ -19,6 +19,7 @@ class UserService:
     async def create(self, user_in: UserCreate) -> User:
         """새 사용자 생성"""
         db_user = User(
+            id=uuid4(),  # UUID 자동 생성
             email=user_in.email,
             name=user_in.name,
             hashed_password=get_password_hash(user_in.password),
@@ -53,6 +54,18 @@ class UserService:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_oauth(self, provider: str, oauth_id: str) -> Optional[User]:
+        """OAuth 제공자와 ID로 사용자 조회"""
+        result = await self.db.execute(
+            select(User).where(
+                and_(
+                    User.oauth_provider == provider,
+                    User.oauth_provider_id == oauth_id
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def update(self, user_id: UUID, user_in: UserUpdate) -> Optional[User]:
         """사용자 정보 수정"""
         user = await self.get(user_id)
@@ -79,6 +92,22 @@ class UserService:
         await self.db.delete(user)
         await self.db.commit()
         return True
+
+    async def create_oauth_user(self, user_data: dict) -> User:
+        """OAuth 사용자 생성"""
+        db_user = User(
+            id=uuid4(),  # UUID 자동 생성
+            email=user_data["email"],
+            name=user_data["name"],
+            oauth_provider=user_data["oauth_provider"],
+            oauth_provider_id=user_data["oauth_provider_id"],
+            is_active=True,
+            is_superuser=False
+        )
+        self.db.add(db_user)
+        await self.db.commit()
+        await self.db.refresh(db_user)
+        return db_user
 
     async def create_session(self, session_in: SessionCreate) -> Session:
         """새 세션 생성"""

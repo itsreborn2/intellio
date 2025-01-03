@@ -9,8 +9,8 @@ from app.schemas.category import CategoryResponse, CategoryCreate, AddProjectToC
 from app.schemas.project import ProjectResponse
 from app.models.category import Category
 from app.models.project import Project
-#from app.models.project_category import ProjectCategory
-from app.core.deps import get_db
+from app.models.user import Session
+from app.core.deps import get_db, get_current_session
 from uuid import UUID
 import logging
 from fastapi.responses import JSONResponse
@@ -20,7 +20,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/", response_model=List[CategoryResponse])
-async def get_categories(db: AsyncSession = Depends(get_db)):
+async def get_categories(
+    session: Session = Depends(get_current_session),
+    db: AsyncSession = Depends(get_db)
+):
+    
     """사용자의 모든 카테고리를 조회합니다."""
     try:
         logger.debug(f"사용자의 모든 카테고리를 조회합니다.")
@@ -30,7 +34,12 @@ async def get_categories(db: AsyncSession = Depends(get_db)):
         result = await db.execute(stmt)
         user_categories = result.scalars().all()
         return user_categories
+    except HTTPException as he:
+        # HTTP 예외는 그대로 전달 (401, 403 등)
+        raise he
     except Exception as e:
+        # 그 외 예외만 500으로 처리
+        logger.error(f"카테고리 조회 중 오류 발생: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=CategoryResponse)

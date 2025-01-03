@@ -5,6 +5,7 @@ import { Settings, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
+import { useAuth } from "@/hooks/useAuth"
 import * as api from "@/services/api"
 import {
   Dialog,
@@ -14,9 +15,19 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { FontSettings } from "@/components/settings/FontSettings"
+import { LoginButton } from "@/components/auth/LoginButton"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 export const Header = ({ className }: { className?: string }) => {
   const { state, dispatch } = useApp()
+  const auth = useAuth()
+  
+  // 디버깅을 위한 상태 로깅
+  console.log('[Header] Current Auth State:', auth)
+  //console.log('LocalStorage Token:', localStorage.getItem('token'))
+  
+  const { isAuthenticated, name, email, logout } = auth
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -83,25 +94,70 @@ export const Header = ({ className }: { className?: string }) => {
   return (
     <div className={`border-b p-4 flex items-center justify-between ${className || ''}`}>
       <div className="flex items-center gap-2">
-        {isEditingTitle ? (
-          <Input
-            ref={titleInputRef}
-            value={editingTitle}
-            onChange={handleTitleChange}
-            onBlur={handleTitleBlur}
-            onKeyDown={handleKeyDown}
-            className="text-lg font-semibold"
-          />
-        ) : (
-          <h1 className="text-lg font-semibold cursor-pointer" onClick={handleTitleClick}>
-            {state.projectTitle || 'Untitled Project'}
-          </h1>
-        )}
+        {isAuthenticated ? (
+          isEditingTitle ? (
+            <Input
+              ref={titleInputRef}
+              value={editingTitle}
+              onChange={handleTitleChange}
+              onBlur={handleTitleBlur}
+              onKeyDown={handleKeyDown}
+              className="text-lg font-semibold"
+            />
+          ) : (
+            <h1 className="text-lg font-semibold cursor-pointer" onClick={handleTitleClick}>
+              {state.projectTitle || 'Untitled Project'}
+            </h1>
+          )
+        ) : null}
       </div>
       <div className="flex items-center gap-2">
+        {/* 사용자 메뉴 */}
+        {isAuthenticated ? (
+          <>
+            <span className="text-sm text-gray-600">{email}</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" name="user">
+                  <User className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={logout}>
+                  로그아웃
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">로그인이 필요합니다</span>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" name="user">
+                  <User className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>로그인 선택</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="flex flex-col space-y-2">
+                    <LoginButton provider="google" />
+                    <LoginButton provider="naver" />
+                    <LoginButton provider="kakao" />
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
         <Dialog>
           <DialogTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" name="settings" >
               <Settings className="h-4 w-4" />
             </Button>
           </DialogTrigger>
@@ -112,9 +168,6 @@ export const Header = ({ className }: { className?: string }) => {
             <FontSettings />
           </DialogContent>
         </Dialog>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <User className="h-4 w-4" />
-        </Button>
       </div>
     </div>
   )
