@@ -1,6 +1,9 @@
 from typing import List
 from pydantic_settings import BaseSettings
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     # API Settings
@@ -38,6 +41,9 @@ class Settings(BaseSettings):
     OPENAI_DOCUMENT_PROMPT: str | None = None
     OPENAI_SUMMARY_PROMPT: str | None = None
     
+    # Google AI (Gemini) Settings
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    
     # Redis - from .env
     REDIS_URL: str
     
@@ -46,12 +52,21 @@ class Settings(BaseSettings):
     PGADMIN_PASSWORD: str
     
     # Google Cloud Storage - from .env
-    GOOGLE_CLOUD_PROJECT: str = "intellio-document"
-    GOOGLE_APPLICATION_CREDENTIALS: str = "app/credentials/intellio-document-5e9dd6681039.json"
-    GOOGLE_DOCUMENT_AI_PROCESSOR_ID: str = "your-processor-id"  # Document AI 프로세서 ID
-    GOOGLE_CLOUD_LOCATION: str
-    GOOGLE_CLOUD_STORAGE_BUCKET: str
-    GCS_BUCKET_NAME: str = "intellio-documents"
+    GOOGLE_CLOUD_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "intellio-document")
+    GOOGLE_APPLICATION_CREDENTIALS: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+    GOOGLE_DOCUMENT_AI_PROCESSOR_ID: str = os.getenv("GOOGLE_DOCUMENT_AI_PROCESSOR_ID", "")
+    GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "")
+    GOOGLE_CLOUD_STORAGE_BUCKET: str = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET", "")
+    GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME", "")
+
+    def get_google_cloud_credentials(self) -> str:
+        """Google Cloud 인증 정보를 파일에서 읽어옴"""
+        try:
+            with open(self.GOOGLE_APPLICATION_CREDENTIALS) as f:
+                return f.read()
+        except Exception as e:
+            logger.error(f"Failed to read Google Cloud credentials: {str(e)}")
+            return ""
     
     # OAuth Settings
     # Kakao
@@ -81,11 +96,6 @@ class Settings(BaseSettings):
         'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'tiff'
     }
     MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024  # 16MB
-    
-    @property
-    def GOOGLE_CLOUD_CREDENTIALS(self) -> str:
-        with open(self.GOOGLE_APPLICATION_CREDENTIALS) as f:
-            return f.read()
     
     # Pinecone Settings
     PINECONE_API_KEY: str

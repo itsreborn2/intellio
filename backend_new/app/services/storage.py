@@ -13,15 +13,23 @@ logger = logging.getLogger(__name__)
 
 class StorageService:
     def __init__(self):
-        credentials = service_account.Credentials.from_service_account_info(
-            json.loads(settings.GOOGLE_CLOUD_CREDENTIALS)
-        )
-        self.client = storage.Client(
-            project=settings.GOOGLE_CLOUD_PROJECT,
-            credentials=credentials
-        )
-        self.bucket = self.client.bucket(settings.GCS_BUCKET_NAME)
-        logger.info(f"StorageService initialized with bucket: {settings.GCS_BUCKET_NAME}")
+        try:
+            credentials_json = settings.get_google_cloud_credentials()
+            if not credentials_json:
+                raise ValueError("Google Cloud credentials not found")
+                
+            credentials = service_account.Credentials.from_service_account_info(
+                json.loads(credentials_json)
+            )
+            self.client = storage.Client(
+                project=settings.GOOGLE_CLOUD_PROJECT,
+                credentials=credentials
+            )
+            self.bucket = self.client.bucket(settings.GCS_BUCKET_NAME)
+            logger.info(f"StorageService initialized with bucket: {settings.GCS_BUCKET_NAME}")
+        except Exception as e:
+            logger.error(f"Failed to initialize StorageService: {str(e)}")
+            raise RuntimeError(f"Failed to initialize Google Cloud Storage: {str(e)}")
 
     async def upload_file(self, destination_blob_name: str, file_content: bytes) -> str:
         """파일을 구글 클라우드 스토리지에 업로드

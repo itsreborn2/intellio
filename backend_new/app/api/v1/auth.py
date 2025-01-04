@@ -167,6 +167,7 @@ async def oauth_callback(
         elif provider == "naver":
             token_info = await oauth_service.get_naver_token(code)
             user_info = await oauth_service.get_naver_user(token_info["access_token"])
+            print("Naver user info:", user_info)  # 디버깅을 위한 로그 추가
         else:
             raise HTTPException(status_code=400, detail="Invalid provider")
 
@@ -186,7 +187,7 @@ async def oauth_callback(
                 "email": email,
                 "oauth_provider": provider,
                 "oauth_provider_id": oauth_id,
-                "name": user_info.get("name", "Unknown")
+                "name": user_info.get("nickname") or user_info.get("name") or email.split("@")[0]
             })
         
         # JWT 토큰 생성
