@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
 const API_ENDPOINT = `${API_BASE_URL}/api/v1`
 
 import { format, parseISO } from 'date-fns';

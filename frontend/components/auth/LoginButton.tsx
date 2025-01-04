@@ -20,36 +20,9 @@ interface IOAuthConfig {
   redirect_uri: string;
 }
 
-// OAuth 제공자별 설정
-const oAuthConfigs: Record<string, IOAuthConfig> = {
-  kakao: {
-    auth_uri: 'https://kauth.kakao.com/oauth/authorize',
-    client_id: process.env.NEXT_PUBLIC_KAKAO_CLIENT_ID || '',
-    scope: 'profile_nickname account_email',
-    redirect_uri: `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/kakao/callback`
-  },
-  google: {
-    auth_uri: 'https://accounts.google.com/o/oauth2/v2/auth',
-    client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
-    scope: 'email profile',
-    redirect_uri: `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/google/callback`
-  },
-  naver: {
-    // https://nid.naver.com/oauth2.0/authorize?client_id=&redirect_uri=undefined%2Fapi%2Fv1%2Fauth%2Fnaver%2Fcallback&response_type=code&scope=name+email
-    auth_uri: 'https://nid.naver.com/oauth2.0/authorize',
-    client_id: process.env.NEXT_PUBLIC_NAVER_CLIENT_ID || '',
-    scope: 'name email',
-    redirect_uri: process.env.NEXT_PUBLIC_NAVER_REDIRECT_URI || ''
-  }
-};
 
 export const LoginButton: React.FC<ILoginButtonProps> = ({ provider }) => {
-    const handleLoginTest = () => {
-        const config = oAuthConfigs[provider];
-        console.log(`${provider} : ${config.auth_uri}`);
-        console.log(`${provider} : ${config.scope}`);
-        console.log(`${provider} : ${config.redirect_uri}`);
-    }
+
   // 로그인 처리 함수
   const handleLogin = () => {
     // 백엔드의 OAuth 로그인 엔드포인트로 리다이렉트
