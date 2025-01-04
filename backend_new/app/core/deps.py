@@ -1,12 +1,13 @@
 from typing import AsyncGenerator, Optional, Type
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import Depends, HTTPException, status, Cookie
+from fastapi import Depends, HTTPException, status, Cookie, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.services.user import UserService
 from app.models.user import Session
+from app.schemas.user import SessionCreate
 from app.services.project import ProjectService
 from app.services.document import DocumentService
 
@@ -17,23 +18,51 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def get_current_session(
     session_id: Optional[str] = Cookie(None),
+    response: Response = None,
     db: AsyncSession = Depends(get_db)
 ) -> Session:
-    """현재 세션 가져오기"""
-    if not session_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="세션이 존재하지 않습니다."
-        )
-
+    """현재 세션 가져오기. 세션이 없으면 새로 생성"""
     user_service = UserService(db)
+    
+    if not session_id:
+        # 새 세션 생성
+        session_create = SessionCreate(
+            session_id=str(uuid4()),
+            is_anonymous=True
+        )
+        session = await user_service.create_session(session_create)
+        
+        if response:
+            # 세션 ID를 쿠키에 설정
+            response.set_cookie(
+                key="session_id",
+                value=session.session_id,
+                max_age=30 * 24 * 60 * 60,  # 30일
+                httponly=True,
+                secure=True,  # HTTPS 전용
+                samesite="strict"  # CSRF 방지 강화
+            )
+        return session
+
     session = await user_service.get_active_session(session_id)
     
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="유효하지 않은 세션입니다."
+        # 세션이 없거나 만료된 경우 새로 생성
+        session_create = SessionCreate(
+            session_id=str(uuid4()),
+            is_anonymous=True
         )
+        session = await user_service.create_session(session_create)
+        
+        if response:
+            response.set_cookie(
+                key="session_id",
+                value=session.session_id,
+                max_age=30 * 24 * 60 * 60,
+                httponly=True,
+                secure=True,
+                samesite="strict"
+            )
     
     return session
 

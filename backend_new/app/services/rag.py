@@ -4,6 +4,8 @@ import logging
 from typing import Dict, Any, List, Union
 from uuid import UUID
 import pandas as pd
+import re
+import aiohttp
 
 from openai import AsyncOpenAI
 
@@ -31,6 +33,7 @@ class RAGService:
     CHAT_SYSTEM_MSG = (
         "다음 규칙을 따라 응답을 작성하세요:\n\n"
         "1. 가독성을 위한 형식\n"
+        "- 번호와 내용은 한 줄에 작성 (예: '1. 내용')\n"
         "- 주요 구분점에서만 빈 줄 사용\n"
         "- 하위 항목들은 줄바꿈만 사용하고 빈 줄 없음\n"
         "- 목록 들여쓰기 규칙:\n"
@@ -38,7 +41,7 @@ class RAGService:
         "  • 2단계 항목은 2칸 들여쓰기 ('-')\n"
         "  • 3단계 항목은 4칸 들여쓰기 ('·')\n"
         "  • 금액, 수치 등의 정보는 해당 항목과 동일 선상에 배치\n\n"
-        "2. 특수 표시 규칙:\n"
+        "2. 특수 표시 규칙\n"
         "- 증가/긍정적 금액: <mp>금액</mp> 형식으로 표시 (파란색)\n"
         "- 감소/부정적 금액: <mn>금액</mn> 형식으로 표시 (빨간색)\n"
         "- 기본/중립적 금액: <m>금액</m> 형식으로 표시 (검정색 볼드)\n"
@@ -48,7 +51,8 @@ class RAGService:
         "- 제목은 '# 제목:' 형식으로 표시\n"
         "- 중요 구분점은 '>' 사용\n"
         "- 핵심 키워드는 '[키워드]' 형식으로 표시\n"
-        "- 결론/요약은 '※' 기호로 시작\n\n"
+        "- 결론/요약은 '※' 기호로 시작\n"
+        "- 모든 번호 매기기는 내용과 함께 한 줄에 작성\n\n"
         "3. 내용 작성\n"
         "- 문서의 내용에만 기반하여 답변\n"
         "- 관련 내용이 없다면 '관련 내용이 문서에 없습니다'로 응답\n"
@@ -83,19 +87,64 @@ class RAGService:
 """
 
     TABLE_CONTENT_SYSTEM_MSG = (
-        "주어진 문서에서 지정된 항목에 대한 내용을 추출하세요. "
-        "다음 규칙을 반드시 따르세요:\n"
-        "1. 항목에 정확히 대응하는 내용만 추출\n"
-        "2. 문서에 없는 내용은 '내용없음'으로 표시\n"
-        "3. 추측이나 해석 없이 원문의 내용만 사용\n"
-        "4. 내용은 간단명료하게 정리"
+        "당신은 다양한 분야의 전문가이며 문서 분석 전문가입니다. 주어진 문서를 다음 지침에 따라 분석하고 정리하세요:\n\n"
+        "1. 기본 작성 규칙\n"
+        "- 번호와 내용은 반드시 한 줄에 작성 (예: '1. 내용')\n"
+        "- 모든 목록은 번호나 기호와 함께 한 줄로 표시\n"
+        "- 불필요한 줄바꿈 없이 간결하게 작성\n\n"
+        "2. 분석 방식\n"
+        "- 문서의 맥락과 목적을 정확히 파악\n"
+        "- 해당 분야의 전문가 관점에서 중요 정보 식별\n"
+        "- 사용자가 실제로 알고 싶어할 핵심 내용에 집중\n"
+        "- 관련 법규, 규정, 업계 표준 등 참고 정보 포함\n\n"
+        "3. 표현 방식\n"
+        "- 경어체 사용하지 않음\n"
+        "- '~임', '~했음', '~로 판단됨' 등 간결한 종결어 사용\n"
+        "- 전문 용어는 쉬운 설명 병기\n"
+        "- 수치, 날짜, 금액은 명확히 표기\n\n"
+        "4. 수치/금액 표시 규칙\n"
+        "- 증가/긍정적 금액: <mp>금액</mp> (파란색)\n"
+        "- 감소/부정적 금액: <mn>금액</mn> (빨간색)\n"
+        "- 기본/중립적 금액: <m>금액</m> (검정색 볼드)\n"
+        "- 증가/상승 수치: <np>수치</np> (파란색)\n"
+        "- 감소/하락 수치: <nn>수치</nn> (빨간색)\n"
+        "- 기본/목표 수치: <n>수치</n> (검정색 볼드)\n"
+        "- 모든 수치는 맥락에 따라 적절한 태그 사용\n"
+        "- 비교 수치는 증감 여부에 따라 색상 구분\n\n"
+        "5. 내용 구성\n"
+        "- 요약: 핵심 내용 3줄 이내 요약\n"
+        "- 주요 내용: 중요도 순으로 정리\n"
+        "- 세부 사항: 구체적 수치나 조건\n"
+        "- 관련 정보: 연관된 중요 맥락\n"
+        "- 위험/주의사항: 잠재적 문제나 고려사항\n\n"
+        "6. 분야별 특화 분석\n"
+        "- 법률: 법적 의미와 영향 분석\n"
+        "- 기술: 기술적 특징과 장단점\n"
+        "- 금융: 재무적 영향과 리스크\n"
+        "- 의료: 임상적 의미와 주의사항\n"
+        "- 특허: 권리범위와 활용방안\n"
+        "- 계약: 주요 조건과 책임사항\n"
+        "- 연구: 방법론과 시사점\n"
+        "- 정책: 적용범위와 영향\n\n"
+        "7. 결과물 형식\n"
+        "- 명확한 구조와 계층화된 정보\n"
+        "- 중요도에 따른 강조 표시\n"
+        "- 관련 항목 간 연결성 표시\n"
+        "- 실행 가능한 인사이트 제공\n\n"
+        "8. 품질 기준\n"
+        "- 사실 기반의 객관적 분석\n"
+        "- 추측이나 과장 없는 정확한 정보\n"
+        "- 실용적이고 구체적인 내용\n"
+        "- 문서 없는 내용은 '확인 불가' 표시"
     )
-
+    
     def __init__(self):
         """RAG 서비스 초기화"""
         self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.embedding_service = EmbeddingService()
         self.model = "gpt-3.5-turbo"  # 기본 모델
+        self.gemini_api_key = settings.GEMINI_API_KEY
+        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
         self.db = None  # DB 세션을 저장할 속성 추가
 
     async def initialize(self, db):
@@ -162,53 +211,113 @@ class RAGService:
             logger.error(f"헤더 추출 중 오류 발생: {str(e)}")
             raise
 
-    async def _fill_table_cell(self, query: str, header: str, document_id: str) -> str:
-        """테이블 셀의 내용을 채웁니다."""
+    async def _call_gemini_api(self, prompt: str) -> str:
+        """Gemini API 호출"""
+        async with aiohttp.ClientSession() as session:
+            headers = {'Content-Type': 'application/json'}
+            data = {
+                "contents": [{
+                    "parts":[{"text": prompt}]
+                }]
+            }
+            url = f"{self.gemini_url}?key={self.gemini_api_key}"
+            
+            async with session.post(url, headers=headers, json=data) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result['candidates'][0]['content']['parts'][0]['text']
+                else:
+                    raise Exception(f"Gemini API 오류: {await response.text()}")
+
+    async def _handle_chat_mode(self, query: str, top_k: int = 5, document_ids: List[str] = None):
+        """채팅 모드 처리 - Gemini 사용"""
         try:
-            # 1. 문서의 청크들을 가져옵니다
-            chunks = await self.embedding_service.get_document_chunks(document_id)
-            if not chunks:
-                logger.warning(f"문서 {document_id}의 청크를 찾을 수 없습니다")
-                return "분석중..."
-
-            # 2. 청크의 텍스트를 하나로 합칩니다
-            full_text = "\n".join(chunk["text"] for chunk in chunks)
-            if not full_text:
-                logger.warning(f"문서 {document_id}의 텍스트가 비어있습니다")
-                return "분석중..."
-
-            # 3. GPT를 사용하여 내용을 추출합니다
-            system_prompt = """주어진 문서에서 지정된 항목에 대한 내용을 추출하세요. 다음 규칙을 반드시 따르세요:
-1. 항목에 정확히 대응하는 내용만 추출
-2. 문서에 없는 내용은 '내용없음'으로 표시
-3. 추측이나 해석 없이 원문의 내용만 사용
-4. 내용은 간단명료하게 정리"""
-
-            user_prompt = f"""
-문서 내용:
-{full_text}
-
-추출할 항목: {header}
-추출할 내용: {query}
-"""
-            logger.info(f"문서 {document_id} 내용 길이: {len(full_text)} 문자")
-            
-            response = await self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.0
+            # 1. 임베딩 서비스로 관련 문서 검색
+            relevant_contexts = await self.embedding_service.search_similar(
+                query=query,
+                top_k=top_k,
+                document_ids=document_ids
             )
-            
-            content = response.choices[0].message.content
-            logger.info(f"문서 {document_id} 추출 결과: {content[:100]}...")
-            return content
 
+            # 2. 문서 컨텍스트 구성
+            doc_contexts = []
+            for ctx in relevant_contexts:
+                doc_contexts.append(
+                    f"문서 ID: {ctx['document_id']}\n"
+                    f"페이지: {ctx.get('page_number', 'N/A')}\n"
+                    f"내용: {ctx['text']}"
+                )
+            
+            # 3. Gemini API용 프롬프트 구성
+            context = (
+                f"시스템: {self.CHAT_SYSTEM_MSG}\n\n"
+                f"문서 내용:\n{'\n\n'.join(doc_contexts)}\n\n"
+                f"사용자: {query}"
+            )
+
+            # 4. Gemini API 호출
+            response = await self._call_gemini_api(context)
+            
+            return {
+                "answer": response,
+                "context": relevant_contexts
+            }
+            
         except Exception as e:
-            logger.error(f"테이블 셀 내용 추출 중 오류: {str(e)}")
-            return "오류 발생"
+            logger.error(f"채팅 모드 처리 중 오류 발생: {str(e)}", exc_info=True)
+            raise
+
+    async def _fill_table_cell(self, query: str, header: str, document_id: str):
+        """테이블 셀 내용 생성 - Gemini 사용"""
+        try:
+            # 기존 컨텍스트 수집 로직 유지
+            context = f"시스템: {self.TABLE_CONTENT_SYSTEM_MSG}\n\n문서 내용:\n{context}\n\n헤더: {header}\n질문: {query}"
+            
+            # Gemini API 호출
+            content = await self._call_gemini_api(context)
+            
+            return self.process_table_content(content)
+        except Exception as e:
+            logger.error(f"테이블 셀 내용 생성 중 오류 발생: {str(e)}")
+            raise
+
+    async def process_table_content(self, content: str) -> str:
+        # 데이터 전처리
+        content = self._preprocess_table_content(content)
+        
+        # 청크 사이즈 계산 (약 8000 토큰)
+        chunk_size = 12000
+        chunks = [content[i:i + chunk_size] for i in range(0, len(content), chunk_size)]
+        
+        results = []
+        for chunk in chunks:
+            try:
+                messages = [
+                    {"role": "system", "content": self.TABLE_CONTENT_SYSTEM_MSG},
+                    {"role": "user", "content": chunk}
+                ]
+                
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-3.5-turbo-16k",  # 16k 컨텍스트 윈도우 모델 사용
+                    messages=messages,
+                    temperature=0.0
+                )
+                
+                result = response.choices[0].message.content
+                results.append(result)
+                
+            except Exception as e:
+                logger.error(f"테이블 셀 내용 추출 중 오류 발생: {str(e)}")
+                continue
+                
+        return "\n".join(results)
+
+    def _preprocess_table_content(self, content: str) -> str:
+        # 연속된 공백 제거
+        content = re.sub(r'\s+', ' ', content)
+        # 불필요한 빈 줄 제거
+        content = re.sub(r'\n\s*\n', '\n', content)
+        return content.strip()
 
     async def search_table(self, query: str, doc_ids: List[str]) -> TableResponse:
         """테이블 형식으로 문서 검색"""
@@ -318,59 +427,6 @@ class RAGService:
             
         except Exception as e:
             logger.error(f"테이블 모드 처리 중 오류 발생: {str(e)}")
-            raise
-
-    async def _handle_chat_mode(self, query: str, top_k: int = 5, document_ids: List[str] = None) -> Dict[str, Any]:
-        """채팅 모드 처리"""
-        try:
-            # 1. 유사 문서 검색 (특정 문서 ID들로 제한)
-            similar_chunks = await self.embedding_service.search_similar(
-                query=query,
-                top_k=top_k,
-                document_ids=document_ids
-            )
-            
-            if not similar_chunks:
-                return {
-                    "answer": "관련 내용이 문서에 없습니다.",
-                    "context": []
-                }
-
-            # 2. 컨텍스트 준비
-            context_texts = [
-                f"[Score: {chunk['score']:.2f}] {chunk['text']}"  
-                for chunk in similar_chunks
-            ]
-            context_str = "\n\n".join(context_texts)
-            
-            # 3. Chat 응답 생성
-            user_msg = (
-                f"Question: {query}\n\n"
-                f"Context:\n{context_str}\n\n"
-                "Please answer based on this context."
-            )
-            
-            response = await self.openai_client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": self.CHAT_SYSTEM_MSG},
-                    {"role": "user", "content": user_msg}
-                ],
-                temperature=0.7,
-            )
-            
-            answer = response.choices[0].message.content
-            
-            return {
-                "answer": answer.strip(),
-                "context": [
-                    {"text": chunk["text"], "score": chunk["score"]}  
-                    for chunk in similar_chunks
-                ]
-            }
-            
-        except Exception as e:
-            logger.error(f"채팅 모드 처리 중 오류 발생: {str(e)}")
             raise
 
     async def get_document_status(self, document_id: str) -> Dict[str, Any]:

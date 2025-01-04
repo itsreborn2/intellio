@@ -55,7 +55,8 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     debug=True,  # 디버그 모드 활성화
-    lifespan=lifespan
+    lifespan=lifespan,
+    redirect_slashes=False  # 슬래시 리다이렉션 비활성화
 )
 
 # CORS 설정

@@ -1,9 +1,10 @@
 from typing import List
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
+from datetime import datetime, timedelta
 
 from app.schemas.project import (
     ProjectCreate,
@@ -44,18 +45,45 @@ async def create_project(
 @router.get("/recent", response_model=RecentProjectsResponse)
 async def get_recent_projects(
     limit: int = 5,
+    response: Response = None,
     session: Session = Depends(get_current_session),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """최근 프로젝트 목록 조회"""
-    result = await project_service.get_recent(
+    logger.debug(f"최근 프로젝트 조회 - 세션 ID: {session.session_id}")
+    
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_start = today_start - timedelta(days=1)
+    four_days_ago_start = today_start - timedelta(days=4)
+    
+    # 오늘 생성된 프로젝트
+    today = await project_service.get_recent(
+        session=session,
         limit=limit,
-        session=session
+        start_date=today_start
     )
+    
+    # 어제 생성된 프로젝트
+    yesterday = await project_service.get_recent(
+        session=session,
+        limit=limit,
+        start_date=yesterday_start,
+        end_date=today_start
+    )
+    
+    # 4일 전 생성된 프로젝트
+    four_days_ago = await project_service.get_recent(
+        session=session,
+        limit=limit,
+        start_date=four_days_ago_start,
+        end_date=yesterday_start
+    )
+    
     return {
-        "today": result["today"],
-        "yesterday": result["yesterday"],
-        "four_days_ago": result["four_days_ago"]
+        "today": today,
+        "yesterday": yesterday,
+        "four_days_ago": four_days_ago
     }
 
 @router.get("/{project_id}", response_model=ProjectResponse)

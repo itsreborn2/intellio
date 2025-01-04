@@ -23,6 +23,11 @@ import { useApp } from "@/contexts/AppContext"
 import { createProject, uploadDocument } from "@/services/api"
 import { Tooltip, Box, DragIndicatorIcon } from "@mui/material"
 import { cn } from "@/lib/utils"
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
 
 // Shadcn Table Components
 const Table = React.forwardRef<
@@ -120,11 +125,174 @@ interface TableData {
 }
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
-  <div className="flex items-center gap-2 bg-muted/90 w-fit px-2 py-1 rounded">
-    <FileText className="h-4 w-4 text-muted-foreground" />
+  <div className="bg-muted/90 w-fit px-2 py-1 rounded">
     <span className="text-sm text-muted-foreground">{fileName}</span>
   </div>
 )
+
+const formatContent = (content: string) => {
+  if (!content) return "";
+  
+  // 문장 단위로 분리하고 정리
+  const sentences = content.split(/[.!?]\s+/);
+  const formattedSentences = sentences
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence)
+    .map(sentence => {
+      // 불릿 포인트나 넘버링으로 시작하는 문장 처리
+      if (sentence.includes('•') || /^\d+[\.\)]/.test(sentence)) {
+        return sentence + (sentence.match(/[.!?]$/) ? '' : '.');
+      }
+      return sentence + (sentence.match(/[.!?]$/) ? '' : '.');
+    });
+
+  // 내용 구조화
+  const sections = [];
+  let currentSection = [];
+  
+  for (let i = 0; i < formattedSentences.length; i++) {
+    const sentence = formattedSentences[i];
+    
+    // 새로운 섹션 시작 여부 확인
+    const isNewSection = 
+      sentence.includes(':') || 
+      sentence.toLowerCase().includes('요구사항') ||
+      sentence.toLowerCase().includes('참고') ||
+      sentence.toLowerCase().includes('주의') ||
+      (currentSection.length > 0 && isSignificantContextChange(sentence, currentSection[currentSection.length - 1]));
+
+    if (isNewSection) {
+      if (currentSection.length > 0) {
+        sections.push(currentSection.join('\n'));
+        currentSection = [];
+      }
+      currentSection.push(sentence);
+    } else {
+      // 불릿 포인트나 넘버링이 있는 경우 새 줄에 추가
+      if (/^[•\d]/.test(sentence.trim())) {
+        if (currentSection.length > 0 && !currentSection[currentSection.length - 1].endsWith('\n')) {
+          currentSection[currentSection.length - 1] += '\n';
+        }
+      }
+      currentSection.push(sentence);
+    }
+  }
+  
+  if (currentSection.length > 0) {
+    sections.push(currentSection.join('\n'));
+  }
+
+  // 최종 포맷팅
+  return sections
+    .map(section => section.trim())
+    .filter(section => section)
+    .join('\n\n');
+};
+
+// 문맥 변화 감지 함수
+const isSignificantContextChange = (currentSentence: string, previousSentence: string) => {
+  // 주제어 목록
+  const keywords = [
+    '구현', '개발', '기능', '설계', '요구', '제약',
+    '규칙', '조건', '참고', '주의', '중요', '필수',
+    '선택', '옵션', '권장', '금지', '허용', '제한'
+  ];
+  
+  // 이전 문장과 현재 문장의 주제어 포함 여부 비교
+  const previousKeywords = keywords.filter(keyword => 
+    previousSentence.toLowerCase().includes(keyword)
+  );
+  const currentKeywords = keywords.filter(keyword => 
+    currentSentence.toLowerCase().includes(keyword)
+  );
+  
+  // 주제어가 완전히 다르면 문맥 변화로 판단
+  return (
+    currentKeywords.length > 0 &&
+    previousKeywords.length > 0 &&
+    !currentKeywords.some(keyword => previousKeywords.includes(keyword))
+  );
+};
+
+const CellContent = ({ content, isDocument = false }: { content: string, isDocument?: boolean }) => {
+  const formattedContent = formatContent(content);
+  
+  // 컨텐츠 길이에 따른 카드 크기 계산
+  const getCardSize = (content: string) => {
+    if (!content) return { width: 300, height: 150 };
+    
+    const lines = content.split('\n').filter(line => line.trim());
+    const maxLineLength = Math.max(...lines.map(line => line.length));
+    const lineCount = lines.length;
+    
+    // 기본 사이즈 계산
+    let width = 400;
+    let height = Math.min(150 + (lineCount * 24), 500); // 줄 수에 따른 높이 계산 (줄당 24px)
+    
+    // 가로 길이 조정
+    if (maxLineLength > 100) {
+      width = 700;
+    } else if (maxLineLength > 80) {
+      width = 600;
+    } else if (maxLineLength > 60) {
+      width = 500;
+    }
+    
+    // 최소/최대 크기 제한
+    width = Math.min(800, Math.max(300, width));
+    height = Math.min(500, Math.max(100, height));
+    
+    // 최종 크기에 여백 추가
+    height += 32; // 상하 패딩 16px씩
+    
+    return { width, height };
+  };
+  
+  const cardSize = getCardSize(formattedContent);
+  
+  return (
+    <HoverCard openDelay={200}>
+      <HoverCardTrigger asChild>
+        <div className={`${
+          !isDocument ? "line-clamp-3 hover:cursor-pointer" : ""
+        }`}>
+          {isDocument ? (
+            <DocumentTitle fileName={content || ''} />
+          ) : (
+            <div className="text-sm text-muted-foreground whitespace-pre-line">
+              {formattedContent || ""}
+            </div>
+          )}
+        </div>
+      </HoverCardTrigger>
+      {!isDocument && formattedContent && (
+        <HoverCardContent 
+          className="p-4"
+          style={{
+            width: `${cardSize.width}px`,
+            height: `${cardSize.height}px`,
+          }}
+          side="right"
+        >
+          <div className="text-sm leading-relaxed tracking-wide">
+            {formattedContent.split('\n').map((line, index) => (
+              <div 
+                key={index} 
+                className={`
+                  ${/^[•\d]/.test(line.trim()) ? 'pl-4 py-1' : 'py-0.5'}
+                  ${line.includes(':') ? 'font-semibold py-2' : ''}
+                  whitespace-pre-line
+                `}
+              >
+                {line}
+              </div>
+            ))}
+          </div>
+        </HoverCardContent>
+      )}
+    </HoverCard>
+  );
+};
 
 export const TableSection = () => {
   const { state, dispatch } = useApp()
@@ -146,13 +314,21 @@ export const TableSection = () => {
       const columnNames = state.analysis.tableData.columns.map(col => col.header.name);
       setColumns(columnNames);
       
-      // Document 컬럼을 첫 번째로, 나머지 컬럼들은 그 뒤에 배치
+      // Document 컬럼을 첫 번째로, 새 컬럼은 Document 다음에, 나머지 컬럼들은 그 뒤에 배치
       const documentIndex = columnNames.indexOf("Document");
       if (documentIndex !== -1) {
+        const documentColumn = "Document";
+        const existingColumns = columnOrder.filter(name => name !== "Document" && columnNames.includes(name));
+        const newColumns = columnNames.filter(name => 
+          name !== "Document" && !columnOrder.includes(name)
+        );
+        
         const reorderedColumns = [
-          "Document",
-          ...columnNames.filter(name => name !== "Document")
+          documentColumn,
+          ...newColumns,
+          ...existingColumns
         ];
+        
         setColumnOrder(reorderedColumns);
       } else {
         setColumnOrder(columnNames);
@@ -327,10 +503,16 @@ export const TableSection = () => {
 
       <div className="flex-1 overflow-auto relative">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] relative">
-          <Table className="w-full border-collapse">
+          <Table className="w-full border-collapse table-fixed">
+            <colgroup>
+              <col className="w-[40px] min-w-[40px] max-w-[40px]" />
+              {columnOrder.map((colName) => (
+                <col key={colName} className="w-auto" />
+              ))}
+            </colgroup>
             <TableHeader>
               <TableRow className="border-b">
-                <TableHead className="w-[50px] p-2 bg-muted/50">
+                <TableHead className="w-[40px] min-w-[40px] max-w-[40px] p-2 bg-muted/50">
                   <div className="flex items-center justify-center">
                     {state.analysis.tableData?.columns?.[0]?.cells?.length > 0 && (
                       <Checkbox
@@ -347,20 +529,24 @@ export const TableSection = () => {
                     )}
                   </div>
                 </TableHead>
-                {state.analysis.tableData?.columns?.map((column) => (
-                  <TableHead
-                    key={column.header.name}
-                    className={`p-2 bg-muted/50 ${
-                      column.header.name === "Document" ? "sticky left-[50px] z-20 bg-muted/50" : ""
-                    }`}
-                  >
-                    {state.analysis.tableData?.columns?.[0]?.cells?.length > 0 && (
-                      <div className="flex items-center justify-center text-center">
-                        <span className="font-medium">{column.header.name}</span>
-                      </div>
-                    )}
-                  </TableHead>
-                ))}
+                {columnOrder.map((colName) => {
+                  const column = state.analysis.tableData?.columns?.find(col => col.header.name === colName);
+                  if (!column) return null;
+                  return (
+                    <TableHead
+                      key={colName}
+                      className={`p-2 bg-muted/50 ${
+                        colName === "Document" ? "sticky left-[40px] z-20 bg-muted/50" : ""
+                      }`}
+                    >
+                      {state.analysis.tableData?.columns?.[0]?.cells?.length > 0 && (
+                        <div className="flex items-center justify-center text-center">
+                          <span className="font-medium">{colName}</span>
+                        </div>
+                      )}
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -371,7 +557,7 @@ export const TableSection = () => {
                     selectedRows.includes(rowIndex) ? "bg-muted/50" : ""
                   }`}
                 >
-                  <TableCell className="w-[50px] p-2">
+                  <TableCell className="w-[40px] min-w-[40px] max-w-[40px] p-2">
                     <div className="flex items-center justify-center">
                       <div className="relative group/row">
                         <span className="text-sm text-muted-foreground group-hover/row:invisible absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -392,48 +578,49 @@ export const TableSection = () => {
                       </div>
                     </div>
                   </TableCell>
-                  {state.analysis.tableData.columns.map((column) => (
-                    <TableCell
-                      key={column.header.name}
-                      onClick={() => {
-                        if (column.header.name !== "Document") {
-                          const isSelected = selectedCells.some(
-                            (selectedCell) =>
-                              selectedCell.row === rowIndex && selectedCell.col === column.header.name
-                          );
-                          if (isSelected) {
-                            setSelectedCells(selectedCells.filter(
-                              (cell) => !(cell.row === rowIndex && cell.col === column.header.name)
-                            ));
-                          } else {
-                            setSelectedCells([...selectedCells, { row: rowIndex, col: column.header.name }]);
+                  {columnOrder.map((colName) => {
+                    const column = state.analysis.tableData?.columns?.find(col => col.header.name === colName);
+                    if (!column) return null;
+                    return (
+                      <TableCell
+                        key={colName}
+                        onClick={() => {
+                          if (colName !== "Document") {
+                            const isSelected = selectedCells.some(
+                              (selectedCell) =>
+                                selectedCell.row === rowIndex && selectedCell.col === colName
+                            );
+                            if (isSelected) {
+                              setSelectedCells(selectedCells.filter(
+                                (cell) => !(cell.row === rowIndex && cell.col === colName)
+                              ));
+                            } else {
+                              setSelectedCells([...selectedCells, { row: rowIndex, col: colName }]);
+                            }
                           }
-                        }
-                      }}
-                      className={`p-2 cursor-pointer ${
-                        column.header.name === "Document"
-                          ? "sticky left-[50px] z-20 bg-background"
-                          : ""
-                      } ${
-                        selectedCells.some(
-                          (selectedCell) =>
-                            selectedCell.row === rowIndex && selectedCell.col === column.header.name
-                        )
-                          ? "bg-muted/80"
-                          : ""
-                      } ${
-                        column.header.name !== "Document" ? "hover:bg-muted/30" : ""
-                      }`}
-                    >
-                      {column.header.name === "Document" ? (
-                        <DocumentTitle fileName={column.cells[rowIndex]?.content || ''} />
-                      ) : (
-                        <div className="text-sm text-muted-foreground">
-                          {column.cells[rowIndex]?.content || ""}
-                        </div>
-                      )}
-                    </TableCell>
-                  ))}
+                        }}
+                        className={`p-2 cursor-pointer ${
+                          colName === "Document"
+                            ? "sticky left-[40px] z-20 bg-background"
+                            : ""
+                        } ${
+                          selectedCells.some(
+                            (selectedCell) =>
+                              selectedCell.row === rowIndex && selectedCell.col === colName
+                          )
+                            ? "bg-muted/80"
+                            : ""
+                        } ${
+                          colName !== "Document" ? "hover:bg-muted/30" : ""
+                        }`}
+                      >
+                        <CellContent 
+                          content={column.cells[rowIndex]?.content || ''} 
+                          isDocument={colName === "Document"}
+                        />
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))}
             </TableBody>

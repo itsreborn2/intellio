@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     
     # OpenAI Settings - from .env
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
     OPENAI_SYSTEM_PROMPT: str | None = None
     OPENAI_DOCUMENT_PROMPT: str | None = None
     OPENAI_SUMMARY_PROMPT: str | None = None
