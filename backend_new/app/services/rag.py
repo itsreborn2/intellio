@@ -270,18 +270,36 @@ class RAGService:
     async def _fill_table_cell(self, query: str, header: str, document_id: str):
         """테이블 셀 내용 생성 - Gemini 사용"""
         try:
-            # 기존 컨텍스트 수집 로직 유지
-            context = f"시스템: {self.TABLE_CONTENT_SYSTEM_MSG}\n\n문서 내용:\n{context}\n\n헤더: {header}\n질문: {query}"
+            # 1. 임베딩 서비스로 관련 문서 검색
+            relevant_contexts = await self.embedding_service.search_similar(
+                query=query,
+                top_k=5,
+                document_ids=[document_id]
+            )
             
-            # Gemini API 호출
+            # 2. 문서 컨텍스트 구성
+            doc_contexts = []
+            for ctx in relevant_contexts:
+                doc_contexts.append(
+                    f"문서 ID: {ctx['document_id']}\n"
+                    f"페이지: {ctx.get('page_number', 'N/A')}\n"
+                    f"내용: {ctx['text']}"
+                )
+            
+            # 3. 컨텍스트 구성
+            context = f"시스템: {self.TABLE_CONTENT_SYSTEM_MSG}\n\n문서 내용:\n{'\n\n'.join(doc_contexts)}\n\n헤더: {header}\n질문: {query}"
+            
+            # 4. Gemini API 호출
             content = await self._call_gemini_api(context)
             
-            return self.process_table_content(content)
+            # 5. 내용 처리 (await 추가)
+            return await self.process_table_content(content)
         except Exception as e:
             logger.error(f"테이블 셀 내용 생성 중 오류 발생: {str(e)}")
             raise
 
     async def process_table_content(self, content: str) -> str:
+        """테이블 내용 처리"""
         # 데이터 전처리
         content = self._preprocess_table_content(content)
         
@@ -297,13 +315,13 @@ class RAGService:
                     {"role": "user", "content": chunk}
                 ]
                 
-                response = self.openai_client.chat.completions.create(
+                completion = await self.openai_client.chat.completions.create(
                     model="gpt-3.5-turbo-16k",  # 16k 컨텍스트 윈도우 모델 사용
                     messages=messages,
                     temperature=0.0
                 )
                 
-                result = response.choices[0].message.content
+                result = completion.choices[0].message.content
                 results.append(result)
                 
             except Exception as e:

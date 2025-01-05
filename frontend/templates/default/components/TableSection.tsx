@@ -133,16 +133,44 @@ const DocumentTitle = ({ fileName }: { fileName: string }) => (
 const formatContent = (content: string) => {
   if (!content) return "";
   
+  // 특수 태그 처리를 위한 임시 저장소
+  const tags: {[key: string]: string[]} = {
+    mp: [], // 증가/긍정적 금액
+    mn: [], // 감소/부정적 금액
+    m: [],  // 기본/중립적 금액
+    np: [], // 증가/상승 수치
+    nn: [], // 감소/하락 수치
+    n: []   // 기본/목표 수치
+  };
+  
+  // 특수 태그를 임시 토큰으로 대체
+  let processedContent = content;
+  Object.keys(tags).forEach((tag, idx) => {
+    const regex = new RegExp(`<${tag}>([^<]+)</${tag}>`, 'g');
+    processedContent = processedContent.replace(regex, (match, content) => {
+      const token = `__${tag}_${idx}_${tags[tag].length}__`;
+      tags[tag].push(content);
+      return token;
+    });
+  });
+
   // 문장 단위로 분리하고 정리
-  const sentences = content.split(/[.!?]\s+/);
+  const sentences = processedContent.split(/(?<=[.!?])\s+/);
   const formattedSentences = sentences
     .map(sentence => sentence.trim())
     .filter(sentence => sentence)
     .map(sentence => {
+      // 마크다운 헤더 처리
+      if (sentence.startsWith('# ')) {
+        return sentence + '\n';
+      }
+      
       // 불릿 포인트나 넘버링으로 시작하는 문장 처리
-      if (sentence.includes('•') || /^\d+[\.\)]/.test(sentence)) {
+      if (sentence.startsWith('•') || sentence.startsWith('-') || /^\d+[\.\)]/.test(sentence)) {
         return sentence + (sentence.match(/[.!?]$/) ? '' : '.');
       }
+      
+      // 일반 문장 처리
       return sentence + (sentence.match(/[.!?]$/) ? '' : '.');
     });
 
@@ -155,6 +183,9 @@ const formatContent = (content: string) => {
     
     // 새로운 섹션 시작 여부 확인
     const isNewSection = 
+      sentence.startsWith('# ') ||
+      sentence.startsWith('> ') ||
+      sentence.startsWith('※ ') ||
       sentence.includes(':') || 
       sentence.toLowerCase().includes('요구사항') ||
       sentence.toLowerCase().includes('참고') ||
@@ -169,7 +200,7 @@ const formatContent = (content: string) => {
       currentSection.push(sentence);
     } else {
       // 불릿 포인트나 넘버링이 있는 경우 새 줄에 추가
-      if (/^[•\d]/.test(sentence.trim())) {
+      if (sentence.startsWith('•') || sentence.startsWith('-') || /^\d+[\.\)]/.test(sentence.trim())) {
         if (currentSection.length > 0 && !currentSection[currentSection.length - 1].endsWith('\n')) {
           currentSection[currentSection.length - 1] += '\n';
         }
@@ -183,10 +214,31 @@ const formatContent = (content: string) => {
   }
 
   // 최종 포맷팅
-  return sections
+  let formattedContent = sections
     .map(section => section.trim())
     .filter(section => section)
     .join('\n\n');
+    
+  // 특수 태그 복원
+  Object.keys(tags).forEach((tag, idx) => {
+    tags[tag].forEach((content, contentIdx) => {
+      const token = `__${tag}_${idx}_${contentIdx}__`;
+      const tagClass = {
+        mp: 'text-blue-600 font-bold',  // 증가/긍정적 금액
+        mn: 'text-red-600 font-bold',   // 감소/부정적 금액
+        m: 'font-bold',                 // 기본/중립적 금액
+        np: 'text-blue-600 font-bold',  // 증가/상승 수치
+        nn: 'text-red-600 font-bold',   // 감소/하락 수치
+        n: 'font-bold'                  // 기본/목표 수치
+      }[tag];
+      formattedContent = formattedContent.replace(
+        token,
+        `<span class="${tagClass}">${content}</span>`
+      );
+    });
+  });
+
+  return formattedContent;
 };
 
 // 문맥 변화 감지 함수
@@ -226,70 +278,50 @@ const CellContent = ({ content, isDocument = false }: { content: string, isDocum
     const lineCount = lines.length;
     
     // 기본 사이즈 계산
-    let width = 400;
-    let height = Math.min(150 + (lineCount * 24), 500); // 줄 수에 따른 높이 계산 (줄당 24px)
-    
-    // 가로 길이 조정
-    if (maxLineLength > 100) {
-      width = 700;
-    } else if (maxLineLength > 80) {
-      width = 600;
-    } else if (maxLineLength > 60) {
-      width = 500;
-    }
-    
-    // 최소/최대 크기 제한
-    width = Math.min(800, Math.max(300, width));
-    height = Math.min(500, Math.max(100, height));
-    
-    // 최종 크기에 여백 추가
-    height += 32; // 상하 패딩 16px씩
+    let width = Math.min(Math.max(500, maxLineLength * 8), 1000);  // 최소 500px, 최대 1000px
+    let height = Math.min(Math.max(200, lineCount * 24 + 40), 800); // 최소 200px, 최대 800px
     
     return { width, height };
   };
   
   const cardSize = getCardSize(formattedContent);
   
+  if (isDocument) {
+    return <DocumentTitle fileName={formattedContent} />;
+  }
+
   return (
-    <HoverCard openDelay={200}>
+    <HoverCard>
       <HoverCardTrigger asChild>
-        <div className={`${
-          !isDocument ? "line-clamp-3 hover:cursor-pointer" : ""
-        }`}>
-          {isDocument ? (
-            <DocumentTitle fileName={content || ''} />
-          ) : (
-            <div className="text-sm text-muted-foreground whitespace-pre-line">
-              {formattedContent || ""}
-            </div>
-          )}
+        <div className="cursor-help">
+          <div className="line-clamp-3 text-sm">
+            {formattedContent}
+          </div>
         </div>
       </HoverCardTrigger>
-      {!isDocument && formattedContent && (
-        <HoverCardContent 
-          className="p-4"
-          style={{
-            width: `${cardSize.width}px`,
-            height: `${cardSize.height}px`,
-          }}
-          side="right"
-        >
-          <div className="text-sm leading-relaxed tracking-wide">
-            {formattedContent.split('\n').map((line, index) => (
-              <div 
-                key={index} 
-                className={`
-                  ${/^[•\d]/.test(line.trim()) ? 'pl-4 py-1' : 'py-0.5'}
-                  ${line.includes(':') ? 'font-semibold py-2' : ''}
-                  whitespace-pre-line
-                `}
-              >
-                {line}
-              </div>
-            ))}
-          </div>
-        </HoverCardContent>
-      )}
+      <HoverCardContent
+        side="right"
+        className="w-[var(--card-width)] max-h-[var(--card-height)] overflow-y-auto"
+        style={{
+          '--card-width': `${cardSize.width}px`,
+          '--card-height': `${cardSize.height}px`,
+        } as React.CSSProperties}
+      >
+        <div className="space-y-1">
+          {formattedContent.split('\n').map((line, index) => (
+            <div 
+              key={index} 
+              className={`
+                ${/^[•\d]/.test(line.trim()) ? 'pl-4 py-1' : 'py-0.5'}
+                ${line.includes(':') ? 'font-semibold py-2' : ''}
+                whitespace-pre-wrap break-words
+              `}
+            >
+              {line}
+            </div>
+          ))}
+        </div>
+      </HoverCardContent>
     </HoverCard>
   );
 };
