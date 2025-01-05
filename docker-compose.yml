@@ -11,7 +11,8 @@ services:
       POSTGRES_MAX_CONNECTIONS: "100"
       PGDATA: /var/lib/postgresql/data/pgdata
       # 한글 인코딩 설정
-      LANG: ko_KR.utf8
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
       # 타임존 설정
       TZ: Asia/Seoul
       # 로깅 설정

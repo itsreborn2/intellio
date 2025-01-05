@@ -14,17 +14,31 @@ export default function OAuthCallbackPage() {
     useEffect(() => {
         const handleOAuthCallback = async () => {
             try {
-                // URL 파라미터에서 데이터 추출
-                const data = searchParams.get('data');
-                if (!data) {
-                    throw new Error('No data received from OAuth provider');
+                // response data : user(id,email,provider,name), token
+                const code = searchParams.get('code');
+                const state = searchParams.get('state');
+                
+                // OAuth 콜백 처리 요청
+                const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/naver/callback?code=${code}&state=${state}`,
+                    {
+                        method: 'GET',
+                        credentials: 'include',
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error('OAuth callback failed');
                 }
 
-                // JSON 파싱
-                const authData: IOAuthResponse = JSON.parse(decodeURIComponent(data));
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.message || 'OAuth callback failed');
+                }
 
                 // 로그인 처리
-                await login(authData);
+                await login(result.data);
 
                 // 홈페이지로 리다이렉트
                 router.push('/');

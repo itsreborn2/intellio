@@ -43,6 +43,8 @@ import {
 } from "@/components/ui/tooltip"
 import { ProjectCategorySection } from './sidebar/ProjectCategorySection'
 import { TemplateSection } from './sidebar/TemplateSection'
+import { useAuth } from '@/hooks/useAuth';
+import { getRecentProjects, IRecentProjectsResponse } from '@/services/api'
 
 interface Project {
   id: string
@@ -92,18 +94,23 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
   const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: Project[] }>({})  
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const fetchRecentProjects = async () => {
       try {
-        const response = await api.getRecentProjects()
+        if (!isAuthenticated) {  
+          //console.warn('로그인되지 않았습니다.');
+          return;
+        }
+        const response:IRecentProjectsResponse = await api.getRecentProjects()
         
         dispatch({ 
           type: 'UPDATE_RECENT_PROJECTS', 
           payload: {
             today: response.today || [],
             yesterday: response.yesterday || [],
-            fourDaysAgo: response.four_days_ago || [],
+            four_days_ago: response.four_days_ago || [],
             older: []
           }
         })
@@ -131,7 +138,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
             payload: {
               today: response.today || [],
               yesterday: response.yesterday || [],
-              fourDaysAgo: response.four_days_ago || [],
+              four_days_ago: response.four_days_ago || [],
               older: []
             }
           })
@@ -181,6 +188,9 @@ export const Sidebar = ({ className }: SidebarProps) => {
   useEffect(() => {
     const loadCategories = async () => {
       try {
+        if (!isAuthenticated) {  
+          return;
+        }
         const data = await api.getCategories();
         setCategories(data);
       } catch (error) {

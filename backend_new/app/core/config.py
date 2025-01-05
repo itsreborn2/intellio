@@ -2,7 +2,19 @@ from typing import List
 from pydantic_settings import BaseSettings
 import os
 
+def detect_file_encoding(file_path):
+    """파일의 인코딩을 자동으로 감지"""
+    import chardet
+    
+    with open(file_path, 'rb') as file:
+        raw = file.read()
+        result = chardet.detect(raw)
+        return result['encoding']
+
 class Settings(BaseSettings):
+    # 환경 설정
+    ENV: str = os.getenv("ENV", "development")  # development 또는 production
+
     # API Settings
     PROJECT_NAME: str = "Intellio API"
     API_V1_STR: str = "/api/v1"
@@ -11,6 +23,10 @@ class Settings(BaseSettings):
     # 프론트엔드 URL
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
     
+    # 쿠키 설정
+    COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", "localhost")
+    COOKIE_SECURE: bool = ENV == "production"  # production에서만 True
+
     # 데이터베이스
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "localhost")
     
@@ -28,7 +44,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     SESSION_EXPIRY_DAYS: int = 30  # 30 days for session expiry
     
-    
+
     # JWT Settings
     JWT_SECRET: str
     
@@ -81,7 +97,7 @@ class Settings(BaseSettings):
         'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'tiff'
     }
     MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024  # 16MB
-    
+
     @property
     def GOOGLE_CLOUD_CREDENTIALS(self) -> str:
         with open(self.GOOGLE_APPLICATION_CREDENTIALS) as f:
@@ -107,7 +123,15 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env" #예전위치.
         #env_file = "../../.env"  # 프로젝트 루트의 .env 파일 참조
-        env_file_encoding = 'utf-8'
         case_sensitive = True
+        
+        @classmethod
+        def customise_sources(cls, init_settings, env_settings, file_secret_settings):
+            # .env 파일의 인코딩 자동 감지
+            env_file = init_settings.get('env_file', '.env')
+            if os.path.exists(env_file):
+                encoding = detect_file_encoding(env_file)
+                init_settings['env_file_encoding'] = encoding
+            return (init_settings, env_settings, file_secret_settings)
 
 settings = Settings()

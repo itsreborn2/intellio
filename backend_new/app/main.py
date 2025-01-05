@@ -1,3 +1,12 @@
+import logging
+
+# SQLAlchemy 로깅 완전 비활성화
+logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
+logging.getLogger('sqlalchemy.engine').setLevel(logging.ERROR)
+logging.getLogger('sqlalchemy.engine.base.Engine').setLevel(logging.ERROR)
+
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
@@ -34,7 +43,7 @@ log_handler.setFormatter(formatter)
 logger = logging.getLogger("app")
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout), # 콘솔 출력

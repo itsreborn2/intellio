@@ -741,13 +741,19 @@ def process_chunk_batch(self, document_id: str, chunks: List[str], batch_start_i
 
                     # 생성된 청크 ID 저장
                     chunk_ids = [v["id"] for v in vectors]
-                    if not doc.embedding_ids:
-                        doc.embedding_ids = chunk_ids
-                    else:
-                        doc.embedding_ids.extend(chunk_ids)
+                    try:
+                        if not doc.embedding_ids:
+                            doc.embedding_ids = json.dumps(chunk_ids)
+                        else:
+                            existing_ids = json.loads(doc.embedding_ids) if doc.embedding_ids else []
+                            existing_ids.extend(chunk_ids)
+                            doc.embedding_ids = json.dumps(existing_ids)
+                    except Exception as e:
+                        logger.error(f"embedding_ids 처리 중 오류: {str(e)}")
+                        doc.embedding_ids = json.dumps(chunk_ids)
 
                     # 상태 업데이트
-                    if total_chunks > 0 and current_processed == total_chunks:  # 정확히 같을 때만 완료
+                    if total_chunks > 0 and current_processed >= total_chunks:  # 모든 청크가 처리되었을 때
                         logger.info(f"문서 {document_id} 처리 완료: {current_processed}/{total_chunks} 청크")
                         doc.status = DOCUMENT_STATUS_COMPLETED
                         doc.updated_at = datetime.utcnow()
@@ -932,9 +938,12 @@ def process_chunk_batch(self, document_id: str, chunks: List[str], batch_start_i
                     # 생성된 청크 ID 저장
                     chunk_ids = [v["id"] for v in vectors]
                     if not doc.embedding_ids:
-                        doc.embedding_ids = chunk_ids
+                        doc.embedding_ids = json.dumps(chunk_ids)
                     else:
-                        doc.embedding_ids.extend(chunk_ids)
+                        # 기존 embedding_ids를 리스트로 변환하고 새로운 chunk_ids를 추가
+                        existing_ids = json.loads(doc.embedding_ids)
+                        existing_ids.extend(chunk_ids)
+                        doc.embedding_ids = json.dumps(existing_ids)
 
                     # 상태 업데이트
                     if total_chunks > 0 and current_processed == total_chunks:  # 정확히 같을 때만 완료

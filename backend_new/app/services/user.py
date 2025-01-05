@@ -95,8 +95,12 @@ class UserService:
 
     async def create_oauth_user(self, user_data: dict) -> User:
         """OAuth 사용자 생성"""
-        db_user = User(
-            id=uuid4(),  # UUID 자동 생성
+        # name이 없거나 None인 경우 이메일의 @ 앞부분을 사용
+        if not user_data.get("name"):
+            user_data["name"] = user_data["email"].split("@")[0]
+
+        user = User(
+            id=uuid4(),
             email=user_data["email"],
             name=user_data["name"],
             oauth_provider=user_data["oauth_provider"],
@@ -104,13 +108,15 @@ class UserService:
             is_active=True,
             is_superuser=False
         )
-        self.db.add(db_user)
+
+        self.db.add(user)
         await self.db.commit()
-        await self.db.refresh(db_user)
-        return db_user
+        await self.db.refresh(user)
+        return user
 
     async def create_session(self, session_in: SessionCreate) -> Session:
         """새 세션 생성"""
+        print(f'[create_session] Creating new session with id: {session_in.session_id}')
         db_session = Session(
             id=uuid4(),
             session_id=session_in.session_id,
@@ -120,22 +126,34 @@ class UserService:
         self.db.add(db_session)
         await self.db.commit()
         await self.db.refresh(db_session)
+        print(f'[create_session] Created session: {db_session}')
         return db_session
 
     async def get_session(self, session_id: str) -> Optional[Session]:
         """세션 조회"""
-        result = await self.db.execute(
+        print(f'[get_session] trying to find session_id: {session_id}')
+        query = (
             select(Session)
             .options(selectinload(Session.user))
             .where(Session.session_id == session_id)
         )
-        return result.scalar_one_or_none()
+        print(f'[get_session] SQL query: {query}')
+        result = await self.db.execute(query)
+        session = result.scalar_one_or_none()
+        print(f'[get_session] found session: {session}')
+        return session
 
     async def get_active_session(self, session_id: str) -> Optional[Session]:
         """활성 세션 조회"""
         session = await self.get_session(session_id)
+        #print(f'[get_active_session] : {session}, {session.is_expired()}')
         if not session or session.is_expired:
+            print(f'[get_active_session] : None')
             return None
+        
+        # 세션 접근 시간 갱신
+        # session.touch()
+        # await self.db.commit()
         return session
 
     async def update_session(
@@ -170,12 +188,15 @@ class UserService:
     async def cleanup_expired_sessions(self) -> int:
         """만료된 세션 정리"""
         expiry_date = datetime.utcnow() - timedelta(days=settings.SESSION_EXPIRY_DAYS)
+        print(f'[cleanup_expired_sessions] Cleaning up sessions older than: {expiry_date}')
         result = await self.db.execute(
             select(Session).where(Session.last_accessed_at < expiry_date)
         )
         expired_sessions = result.scalars().all()
         
+        print(f'[cleanup_expired_sessions] Found {len(expired_sessions)} expired sessions')
         for session in expired_sessions:
+            print(f'[cleanup_expired_sessions] Deleting session: {session}')
             await self.db.delete(session)
         
         await self.db.commit()

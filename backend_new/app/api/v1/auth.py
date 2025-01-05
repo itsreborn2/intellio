@@ -20,8 +20,10 @@ from app.schemas.auth import OAuthLoginResponse
 from app.core.config import settings
 import urllib.parse
 import json
+import logging
 
 router = APIRouter(tags=["auth"])
+logger = logging.getLogger(__name__)
 
 # OAuth2 bearer token 설정
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -60,10 +62,12 @@ async def register(
         value=session.session_id,
         max_age=30 * 24 * 60 * 60,  # 30일
         httponly=True,
-        secure=True,  # HTTPS 전용
-        samesite="strict"  # CSRF 방지 강화
+        secure=settings.COOKIE_SECURE,  # production에서만 True
+        samesite="lax",
+        path="/",  # 모든 경로에서 접근 가능
+        domain=settings.COOKIE_DOMAIN  # 환경별 도메인 설정
     )
-    
+
     return UserResponse(
         success=True,
         data=user,
@@ -101,8 +105,10 @@ async def login(
         value=session.session_id,
         max_age=30 * 24 * 60 * 60,  # 30일
         httponly=True,
-        secure=True,  # HTTPS 전용
-        samesite="strict"  # CSRF 방지 강화
+        secure=settings.COOKIE_SECURE,  # production에서만 True
+        samesite="lax",
+        path="/",  # 모든 경로에서 접근 가능
+        domain=settings.COOKIE_DOMAIN  # 환경별 도메인 설정
     )
     
     return UserResponse(
@@ -142,8 +148,9 @@ async def oauth_login(provider: str):
 async def oauth_callback(
     provider: str,
     code: str,
-    state: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    state: Optional[str] = None
 ):
     """OAuth 콜백 처리"""
     oauth_service = OAuthService()
@@ -181,6 +188,7 @@ async def oauth_callback(
         
         user = await user_service.get_by_oauth(provider, oauth_id)
         if not user:
+            logger.info(f"Creating new user with email: {provider}")
             # 새 사용자 생성
             user = await user_service.create_oauth_user({
                 "email": email,
@@ -188,6 +196,17 @@ async def oauth_callback(
                 "oauth_provider_id": oauth_id,
                 "name": user_info.get("name", "Unknown")
             })
+        else:
+            logger.info(f"Exsisting user with ID: {provider}, {user.id}, {user.email}")
+        
+        # 세션 생성
+        session_create = SessionCreate(
+            session_id=str(uuid4()),
+            user_id=user.id,
+            is_anonymous=False  # OAuth 로그인 사용자는 익명이 아님
+        )
+        session = await user_service.create_session(session_create)
+        logger.info(f"Created new session: {session.session_id} for user: {user.email}")
         
         # JWT 토큰 생성
         token = create_oauth_token({
@@ -195,22 +214,55 @@ async def oauth_callback(
             "email": user.email,
             "provider": provider
         })
+        logger.info(f"Created token : {token}")
+
+        # 세션 ID를 쿠키로 설정
+        response = RedirectResponse(url=f"{settings.FRONTEND_URL}/")
+        response.set_cookie(
+            key="session_id",
+            value=session.session_id,
+            max_age=30 * 24 * 60 * 60,  # 30일
+            httponly=True,
+            secure=settings.COOKIE_SECURE,  # production에서만 True
+            samesite="lax",
+            path="/",  # 모든 경로에서 접근 가능
+            domain=settings.COOKIE_DOMAIN  # 환경별 도메인 설정
+        )
         
-        # 프론트엔드로 리다이렉트
-        response_data = {
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "name": user.name,
-                "provider": provider
-            },
-            "token": token
+        # JWT 토큰도 쿠키로 설정
+        response.set_cookie(
+            key="token",
+            value=token,
+            max_age=30 * 24 * 60 * 60,  # 30일
+            httponly=False,  # JavaScript에서 접근 가능하도록
+            secure=settings.COOKIE_SECURE,
+            samesite="lax",
+            path="/",
+            domain=settings.COOKIE_DOMAIN
+        )
+
+        # 사용자 정보도 쿠키로 설정
+        user_data = {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "provider": provider
         }
-        
-        redirect_url = f"{settings.FRONTEND_URL}/auth/callback?data={urllib.parse.quote(json.dumps(response_data))}"
-        return RedirectResponse(url=redirect_url)
+        response.set_cookie(
+            key="user",
+            value=json.dumps(user_data, ensure_ascii=False).replace(',', '|'),
+            max_age=30 * 24 * 60 * 60,
+            httponly=False,  # JavaScript에서 접근 가능하도록
+            secure=settings.COOKIE_SECURE,
+            samesite="lax",
+            path="/",
+            domain=settings.COOKIE_DOMAIN
+        )
+
+        return response
         
     except Exception as e:
+        logger.error(f"OAuth callback error: {str(e)}", exc_info=True)
         # 에러 발생 시 에러 페이지로 리다이렉트
         error_message = urllib.parse.quote(str(e))
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/error?message={error_message}")
@@ -224,6 +276,7 @@ async def get_current_user(
     token_data = verify_oauth_token(token)
     user_service = UserService(db)
     user = await user_service.get(token_data["sub"])
+    logger.info(f"[get_current_user] - ID: {user.id}, email: {user.email}, provider: {user.oauth_provider}")
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog"
 import { FontSettings } from "@/components/settings/FontSettings"
 import { LoginButton } from "@/components/auth/LoginButton"
@@ -24,7 +25,7 @@ export const Header = ({ className }: { className?: string }) => {
   const auth = useAuth()
   
   // 디버깅을 위한 상태 로깅
-  console.log('[Header] Current Auth State:', auth)
+  //console.log('[Header] Current Auth State:', auth)
   //console.log('LocalStorage Token:', localStorage.getItem('token'))
   
   const { isAuthenticated, name, email, logout } = auth
@@ -83,6 +84,16 @@ export const Header = ({ className }: { className?: string }) => {
       setEditingTitle(state.projectTitle || 'Untitled Project')
     }
   }
+  useEffect(() => {
+    //setEditingTitle(state.projectTitle || 'Untitled Project')
+    console.log('[Header1] Auth State Updated:', {
+      isAuthenticated: auth.isAuthenticated,
+      name: auth.name,
+      email: auth.email,
+      token: auth.token,
+      provider: auth.provider
+    })
+  }, [auth])
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -138,10 +149,12 @@ export const Header = ({ className }: { className?: string }) => {
                   <User className="h-4 w-4" />
                 </Button>
               </DialogTrigger>
-              
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>로그인 선택</DialogTitle>
+                  <DialogDescription>
+                    소셜 계정으로 로그인하세요
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="flex flex-col space-y-2">
@@ -164,6 +177,9 @@ export const Header = ({ className }: { className?: string }) => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>설정</DialogTitle>
+              <DialogDescription>
+                애플리케이션 설정을 변경할 수 있습니다
+              </DialogDescription>
             </DialogHeader>
             <FontSettings />
           </DialogContent>
