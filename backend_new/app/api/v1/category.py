@@ -66,11 +66,13 @@ async def get_categories(
             detail="카테고리 조회 중 오류가 발생했습니다."
         )
 
-@router.post("/", response_model=CategoryResponse)
+@router.post("", response_model=CategoryResponse)
 async def create_category(
     category_in: CategoryCreate,
+    session: Session = Depends(get_current_session), 
     db: AsyncSession = Depends(get_db)
 ):
+    logger.error(f"Create 프로젝트 폴더")
     """새로운 카테고리(영구 폴더)를 생성합니다."""
     try:
         # 동일한 이름의 카테고리(영구 폴더)가 있는지 확인
@@ -87,6 +89,7 @@ async def create_category(
         # 새 카테고리 (영구 폴더)생성
         new_category = Category(
             name=category_in.name,
+            user_id=session.user_id,
             type=category_in.type or "PERMANENT"  # 기본값 설정
         )
         db.add(new_category)
