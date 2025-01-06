@@ -124,8 +124,7 @@ interface IApiRecentProjectsResponse {
 export interface IRecentProjectsResponse {
   today: IProject[];
   yesterday: IProject[];
-  this_week: IProject[];
-  this_month: IProject[];
+  four_days_ago: IProject[];
   older: IProject[];
 }
 

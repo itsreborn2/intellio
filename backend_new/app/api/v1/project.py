@@ -47,29 +47,51 @@ async def create_project(
 @router.get("/recent", response_model=RecentProjectsResponse)
 async def get_recent_projects(
     limit: int = 5,
-    response: Response = None,
     session: Session = Depends(get_current_session),
+    db: AsyncSession = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """최근 프로젝트 목록 조회"""
     logger.debug(f"최근 프로젝트 조회 - User Id:{session.user_id}, 세션 ID: {session.session_id}")
     
     try:
-        # 최근 프로젝트 조회
-        projects = await project_service.get_recent(session=session, limit=limit)
-        logger.debug(f"조회된 프로젝트 목록: {len(projects)}개 : {projects}")
-        
-        # 'today' 리스트의 모든 프로젝트의 제목을 출력
-        if projects["today"]:
-            for project in projects["today"]:
-                logger.debug(f' => {project.name}')
-        return {"projects": projects}
-        
+        logger.info(f"get_recent_projects : {session}")
+        # 세션 검증
+        if not session or not session.is_authenticated or not session.user:
+            logger.warning("인증되지 않은 사용자의 접근")
+            return RecentProjectsResponse(
+                today=[],
+                yesterday=[],
+                four_days_ago=[],
+                older=[]
+            )
+
+        email = session.user.email
+        logger.info(f"최근 프로젝트 조회 - 사용자: {email}")
+
+        # 이메일로 사용자 조회
+        user = await user_service.get_by_email(email)
+        if not user:
+            logger.error(f"사용자를 찾을 수 없음: {email}")
+            return RecentProjectsResponse(
+                today=[],
+                yesterday=[],
+                four_days_ago=[],
+                older=[]
+            )
+
+        # 사용자 ID로 최근 프로젝트 조회
+        result = await project_service.get_recent_by_user_id(user.id, limit)
+        return result
+
     except Exception as e:
-        logger.error(f"최근 프로젝트 조회 실패: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="최근 프로젝트 조회 중 오류가 발생했습니다."
+        logger.error(f"최근 프로젝트 조회 중 오류 발생: {str(e)}", exc_info=True)
+        return RecentProjectsResponse(
+            today=[],
+            yesterday=[],
+            four_days_ago=[],
+            older=[]
         )
 
 @router.get("/{project_id}", response_model=ProjectResponse)
