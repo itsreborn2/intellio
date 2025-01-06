@@ -51,14 +51,27 @@ class ProjectService:
         session: Optional[Session] = None
     ) -> List[Project]:
         """프로젝트 목록 조회"""
-        query = select(Project)
-        
-        if session:
-            query = query.where(Project.session_id == session.session_id)
+        try:
+            query = select(Project)
             
-        query = query.offset(skip).limit(limit)
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
+            if session:
+                # 세션 ID로 필터링
+                query = query.where(Project.session_id == session.session_id)
+                
+                # 사용자 ID로도 필터링 (옵션)
+                if session.user_id:
+                    query = query.where(Project.user_id == session.user_id)
+            
+            # 정렬 및 페이지네이션 적용
+            query = query.order_by(Project.created_at.desc())
+            query = query.offset(skip).limit(limit)
+            
+            result = await self.db.execute(query)
+            return list(result.scalars().all())
+            
+        except Exception as e:
+            logger.error(f"프로젝트 목록 조회 중 오류 발생: {str(e)}")
+            raise
 
     async def get_recent(
         self,

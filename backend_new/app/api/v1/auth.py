@@ -1,5 +1,6 @@
 from uuid import uuid4
 from typing import Optional
+import urllib.parse
 from fastapi import APIRouter, Depends, HTTPException, Response, Cookie, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordBearer
@@ -18,7 +19,6 @@ from app.schemas.user import (
 )
 from app.schemas.auth import OAuthLoginResponse
 from app.core.config import settings
-import urllib.parse
 import json
 import logging
 
@@ -249,9 +249,13 @@ async def oauth_callback(
             "name": user.name,
             "provider": provider
         }
+        # URL 인코딩을 사용하여 한글 문자를 안전하게 처리
+        encoded_user_data = urllib.parse.quote(
+            json.dumps(user_data, ensure_ascii=False).replace(',', '|')
+        )
         response.set_cookie(
             key="user",
-            value=json.dumps(user_data, ensure_ascii=False).replace(',', '|'),
+            value=encoded_user_data,
             max_age=30 * 24 * 60 * 60,
             httponly=False,  # JavaScript에서 접근 가능하도록
             secure=settings.COOKIE_SECURE,

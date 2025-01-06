@@ -124,7 +124,8 @@ interface IApiRecentProjectsResponse {
 export interface IRecentProjectsResponse {
   today: IProject[];
   yesterday: IProject[];
-  four_days_ago: IProject[];
+  this_week: IProject[];
+  this_month: IProject[];
   older: IProject[];
 }
 
@@ -523,7 +524,7 @@ export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
           new Date(project.created_at).getTime() < new Date().getTime() - 4 * 24 * 60 * 60 * 1000
       }));
     };
-
+    console.log(data.today);
     const result: IRecentProjectsResponse = {
       today: formatProjects(data.today || []),
       yesterday: formatProjects(data.yesterday || []),
@@ -603,15 +604,22 @@ export const createCategory = async (name: string, parent_id?: string): Promise<
 
 // 카테고리 목록 조회
 export const getCategories = async (): Promise<Category[]> => {
-  const response = await apiFetch(`${API_ENDPOINT}/categories`, {
-    credentials: 'include'
-  });
+  try {
+    const response = await apiFetch(`${API_ENDPOINT}/categories`, {
+      credentials: 'include'
+    });
 
-  if (!response.ok) {
-    throw new Error('Failed to fetch categories');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: '알 수 없는 오류가 발생했습니다.' }));
+      console.error('카테고리 조회 실패:', errorData);
+      throw new Error(errorData.detail || '카테고리 조회에 실패했습니다.');
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('카테고리 조회 중 오류 발생:', error);
+    throw error;
   }
-
-  return response.json();
 };
 
 // 프로젝트를 카테고리에 추가

@@ -10,6 +10,11 @@ from app.models.user import Session
 from app.schemas.user import SessionCreate
 from app.services.project import ProjectService
 from app.services.document import DocumentService
+import logging
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """데이터베이스 세션 의존성"""
@@ -22,11 +27,14 @@ async def get_current_session(
     db: AsyncSession = Depends(get_db)
 ) -> Session:
     """현재 세션 가져오기"""
-    print(f'[get_current_session] : {session_id}')
+    print(f"DB 포트 확인 : {settings.POSTGRES_PORT}")
+
+    logger.info(f'[get_current_session] : {session_id} 유령인가...')
+    print(f'[get_current_session] : {session_id} 유령인가...')
     user_service = UserService(db)
-    
+    logger.info(f"[get_current_session] 1")
     if not session_id:
-        print(f'  => 세션이 존재하지 않습니다.')
+        logger.info(f'  => 세션이 존재하지 않습니다.')
         # 새 세션 생성
         session_create = SessionCreate(
             session_id=str(uuid4()),
@@ -35,6 +43,7 @@ async def get_current_session(
         session = await user_service.create_session(session_create)
         
         if response:
+            logger.info(f"[get_current_session] 1-1")
             # 세션 ID를 쿠키에 설정
             response.set_cookie(
                 key="session_id",
@@ -45,16 +54,16 @@ async def get_current_session(
                 samesite="strict"  # CSRF 방지 강화
             )
         return session
-
+    logger.info(f"[get_current_session] 2")
     session = await user_service.get_active_session(session_id)
-    
+    logger.info(f"[get_current_session] 3")
     if not session:
-        print(f'  => 유효하지 않은 세션입니다.')
+        logger.info(f'  => 유효하지 않은 세션입니다.')
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="유효하지 않은 세션입니다."
         )
-    
+    logger.info(f"final session : ${session}")
     return session
 
 async def get_current_user(

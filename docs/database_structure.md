@@ -14,90 +14,117 @@
 
 ## 2. 테이블 구조
 
-### 2.1 Document (documents)
-문서의 기본 정보를 저장하는 테이블
+### 2.1 User (users)
+사용자 정보를 저장하는 테이블
 
 #### 필드 구조
 | 필드명 | 타입 | 설명 |
 |--------|------|------|
 | id | UUID | 고유 식별자 |
-| project_id | UUID | 프로젝트 연결 (FK) |
+| email | String(255) | 이메일 주소 |
+| name | String(100) | 사용자 이름 |
+| hashed_password | String(255) | 암호화된 비밀번호 |
+| is_active | Boolean | 계정 활성화 여부 |
+| is_superuser | Boolean | 관리자 여부 |
+| oauth_provider | String(20) | OAuth 제공자 (google, naver, kakao) |
+| oauth_provider_id | String(100) | OAuth 제공자의 사용자 ID |
+| created_at | DateTime | 생성 일시 |
+| updated_at | DateTime | 수정 일시 |
+
+### 2.2 Session (sessions)
+사용자 세션 정보를 저장하는 테이블
+
+#### 필드 구조
+| 필드명 | 타입 | 설명 |
+|--------|------|------|
+| id | UUID | 세션 고유 ID |
+| session_id | String(100) | 세션 식별자 |
+| user_id | UUID | 사용자 ID |
+| is_anonymous | Boolean | 익명 세션 여부 |
+| created_at | DateTime | 생성 일시 |
+| last_accessed_at | DateTime | 마지막 접근 일시 |
+| updated_at | DateTime | 수정 일시 |
+
+### 2.3 EmailVerification (email_verifications)
+이메일 인증 정보를 저장하는 테이블
+
+#### 필드 구조
+| 필드명 | 타입 | 설명 |
+|--------|------|------|
+| id | UUID | 인증 고유 ID |
+| user_id | UUID | 사용자 ID |
+| token | String(255) | 인증 토큰 |
+| expires_at | DateTime | 만료 일시 |
+| is_used | Boolean | 사용 여부 |
+| created_at | DateTime | 생성 일시 |
+
+### 2.4 Project (projects)
+프로젝트 정보를 저장하는 테이블
+
+#### 필드 구조
+| 필드명 | 타입 | 설명 |
+|--------|------|------|
+| id | UUID | 프로젝트 고유 ID |
+| name | String(255) | 프로젝트 이름 |
+| description | Text | 프로젝트 설명 |
+| is_temporary | Boolean | 임시 프로젝트 여부 |
+| user_category | String(255) | 사용자 정의 카테고리 |
+| session_id | String(255) | 세션 ID |
+| user_id | UUID | 사용자 ID |
+| category_id | UUID | 카테고리 ID |
+| project_metadata | Text | 프로젝트 메타데이터 |
+| content_data | Text | 프로젝트 내용 데이터 |
+| embedding_refs | Text | 임베딩 참조 정보 |
+| created_at | DateTime | 생성 일시 |
+| updated_at | DateTime | 수정 일시 |
+
+### 2.5 Category (categories)
+카테고리 정보를 저장하는 테이블
+
+#### 필드 구조
+| 필드명 | 타입 | 설명 |
+|--------|------|------|
+| id | UUID | 카테고리 고유 ID |
+| name | String(255) | 카테고리 이름 |
+| type | String(50) | 카테고리 타입 (TEMPORARY/PERMANENT) |
+| created_at | DateTime | 생성 일시 |
+
+### 2.6 Document (documents)
+문서 정보를 저장하는 테이블
+
+#### 필드 구조
+| 필드명 | 타입 | 설명 |
+|--------|------|------|
+| id | UUID | 문서 고유 ID |
+| project_id | UUID | 프로젝트 ID |
 | filename | String(255) | 원본 파일명 |
-| file_path | String(1000) | 저장 경로 |
-| file_type | String(100) | 파일 형식 (txt, pdf, docx 등) |
+| file_path | String(1000) | 스토리지 내 파일 경로 |
+| file_type | String(100) | 파일 타입 (txt, pdf, docx 등) |
 | mime_type | String(100) | MIME 타입 |
 | file_size | Integer | 파일 크기 |
-| status | String(20) | 문서 처리 상태 |
+| status | String(20) | 문서 상태 |
 | error_message | String(1000) | 오류 메시지 |
 | extracted_text | Text | 추출된 텍스트 |
-| embedding_ids | String | Pinecone 임베딩 ID (JSON) |
-| created_at | DateTime | 생성 시간 |
-| updated_at | DateTime | 수정 시간 |
+| embedding_ids | String | 임베딩 ID 목록 (JSON) |
+| created_at | DateTime | 생성 일시 |
+| updated_at | DateTime | 수정 일시 |
 
-### 2.2 DocumentChunk (document_chunks)
-대용량 문서의 분할된 청크를 저장하는 테이블
+### 2.7 DocumentChunk (document_chunks)
+문서 청크 정보를 저장하는 테이블
 
 #### 필드 구조
 | 필드명 | 타입 | 설명 |
 |--------|------|------|
-| id | UUID | 고유 식별자 |
-| document_id | UUID | 원본 문서 연결 (FK) |
+| id | UUID | 청크 고유 ID |
+| document_id | UUID | 문서 ID |
 | content | Text | 청크 내용 |
-| embedding | String | 벡터 임베딩 데이터 |
-| chunk_metadata | String | 청크 관련 메타데이터 |
-| created_at | DateTime | 생성 시간 |
-| updated_at | DateTime | 수정 시간 |
-
-### 2.3 Project (projects)
-문서 분석 프로젝트 정보를 저장하는 테이블
-
-#### 필드 구조
-| 필드명 | 타입 | 설명 |
-|--------|------|------|
-| id | UUID | 고유 식별자 |
-| name | String(255) | 프로젝트명 |
-| description | Text | 프로젝트 설명 |
-| is_temporary | Boolean | 임시/영구 여부 |
-| user_category | String(255) | 사용자 정의 카테고리 |
-| session_id | String(255) | 세션 연결 (FK) |
-| user_id | UUID | 사용자 연결 (FK) |
-| project_metadata | Text | 프로젝트 메타데이터 |
-| content_data | Text | 컨텐츠 데이터 |
-| embedding_refs | Text | 임베딩 참조 정보 |
-| created_at | DateTime | 생성 시간 |
-| updated_at | DateTime | 수정 시간 |
-
-### 2.4 User (users)
-사용자 정보를 관리하는 테이블
-
-#### 필드 구조
-| 필드명 | 타입 | 설명 |
-|--------|------|------|
-| id | UUID | 고유 식별자 |
-| email | String(255) | 이메일 (unique) |
-| name | String(100) | 사용자명 |
-| hashed_password | String(255) | 암호화된 비밀번호 |
-| is_active | Boolean | 활성화 상태 |
-| is_superuser | Boolean | 관리자 여부 |
-| created_at | DateTime | 생성 시간 |
-| updated_at | DateTime | 수정 시간 |
-
-### 2.5 Session (sessions)
-사용자 세션을 관리하는 테이블
-
-#### 필드 구조
-| 필드명 | 타입 | 설명 |
-|--------|------|------|
-| id | UUID | 고유 식별자 |
-| session_id | String(100) | 세션 식별자 |
-| user_id | UUID | 사용자 연결 (FK) |
-| is_anonymous | Boolean | 익명 세션 여부 |
-| created_at | DateTime | 생성 시간 |
-| last_accessed_at | DateTime | 마지막 접근 시간 |
-| updated_at | DateTime | 수정 시간 |
+| embedding | String | 임베딩 데이터 |
+| chunk_metadata | String | 청크 메타데이터 |
+| created_at | DateTime | 생성 일시 |
+| updated_at | DateTime | 수정 일시 |
 
 ## 3. 테이블 관계도
-```
+```sql
 User (1) ----< Session (1) ----< Project (1) ----< Document (1) ----< DocumentChunk (N)
 ```
 
@@ -178,7 +205,7 @@ User (1) ----< Session (1) ----< Project (1) ----< Document (1) ----< DocumentCh
 ### 5.3 임베딩 관리
 
 #### 5.3.1 Pinecone 연동 구조
-```
+```sql
 PostgreSQL (Document/Chunk) <-> 중간 레이어 <-> Pinecone
 ```
 
@@ -267,7 +294,7 @@ PostgreSQL (Document/Chunk) <-> 중간 레이어 <-> Pinecone
 2. **모니터링**
    - 세션 생성/만료 로깅
    - 비정상 접근 탐지
-   - 성능 모니터링
+   - 로그 보관 정책
 
 ### 5.5 프로젝트 메타데이터
 

@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 from datetime import datetime, timedelta
+import pdb
 
 from app.schemas.project import (
     ProjectCreate,
@@ -51,11 +52,17 @@ async def get_recent_projects(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """최근 프로젝트 목록 조회"""
-    logger.debug(f"최근 프로젝트 조회 - 세션 ID: {session.session_id}")
+    logger.debug(f"최근 프로젝트 조회 - User Id:{session.user_id}, 세션 ID: {session.session_id}")
     
     try:
         # 최근 프로젝트 조회
         projects = await project_service.get_recent(session=session, limit=limit)
+        logger.debug(f"조회된 프로젝트 목록: {len(projects)}개 : {projects}")
+        
+        # 'today' 리스트의 모든 프로젝트의 제목을 출력
+        if projects["today"]:
+            for project in projects["today"]:
+                logger.debug(f' => {project.name}')
         return {"projects": projects}
         
     except Exception as e:
@@ -123,17 +130,26 @@ async def list_projects(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 목록 조회"""
-    total, items = await project_service.get_multi(
-        skip=skip,
-        limit=limit,
-        session=session
-    )
-    return {
-        "total": total,
-        "items": items,
-        "skip": skip,
-        "limit": limit
-    }
+    try:
+        logger.info(f"프로젝트 목록 조회 시도 - 세션 ID: {session.session_id}")
+        projects = await project_service.get_multi(
+            skip=skip,
+            limit=limit,
+            session=session
+        )
+        
+        if not projects:
+            # 프로젝트가 없는 경우 빈 리스트 반환
+            return {"projects": []}
+            
+        return {"projects": projects}
+        
+    except Exception as e:
+        logger.error(f"프로젝트 목록 조회 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="프로젝트 목록 조회 중 오류가 발생했습니다."
+        )
 
 @router.put("/{project_id}", response_model=ProjectResponse)
 async def update_project(

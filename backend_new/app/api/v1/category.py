@@ -14,33 +14,57 @@ from app.core.deps import get_db, get_current_session
 from uuid import UUID
 import logging
 from fastapi.responses import JSONResponse
+from fastapi import status
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.get("/", response_model=List[CategoryResponse])
+logger.info("카테고리 라우터 초기화")
+
+@router.get("", response_model=List[CategoryResponse])
 async def get_categories(
     session: Session = Depends(get_current_session),
     db: AsyncSession = Depends(get_db)
 ):
-    
     """사용자의 모든 카테고리를 조회합니다."""
+    logger.info(f"GET /categories 요청 받음 - 세션 ID: {session.session_id}")
+    print(f"GET /categories 요청 받음 - 세션 ID: {session.session_id}")
+    
     try:
-        logger.info(f"사용자의 모든 카테고리를 조회합니다.")
+        # 익명 사용자 체크
+        if session.is_anonymous or not session.user_id:
+            logger.warning("익명 사용자는 카테고리를 조회할 수 없습니다.")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="로그인이 필요한 기능입니다."
+            )
+            
+        logger.info(f"사용자 {session.user_id}의 모든 카테고리를 조회합니다.")
         
-        # 카테고리 조회
-        stmt = select(Category)
-        result = await db.execute(stmt)
-        user_categories = result.scalars().all()
-        return user_categories
-    except HTTPException as he:
-        # HTTP 예외는 그대로 전달 (401, 403 등)
-        raise he
+        # 사용자의 카테고리만 조회
+        query = select(Category).where(Category.user_id == session.user_id)
+        logger.debug(f"실행할 쿼리: {query}")
+        
+        result = await db.execute(query)
+        categories = result.scalars().all()
+        
+        # 카테고리가 없는 경우 빈 리스트 반환
+        if not categories:
+            logger.info(f"사용자 {session.user_id}의 카테고리가 없습니다.")
+            return []
+            
+        logger.info(f"사용자 {session.user_id}의 카테고리 {len(categories)}개를 조회했습니다.")
+        return categories
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        # 그 외 예외만 500으로 처리
-        logger.error(f"카테고리 조회 중 오류 발생: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"카테고리 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="카테고리 조회 중 오류가 발생했습니다."
+        )
 
 @router.post("/", response_model=CategoryResponse)
 async def create_category(

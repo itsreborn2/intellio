@@ -12,3 +12,4 @@ class Category(Base):
     name = Column(String(255), nullable=False, unique=True)
     type = Column(String(50), nullable=False)  # 'TEMPORARY' 또는 'PERMANENT'
     created_at = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
