@@ -21,10 +21,12 @@ async def get_current_session(
     response: Response = None,
     db: AsyncSession = Depends(get_db)
 ) -> Session:
-    """현재 세션 가져오기. 세션이 없으면 새로 생성"""
+    """현재 세션 가져오기"""
+    print(f'[get_current_session] : {session_id}')
     user_service = UserService(db)
     
     if not session_id:
+        print(f'  => 세션이 존재하지 않습니다.')
         # 새 세션 생성
         session_create = SessionCreate(
             session_id=str(uuid4()),
@@ -47,22 +49,11 @@ async def get_current_session(
     session = await user_service.get_active_session(session_id)
     
     if not session:
-        # 세션이 없거나 만료된 경우 새로 생성
-        session_create = SessionCreate(
-            session_id=str(uuid4()),
-            is_anonymous=True
+        print(f'  => 유효하지 않은 세션입니다.')
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 세션입니다."
         )
-        session = await user_service.create_session(session_create)
-        
-        if response:
-            response.set_cookie(
-                key="session_id",
-                value=session.session_id,
-                max_age=30 * 24 * 60 * 60,
-                httponly=True,
-                secure=True,
-                samesite="strict"
-            )
     
     return session
 
@@ -71,12 +62,18 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db)
 ) -> Session:
     """현재 인증된 사용자 가져오기"""
-    if not session.is_authenticated:
+    if not session or not session.is_authenticated or not session.user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="인증되지 않은 사용자입니다."
         )
     return session
+
+async def get_user_service(
+    db: AsyncSession = Depends(get_db)
+) -> UserService:
+    """사용자 서비스 의존성"""
+    return UserService(db)
 
 def get_project_service(
     db: AsyncSession = Depends(get_db)

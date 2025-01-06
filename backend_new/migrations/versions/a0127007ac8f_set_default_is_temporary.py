@@ -1,7 +1,7 @@
 """set default is_temporary
 
 Revision ID: a0127007ac8f
-Revises: 679295943d52
+Revises: ea5691a8767e
 Create Date: 2024-12-25 18:30:05.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'a0127007ac8f'
-down_revision: Union[str, None] = '679295943d52'
+down_revision: Union[str, None] = 'ea5691a8767e'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

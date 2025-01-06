@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
 const API_ENDPOINT = `${API_BASE_URL}/api/v1`
 
 import { format, parseISO } from 'date-fns';
@@ -258,7 +258,7 @@ export const uploadDocument = async (
           'X-Requested-With': 'XMLHttpRequest'
         },
         body: formData
-      })
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null)
@@ -486,14 +486,25 @@ export const checkSession = async (): Promise<{
 export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
   try {
     const response = await apiFetch(`${API_ENDPOINT}/projects/recent?limit=3`, {
-      credentials: 'include'
-    })
+      credentials: 'include' // 단순히 브라우저에 저장된 쿠키를 HTTP 요청에 포함시키라는 의미
+    });
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch recent projects')
+    // 인증 오류 처리
+    if (response.status === 401) {
+      console.warn('사용자 인증이 필요합니다.');
+      return {
+        today: [],
+        yesterday: [],
+        four_days_ago: [],
+        older: []
+      };
     }
 
-    const data: IApiRecentProjectsResponse = await response.json()
+    if (!response.ok) {
+      throw new Error(`Failed to fetch recent projects: ${response.status}`);
+    }
+
+    const data: IApiRecentProjectsResponse = await response.json();
   
     // 날짜 포맷팅
     const formatProjects = (projects: IApiProject[]): IProject[] => {
@@ -510,25 +521,25 @@ export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
         category_id: project.category_id,
         will_be_deleted: project.is_temporary && project.created_at &&
           new Date(project.created_at).getTime() < new Date().getTime() - 4 * 24 * 60 * 60 * 1000
-      }))
-    }
+      }));
+    };
 
     const result: IRecentProjectsResponse = {
       today: formatProjects(data.today || []),
       yesterday: formatProjects(data.yesterday || []),
       four_days_ago: formatProjects(data.four_days_ago || []),
       older: formatProjects(data.older || [])
-    }
+    };
 
-    return result
+    return result;
   } catch (error) {
-    console.error('Error fetching recent projects:', error)
+    console.error('Error fetching recent projects:', error);
     return {
       today: [],
       yesterday: [],
       four_days_ago: [],
       older: []
-    }
+    };
   }
 };
 

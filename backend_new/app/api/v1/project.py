@@ -16,8 +16,9 @@ from app.schemas.project import (
 from app.models.user import Session
 from app.models.project import Project
 from app.models.category import Category
-from app.core.deps import get_db, get_current_session, get_project_service
+from app.core.deps import get_db, get_current_session, get_project_service, get_user_service
 from app.services.project import ProjectService
+from app.services.user import UserService
 import sys
 router = APIRouter()
 
@@ -52,39 +53,17 @@ async def get_recent_projects(
     """최근 프로젝트 목록 조회"""
     logger.debug(f"최근 프로젝트 조회 - 세션 ID: {session.session_id}")
     
-    now = datetime.now()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday_start = today_start - timedelta(days=1)
-    four_days_ago_start = today_start - timedelta(days=4)
-    
-    # 오늘 생성된 프로젝트
-    today = await project_service.get_recent(
-        session=session,
-        limit=limit,
-        start_date=today_start
-    )
-    
-    # 어제 생성된 프로젝트
-    yesterday = await project_service.get_recent(
-        session=session,
-        limit=limit,
-        start_date=yesterday_start,
-        end_date=today_start
-    )
-    
-    # 4일 전 생성된 프로젝트
-    four_days_ago = await project_service.get_recent(
-        session=session,
-        limit=limit,
-        start_date=four_days_ago_start,
-        end_date=yesterday_start
-    )
-    
-    return {
-        "today": today,
-        "yesterday": yesterday,
-        "four_days_ago": four_days_ago
-    }
+    try:
+        # 최근 프로젝트 조회
+        projects = await project_service.get_recent(session=session, limit=limit)
+        return {"projects": projects}
+        
+    except Exception as e:
+        logger.error(f"최근 프로젝트 조회 실패: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="최근 프로젝트 조회 중 오류가 발생했습니다."
+        )
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
@@ -92,7 +71,7 @@ async def get_project(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 조회"""
-    logger.debug(f"프로젝트 조회 시도: {project_id}")
+    logger.info(f"프로젝트 조회 시도: {project_id}")
     try:
         project = await project_service.get(project_id)
         if not project:
@@ -101,7 +80,7 @@ async def get_project(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="프로젝트를 찾을 수 없습니다."
             )
-        logger.debug(f"프로젝트 조회 결과: {project}")
+        logger.info(f"프로젝트 조회 결과: {project}")
         return project
     except Exception as e:
         logger.error(f"프로젝트 조회 중 오류 발생: {str(e)}", exc_info=True)
@@ -163,8 +142,8 @@ async def update_project(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 수정"""
-    logger.debug(f"프로젝트 업데이트 시도: {project_id}")
-    logger.debug(f"업데이트 데이터: {project_in}")
+    logger.info(f"프로젝트 업데이트 시도: {project_id}")
+    logger.info(f"업데이트 데이터: {project_in}")
     try:
         project = await project_service.update(project_id, project_in)
         if not project:
@@ -253,7 +232,7 @@ async def delete_project(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 삭제"""
-    logger.debug(f"프로젝트 삭제 시도: {project_id}")
+    logger.info(f"프로젝트 삭제 시도: {project_id}")
     try:
         success = await project_service.delete(project_id)
         if not success:

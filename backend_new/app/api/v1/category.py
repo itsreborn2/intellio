@@ -27,7 +27,7 @@ async def get_categories(
     
     """사용자의 모든 카테고리를 조회합니다."""
     try:
-        logger.debug(f"사용자의 모든 카테고리를 조회합니다.")
+        logger.info(f"사용자의 모든 카테고리를 조회합니다.")
         
         # 카테고리 조회
         stmt = select(Category)
@@ -83,8 +83,8 @@ async def delete_category(
     category_id: str,
     db: AsyncSession = Depends(get_db)
 ):
-    logger.debug(f"=== 카테고리 삭제 시작 ===")
-    logger.debug(f"카테고리 ID (문자열): {category_id}")
+    logger.info(f"=== 카테고리 삭제 시작 ===")
+    logger.info(f"카테고리 ID (문자열): {category_id}")
     
     try:
         # 문자열을 UUID로 변환
@@ -100,7 +100,7 @@ async def delete_category(
 
         # 1. 카테고리 존재 확인
         category = await db.get(Category, category_uuid)
-        logger.debug(f"조회된 카테고리: {category}")
+        logger.info(f"조회된 카테고리: {category}")
         
         if not category:
             logger.debug(f"카테고리를 찾을 수 없음: {category_uuid}")
@@ -110,35 +110,35 @@ async def delete_category(
             )
 
         # 2. 프로젝트 연결 해제
-        logger.debug("프로젝트 연결 해제 시작")
+        logger.info("프로젝트 연결 해제 시작")
         update_stmt = (
             update(Project)
             .where(Project.category_id == category_uuid)
             .values(category_id=None)
         )
         result = await db.execute(update_stmt)
-        logger.debug(f"프로젝트 연결 해제 완료: {result.rowcount}개")
+        logger.info(f"프로젝트 연결 해제 완료: {result.rowcount}개")
         
         # 3. 카테고리 삭제
-        logger.debug("카테고리 삭제 시작")
+        logger.info("카테고리 삭제 시작")
         await db.delete(category)
         await db.commit()
-        logger.debug(f"카테고리 삭제 완료: {category_uuid}")
+        logger.info(f"카테고리 삭제 완료: {category_uuid}")
         
         # 성공 응답 반환
-        logger.debug("성공 응답 반환")
+        logger.info("성공 응답 반환")
         return {"message": "Category deleted successfully"}
         
     except HTTPException as he:
         # HTTP 예외는 그대로 전달
         raise he
     except Exception as e:
-        logger.debug(f"=== 에러 발생 ===")
-        logger.debug(f"에러 타입: {type(e)}")
-        logger.debug(f"에러 메시지: {str(e)}")
-        logger.debug(f"=== 에러 상세 ===")
+        logger.info(f"=== 에러 발생 ===")
+        logger.info(f"에러 타입: {type(e)}")
+        logger.info(f"에러 메시지: {str(e)}")
+        logger.info(f"=== 에러 상세 ===")
         import traceback
-        logger.debug(traceback.format_exc())
+        logger.info(traceback.format_exc())
         await db.rollback()
         raise HTTPException(
             status_code=500,
@@ -153,8 +153,8 @@ async def add_project_to_category(
 ):
     """카테고리(영구 폴더)에 프로젝트를 추가합니다."""
     try:
-        logger.debug(f"카테고리 {category_id}에 프로젝트 추가 시도")
-        logger.debug(f"요청 데이터: {project_data}")
+        logger.info(f"카테고리 {category_id}에 프로젝트 추가 시도")
+        logger.info(f"요청 데이터: {project_data}")
         
         # 카테고리 존재 여부 확인
         stmt = select(Category).where(Category.id == category_id)

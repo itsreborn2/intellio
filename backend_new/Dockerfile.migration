@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 필요한 시스템 패키지 설치
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# 의존성 파일 복사 및 설치
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 마이그레이션 파일 복사
+COPY migrations migrations/
+COPY alembic.ini .
+
+# 마이그레이션 실행을 위한 스크립트
+COPY wait-for-it.sh /wait-for-it.sh
+RUN chmod +x /wait-for-it.sh
+
+# 데이터베이스 연결 대기 후 마이그레이션 실행
+CMD ["/wait-for-it.sh", "postgres:5432", "--", "alembic", "upgrade", "head"]
