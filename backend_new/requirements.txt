@@ -20,6 +20,9 @@ chardet==5.2.0
 # OpenAI
 openai==1.6.1
 
+# Google AI
+google-generativeai==0.8.3
+
 # Redis
 redis>=5.0.1
 

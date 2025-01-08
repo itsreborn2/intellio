@@ -18,8 +18,8 @@ import {
 } from '@/components/ui/popover'
 import { Folder, Plus, Trash2, FileText, ChevronDown, ChevronRight, History, AlertCircle } from 'lucide-react'
 import * as api from '@/services/api'  // 최상단에 추가
-import { getRecentProjects, IRecentProjectsResponse } from '@/services/api'
-import { Category, Project } from '@/services/api'
+import { IRecentProjectsResponse, IProject, Category } from '@/types/index'
+import { getRecentProjects, } from '@/services/api'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 
@@ -32,10 +32,10 @@ interface ProjectCategorySectionProps {
   expandedSections: string[]
   toggleSection: (section: string) => void
   categories: Category[]
-  setCategories: (categories: Category[]) => void
+  setCategories: React.Dispatch<React.SetStateAction<Category[]>>
   dispatch: any
   onDragEnd: (result: any) => void
-  categoryProjects: { [key: string]: Project[] }  // 추가: 각 카테고리의 프로젝트 목록
+  categoryProjects: { [key: string]: IProject[] }  // 추가: 각 카테고리의 프로젝트 목록
 }
 
 export function ProjectCategorySection({
@@ -147,9 +147,8 @@ export function ProjectCategorySection({
             console.log(` - ${category.name} 폴더(${categoriesData.length}) `);
             const projects = await api.getCategoryProjects(category.id)
             //console.log('카테고리의 프로젝트들:', projects); // 전체 배열 확인
-            projects.forEach(project => {
+            projects.forEach((project: IProject) => {
               console.log(`   - 영구프로젝트 : ID:${project.id}, title:${project.name}, temp:${project.is_temporary}`);
-              
             });
             return { categoryId: category.id, projects }
           } catch (error) {
@@ -164,7 +163,7 @@ export function ProjectCategorySection({
         const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
           acc[categoryId] = projects
           return acc
-        }, {} as { [key: string]: Project[] })
+        }, {} as { [key: string]: IProject[] })
 
         // categoryProjects 상태 업데이트
         dispatch({ type: 'UPDATE_CATEGORY_PROJECTS', payload: newCategoryProjects })
@@ -257,7 +256,7 @@ export function ProjectCategorySection({
     return title.length > maxLength ? `${title.slice(0, maxLength)}...` : title;
   };
 
-  const renderProjects = (projects: any[], sectionTitle: string) => {
+  const renderProjects = (projects: IProject[], sectionTitle: string) => {
     if (!Array.isArray(projects) || !projects?.length) return null;
 
     return (
@@ -303,8 +302,8 @@ export function ProjectCategorySection({
                         "h-4 w-4 flex-shrink-0",
                         snapshot.isDragging && "text-blue-500"
                       )} />
-                      <span className="truncate text-left" title={project.title || project.name}>
-                        {truncateTitle(project.title || project.name, 15)}
+                      <span className="truncate text-left" title={project.name}>
+                        {truncateTitle(project.name, 15)}
                       </span>
                     </Button>
                   </div>
@@ -391,8 +390,8 @@ export function ProjectCategorySection({
                         "h-4 w-4 flex-shrink-0",
                         snapshot.isDragging && "text-blue-500"
                       )} />
-                      <span className="truncate text-left" title={project.title || project.name}>
-                        {truncateTitle(project.title || project.name, 15)}
+                      <span className="truncate text-left" title={project.name}>
+                        {truncateTitle(project.name, 15)}
                       </span>
                     </Button>
                   </div>

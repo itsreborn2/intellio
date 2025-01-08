@@ -24,10 +24,6 @@ export const Header = ({ className }: { className?: string }) => {
   const { state, dispatch } = useApp()
   const auth = useAuth()
   
-  // 디버깅을 위한 상태 로깅
-  //console.log('[Header] Current Auth State:', auth)
-  //console.log('LocalStorage Token:', localStorage.getItem('token'))
-  
   const { isAuthenticated, name, email, logout } = auth
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')

@@ -21,14 +21,14 @@ import {
 } from "lucide-react"
 import { useApp } from "@/contexts/AppContext"
 import { createProject, uploadDocument } from "@/services/api"
-import { Tooltip, Box, DragIndicatorIcon } from "@mui/material"
+import { Tooltip, Box } from "@mui/material"
 import { cn } from "@/lib/utils"
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
-import { IDocument, ITableData, IMessage, ITemplate, IProjectItem, IDocumentUploadResponse, IDocumentStatus } from '@/types';  
+import { IDocument,  IMessage, ITemplate, IProjectItem, IDocumentUploadResponse, IDocumentStatus } from '@/types';  
 
 // Shadcn Table Components
 const Table = React.forwardRef<
@@ -387,27 +387,33 @@ export const TableSection = () => {
         window.dispatchEvent(new CustomEvent('projectCreated'))
       }
       
+      dispatch({
+        type: 'ADD_CHAT_MESSAGE',
+        payload: {
+          role: 'assistant',
+          content: `문서 업로드를 시작합니다. 총 ${files.length}개의 파일이 업로드됩니다.`
+        }
+      })
+
       const response: IDocumentUploadResponse = await uploadDocument(projectId, Array.from(files))
       console.log('Upload response[TableSection]:', response)
-        
+      
+      
       // 1. 문서 상태 업데이트
       const documents: IDocument[] = response.documents.map(doc => ({
         id: doc.id,
         filename: doc.filename,
-        status: {  // IDocumentStatus 타입에 맞게 객체 구성
-          id: doc.id,
-          filename: doc.filename,
-          status: doc.status,  // 이미 적절한 상태 문자열
-        },
+        project_id: doc.project_id,
+        status: doc.status,
         content_type: doc.content_type
       }));
-      console.log('Created document[TableSection], dispatch(\'SET_DOCUMENT\', payload) : ', documents)
+      console.log('Created document[TableSection], dispatch(\'SET_DOCUMENTS_IN_TABLESECTION\', payload) : ', documents)
     
 
       dispatch({
-        type: 'SET_DOCUMENTS',
+        type: 'SET_DOCUMENTS_IN_TABLESECTION',
         payload: documents
-      })
+      });
       console.log(`2. 테이블 데이터 초기화 - Document 컬럼 추가. 현재프로젝트 : ${state.currentProjectId}`)
       // 2. 테이블 데이터 초기화 - Document 컬럼 추가
       if (documents.length > 0) {
@@ -436,15 +442,16 @@ export const TableSection = () => {
           payload: 'table'
         })
       }
-      console.log('ADD_CHAT_MESSAGE')
+      console.log('ADD_MESSAGE')
       // 기존 메시지 dispatch
       dispatch({
         type: 'ADD_CHAT_MESSAGE',
         payload: {
-          role: 'system',
-          content: response.message
+          role: 'assistant',
+          content: `문서 추가 완료`
         }
       })
+
     } catch (error) {
       console.error('Failed to upload documents:', error)
     }
@@ -471,6 +478,8 @@ export const TableSection = () => {
 
   const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>, column: string) => {
     const tableHead = e.currentTarget.parentElement
+    if (!tableHead) return;  // 조기 반환으로 null 체크
+    
     const table = tableHead.parentElement
     const columnWidth = tableHead.style.width
     const startX = e.clientX
@@ -554,6 +563,22 @@ export const TableSection = () => {
       // 여기에 컨텍스트 메뉴 로직 추가
     }
   }
+
+  // useEffect(() => {
+  //   const tableHead = document.querySelector('thead');
+  //   if (!tableHead) return;  // tableHead가 null이 함수 종료
+
+  //   // 이후 tableHead 사용하는 코드...
+  //   tableHead.addEventListener('dragover', handleDragOver);
+  //   tableHead.addEventListener('drop', handleDrop);
+    
+  //   return () => {
+  //     if (tableHead) {  // cleanup에서도 null 체크
+  //       tableHead.removeEventListener('dragover', handleDragOver);
+  //       tableHead.removeEventListener('drop', handleDrop);
+  //     }
+  //   };
+  // }, [handleDragOver, handleDrop]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">

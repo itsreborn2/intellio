@@ -88,8 +88,9 @@ async def chat_search(
             mode="chat",
             document_ids=request.document_ids
         )
-        logger.info("채팅 검색 완료")
-        return result
+        answer = result.get('answer')
+        logger.info(f"채팅 검색 완료 - 답변: {result.get('answer')}")
+        return answer
     except Exception as e:
         logger.error(f"채팅 검색 중 오류 발생: {str(e)}")
         raise HTTPException(

@@ -82,6 +82,10 @@ logging_config = {
             "()": ColorFormatter,
             "format": "%(asctime)s/%(name)s - %(message)s",
             "datefmt": "%Y-%m-%d %H:%M:%S"
+        },
+        "file": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
         }
     },
     "handlers": {
@@ -89,27 +93,36 @@ logging_config = {
             "class": "logging.StreamHandler",
             "formatter": "color",
             "level": "INFO"
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "file",
+            "filename": "logs/app.log",
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 5,
+            "encoding": "utf-8",
+            "level": "INFO"
         }
     },
     "loggers": {
         "app": {
-            "handlers": ["console"],
+            "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False
         },
         "sqlalchemy.engine": {
-            "handlers": ["console"],
+            "handlers": ["console", "file"],
             "level": "WARNING",
             "propagate": False
         },
         "uvicorn": {
-            "handlers": ["console"],
+            "handlers": ["console", "file"],
             "level": "WARNING",
             "propagate": False
         }
     },
     "root": {
-        "handlers": ["console"],
+        "handlers": ["console", "file"],
         "level": "WARNING"
     }
 }

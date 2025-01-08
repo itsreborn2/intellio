@@ -6,12 +6,20 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/contexts/AppContext'
-import { searchTable, chat } from '@/services/api'
+import { searchTable, sendChatMessage } from '@/services/api'
+import { IMessage, IChatResponse } from '@/types/index'
 
 export const ChatSection = () => {
   const { state, dispatch } = useApp()
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // useEffect(() => {
+  //   console.log('메시지 상태 변경:', {
+  //     messages: state.messages,
+  //     lastMessage: state.messages[state.messages.length - 1]
+  //   })
+  // }, [state.messages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -31,9 +39,9 @@ export const ChatSection = () => {
     // 분석 시작 상태 설정
     dispatch({ type: 'SET_IS_ANALYZING', payload: true })
 
-    // 사용자 메시지 추가 (모든 모드에서 공통)
+    // 사용자 메시지 추가
     dispatch({
-      type: 'ADD_MESSAGE',
+      type: 'ADD_CHAT_MESSAGE',
       payload: {
         role: 'user',
         content: currentInput
@@ -74,7 +82,7 @@ export const ChatSection = () => {
 
           // 성공 메시지 추가
           dispatch({
-            type: 'ADD_MESSAGE',
+            type: 'ADD_CHAT_MESSAGE',
             payload: {
               role: 'assistant',
               content: '새로운 컬럼이 추가되었습니다.'
@@ -86,7 +94,7 @@ export const ChatSection = () => {
         
         // 오류 메시지 추가
         dispatch({
-          type: 'ADD_MESSAGE',
+          type: 'ADD_CHAT_MESSAGE',
           payload: {
             role: 'assistant',
             content: '죄송합니다. 분석 중 오류가 발생했습니다.'
@@ -96,25 +104,32 @@ export const ChatSection = () => {
         dispatch({ type: 'SET_IS_ANALYZING', payload: false })
       }
     } else {
-      // 채팅 모드
+
       try {
-        const response = await chat(
+        const response: IChatResponse = await sendChatMessage(
           state.currentProjectId!,
           state.analysis.selectedDocumentIds,
           currentInput
         )
 
-        dispatch({
-          type: 'ADD_MESSAGE',
-          payload: {
-            role: 'assistant',
-            content: response.message
-          }
-        })
+        // 응답 메시지 추가
+        if (response) {
+          console.log('채팅 응답 상세:', {
+            response,
+          })
+          dispatch({
+            type: 'ADD_CHAT_MESSAGE',
+            payload: {
+              role: response.role,
+              content: response.content,
+              timestamp: response.timestamp
+            }
+          })
+        }
       } catch (error) {
         console.error('채팅 중 오류:', error)
         dispatch({
-          type: 'ADD_MESSAGE',
+          type: 'ADD_CHAT_MESSAGE',
           payload: {
             role: 'assistant',
             content: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.'

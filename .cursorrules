@@ -142,3 +142,9 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 - **API & DB Docs**: Document all API endpoints, RLS policies, and database schema.
 - **Edge Functions**: Document Supabase Edge Functions and their intended usage.
 - **Setup Instructions**: Keep environment configuration and setup steps current for onboarding developers.
+
+## other rules
+- frontend/types/index.ts 파일은 모든 타입을 모아놓은 파일이다.
+- frontend에서 사용하는 모든 interface는 frontend/types/index.ts에 정의한다.
+
+

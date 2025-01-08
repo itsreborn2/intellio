@@ -6,8 +6,8 @@ import { useDropzone } from 'react-dropzone'
 import { useApp } from '@/contexts/AppContext'
 import { Button } from '@/components/ui/button'
 import { createProject } from '@/services/api'
-import { uploadDocument } from '@/services/api' // Assuming uploadDocument is defined in this file
-import { IDocumentStatus, ITableData } from '@/types'  // 타입 import 추가
+import { uploadDocument } from '@/services/api'
+import { IDocument, IDocumentStatus, IDocumentUploadResponse, ITableData, TableResponse } from '@/types'
 
 // 문서 상태 타입 정의
 interface DocumentStatus {
@@ -122,14 +122,7 @@ export const UploadSection = () => {
         failedFiles
       })
 
-      // 채팅 메시지로 상태 업데이트
-      dispatch({
-        type: 'ADD_CHAT_MESSAGE',
-        payload: {
-          role: 'system',
-          content: `문서 업로드를 시작합니다. 총 ${total}개의 파일이 업로드됩니다.`
-        }
-      })
+      
     }, [dispatch]
   )
 
@@ -164,15 +157,28 @@ export const UploadSection = () => {
           0, 
           []
         )
+        // 채팅 메시지로 상태 업데이트
+        dispatch({
+          type: 'ADD_CHAT_MESSAGE',
+          payload: {
+            role: 'assistant',
+            content: `문서 업로드를 시작합니다. 총 ${acceptedFiles.length}개의 파일이 업로드됩니다.`
+          }
+        })
 
         // 모든 파일의 상태를 UPLOADING으로 업데이트하고 테이블에 즉시 추가
-        const initialTableData: ITableRowData[] = acceptedFiles.map(file => ({
-          id: file.name,
-          Document: file.name,
-          Date: new Date().toLocaleDateString(),
-          "Document Type": file.type || "Unknown",
-          status: 'UPLOADING' as IDocumentStatus
-        }))
+        const initialTableData: TableResponse = {
+          columns: [{
+            header: {
+              name: 'Document',
+              prompt: '문서 이름을 표시합니다'
+            },
+            cells: acceptedFiles.map(file => ({
+              doc_id: file.name,
+              content: file.name
+            }))
+          }]
+        };
 
         // 테이블 데이터 즉시 업데이트
         dispatch({
@@ -185,18 +191,26 @@ export const UploadSection = () => {
 
         // 파일 업로드 진행
         console.log(`Uploading ${acceptedFiles.length} files to project ${project.id}`)
-        const response = await uploadDocument(project.id, acceptedFiles)
+        const response:IDocumentUploadResponse = await uploadDocument(project.id, acceptedFiles)
         console.log('Upload response:[UploadSection]', response)
 
         // 업로드 상태 업데이트
         updateUploadStatus(
           acceptedFiles.length,
-          response.error || 0,
-          response.failedFiles || []
+          response.errors.length,
+          response.failed_uploads || []
         )
+        // 채팅 메시지로 상태 업데이트
+        dispatch({
+          type: 'ADD_CHAT_MESSAGE',
+          payload: {
+            role: 'assistant',
+            content: `문서 업로드 완료`
+          }
+        })
 
         // 새 문서 목록 생성
-        const newDocuments = (response.document_ids || []).map((docId, index) => ({
+        const newDocuments:IDocument[] = (response.document_ids || []).map((docId, index) => ({
           id: docId,
           filename: acceptedFiles[index].name,
           project_id: project.id,
@@ -205,7 +219,7 @@ export const UploadSection = () => {
 
         // 문서 목록 업데이트
         dispatch({
-          type: 'SET_DOCUMENTS',
+          type: 'SET_DOCUMENTS_IN_TABLESECTION',
           payload: newDocuments
         });
 
@@ -224,22 +238,28 @@ export const UploadSection = () => {
       } catch (error) {
         console.error('Upload failed:', error)
         // 실패한 파일 이름 목록 생성
-        const failedFileNames = acceptedFiles.map(file => file.name)
+        const failedFiles = acceptedFiles.map(file => file.name)
+        console.log('Failed files:', failedFiles)
         // 실패한 업로드 상태 업데이트
         updateUploadStatus(
           acceptedFiles.length,
           acceptedFiles.length,
-          failedFileNames
+          failedFiles
         )
 
         // 실패한 파일들의 상태를 ERROR로 업데이트
-        const failedTableData: ITableRowData[] = acceptedFiles.map(file => ({
-          id: file.name,
-          Document: file.name,
-          Date: new Date().toLocaleDateString(),
-          "Document Type": file.type || "Unknown",
-          status: 'ERROR' as IDocumentStatus
-        }))
+        const failedTableData: TableResponse = {
+          columns: [{
+            header: {
+              name: 'Document',
+              prompt: '문서 이름을 표시합니다'
+            },
+            cells: failedFiles.map(filename => ({
+              doc_id: filename,
+              content: filename
+            }))
+          }]
+        };
 
         dispatch({
           type: 'UPDATE_TABLE_DATA',

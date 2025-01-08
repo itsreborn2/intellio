@@ -203,6 +203,8 @@ async def autosave_project(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 자동 저장"""
+    logger.info(f"프로젝트 자동 저장 시도: {project_id}")
+    logger.info(f"자동 저장 데이터: {project_in}")
     try:
         project = await project_service.update(project_id, project_in)
         if not project:

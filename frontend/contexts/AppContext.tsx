@@ -1,32 +1,9 @@
 "use client"
 
 import { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react'
-import { TableData, Document, Message, DocumentStatus } from '@/types'
+import { DocumentStatus, IProject } from '@/types'
 import * as api from '@/services/api'
-import {  IRecentProjectsResponse } from '@/services/api'
-interface TableColumn {
-  header: {
-    name: string;
-    prompt: string;
-  };
-  cells: {
-    doc_id: string;
-    content: string;
-  }[];
-}
-
-interface TableResponse {
-  columns: TableColumn[];
-}
-
-interface RecentProject {
-  id: string
-  title: string
-  created_at: string
-  formatted_date?: string
-  description?: string
-  is_temporary: boolean
-}
+import { IMessage, TableResponse, IDocument, IRecentProjectsResponse } from '@/types'
 
 interface AppState {
   sessionId: string | null
@@ -34,9 +11,9 @@ interface AppState {
   projectTitle: string
   currentView: 'upload' | 'table' | 'chat'  // 현재 뷰 상태
   documents: {
-    [id: string]: Document
+    [id: string]: IDocument
   }
-  messages: Message[]
+  messages: IMessage[]
   analysis: {
     mode: 'chat' | 'table'  // 분석 모드 (채팅/테이블)
     columns: string[]
@@ -44,43 +21,53 @@ interface AppState {
     columnOriginalPrompts: { [key: string]: string }
     tableData: TableResponse
     selectedDocumentIds: string[]
-    messages: Message[]
+    messages: IMessage[]
     processingColumns: string[]  // 현재 처리 중인 컬럼들
   }
   isAnalyzing: boolean
   lastAutosaved: Date | null
   hasUnsavedChanges: boolean
-  recentProjects: {
-    today: RecentProject[]
-    yesterday: RecentProject[]
-    fourDaysAgo: RecentProject[]
-    older: RecentProject[]
-  }
+  recentProjects: IRecentProjectsResponse
   categoryProjects: { [key: string]: any[] }
 }
 
 type Action =
+  // 전역에 영향을 주는 action
   | { type: 'SET_INITIAL_STATE' }
   | { type: 'SET_SESSION'; payload: string }
   | { type: 'SET_CURRENT_PROJECT'; payload: string }
-  | { type: 'SET_PROJECT_TITLE'; payload: string }
   | { type: 'SET_VIEW'; payload: 'upload' | 'table' | 'chat' }
-  | { type: 'SET_DOCUMENTS'; payload: Document[] }
-  | { type: 'ADD_MESSAGE'; payload: Message }
-  | { type: 'SET_IS_ANALYZING'; payload: boolean }
   | { type: 'SET_MODE'; payload: 'chat' | 'table' }
-  | { type: 'SELECT_DOCUMENTS'; payload: string[] }
+  // Header에서 사용하는 action
+  | { type: 'SET_PROJECT_TITLE'; payload: string }
+
+  // Sidebar, ProjectCategory에서 사용하는 action
+  | { type: 'UPDATE_RECENT_PROJECTS'; payload: IRecentProjectsResponse }
+  | { type: 'UPDATE_CATEGORY_PROJECTS'; payload: { [key: string]: IProject[] } }
+
+  // TemplateSection에서 사용하는 action
+  // UploadSection에서 사용하는 action
+  // ChatSection에서 사용하는 action
+  // TableSection에서 사용하는 action
+  | { type: 'SET_DOCUMENTS_IN_TABLESECTION'; payload: IDocument[] }
+  | { type: 'ADD_CHAT_MESSAGE'; payload: IMessage }
+  | { type: 'SET_IS_ANALYZING'; payload: boolean }
+  | { type: 'UPDATE_TABLE_DATA'; payload: TableResponse }
+
+
+  // 아직 사용하지 않는 action. 다 체크 못함. 계속 확인 중.
+  | { type: 'SELECT_DOCUMENTS'; payload: string[] }  
   | { type: 'ADD_COLUMN'; payload: string }
   | { type: 'DELETE_COLUMN'; payload: string }
-  | { type: 'UPDATE_TABLE_DATA'; payload: TableResponse }
+  | { type: 'UPDATE_DOCUMENT_STATUS'; payload: { id: string; status: DocumentStatus } }  
+  
   | { type: 'UPDATE_TABLE_COLUMNS'; payload: any[] }
   | { type: 'UPDATE_COLUMN_INFO'; payload: { oldName: string; newName: string; prompt: string; originalPrompt: string } }
-  | { type: 'UPDATE_DOCUMENT_STATUS'; payload: { id: string; status: DocumentStatus } }
+  
   | { type: 'ADD_ANALYSIS_COLUMN'; payload: { columnName: string; prompt: string; originalPrompt: string } }
   | { type: 'UPDATE_COLUMN_RESULT'; payload: { documentId: string; columnName: string; result: any } }
   | { type: 'SET_LAST_AUTOSAVED'; payload: Date }
-  | { type: 'UPDATE_RECENT_PROJECTS'; payload: IRecentProjectsResponse }
-  | { type: 'UPDATE_CATEGORY_PROJECTS'; payload: any[] }
+
 
 const initialState: AppState = {
   sessionId: null,
@@ -107,7 +94,7 @@ const initialState: AppState = {
   recentProjects: {
     today: [],
     yesterday: [],
-    fourDaysAgo: [],
+    four_days_ago: [],
     older: []
   },
   categoryProjects: {}
@@ -156,7 +143,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
               ? { ...project, title: action.payload }
               : project
           ),
-          fourDaysAgo: state.recentProjects.fourDaysAgo.map(project => 
+          four_days_ago: state.recentProjects.four_days_ago.map(project => 
             project.id === state.currentProjectId 
               ? { ...project, title: action.payload }
               : project
@@ -179,7 +166,9 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case 'SET_DOCUMENTS':
+    case 'SET_DOCUMENTS_IN_TABLESECTION':
+      //payload는 IDocument[] 타입
+      // SET_DOCUMENTS_IN_TABLESECTION 는 현재 프로젝트에 속한 문서를 TableSection의 data에 할당하는 역할
       const newDocuments = action.payload.reduce((acc, doc) => {
         acc[doc.id] = doc;
         return acc;
@@ -239,10 +228,13 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       };
 
-    case 'ADD_MESSAGE':
+    case 'ADD_CHAT_MESSAGE':
       newState = {
         ...state,
-        messages: [...state.messages, action.payload],
+        messages: [...state.messages, {
+          ...action.payload,
+          timestamp: action.payload.timestamp || new Date().toISOString()
+        }],
         hasUnsavedChanges: true
       };
       break;
@@ -292,6 +284,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case 'ADD_COLUMN':    
+    // 아직 쓰는데가 없네.
       // 기존 테이블 데이터 유지하면서 새 컬럼 추가       
       const updatedColumnData = state.analysis.tableData.columns.map(row => ({
         ...row,
@@ -357,7 +350,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
       let finalColumns = initialTableColumns;
       if (action.payload?.columns?.length > 0) {
         console.log('5. 새로운 컬럼 데이터 병합 시작');
-        const newColumns = action.payload.columns.filter(col => col.header.name !== 'Document');
+        //const newColumns = action.payload.columns.filter(col => col.header.name !== 'Document');
+        const newColumns = action.payload.columns;
         console.log('5-1. Document 컬럼 제외된 새 컬럼:', newColumns);
         finalColumns = [...initialTableColumns, ...newColumns];
         console.log('5-2. 최종 병합된 컬럼:', finalColumns);
@@ -440,16 +434,18 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case 'UPDATE_DOCUMENT_STATUS':
-      return {
-        ...state,
-        documents: {
-          ...state.documents,
-          [action.payload.id]: {
-            ...state.documents[action.payload.id],
-            status: action.payload.status
-          }
-        }
-      }
+      // 주석 삭제 금지
+      // return {
+      //   ...state,
+      //   documents: {
+      //     ...state.documents,
+      //     [action.payload.id]: {
+      //       ...state.documents[action.payload.id],
+      //       status: action.payload.status
+      //     }
+      //   }
+      // }
+      return state;
 
     case 'ADD_ANALYSIS_COLUMN':
       return state;
@@ -525,15 +521,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
       break;
 
     case 'UPDATE_RECENT_PROJECTS':
-      console.log('UPDATE_RECENT_PROJECTS 액션:', action.payload)
+      //console.log('UPDATE_RECENT_PROJECTS 액션:', action.payload)
       return {
         ...state,
-        recentProjects: {
-          today: action.payload.today || [],
-          yesterday: action.payload.yesterday || [],
-          fourDaysAgo: action.payload.four_days_ago || [],
-          older: action.payload.older || []
-        }
+        recentProjects: action.payload
       }
 
     case 'UPDATE_CATEGORY_PROJECTS':
