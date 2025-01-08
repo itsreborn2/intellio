@@ -21,8 +21,7 @@ chardet==5.2.0
 openai==1.6.1
 
 # Redis
-redis==5.0.1
-aioredis==2.0.1
+redis>=5.0.1
 
 # Task Queue
 celery==5.3.6
