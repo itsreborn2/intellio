@@ -1,8 +1,13 @@
-답변을 할때 아래의 폴더에 있는 소스들을 참고해
-backend_new
-frontend
+## Next.js: Route Handler 우선 사용
 
-프로젝트 폴더의 구조는 docs/개발_가이드.md의 '2. 프로젝트 폴더 구조'를 참고해
+-   **모든 API 엔드포인트는 Route Handler를 사용하여 구현하세요.**
+-   **데이터베이스 작업, 외부 API 호출, 인증 등 복잡한 서버 작업은 반드시 Route Handler를 사용하세요.**
+
+## 답변 시 소스를 찾을때
+- 답변을 할때 아래의 폴더에 있는 소스들을 참고해 
+- backend_new
+- frontend
+- 프로젝트 폴더의 구조는 docs/개발_가이드.md의 '2. 프로젝트 폴더 구조'를 참고해
 
 ## TypeScript 인터페이스 정의 규칙: 'I' 접두사 사용
 

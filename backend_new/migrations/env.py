@@ -6,9 +6,16 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from dotenv import load_dotenv
+
+# .env 파일의 절대 경로
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+load_dotenv(dotenv_path)
+print(os.getenv("DATABASE_URL"))  # .env 파일의 DATABASE_URL 값
 
 # Add the project root directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print(f"ROOT : {os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}")
 
 # Import all models here
 from app.models.base import Base

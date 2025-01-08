@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 from pydantic import BaseModel, Field, HttpUrl, ConfigDict, field_validator, validator
 from datetime import datetime
 import json
@@ -98,6 +98,10 @@ class DocumentUploadResponse(BaseSchema):
     success: bool = Field(True, description="업로드 성공 여부")
     project_id: UUID = Field(..., description="프로젝트 ID")
     document_ids: List[UUID] = Field(..., description="문서 ID 목록")
+    documents: List[Dict] = Field(..., description="업로드된 문서 상세 정보 목록")
+    errors: List[Dict] = Field(default_factory=list, description="업로드 실패한 문서 에러 정보")
+    failed_uploads: int = Field(0, description="업로드 실패한 문서 수")
+    message: str = Field("Upload started", description="업로드 상태 메시지")
 
 class DocumentQueryRequest(BaseSchema):
     """문서 쿼리 요청 스키마"""

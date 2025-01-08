@@ -3,6 +3,7 @@ const API_ENDPOINT = `${API_BASE_URL}/api/v1`
 
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { IDocument, ITableData, IMessage, ITemplate, IProjectItem, IDocumentUploadResponse } from '@/types';  
 
 export interface Project {
   id: string
@@ -21,22 +22,30 @@ export interface ProjectListResponse {
   items: Project[]
 }
 
-export interface UploadResponse {
-  success: boolean
-  project_id: string
-  document_ids: string[]
-  documents: Array<{
-    id: string
-    filename: string
-    content_type: string
-    status: string
-  }>
-  errors: Array<{
-    filename: string
-    error: string
-  }>
-  failed_uploads: string[]
-  message: string
+// // 문서 업로드 응답 인터페이스
+// export interface IDocumentUploadResponse {
+//   success: boolean;              // 업로드 성공 여부
+//   project_id: string;           // 프로젝트 ID (UUID)
+//   document_ids: string[];       // 업로드된 문서 ID 목록 (UUID[])
+//   documents: Array<{
+//     id: string
+//     filename: string
+//     content_type: string
+//     status: string
+//   }>
+//   errors: Array<{
+//     filename: string
+//     error: string
+//   }>
+//   failed_uploads: string[]
+//   message: string
+// }
+
+// 업로드 진행 상태 콜백 인터페이스
+export interface IUploadProgressCallback {
+  onProgress?: (totalProgress: number) => void;
+  onComplete?: (response: IDocumentUploadResponse) => void;
+  onError?: (error: Error) => void;
 }
 
 export interface DocumentStatus {
@@ -44,12 +53,6 @@ export interface DocumentStatus {
   filename: string
   status: 'UPLOADING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
   error_message?: string
-}
-
-export interface UploadProgressCallback {
-  onProgress?: (totalProgress: number) => void;
-  onComplete?: (response: UploadResponse) => void;
-  onError?: (error: Error) => void;
 }
 
 export interface ProjectDetail {
@@ -239,8 +242,8 @@ const sanitizeFileName = (fileName: string): string => {
 export const uploadDocument = async (
   projectId: string, 
   files: File | File[],
-  callbacks?: UploadProgressCallback
-): Promise<UploadResponse> => {
+  callbacks?: IUploadProgressCallback
+): Promise<IDocumentUploadResponse> => {
   return new Promise(async (resolve, reject) => {
     try {
       const formData = new FormData()
@@ -270,7 +273,8 @@ export const uploadDocument = async (
         throw new Error(errorData?.detail || `Upload failed with status ${response.status}`)
       }
 
-      const result = await response.json()
+      const result: IDocumentUploadResponse = await response.json()
+      console.log(`upload result : ${JSON.stringify(result)}`)
       
       if (callbacks?.onComplete) {
         callbacks.onComplete(result)
@@ -519,8 +523,8 @@ export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
           undefined,
         is_temporary: project.is_temporary,
         category_id: project.category_id,
-        will_be_deleted: project.is_temporary && project.created_at &&
-          new Date(project.created_at).getTime() < new Date().getTime() - 4 * 24 * 60 * 60 * 1000
+        will_be_deleted: project.is_temporary && project.created_at ?
+          new Date(project.created_at).getTime() < new Date().getTime() - 4 * 24 * 60 * 60 * 1000 : false
       }));
     };
     console.log(data.today);

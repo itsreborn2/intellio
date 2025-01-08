@@ -7,6 +7,7 @@ import { useApp } from '@/contexts/AppContext'
 import { Button } from '@/components/ui/button'
 import { createProject } from '@/services/api'
 import { uploadDocument } from '@/services/api' // Assuming uploadDocument is defined in this file
+import { IDocumentStatus, ITableData } from '@/types'  // 타입 import 추가
 
 // 문서 상태 타입 정의
 interface DocumentStatus {
@@ -49,6 +50,15 @@ const DocumentStatusBadge = ({ status }: { status: string }) => {
         </span>
       )
   }
+}
+
+// 테이블 행 데이터 인터페이스 정의
+interface ITableRowData {
+  id: string
+  Document: string
+  Date: string
+  "Document Type": string
+  status: IDocumentStatus
 }
 
 export const UploadSection = () => {
@@ -156,12 +166,12 @@ export const UploadSection = () => {
         )
 
         // 모든 파일의 상태를 UPLOADING으로 업데이트하고 테이블에 즉시 추가
-        const initialTableData = acceptedFiles.map(file => ({
+        const initialTableData: ITableRowData[] = acceptedFiles.map(file => ({
           id: file.name,
           Document: file.name,
           Date: new Date().toLocaleDateString(),
           "Document Type": file.type || "Unknown",
-          status: 'UPLOADING'
+          status: 'UPLOADING' as IDocumentStatus
         }))
 
         // 테이블 데이터 즉시 업데이트
@@ -176,7 +186,7 @@ export const UploadSection = () => {
         // 파일 업로드 진행
         console.log(`Uploading ${acceptedFiles.length} files to project ${project.id}`)
         const response = await uploadDocument(project.id, acceptedFiles)
-        console.log('Upload response:', response)
+        console.log('Upload response:[UploadSection]', response)
 
         // 업로드 상태 업데이트
         updateUploadStatus(
@@ -223,12 +233,12 @@ export const UploadSection = () => {
         )
 
         // 실패한 파일들의 상태를 ERROR로 업데이트
-        const failedTableData = acceptedFiles.map(file => ({
+        const failedTableData: ITableRowData[] = acceptedFiles.map(file => ({
           id: file.name,
           Document: file.name,
           Date: new Date().toLocaleDateString(),
           "Document Type": file.type || "Unknown",
-          status: 'ERROR'
+          status: 'ERROR' as IDocumentStatus
         }))
 
         dispatch({

@@ -28,6 +28,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
+import { IDocument, ITableData, IMessage, ITemplate, IProjectItem, IDocumentUploadResponse, IDocumentStatus } from '@/types';  
 
 // Shadcn Table Components
 const Table = React.forwardRef<
@@ -109,19 +110,22 @@ const TableCell = React.forwardRef<
 ))
 TableCell.displayName = "TableCell"
 
-interface TableColumn {
+// 테이블 컬럼 인터페이스
+interface ITableColumn {
   name: string
   key: string
 }
 
-interface TableRow {
+// 테이블 행 인터페이스
+interface ITableRow {
   id: string
   [key: string]: string
 }
 
-interface TableData {
-  columns: TableColumn[]
-  rows: TableRow[]
+// 테이블 데이터 인터페이스
+interface ITableData {
+  columns: ITableColumn[]
+  rows: ITableRow[]
 }
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
@@ -382,18 +386,58 @@ export const TableSection = () => {
         // 프로젝트 생성 이벤트 발생
         window.dispatchEvent(new CustomEvent('projectCreated'))
       }
-
-      const response = await uploadDocument(projectId, Array.from(files))
-      dispatch({
-        type: 'SET_DOCUMENTS',
-        payload: response.documents.map(doc => ({
+      
+      const response: IDocumentUploadResponse = await uploadDocument(projectId, Array.from(files))
+      console.log('Upload response[TableSection]:', response)
+        
+      // 1. 문서 상태 업데이트
+      const documents: IDocument[] = response.documents.map(doc => ({
+        id: doc.id,
+        filename: doc.filename,
+        status: {  // IDocumentStatus 타입에 맞게 객체 구성
           id: doc.id,
           filename: doc.filename,
-          status: doc.status,
-          content_type: doc.content_type
-        }))
-      })
+          status: doc.status,  // 이미 적절한 상태 문자열
+        },
+        content_type: doc.content_type
+      }));
+      console.log('Created document[TableSection], dispatch(\'SET_DOCUMENT\', payload) : ', documents)
+    
 
+      dispatch({
+        type: 'SET_DOCUMENTS',
+        payload: documents
+      })
+      console.log(`2. 테이블 데이터 초기화 - Document 컬럼 추가. 현재프로젝트 : ${state.currentProjectId}`)
+      // 2. 테이블 데이터 초기화 - Document 컬럼 추가
+      if (documents.length > 0) {
+        const tableData = {
+          columns: [{
+            header: {
+              name: 'Document',
+              prompt: '문서 이름을 표시합니다'
+            },
+            cells: documents.map(doc => ({
+              doc_id: doc.id,
+              content: doc.filename
+            }))
+          }]
+        }
+        console.log(`2-1. tableData : ${tableData}`)
+        dispatch({
+          type: 'UPDATE_TABLE_DATA',
+          payload: tableData
+        })
+
+        console.log('3. 분석 모드를 테이블로 변경')
+        // 3. 분석 모드를 테이블로 변경
+        dispatch({
+          type: 'SET_VIEW',
+          payload: 'table'
+        })
+      }
+      console.log('ADD_CHAT_MESSAGE')
+      // 기존 메시지 dispatch
       dispatch({
         type: 'ADD_CHAT_MESSAGE',
         payload: {
@@ -404,6 +448,7 @@ export const TableSection = () => {
     } catch (error) {
       console.error('Failed to upload documents:', error)
     }
+      
   }
 
   const toggleRowSelection = (id: number) => {

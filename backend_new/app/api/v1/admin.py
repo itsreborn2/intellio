@@ -52,66 +52,90 @@ async def admin_page(
     <body>
         <h1>데이터베이스 관리</h1>
         <div class="table-list">
-            <h2>테이블 목록</h2>
+            <h2 id="tableListTitle">테이블 목록</h2>
             <div id="tables"></div>
         </div>
         <div id="tableContent"></div>
 
         <script>
+            // 페이지 로드 시 테이블 목록 로드
+            document.addEventListener('DOMContentLoaded', () => {
+                loadTables();
+            });
+
             async function loadTables() {
-                const response = await fetch('/api/v1/admin/tables');
-                const tables = await response.json();
-                const tablesDiv = document.getElementById('tables');
-                tables.forEach(table => {
-                    const button = document.createElement('button');
-                    button.textContent = table;
-                    button.onclick = () => loadTableData(table);
-                    tablesDiv.appendChild(button);
-                });
+                try {
+                    const response = await fetch('/api/v1/admin/tables');
+                    const tables = await response.json();
+                    const tablesDiv = document.getElementById('tables');
+                    tablesDiv.innerHTML = ''; // 기존 버튼들 제거
+                    tables.forEach(table => {
+                        const button = document.createElement('button');
+                        button.textContent = table;
+                        button.onclick = () => loadTableData(table);
+                        tablesDiv.appendChild(button);
+                    });
+                } catch (error) {
+                    console.error('테이블 목록 로드 실패:', error);
+                }
             }
 
             async function loadTableData(tableName) {
-                const response = await fetch(`/api/v1/admin/table/${tableName}`);
-                const data = await response.json();
-                
-                const tableDiv = document.getElementById('tableContent');
-                if (data.length === 0) {
-                    tableDiv.innerHTML = `<p>테이블 ${tableName}에 데이터가 없습니다.</p>`;
-                    return;
-                }
+                try {
+                    // 테이블 목록 제목 업데이트
+                    document.getElementById('tableListTitle').textContent = `테이블 목록 - ${tableName}`;
+                    
+                    const response = await fetch(`/api/v1/admin/table/${tableName}`);
+                    const data = await response.json();
+                    
+                    const tableDiv = document.getElementById('tableContent');
+                    tableDiv.innerHTML = ''; // 기존 테이블 제거
+                    
+                    if (data.length === 0) {
+                        tableDiv.innerHTML = `<p>테이블 ${tableName}에 데이터가 없습니다.</p>`;
+                        return;
+                    }
 
-                const table = document.createElement('table');
-                table.className = 'table-data';
-                
-                // 헤더 생성
-                const thead = document.createElement('thead');
-                const headerRow = document.createElement('tr');
-                Object.keys(data[0]).forEach(key => {
-                    const th = document.createElement('th');
-                    th.textContent = key;
-                    headerRow.appendChild(th);
-                });
-                thead.appendChild(headerRow);
-                table.appendChild(thead);
-
-                // 데이터 행 생성
-                const tbody = document.createElement('tbody');
-                data.forEach(row => {
-                    const tr = document.createElement('tr');
-                    Object.values(row).forEach(value => {
-                        const td = document.createElement('td');
-                        td.textContent = JSON.stringify(value);
-                        tr.appendChild(td);
+                    const table = document.createElement('table');
+                    table.className = 'table-data';
+                    
+                    // 헤더 생성
+                    const thead = document.createElement('thead');
+                    const headerRow = document.createElement('tr');
+                    Object.keys(data[0]).forEach(key => {
+                        const th = document.createElement('th');
+                        th.textContent = key;
+                        headerRow.appendChild(th);
                     });
-                    tbody.appendChild(tr);
-                });
-                table.appendChild(tbody);
+                    thead.appendChild(headerRow);
+                    table.appendChild(thead);
 
-                tableDiv.innerHTML = '';
-                tableDiv.appendChild(table);
+                    // 데이터 행 생성
+                    const tbody = document.createElement('tbody');
+                    data.forEach(row => {
+                        const tr = document.createElement('tr');
+                        Object.entries(row).forEach(([key, value]) => {
+                            const td = document.createElement('td');
+                            // documents 테이블의 extracted_text 필드인 경우 20자로 제한
+                            if (tableName === 'documents' && key === 'extracted_text' && value) {
+                                const text = value.toString();
+                                td.textContent = text.length > 20 ? text.substring(0, 20) + '...' : text;
+                                td.title = text; // 마우스 오버 시 전체 텍스트 표시
+                            } else {
+                                td.textContent = value === null ? '' : value.toString();
+                            }
+                            tr.appendChild(td);
+                        });
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+                    tableDiv.appendChild(table);
+                } catch (error) {
+                    console.error('테이블 데이터 로드 실패:', error);
+                    document.getElementById('tableContent').innerHTML = 
+                        `<p>테이블 데이터를 불러오는 중 오류가 발생했습니다.</p>`;
+                }
             }
-
-            loadTables();
         </script>
     </body>
     </html>

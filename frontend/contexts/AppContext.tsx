@@ -223,7 +223,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
       console.log('SET_DOCUMENTS - 상태 업데이트:', {
-        documentsCount: Object.keys(newDocuments).length,
+        totalDocumentsCount: Object.keys(newDocuments).length,
+        currentProjectDocumentsCount: action.payload.filter(doc => doc.project_id === state.currentProjectId).length,
         columnsCount: updatedTableData.columns.length,
         cellsCount: updatedTableData.columns[0]?.cells.length || 0
       });
@@ -321,15 +322,21 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case 'UPDATE_TABLE_DATA':
-      console.log('UPDATE_TABLE_DATA - 이전 상태:', {
+      console.log('[UPDATE_TABLE_DATA] 시작 ----------------');
+      console.log('1. 현재 상태:', {
         currentColumns: state.analysis.tableData?.columns || [],
-        newColumns: action.payload?.columns
+        documents: state.documents,
+        currentProjectId: state.currentProjectId
       });
 
+      console.log('2. 받은 payload:', action.payload);
+
       let initialTableColumns = state.analysis.tableData?.columns || [];
+      console.log('3. 초기 테이블 컬럼:', initialTableColumns);
 
       // Document 칼럼이 없으면 추가
       if (!initialTableColumns.some(col => col.header.name === 'Document')) {
+        console.log('4. Document 컬럼 없음 - 새로 추가');
         const documentColumn = {
           header: {
             name: 'Document',
@@ -342,49 +349,30 @@ const appReducer = (state: AppState, action: Action): AppState => {
               content: doc.filename
             }))
         };
+        console.log('4-1. 생성된 Document 컬럼:', documentColumn);
         initialTableColumns = [documentColumn];
       }
 
       // 새로운 칼럼 데이터가 있으면 병합
+      let finalColumns = initialTableColumns;
       if (action.payload?.columns?.length > 0) {
+        console.log('5. 새로운 컬럼 데이터 병합 시작');
         const newColumns = action.payload.columns.filter(col => col.header.name !== 'Document');
-
-        // 각 새로운 컬럼에 대해 모든 문서의 셀 데이터 확인
-        newColumns.forEach(newCol => {
-          const existingCol = initialTableColumns.find(col => col.header.name === newCol.header.name);
-          if (existingCol) {
-            // 기존 컬럼이 있으면 셀 데이터 업데이트
-            newCol.cells.forEach(newCell => {
-              const existingCellIndex = existingCol.cells.findIndex(cell => cell.doc_id === newCell.doc_id);
-              if (existingCellIndex !== -1) {
-                existingCol.cells[existingCellIndex] = newCell;
-              } else {
-                existingCol.cells.push(newCell);
-              }
-            });
-          } else {
-            // 새로운 컬럼 추가
-            const documentColumn = initialTableColumns[0];
-            newCol.cells = documentColumn.cells.map(docCell => {
-              const matchingCell = newCol.cells.find(cell => cell.doc_id === docCell.doc_id);
-              return matchingCell || { doc_id: docCell.doc_id, content: '' };
-            });
-            initialTableColumns.push(newCol);
-          }
-        });
+        console.log('5-1. Document 컬럼 제외된 새 컬럼:', newColumns);
+        finalColumns = [...initialTableColumns, ...newColumns];
+        console.log('5-2. 최종 병합된 컬럼:', finalColumns);
       }
 
-      console.log('UPDATE_TABLE_DATA - 업데이트된 상태:', {
-        initialTableColumns
+      console.log('6. 최종 업데이트될 상태:', {
+        columns: finalColumns
       });
+      console.log('[UPDATE_TABLE_DATA] 종료 ----------------');
 
       return {
         ...state,
         analysis: {
           ...state.analysis,
-          tableData: {
-            columns: initialTableColumns
-          }
+          tableData: { columns: finalColumns }
         }
       };
 
@@ -643,4 +631,3 @@ export function useApp() {
   }
   return context
 }
-
