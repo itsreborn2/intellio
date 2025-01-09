@@ -23,7 +23,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 export const Header = ({ className }: { className?: string }) => {
   const { state, dispatch } = useApp()
   const auth = useAuth()
-  
   const { isAuthenticated, name, email, logout } = auth
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')
@@ -99,7 +98,8 @@ export const Header = ({ className }: { className?: string }) => {
   }, [isEditingTitle])
 
   return (
-    <div className={`border-b p-4 flex items-center justify-between ${className || ''}`}>
+    // header 태그로 변경하고 className 통합
+    <header className={`border-b p-4 flex items-center justify-between ${className || ''}`}>
       <div className="flex items-center gap-2">
         {isAuthenticated ? (
           isEditingTitle ? (
@@ -124,10 +124,10 @@ export const Header = ({ className }: { className?: string }) => {
           <>
             <span className="text-sm text-gray-600">{email}</span>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" name="user">
+              <DropdownMenuTrigger>
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
                   <User className="h-4 w-4" />
-                </Button>
+                </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={logout}>
@@ -140,10 +140,10 @@ export const Header = ({ className }: { className?: string }) => {
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">로그인이 필요합니다</span>
             <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" name="user">
+              <DialogTrigger>
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
                   <User className="h-4 w-4" />
-                </Button>
+                </div>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -165,10 +165,10 @@ export const Header = ({ className }: { className?: string }) => {
         )}
 
         <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="icon" name="settings" >
+          <DialogTrigger>
+            <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
               <Settings className="h-4 w-4" />
-            </Button>
+            </div>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -181,6 +181,6 @@ export const Header = ({ className }: { className?: string }) => {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </header>
   )
 }
