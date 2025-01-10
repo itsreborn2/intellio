@@ -172,7 +172,14 @@ class PromptManager:
 {response_format}"""
             
         elif template == PromptTemplate.TABLE_ANALYSIS:
-            return f"""다음 문서에서 요청한 정보를 추출하여 요구형태로 가공해주세요.
+            # 데이터 타입별 포맷 지침
+            format_rules = []
+            if query_analysis.get("data_type") == "numeric":
+                format_rules.append("- 숫자: 순수 숫자만 (42000000)")
+            elif query_analysis.get("data_type") == "date":
+                format_rules.append("- 날짜: YYYY-MM-DD (2024-01-01)")
+            
+            return f"""문서에서 요청한 정보만을 정확히 추출하여 반환하세요.
 
 문서 내용:
 {content}
@@ -180,26 +187,25 @@ class PromptManager:
 분석 요청:
 {query}
 
-요구사항:
-- 문서에서 요청한 정보만을 정확하게 추출해주세요
-- 추출한 정보는 테이블 셀에 들어갈 수 있도록 간단명료하게 정리해주세요
-- 수치 데이터는 숫자 형태로 변환하여 제시해주세요
-- 날짜는 YYYY-MM-DD 형식으로 통일해주세요
-- 불필요한 설명이나 부가 정보는 제외해주세요
+필수 규칙:
+- 문서에 있는 정보만 추출
+- 추론이나 예측 금지
+- 설명이나 부가 정보 제외
+- 없는 정보는 "N/A"
+{chr(10).join(format_rules)}
 
 예시:
-[요청] "각 부서의 2023년 4분기 매출액을 알려줘"
-[응답] 42000000
+Q: 2023년 4분기 매출액
+A: 42000000
 
-[요청] "지난달 입사한 신규 직원의 이름과 부서를 알려줘"
-[응답] 홍길동/영업팀
+Q: 계약시작일
+A: 2024-01-01
 
-[요청] "이 계약서의 계약기간이 어떻게 되나요?"
-[응답] 2024-01-01~2024-12-31
+Q: 담당자/부서
+A: 홍길동/영업팀
 
-답변 형식:
-- 셀에 들어갈 값만 간단히 작성
-- 부가 설명 없이 데이터만 제시"""
+답변:
+데이터값만 작성"""
             
         else:  # TABLE_TITLE
             return f"""사용자의 요청을 테이블 제목으로 변환해주세요.
@@ -222,75 +228,193 @@ class PromptManager:
 답변 형식:
 제목만 2-3단어로 작성해주세요."""
 
+    def _analyze_query(self, query: str) -> Dict[str, Any]:
+        """쿼리 분석 - 사용자 질문의 의도와 필요한 정보를 파악"""
+        try:
+            normalized_query = self._normalize_query(query)
+            
+            # 기본 분석 결과
+            analysis = {
+                "type": "general",      
+                "focus": "general",     
+                "time_range": None,     
+                "data_type": "text",    
+                "comparison": False,    
+                "trend": False          
+            }
+            
+            # 분석 유형 결정
+            if any(keyword in normalized_query for keyword in FINANCIAL_KEYWORDS):
+                analysis["focus"] = "financial"
+            elif any(keyword in normalized_query for keyword in OPERATIONAL_KEYWORDS):
+                analysis["focus"] = "operational"
+            elif any(keyword in normalized_query for keyword in STRATEGIC_KEYWORDS):
+                analysis["focus"] = "strategic"
+                
+            # 시간 범위 분석
+            for time_range, keywords in TIME_KEYWORDS.items():
+                if any(keyword in normalized_query for keyword in keywords):
+                    analysis["time_range"] = time_range
+                    break
+                    
+            # 비교 분석 여부 확인
+            comparison_keywords = ['대비', '비교', '차이', '증감', '변화']
+            if any(keyword in normalized_query for keyword in comparison_keywords):
+                analysis["comparison"] = True
+                
+            # 추세 분석 여부 확인
+            trend_keywords = ['추이', '트렌드', '변화', '흐름']
+            if any(keyword in normalized_query for keyword in trend_keywords):
+                analysis["trend"] = True
+                
+            # 데이터 타입 분석
+            if any(char.isdigit() for char in normalized_query):
+                analysis["data_type"] = "numeric"
+            elif any(word in normalized_query for word in ['날짜', '일자', '기간']):
+                analysis["data_type"] = "date"
+                
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"쿼리 분석 실패: {str(e)}")
+            # 기본값 반환
+            return {
+                "type": "general",
+                "focus": "general",
+                "time_range": None,
+                "data_type": "text",
+                "comparison": False,
+                "trend": False
+            }
+
     def _get_response_format(self, query_analysis: Dict[str, Any]) -> str:
         """쿼리 분석 결과에 따른 응답 형식 생성"""
         
-        if query_analysis.get("type") == "comparison":
-            return """다음 형식으로 답변해주세요:
-
-1. 변화 요약
-   - 주요 변화 포인트를 1-2줄로 요약
-
-2. 상세 분석
-   - 각 지표별 변화량과 변화율
-   - 변화의 주요 원인
-   
-3. 시사점
-   - 이 변화가 의미하는 바
-   - 향후 전망"""
-            
-        elif query_analysis.get("focus") == "financial":
-            return """다음 형식으로 답변해주세요:
-
-1. 핵심 지표
-   - 요청된 재무 지표의 현재 값
-   - 해당 지표의 의미와 중요성
-
-2. 상세 설명
-   - 지표에 영향을 미친 주요 요인
-   - 산업 평균 또는 경쟁사 대비 수준
-
-3. 분석 결과
-   - 재무적 관점에서의 평가
-   - 개선 필요 사항 또는 강점"""
-        
-        else:
-            return """다음 형식으로 답변해주세요:
+        # 기본 응답 구조
+        base_format = """다음 형식으로 답변해주세요:
 
 1. 핵심 답변
-   - 질문에 대한 직접적인 답변을 1-2줄로 제시
-
-2. 상세 설명
-   - 관련된 주요 정보와 데이터
-   - 맥락과 배경 설명
-
+   - 질문에 대한 직접적인 답변
+   {core_metrics}
+   
+2. 상세 분석
+   {detail_format}
+   
 3. 결론
-   - 종합적 의견 또는 시사점"""
+   - 주요 시사점
+   - {conclusion_focus}"""
+        
+        # 분석 유형별 상세 포맷
+        detail_formats = {
+            "financial": """
+   - 주요 재무 지표 분석
+   - 증감 원인 분석
+   - 산업 평균 대비 수준""",
+               
+            "operational": """
+   - 운영 효율성 분석
+   - 주요 개선점
+   - 리스크 요인""",
+            
+            "strategic": """
+   - 시장 환경 분석
+   - 경쟁사 대비 포지션
+   - 전략적 시사점""",
+               
+            "general": """
+   - 주요 내용 분석
+   - 핵심 포인트
+   - 관련 맥락 설명"""
+        }
+        
+        # 결론 포커스
+        conclusion_focuses = {
+            "financial": "재무적 개선 방향",
+            "operational": "운영 효율화 방안",
+            "strategic": "전략적 제언",
+            "general": "주요 시사점"
+        }
+        
+        # 핵심 지표 포맷
+        core_metrics = ""
+        if query_analysis.get("data_type") == "numeric":
+            core_metrics = "\n   - 관련 수치 데이터"
+        if query_analysis.get("comparison"):
+            core_metrics += "\n   - 비교 분석 결과"
+        if query_analysis.get("trend"):
+            core_metrics += "\n   - 주요 변화 추이"
+        
+        focus = query_analysis.get("focus", "general")
+        if focus not in detail_formats:
+            focus = "general"
+            
+        return base_format.format(
+            core_metrics=core_metrics,
+            detail_format=detail_formats[focus],
+            conclusion_focus=conclusion_focuses[focus]
+        )
 
     def _generate_analysis_instructions(self, patterns: Dict[str, Any], query_analysis: Dict[str, Any]) -> List[str]:
         """문서 패턴과 쿼리 분석 결과에 따른 분석 지침 생성"""
         
-        instructions = []
+        instructions = [
+            "- 문서의 직접적인 정보만 사용하세요",
+            "- 추측성 정보는 제외하세요"
+        ]
         
-        # 기본 지침
-        instructions.append("- 문서에서 직접 확인할 수 있는 정보만 사용하세요")
-        instructions.append("- 추측이나 일반적인 설명은 제외하세요")
-        
-        # 쿼리 유형별 지침
-        if query_analysis.get("focus") == "financial":
-            instructions.append("- 재무적 맥락에서 수치를 해석하세요")
-            instructions.append("- 증감의 원인과 영향을 분석하세요")
+        # 분석 유형별 지침
+        focus = query_analysis.get("focus")
+        if focus == "financial":
+            instructions.extend([
+                "- 수치는 정확한 값으로 인용하세요",
+                "- 증감률은 %로 표시하세요",
+                "- 주요 재무비율을 계산하여 제시하세요"
+            ])
+        elif focus == "operational":
+            instructions.extend([
+                "- 구체적인 수치와 함께 설명하세요",
+                "- 개선 가능한 부분을 지적하세요",
+                "- 리스크 요인을 명시하세요"
+            ])
+        elif focus == "strategic":
+            instructions.extend([
+                "- 시장 상황을 고려하여 분석하세요",
+                "- 경쟁사 정보를 포함하세요",
+                "- 중장기 관점에서 평가하세요"
+            ])
             
-            if patterns.get("has_tables"):
-                instructions.append("- 표의 데이터를 체계적으로 분석하세요")
-                
-        if query_analysis.get("time_range") == "multi_year":
-            instructions.append("- 연도별 추이를 분석하세요")
-            instructions.append("- 주요 변화 시점과 원인을 파악하세요")
+        # 시간 범위별 지침
+        time_range = query_analysis.get("time_range")
+        if time_range == "multi_year":
+            instructions.extend([
+                "- 연도별 추이를 분석하세요",
+                "- 주요 변화 시점을 파악하세요"
+            ])
+        elif time_range in ["monthly", "quarterly"]:
+            instructions.extend([
+                "- 기간별 변화를 상세히 분석하세요",
+                "- 특이사항이 있는 기간을 표시하세요"
+            ])
             
-        if patterns.get("common_terms"):
-            terms = ", ".join(patterns["common_terms"])
-            instructions.append(f"- 다음 주요 용어들과 관련된 맥락을 설명하세요: {terms}")
+        # 비교 분석 지침
+        if query_analysis.get("comparison"):
+            instructions.extend([
+                "- 명확한 비교 기준을 제시하세요",
+                "- 주요 차이점을 구체적으로 설명하세요"
+            ])
+            
+        # 데이터 타입별 지침
+        data_type = query_analysis.get("data_type")
+        if data_type == "numeric":
+            instructions.extend([
+                "- 모든 수치는 정확히 표기하세요",
+                "- 단위를 명확히 표시하세요"
+            ])
+        elif data_type == "date":
+            instructions.extend([
+                "- 날짜 형식을 YYYY-MM-DD로 통일하세요",
+                "- 기간을 명확히 표시하세요"
+            ])
             
         return instructions
 
@@ -321,3 +445,28 @@ class PromptManager:
             
         except Exception as e:
             raise Exception(f"OpenAI API 처리 중 오류 발생: {str(e)}")
+
+# 분석 관련 상수 정의
+FINANCIAL_KEYWORDS = [
+    '매출', '이익', '손실', '비용', '자산', '부채', '자본', 
+    'ROI', 'ROE', '수익', '영업이익', '당기순이익', '매출액',
+    '재무', '투자', '예산', '원가'
+]
+
+OPERATIONAL_KEYWORDS = [
+    '생산', '공정', '품질', '재고', '효율', '운영', '프로세스',
+    '생산성', '불량', '납기', '가동', '설비', '인력', '자원'
+]
+
+STRATEGIC_KEYWORDS = [
+    '전략', '계획', '목표', '경쟁', '시장', '성장', '확장',
+    '개발', '혁신', '리스크', '기회', '위험', '전망'
+]
+
+TIME_KEYWORDS = {
+    'single_point': ['현재', '현황', '상태', '지금'],
+    'monthly': ['월간', '매월', '월별'],
+    'quarterly': ['분기', '분기별'],
+    'yearly': ['연간', '연도별', '년간'],
+    'multi_year': ['추이', '트렌드', '변화', '연도별']
+}

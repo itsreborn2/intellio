@@ -120,48 +120,61 @@ class EmbeddingService:
         top_k: int = 5,
         document_ids: List[str] = None
     ) -> List[Dict[str, Any]]:
-        """질문과 유사한 문서 청크를 검색합니다.
-        
-        Args:
-            query: 검색 쿼리
-            top_k: 반환할 최대 결과 수
-            document_ids: 검색할 문서 ID 목록 (None이면 모든 문서에서 검색)
-        """
+        """질문과 유사한 문서 청크를 검색합니다."""
         try:
             # 쿼리 임베딩 생성
             query_embedding = await self.create_embedding_with_retry(query)
             if not query_embedding:
-                raise ValueError("Failed to create query embedding")
-            
+                logger.error("쿼리 임베딩 생성 실패")
+                return []
+
             # 필터 조건 설정
-            filter_dict = {}
+            filter_condition = {}
             if document_ids:
-                filter_dict["document_id"] = {"$in": document_ids}
-                
-            # Pinecone에서 유사한 벡터 검색
-            results = self.index.query(
-                vector=query_embedding,
-                top_k=top_k,
-                include_metadata=True,
-                filter=filter_dict
-            )
-            
-            # 결과 정리
+                # 문자열로 변환하여 필터링
+                str_doc_ids = [str(doc_id) for doc_id in document_ids]
+                filter_condition = {
+                    "document_id": {"$in": str_doc_ids}
+                }
+
+            # Pinecone 쿼리 실행
+            try:
+                results = self.index.query(
+                    vector=query_embedding,
+                    top_k=top_k,
+                    filter=filter_condition,
+                    include_metadata=True
+                )
+            except Exception as e:
+                logger.error(f"Pinecone 쿼리 실패: {str(e)}")
+                return []
+
+            # 결과가 없는 경우
+            if not results.matches:
+                logger.warning(f"검색 결과 없음 (쿼리: {query[:50]}...)")
+                return []
+
+            # 결과 처리
             similar_chunks = []
             for match in results.matches:
-                similar_chunks.append({
-                    "chunk_id": match.id,
-                    "score": match.score,
-                    "text": match.metadata.get("text", ""),
-                    "document_id": match.metadata.get("document_id", ""),
-                    "chunk_index": match.metadata.get("chunk_index", -1)
-                })
-                
+                try:
+                    chunk_data = {
+                        "chunk_id": match.id,
+                        "score": float(match.score),  # 명시적 형변환
+                        "text": match.metadata.get("text", ""),
+                        "document_id": str(match.metadata.get("document_id", "")),  # 문자열로 변환
+                        "chunk_index": int(match.metadata.get("chunk_index", -1))
+                    }
+                    similar_chunks.append(chunk_data)
+                except Exception as e:
+                    logger.error(f"청크 데이터 처리 실패: {str(e)}")
+                    continue
+
             return similar_chunks
-            
+
         except Exception as e:
             logger.error(f"유사 문서 검색 실패: {str(e)}")
-            raise
+            return []  # 에러 발생 시 빈 리스트 반환
 
     async def store_embeddings(
         self,
