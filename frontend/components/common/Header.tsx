@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
 import { useAuth } from "@/hooks/useAuth"
 import * as api from "@/services/api"
+import * as actionTypes from '@/types/actions'
 import {
   Dialog,
   DialogContent,
@@ -46,7 +47,7 @@ export const Header = ({ className }: { className?: string }) => {
     }
     
     const newTitle = editingTitle.trim()
-    dispatch({ type: 'SET_PROJECT_TITLE', payload: newTitle })
+    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: newTitle })
     setIsEditingTitle(false)
 
     // 현재 프로젝트가 있을 때만 저장

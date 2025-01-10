@@ -3,16 +3,15 @@
 import { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react'
 import { DocumentStatus, IProject } from '@/types'
 import * as api from '@/services/api'
-import { IMessage, TableResponse, IDocument, IRecentProjectsResponse } from '@/types'
+import { IMessage, TableResponse, TableColumn,IDocument, IRecentProjectsResponse } from '@/types'
+import * as actionTypes from '@/types/actions'
 
 interface AppState {
   sessionId: string | null
   currentProjectId: string | null
   projectTitle: string
   currentView: 'upload' | 'table' | 'chat'  // 현재 뷰 상태
-  documents: {
-    [id: string]: IDocument
-  }
+  documents: { [id: string]: IDocument } // id, IDocument 딕셔너리. 프로젝트에 속한 문서들만. 다른 프로젝트 이동 시 초기화됨.
   messages: IMessage[]
   analysis: {
     mode: 'chat' | 'table'  // 분석 모드 (채팅/테이블)
@@ -33,41 +32,35 @@ interface AppState {
 
 type Action =
   // 전역에 영향을 주는 action
-  | { type: 'SET_INITIAL_STATE' }
-  | { type: 'SET_SESSION'; payload: string }
-  | { type: 'SET_CURRENT_PROJECT'; payload: string }
-  | { type: 'SET_VIEW'; payload: 'upload' | 'table' | 'chat' }
-  | { type: 'SET_MODE'; payload: 'chat' | 'table' }
+  | { type: typeof actionTypes.SET_INITIAL_STATE }
+  | { type: typeof actionTypes.SET_SESSION; payload: string }
+  | { type: typeof actionTypes.SET_CURRENT_PROJECT; payload: string }
+  | { type: typeof actionTypes.SET_VIEW; payload: 'upload' | 'table' | 'chat' }
+  | { type: typeof actionTypes.SET_MODE; payload: 'chat' | 'table' }
+  
   // Header에서 사용하는 action
-  | { type: 'SET_PROJECT_TITLE'; payload: string }
+  | { type: typeof actionTypes.SET_PROJECT_TITLE; payload: string }
 
   // Sidebar, ProjectCategory에서 사용하는 action
-  | { type: 'UPDATE_RECENT_PROJECTS'; payload: IRecentProjectsResponse }
-  | { type: 'UPDATE_CATEGORY_PROJECTS'; payload: { [key: string]: IProject[] } }
+  | { type: typeof actionTypes.UPDATE_RECENT_PROJECTS; payload: IRecentProjectsResponse }
+  | { type: typeof actionTypes.UPDATE_CATEGORY_PROJECTS; payload: { [key: string]: IProject[] } }
 
-  // TemplateSection에서 사용하는 action
-  // UploadSection에서 사용하는 action
-  // ChatSection에서 사용하는 action
   // TableSection에서 사용하는 action
-  | { type: 'SET_DOCUMENTS_IN_TABLESECTION'; payload: IDocument[] }
-  | { type: 'ADD_CHAT_MESSAGE'; payload: IMessage }
-  | { type: 'SET_IS_ANALYZING'; payload: boolean }
-  | { type: 'UPDATE_TABLE_DATA'; payload: TableResponse }
+  | { type: typeof actionTypes.ADD_DOCUMENTS; payload: IDocument[] }
+  | { type: typeof actionTypes.ADD_CHAT_MESSAGE; payload: IMessage }
+  | { type: typeof actionTypes.SET_IS_ANALYZING; payload: boolean }
+  | { type: typeof actionTypes.UPDATE_TABLE_DATA; payload: TableResponse }
 
-
-  // 아직 사용하지 않는 action. 다 체크 못함. 계속 확인 중.
-  | { type: 'SELECT_DOCUMENTS'; payload: string[] }  
-  | { type: 'ADD_COLUMN'; payload: string }
-  | { type: 'DELETE_COLUMN'; payload: string }
-  | { type: 'UPDATE_DOCUMENT_STATUS'; payload: { id: string; status: DocumentStatus } }  
-  
-  | { type: 'UPDATE_TABLE_COLUMNS'; payload: any[] }
-  | { type: 'UPDATE_COLUMN_INFO'; payload: { oldName: string; newName: string; prompt: string; originalPrompt: string } }
-  
-  | { type: 'ADD_ANALYSIS_COLUMN'; payload: { columnName: string; prompt: string; originalPrompt: string } }
-  | { type: 'UPDATE_COLUMN_RESULT'; payload: { documentId: string; columnName: string; result: any } }
-  | { type: 'SET_LAST_AUTOSAVED'; payload: Date }
-
+  // 아직 사용하지 않는 action
+  | { type: typeof actionTypes.SELECT_DOCUMENTS; payload: string[] }
+  | { type: typeof actionTypes.ADD_COLUMN; payload: string }
+  | { type: typeof actionTypes.DELETE_COLUMN; payload: string }
+  | { type: typeof actionTypes.UPDATE_DOCUMENT_STATUS; payload: { id: string; status: DocumentStatus } }
+  | { type: typeof actionTypes.UPDATE_TABLE_COLUMNS; payload: any[] }
+  | { type: typeof actionTypes.UPDATE_COLUMN_INFO; payload: { oldName: string; newName: string; prompt: string; originalPrompt: string } }
+  | { type: typeof actionTypes.ADD_ANALYSIS_COLUMN; payload: { columnName: string; prompt: string; originalPrompt: string } }
+  | { type: typeof actionTypes.UPDATE_COLUMN_RESULT; payload: { documentId: string; columnName: string; result: any } }
+  | { type: typeof actionTypes.SET_LAST_AUTOSAVED; payload: Date }
 
 const initialState: AppState = {
   sessionId: null,
@@ -109,25 +102,25 @@ const appReducer = (state: AppState, action: Action): AppState => {
   let newState: AppState;
 
   switch (action.type) {
-    case 'SET_INITIAL_STATE':
+    case actionTypes.SET_INITIAL_STATE:
       return {
         ...initialState,
         recentProjects: state.recentProjects // 프로젝트 목록 상태 유지
       }
 
-    case 'SET_SESSION':
+    case actionTypes.SET_SESSION:
       return {
         ...state,
         sessionId: action.payload
       }
 
-    case 'SET_CURRENT_PROJECT':
+    case actionTypes.SET_CURRENT_PROJECT:
       return {
         ...state,
         currentProjectId: action.payload
       }
 
-    case 'SET_PROJECT_TITLE':
+    case actionTypes.SET_PROJECT_TITLE:
       console.log('SET_PROJECT_TITLE:', action.payload)
       return {
         ...state,
@@ -156,7 +149,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case 'SET_VIEW':
+    case actionTypes.SET_VIEW:
       return {
         ...state,
         currentView: action.payload,
@@ -166,9 +159,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case 'SET_DOCUMENTS_IN_TABLESECTION':
+    case actionTypes.ADD_DOCUMENTS:
       //payload는 IDocument[] 타입
-      // SET_DOCUMENTS_IN_TABLESECTION 는 현재 프로젝트에 속한 문서를 TableSection의 data에 할당하는 역할
+      // SET_DOCUMENTS_IN_TABLESECTION 는 현재 프로젝트에 속한 문서를 그냥 row 추가하고 땡.하는 역할
+      // 나머지는 UPDATE_DATATABLE이던가.. 거기서 
       const newDocuments = action.payload.reduce((acc, doc) => {
         acc[doc.id] = doc;
         return acc;
@@ -176,40 +170,40 @@ const appReducer = (state: AppState, action: Action): AppState => {
 
       // 테이블 데이터가 비어있을 때만 초기화
       let updatedTableData = state.analysis.tableData;
-      if (!updatedTableData.columns || updatedTableData.columns.length === 0) {
-        const documentCells = action.payload
-          .filter(doc => doc.project_id === state.currentProjectId)
-          .map(doc => ({
-            doc_id: doc.id,
-            content: doc.filename
-          }));
+      // if (!updatedTableData.columns || updatedTableData.columns.length === 0) {
+      //   const documentCells = action.payload
+      //     .filter(doc => doc.project_id === state.currentProjectId)
+      //     .map(doc => ({
+      //       doc_id: doc.id,
+      //       content: doc.filename
+      //     }));
 
-        updatedTableData = {
-          columns: documentCells.length > 0 ? [
-            {
-              header: {
-                name: 'Document',
-                prompt: '문서 이름을 표시합니다'
-              },
-              cells: documentCells
-            }
-          ] : []
-        };
-      } else {
-        // Document 칼럼의 cells만 업데이트
-        const documentColumn = updatedTableData.columns.find(col => col.header.name === 'Document');
-        if (documentColumn) {
-          const existingDocIds = new Set(documentColumn.cells.map(cell => cell.doc_id));
-          const newCells = action.payload
-            .filter(doc => doc.project_id === state.currentProjectId && !existingDocIds.has(doc.id))
-            .map(doc => ({
-              doc_id: doc.id,
-              content: doc.filename
-            }));
+      //   updatedTableData = {
+      //     columns: documentCells.length > 0 ? [
+      //       {
+      //         header: {
+      //           name: 'Document',
+      //           prompt: '문서 이름을 표시합니다'
+      //         },
+      //         cells: documentCells
+      //       }
+      //     ] : []
+      //   };
+      // } else {
+      //   // Document 칼럼의 cells만 업데이트
+      //   const documentColumn = updatedTableData.columns.find(col => col.header.name === 'Document');
+      //   if (documentColumn) {
+      //     const existingDocIds = new Set(documentColumn.cells.map(cell => cell.doc_id));
+      //     const newCells = action.payload
+      //       .filter(doc => doc.project_id === state.currentProjectId && !existingDocIds.has(doc.id))
+      //       .map(doc => ({
+      //         doc_id: doc.id,
+      //         content: doc.filename
+      //       }));
 
-          documentColumn.cells = [...documentColumn.cells, ...newCells];
-        }
-      }
+      //     documentColumn.cells = [...documentColumn.cells, ...newCells];
+      //   }
+      // }
 
       console.log('SET_DOCUMENTS - 상태 업데이트:', {
         totalDocumentsCount: Object.keys(newDocuments).length,
@@ -228,7 +222,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       };
 
-    case 'ADD_CHAT_MESSAGE':
+      break;
+    case actionTypes.ADD_CHAT_MESSAGE:
       newState = {
         ...state,
         messages: [...state.messages, {
@@ -239,13 +234,13 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
       break;
 
-    case 'SET_IS_ANALYZING':
+    case actionTypes.SET_IS_ANALYZING:
       return {
         ...state,
         isAnalyzing: action.payload
       }
 
-    case 'SET_MODE':
+    case actionTypes.SET_MODE:
       // 테이블 모드로 변경 시 현재 프로젝트의 모든 문서를 선택
       const selectedIds = action.payload === 'table' 
         ? Object.values(state.documents)
@@ -269,7 +264,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case 'SELECT_DOCUMENTS':
+    case actionTypes.SELECT_DOCUMENTS:
       // 현재 프로젝트의 문서 ID만 선택 가능
       const validDocumentIds = action.payload.filter(
         id => state.documents[id]?.project_id === state.currentProjectId
@@ -283,7 +278,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case 'ADD_COLUMN':    
+    case actionTypes.ADD_COLUMN:    
     // 아직 쓰는데가 없네.
       // 기존 테이블 데이터 유지하면서 새 컬럼 추가       
       const updatedColumnData = state.analysis.tableData.columns.map(row => ({
@@ -305,7 +300,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case 'DELETE_COLUMN':
+    case actionTypes.DELETE_COLUMN:
       return {
         ...state,
         analysis: {
@@ -314,7 +309,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case 'UPDATE_TABLE_DATA':
+    case actionTypes.UPDATE_TABLE_DATA:
       console.log('[UPDATE_TABLE_DATA] 시작 ----------------');
       console.log('1. 현재 상태:', {
         currentColumns: state.analysis.tableData?.columns || [],
@@ -328,33 +323,64 @@ const appReducer = (state: AppState, action: Action): AppState => {
       console.log('3. 초기 테이블 컬럼:', initialTableColumns);
 
       // Document 칼럼이 없으면 추가
-      if (!initialTableColumns.some(col => col.header.name === 'Document')) {
-        console.log('4. Document 컬럼 없음 - 새로 추가');
-        const documentColumn = {
-          header: {
-            name: 'Document',
-            prompt: '문서 이름을 표시합니다'
-          },
-          cells: Object.values(state.documents)
-            .filter(doc => doc.project_id === state.currentProjectId)
-            .map(doc => ({
-              doc_id: doc.id,
-              content: doc.filename
-            }))
-        };
-        console.log('4-1. 생성된 Document 컬럼:', documentColumn);
-        initialTableColumns = [documentColumn];
-      }
+      // if (!initialTableColumns.some(col => col.header.name === 'Document')) {
+      //   console.log('4. Document 컬럼 없음 - 새로 추가');
+      //   const documentColumn = {
+      //     header: {
+      //       name: 'Document',
+      //       prompt: '문서 이름을 표시합니다'
+      //     },
+      //     cells: Object.values(state.documents)
+      //       .filter(doc => doc.project_id === state.currentProjectId)
+      //       .map(doc => ({
+      //         doc_id: doc.id,
+      //         content: doc.filename
+      //       }))
+      //   };
+      //   console.log('4-1. 생성된 Document 컬럼:', documentColumn);
+      //   initialTableColumns = [documentColumn];
+      // }
 
       // 새로운 칼럼 데이터가 있으면 병합
       let finalColumns = initialTableColumns;
+      const updatedDocuments = { ...state.documents };
       if (action.payload?.columns?.length > 0) {
-        console.log('5. 새로운 컬럼 데이터 병합 시작');
+        //console.log('5. 새로운 컬럼 데이터 병합 시작');
         //const newColumns = action.payload.columns.filter(col => col.header.name !== 'Document');
         const newColumns = action.payload.columns;
         console.log('5-1. Document 컬럼 제외된 새 컬럼:', newColumns);
-        finalColumns = [...initialTableColumns, ...newColumns];
+        
+        // documents 복사본 생성
+        
+
+        // 각 컬럼을 순회하면서 해당하는 문서의 added_col_context 업데이트
+        newColumns.forEach((column: TableColumn) => {
+          // 각 셀을 순회하면서 해당하는 문서 찾기
+          column.cells.forEach(cell => {
+            const document = updatedDocuments[cell.doc_id];
+            if (document) {
+              // added_col_context가 없으면 새로 생성
+              if (!document.added_col_context) {
+                document.added_col_context = [];
+              }
+              
+              // 새로운 cell 데이터 추가
+              document.added_col_context.push({
+                docId: cell.doc_id,
+                header: column.header.name,
+                value: cell.content
+              });
+            }
+          });
+        });
+
+        // finalColumns = [...initialTableColumns, ...newColumns];
+        // console.log('5-2. 최종 병합된 컬럼:', finalColumns);
+        // 여기에 요청한 데이터를 넣어줘.
+
         console.log('5-2. 최종 병합된 컬럼:', finalColumns);
+        console.log('5-3. 업데이트된 documents:', updatedDocuments);
+
       }
 
       console.log('6. 최종 업데이트될 상태:', {
@@ -364,13 +390,14 @@ const appReducer = (state: AppState, action: Action): AppState => {
 
       return {
         ...state,
+        documents: updatedDocuments,
         analysis: {
           ...state.analysis,
           tableData: { columns: finalColumns }
         }
       };
 
-    case 'UPDATE_TABLE_COLUMNS':
+    case actionTypes.UPDATE_TABLE_COLUMNS:
       // 서버로부터 받은 새 컬럼 데이터로 테이블 업데이트
       const newColumnsList = action.payload.map((col: any) => col.header.name)
       const existingColumnsList = state.analysis.columns.filter(col => col !== 'Document')
@@ -415,7 +442,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case 'UPDATE_COLUMN_INFO':
+    case actionTypes.UPDATE_COLUMN_INFO:
       const { oldName, newName, prompt, originalPrompt } = action.payload
       return {
         ...state,
@@ -433,7 +460,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case 'UPDATE_DOCUMENT_STATUS':
+    case actionTypes.UPDATE_DOCUMENT_STATUS:
       // 주석 삭제 금지
       // return {
       //   ...state,
@@ -447,10 +474,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
       // }
       return state;
 
-    case 'ADD_ANALYSIS_COLUMN':
+    case actionTypes.ADD_ANALYSIS_COLUMN:
       return state;
 
-    case 'UPDATE_COLUMN_RESULT':
+    case actionTypes.UPDATE_COLUMN_RESULT:
       const { documentId, columnName, result } = action.payload;
       
       // 테이블 데이터에서 해당 컬럼을 찾아 결과 업데이트
@@ -512,7 +539,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       };
 
-    case 'SET_LAST_AUTOSAVED':
+    case actionTypes.SET_LAST_AUTOSAVED:
       newState = {
         ...state,
         lastAutosaved: action.payload,
@@ -520,14 +547,14 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
       break;
 
-    case 'UPDATE_RECENT_PROJECTS':
+    case actionTypes.UPDATE_RECENT_PROJECTS:
       //console.log('UPDATE_RECENT_PROJECTS 액션:', action.payload)
       return {
         ...state,
         recentProjects: action.payload
       }
 
-    case 'UPDATE_CATEGORY_PROJECTS':
+    case actionTypes.UPDATE_CATEGORY_PROJECTS:
       return {
         ...state,
         categoryProjects: action.payload
@@ -565,7 +592,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       await api.autosaveProject(state.currentProjectId, saveData);
       dispatch({ 
-        type: 'SET_LAST_AUTOSAVED', 
+        type: actionTypes.SET_LAST_AUTOSAVED, 
         payload: new Date() 
       });
 

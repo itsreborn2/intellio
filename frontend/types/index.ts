@@ -1,18 +1,4 @@
-export interface TableColumn {
-  header: {
-    name: string;
-    prompt: string;
-  };
-  cells: {
-    doc_id: string;
-    content: string;
-  }[];
-  [key: string]: any;
-}
 
-export interface TableResponse {
-  columns: TableColumn[];
-}
 
 
 /*
@@ -73,15 +59,38 @@ export interface IUploadProgressCallback {
 }
 
 
+// Table관련되는 인터페이스
 
+export interface TableColumn {
+  header: {
+    name: string;
+    prompt: string;
+  };
+  cells: {
+    doc_id: string;
+    content: string;
+  }[];
+  [key: string]: any;
+}
 
-// 문서 관련 인터페이스
+// 응답
+export interface TableResponse {
+  columns: TableColumn[];
+}
+
+export interface ICell {
+  docId:string // x축row
+  header:string // y축col
+  value:string
+}
+// 문서 관련 인터페이스. 테이블의 row 1개 담당
 export interface IDocument {
   id: string
   filename: string
   project_id: string
   status: IDocumentStatus
   content_type?: string
+  added_col_context?: Array<ICell> // 추가된 셀. 헤더정보(name), 셀내용
 }
 
 

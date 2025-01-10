@@ -66,7 +66,7 @@ async def table_search(
             mode=request.mode,
             document_ids=request.document_ids
         )
-        logger.info("테이블 검색 완료")
+        logger.info(f"테이블 검색 완료 : {result}")
         return result
     except Exception as e:
         logger.error(f"테이블 검색 중 오류 발생: {str(e)}")

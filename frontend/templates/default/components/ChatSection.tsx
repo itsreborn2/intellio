@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/contexts/AppContext'
 import { searchTable, sendChatMessage } from '@/services/api'
-import { IMessage, IChatResponse } from '@/types/index'
+import { IMessage, IChatResponse, TableResponse } from '@/types/index'
+import * as actionTypes from '@/types/actions'
 
 export const ChatSection = () => {
   const { state, dispatch } = useApp()
@@ -37,11 +38,11 @@ export const ChatSection = () => {
     setInput('')
 
     // 분석 시작 상태 설정
-    dispatch({ type: 'SET_IS_ANALYZING', payload: true })
+    dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: true })
 
     // 사용자 메시지 추가
     dispatch({
-      type: 'ADD_CHAT_MESSAGE',
+      type: actionTypes.ADD_CHAT_MESSAGE,
       payload: {
         role: 'user',
         content: currentInput
@@ -51,7 +52,7 @@ export const ChatSection = () => {
     if (state.analysis.mode === 'table') {
       if (!state.currentProjectId || !state.analysis.selectedDocumentIds.length) {
         console.warn('프로젝트 ID 또는 선택된 문서가 없습니다')
-        dispatch({ type: 'SET_IS_ANALYZING', payload: false })
+        dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false })
         return
       }
 
@@ -64,7 +65,7 @@ export const ChatSection = () => {
 
       // AI 요청
       try {
-        const result = await searchTable(
+        const result:TableResponse = await searchTable(
           state.currentProjectId,
           state.analysis.selectedDocumentIds,
           currentInput
@@ -74,15 +75,16 @@ export const ChatSection = () => {
 
         if (result.columns?.length > 0) {
           dispatch({
-            type: 'UPDATE_TABLE_DATA',
-            payload: {
-              columns: [...state.analysis.tableData.columns, ...result.columns]
-            }
+            type: actionTypes.UPDATE_TABLE_DATA,
+            payload: result //{
+              //columns: [...state.analysis.tableData.columns, ...result.columns]
+            //   columns: [...state.analysis.tableData.columns, ...result.columns
+            // }
           })
 
           // 성공 메시지 추가
           dispatch({
-            type: 'ADD_CHAT_MESSAGE',
+            type: actionTypes.ADD_CHAT_MESSAGE,
             payload: {
               role: 'assistant',
               content: '새로운 컬럼이 추가되었습니다.'
@@ -94,14 +96,14 @@ export const ChatSection = () => {
         
         // 오류 메시지 추가
         dispatch({
-          type: 'ADD_CHAT_MESSAGE',
+          type: actionTypes.ADD_CHAT_MESSAGE,
           payload: {
             role: 'assistant',
             content: '죄송합니다. 분석 중 오류가 발생했습니다.'
           }
         })
       } finally {
-        dispatch({ type: 'SET_IS_ANALYZING', payload: false })
+        dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false })
       }
     } else {
 
@@ -118,7 +120,7 @@ export const ChatSection = () => {
             response,
           })
           dispatch({
-            type: 'ADD_CHAT_MESSAGE',
+            type: actionTypes.ADD_CHAT_MESSAGE,
             payload: {
               role: response.role,
               content: response.content,
@@ -129,14 +131,14 @@ export const ChatSection = () => {
       } catch (error) {
         console.error('채팅 중 오류:', error)
         dispatch({
-          type: 'ADD_CHAT_MESSAGE',
+          type: actionTypes.ADD_CHAT_MESSAGE,
           payload: {
             role: 'assistant',
             content: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.'
           }
         })
       } finally {
-        dispatch({ type: 'SET_IS_ANALYZING', payload: false })
+        dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false })
       }
     }
   }
@@ -149,7 +151,7 @@ export const ChatSection = () => {
             <Button
               variant={state.analysis.mode === 'chat' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => dispatch({ type: 'SET_MODE', payload: 'chat' })}
+              onClick={() => dispatch({ type: actionTypes.SET_MODE, payload: 'chat' })}
               className="text-xs"
             >
               Chat
@@ -157,7 +159,7 @@ export const ChatSection = () => {
             <Button
               variant={state.analysis.mode === 'table' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => dispatch({ type: 'SET_MODE', payload: 'table' })}
+              onClick={() => dispatch({ type: actionTypes.SET_MODE, payload: 'table' })}
               className="text-xs"
             >
               Table

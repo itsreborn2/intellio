@@ -7,7 +7,7 @@ import { ko } from 'date-fns/locale';
 //import { IDocument, ITableData, IMessage, ITemplate, IProjectItem, IDocumentUploadResponse } from '@/types';  
 import {  ProjectListResponse, IRecentProjectsResponse, ProjectDetail, IUploadProgressCallback, IDocumentUploadResponse, DocumentStatus, Category, ProjectCategory, IProject } from '@/types/index';
 import { defaultFetchOptions, IApiProject, IApiRecentProjectsResponse } from '@/types/index';
-import { IChatRequest, IChatResponse } from '@/types';
+import { IChatRequest, IChatResponse, TableResponse } from '@/types';
 
 
 // // 문서 업로드 응답 인터페이스
@@ -222,7 +222,7 @@ export const updateProjectToPermanent = async (
   return response.json()
 }
 
-export const searchTable = async (projectId: string, documentIds: string[], query: string) => {
+export const searchTable = async (projectId: string, documentIds: string[], query: string): Promise<TableResponse> => {
   try {
     console.log('테이블 검색 요청:', { query, documentIds, mode: 'table' });
     

@@ -25,8 +25,8 @@ import { useState, useEffect } from 'react'
 
 import { useApp } from '@/contexts/AppContext'
 import { cn } from '@/lib/utils'
-
 import { useAuth } from '@/hooks/useAuth';
+import * as actionTypes from '@/types/actions'
 
 interface ProjectCategorySectionProps {
   expandedSections: string[]
@@ -116,7 +116,7 @@ export function ProjectCategorySection({
         }
         console.log('최근 프로젝트 로딩');
         const response:IRecentProjectsResponse = await getRecentProjects()
-        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: response })
+        dispatch({ type: actionTypes.UPDATE_RECENT_PROJECTS, payload: response })
       } catch (error) {
         console.error('최근 프로젝트 목록을 가져오는데 실패했습니다:', error)
       }
@@ -166,7 +166,7 @@ export function ProjectCategorySection({
         }, {} as { [key: string]: IProject[] })
 
         // categoryProjects 상태 업데이트
-        dispatch({ type: 'UPDATE_CATEGORY_PROJECTS', payload: newCategoryProjects })
+        dispatch({ type: actionTypes.UPDATE_CATEGORY_PROJECTS, payload: newCategoryProjects })
       } catch (error) {
         console.error('카테고리 로드 실패:', error)
       }
@@ -244,7 +244,7 @@ export function ProjectCategorySection({
 
         // 프로젝트 목록 새로고침
         const recentProjects:IRecentProjectsResponse= await api.getRecentProjects();
-        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: recentProjects });
+        dispatch({ type: actionTypes.UPDATE_RECENT_PROJECTS, payload: recentProjects });
       } catch (error) {
         console.error('프로젝트 이동 실패:', error);
       }

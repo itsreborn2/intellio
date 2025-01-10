@@ -1,0 +1,30 @@
+// 전역에 영향을 주는 action
+export const SET_INITIAL_STATE = 'SET_INITIAL_STATE'
+export const SET_SESSION = 'SET_SESSION'
+export const SET_CURRENT_PROJECT = 'SET_CURRENT_PROJECT'
+export const SET_VIEW = 'SET_VIEW'
+export const SET_MODE = 'SET_MODE'
+
+// Header에서 사용하는 action
+export const SET_PROJECT_TITLE = 'SET_PROJECT_TITLE'
+
+// Sidebar, ProjectCategory에서 사용하는 action
+export const UPDATE_RECENT_PROJECTS = 'UPDATE_RECENT_PROJECTS'
+export const UPDATE_CATEGORY_PROJECTS = 'UPDATE_CATEGORY_PROJECTS'
+
+// TableSection에서 사용하는 action
+export const ADD_DOCUMENTS = 'SET_DOCUMENTS_IN_TABLESECTION'
+export const ADD_CHAT_MESSAGE = 'ADD_CHAT_MESSAGE'
+export const SET_IS_ANALYZING = 'SET_IS_ANALYZING'
+export const UPDATE_TABLE_DATA = 'UPDATE_TABLE_DATA'
+
+// 아직 사용하지 않는 action
+export const SELECT_DOCUMENTS = 'SELECT_DOCUMENTS'
+export const ADD_COLUMN = 'ADD_COLUMN'
+export const DELETE_COLUMN = 'DELETE_COLUMN'
+export const UPDATE_DOCUMENT_STATUS = 'UPDATE_DOCUMENT_STATUS'
+export const UPDATE_TABLE_COLUMNS = 'UPDATE_TABLE_COLUMNS'
+export const UPDATE_COLUMN_INFO = 'UPDATE_COLUMN_INFO'
+export const ADD_ANALYSIS_COLUMN = 'ADD_ANALYSIS_COLUMN'
+export const UPDATE_COLUMN_RESULT = 'UPDATE_COLUMN_RESULT'
+export const SET_LAST_AUTOSAVED = 'SET_LAST_AUTOSAVED'
