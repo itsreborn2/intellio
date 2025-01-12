@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState, forwardRef, useImperativeHandle } from 'react';
+import { useMemo, useState, forwardRef, useEffect, useImperativeHandle } from 'react';
 import {
   MaterialReactTable,
   useMaterialReactTable,
@@ -29,12 +29,18 @@ export interface ITableUtils {
 }
 
 const Example = forwardRef<ITableUtils>((props, ref) => {
-  const [showAgeColumn, setShowAgeColumn] = useState(true);
+  const [initAllData, doInitAllData] = useState(false);
   const [countCol, setCountCol] = useState(0);
   const [countRow, setCountRow] = useState(0);
+  //const [data, setData] = useState<Person[]>([]);  
 
   // 동적 데이터 생성
   const tableData = useMemo(() => {
+    if(initAllData) {
+      //setData([]); 
+      return [];
+    }
+    
     // 기본 데이터
     const baseData: Person[] = [
       {
@@ -84,6 +90,7 @@ const Example = forwardRef<ITableUtils>((props, ref) => {
       },
     ];
 
+
     // countRow만큼 추가 데이터 생성
     const additionalData = Array.from({ length: countRow }).map((_, index) => ({
       idx3123:index+5,
@@ -102,15 +109,14 @@ const Example = forwardRef<ITableUtils>((props, ref) => {
       )
     }));
 
-    return [...baseData, ...additionalData];
-  }, [countRow, countCol]);
+    const result = [...baseData, ...additionalData];
+    //setData(result); 
+    return result;
+  }, [countRow, countCol, initAllData]);
 
   const columns = useMemo<MRT_ColumnDef<Person>[]>(() => {
     const baseColumns: MRT_ColumnDef<Person>[] = [
-      {
-        accessorKey: 'idx3123',
-        header: 'index',
-      },
+      
       {
         accessorKey: 'firstName',
         header: 'First Name',
@@ -118,24 +124,19 @@ const Example = forwardRef<ITableUtils>((props, ref) => {
       {
         accessorKey: 'lastName',
         header: 'Last Name',
+        
       },
       {
         accessorKey: 'email',
         header: 'Email',
       },
-      {
-        accessorKey: 'city',
-        header: 'City',
-      },
+      // {
+      //   accessorKey: 'city',
+      //   header: 'City',
+      // },
     ];
 
-    if (showAgeColumn) {
-      baseColumns.push({
-        accessorKey: 'age',
-        header: 'Age',
-        Cell: ({ cell }) => cell.getValue<number>()?.toString() || 'N/A'
-      });
-    }
+
     
     // count만큼 동적 컬럼 추가
     Array.from({ length: countCol }).forEach((_, index) => {
@@ -148,8 +149,11 @@ const Example = forwardRef<ITableUtils>((props, ref) => {
 
     return baseColumns;
   },
-  [showAgeColumn, countCol]
+  [initAllData, countCol]
   );
+
+
+  
 
   const table = useMaterialReactTable({
     columns,
@@ -160,20 +164,64 @@ const Example = forwardRef<ITableUtils>((props, ref) => {
     enableRowSelection: true,
     enableStickyHeader: true,
     rowPinningDisplayMode: 'select-sticky',
-    getRowId: (row) => row.email,
-    initialState: {
-      rowPinning: {
-        top: ['dmurray@example.com'],
+    getRowId: (row: Person) => row.email,
+    // state: {
+    //   isLoading: data.length === 0 && initAllData, 
+    // },
+    displayColumnDefOptions: {
+      'mrt-row-numbers': {
+        size: 20, 
+        grow: false, 
       },
-      rowSelection: {
-        'dmurray@example.com': true,
+    },
+    muiTableProps: {
+      sx: {
+        border: '1px solid rgba(0, 0, 255, .5)',
+        height: '100%', 
+        overflow: 'auto', 
+        caption: {
+          captionSide: 'top',
+        },
+        '& .MuiTable-root': {
+        borderCollapse: 'separate',
+        borderSpacing: 0,
       },
+      },
+      
     },
     muiTableContainerProps: {
+      sx: { 
+         maxHeight: 'calc(100vh - 120px)', 
+       height: '100%', 
+         overflow: 'auto', 
+      // display: 'flex',
+      // flexDirection: 'column',
+      // '& .MuiTable-root': {
+      //   flex: 1,
+      //   minHeight: 0
+      // }
+      }
+    },
+    muiTableHeadCellProps: {
       sx: {
-        maxHeight: '400px',
+        border: '3px solid rgba(255, 81, 81, .5)',
+        fontStyle: 'italic',
+        fontWeight: 'normal',
       },
     },
+    muiTableBodyCellProps: {
+      sx: {
+        border: '1px solid rgba(81, 81, 81, .5)',
+      },
+    },
+    initialState: {
+      rowPinning: {
+        top: [],
+      },
+      
+    },
+    
+    layoutMode: 'grid',
     muiTableBodyRowProps: ({ row, table }) => {
       const { density } = table.getState();
       return {
@@ -187,6 +235,18 @@ const Example = forwardRef<ITableUtils>((props, ref) => {
       };
     },
   });
+
+  // 테이블 초기화 핸들러
+  const handleClearTable = () => {
+    console.log("테이블 초기화")
+    table.setRowSelection({});
+    table.resetColumnFilters();
+    table.resetColumnVisibility();
+    // table.resetRowPinning();
+    // table.resetRowSelection();
+    // table.resetState();
+    
+  };
 
   // 테이블 유틸리티 함수들
   const tableUtils: ITableUtils = {
@@ -209,10 +269,10 @@ const Example = forwardRef<ITableUtils>((props, ref) => {
   return (
     <div className="space-y-4">
       <Button 
-        onClick={() => setShowAgeColumn(!showAgeColumn)}
+        onClick={() => doInitAllData(!initAllData)}
         className="mb-4 mr-2"
       >
-        {showAgeColumn ? '나이 칼럼 숨기기' : '나이 칼럼 보이기'}
+        테이블 초기화
       </Button>
       <Button
         onClick={tableUtils.addColumn}

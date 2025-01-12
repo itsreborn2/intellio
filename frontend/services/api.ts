@@ -7,27 +7,7 @@ import { ko } from 'date-fns/locale';
 //import { IDocument, ITableData, IMessage, ITemplate, IProjectItem, IDocumentUploadResponse } from '@/types';  
 import {  ProjectListResponse, IRecentProjectsResponse, ProjectDetail, IUploadProgressCallback, IDocumentUploadResponse, DocumentStatus, Category, ProjectCategory, IProject } from '@/types/index';
 import { defaultFetchOptions, IApiProject, IApiRecentProjectsResponse } from '@/types/index';
-import { IChatRequest, IChatResponse, TableResponse } from '@/types';
-
-
-// // 문서 업로드 응답 인터페이스
-// export interface IDocumentUploadResponse {
-//   success: boolean;              // 업로드 성공 여부
-//   project_id: string;           // 프로젝트 ID (UUID)
-//   document_ids: string[];       // 업로드된 문서 ID 목록 (UUID[])
-//   documents: Array<{
-//     id: string
-//     filename: string
-//     content_type: string
-//     status: string
-//   }>
-//   errors: Array<{
-//     filename: string
-//     error: string
-//   }>
-//   failed_uploads: string[]
-//   message: string
-// }
+import { IChatRequest, IChatResponse, TableResponse,IDocument } from '@/types';
 
 
 // fetch 함수 래퍼
@@ -105,8 +85,8 @@ export const createProject = async (
   }
 }
 
-export const getProjects = async (): Promise<ProjectListResponse> => {
-  const response = await apiFetch(`${API_ENDPOINT}/projects/`, {
+export const getProjectList = async (): Promise<ProjectListResponse> => {
+  const response = await apiFetch(`${API_ENDPOINT}/projects`, {
     credentials: 'include'  // 쿠키 포함
   })
   
@@ -348,20 +328,21 @@ export const autosaveProject = async (
   projectId: string, 
   data: any
 ): Promise<any> => {
-  const response = await apiFetch(`${API_ENDPOINT}/projects/${projectId}/autosave`, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
+  return null;
+  // const response = await apiFetch(`${API_ENDPOINT}/projects/${projectId}/autosave`, {
+  //   method: 'PUT',
+  //   credentials: 'include',
+  //   headers: {
+  //     'Content-Type': 'application/json',
+  //   },
+  //   body: JSON.stringify(data),
+  // });
 
-  if (!response.ok) {
-    throw new Error('Failed to autosave project')
-  }
+  // if (!response.ok) {
+  //   throw new Error('Failed to autosave project')
+  // }
 
-  return response.json()
+  // return response.json()
 };
 
 // 세션 관련 API 함수들
@@ -433,7 +414,7 @@ export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
           new Date(project.created_at).getTime() < new Date().getTime() - 4 * 24 * 60 * 60 * 1000 : false
       }));
     };
-    console.log(data.today);
+    console.log(`[getRecentProjects] today : ${data.today}`);
     const result: IRecentProjectsResponse = {
       today: formatProjects(data.today || []),
       yesterday: formatProjects(data.yesterday || []),
@@ -454,7 +435,7 @@ export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
 };
 
 // 1개의 프로젝트를 조회하는 함수
-export const getProject = async (projectId: string): Promise<ProjectDetail> => {
+export const getProjectInfo = async (projectId: string): Promise<ProjectDetail> => {
   try {
     const response = await apiFetch(`${API_ENDPOINT}/projects/${projectId}`, {
       credentials: 'include'
@@ -464,7 +445,18 @@ export const getProject = async (projectId: string): Promise<ProjectDetail> => {
       throw new Error(`Failed to fetch project: ${response.statusText}`);
     }
 
-    const project = await response.json();
+    const project:ProjectDetail = await response.json();
+    // response.json()
+  //   {
+  //     "id": "550e8400-e29b-41d4-a716-446655440000",
+  //     "name": "프로젝트명",
+  //     "description": "설명",
+  //     "is_temporary": false,
+  //     "created_at": "2025-01-11T12:10:42",
+  //     "updated_at": "2025-01-11T12:10:42",
+  //     "session_id": "some-session-id",
+  //     "user_id": "123e4567-e89b-12d3-a456-426614174000"
+  // }
     return project;
   } catch (error) {
     console.error('Error fetching project:', error);
@@ -472,6 +464,31 @@ export const getProject = async (projectId: string): Promise<ProjectDetail> => {
   }
 };
 
+// 프로젝트의 문서 목록을 가져옵니다.
+// @param projectId 프로젝트 ID
+export const getDocumentList = async (projectId: string): Promise<{ [id: string]: IDocument }> => {
+  try {
+    const response = await apiFetch(`${API_ENDPOINT}/documents/list/${projectId}`, {
+      credentials: 'include'
+    });
+    
+    const temp = await response.json();
+    //console.log('getDocumentList[temp]:', temp);  // 객체 그대로 출력
+    
+    // 문서 배열을 key-value 객체로 변환
+    const result = temp.items.reduce((acc: { [key: string]: IDocument }, doc: IDocument) => {
+      acc[doc.id] = doc;
+      return acc;
+    
+    }, {});
+
+    //console.log(`getDocumentList : `, result)
+    return result
+  } catch (error) {
+    console.error('문서 목록 조회 실패:', error);
+    throw error;
+  }
+};
 
 // 카테고리 생성
 export const createCategory = async (name: string, parent_id?: string): Promise<Category> => {

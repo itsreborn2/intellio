@@ -179,7 +179,7 @@ export const ChatSection = () => {
                   </div>
                 ) : (
                   <div className="inline-block p-2 rounded-lg bg-gray-200 text-gray-800 text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed ml-2">
-                    {message.content.split(/(<[mnp][pn]?>.*?<\/[mnp][pn]?>)/).map((part, index) => {
+                    {message.content?.split(/(<[mnp][pn]?>.*?<\/[mnp][pn]?>)/).map((part, index) => {
                       const moneyPlusMatch = part.match(/<mp>(.*?)<\/mp>/);
                       const moneyMinusMatch = part.match(/<mn>(.*?)<\/mn>/);
                       const moneyMatch = part.match(/<m>(.*?)<\/m>/);

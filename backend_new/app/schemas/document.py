@@ -21,7 +21,7 @@ DocumentStatusType = Literal[
 class DocumentBase(BaseSchema):
     """문서 기본 스키마"""
     filename: str = Field(..., min_length=1, max_length=255, description="문서 파일명")
-    mime_type: str = Field(..., max_length=100, description="MIME 타입")
+    mime_type: Optional[str] = Field(None, max_length=100, description="MIME 타입")
     file_size: int = Field(..., gt=0, description="파일 크기 (bytes)")
 
 class DocumentCreate(DocumentBase):
@@ -71,7 +71,7 @@ class DocumentResponse(DocumentBase, TimestampSchema):
 
 class DocumentListResponse(BaseSchema):
     """문서 목록 응답 스키마"""
-    total: int = Field(..., description="문서 총 개수")
+    #total: int = Field(..., description="문서 총 개수")
     items: List[DocumentResponse] = Field(..., description="문서 목록")
 
 class DocumentChunkBase(BaseSchema):

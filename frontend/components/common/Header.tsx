@@ -49,22 +49,9 @@ export const Header = ({ className }: { className?: string }) => {
     const newTitle = editingTitle.trim()
     dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: newTitle })
     setIsEditingTitle(false)
+    // 백엔드로 프로젝트 이름 변경 요청.
+    // 혹은 프로젝트 업데이트 요청하면서 변경된 이름을 넣어서 보내면 됨.
 
-    // 현재 프로젝트가 있을 때만 저장
-    if (state.currentProjectId) {
-      try {
-        // 프로젝트 상태 저장
-        await api.autosaveProject(state.currentProjectId, {
-          title: newTitle,
-          documents: state.documents,
-          messages: state.messages,
-          analysis: state.analysis,
-          currentView: state.currentView
-        });
-      } catch (error) {
-        console.error('프로젝트 저장 실패:', error)
-      }
-    }
   }
 
   const handleTitleBlur = () => {
@@ -92,6 +79,7 @@ export const Header = ({ className }: { className?: string }) => {
   }, [auth])
 
   useEffect(() => {
+    console.log("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     if (isEditingTitle && titleInputRef.current) {
       titleInputRef.current.focus()
       titleInputRef.current.select() // 텍스트 전체 선택

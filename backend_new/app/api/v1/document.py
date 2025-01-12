@@ -1,10 +1,12 @@
 from uuid import UUID
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, BackgroundTasks, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
+from app.models.user import Session
 
 from app.api import deps
+from app.core.deps import get_current_session
 from app.schemas.document import (
     DocumentResponse,
     DocumentListResponse,
@@ -27,14 +29,14 @@ async def upload_documents(
     files: list[UploadFile] = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(deps.get_async_db),
-    session_id: Optional[str] = Cookie(None)
+    session: Session = Depends(get_current_session),
 ) -> DocumentUploadResponse:
     #print("upload_documents 여기 오나 안오나")
     """문서 업로드 API - 지정된 프로젝트에 문서 업로드"""
     logger.info(f"문서 업로드 시작")
     logger.info(f"업로드된 파일 수: {len(files)}")
     
-    if not session_id:
+    if not session.user_id:
         raise HTTPException(status_code=401, detail="Session ID is required")
         
     if not files:
@@ -48,7 +50,7 @@ async def upload_documents(
         logger.info(f"프로젝트 확인")
         # 프로젝트 존재 여부 확인
         project_service = ProjectService(db)
-        project = await project_service.get(project_id, session_id)
+        project = await project_service.get(project_id, session.user_id)#session_id)
         if not project:
             logger.info(f"Project not found or not accessible")
             raise HTTPException(status_code=404, detail="Project not found or not accessible")
@@ -57,12 +59,12 @@ async def upload_documents(
         document_service = DocumentService(db)
         documents = await document_service.upload_documents(
             project_id=project_id,
-            session_id=session_id,
+            user_id=session.user_id,
             files=files,
             background_tasks=background_tasks
         )
         logger.info(f"완료")
-        logger.info(f"session:{session_id}, prject id:{project_id}")
+        logger.info(f"user id:{session.user_id}, prject id:{project_id}")
         for doc in documents:
             logger.info(f"doc_id:{doc.id}, file:{doc.filename}, status:{doc.status}")
         return DocumentUploadResponse(
@@ -83,7 +85,7 @@ async def upload_documents(
     except HTTPException:
         raise
     except Exception as e:
-        logger.info(f"문서 업로드 중 오류 발생: {str(e)}")
+        logger.error(f"문서 업로드 중 오류 발생: {str(e)}")
         # 더 자세한 에러 메시지 반환
         return DocumentUploadResponse(
             success=False,
@@ -143,4 +145,65 @@ async def search_documents(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to search documents: {str(e)}"
+        )
+
+@router.get("/list/{project_id}")
+async def get_document_list(
+    project_id: str,
+    document_service: DocumentService = Depends(deps.get_document_service)
+) -> DocumentListResponse:
+    """프로젝트에 속한 모든 문서 목록을 반환합니다."""
+    try:
+        logger.info(f"문서 리스트 요청 : {project_id}")
+        # document_service를 사용하여 프로젝트의 문서 목록 조회
+        documents = await document_service.get_documents_by_project(project_id)
+        logger.info(f"조회된 문서 목록: {documents}")
+        
+        # export interface IDocument {
+        # id: string
+        # filename: string
+        # project_id: string
+        # status: IDocumentStatus
+        # content_type?: string
+        # added_col_context?: Array<ICell> // 추가된 셀. 헤더정보(name), 셀내용
+        # }
+        # Document 모델을 DocumentResponse로 변환
+        document_responses = []
+        for doc in documents:
+            try:
+                logger.info(f"문서 변환 시도: {doc.id}")
+                response = DocumentResponse(
+                    id=doc.id,
+                    project_id=doc.project_id,
+                    filename=doc.filename,
+                    created_at=doc.created_at if hasattr(doc, 'created_at') else None,
+                    updated_at=doc.updated_at if hasattr(doc, 'updated_at') else None,
+                    mime_type=None,  # Optional 필드로 변경됨
+                    file_size=doc.file_size,
+                    file_path=doc.file_path,
+                    status=doc.status,
+                    error_message=doc.error_message if hasattr(doc, 'error_message') else None,
+                    chunk_count=doc.chunk_count if hasattr(doc, 'chunk_count') else 0,
+                    download_url=None,  # 필요한 경우 URL 생성 로직 추가
+                    embedding_ids=doc.embedding_ids if hasattr(doc, 'embedding_ids') else None,
+                    extracted_text=doc.extracted_text if hasattr(doc, 'extracted_text') else None
+                )
+                document_responses.append(response)
+                logger.info(f"문서 변환 성공: {doc.id}")
+            except Exception as e:
+                logger.error(f"문서 변환 실패 {doc.id}: {str(e)}")
+                continue
+        
+        logger.info(f"변환 완료된 문서 수: {len(document_responses)}")
+        
+        # DocumentListResponse 형식으로 반환
+        return DocumentListResponse(
+            items=document_responses
+        )
+        
+    except Exception as e:
+        logger.error(f"문서 목록 조회 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"문서 목록 조회 중 오류가 발생했습니다: {str(e)}"
         )

@@ -8,6 +8,8 @@ const nextConfig = {
       },
     ];
   },
+  // React의 Strict Mode 활성화 - 개발 시 잠재적인 문제를 감지하고 더 나은 개발 경험을 제공
+  reactStrictMode: true,
   webpack: (config, { isServer }) => {
     // webpack 경고 메시지 숨기기
     config.infrastructureLogging = {

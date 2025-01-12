@@ -6,7 +6,7 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.schemas.category import CategoryResponse, CategoryCreate, AddProjectToCategory
-from app.schemas.project import ProjectResponse
+from app.schemas.project import ProjectSimpleResponse
 from app.models.category import Category
 from app.models.project import Project
 from app.models.user import Session
@@ -172,7 +172,7 @@ async def delete_category(
             detail=f"Failed to delete category: {str(e)}"
         )
 
-@router.post("/{category_id}/projects", response_model=ProjectResponse)
+@router.post("/{category_id}/projects", response_model=ProjectSimpleResponse)
 async def add_project_to_category(
     category_id: str,
     project_data: AddProjectToCategory,
@@ -231,7 +231,7 @@ async def add_project_to_category(
             detail="Failed to add project to category"
         )
 
-@router.get("/{category_id}/projects", response_model=List[ProjectResponse])
+@router.get("/{category_id}/projects", response_model=List[ProjectSimpleResponse])
 async def get_category_projects(
     category_id: str,
     db: AsyncSession = Depends(get_db)
@@ -249,7 +249,7 @@ async def get_category_projects(
     result = await db.execute(stmt)
     projects = result.scalars().all()
 
-    return [ProjectResponse(
+    return [ProjectSimpleResponse(
         id=str(project.id),
         name=project.name,
         title=project.name,

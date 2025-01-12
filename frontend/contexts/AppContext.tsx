@@ -9,6 +9,7 @@ import * as actionTypes from '@/types/actions'
 interface AppState {
   sessionId: string | null
   currentProjectId: string | null
+  currentProject: IProject | null
   projectTitle: string
   currentView: 'upload' | 'table' | 'chat'  // 현재 뷰 상태
   documents: { [id: string]: IDocument } // id, IDocument 딕셔너리. 프로젝트에 속한 문서들만. 다른 프로젝트 이동 시 초기화됨.
@@ -34,12 +35,12 @@ type Action =
   // 전역에 영향을 주는 action
   | { type: typeof actionTypes.SET_INITIAL_STATE }
   | { type: typeof actionTypes.SET_SESSION; payload: string }
-  | { type: typeof actionTypes.SET_CURRENT_PROJECT; payload: string }
+  | { type: typeof actionTypes.SET_CURRENT_PROJECT; payload: IProject }
   | { type: typeof actionTypes.SET_VIEW; payload: 'upload' | 'table' | 'chat' }
   | { type: typeof actionTypes.SET_MODE; payload: 'chat' | 'table' }
   
   // Header에서 사용하는 action
-  | { type: typeof actionTypes.SET_PROJECT_TITLE; payload: string }
+  | { type: typeof actionTypes.SET_PROJECT_TITLE; payload:string}
 
   // Sidebar, ProjectCategory에서 사용하는 action
   | { type: typeof actionTypes.UPDATE_RECENT_PROJECTS; payload: IRecentProjectsResponse }
@@ -48,6 +49,7 @@ type Action =
   // TableSection에서 사용하는 action
   | { type: typeof actionTypes.ADD_DOCUMENTS; payload: IDocument[] }
   | { type: typeof actionTypes.ADD_CHAT_MESSAGE; payload: IMessage }
+  | { type: typeof actionTypes.CLEAR_CHAT_MESSAGE }
   | { type: typeof actionTypes.SET_IS_ANALYZING; payload: boolean }
   | { type: typeof actionTypes.UPDATE_TABLE_DATA; payload: TableResponse }
 
@@ -61,10 +63,12 @@ type Action =
   | { type: typeof actionTypes.ADD_ANALYSIS_COLUMN; payload: { columnName: string; prompt: string; originalPrompt: string } }
   | { type: typeof actionTypes.UPDATE_COLUMN_RESULT; payload: { documentId: string; columnName: string; result: any } }
   | { type: typeof actionTypes.SET_LAST_AUTOSAVED; payload: Date }
+  | { type: typeof actionTypes.SET_DOCUMENT_LIST; payload: { [key: string]: IDocument } }
 
 const initialState: AppState = {
   sessionId: null,
   currentProjectId: null,
+  currentProject: null,
   projectTitle: '',
   currentView: 'upload',
   documents: {},
@@ -117,36 +121,17 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case actionTypes.SET_CURRENT_PROJECT:
       return {
         ...state,
-        currentProjectId: action.payload
+        currentProjectId: action.payload.id,
+        currentProject: action.payload,
+        documents: {}
       }
 
     case actionTypes.SET_PROJECT_TITLE:
-      console.log('SET_PROJECT_TITLE:', action.payload)
+      console.log(`SET_PROJECT_TITLE: ${action.payload}`)
       return {
         ...state,
-        projectTitle: action.payload,
-        recentProjects: {
-          today: state.recentProjects.today.map(project => 
-            project.id === state.currentProjectId 
-              ? { ...project, title: action.payload }
-              : project
-          ),
-          yesterday: state.recentProjects.yesterday.map(project => 
-            project.id === state.currentProjectId 
-              ? { ...project, title: action.payload }
-              : project
-          ),
-          four_days_ago: state.recentProjects.four_days_ago.map(project => 
-            project.id === state.currentProjectId 
-              ? { ...project, title: action.payload }
-              : project
-          ),
-          older: state.recentProjects.older.map(project => 
-            project.id === state.currentProjectId 
-              ? { ...project, title: action.payload }
-              : project
-          )
-        }
+        projectTitle: action.payload
+        
       }
 
     case actionTypes.SET_VIEW:
@@ -231,6 +216,13 @@ const appReducer = (state: AppState, action: Action): AppState => {
           timestamp: action.payload.timestamp || new Date().toISOString()
         }],
         hasUnsavedChanges: true
+      };
+      break;
+
+    case actionTypes.CLEAR_CHAT_MESSAGE:
+      newState = {
+        ...state,
+        messages: []
       };
       break;
 
@@ -363,8 +355,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
               if (!document.added_col_context) {
                 document.added_col_context = [];
               }
-              
-              // 새로운 cell 데이터 추가
+　　           // 새로운 cell 데이터 추가
               document.added_col_context.push({
                 docId: cell.doc_id,
                 header: column.header.name,
@@ -554,6 +545,12 @@ const appReducer = (state: AppState, action: Action): AppState => {
         recentProjects: action.payload
       }
 
+    case actionTypes.SET_DOCUMENT_LIST:
+      return {
+        ...state,
+        documents: action.payload
+      };
+
     case actionTypes.UPDATE_CATEGORY_PROJECTS:
       return {
         ...state,
@@ -576,27 +573,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!state.currentProjectId || !state.hasUnsavedChanges) return;
 
     try {
-      const saveData = {
-        name: state.projectTitle,
-        analysis_data: {
-          mode: state.analysis.mode,
-          columns: state.analysis.columns,
-          columnPrompts: state.analysis.columnPrompts,
-        },
-        table_data: {
-          columns: state.analysis.tableData?.columns || []
-        },
-        documents: state.documents,
-        messages: state.messages
-      };
+      
+      // const saveData = {
+      //   name: state.projectTitle,
+      //   analysis_data: {
+      //     mode: state.analysis.mode,
+      //     columns: state.analysis.columns,
+      //     columnPrompts: state.analysis.columnPrompts,
+      //   },
+      //   table_data: {
+      //     columns: state.analysis.tableData?.columns || []
+      //   },
+      //   documents: state.documents,
+      //   messages: state.messages
+      // };
 
-      await api.autosaveProject(state.currentProjectId, saveData);
-      dispatch({ 
-        type: actionTypes.SET_LAST_AUTOSAVED, 
-        payload: new Date() 
-      });
+      // await api.autosaveProject(state.currentProjectId, saveData);
+      // dispatch({ 
+      //   type: actionTypes.SET_LAST_AUTOSAVED, 
+      //   payload: new Date() 
+      // });
 
-      console.log('프로젝트 자동 저장 완료:', new Date().toLocaleString());
+      // console.log('프로젝트 자동 저장 완료:', new Date().toLocaleString());
     } catch (error) {
       console.error('자동 저장 실패:', error);
     }

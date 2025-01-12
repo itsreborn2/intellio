@@ -89,6 +89,8 @@ export interface IDocument {
   filename: string
   project_id: string
   status: IDocumentStatus
+  created_at:string
+  updated_at:string
   content_type?: string
   added_col_context?: Array<ICell> // 추가된 셀. 헤더정보(name), 셀내용
 }

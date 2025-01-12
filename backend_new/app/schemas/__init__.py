@@ -4,7 +4,7 @@ from app.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
     ProjectInDB,
-    ProjectResponse,
+    ProjectSimpleResponse,
     ProjectListResponse,
     RecentProjectsResponse
 )
@@ -39,7 +39,7 @@ __all__ = [
     "ProjectCreate",
     "ProjectUpdate",
     "ProjectInDB",
-    "ProjectResponse",
+    "ProjectSimpleResponse",
     "ProjectListResponse",
     "RecentProjectsResponse",
     # 사용자 스키마

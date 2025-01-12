@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/popover'
 import { Folder, Plus, Trash2, FileText, ChevronDown, ChevronRight, History, AlertCircle } from 'lucide-react'
 import * as api from '@/services/api'  // 최상단에 추가
-import { IRecentProjectsResponse, IProject, Category } from '@/types/index'
+import { IRecentProjectsResponse, IProject, Category, ProjectDetail,  } from '@/types/index'
 import { getRecentProjects, } from '@/services/api'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
@@ -175,12 +175,37 @@ export function ProjectCategorySection({
     loadCategoriesAndProjects()
   }, [setCategories, dispatch, isAuthenticated])
 
-  const handleProjectClick = (projectId: string, is_temp: any) => {
-    console.log(`Project UUID: ${projectId}, is_temp:${is_temp}`);
+  const handleProjectClick = async (projectId: string, is_temp: any) => {
+
+    console.log(`Current project:${state.currentProjectId}, Project UUID: ${projectId}, is_temp:${is_temp}`);
+    if(state.currentProjectId === projectId )
+      return;
+    // 채팅 영역 초기화
+    // 문서 영역 초기화
+    const projectInfo:ProjectDetail = await api.getProjectInfo(projectId)
+    console.log(`Change Project To ${projectInfo.name}`)
+    // 프로젝트 기본정보 요청
+    // 프로젝트의 문서 목록 요청
+    // 문서의 양이 많을때, 프로젝트와 문서를 한번에 불러오려면 로딩시간이 매우 길어질수 있기 때문에
+    // 요청을 2개로 분리한다. UI 제공.
+    // 프로젝트 기본정보 설정
+    console.log(`handleProjectClick current view: ${state.currentView}`)
     
-    // {`category-${category.id}`}
-    //임시로 막음. 어차피 동작 안하는데.
-    //router.push(`/projects/${projectId}`)
+    // 현재 view가 upload인 경우에만 chat으로 변경, 나머지는 유지
+    if (state.currentView === 'upload') {
+      dispatch({ type: actionTypes.SET_VIEW, payload: 'chat' })
+    }
+
+    dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: projectInfo })
+    
+    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: projectInfo.name })
+
+    // 채팅 메시지 초기화
+    dispatch({ type: actionTypes.CLEAR_CHAT_MESSAGE })
+    const documents = await api.getDocumentList(projectId)
+    dispatch({ type: actionTypes.SET_DOCUMENT_LIST, payload: documents })  // documents 상태 업데이트
+
+    //console.log(`프로젝트 handleProjectClick : `, documents)
   }
 
   const handleDeleteCategory = async () => {

@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel, Field, validator
+from .document import DocumentResponse  # 문서 응답 스키마 import
 
 class ProjectBase(BaseModel):
     """프로젝트 기본 스키마"""
@@ -35,7 +36,7 @@ class ProjectInDB(ProjectBase):
             UUID: lambda v: str(v)
         }
 
-class ProjectResponse(ProjectInDB):
+class ProjectSimpleResponse(ProjectInDB):
     """프로젝트 응답 모델"""
     class Config:
         from_attributes = True
@@ -44,10 +45,11 @@ class ProjectResponse(ProjectInDB):
             UUID: lambda v: str(v)
         }
 
+
 class ProjectListResponse(BaseModel):
     """프로젝트 목록 응답 모델"""
     total: int = Field(..., description="전체 프로젝트 수")
-    items: List[ProjectResponse] = Field(default_factory=list, description="프로젝트 목록")
+    items: List[ProjectSimpleResponse] = Field(default_factory=list, description="프로젝트 목록")
 
     class Config:
         from_attributes = True
@@ -58,10 +60,10 @@ class ProjectListResponse(BaseModel):
 
 class RecentProjectsResponse(BaseModel):
     """최근 프로젝트 목록 응답 모델"""
-    today: List[ProjectResponse] = Field(default_factory=list, description="오늘 생성된 프로젝트 목록")
-    yesterday: List[ProjectResponse] = Field(default_factory=list, description="어제 생성된 프로젝트 목록")
-    four_days_ago: List[ProjectResponse] = Field(default_factory=list, description="4일 전 생성된 프로젝트 목록")
-    older: List[ProjectResponse] = Field(default_factory=list, description="4일 전 이전에 생성된 프로젝트 목록")
+    today: List[ProjectSimpleResponse] = Field(default_factory=list, description="오늘 생성된 프로젝트 목록")
+    yesterday: List[ProjectSimpleResponse] = Field(default_factory=list, description="어제 생성된 프로젝트 목록")
+    four_days_ago: List[ProjectSimpleResponse] = Field(default_factory=list, description="4일 전 생성된 프로젝트 목록")
+    older: List[ProjectSimpleResponse] = Field(default_factory=list, description="4일 전 이전에 생성된 프로젝트 목록")
 
     class Config:
         from_attributes = True

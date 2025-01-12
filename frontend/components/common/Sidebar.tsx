@@ -292,58 +292,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
     }
   }
 
-  const handleProjectClick = async (projectId: string) => {
-    try {
-      dispatch({ type: 'SET_INITIAL_STATE' })
-      
-      const project:ProjectDetail = await api.getProject(projectId)
-      
-      dispatch({ type: 'SET_CURRENT_PROJECT', payload: projectId })
-      dispatch({ type: 'SET_PROJECT_TITLE', payload: project.name })
-      
-      if (project.documents) {
-        dispatch({ 
-          type: 'SET_DOCUMENTS_IN_TABLESECTION', 
-          payload: project.documents
-        })
-      }
-      
-      if (project.analysis) {
-        dispatch({
-          type: 'SET_MODE',
-          payload: project.analysis.mode
-        })
-        
-        if (project.analysis.tableData) {
-          dispatch({
-            type: 'UPDATE_TABLE_DATA',
-            payload: project.analysis.tableData
-          })
-        }
-      }
-      
-      if (project.messages) {
-        project.messages.forEach((message: IMessage) => {
-          dispatch({
-            type: 'ADD_CHAT_MESSAGE',
-            payload: {
-              role: 'assistant',
-              content: message.content
-            }
-          })
-        })
-      }
-      
-      dispatch({ 
-        type: 'SET_VIEW', 
-        payload: project.analysis?.mode || 'table' 
-      })
-      
-    } catch (error) {
-      console.error('프로젝트 로드 실패:', error)
-    }
-  }
-
+  
   const toggleSection = (section: string) => {
     setExpandedSections(prev =>
       prev.includes(section)
@@ -400,17 +349,17 @@ export const Sidebar = ({ className }: SidebarProps) => {
                   size="icon" 
                   className="h-8 w-8"
                   onClick={async () => {
-                    setIsLoading(true);
+                      setIsLoading(true);
                     try {
                       // 현재 프로젝트 상태 저장
                       if (state.currentProjectId) {
-                        await api.autosaveProject(state.currentProjectId, {
-                          title: state.projectTitle,
-                          documents: state.documents,
-                          messages: state.messages,
-                          analysis: state.analysis,
-                          currentView: state.currentView
-                        });
+                        // await api.autosaveProject(state.currentProjectId, {
+                        //   title: state.projectTitle,
+                        //   documents: state.documents,
+                        //   messages: state.messages,
+                        //   analysis: state.analysis,
+                        //   currentView: state.currentView
+                        // });
                       }
 
                       // 앱 상태 초기화

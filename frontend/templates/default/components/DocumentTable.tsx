@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState, forwardRef, useImperativeHandle } from 'react';
+import { useMemo, useState, forwardRef, useEffect, useImperativeHandle } from 'react';
 import {
   MaterialReactTable,
   useMaterialReactTable,
@@ -31,7 +31,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
   const tableData = useMemo(() => {
     // 기본 데이터
     const baseData: IDocument[] = []
-
+    //console.log(`[DocumentTable] documents length: ${Object.keys(state.documents).length}`)
     // documents에 있는 내용 업데이트.
     // document가 추가될때. 즉 row가 1개 늘어나야할때 호출됨. 문서 업로드 / 문서 추가 시
     const additionalData = Object.values(state.documents).map((document) => ({
@@ -57,12 +57,13 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     ];
     
     Object.values(state.documents).forEach((doc) => {
-      console.log(`[DocumentTable] ${doc.filename} : `);
+      
       doc.added_col_context?.forEach((cell) => {
         // 주석 삭제 절대금지
         // 여기는 헤더값을 비교하고 있으면 안넣는데, 백엔드 응답에 따라 동일한 헤더값이 올수도 있다.
         // 그런 경우 헤더값+숫자의 형태로 또 다른 헤더를 넣어줘야한다.
         // 헤더값을 받는 함수를 따로 만들어서 처리해야할듯.
+        console.log(`[DocumentTable] ${doc.filename} : `);
         console.log(`[DocumentTable] col`, cell);
         if (!baseColumns.some(col => col.accessorKey === cell.header)) {
           console.log(`[DocumentTable] col 변경 : ` , cell)
@@ -81,7 +82,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       })
     });
     return baseColumns;
-  }, [dispatch, documentColContexts]);
+  }, [dispatch, documentColContexts, state.documents]);
 
   const table = useMaterialReactTable({
     columns,
@@ -91,17 +92,78 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     enableRowSelection: true,
     enableRowNumbers: true,
     enableStickyHeader: true,
+    enableFullScreenToggle: false,
     rowPinningDisplayMode: 'select-sticky',
+    
     getRowId: (doc) => doc.id,
-    muiTableHeadCellProps: {
+    displayColumnDefOptions: { // 기본 헤더의 옵션 설정
+        'mrt-row-select': {
+        size: 10, // 체크박스 컬럼 너비
+        grow: false, // 남은 공간을 채우지 않도록 설정
+        muiTableHeadCellProps: {
+          sx: { borderRight: 'none' }
+        },
+        muiTableBodyCellProps: {
+          sx: { borderRight: 'none' }
+        }
+      },
+      'mrt-row-numbers': {
+        size: 10, // row number를 출력하는 칼럼만 너비10. 고정
+        grow: false, // 남은 공간을 채우지 않도록 설정
+        muiTableHeadCellProps: {
+          sx: { borderRight: 'none' }
+        },
+        muiTableBodyCellProps: {
+          sx: { borderRight: 'none' }
+        }
+      },
+    },
+    muiTableProps: {
       sx: {
-        '&.MuiTableCell-root:first-of-type': {  // 첫 번째 컬럼(인덱스)에만 적용
-          width: '30px',  // 원하는 너비로 조정
-          maxWidth: '30px',
-          padding: '8px'
+        caption: {
+          captionSide: 'top',
+        },
+        height: '100%', // 상위 컨테이너에 맞춤
+        '& .MuiTable-root': {
+          borderCollapse: 'separate',
+          borderSpacing: 0,
+        },
+      },
+    },
+    muiTablePaperProps: {
+      sx: {
+        padding: 0,
+        margin: 0,
+        '& .MuiTableContainer-root': {
+          padding: 0
         }
       }
     },
+    muiTableContainerProps: {
+      sx: { 
+        height: '100%',
+        maxHeight: '100%',
+        overflow: 'auto',
+        padding: 0,
+        '& .MuiTable-root': {
+          margin: 0
+        }
+      }
+    },
+    muiTableHeadCellProps: {
+      sx: {
+        //border: '1px solid rgba(200, 200, 200, 0.4)',
+        fontStyle: 'italic',
+        fontWeight: 'normal',
+        
+      },
+    },
+    muiTableBodyCellProps: {
+      sx: {
+        //border: '1px solid rgba(180, 180, 180, .5)',
+      },
+    },
+
     initialState: {
       rowPinning: {
         //top: ['dmurray@example.com'],
@@ -110,11 +172,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         //'dmurray@example.com': true,
       },
     },
-    muiTableContainerProps: {
-      sx: {
-        maxHeight: '400px',
-      },
-    },
+    layoutMode: 'grid', //모든 칼럼은 남은 공간을 채우는 형태
     muiTableBodyRowProps: ({ row, table }) => {
       const { density } = table.getState();
       return {
@@ -128,6 +186,8 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       };
     },
   });
+
+  
 
   // 테이블 유틸리티 함수들
   // const tableUtils: ITableUtils = {
@@ -148,22 +208,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
   //useImperativeHandle(ref, () => tableUtils);
 
   return (
-    <div className="space-y-4 mt-4 border-t pt-4">
-      <div className="flex gap-2">
-        
-        {/* <Button
-          //onClick={tableUtils.addColumn}
-          className="mb-4 mr-2"
-        >
-          컬럼 추가 ({countCol})
-        </Button>
-        <Button
-          //onClick={tableUtils.addRow}
-          className="mb-4"
-        >
-          로우 추가 ({countRow})
-        </Button> */}
-      </div>
+    <div className="space-y-0 mt-4 border-t pt-4">
       <MaterialReactTable table={table} />
     </div>
   );

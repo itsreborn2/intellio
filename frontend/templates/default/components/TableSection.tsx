@@ -382,12 +382,14 @@ export const TableSection = () => {
     try {
       let projectId = state.currentProjectId
       if (!projectId) {
-        const project = await createProject('Temporary Project', 'Created for document upload')
-        projectId = project.id
-        dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: projectId })
+        console.warn("Not Created Project")
+        // const project = await createProject('Temporary Project', 'Created for document upload')
+        // projectId = project.id
+        // dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: projectId })
         
-        // 프로젝트 생성 이벤트 발생
-        window.dispatchEvent(new CustomEvent('projectCreated'))
+        // // 프로젝트 생성 이벤트 발생
+        // window.dispatchEvent(new CustomEvent('projectCreated'))
+        return;
       }
       
       dispatch({
@@ -396,11 +398,13 @@ export const TableSection = () => {
           role: 'assistant',
           content: `문서 업로드를 시작합니다. 총 ${files.length}개의 파일이 업로드됩니다.`
         }
-      })
+      });
 
       const response: IDocumentUploadResponse = await uploadDocument(projectId, Array.from(files))
-      console.log('Upload response[TableSection]:', response)
-      
+      if(response.success === true)
+        console.log('Upload response:[TableSection]', response)
+      else
+        console.warn('Upload response:[TableSection]', response)
       
       // 1. 문서 상태 업데이트
       const documents: IDocument[] = response.documents.map(doc => ({
@@ -408,6 +412,8 @@ export const TableSection = () => {
         filename: doc.filename,
         project_id: doc.project_id,
         status: doc.status,
+        created_at: new Date().toISOString(),  // 현재 시간을 ISO 문자열로 추가 // 서버에서 생성된 create_at과 다른값일텐데.. 일단 나중에..
+        updated_at: new Date().toISOString(),   // 현재 시간을 ISO 문자열로 추가
         content_type: doc.content_type
       }));
       console.log('Created document[TableSection], dispatch(\'SET_DOCUMENTS_IN_TABLESECTION\', payload) : ', documents)
@@ -581,25 +587,8 @@ export const TableSection = () => {
       // 여기에 컨텍스트 메뉴 로직 추가
     }
   }
-
-  // useEffect(() => {
-  //   const tableHead = document.querySelector('thead');
-  //   if (!tableHead) return;  // tableHead가 null이 함수 종료
-
-  //   // 이후 tableHead 사용하는 코드...
-  //   tableHead.addEventListener('dragover', handleDragOver);
-  //   tableHead.addEventListener('drop', handleDrop);
-    
-  //   return () => {
-  //     if (tableHead) {  // cleanup에서도 null 체크
-  //       tableHead.removeEventListener('dragover', handleDragOver);
-  //       tableHead.removeEventListener('drop', handleDrop);
-  //     }
-  //   };
-  // }, [handleDragOver, handleDrop]);
-
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col h-full overflow-hidden">  
       <div className="sticky top-0 z-10 bg-background border-b">
         <div className="flex items-center justify-between p-2 gap-2">
           <Button
@@ -620,155 +609,10 @@ export const TableSection = () => {
           />
         </div>
       </div>
-
-      <div className="flex-1 relative">  {/* overflow-auto 제거 */}
+      <div className="flex-1 overflow-auto">  
         <DocumentTable ref={tableRef} />
-        {/*
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] relative">
-           예전에 쓰던 테이블.
-          <div className="flex flex-col gap-4">
-            <Table className="w-full border-collapse table-fixed">
-              <colgroup>
-                <col className="w-[40px] min-w-[40px] max-w-[40px]" />
-                {columnOrder.map((colName) => (
-                  <col key={colName} className="w-auto" />
-                ))}
-              </colgroup>
-              <TableHeader>
-                <TableRow className="border-b">
-                  <TableHead className="w-[40px] min-w-[40px] max-w-[40px] p-2 bg-muted/50">
-                    <div className="flex items-center justify-center">
-                      {state.analysis.tableData?.columns?.[0]?.cells?.length > 0 && (
-                        <Checkbox
-                          checked={selectedRows.length > 0}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              const allRows = state.analysis.tableData?.columns?.[0]?.cells?.map((_, index) => index) || [];
-                              setSelectedRows(allRows);
-                            } else {
-                              setSelectedRows([]);
-                            }
-                          }}
-                        />
-                      )}
-                    </div>
-                  </TableHead>
-                  {columnOrder.map((colName) => {
-                    const column = state.analysis.tableData?.columns?.find(col => col.header.name === colName);
-                    if (!column) return null;
-                    return (
-                      <TableHead
-                        key={colName}
-                        className={`p-2 bg-muted/50 ${
-                          colName === "Document" ? "sticky left-[40px] z-20 bg-muted/50" : ""
-                        }`}
-                      >
-                        {state.analysis.tableData?.columns?.[0]?.cells?.length > 0 && (
-                          <div className="flex items-center justify-center text-center">
-                            <span className="font-medium">{colName}</span>
-                          </div>
-                        )}
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {state.analysis.tableData?.columns?.[0]?.cells?.map((cell, rowIndex) => (
-                  <TableRow
-                    key={cell.doc_id}
-                    className={`group border-b hover:bg-muted/30 ${
-                      selectedRows.includes(rowIndex) ? "bg-muted/50" : ""
-                    }`}
-                  >
-                    <TableCell className="w-[40px] min-w-[40px] max-w-[40px] p-2">
-                      <div className="flex items-center justify-center">
-                        <div className="relative group/row">
-                          <span className="text-sm text-muted-foreground group-hover/row:invisible absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                            {rowIndex + 1}
-                          </span>
-                          <div className="invisible group-hover/row:visible">
-                            <Checkbox
-                              checked={selectedRows.includes(rowIndex)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedRows([...selectedRows, rowIndex]);
-                                } else {
-                                  setSelectedRows(selectedRows.filter(row => row !== rowIndex));
-                                }
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    {columnOrder.map((colName) => {
-                      const column = state.analysis.tableData?.columns?.find(col => col.header.name === colName);
-                      if (!column) return null;
-                      return (
-                        <TableCell
-                          key={colName}
-                          onClick={() => {
-                            if (colName !== "Document") {
-                              const isSelected = selectedCells.some(
-                                (selectedCell) =>
-                                  selectedCell.row === rowIndex && selectedCell.col === colName
-                              );
-                              if (isSelected) {
-                                setSelectedCells(selectedCells.filter(
-                                  (cell) => !(cell.row === rowIndex && cell.col === colName)
-                                ));
-                              } else {
-                                setSelectedCells([...selectedCells, { row: rowIndex, col: colName }]);
-                              }
-                            }
-                          }}
-                          className={`p-2 cursor-pointer ${
-                            colName === "Document"
-                              ? "sticky left-[40px] z-20 bg-background"
-                              : ""
-                          } ${
-                            selectedCells.some(
-                              (selectedCell) =>
-                                selectedCell.row === rowIndex && selectedCell.col === colName
-                            )
-                              ? "bg-muted/80"
-                              : ""
-                          } ${
-                            colName !== "Document" ? "hover:bg-muted/30" : ""
-                          }`}
-                        >
-                          <CellContent 
-                            content={column.cells[rowIndex]?.content || ''} 
-                            isDocument={colName === "Document"}
-                          />
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          
-         
-        </div>
-        */}
       </div>
-
-      {selectedRows.length > 0 && (
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-background shadow-lg rounded-lg p-4 flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">{selectedRows.length}개의 행이 선택됨</span>
-          <Button variant="destructive" size="sm" onClick={deleteSelectedRows}>
-            <Trash2 className="h-4 w-4 mr-2" />
-            선택 행 삭제
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setSelectedRows([])}>
-            <X className="h-4 w-4 mr-2" />
-            선택 취소
-          </Button>
-        </div>
-      )}
     </div>
+    
   )
 }

@@ -143,8 +143,8 @@ export const UploadSection = () => {
       console.log('Created new project:', project)
       
       // 프로젝트 ID와 제목 설정
-      dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: project.id })
-      dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: projectName })
+      dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: project })
+      dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: projectName})
 
       // 사이드바의 프로젝트 목록 갱신을 위해 이벤트 발생
       window.dispatchEvent(new CustomEvent('projectCreated'))
@@ -193,7 +193,11 @@ export const UploadSection = () => {
         // 파일 업로드 진행
         console.log(`Uploading ${acceptedFiles.length} files to project ${project.id}`)
         const response:IDocumentUploadResponse = await uploadDocument(project.id, acceptedFiles)
-        console.log('Upload response:[UploadSection]', response)
+        if(response.success === true)
+          console.log('Upload response:[UploadSection1]', response)
+        else
+          console.warn('Upload response:[UploadSection2]', response)
+        
 
         // 업로드 상태 업데이트
         updateUploadStatus(
@@ -215,7 +219,9 @@ export const UploadSection = () => {
           id: docId,
           filename: acceptedFiles[index].name,
           project_id: project.id,
-          status: 'UPLOADING'
+          status: 'UPLOADING',
+          created_at: new Date().toISOString(),  // 현재 시간을 ISO 문자열로 추가 // 서버에서 생성된 create_at과 다른값일텐데.. 일단 나중에..
+          updated_at: new Date().toISOString()   // 현재 시간을 ISO 문자열로 추가
         }));
 
         // 문서 목록 업데이트
