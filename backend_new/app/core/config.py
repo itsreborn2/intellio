@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     GEMINI_LOCATION: str = os.getenv("GEMINI_LOCATION", "us-central1")  # Gemini API 기본 리전
     
     # Redis 설정
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
     REDIS_URL: str = "redis://localhost:6379"
     REDIS_CACHE_EXPIRE: int = 3600  # 1시간
     
