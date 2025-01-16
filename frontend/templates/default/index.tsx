@@ -64,7 +64,7 @@ export const DefaultTemplate = () => {
                 : expandedSection === 'chat' 
                   ? 'hidden' 
                   : 'flex-1'
-            } overflow-auto`}>
+            } overflow-hidden`}>
               <div className="absolute right-2 top-2 z-30">
                 <TooltipProvider>
                   <Tooltip>

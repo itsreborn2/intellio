@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, List, Dict
 from uuid import UUID
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project import Project
@@ -34,15 +34,26 @@ class ProjectService:
         logger.info(f"프로젝트 생성 - 사용자 이메일: {user_email}, 세션: {session.session_id}")
         return project
 
-    async def get(self, project_id: UUID, session_id: Optional[str] = None) -> Optional[Project]:
+    async def get(self, project_id: UUID, user_id:UUID) -> Optional[Project]:
         """프로젝트 조회"""
-        query = select(Project).where(Project.id == project_id)
+
+        #프로젝트의 조회를 세션말고
+        if user_id:
+            # SQLAlchemy의 and_ 함수를 사용하여 여러 조건을 결합
+            query = select(Project).where(and_(Project.user_id == user_id, Project.id == project_id))
+        else:
+            query = select(Project).where(Project.id == project_id)
         
-        if session_id:
-            query = query.where(Project.session_id == session_id)
-            
         result = await self.db.execute(query)
-        return result.scalars().first()
+        project_row = result.first()
+        
+        if project_row:
+            project = project_row[0] # result.first()는 튜플을 반환하므로 인덱싱 필요
+            return project
+        else:
+            logger.warning("프로젝트를 찾을 수 없습니다.")
+            return None
+        
 
     async def get_multi(
         self,

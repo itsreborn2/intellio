@@ -6,7 +6,9 @@ import { useDropzone } from 'react-dropzone'
 import { useApp } from '@/contexts/AppContext'
 import { Button } from '@/components/ui/button'
 import { createProject } from '@/services/api'
-import { uploadDocument } from '@/services/api' // Assuming uploadDocument is defined in this file
+import { uploadDocument } from '@/services/api'
+import { IDocument, IDocumentStatus, IDocumentUploadResponse, ITableData, TableResponse } from '@/types'
+import * as actionTypes from '@/types/actions'
 
 // 문서 상태 타입 정의
 interface DocumentStatus {
@@ -49,6 +51,15 @@ const DocumentStatusBadge = ({ status }: { status: string }) => {
         </span>
       )
   }
+}
+
+// 테이블 행 데이터 인터페이스 정의
+interface ITableRowData {
+  id: string
+  Document: string
+  Date: string
+  "Document Type": string
+  status: IDocumentStatus
 }
 
 export const UploadSection = () => {
@@ -112,14 +123,7 @@ export const UploadSection = () => {
         failedFiles
       })
 
-      // 채팅 메시지로 상태 업데이트
-      dispatch({
-        type: 'ADD_CHAT_MESSAGE',
-        payload: {
-          role: 'system',
-          content: `문서 업로드를 시작합니다. 총 ${total}개의 파일이 업로드됩니다.`
-        }
-      })
+      
     }, [dispatch]
   )
 
@@ -128,7 +132,7 @@ export const UploadSection = () => {
     
     try {
       // 새로운 프로젝트 생성 전에 상태 초기화
-      dispatch({ type: 'SET_INITIAL_STATE' })
+      dispatch({ type: actionTypes.SET_INITIAL_STATE })
 
       // 첫 번째 파일의 이름을 프로젝트 이름으로 사용
       const projectName = acceptedFiles[0]?.name.replace(/\.[^/.]+$/, '') || 'Untitled Project'
@@ -139,8 +143,8 @@ export const UploadSection = () => {
       console.log('Created new project:', project)
       
       // 프로젝트 ID와 제목 설정
-      dispatch({ type: 'SET_CURRENT_PROJECT', payload: project.id })
-      dispatch({ type: 'SET_PROJECT_TITLE', payload: projectName })
+      dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: project })
+      dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: projectName})
 
       // 사이드바의 프로젝트 목록 갱신을 위해 이벤트 발생
       window.dispatchEvent(new CustomEvent('projectCreated'))
@@ -154,48 +158,75 @@ export const UploadSection = () => {
           0, 
           []
         )
+        // 채팅 메시지로 상태 업데이트
+        dispatch({
+          type: actionTypes.ADD_CHAT_MESSAGE,
+          payload: {
+            role: 'assistant',
+            content: `문서 업로드를 시작합니다. 총 ${acceptedFiles.length}개의 파일이 업로드됩니다.`
+          }
+        })
 
         // 모든 파일의 상태를 UPLOADING으로 업데이트하고 테이블에 즉시 추가
-        const initialTableData = acceptedFiles.map(file => ({
-          id: file.name,
-          Document: file.name,
-          Date: new Date().toLocaleDateString(),
-          "Document Type": file.type || "Unknown",
-          status: 'UPLOADING'
-        }))
+        const initialTableData: TableResponse = {
+          columns: [{
+            header: {
+              name: 'Document',
+              prompt: '문서 이름을 표시합니다'
+            },
+            cells: acceptedFiles.map(file => ({
+              doc_id: file.name,
+              content: file.name
+            }))
+          }]
+        };
 
         // 테이블 데이터 즉시 업데이트
         dispatch({
-          type: 'UPDATE_TABLE_DATA',
+          type: actionTypes.UPDATE_TABLE_DATA,
           payload: initialTableData
         })
 
         // 업로드 섹션에서 채팅 섹션으로 전환
-        dispatch({ type: 'SET_VIEW', payload: 'chat' })
+        dispatch({ type: actionTypes.SET_VIEW, payload: 'chat' })
 
         // 파일 업로드 진행
         console.log(`Uploading ${acceptedFiles.length} files to project ${project.id}`)
-        const response = await uploadDocument(project.id, acceptedFiles)
-        console.log('Upload response:', response)
+        const response:IDocumentUploadResponse = await uploadDocument(project.id, acceptedFiles)
+        if(response.success === true)
+          console.log('Upload response:[UploadSection1]', response)
+        else
+          console.warn('Upload response:[UploadSection2]', response)
+        
 
         // 업로드 상태 업데이트
         updateUploadStatus(
           acceptedFiles.length,
-          response.error || 0,
-          response.failedFiles || []
+          response.errors.length,
+          response.failed_uploads || []
         )
+        // 채팅 메시지로 상태 업데이트
+        dispatch({
+          type: actionTypes.ADD_CHAT_MESSAGE,
+          payload: {
+            role: 'assistant',
+            content: `문서 업로드 완료`
+          }
+        })
 
         // 새 문서 목록 생성
-        const newDocuments = (response.document_ids || []).map((docId, index) => ({
+        const newDocuments:IDocument[] = (response.document_ids || []).map((docId, index) => ({
           id: docId,
           filename: acceptedFiles[index].name,
           project_id: project.id,
-          status: 'UPLOADING'
+          status: 'UPLOADING',
+          created_at: new Date().toISOString(),  // 현재 시간을 ISO 문자열로 추가 // 서버에서 생성된 create_at과 다른값일텐데.. 일단 나중에..
+          updated_at: new Date().toISOString()   // 현재 시간을 ISO 문자열로 추가
         }));
 
         // 문서 목록 업데이트
         dispatch({
-          type: 'SET_DOCUMENTS',
+          type: actionTypes.ADD_DOCUMENTS,
           payload: newDocuments
         });
 
@@ -209,30 +240,36 @@ export const UploadSection = () => {
         );
 
         // 채팅 모드 유지
-        dispatch({ type: 'SET_VIEW', payload: 'chat' })
+        dispatch({ type: actionTypes.SET_VIEW, payload: 'chat' })
 
       } catch (error) {
         console.error('Upload failed:', error)
         // 실패한 파일 이름 목록 생성
-        const failedFileNames = acceptedFiles.map(file => file.name)
+        const failedFiles = acceptedFiles.map(file => file.name)
+        console.log('Failed files:', failedFiles)
         // 실패한 업로드 상태 업데이트
         updateUploadStatus(
           acceptedFiles.length,
           acceptedFiles.length,
-          failedFileNames
+          failedFiles
         )
 
         // 실패한 파일들의 상태를 ERROR로 업데이트
-        const failedTableData = acceptedFiles.map(file => ({
-          id: file.name,
-          Document: file.name,
-          Date: new Date().toLocaleDateString(),
-          "Document Type": file.type || "Unknown",
-          status: 'ERROR'
-        }))
+        const failedTableData: TableResponse = {
+          columns: [{
+            header: {
+              name: 'Document',
+              prompt: '문서 이름을 표시합니다'
+            },
+            cells: failedFiles.map(filename => ({
+              doc_id: filename,
+              content: filename
+            }))
+          }]
+        };
 
         dispatch({
-          type: 'UPDATE_TABLE_DATA',
+          type: actionTypes.UPDATE_TABLE_DATA,
           payload: failedTableData
         })
 

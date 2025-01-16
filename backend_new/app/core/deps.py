@@ -29,8 +29,8 @@ async def get_current_session(
     """현재 세션 가져오기"""
     print(f"DB 포트 확인 : {settings.POSTGRES_PORT}")
 
-    logger.info(f'[get_current_session] : {session_id} 유령인가...')
-    print(f'[get_current_session] : {session_id} 유령인가...')
+    logger.info(f'[get_current_session] : {session_id}')
+    print(f'[get_current_session] : {session_id}')
     user_service = UserService(db)
     logger.info(f"[get_current_session] 1")
     if not session_id:
@@ -63,10 +63,10 @@ async def get_current_session(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="유효하지 않은 세션입니다."
         )
-    logger.info(f"final session : ${session}")
+    logger.info(f"final session : ${session}, : id추가 조회 ${session.user_id}")
     return session
 
-async def get_current_user(
+async def get_current_user_uuid(
     session: Session = Depends(get_current_session),
     db: AsyncSession = Depends(get_db)
 ) -> Session:
@@ -76,7 +76,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="인증되지 않은 사용자입니다."
         )
-    return session
+    return session.user.id
 
 async def get_user_service(
     db: AsyncSession = Depends(get_db)

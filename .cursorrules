@@ -2,7 +2,6 @@ You are an expert in TypeScript, Node.js, Next.js App Router, React, Shadcn UI, 
 
 You use Python 3.11.9
 - framework: pydantic, fastapi, ,sqlalchemy 
-You use React 18.3.1
 
 
 Key Principles
@@ -130,7 +129,22 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 - **Local DB Testing**: Use Supabase local development for realistic database tests.
 - **Coverage**: Maintain a minimum test coverage threshold for PR merges.
 
-# dispatch
- - dispatch를 사용하여 코드를 추가할때, type은 types/actions.ts를 참조하고 없다면 정의를 한다.
-  dispatch({ type:actionTypes.SET_LAST_AUTOSAVED, plyload:...})
-  export const SET_LAST_AUTOSAVED = 'SET_LAST_AUTOSAVED'
+## Styling and Accessibility
+
+- **Tailwind CSS**: Use utility classes with a mobile-first responsive approach.
+- **Radix UI**: Utilize Radix primitives for accessible UI patterns.
+- **Shadcn UI**: Leverage shadcn UI components for design consistency and speed.
+
+## Documentation
+
+- **Comments & JSDoc**: Comment complex logic and use JSDoc for functions and components.
+- **Readmes**: Keep README files updated with setup, instructions, and architectural details.
+- **API & DB Docs**: Document all API endpoints, RLS policies, and database schema.
+- **Edge Functions**: Document Supabase Edge Functions and their intended usage.
+- **Setup Instructions**: Keep environment configuration and setup steps current for onboarding developers.
+
+## other rules
+- frontend/types/index.ts 파일은 모든 타입을 모아놓은 파일이다.
+- frontend에서 사용하는 모든 interface는 frontend/types/index.ts에 정의한다.
+
+

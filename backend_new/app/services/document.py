@@ -64,7 +64,7 @@ class DocumentService:
     async def upload_documents(
         self,
         project_id: UUID,
-        session_id: str,
+        user_id: UUID,
         files: List[UploadFile],
         background_tasks: BackgroundTasks
     ) -> List[Document]:
@@ -72,7 +72,7 @@ class DocumentService:
         
         Args:
             project_id: 프로젝트 ID
-            session_id: 세션 ID
+            user_id: 사용자 ID
             files: 업로드할 파일 목록
             background_tasks: 백그라운드 태스크
             
@@ -82,13 +82,8 @@ class DocumentService:
         if not files:
             raise HTTPException(status_code=400, detail="No files provided")
             
-        # 1. 세션 검증
-        session = await self._validate_session(session_id)
-        if not session:
-            raise HTTPException(status_code=401, detail="Invalid session")
-            
-        # 2. 프로젝트 검증
-        project = await self._validate_project(project_id, session_id)
+        # 1. 프로젝트 검증 - user_id로 접근 권한 확인
+        project = await self._validate_project(project_id, user_id)
         if not project:
             raise HTTPException(status_code=403, detail="Invalid project access")
             
@@ -208,18 +203,12 @@ class DocumentService:
             
         return documents
 
-    async def _validate_session(self, session_id: str):
-        """세션 유효성 검증"""
-        from app.services.session import SessionService
-        session_service = SessionService(self.db)
-        return await session_service.get_by_id(session_id)
-        
-    async def _validate_project(self, project_id: UUID, session_id: str) -> Project:
+    async def _validate_project(self, project_id: UUID, user_id: UUID) -> Project:
         """프로젝트 접근 권한 검증"""
         project = await self.db.execute(
             select(Project).where(
                 Project.id == project_id,
-                Project.session_id == session_id
+                Project.user_id == user_id
             )
         )
         return project.scalar_one_or_none()
@@ -385,3 +374,17 @@ class DocumentService:
         except Exception as e:
             logger.error(f"Error processing chunks: {str(e)}")
             return None
+
+    async def get_documents_by_project(self, project_id: str) -> List[Document]:
+        """프로젝트에 속한 모든 문서를 조회합니다."""
+        try:
+            logger.info(f"프로젝트 {project_id}의 문서 조회 시작")
+            async with self.db as session:
+                query = select(Document).where(Document.project_id == project_id)
+                result = await session.execute(query)
+                documents = result.scalars().all()
+                logger.info(f"조회된 문서 수: {len(list(documents))}")
+                return documents
+        except Exception as e:
+            logger.error(f"문서 조회 중 오류 발생: {str(e)}")
+            raise

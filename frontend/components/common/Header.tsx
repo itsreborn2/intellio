@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
 import { useAuth } from "@/hooks/useAuth"
 import * as api from "@/services/api"
+import * as actionTypes from '@/types/actions'
 import {
   Dialog,
   DialogContent,
@@ -23,11 +24,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 export const Header = ({ className }: { className?: string }) => {
   const { state, dispatch } = useApp()
   const auth = useAuth()
-  
-  // 디버깅을 위한 상태 로깅
-  //console.log('[Header] Current Auth State:', auth)
-  //console.log('LocalStorage Token:', localStorage.getItem('token'))
-  
   const { isAuthenticated, name, email, logout } = auth
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')
@@ -51,24 +47,11 @@ export const Header = ({ className }: { className?: string }) => {
     }
     
     const newTitle = editingTitle.trim()
-    dispatch({ type: 'SET_PROJECT_TITLE', payload: newTitle })
+    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: newTitle })
     setIsEditingTitle(false)
+    // 백엔드로 프로젝트 이름 변경 요청.
+    // 혹은 프로젝트 업데이트 요청하면서 변경된 이름을 넣어서 보내면 됨.
 
-    // 현재 프로젝트가 있을 때만 저장
-    if (state.currentProjectId) {
-      try {
-        // 프로젝트 상태 저장
-        await api.autosaveProject(state.currentProjectId, {
-          title: newTitle,
-          documents: state.documents,
-          messages: state.messages,
-          analysis: state.analysis,
-          currentView: state.currentView
-        });
-      } catch (error) {
-        console.error('프로젝트 저장 실패:', error)
-      }
-    }
   }
 
   const handleTitleBlur = () => {
@@ -96,6 +79,7 @@ export const Header = ({ className }: { className?: string }) => {
   }, [auth])
 
   useEffect(() => {
+    console.log("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     if (isEditingTitle && titleInputRef.current) {
       titleInputRef.current.focus()
       titleInputRef.current.select() // 텍스트 전체 선택
@@ -103,7 +87,8 @@ export const Header = ({ className }: { className?: string }) => {
   }, [isEditingTitle])
 
   return (
-    <div className={`border-b p-4 flex items-center justify-between ${className || ''}`}>
+    // header 태그로 변경하고 className 통합
+    <header className={`border-b p-4 flex items-center justify-between ${className || ''}`}>
       <div className="flex items-center gap-2">
         {isAuthenticated ? (
           isEditingTitle ? (
@@ -128,10 +113,10 @@ export const Header = ({ className }: { className?: string }) => {
           <>
             <span className="text-sm text-gray-600">{email}</span>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" name="user">
+              <DropdownMenuTrigger>
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
                   <User className="h-4 w-4" />
-                </Button>
+                </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={logout}>
@@ -144,10 +129,10 @@ export const Header = ({ className }: { className?: string }) => {
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">로그인이 필요합니다</span>
             <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" name="user">
+              <DialogTrigger>
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
                   <User className="h-4 w-4" />
-                </Button>
+                </div>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -169,10 +154,10 @@ export const Header = ({ className }: { className?: string }) => {
         )}
 
         <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="icon" name="settings" >
+          <DialogTrigger>
+            <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
               <Settings className="h-4 w-4" />
-            </Button>
+            </div>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -185,6 +170,6 @@ export const Header = ({ className }: { className?: string }) => {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </header>
   )
 }

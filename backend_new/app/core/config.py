@@ -46,22 +46,17 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     SESSION_EXPIRY_DAYS: int = 30  # 30 days for session expiry
-
-    # JWT Settings
     JWT_SECRET: str
+
+    # AI Model Settings - from .env
+    OPENAI_API_KEY: str
+    GEMINI_API_KEY: str
+    GEMINI_PROJECT: str = os.getenv("GEMINI_PROJECT", "your-project-id")
+    GEMINI_LOCATION: str = os.getenv("GEMINI_LOCATION", "us-central1")  # Gemini API 기본 리전
     
-    # OpenAI Settings - from .env
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
-    OPENAI_SYSTEM_PROMPT: str | None = None
-    OPENAI_DOCUMENT_PROMPT: str | None = None
-    OPENAI_SUMMARY_PROMPT: str | None = None
-    
-    # Google AI (Gemini) Settings
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    
-    # Redis - from .env
-    REDIS_URL: str
+    # Redis 설정
+    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_CACHE_EXPIRE: int = 3600  # 1시간
     
     # PGAdmin - from .env
     PGADMIN_EMAIL: str

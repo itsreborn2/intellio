@@ -18,24 +18,24 @@ import {
 } from '@/components/ui/popover'
 import { Folder, Plus, Trash2, FileText, ChevronDown, ChevronRight, History, AlertCircle } from 'lucide-react'
 import * as api from '@/services/api'  // 최상단에 추가
-import { getRecentProjects, IRecentProjectsResponse } from '@/services/api'
-import { Category, Project } from '@/services/api'
+import { IRecentProjectsResponse, IProject, Category, ProjectDetail,  } from '@/types/index'
+import { getRecentProjects, } from '@/services/api'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 
 import { useApp } from '@/contexts/AppContext'
 import { cn } from '@/lib/utils'
-
 import { useAuth } from '@/hooks/useAuth';
+import * as actionTypes from '@/types/actions'
 
 interface ProjectCategorySectionProps {
   expandedSections: string[]
   toggleSection: (section: string) => void
   categories: Category[]
-  setCategories: (categories: Category[]) => void
+  setCategories: React.Dispatch<React.SetStateAction<Category[]>>
   dispatch: any
   onDragEnd: (result: any) => void
-  categoryProjects: { [key: string]: Project[] }  // 추가: 각 카테고리의 프로젝트 목록
+  categoryProjects: { [key: string]: IProject[] }  // 추가: 각 카테고리의 프로젝트 목록
 }
 
 export function ProjectCategorySection({
@@ -116,7 +116,7 @@ export function ProjectCategorySection({
         }
         console.log('최근 프로젝트 로딩');
         const response:IRecentProjectsResponse = await getRecentProjects()
-        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: response })
+        dispatch({ type: actionTypes.UPDATE_RECENT_PROJECTS, payload: response })
       } catch (error) {
         console.error('최근 프로젝트 목록을 가져오는데 실패했습니다:', error)
       }
@@ -147,9 +147,8 @@ export function ProjectCategorySection({
             console.log(` - ${category.name} 폴더(${categoriesData.length}) `);
             const projects = await api.getCategoryProjects(category.id)
             //console.log('카테고리의 프로젝트들:', projects); // 전체 배열 확인
-            projects.forEach(project => {
+            projects.forEach((project: IProject) => {
               console.log(`   - 영구프로젝트 : ID:${project.id}, title:${project.name}, temp:${project.is_temporary}`);
-              
             });
             return { categoryId: category.id, projects }
           } catch (error) {
@@ -164,10 +163,10 @@ export function ProjectCategorySection({
         const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
           acc[categoryId] = projects
           return acc
-        }, {} as { [key: string]: Project[] })
+        }, {} as { [key: string]: IProject[] })
 
         // categoryProjects 상태 업데이트
-        dispatch({ type: 'UPDATE_CATEGORY_PROJECTS', payload: newCategoryProjects })
+        dispatch({ type: actionTypes.UPDATE_CATEGORY_PROJECTS, payload: newCategoryProjects })
       } catch (error) {
         console.error('카테고리 로드 실패:', error)
       }
@@ -176,12 +175,37 @@ export function ProjectCategorySection({
     loadCategoriesAndProjects()
   }, [setCategories, dispatch, isAuthenticated])
 
-  const handleProjectClick = (projectId: string, is_temp: any) => {
-    console.log(`Project UUID: ${projectId}, is_temp:${is_temp}`);
+  const handleProjectClick = async (projectId: string, is_temp: any) => {
+
+    console.log(`Current project:${state.currentProjectId}, Project UUID: ${projectId}, is_temp:${is_temp}`);
+    if(state.currentProjectId === projectId )
+      return;
+    // 채팅 영역 초기화
+    // 문서 영역 초기화
+    const projectInfo:ProjectDetail = await api.getProjectInfo(projectId)
+    console.log(`Change Project To ${projectInfo.name}`)
+    // 프로젝트 기본정보 요청
+    // 프로젝트의 문서 목록 요청
+    // 문서의 양이 많을때, 프로젝트와 문서를 한번에 불러오려면 로딩시간이 매우 길어질수 있기 때문에
+    // 요청을 2개로 분리한다. UI 제공.
+    // 프로젝트 기본정보 설정
+    console.log(`handleProjectClick current view: ${state.currentView}`)
     
-    // {`category-${category.id}`}
-    //임시로 막음. 어차피 동작 안하는데.
-    //router.push(`/projects/${projectId}`)
+    // 현재 view가 upload인 경우에만 chat으로 변경, 나머지는 유지
+    if (state.currentView === 'upload') {
+      dispatch({ type: actionTypes.SET_VIEW, payload: 'chat' })
+    }
+
+    dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: projectInfo })
+    
+    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: projectInfo.name })
+
+    // 채팅 메시지 초기화
+    dispatch({ type: actionTypes.CLEAR_CHAT_MESSAGE })
+    const documents = await api.getDocumentList(projectId)
+    dispatch({ type: actionTypes.SET_DOCUMENT_LIST, payload: documents })  // documents 상태 업데이트
+
+    //console.log(`프로젝트 handleProjectClick : `, documents)
   }
 
   const handleDeleteCategory = async () => {
@@ -245,7 +269,7 @@ export function ProjectCategorySection({
 
         // 프로젝트 목록 새로고침
         const recentProjects:IRecentProjectsResponse= await api.getRecentProjects();
-        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: recentProjects });
+        dispatch({ type: actionTypes.UPDATE_RECENT_PROJECTS, payload: recentProjects });
       } catch (error) {
         console.error('프로젝트 이동 실패:', error);
       }
@@ -257,7 +281,7 @@ export function ProjectCategorySection({
     return title.length > maxLength ? `${title.slice(0, maxLength)}...` : title;
   };
 
-  const renderProjects = (projects: any[], sectionTitle: string) => {
+  const renderProjects = (projects: IProject[], sectionTitle: string) => {
     if (!Array.isArray(projects) || !projects?.length) return null;
 
     return (
@@ -303,8 +327,8 @@ export function ProjectCategorySection({
                         "h-4 w-4 flex-shrink-0",
                         snapshot.isDragging && "text-blue-500"
                       )} />
-                      <span className="truncate text-left" title={project.title || project.name}>
-                        {truncateTitle(project.title || project.name, 15)}
+                      <span className="truncate text-left" title={project.name}>
+                        {truncateTitle(project.name, 15)}
                       </span>
                     </Button>
                   </div>
@@ -391,8 +415,8 @@ export function ProjectCategorySection({
                         "h-4 w-4 flex-shrink-0",
                         snapshot.isDragging && "text-blue-500"
                       )} />
-                      <span className="truncate text-left" title={project.title || project.name}>
-                        {truncateTitle(project.title || project.name, 15)}
+                      <span className="truncate text-left" title={project.name}>
+                        {truncateTitle(project.name, 15)}
                       </span>
                     </Button>
                   </div>

@@ -6,6 +6,7 @@ import { DefaultTemplate } from '@/templates/default'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/hooks/useAuth'
 import { IOAuthResponse, IOAuthUser } from '@/types/auth'
+import * as actionTypes from '@/types/actions'
 
 export default function Home() {
   const searchParams = useSearchParams()
@@ -51,7 +52,7 @@ export default function Home() {
         }
 
         // 초기 상태 설정
-        dispatch({ type: 'SET_INITIAL_STATE' })
+        dispatch({ type: actionTypes.SET_INITIAL_STATE })
       } catch (error) {
         console.error('Failed to initialize app:', error)
       }

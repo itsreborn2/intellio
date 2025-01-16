@@ -1,11 +1,10 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
+
 import { useRouter } from 'next/navigation'
-import { format } from 'date-fns'
-import { ko } from 'date-fns/locale'
-import { AppContext, useApp } from '@/contexts/AppContext'
+
+import { useApp } from '@/contexts/AppContext'
 import * as api from '@/services/api'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { cn } from "@/lib/utils"
@@ -44,38 +43,9 @@ import {
 import { ProjectCategorySection } from './sidebar/ProjectCategorySection'
 import { TemplateSection } from './sidebar/TemplateSection'
 import { useAuth } from '@/hooks/useAuth';
-import { getRecentProjects, IRecentProjectsResponse } from '@/services/api'
+import { getRecentProjects, } from '@/services/api'
+import { IRecentProjectsResponse, IProject, IMessage, ProjectDetail, Category, SidebarProps, Template } from '@/types/index'
 
-interface Project {
-  id: string
-  name: string
-  created_at: string
-  formatted_date?: string
-  is_temporary: boolean
-  will_be_deleted?: boolean
-}
-
-interface ProjectGroup {
-  today: Project[]
-  yesterday: Project[]
-  fourDaysAgo: Project[]
-  older: Project[]
-}
-
-interface Category {
-  id: string
-  name: string
-}
-
-interface Template {
-  id: string
-  name: string
-  description: string
-}
-
-interface SidebarProps {
-  className?: string;
-}
 
 export const Sidebar = ({ className }: SidebarProps) => {
   const router = useRouter()
@@ -93,7 +63,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
-  const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: Project[] }>({})  
+  const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: IProject[] }>({})  
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
@@ -162,7 +132,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
           const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
             acc[categoryId] = projects
             return acc
-          }, {} as { [key: string]: Project[] })
+          }, {} as { [key: string]: IProject[] })
 
           dispatch({
             type: 'UPDATE_CATEGORY_PROJECTS',
@@ -240,7 +210,11 @@ export const Sidebar = ({ className }: SidebarProps) => {
           ...prev,
           [categoryId]: [...(prev[categoryId] || []), {
             id: movedProject.id,
-            name: movedProject.title,
+            name: movedProject.name,
+            is_temporary: false,
+            retention_period: 'PERMANENT',
+            created_at: movedProject.created_at,
+            updated_at: movedProject.updated_at
           }]
         }));
 
@@ -263,10 +237,11 @@ export const Sidebar = ({ className }: SidebarProps) => {
         })
 
         const projectsResults = await Promise.all(projectsPromises)
+        //const a:Project = 
         const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
           acc[categoryId] = projects
           return acc
-        }, {} as { [key: string]: Project[] })
+        }, {} as { [key: string]: IProject[] })
 
         dispatch({
           type: 'UPDATE_CATEGORY_PROJECTS',
@@ -317,55 +292,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
     }
   }
 
-  const handleProjectClick = async (projectId: string) => {
-    try {
-      dispatch({ type: 'SET_INITIAL_STATE' })
-      
-      const project = await api.getProject(projectId)
-      
-      dispatch({ type: 'SET_CURRENT_PROJECT', payload: projectId })
-      dispatch({ type: 'SET_PROJECT_TITLE', payload: project.name })
-      
-      if (project.documents) {
-        dispatch({ 
-          type: 'SET_DOCUMENTS', 
-          payload: project.documents
-        })
-      }
-      
-      if (project.analysis) {
-        dispatch({
-          type: 'SET_MODE',
-          payload: project.analysis.mode
-        })
-        
-        if (project.analysis.tableData) {
-          dispatch({
-            type: 'UPDATE_TABLE_DATA',
-            payload: project.analysis.tableData
-          })
-        }
-      }
-      
-      if (project.messages) {
-        project.messages.forEach(message => {
-          dispatch({
-            type: 'ADD_MESSAGE',
-            payload: message
-          })
-        })
-      }
-      
-      dispatch({ 
-        type: 'SET_VIEW', 
-        payload: project.analysis?.mode || 'table' 
-      })
-      
-    } catch (error) {
-      console.error('프로젝트 로드 실패:', error)
-    }
-  }
-
+  
   const toggleSection = (section: string) => {
     setExpandedSections(prev =>
       prev.includes(section)
@@ -422,17 +349,17 @@ export const Sidebar = ({ className }: SidebarProps) => {
                   size="icon" 
                   className="h-8 w-8"
                   onClick={async () => {
-                    setIsLoading(true);
+                      setIsLoading(true);
                     try {
                       // 현재 프로젝트 상태 저장
-                      if (state.currentProject) {
-                        await api.autosaveProject(state.currentProject, {
-                          title: state.projectTitle,
-                          documents: state.documents,
-                          messages: state.messages,
-                          analysis: state.analysis,
-                          currentView: state.currentView
-                        });
+                      if (state.currentProjectId) {
+                        // await api.autosaveProject(state.currentProjectId, {
+                        //   title: state.projectTitle,
+                        //   documents: state.documents,
+                        //   messages: state.messages,
+                        //   analysis: state.analysis,
+                        //   currentView: state.currentView
+                        // });
                       }
 
                       // 앱 상태 초기화

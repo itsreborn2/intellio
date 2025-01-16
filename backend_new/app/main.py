@@ -73,33 +73,71 @@ try:
 except Exception as e:
     print(f"로그 디렉토리 생성 실패: {e}")
 
-# 로그 파일 설정
-log_file_path = os.path.join(log_dir, 'app.log')
-log_handler = logging.handlers.RotatingFileHandler(
-    filename=log_file_path, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'
-)
+# 로깅 설정
+logging_config = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "color": {
+            "()": ColorFormatter,
+            "format": "%(asctime)s/%(name)s - %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        },
+        "file": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "color",
+            "level": "INFO"
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "file",
+            "filename": "logs/app.log",
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 5,
+            "encoding": "utf-8",
+            "level": "INFO"
+        }
+    },
+    "loggers": {
+        "app": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False
+        },
+        "sqlalchemy.engine": {
+            "handlers": ["console", "file"],
+            "level": "WARNING",
+            "propagate": False
+        },
+        "uvicorn": {
+            "handlers": ["console", "file"],
+            "level": "WARNING",
+            "propagate": False
+        }
+    },
+    "root": {
+        "handlers": ["console", "file"],
+        "level": "WARNING"
+    }
+}
 
-logger = logging.getLogger("app")
+# 로깅 설정 적용
+dictConfig(logging_config)
 
-# 콘솔 핸들러 설정 (컬러 포맷터 사용)
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(ColorFormatter('%(asctime)s/%(name)s - %(message)s'))
-
-# 파일 핸들러 설정 (일반 포맷터 사용)
-log_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-
-logging.basicConfig(
-    #level=logging.INFO,
-    handlers=[
-        console_handler,  # 컬러 포맷터가 적용된 콘솔 출력
-        log_handler      # 일반 포맷터가 적용된 파일 출력
-    ]
-)
+# SQLAlchemy 로그 레벨 설정
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """애플리케이션 라이프사이클 관리"""
     # 시작 시 실행
+    logger = logging.getLogger("app")
     logger.info("애플리케이션 시작됨")
     yield
     # 종료 시 실행
@@ -129,6 +167,7 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request, call_next):
     """요청과 응답을 로깅하는 미들웨어"""
+    logger = logging.getLogger("app")
     logger.debug(f"Request path: {request.url.path}")
     logger.debug(f"Request method: {request.method}")
     logger.debug(f"Request headers: {request.headers}")
