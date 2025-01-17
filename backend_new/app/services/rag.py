@@ -249,8 +249,32 @@ class RAGService:
             "requires_all_docs": False,  # 모든 문서 필요 여부
             "is_comparison": False,      # 비교 분석 필요 여부
             "target_fields": [],         # 목표 필드들
-            "query_type": "general"      # 쿼리 타입
+            "query_type": "general",     # 쿼리 타입
+            "query": query.lower()       # 원본 쿼리 (소문자)
         }
+        
+        # 재무 정보 관련 키워드
+        financial_patterns = [
+            r'매출액|영업이익|당기순이익|영업이익률|순이익률',
+            r'자산|부채|자본|현금흐름|재무상태',
+            r'분기|연도|전년|전분기|증감률'
+        ]
+        
+        # 기업 정보 관련 키워드
+        company_info_patterns = [
+            r'기업명|회사명|법인명|상호',
+            r'증권코드|종목코드|티커',
+            r'설립일|설립연도|업력',
+            r'대표|임원|이사|경영진',
+            r'사업내용|주요제품|서비스'
+        ]
+        
+        # 시장 정보 관련 키워드
+        market_patterns = [
+            r'시장점유율|점유율|순위|랭킹',
+            r'경쟁사|동종업체|업계',
+            r'시장규모|시장현황|산업동향'
+        ]
         
         # 증권사 관련 키워드
         securities_patterns = [
@@ -270,6 +294,22 @@ class RAGService:
             r'전체',
             r'종합'
         ]
+        
+        # 쿼리 타입 결정
+        for pattern in financial_patterns:
+            if re.search(pattern, query):
+                analysis["query_type"] = "financial"
+                break
+                
+        for pattern in company_info_patterns:
+            if re.search(pattern, query):
+                analysis["query_type"] = "company_info"
+                break
+                
+        for pattern in market_patterns:
+            if re.search(pattern, query):
+                analysis["query_type"] = "market"
+                break
         
         # 증권사 관련 쿼리 확인
         for pattern in securities_patterns:
@@ -344,57 +384,105 @@ class RAGService:
             logger.error(f"채팅 모드 처리 실패: {str(e)}")
             raise
 
-    async def handle_table_mode(self, query: str, document_ids: List[str] = None):
+    async def handle_table_mode(self, query: str, document_ids: List[str] = None) -> TableResponse:
         """테이블 모드 처리"""
         try:
-            # 테이블 제목 생성
+            # 1. 테이블 헤더 생성
             title = await self.table_header_prompt.generate_title(query)
+            logger.info("테이블 헤더 생성 완료")
+
+            if not document_ids:
+                return TableResponse(columns=[
+                    TableColumn(
+                        header=TableHeader(name=title, prompt=query),
+                        cells=[TableCell(doc_id="1", content="문서가 선택되지 않았습니다.")]
+                    )
+                ])
+
+            # 2. 관련 청크 검색 및 패턴 분석
+            relevant_chunks, patterns = await self._get_relevant_chunks(
+                query=query,
+                document_ids=document_ids
+            )
+            logger.info(f"관련 청크 검색 완료 - 총 {len(relevant_chunks)}개 청크 발견")
             
-            # 관련 문서 검색
-            relevant_chunks, patterns = await self._get_relevant_chunks(query, top_k=5, document_ids=document_ids)
+            # 3. 쿼리 분석
+            query_analysis = self._analyze_query(query)
+            logger.info(f"쿼리 분석 완료 - 타입: {query_analysis['query_type']}")
             
-            if not relevant_chunks:
+            # 4. 문서별로 청크 그룹화
+            doc_chunks = {}
+            for chunk in relevant_chunks:
+                doc_id = chunk["document_id"]
+                if doc_id not in doc_chunks:
+                    doc_chunks[doc_id] = []
+                doc_chunks[doc_id].append(chunk["text"])
+
+            # 5. 모든 문서 동시 분석
+            async def analyze_document(doc_id: str):
+                try:
+                    logger.info(f"문서 {doc_id} 처리 시작")
+                    content = None
+                    source = None
+                    
+                    # 관련 청크 확인
+                    if doc_id in doc_chunks:
+                        content = '\n'.join(doc_chunks[doc_id])
+                        source = "relevant_chunks"
+                        logger.info(f"문서 {doc_id}: 관련 청크 {len(doc_chunks[doc_id])}개 사용")
+                    
+                    # 관련 청크가 없으면 전체 문서 시도
+                    if not content:
+                        try:
+                            chunks = await self.embedding_service.get_document_chunks(doc_id)
+                            if chunks:
+                                content = '\n'.join(chunk.get('text', '') for chunk in chunks)
+                                source = "full_document"
+                                logger.info(f"문서 {doc_id}: 전체 문서 청크 {len(chunks)}개 사용")
+                        except Exception as e:
+                            logger.error(f"문서 {doc_id} 전체 청크 가져오기 실패: {str(e)}")
+                    
+                    if content:
+                        logger.info(f"문서 {doc_id} 분석 시작 (소스: {source})")
+                        analysis_result = await self.table_prompt.analyze(
+                            content=content,
+                            query=query,
+                            patterns=patterns,
+                            query_analysis=query_analysis
+                        )
+                        logger.info(f"문서 {doc_id} 분석 완료")
+                        return {'doc_id': doc_id, 'content': analysis_result}
+                    else:
+                        logger.error(f"문서 {doc_id}: 청크를 전혀 찾을 수 없음")
+                        return None
+                except Exception as e:
+                    logger.error(f"문서 {doc_id} 분석 중 오류 발생: {str(e)}")
+                    return None
+
+            # 모든 문서 동시 분석 실행
+            tasks = [analyze_document(doc_id) for doc_id in document_ids]
+            analysis_results = [result for result in await asyncio.gather(*tasks) if result]
+            
+            logger.info(f"테이블 모드 완료 - 분석된 문서 수: {len(analysis_results)}")
+            
+            if not analysis_results:
                 return TableResponse(columns=[
                     TableColumn(
                         header=TableHeader(name=title, prompt=query),
                         cells=[TableCell(doc_id="1", content="관련 문서를 찾을 수 없습니다.")]
                     )
                 ])
-            
-            # 각 문서별로 개별 분석 수행
-            analysis_results = []
-            for chunk in relevant_chunks:
-                if not isinstance(chunk, dict):
-                    logger.warning(f"잘못된 청크 형식: {type(chunk)}")
-                    continue
-                    
-                # 문서 분석 수행
-                analysis_result = await self.table_prompt.analyze(
-                    content=chunk.get('text', ''),
-                    query=query
-                )
                 
-                analysis_results.append({
-                    'doc_id': chunk.get('document_id', 'N/A'),
-                    'content': analysis_result
-                })
-            
-            # 분석 결과를 테이블 형식으로 변환
             return TableResponse(columns=[
                 TableColumn(
                     header=TableHeader(name=title, prompt=query),
-                    cells=[
-                        TableCell(
-                            doc_id=result['doc_id'],
-                            content=result['content']
-                        )
-                        for result in analysis_results
-                    ]
+                    cells=[TableCell(doc_id=result['doc_id'], content=result['content']) 
+                          for result in analysis_results]
                 )
             ])
-            
+                
         except Exception as e:
-            logger.error(f"테이블 모드 처리 실패: {str(e)}", exc_info=True)
+            logger.error(f"테이블 모드 처리 실패: {str(e)}")
             raise
 
     async def query(

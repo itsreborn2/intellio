@@ -9,12 +9,59 @@ from app.core.cache import AsyncRedisCache
 
 logger = logging.getLogger(__name__)
 
+class GeminiAPI:
+    """Gemini API 싱글톤"""
+    _instance = None
+    _model = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def initialize(self, api_key: str, **kwargs):
+        """API 초기화"""
+        if self._model is None:
+            generation_config = kwargs.get('generation_config', {
+                "temperature": 0.3,
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 2048,
+            })
+            
+            safety_settings = kwargs.get('safety_settings', [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            ])
+            
+            logger.info("Gemini API 초기화")
+            genai.configure(api_key=api_key)
+            self._model = genai.GenerativeModel(
+                model_name=kwargs.get('model_name', "models/gemini-2.0-flash-exp"),
+                generation_config=genai.GenerationConfig(**generation_config),
+                safety_settings=safety_settings
+            )
+    
+    async def generate_content(self, prompt: str) -> Optional[GenerateContentResponse]:
+        """컨텐츠 생성"""
+        if self._model is None:
+            self.initialize(settings.GEMINI_API_KEY)
+            
+        logger.info(f"Gemini API 호출 - 프롬프트: {prompt[:100]}...")
+        response = await self._model.generate_content_async(prompt)
+        logger.info("Gemini API 호출 완료")
+        return response
+
 class BasePrompt:
+    """기본 프롬프트 클래스"""
     def __init__(self, 
                  openai_api_key: Optional[str] = None, 
                  gemini_api_key: Optional[str] = None,
                  redis_url: Optional[str] = None,
-                 cache_expire: Optional[int] = None):
+                 cache_expire: Optional[int] = None,
+                 **kwargs):
         """프롬프트 기본 클래스 초기화
         
         Args:
@@ -23,49 +70,9 @@ class BasePrompt:
             redis_url: Redis 서버 URL (선택)
             cache_expire: 캐시 만료 시간 (초)
         """
-        self.openai_api_key = openai_api_key or settings.OPENAI_API_KEY
+        self.gemini_api = GeminiAPI()  # 싱글톤 인스턴스
         self.gemini_api_key = gemini_api_key or settings.GEMINI_API_KEY
-        
-        # Gemini 초기화
-        logger.info("Gemini API 초기화 시작")
-        genai.configure(api_key=self.gemini_api_key)
-        
-        # 모델 및 설정 초기화
-        self.generation_config = genai.GenerationConfig(
-            temperature=0.3,  # 낮은 temperature로 일관된 응답
-            top_p=0.8,       # 다양성과 정확성의 균형
-            top_k=40,        # 적절한 선택 범위
-            max_output_tokens=2048,  # 충분한 응답 길이
-            stop_sequences=[],  # 필요한 경우 중지 시퀀스 추가
-        )
-        
-        self.safety_settings = [
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_NONE"
-            },
-        ]
-        
-        # gemini-2.0-flash-exp 모델 초기화
-        model_name = 'gemini-2.0-flash-exp'
-        self.gemini_model = genai.GenerativeModel(
-            model_name=model_name,
-            generation_config=self.generation_config,
-            safety_settings=self.safety_settings
-        )
-        logger.info(f"Gemini API 초기화 완료 - 사용 모델: {model_name}")
+        self.openai_api_key = openai_api_key or settings.OPENAI_API_KEY
         
         # OpenAI 클라이언트 초기화
         self.openai_client = AsyncOpenAI(api_key=self.openai_api_key)
@@ -96,13 +103,10 @@ class BasePrompt:
                 return cached_response["response"]
         
         try:
-            logger.info(f"Gemini API 호출 시작 - 모델: {self.gemini_model.model_name} - 프롬프트: {prompt[:200]}...")
+            logger.info(f"Gemini API 호출 시작 - 모델: models/gemini-2.0-flash-exp - 프롬프트: {prompt[:200]}...")
             
             # 비동기로 Gemini API 호출
-            response: GenerateContentResponse = await asyncio.to_thread(
-                self.gemini_model.generate_content,
-                contents=prompt,
-            )
+            response: GenerateContentResponse = await self._generate_content(prompt)
             
             if not response or response.candidates is None or len(response.candidates) == 0:
                 raise Exception("No valid response from Gemini API")
@@ -124,6 +128,10 @@ class BasePrompt:
             await self.cache.set(document_id, query, result)
         
         return result
+
+    async def _generate_content(self, prompt: str) -> Optional[GenerateContentResponse]:
+        """Gemini API를 사용하여 컨텐츠 생성"""
+        return await self.gemini_api.generate_content(prompt)
 
     async def _process_with_openai(self, prompt: str) -> str:
         """OpenAI API를 사용한 프롬프트 처리 (폴백 메서드)
