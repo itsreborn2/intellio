@@ -70,15 +70,16 @@ class DocumentChunker:
             
         return int(chunk_size)
     
-    def create_chunks(self, text: str) -> List[str]:
+    def create_chunks(self, text: str, title: str = None) -> List[dict]:
         """
         텍스트를 청크로 분할
         
         Args:
             text (str): 분할할 텍스트
+            title (str, optional): 문서 제목
             
         Returns:
-            List[str]: 분할된 텍스트 청크 목록
+            List[dict]: 분할된 텍스트 청크와 메타데이터 목록
         """
         if not text:
             return []
@@ -91,8 +92,22 @@ class DocumentChunker:
         
         # 청크 후처리
         chunks = [self._postprocess_chunk(chunk) for chunk in chunks]
+        chunks = [chunk for chunk in chunks if chunk]  # 빈 청크 제거
         
-        return [chunk for chunk in chunks if chunk]  # 빈 청크 제거
+        # 메타데이터 추가
+        result = []
+        for i, chunk in enumerate(chunks):
+            chunk_data = {
+                "content": chunk,
+                "metadata": {
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "title": title  # 제목을 메타데이터에 포함
+                }
+            }
+            result.append(chunk_data)
+        
+        return result
     
     def _preprocess_text(self, text: str) -> str:
         """텍스트 전처리

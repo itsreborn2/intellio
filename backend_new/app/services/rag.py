@@ -127,7 +127,7 @@ class RAGService:
             
             # 증권사 관련 쿼리인 경우, 문서 시작 부분도 포함
             if query_analysis["requires_all_docs"] or query_analysis["query_type"] == "securities":
-                first_chunk = await self.embedding_service.get_first_chunk(doc_id)
+                first_chunk = self.embedding_service.get_first_chunk(doc_id)
                 chunks = await self.embedding_service.search_similar(
                     query=query,
                     document_ids=[doc_id],
