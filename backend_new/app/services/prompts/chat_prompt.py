@@ -1,0 +1,352 @@
+from typing import Dict, Any, List, Set
+from .base import BasePrompt
+import re
+from enum import Enum
+
+class AnalysisType(Enum):
+    TIME_SERIES = "시계열"
+    COMPARISON = "비교"
+    RANKING = "순위"
+    PATTERN = "패턴"
+    AGGREGATION = "집계"
+    RELATIONSHIP = "관계"
+    CLASSIFICATION = "분류"
+    PREDICTION = "예측"
+    STRUCTURE = "구조"
+    INTEGRATION = "통합"
+
+class QueryAnalyzer:
+    def __init__(self):
+        self.analysis_patterns = {
+            AnalysisType.TIME_SERIES: [
+                r"추세|트렌드|변화|추이",
+                r"(전년|전월|전분기)\s*(대비|比)",
+                r"YoY|QoQ|MoM",
+                r"언제|시기|날짜|기간",
+                r"(증가|감소|변화)\s*(했|됐|되었)"
+            ],
+            AnalysisType.COMPARISON: [
+                r"비교|차이|격차|대비",
+                r"어떻게\s*(다른가|다른지|다른)",
+                r"vs|versus",
+                r"차이점|공통점",
+                r"어느\s*(쪽|것|곳)"
+            ],
+            AnalysisType.RANKING: [
+                r"순위|등수|석차",
+                r"(가장|제일)\s*(높은|낮은|좋은|나쁜)",
+                r"top|bottom|\d+위",
+                r"최고|최저|최상|최하",
+                r"상위|하위"
+            ],
+            AnalysisType.PATTERN: [
+                r"패턴|특징|경향|양상",
+                r"반복|주기|규칙",
+                r"공통점|유사점",
+                r"어떤\s*(특징|패턴)",
+                r"규칙성|불규칙"
+            ],
+            AnalysisType.AGGREGATION: [
+                r"평균|중간값|최빈값",
+                r"합계|총합|전체",
+                r"얼마나|몇|몇개",
+                r"분포|비율|퍼센트",
+                r"%|％"
+            ],
+            AnalysisType.RELATIONSHIP: [
+                r"관계|연관|상관",
+                r"영향|효과|작용",
+                r"원인|이유|때문",
+                r"어떻게|어떤|왜",
+                r"인과|상호작용"
+            ],
+            AnalysisType.CLASSIFICATION: [
+                r"분류|구분|카테고리",
+                r"종류|유형|타입",
+                r"어떤\s*(종류|유형)",
+                r"긍정|부정",
+                r"장점|단점"
+            ],
+            AnalysisType.PREDICTION: [
+                r"전망|예상|예측",
+                r"향후|미래|앞으로",
+                r"될\s*(것|예정|전망)",
+                r"가능성|확률|리스크",
+                r"시나리오"
+            ],
+            AnalysisType.STRUCTURE: [
+                r"구조|체계|시스템",
+                r"프로세스|절차|단계",
+                r"어떻게\s*(구성|이루어)",
+                r"SWOT|밸류체인",
+                r"구성|요소"
+            ],
+            AnalysisType.INTEGRATION: [
+                r"종합|통합|전체",
+                r"핵심|요점|포인트",
+                r"결론|시사점",
+                r"컨센서스|의견",
+                r"정리|요약"
+            ]
+        }
+        
+    def analyze(self, query: str) -> Set[AnalysisType]:
+        """쿼리에서 요구하는 분석 유형들을 식별"""
+        analysis_types = set()
+        
+        for analysis_type, patterns in self.analysis_patterns.items():
+            if any(re.search(pattern, query, re.I | re.U) for pattern in patterns):
+                analysis_types.add(analysis_type)
+                
+        # 기본값으로 통합 분석 추가
+        if not analysis_types:
+            analysis_types.add(AnalysisType.INTEGRATION)
+            
+        return analysis_types
+
+class ChatPrompt(BasePrompt):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.query_analyzer = QueryAnalyzer()
+        
+    async def analyze(self, content: str, query: str, patterns: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+        """문서 분석 및 질문 답변"""
+        # 쿼리 분석 수행
+        analysis_types = self.query_analyzer.analyze(query)
+        
+        # 분석 결과를 query_analysis에 추가
+        query_analysis["analysis_types"] = [at.value for at in analysis_types]
+        
+        context = {
+            "content": content,
+            "query": query,
+            "patterns": patterns,
+            "query_analysis": query_analysis
+        }
+        
+        prompt = self._generate_prompt(content, query, patterns, query_analysis)
+        return await self.process_prompt(prompt, context)
+
+    def _get_analysis_type_prompt(self, analysis_type: AnalysisType) -> str:
+        """분석 유형별 프롬프트 생성"""
+        prompts = {
+            AnalysisType.TIME_SERIES: """시계열 분석 지침:
+- 시간 순서대로 데이터를 정렬하여 분석하세요
+- 주요 변화 시점과 변화율을 명시하세요
+- 추세와 패턴을 식별하여 설명하세요
+- 계절성이나 주기성이 있다면 언급하세요""",
+
+            AnalysisType.COMPARISON: """비교 분석 지침:
+- 항목별로 명확한 비교 기준을 설정하세요
+- 공통점과 차이점을 구체적으로 나열하세요
+- 차이가 발생한 원인을 분석하세요
+- 비교 결과의 시사점을 도출하세요""",
+
+            AnalysisType.RANKING: """순위 분석 지침:
+- 순위 기준을 명확히 제시하세요
+- 상위/하위 항목의 특징을 설명하세요
+- 순위 변동이 있다면 원인을 분석하세요
+- 전체 분포 속에서의 위치를 설명하세요""",
+
+            AnalysisType.PATTERN: """패턴 분석 지침:
+- 반복되는 패턴을 식별하세요
+- 패턴의 주기와 강도를 분석하세요
+- 예외적인 패턴을 찾아 설명하세요
+- 패턴의 의미와 시사점을 도출하세요""",
+
+            AnalysisType.AGGREGATION: """집계 분석 지침:
+- 데이터의 분포를 파악하세요
+- 대표값(평균, 중앙값, 최빈값)을 제시하세요
+- 이상치가 있다면 별도로 표시하세요
+- 전체적인 경향성을 설명하세요""",
+
+            AnalysisType.RELATIONSHIP: """관계 분석 지침:
+- 변수 간의 관계를 파악하세요
+- 인과관계가 있다면 근거와 함께 설명하세요
+- 직접/간접적 영향을 구분하여 설명하세요
+- 관계의 강도와 방향을 명시하세요""",
+
+            AnalysisType.CLASSIFICATION: """분류 분석 지침:
+- 분류 기준을 명확히 제시하세요
+- 각 분류별 특징을 설명하세요
+- 분류 간 경계가 모호한 경우를 언급하세요
+- 분류 결과의 의미를 해석하세요""",
+
+            AnalysisType.PREDICTION: """예측 분석 지침:
+- 현재 상황을 정확히 진단하세요
+- 주요 변수와 영향 요인을 분석하세요
+- 가능한 시나리오를 제시하세요
+- 예측의 불확실성 요인을 명시하세요""",
+
+            AnalysisType.STRUCTURE: """구조 분석 지침:
+- 전체 구조를 개관적으로 설명하세요
+- 주요 구성 요소를 분석하세요
+- 요소 간 관계를 설명하세요
+- 구조적 특징과 의미를 도출하세요""",
+
+            AnalysisType.INTEGRATION: """통합 분석 지침:
+- 핵심 메시지를 명확히 도출하세요
+- 주요 발견사항을 종합하세요
+- 상충되는 내용을 조율하여 설명하세요
+- 전체적인 시사점을 제시하세요"""
+        }
+        
+        return prompts.get(analysis_type, "")
+
+    def _get_time_range_prompt(self, query_analysis: Dict[str, Any]) -> str:
+        """시간 범위에 따른 프롬프트 생성"""
+        if not query_analysis.get("focus") == "financial":
+            return ""
+            
+        prompts = []
+        
+        # 시간 범위가 있는 경우
+        if query_analysis.get("time_range"):
+            prompts.append(f"- {query_analysis['time_range']} 기간의 데이터를 분석하세요")
+            
+        # 시간 비교가 필요한 경우
+        if query_analysis.get("time_comparison"):
+            prompts.append("- 기간별 변화를 다음 순서로 분석하세요:")
+            prompts.append("  1. 절대적 변화량")
+            prompts.append("  2. 상대적 변화율")
+            prompts.append("  3. 변화 추세")
+            
+        # YoY, QoQ, MoM 분석이 필요한 경우
+        if query_analysis.get("period_comparison"):
+            periods = query_analysis["period_comparison"]
+            comparisons = []
+            if "YoY" in periods:
+                comparisons.append("전년 동기 대비(YoY)")
+            if "QoQ" in periods:
+                comparisons.append("전분기 대비(QoQ)")
+            if "MoM" in periods:
+                comparisons.append("전월 대비(MoM)")
+            if comparisons:
+                prompts.append(f"- {', '.join(comparisons)} 변화를 분석하세요")
+        
+        return "\n".join(prompts) if prompts else ""
+
+    def _get_pattern_prompt(self, patterns: Dict[str, Any]) -> str:
+        """패턴 분석 결과에 따른 프롬프트 생성"""
+        prompts = []
+        
+        # 문서 커버리지 확인
+        if patterns.get("total_documents") != patterns.get("found_documents"):
+            prompts.append(f"- 총 {patterns['total_documents']}개의 문서 중 {patterns['found_documents']}개만 분석되었습니다. 누락된 문서가 없는지 확인하세요.")
+        
+        # 주요 용어 분석
+        if patterns.get("common_terms"):
+            terms = ", ".join(patterns["common_terms"])
+            prompts.append(f"- 다음 주요 용어들의 맥락을 설명하세요: {terms}")
+            
+            # 용어 간 관계 분석
+            if len(patterns["common_terms"]) > 1:
+                prompts.append("- 주요 용어들 간의 연관성을 분석하세요")
+        
+        # 표 데이터 분석
+        if patterns.get("has_tables"):
+            prompts.append("""- 표 데이터 분석 지침:
+  1. 표의 구조와 의미 설명
+  2. 주요 수치 해석
+  3. 데이터 간 관계 분석
+  4. 특이사항 도출""")
+        
+        # 날짜 범위 분석
+        if patterns.get("date_range"):
+            date_range = patterns["date_range"]
+            prompts.append(f"- {date_range} 기간 동안의 변화를 분석하세요")
+            prompts.append("- 주요 변화 시점과 원인을 식별하세요")
+        
+        # 반복 패턴 분석
+        if patterns.get("recurring_patterns"):
+            prompts.append("""- 반복 패턴 분석:
+  1. 패턴의 주기와 강도
+  2. 예외적인 상황
+  3. 패턴의 의미""")
+            
+        return "\n".join(prompts) if prompts else ""
+
+    def _get_response_format(self, analysis_types: Set[AnalysisType]) -> str:
+        """분석 유형에 따른 응답 형식 생성"""
+        prompts = []
+        
+        # 기본 지침
+        prompts.append("""주어진 질문의 의도를 파악하여 가장 적절한 형태로 답변하세요.
+내용이 구분되어야 하는 경우 적절한 섹션으로 나누어 설명하세요.""")
+        
+        # 분석 유형별 지침
+        type_hints = []
+        if AnalysisType.TIME_SERIES in analysis_types:
+            type_hints.append("시간에 따른 변화와 그 의미")
+            
+        if AnalysisType.COMPARISON in analysis_types:
+            type_hints.append("의미 있는 차이점과 원인")
+            
+        if AnalysisType.RANKING in analysis_types:
+            type_hints.append("순위 정보의 중요한 특징")
+
+        if AnalysisType.PATTERN in analysis_types:
+            type_hints.append("발견된 패턴의 의미")
+
+        if AnalysisType.AGGREGATION in analysis_types:
+            type_hints.append("데이터의 핵심 인사이트")
+
+        if AnalysisType.RELATIONSHIP in analysis_types:
+            type_hints.append("요소들 간의 관계")
+            
+        if type_hints:
+            prompts.append("다음 관점들을 고려하세요: " + ", ".join(type_hints))
+            
+        # 응답 품질 지침
+        prompts.append("""답변 작성 시:
+* 핵심적인 내용만 간단명료하게 전달
+* 관련된 내용끼리 적절히 그룹화하여 구분
+* 확실한 내용만 포함""")
+        
+        return "\n\n".join(prompts)
+
+    def _generate_prompt(self, content: str, query: str, patterns: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+        """분석용 프롬프트 생성"""
+        # 분석 유형 확인
+        analysis_types = {AnalysisType(at) for at in query_analysis.get("analysis_types", [])}
+        
+        # 기본 프롬프트
+        base_prompt = """당신은 문서를 분석하고 사용자의 질문에 답변하는 AI 어시스턴트입니다.
+주어진 문서의 내용만을 기반으로 답변해야 하며, 문서에 없는 내용은 답변하지 마세요."""
+
+        # 분석 유형별 프롬프트 생성
+        analysis_prompts = []
+        for analysis_type in analysis_types:
+            prompt = self._get_analysis_type_prompt(analysis_type)
+            if prompt:
+                analysis_prompts.append(prompt)
+        
+        # 시간 범위 프롬프트
+        time_prompt = self._get_time_range_prompt(query_analysis)
+        
+        # 패턴 분석 프롬프트
+        pattern_prompt = self._get_pattern_prompt(patterns)
+        
+        # 응답 형식
+        response_format = self._get_response_format(analysis_types)
+        
+        # 최종 프롬프트 조합
+        parts = [
+            base_prompt,
+            f"\n문서 내용:\n{content}",
+            f"\n질문:\n{query}"
+        ]
+        
+        # 분석 지침 결합
+        analysis_instructions = "\n\n".join(filter(None, [
+            "\n".join(analysis_prompts),
+            time_prompt,
+            pattern_prompt
+        ]))
+        
+        if analysis_instructions:
+            parts.append(f"\n분석 지침:\n{analysis_instructions}")
+            
+        parts.append(f"\n응답 형식:\n{response_format}")
+        
+        return "\n".join(parts)

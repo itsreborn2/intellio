@@ -1,22 +1,56 @@
+//////////////////////////////////////////////////////////////
+// 프로젝트 목록 관련 인터페이스
+//////////////////////////////////////////////////////////////
+export interface Category {
+  id: string;
+  name: string;
+  parent_id?: string;
+  created_at: string;
+}
 
+export interface ProjectCategory {
+  id: string;
+  project_id: string;
+  category_id: string;
+}
 
-
-/*
-export interface RecentProject {
+export interface Template {
   id: string
-  title: string
-  created_at: string
-  formatted_date?: string
+  name: string
+  description: string
+}
+
+export interface SidebarProps {
+  className?: string;
+}
+
+// API 응답의 프로젝트 타입
+export interface IApiProject {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  is_temporary: boolean;
+  category_id?: string;
+}
+
+// 프로젝트 관련 인터페이스
+export interface IProject {
+  id: string
+  name: string
   description?: string
   is_temporary: boolean
-}*/
+  retention_period: string
+  created_at: string
+  updated_at: string
+  formatted_date?: string;  // 한국어로 포맷된 날짜
+  category_id?: string;  // 카테고리 ID 추가
+}
 
 export interface ProjectListResponse {
   total: number
   items: IProject[]
 }
-
-
 
 // 문서 상태 타입
 export type IDocumentStatus = 'UPLOADING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'ERROR'
@@ -48,16 +82,12 @@ export interface IProjectItem {
   children?: IProjectItem[]
 }
 
-
-
-
 // 업로드 진행 상태 콜백 인터페이스
 export interface IUploadProgressCallback {
   onProgress?: (totalProgress: number) => void;
   onComplete?: (response: IDocumentUploadResponse) => void;
   onError?: (error: Error) => void;
 }
-
 
 // Table관련되는 인터페이스
 
@@ -89,13 +119,11 @@ export interface IDocument {
   filename: string
   project_id: string
   status: IDocumentStatus
-  created_at:string
-  updated_at:string
   content_type?: string
   added_col_context?: Array<ICell> // 추가된 셀. 헤더정보(name), 셀내용
 }
 
-
+// 문서 상태 인터페이스
 export interface DocumentStatus {
   id: string
   filename: string
@@ -143,71 +171,6 @@ export interface ProjectDetail {
   };
   created_at: string;
   updated_at: string;
-}
-
-//////////////////////////////////////////////////////////////
-// 프로젝트 목록 관련 인터페이스
-//////////////////////////////////////////////////////////////
-export interface Category {
-  id: string;
-  name: string;
-  parent_id?: string;
-  created_at: string;
-}
-
-export interface ProjectCategory {
-  id: string;
-  project_id: string;
-  category_id: string;
-}
-
-
-
-export interface Template {
-  id: string
-  name: string
-  description: string
-}
-
-export interface SidebarProps {
-  className?: string;
-}
-
-// API 응답의 프로젝트 타입
-export interface IApiProject {
-  id: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
-  is_temporary: boolean;
-  category_id?: string;
-}
-
-// // 프로젝트 타입 정의
-// export interface IProject {
-//   id: string;
-//   title: string;
-//   name: string;
-//   created_at: string;
-//   updated_at: string;
-//   formatted_date?: string;
-//   is_temporary: boolean;
-//   category_id?: string;
-//   will_be_deleted: boolean;
-// }
-
-
-// 프로젝트 관련 인터페이스
-export interface IProject {
-  id: string
-  name: string
-  description?: string
-  is_temporary: boolean
-  retention_period: string
-  created_at: string
-  updated_at: string
-  formatted_date?: string;  // 한국어로 포맷된 날짜
-  category_id?: string;  // 카테고리 ID 추가
 }
 
 // API 응답 타입 정의

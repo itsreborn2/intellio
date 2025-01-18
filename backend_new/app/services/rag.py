@@ -1,14 +1,16 @@
 """RAG 서비스"""
 
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Tuple
 from uuid import UUID
 import pandas as pd
 import logging
+import asyncio
 from sqlalchemy import select
+import re
 
 from app.core.config import settings
 from app.services.embedding import EmbeddingService
-from app.services.prompt_manager import PromptManager, PromptTemplate
+from app.services.prompts import ChatPrompt, TablePrompt, TableHeaderPrompt
 from app.models.document import Document
 from app.schemas.table_response import TableResponse, TableHeader, TableColumn, TableCell
 from app.schemas.table_history import TableHistoryCreate
@@ -31,8 +33,15 @@ class RAGService:
     def __init__(self):
         """RAG 서비스 초기화"""
         self.embedding_service = EmbeddingService()
-        self.prompt_manager = PromptManager()
+        self.chat_prompt = ChatPrompt()
+        self.table_prompt = TablePrompt()
+        self.table_header_prompt = TableHeaderPrompt()
         self.db = None
+        # 동시 처리할 최대 문서 수 (rate limit 고려)
+        self.max_concurrent = 5
+        # 청크 수 관련 설정
+        self.chunk_multiplier = 5  # 청크 수 배수
+        self.max_chunks_per_doc = 10  # 문서당 최대 청크 수
 
     async def initialize(self, db):
         """DB 세션 초기화"""
@@ -106,143 +115,227 @@ class RAGService:
             
         return query
 
+    async def _search_document_chunks(self, doc_id: str, query: str, top_k: int) -> List[Dict[str, Any]]:
+        """단일 문서의 청크 검색 (에러 처리 포함)"""
+        try:
+            # 쿼리 분석
+            query_analysis = self._analyze_query(query)
+            
+            # 증권사 관련 쿼리인 경우, 문서 시작 부분도 포함
+            if query_analysis["requires_all_docs"] or query_analysis["query_type"] == "securities":
+                first_chunk = self.embedding_service.get_first_chunk(doc_id)
+                chunks = await self.embedding_service.search_similar(
+                    query=query,
+                    document_ids=[doc_id],
+                    top_k=min(self.max_chunks_per_doc - 1, self.chunk_multiplier * top_k)
+                )
+                if first_chunk:
+                    # 첫 번째 청크를 앞에 추가 (증권사 정보가 주로 여기에 있음)
+                    return [first_chunk] + (chunks or [])
+            
+            # 일반 쿼리
+            chunks = await self.embedding_service.search_similar(
+                query=query,
+                document_ids=[doc_id],
+                top_k=min(self.max_chunks_per_doc, self.chunk_multiplier * top_k)
+            )
+            return chunks or []
+            
+        except Exception as e:
+            logger.error(f"문서 {doc_id} 검색 중 오류 발생: {str(e)}")
+            return []
+
+    async def _get_first_chunks_parallel(self, doc_ids: List[str]) -> List[Dict[str, Any]]:
+        """여러 문서의 첫 번째 청크 병렬 검색"""
+        tasks = [self.embedding_service.get_first_chunk(doc_id) for doc_id in doc_ids]
+        chunks = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        valid_chunks = []
+        for doc_id, chunk in zip(doc_ids, chunks):
+            if isinstance(chunk, Exception):
+                logger.error(f"문서 {doc_id}의 첫 번째 청크 검색 실패: {str(chunk)}")
+            elif chunk:
+                valid_chunks.append(chunk)
+        return valid_chunks
+
+    def _filter_chunks_by_query(self, chunks: List[Dict[str, Any]], query_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """쿼리 분석 결과에 따라 청크 필터링"""
+        filtered_chunks = []
+        
+        if query_analysis["query_type"] == "securities":
+            securities_patterns = [
+                r'([가-힣A-Za-z\s&]+)증권',  # 기본 증권사 패턴
+                r'([가-힣A-Za-z\s&]+)\s*Investment\s*&\s*Securities',  # 영문 증권사 패턴
+                r'([가-힣A-Za-z\s&]+)\s*리서치센터',  # 리서치센터 패턴
+                r'([가-힣A-Za-z\s&]+)\s*투자증권'  # 투자증권 패턴
+            ]
+            
+            found_securities = set()  # 중복 제거를 위한 집합
+            
+            for chunk in chunks:
+                content = chunk.get("content", "")
+                # 문서 시작 부분에서 증권사 찾기 (처음 몇 줄만)
+                first_lines = '\n'.join(content.split('\n')[:5])  # 처음 5줄만 검사
+                
+                for pattern in securities_patterns:
+                    matches = re.finditer(pattern, first_lines, re.IGNORECASE)
+                    for match in matches:
+                        company = match.group(1).strip()
+                        # 기본적인 정제
+                        company = re.sub(r'\s+', ' ', company)  # 연속된 공백 제거
+                        found_securities.add(company)
+                
+                if found_securities:  # 증권사를 찾은 경우만 청크 추가
+                    chunk = chunk.copy()
+                    chunk["content"] = f"증권사: {', '.join(found_securities)}"
+                    filtered_chunks.append(chunk)
+                    found_securities.clear()  # 다음 청크를 위해 초기화
+        else:
+            filtered_chunks = chunks
+            
+        return filtered_chunks
+
+    async def _get_relevant_chunks(self, query: str, top_k: int = 5, document_ids: List[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """관련 문서 청크 검색 및 패턴 분석"""
+        query_analysis = self._analyze_query(query)
+        all_chunks = []
+        
+        if document_ids and query_analysis["requires_all_docs"]:
+            # 문서 그룹화 (max_concurrent 단위로)
+            doc_groups = [document_ids[i:i + self.max_concurrent] 
+                        for i in range(0, len(document_ids), self.max_concurrent)]
+            
+            for group in doc_groups:
+                search_tasks = [
+                    self._search_document_chunks(doc_id, query, top_k)
+                    for doc_id in group
+                ]
+                chunks_list = await asyncio.gather(*search_tasks)
+                
+                for chunks in chunks_list:
+                    if chunks:
+                        all_chunks.extend(chunks)
+            
+            # 쿼리 타입에 따라 청크 필터링
+            all_chunks = self._filter_chunks_by_query(all_chunks, query_analysis)
+            
+            # 문서별로 가장 관련성 높은 청크만 유지
+            doc_chunks = {}
+            for chunk in sorted(all_chunks, key=lambda x: x.get("score", 0), reverse=True):
+                doc_id = chunk["document_id"]
+                if doc_id not in doc_chunks:
+                    doc_chunks[doc_id] = chunk
+            
+            all_chunks = list(doc_chunks.values())
+                    
+        else:
+            all_chunks = await self.embedding_service.search_similar(
+                query=query,
+                document_ids=document_ids,
+                top_k=top_k
+            )
+            all_chunks = self._filter_chunks_by_query(all_chunks, query_analysis)
+        
+        patterns = self._analyze_chunk_patterns(all_chunks)
+        return all_chunks, patterns
+
     def _analyze_query(self, query: str) -> Dict[str, Any]:
-        """쿼리 분석 - 사용자 질문의 의도와 필요한 정보를 파악
-        
-        Args:
-            query: 사용자 쿼리
-            
-        Returns:
-            Dict: 쿼리 분석 결과
-        """
-        import re
-        import hashlib
-        from collections import defaultdict
-        
-        # 1. 기본 분석 구조
+        """쿼리 분석"""
         analysis = {
-            "type": "general",      # 쿼리 유형 (일반/숫자/날짜/비교)
-            "focus": None,          # 분석 초점 (재무/인사/경영 등)
-            "time_range": None,     # 시간 범위
-            "metrics": set(),       # 요청된 지표들
-            "complexity": "low",    # 복잡도 (낮음/중간/높음)
-            "required_context": 3,  # 필요한 컨텍스트 수
-            "cache_key": None       # 캐시 키
+            "requires_all_docs": False,  # 모든 문서 필요 여부
+            "is_comparison": False,      # 비교 분석 필요 여부
+            "target_fields": [],         # 목표 필드들
+            "query_type": "general",     # 쿼리 타입
+            "query": query.lower()       # 원본 쿼리 (소문자)
         }
         
-        # 2. 단순 숫자 쿼리 필터링
-        if query.strip().isdigit():
-            return {
-                "type": "invalid",
-                "message": "단순 숫자 쿼리는 처리할 수 없습니다."
-            }
+        # 재무 정보 관련 키워드
+        financial_patterns = [
+            r'매출액|영업이익|당기순이익|영업이익률|순이익률',
+            r'자산|부채|자본|현금흐름|재무상태',
+            r'분기|연도|전년|전분기|증감률'
+        ]
         
-        # 3. 쿼리 정규화 및 캐시 키 생성
-        normalized_query = self._normalize_query(query)
-        analysis["cache_key"] = hashlib.md5(normalized_query.encode()).hexdigest()
+        # 기업 정보 관련 키워드
+        company_info_patterns = [
+            r'기업명|회사명|법인명|상호',
+            r'증권코드|종목코드|티커',
+            r'설립일|설립연도|업력',
+            r'대표|임원|이사|경영진',
+            r'사업내용|주요제품|서비스'
+        ]
         
-        # 4. 재무 지표 분석 (확장)
-        financial_terms = {
-            # 수익 관련
-            "매출": "revenue", "매출액": "revenue", "수입": "revenue",
-            "영업이익": "operating_profit", "영업손실": "operating_loss",
-            "순이익": "net_profit", "당기순이익": "net_profit",
-            
-            # 수익성 지표
-            "ROE": "roe", "ROIC": "roic", "ROA": "roa",
-            "이익률": "profit_ratio", "마진": "margin",
-            "영업이익률": "operating_margin", "순이익률": "net_margin",
-            
-            # 성장성 지표
-            "성장률": "growth_rate", "증가율": "increase_rate",
-            "신장률": "growth_rate", "확대율": "expansion_rate",
-            
-            # 비용 관련
-            "원가": "cost", "비용": "expense", "지출": "expenditure",
-            "판관비": "sga", "인건비": "labor_cost",
-            
-            # 재무상태 관련
-            "부채": "debt", "자산": "asset", "자본": "capital",
-            "현금": "cash", "유동성": "liquidity", "재고": "inventory"
+        # 시장 정보 관련 키워드
+        market_patterns = [
+            r'시장점유율|점유율|순위|랭킹',
+            r'경쟁사|동종업체|업계',
+            r'시장규모|시장현황|산업동향'
+        ]
+        
+        # 증권사 관련 키워드
+        securities_patterns = [
+            r'증권사\s*(별|간|들의|의|모든|전체)',
+            r'(모든|전체|각)\s*증권사',
+            r'리서치\s*(센터|보고서)',
+            r'(목표가|투자의견|전망)',
+        ]
+        
+        # 비교 분석 키워드
+        comparison_patterns = [
+            r'비교',
+            r'차이',
+            r'다른',
+            r'각각의?',
+            r'모든',
+            r'전체',
+            r'종합'
+        ]
+        
+        # 쿼리 타입 결정
+        for pattern in financial_patterns:
+            if re.search(pattern, query):
+                analysis["query_type"] = "financial"
+                break
+                
+        for pattern in company_info_patterns:
+            if re.search(pattern, query):
+                analysis["query_type"] = "company_info"
+                break
+                
+        for pattern in market_patterns:
+            if re.search(pattern, query):
+                analysis["query_type"] = "market"
+                break
+        
+        # 증권사 관련 쿼리 확인
+        for pattern in securities_patterns:
+            if re.search(pattern, query):
+                analysis["requires_all_docs"] = True
+                analysis["query_type"] = "securities"
+                break
+                
+        # 비교 분석 필요 여부 확인
+        for pattern in comparison_patterns:
+            if re.search(pattern, query):
+                analysis["is_comparison"] = True
+                if not analysis["requires_all_docs"]:
+                    analysis["requires_all_docs"] = True
+                break
+                
+        # 목표 필드 식별
+        target_patterns = {
+            "price_target": r'목표가',
+            "investment_opinion": r'투자의견',
+            "outlook": r'전망',
+            "securities_name": r'증권사\s*이름|증권사\s*명칭|어느\s*증권사'
         }
         
-        for term, metric in financial_terms.items():
-            if term in normalized_query:
-                analysis["metrics"].add(metric)
-                analysis["focus"] = "financial"
-        
-        # 5. 시간 범위 분석 (개선)
-        time_patterns = {
-            r'20\d{2}년': 'year',           # 연도
-            r'(\d{1,2})월': 'month',        # 월
-            r'(\d{1,2})분기': 'quarter',    # 분기
-            r'전년\s*대비': 'yoy',          # 전년 대비
-            r'전월\s*대비': 'mom',          # 전월 대비
-            r'전분기\s*대비': 'qoq',        # 전분기 대비
-            r'연간': 'yearly',              # 연간
-            r'반기': 'half_year',           # 반기
-            r'월간': 'monthly'              # 월간
-        }
-        
-        time_matches = defaultdict(list)
-        for pattern, time_type in time_patterns.items():
-            matches = re.finditer(pattern, normalized_query)
-            time_matches[time_type].extend(m.group() for m in matches)
-        
-        # 시간 범위 결정
-        if time_matches['yoy'] or len(time_matches['year']) > 1:
-            analysis["time_range"] = "multi_year"
-        elif time_matches['year']:
-            analysis["time_range"] = "single_year"
-        elif any(time_matches[t] for t in ['month', 'quarter', 'half_year']):
-            analysis["time_range"] = "specific_period"
-        elif any(time_matches[t] for t in ['yearly', 'monthly']):
-            analysis["time_range"] = "periodic"
-            
-        # 6. 복잡도 분석
-        complexity_score = 0
-        
-        # 길이 기반 점수
-        complexity_score += len(normalized_query) > 100 and 3 or (len(normalized_query) > 50 and 2 or 1)
-        
-        # 문장 수 기반 점수
-        sentences = [s for s in normalized_query.split('.') if s.strip()]
-        complexity_score += len(sentences) > 2 and 2 or 1
-        
-        # 조건절 점수
-        conditions = ['만약', '경우', '조건', 'if', '때', '어떻게', '어떤']
-        complexity_score += sum(1 for c in conditions if c in normalized_query)
-        
-        # 연산 필요성 점수
-        calculations = ['평균', '합계', '총', '증가율', '비율', '차이', '편차', '분포']
-        complexity_score += sum(1 for c in calculations if c in normalized_query)
-        
-        # 복잡도 수준 결정
-        analysis["complexity"] = "high" if complexity_score >= 6 else ("medium" if complexity_score >= 3 else "low")
-        analysis["required_context"] = {"high": 8, "medium": 5, "low": 3}[analysis["complexity"]]
-        
-        # 7. 비교 분석 필요 여부 확인 (가중치 기반)
-        comparison_patterns = {
-            "추세": 0.8,    # 가중치
-            "추이": 0.8,
-            "변화": 0.7,
-            "증가": 0.6,
-            "감소": 0.6,
-            "대비": 0.9,
-            "비교": 1.0,
-            "차이": 0.7,
-            "어떻게": 0.5,
-            "얼마나": 0.5
-        }
-        
-        comparison_score = sum(weight for word, weight in comparison_patterns.items() if word in normalized_query)
-        if comparison_score >= 0.8:
-            analysis["type"] = "comparison"
-            
-        # 8. 숫자 데이터 요청 확인
-        if re.search(r'(\d+%|[\d,.]+\s*(원|달러|위안|엔|유로|%)|[\d,.]+\s*(억|만|천|조))', normalized_query):
-            if analysis["type"] == "general":
-                analysis["type"] = "number"
+        for field, pattern in target_patterns.items():
+            if re.search(pattern, query):
+                analysis["target_fields"].append(field)
+                
+        if not analysis["target_fields"]:
+            analysis["target_fields"].append("general")
             
         return analysis
 
@@ -270,15 +363,12 @@ class RAGService:
                     f"내용: {chunk.get('text', '')}"
                 )
             
-            # 프롬프트 체인으로 분석 (쿼리 분석 결과 추가)
-            chain_response = await self.prompt_manager.process_prompt(
-                template=PromptTemplate.ANALYSIS,
-                context={
-                    'query': query,
-                    'content': '\n\n'.join(doc_contexts),
-                    'patterns': patterns,
-                    'query_analysis': query_analysis
-                }
+            # 프롬프트로 분석
+            chain_response = await self.chat_prompt.analyze(
+                content='\n\n'.join(doc_contexts),
+                query=query,
+                patterns=patterns,
+                query_analysis=query_analysis
             )
             
             return {
@@ -293,16 +383,85 @@ class RAGService:
     async def handle_table_mode(self, query: str, document_ids: List[str] = None, user_id: str = None, project_id: str = None):
         """테이블 모드 처리"""
         try:
-            # 테이블 제목 생성
-            title = await self.prompt_manager.process_prompt(
-                template=PromptTemplate.TABLE_TITLE,
-                context={'query': query}
+            # 1. 테이블 헤더 생성
+            title = await self.table_header_prompt.generate_title(query)
+            logger.info("테이블 헤더 생성 완료")
+
+            if not document_ids:
+                return TableResponse(columns=[
+                    TableColumn(
+                        header=TableHeader(name=title, prompt=query),
+                        cells=[TableCell(doc_id="1", content="문서가 선택되지 않았습니다.")]
+                    )
+                ])
+
+            # 2. 관련 청크 검색 및 패턴 분석
+            relevant_chunks, patterns = await self._get_relevant_chunks(
+                query=query,
+                document_ids=document_ids
             )
+            logger.info(f"관련 청크 검색 완료 - 총 {len(relevant_chunks)}개 청크 발견")
             
-            # 관련 문서 검색
-            relevant_chunks, patterns = await self._get_relevant_chunks(query, top_k=5, document_ids=document_ids)
+            # 3. 쿼리 분석
+            query_analysis = self._analyze_query(query)
+            logger.info(f"쿼리 분석 완료 - 타입: {query_analysis['query_type']}")
             
-            if not relevant_chunks:
+            # 4. 문서별로 청크 그룹화
+            doc_chunks = {}
+            for chunk in relevant_chunks:
+                doc_id = chunk["document_id"]
+                if doc_id not in doc_chunks:
+                    doc_chunks[doc_id] = []
+                doc_chunks[doc_id].append(chunk["text"])
+
+            # 5. 모든 문서 동시 분석
+            async def analyze_document(doc_id: str):
+                try:
+                    logger.info(f"문서 {doc_id} 처리 시작")
+                    content = None
+                    source = None
+                    
+                    # 관련 청크 확인
+                    if doc_id in doc_chunks:
+                        content = '\n'.join(doc_chunks[doc_id])
+                        source = "relevant_chunks"
+                        logger.info(f"문서 {doc_id}: 관련 청크 {len(doc_chunks[doc_id])}개 사용")
+                    
+                    # 관련 청크가 없으면 전체 문서 시도
+                    if not content:
+                        try:
+                            chunks = await self.embedding_service.get_document_chunks(doc_id)
+                            if chunks:
+                                content = '\n'.join(chunk.get('text', '') for chunk in chunks)
+                                source = "full_document"
+                                logger.info(f"문서 {doc_id}: 전체 문서 청크 {len(chunks)}개 사용")
+                        except Exception as e:
+                            logger.error(f"문서 {doc_id} 전체 청크 가져오기 실패: {str(e)}")
+                    
+                    if content:
+                        logger.info(f"문서 {doc_id} 분석 시작 (소스: {source})")
+                        analysis_result = await self.table_prompt.analyze(
+                            content=content,
+                            query=query,
+                            patterns=patterns,
+                            query_analysis=query_analysis
+                        )
+                        logger.info(f"문서 {doc_id} 분석 완료")
+                        return {'doc_id': doc_id, 'content': analysis_result}
+                    else:
+                        logger.error(f"문서 {doc_id}: 청크를 전혀 찾을 수 없음")
+                        return None
+                except Exception as e:
+                    logger.error(f"문서 {doc_id} 분석 중 오류 발생: {str(e)}")
+                    return None
+
+            # 모든 문서 동시 분석 실행
+            tasks = [analyze_document(doc_id) for doc_id in document_ids]
+            analysis_results = [result for result in await asyncio.gather(*tasks) if result]
+            
+            logger.info(f"테이블 모드 완료 - 분석된 문서 수: {len(analysis_results)}")
+            
+            if not analysis_results:
                 return TableResponse(columns=[
                     TableColumn(
                         header=TableHeader(name=title, prompt=query),
@@ -349,88 +508,14 @@ class RAGService:
             return TableResponse(columns=[
                 TableColumn(
                     header=TableHeader(name=title, prompt=query),
-                    cells=[
-                        TableCell(
-                            doc_id=result['doc_id'],
-                            content=result['content']
-                        )
-                        for result in analysis_results
-                    ]
+                    cells=[TableCell(doc_id=result['doc_id'], content=result['content']) 
+                          for result in analysis_results]
                 )
             ])
-            
+                
         except Exception as e:
-            logger.error(f"테이블 모드 처리 실패: {str(e)}", exc_info=True)
+            logger.error(f"테이블 모드 처리 실패: {str(e)}")
             raise
-
-    def _analyze_chunk_patterns(self, chunks: List[Dict]) -> Dict[str, Any]:
-        """임베딩된 청크들의 패턴을 분석
-        
-        Args:
-            chunks: 검색된 청크 리스트
-            
-        Returns:
-            Dict: 분석된 패턴 정보
-        """
-        patterns = {
-            "has_numbers": False,
-            "has_dates": False,
-            "has_tables": False,
-            "text_length": 0,
-            "chunk_count": len(chunks),
-            "common_terms": set()
-        }
-        
-        import re
-        from collections import Counter
-        
-        all_text = ""
-        for chunk in chunks:
-            text = chunk.get('text', '')
-            all_text += text
-            
-            # 숫자 패턴 확인
-            if re.search(r'\d+(?:,\d{3})*(?:\.\d+)?', text):
-                patterns["has_numbers"] = True
-                
-            # 날짜 패턴 확인
-            if re.search(r'\d{4}[-/년]\d{1,2}[-/월]\d{1,2}[일]?', text):
-                patterns["has_dates"] = True
-                
-            # 표 패턴 확인 (|나 표 관련 키워드로 확인)
-            if '|' in text or re.search(r'표\s*\d+|테이블|table', text, re.I):
-                patterns["has_tables"] = True
-        
-        # 전체 텍스트 길이
-        patterns["text_length"] = len(all_text)
-        
-        # 자주 등장하는 용어 추출
-        words = re.findall(r'\w+', all_text)
-        common_terms = Counter(words).most_common(5)
-        patterns["common_terms"] = [term for term, _ in common_terms]
-        
-        return patterns
-
-    async def _get_relevant_chunks(self, query: str, top_k: int = 5, document_ids: List[str] = None):
-        """관련 청크 검색 및 패턴 분석
-        
-        Args:
-            query: 검색 쿼리
-            top_k: 검색할 상위 청크 수
-            document_ids: 검색할 문서 ID 리스트
-            
-        Returns:
-            Tuple[List, Dict]: 검색된 청크와 패턴 분석 결과
-        """
-        chunks = await self.embedding_service.search_similar(
-            query=query,
-            top_k=top_k,
-            document_ids=document_ids
-        )
-        
-        patterns = self._analyze_chunk_patterns(chunks)
-        
-        return chunks, patterns
 
     async def query(
         self,
@@ -548,3 +633,51 @@ class RAGService:
         content = content.replace('\n', ' ')
         content = ' '.join(content.split())
         return content.strip()
+
+    def _analyze_chunk_patterns(self, chunks: List[Dict]) -> Dict[str, Any]:
+        """임베딩된 청크들의 패턴을 분석
+        
+        Args:
+            chunks: 검색된 청크 리스트
+            
+        Returns:
+            Dict: 분석된 패턴 정보
+        """
+        patterns = {
+            "has_numbers": False,
+            "has_dates": False,
+            "has_tables": False,
+            "text_length": 0,
+            "chunk_count": len(chunks),
+            "common_terms": set()
+        }
+        
+        import re
+        from collections import Counter
+        
+        all_text = ""
+        for chunk in chunks:
+            text = chunk.get('text', '')
+            all_text += text
+            
+            # 숫자 패턴 확인
+            if re.search(r'\d+(?:,\d{3})*(?:\.\d+)?', text):
+                patterns["has_numbers"] = True
+                
+            # 날짜 패턴 확인
+            if re.search(r'\d{4}[-/년]\d{1,2}[-/월]\d{1,2}[일]?', text):
+                patterns["has_dates"] = True
+                
+            # 표 패턴 확인 (|나 표 관련 키워드로 확인)
+            if '|' in text or re.search(r'표\s*\d+|테이블|table', text, re.I):
+                patterns["has_tables"] = True
+        
+        # 전체 텍스트 길이
+        patterns["text_length"] = len(all_text)
+        
+        # 자주 등장하는 용어 추출
+        words = re.findall(r'\w+', all_text)
+        common_terms = Counter(words).most_common(5)
+        patterns["common_terms"] = [term for term, _ in common_terms]
+        
+        return patterns
