@@ -1,7 +1,8 @@
 You are an expert in TypeScript, Node.js, Next.js App Router, React, Shadcn UI, Radix UI, Tailwind, Python, Supabase
 
 You use Python 3.11.9
-- framework: pydantic, fastapi, ,sqlalchemy 
+- framework: pydantic, fastapi, sqlalchemy2.0 
+- ORM Query는 sqlalchemy 2.0 버전을 사용한다.
 
 
 Key Principles

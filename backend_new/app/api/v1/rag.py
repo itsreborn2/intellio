@@ -1,25 +1,33 @@
 """RAG 검색 API 라우터"""
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 import logging
+from uuid import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.rag import RAGService
 from app.api import deps
 from app.schemas.table_response import TableResponse, TableHeader
 from app.schemas.document import DocumentQueryRequest
+from app.core.database import get_db
+from app.schemas.rag import RAGQuery, RAGResponse
+from app.models.user import Session
+from app.core.deps import get_current_session
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # 디버그 로깅 활성화
 
-router = APIRouter()
+router = APIRouter(prefix="/rag", tags=["rag"])
 
 class TableQueryRequest(BaseModel):
     """테이블 모드 쿼리 요청"""
     query: str
     mode: str = "table"
     document_ids: List[str]  # 테이블에 표시된 문서 ID 목록
+    user_id: str = None
+    project_id: str = None
 
 class ChatContext(BaseModel):
     """채팅 컨텍스트"""
@@ -56,24 +64,68 @@ class ChatRequest(BaseModel):
 @router.post("/table/search", response_model=TableResponse)
 async def table_search(
     request: TableQueryRequest,
-    rag_service: RAGService = Depends(deps.get_rag_service)
+    session: Session = Depends(get_current_session),
+    rag_service: RAGService = Depends(deps.get_rag_service),
+    db: AsyncSession = Depends(get_db)
 ) -> TableResponse:
     """테이블 모드 검색 및 질의응답"""
     try:
+
         logger.info(f"테이블 검색 요청 - 쿼리: {request.query}, 문서 ID: {request.document_ids}")
+        
+        # 문서 접근 권한 확인
+        # if request.document_ids:
+        #     for doc_id in request.document_ids:
+        #         if not await rag_service.verify_document_access(doc_id):
+        #             raise HTTPException(
+        #                 status_code=404,
+        #                 detail=f"문서를 찾을 수 없거나 접근할 수 없습니다: {doc_id}"
+        #             )
+
         result = await rag_service.query(
             query=request.query,
             mode=request.mode,
-            document_ids=request.document_ids
+            document_ids=request.document_ids,
+            user_id=session.user_id,
+            project_id=request.project_id
         )
+        
         logger.info(f"테이블 검색 완료 : {result}")
         return result
+        
     except Exception as e:
         logger.error(f"테이블 검색 중 오류 발생: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"테이블 검색 처리 중 오류 발생: {str(e)}"
         )
+
+@router.post("", response_model=Union[Dict[str, Any], TableResponse])
+async def query_rag(
+    query: RAGQuery,
+    db: AsyncSession = Depends(get_db)
+):
+    
+    """RAG 쿼리 처리"""
+    service = RAGService()
+    await service.initialize(db)
+    
+    # 문서 접근 권한 확인
+    if query.document_ids:
+        for doc_id in query.document_ids:
+            if not await service.verify_document_access(doc_id):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"문서를 찾을 수 없거나 접근할 수 없습니다: {doc_id}"
+                )
+    
+    return await service.query(
+        query=query.query,
+        mode=query.mode,
+        document_ids=query.document_ids,
+        user_id=query.user_id,
+        project_id=query.project_id
+    )
 
 @router.post("/chat")
 async def chat_search(

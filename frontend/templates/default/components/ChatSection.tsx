@@ -70,6 +70,7 @@ export const ChatSection = () => {
           state.analysis.selectedDocumentIds,
           currentInput
         )
+        
 
         console.log('테이블 검색 결과:', result)
 

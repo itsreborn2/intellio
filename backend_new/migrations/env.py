@@ -19,9 +19,10 @@ print(f"ROOT : {os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}")
 
 # Import all models here
 from app.models.base import Base
+from app.models.table_history import TableHistory
+from app.models.document import Document
 from app.models.user import User
 from app.models.project import Project
-from app.models.document import Document
 from app.models.category import Category
 
 # this is the Alembic Config object, which provides

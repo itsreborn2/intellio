@@ -10,8 +10,9 @@ from app.core.config import settings
 from app.services.embedding import EmbeddingService
 from app.services.prompt_manager import PromptManager, PromptTemplate
 from app.models.document import Document
-from app.schemas.table_response import TableHeader, TableCell, TableColumn, TableResponse
-
+from app.schemas.table_response import TableResponse, TableHeader, TableColumn, TableCell
+from app.schemas.table_history import TableHistoryCreate
+from app.services.table_history import TableHistoryService
 logger = logging.getLogger(__name__)
 
 # 문서 상태 상수
@@ -48,11 +49,11 @@ class RAGService:
         """
         try:
             # 문서 존재 여부 확인
-            result = await self.db.execute(
-                select(Document)
-                .where(Document.id == document_id)
-            )
-            document = result.scalar_one_or_none()
+            stmt = select(Document).where(Document.id == document_id)
+            # async_session을 사용하여 비동기 쿼리 실행
+            async with self.db.begin() as session:
+                result = await session.execute(stmt)
+                document = result.scalar_one_or_none()
             
             if not document:
                 logger.warning(f"문서를 찾을 수 없음: {document_id}")
@@ -62,16 +63,11 @@ class RAGService:
             if document.status not in ['COMPLETED', 'PARTIAL']:
                 logger.warning(f"문서가 아직 처리되지 않음: {document_id} (상태: {document.status})")
                 return False
-            
-            # 임베딩 존재 여부 확인
-            if not document.embedding_ids:
-                logger.warning(f"문서에 임베딩이 없음: {document_id}")
-                return False
-            
+                
             return True
             
         except Exception as e:
-            logger.error(f"문서 접근 권한 확인 중 오류 발생: {str(e)}", exc_info=True)
+            logger.error(f"문서 접근 권한 확인 중 오류 발생: {str(e)}")
             return False
 
     def _normalize_query(self, query: str) -> str:
@@ -294,7 +290,7 @@ class RAGService:
             logger.error(f"채팅 모드 처리 실패: {str(e)}")
             raise
 
-    async def handle_table_mode(self, query: str, document_ids: List[str] = None):
+    async def handle_table_mode(self, query: str, document_ids: List[str] = None, user_id: str = None, project_id: str = None):
         """테이블 모드 처리"""
         try:
             # 테이블 제목 생성
@@ -334,6 +330,20 @@ class RAGService:
                     'doc_id': chunk.get('document_id', 'N/A'),
                     'content': analysis_result
                 })
+                
+                # 히스토리 저장
+                if user_id and project_id:
+                    history_service = TableHistoryService(self.db)
+                    await history_service.create(
+                        TableHistoryCreate(
+                            user_id=user_id,
+                            project_id=project_id,
+                            document_id=chunk.get('document_id'),
+                            prompt=query,
+                            title=title,
+                            result=analysis_result
+                        )
+                    )
             
             # 분석 결과를 테이블 형식으로 변환
             return TableResponse(columns=[
@@ -426,6 +436,8 @@ class RAGService:
         self,
         query: str,
         mode: str = "chat",
+        user_id:str = None,
+        project_id:str=None,
         document_ids: List[str] = None
     ) -> Union[Dict[str, Any], TableResponse]:
         """쿼리에 대한 응답 생성
@@ -441,7 +453,7 @@ class RAGService:
             - table 모드: TableResponse 객체
         """
         if mode == "table":
-            return await self.handle_table_mode(query, document_ids=document_ids)
+            return await self.handle_table_mode(query, document_ids=document_ids, user_id=user_id, project_id=project_id)
         return await self._handle_chat_mode(query, 5, document_ids=document_ids)
 
     async def get_document_status(self, document_id: str) -> Dict[str, Any]:

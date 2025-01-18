@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/popover'
 import { Folder, Plus, Trash2, FileText, ChevronDown, ChevronRight, History, AlertCircle } from 'lucide-react'
 import * as api from '@/services/api'  // 최상단에 추가
-import { IRecentProjectsResponse, IProject, Category, ProjectDetail,  } from '@/types/index'
+import { IRecentProjectsResponse, IProject, Category, ProjectDetail, TableResponse,  } from '@/types/index'
 import { getRecentProjects, } from '@/services/api'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
@@ -204,6 +204,16 @@ export function ProjectCategorySection({
     dispatch({ type: actionTypes.CLEAR_CHAT_MESSAGE })
     const documents = await api.getDocumentList(projectId)
     dispatch({ type: actionTypes.SET_DOCUMENT_LIST, payload: documents })  // documents 상태 업데이트
+
+    // 테이블 히스토리 요청
+    try {
+      const tableHistory:TableResponse = await api.getTableHistory(projectId)
+      console.log('테이블 히스토리 로드 결과:', tableHistory)
+      
+      dispatch({ type: actionTypes.UPDATE_TABLE_DATA, payload: tableHistory })
+    } catch (error) {
+      console.error('테이블 히스토리 로드 실패:', error)
+    }
 
     //console.log(`프로젝트 handleProjectClick : `, documents)
   }

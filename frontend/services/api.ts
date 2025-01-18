@@ -212,8 +212,10 @@ export const searchTable = async (projectId: string, documentIds: string[], quer
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        query,
+        //user_id,
+        project_id : projectId,
         document_ids: documentIds,
+        query,
         mode: 'table'
       }),
       credentials: 'include'
@@ -582,20 +584,7 @@ export const getCategoryProjects = async (categoryId: string) => {
 // 카테고리 삭제 함수 수정
 export const deleteCategory = async (categoryId: string): Promise<void> => {
   try {
-    /* // 먼저 카테고리에 속한 프로젝트들의 카테고리 연결을 해제
-    const projects = await getCategoryProjects(categoryId);
-    
-    // 각 프로젝트의 카테고리 연결 해제
-    for (const project of projects) {
-      await apiFetch(`${API_ENDPOINT}/categories/${categoryId}/projects/${project.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-    } */
-    //const data = await getCategories();
-    //console.log('before delete, category : ',data);
+
     // 그 다음 카테고리 삭제
     const url = `${API_ENDPOINT}/categories/${categoryId}`;
     console.log('Category deletion URL: ', url);
@@ -664,3 +653,24 @@ export const logout = async (): Promise<void> => {
     method: 'POST',
   });
 };
+
+export async function getTableHistory(projectId: string) {
+  try {
+    const response = await apiFetch(`${API_ENDPOINT}/table-history/project/${projectId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      throw new Error('테이블 히스토리를 가져오는데 실패했습니다.');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('테이블 히스토리 요청 실패:', error);
+    throw error;
+  }
+}

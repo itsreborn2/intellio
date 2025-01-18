@@ -174,6 +174,7 @@ class DocumentService:
                     documents.append(document)
                     
                     # 14. 비동기 처리 태스크 등록
+                    # 여기는 바로 celery 등록하면 될텐데 왜 굳이 등록하는 행위 자체를 또 비동기 task에 맡기는거지?
                     background_tasks.add_task(self.process_document_async, doc_id)
                     
                 except Exception as e:
