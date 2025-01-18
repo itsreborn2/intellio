@@ -101,20 +101,32 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         size: 10, // 체크박스 컬럼 너비
         grow: false, // 남은 공간을 채우지 않도록 설정
         muiTableHeadCellProps: {
-          sx: { borderRight: 'none' }
+          sx: { 
+            borderRight: 'none',
+            backgroundColor: '#f8fafc'
+          }
         },
         muiTableBodyCellProps: {
-          sx: { borderRight: 'none' }
+          sx: { 
+            borderRight: 'none',
+            backgroundColor: '#ffffff'
+          }
         }
       },
       'mrt-row-numbers': {
         size: 10, // row number를 출력하는 칼럼만 너비10. 고정
         grow: false, // 남은 공간을 채우지 않도록 설정
         muiTableHeadCellProps: {
-          sx: { borderRight: 'none' }
+          sx: { 
+            borderRight: 'none',
+            backgroundColor: '#f8fafc'
+          }
         },
         muiTableBodyCellProps: {
-          sx: { borderRight: 'none' }
+          sx: { 
+            borderRight: 'none',
+            backgroundColor: '#ffffff'
+          }
         }
       },
     },
@@ -127,6 +139,8 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         '& .MuiTable-root': {
           borderCollapse: 'separate',
           borderSpacing: 0,
+          backgroundColor: '#ffffff',
+          boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)'
         },
       },
     },
@@ -134,6 +148,8 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       sx: {
         padding: 0,
         margin: 0,
+        backgroundColor: 'transparent',
+        boxShadow: 'none',
         '& .MuiTableContainer-root': {
           padding: 0
         }
@@ -147,44 +163,59 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         padding: 0,
         '& .MuiTable-root': {
           margin: 0
+        },
+        '&::-webkit-scrollbar': {
+          width: '8px',
+          height: '8px'
+        },
+        '&::-webkit-scrollbar-track': {
+          backgroundColor: '#f1f1f1'
+        },
+        '&::-webkit-scrollbar-thumb': {
+          backgroundColor: '#888',
+          borderRadius: '4px',
+          '&:hover': {
+            backgroundColor: '#555'
+          }
         }
       }
     },
     muiTableHeadCellProps: {
       sx: {
-        //border: '1px solid rgba(200, 200, 200, 0.4)',
-        fontStyle: 'italic',
-        fontWeight: 'normal',
-        
+        backgroundColor: '#f8fafc',
+        color: '#1e293b',
+        fontWeight: '600',
+        fontSize: '0.875rem',
+        padding: '12px 16px',
+        borderBottom: '2px solid #e2e8f0',
+        '&:hover': {
+          backgroundColor: '#f1f5f9'
+        }
       },
     },
     muiTableBodyCellProps: {
       sx: {
-        //border: '1px solid rgba(180, 180, 180, .5)',
-      },
-    },
-
-    initialState: {
-      rowPinning: {
-        //top: ['dmurray@example.com'],
-      },
-      rowSelection: {
-        //'dmurray@example.com': true,
+        padding: '12px 16px',
+        fontSize: '0.875rem',
+        color: '#334155',
+        borderBottom: '1px solid #e2e8f0',
+        '&:hover': {
+          backgroundColor: '#f8fafc'
+        }
       },
     },
     layoutMode: 'grid', //모든 칼럼은 남은 공간을 채우는 형태
-    muiTableBodyRowProps: ({ row, table }) => {
-      const { density } = table.getState();
-      return {
-        sx: {
-          height: row.getIsPinned()
-            ? `${
-                density === 'compact' ? 37 : density === 'comfortable' ? 53 : 69
-              }px`
-            : undefined,
+    muiTableBodyRowProps: ({ row, table }) => ({
+      sx: {
+        '&:hover': {
+          backgroundColor: '#f1f5f9',
+          transition: 'background-color 0.2s ease-in-out'
         },
-      };
-    },
+        height: row.getIsPinned()
+          ? `${table.getState().density === 'compact' ? 37 : table.getState().density === 'comfortable' ? 53 : 69}px`
+          : undefined,
+      },
+    }),
   });
 
   
@@ -208,7 +239,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
   //useImperativeHandle(ref, () => tableUtils);
 
   return (
-    <div className="space-y-0 mt-4 border-t pt-4">
+    <div className="space-y-0 mt-0 rounded-lg bg-white">
       <MaterialReactTable table={table} />
     </div>
   );

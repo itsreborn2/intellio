@@ -189,10 +189,11 @@ class ProjectService:
     async def update(
         self,
         project_id: UUID,
-        project_in: ProjectUpdate
+        project_in: ProjectUpdate,
+        user_id: UUID
     ) -> Optional[Project]:
         """프로젝트 수정"""
-        project = await self.get(project_id)
+        project = await self.get(project_id, user_id)
         if not project:
             return None
         

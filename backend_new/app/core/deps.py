@@ -27,44 +27,48 @@ async def get_current_session(
     db: AsyncSession = Depends(get_db)
 ) -> Session:
     """현재 세션 가져오기"""
-    print(f"DB 포트 확인 : {settings.POSTGRES_PORT}")
+    try:
+        logger.info(f'세션 처리 시작 - 세션 ID: {session_id}')
+        user_service = UserService(db)
 
-    logger.info(f'[get_current_session] : {session_id}')
-    print(f'[get_current_session] : {session_id}')
-    user_service = UserService(db)
-    logger.info(f"[get_current_session] 1")
-    if not session_id:
-        logger.info(f'  => 세션이 존재하지 않습니다.')
+        # 기존 세션이 있는 경우
+        if session_id:
+            session = await user_service.get_active_session(session_id)
+            if session:
+                logger.info(f'유효한 세션 확인: {session.session_id}')
+                return session
+            logger.info('세션이 없거나 만료됨')
+
         # 새 세션 생성
+        logger.info('새 세션 생성 시작')
+        new_session_id = str(uuid4())
         session_create = SessionCreate(
-            session_id=str(uuid4()),
+            session_id=new_session_id,
             is_anonymous=True
         )
+        
         session = await user_service.create_session(session_create)
         
+        # 쿠키 설정
         if response:
-            logger.info(f"[get_current_session] 1-1")
-            # 세션 ID를 쿠키에 설정
+            logger.info(f'새 세션 쿠키 설정: {new_session_id}')
             response.set_cookie(
                 key="session_id",
-                value=session.session_id,
-                max_age=30 * 24 * 60 * 60,  # 30일
+                value=new_session_id,
+                max_age=settings.SESSION_EXPIRY_DAYS * 24 * 60 * 60,  # 설정된 일수를 초로 변환
                 httponly=True,
-                secure=True,  # HTTPS 전용
-                samesite="strict"  # CSRF 방지 강화
+                secure=True,     # HTTPS 전용
+                samesite="lax"   # CSRF 방지 (lax로 변경하여 일반적인 링크 이동 허용)
             )
+        
         return session
-    logger.info(f"[get_current_session] 2")
-    session = await user_service.get_active_session(session_id)
-    logger.info(f"[get_current_session] 3")
-    if not session:
-        logger.info(f'  => 유효하지 않은 세션입니다.')
+
+    except Exception as e:
+        logger.error(f'세션 처리 중 오류 발생: {str(e)}', exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="유효하지 않은 세션입니다."
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="세션을 처리할 수 없습니다."
         )
-    logger.info(f"final session : ${session}, : id추가 조회 ${session.user_id}")
-    return session
 
 async def get_current_user_uuid(
     session: Session = Depends(get_current_session),
