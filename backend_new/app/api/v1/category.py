@@ -28,8 +28,7 @@ async def get_categories(
     db: AsyncSession = Depends(get_db)
 ):
     """사용자의 모든 카테고리를 조회합니다."""
-    logger.info(f"GET /categories 요청 받음 - 세션 ID: {session.session_id}")
-    print(f"GET /categories 요청 받음 - 세션 ID: {session.session_id}")
+    logger.info(f"GET /categories 요청 받음 - User ID: {session.user_id}")
     
     try:
         # 익명 사용자 체크

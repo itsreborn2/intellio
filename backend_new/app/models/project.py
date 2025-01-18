@@ -17,7 +17,7 @@ class Project(Base):
     user_category = Column(String(255), nullable=True)  # 프론트엔드용 사용자 카테고리
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    session_id = Column(String(255), ForeignKey("sessions.session_id"), nullable=True)
+    #session_id = Column(String(255), ForeignKey("sessions.session_id"), nullable=True) # 프로젝트와 세션은 관계가 없음. 일단 제거.
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True)  # 카테고리 ID 추가
 
@@ -26,6 +26,5 @@ class Project(Base):
     embedding_refs = Column(Text, nullable=True)
 
     # 관계 설정
-    session = relationship("Session", back_populates="projects")
     user = relationship("User", back_populates="projects")
     documents = relationship("Document", back_populates="project", cascade="all, delete-orphan")

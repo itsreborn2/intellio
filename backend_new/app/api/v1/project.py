@@ -53,7 +53,7 @@ async def get_recent_projects(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """최근 프로젝트 목록 조회"""
-    logger.debug(f"최근 프로젝트 조회 - User Id:{session.user_id}, 세션 ID: {session.session_id}")
+    logger.debug(f"최근 프로젝트 조회 - User Id:{session.user_id}")
     
     try:
         logger.info(f"get_recent_projects : {session}")
@@ -156,7 +156,7 @@ async def list_projects(
 ):
     """프로젝트 목록 조회"""
     try:
-        logger.info(f"프로젝트 목록 조회 시도 - 세션 ID: {session.session_id}")
+        logger.info(f"프로젝트 목록 조회 시도 - user ID: {session.user_id}")
         projects = await project_service.get_multi(
             skip=skip,
             limit=limit,

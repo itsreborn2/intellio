@@ -23,7 +23,7 @@ class ProjectService:
         project = Project(
             **project_in.dict(),
             user_id=session.user_id,
-            session_id=session.session_id
+            #session_id=session.session_id
         )
         self.db.add(project)
         await self.db.commit()
@@ -31,7 +31,7 @@ class ProjectService:
         # 사용자 이메일을 로그에 기록
         user_email = session.user.email if session.user else 'Unknown'
         #print(f"프로젝트 생성 - 사용자 이메일: {user_email}")
-        logger.info(f"프로젝트 생성 - 사용자 이메일: {user_email}, 세션: {session.session_id}")
+        logger.info(f"프로젝트 생성 - 사용자 이메일: {user_email}, 사용자ID: {session.user_id}")
         return project
 
     async def get(self, project_id: UUID, user_id:UUID) -> Optional[Project]:
@@ -67,7 +67,8 @@ class ProjectService:
             
             if session:
                 # 세션 ID로 필터링
-                query = query.where(Project.session_id == session.session_id)
+                # 세션 ID를 이용한 각종 조회작업은 하지 않음.
+                #query = query.where(Project.user_id == session.user_id)
                 
                 # 사용자 ID로도 필터링 (옵션)
                 if session.user_id:
@@ -91,7 +92,7 @@ class ProjectService:
     ) -> Dict[str, List[Project]]:
         """최근 프로젝트 목록 조회"""
         # 현재 시간 기준으로 날짜 범위 계산
-        logger.info(f"get_recent - 세션: {session.session_id}")
+        logger.info(f"get_recent - UserID: {session.user_id}")
         now = datetime.utcnow()
         today_start = datetime(now.year, now.month, now.day)
         yesterday_start = today_start - timedelta(days=1)
@@ -105,7 +106,12 @@ class ProjectService:
             if session.user_id:
                 base_query = base_query.where(Project.user_id == session.user_id)
             else:
-                base_query = base_query.where(Project.session_id == session.session_id)
+                #base_query = base_query.where(Project.session_id == session.session_id)
+                return {
+                    "today": [],
+                    "yesterday": [],
+                    "four_days_ago": []
+                }
 
         # 오늘 생성된 프로젝트
         today_query = base_query.where(

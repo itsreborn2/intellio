@@ -44,7 +44,6 @@ class Session(Base):
 
     # Relationships
     user = relationship("User", back_populates="sessions", lazy="joined")
-    projects = relationship("Project", back_populates="session", cascade="all, delete-orphan")
 
     @property
     def is_expired(self) -> bool:

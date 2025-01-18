@@ -117,25 +117,34 @@ async def login(
         message="로그인이 완료되었습니다."
     )
 
-@router.post("/logout")
+@router.post("/logout", response_model=SessionResponse)
 async def logout(
     response: Response,
     session_id: Optional[str] = Cookie(None),
     db: AsyncSession = Depends(get_db)
 ):
-    """로그아웃"""
-    if session_id:
-        user_service = UserService(db)
-        await user_service.delete_session(session_id)
+    """로그아웃 처리 - 세션 삭제 및 쿠키 제거"""
+    if not session_id:
+        return SessionResponse(
+            success=True,
+            message="이미 로그아웃 되었습니다."
+        )
+    
+    user_service = UserService(db)
+    # 세션 삭제
+    await user_service.delete_session(session_id)
     
     # 쿠키에서 세션 ID 제거
     response.delete_cookie(
         key="session_id",
-        httponly=True,
-        samesite="lax"
+        path="/",
+        domain=settings.COOKIE_DOMAIN
     )
     
-    return {"message": "Successfully logged out"}
+    return SessionResponse(
+        success=True,
+        message="로그아웃되었습니다."
+    )
 
 @router.get("/{provider}/login")
 async def oauth_login(provider: str):
@@ -295,9 +304,3 @@ async def get_current_user(
         },
         "token": token
     }
-
-@router.post("/logout")
-async def oauth_logout(response: Response):
-    """로그아웃 처리"""
-    response.delete_cookie(key="token")
-    return {"message": "Successfully logged out"}
