@@ -197,9 +197,26 @@ class RAGService:
                     filtered_chunks.append(chunk)
                     found_securities.clear()  # 다음 청크를 위해 초기화
         else:
-            filtered_chunks = chunks
+            # 기업명 검색 패턴
+            company_patterns = [
+                r'기업명|회사명|법인명|상호',
+                r'([가-힣A-Za-z\s&]+)(주식회사|㈜|주식회사|[Cc]orp\.?|[Cc]orporation|[Cc]ompany|[Ii]nc\.?)',
+                r'([가-힣A-Za-z\s&]+)(그룹|[Gg]roup)',
+            ]
 
-        return filtered_chunks
+            for chunk in chunks:
+                # 메타데이터에서 제목 확인
+                metadata = chunk.get("metadata", {})
+                title = metadata.get("title", "")
+                content = chunk.get("content", "")
+
+                # 제목이나 내용에서 기업명 찾기
+                for pattern in company_patterns:
+                    if re.search(pattern, title, re.IGNORECASE) or re.search(pattern, content, re.IGNORECASE):
+                        filtered_chunks.append(chunk)
+                        break
+
+        return filtered_chunks or chunks  # 필터링된 결과가 없으면 원본 반환
 
     async def _get_relevant_chunks(self, query: str, top_k: int = 5, document_ids: List[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """관련 문서 청크 검색 및 패턴 분석"""
@@ -228,7 +245,7 @@ class RAGService:
             # 문서별로 가장 관련성 높은 청크만 유지
             doc_chunks = {}
             for chunk in sorted(all_chunks, key=lambda x: x.get("score", 0), reverse=True):
-                doc_id = chunk["document_id"]
+                doc_id = chunk["metadata"].get("document_id", "")
                 if doc_id not in doc_chunks:
                     doc_chunks[doc_id] = chunk
 
@@ -364,7 +381,7 @@ class RAGService:
             doc_contexts = []
             for chunk in relevant_chunks:
                 doc_contexts.append(
-                    f"문서 ID: {chunk.get('document_id', 'N/A')}\n"
+                    f"문서 ID: {chunk.get('metadata', {}).get('document_id', 'N/A')}\n"
                     f"페이지: {chunk.get('page_number', 'N/A')}\n"
                     f"내용: {chunk.get('text', '')}"
                 )
@@ -415,10 +432,10 @@ class RAGService:
             # 4. 문서별로 청크 그룹화
             doc_chunks = {}
             for chunk in relevant_chunks:
-                doc_id = chunk["document_id"]
+                doc_id = chunk["metadata"].get("document_id", "")
                 if doc_id not in doc_chunks:
                     doc_chunks[doc_id] = []
-                doc_chunks[doc_id].append(chunk["text"])
+                doc_chunks[doc_id].append(chunk["content"])
 
             # 5. 모든 문서 동시 분석
             async def analyze_document(doc_id: str):
