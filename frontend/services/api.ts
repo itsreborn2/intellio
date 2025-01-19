@@ -1311,3 +1311,27 @@ export async function getTableHistory(projectId: string) {
     throw error;
   }
 }
+
+export async function updateProjectName(projectId: string, newName: string): Promise<IProject> {
+  try {
+    const response = await apiFetch(`${API_ENDPOINT}/projects/${projectId}`, {
+      method: 'PUT',  // PATCH에서 PUT으로 변경
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: newName,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('프로젝트 이름 업데이트 실패');
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('프로젝트 이름 업데이트 중 오류 발생:', error);
+    throw error;
+  }
+}
