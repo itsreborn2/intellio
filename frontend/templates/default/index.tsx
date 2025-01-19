@@ -35,7 +35,7 @@ export const DefaultTemplate = () => {
             }`}>
               <div className="absolute right-2 top-2 z-30">
                 <TooltipProvider>
-                  <Tooltip>
+                  <Tooltip delayDuration={100}>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
@@ -50,7 +50,7 @@ export const DefaultTemplate = () => {
                         )}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
+                    <TooltipContent side="bottom" align="end">
                       <p>{expandedSection === 'chat' ? '복원' : '채팅 영역 최대화'}</p>
                     </TooltipContent>
                   </Tooltip>
@@ -67,7 +67,7 @@ export const DefaultTemplate = () => {
             } overflow-hidden`}>
               <div className="absolute right-2 top-2 z-30">
                 <TooltipProvider>
-                  <Tooltip>
+                  <Tooltip delayDuration={100}>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
@@ -82,7 +82,7 @@ export const DefaultTemplate = () => {
                         )}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
+                    <TooltipContent side="bottom" align="end">
                       <p>{expandedSection === 'table' ? '복원' : '테이블 영역 최대화'}</p>
                     </TooltipContent>
                   </Tooltip>

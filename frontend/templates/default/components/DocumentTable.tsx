@@ -87,14 +87,22 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
   const table = useMaterialReactTable({
     columns,
     data: tableData,
-    enablePagination: false,
-    enableRowPinning: true,
     enableRowSelection: true,
-    enableRowNumbers: true,
+    enableMultiRowSelection: true,
+    enableColumnResizing: true,
     enableStickyHeader: true,
-    enableFullScreenToggle: false,
-    rowPinningDisplayMode: 'select-sticky',
-    
+    enableColumnOrdering: false, // 컬럼 순서 변경 비활성화
+    enableGlobalFilter: false, // 전역 검색 비활성화
+    enableColumnFilters: false, // 컬럼 필터 비활성화
+    enableFilters: false, // 필터 비활성화
+    enableColumnActions: false, // 컬럼 액션 버튼 비활성화
+    enableHiding: false, // 컬럼 숨기기 비활성화
+    enableDensityToggle: false, // 밀도 토글 비활성화
+    enableFullScreenToggle: false, // 전체화면 토글 비활성화
+    enableTopToolbar: false, // 상단 툴바 비활성화
+    enablePagination: false, // 페이지네이션 비활성화
+    enableBottomToolbar: false, // 하단 툴바 비활성화
+    positionToolbarAlertBanner: 'none', // 알림 배너 비활성화
     getRowId: (doc) => doc.id,
     displayColumnDefOptions: { // 기본 헤더의 옵션 설정
         'mrt-row-select': {
