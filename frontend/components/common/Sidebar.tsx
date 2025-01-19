@@ -51,6 +51,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const router = useRouter()
   const { state, dispatch } = useApp()
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: IProject[] }>({})
   const [templates, setTemplates] = useState<Template[]>([
     { id: 'template1', name: '기본 템플릿', description: '일반적인 문서 분석용 템플릿' },
     { id: 'template2', name: '계약서 분석', description: '계약서 분석 전용 템플릿' },
@@ -63,7 +64,6 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
-  const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: IProject[] }>({})  
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
@@ -394,7 +394,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
                 setCategories={setCategories}
                 dispatch={dispatch}
                 onDragEnd={handleDragEnd}
-                categoryProjects={categoryProjects}  
+                categoryProjects={categoryProjects}
+                setCategoryProjects={setCategoryProjects}
               />
             </div>
           </div>
