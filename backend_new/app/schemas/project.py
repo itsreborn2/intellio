@@ -61,9 +61,8 @@ class ProjectListResponse(BaseModel):
 class RecentProjectsResponse(BaseModel):
     """최근 프로젝트 목록 응답 모델"""
     today: List[ProjectSimpleResponse] = Field(default_factory=list, description="오늘 생성된 프로젝트 목록")
-    yesterday: List[ProjectSimpleResponse] = Field(default_factory=list, description="어제 생성된 프로젝트 목록")
-    four_days_ago: List[ProjectSimpleResponse] = Field(default_factory=list, description="4일 전 생성된 프로젝트 목록")
-    older: List[ProjectSimpleResponse] = Field(default_factory=list, description="4일 전 이전에 생성된 프로젝트 목록")
+    last_7_days: List[ProjectSimpleResponse] = Field(default_factory=list, description="7일 이내 생성된 프로젝트 목록")
+    last_30_days: List[ProjectSimpleResponse] = Field(default_factory=list, description="30일 이내 생성된 프로젝트 목록")
 
     class Config:
         from_attributes = True

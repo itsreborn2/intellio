@@ -109,7 +109,7 @@ export const createProject = async (
 
   description?: string, 
 
-  retention_period: string = 'FIVE_DAYS'
+  retention_period: string = 'THIRTY_DAYS'
 
 ): Promise<IProject> => {
 
@@ -242,105 +242,53 @@ const sanitizeFileName = (fileName: string): string => {
 
 
 export const uploadDocument = async (
-
   projectId: string, 
-
   files: File | File[],
-
   callbacks?: IUploadProgressCallback
-
 ): Promise<IDocumentUploadResponse> => {
+  try {
+    const formData = new FormData()
+    const fileList = Array.isArray(files) ? files : [files]
+    
+    fileList.forEach(file => {
+      const sanitizedName = sanitizeFileName(file.name)
+      formData.append('files', file, sanitizedName)
+    })
 
-  return new Promise(async (resolve, reject) => {
+    const response = await apiFetch(`${API_ENDPOINT}/documents/projects/${projectId}/upload`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: formData
+    });
 
-    try {
-
-      const formData = new FormData()
-
-      const fileList = Array.isArray(files) ? files : [files]
-
-      
-
-      fileList.forEach(file => {
-
-        const sanitizedName = sanitizeFileName(file.name)
-
-        formData.append('files', file, sanitizedName)
-
-      })
-
-
-
-      const response = await apiFetch(`${API_ENDPOINT}/documents/projects/${projectId}/upload`, {
-
-        method: 'POST',
-
-        headers: {
-
-          'Accept': 'application/json',
-
-          'X-Requested-With': 'XMLHttpRequest'
-
-        },
-
-        body: formData
-
-      });
-
-
-
-      if (!response.ok) {
-
-        const errorData = await response.json().catch(() => null)
-
-        if (response.status === 401) {
-
-          // 세션 만료 처리
-
-          window.dispatchEvent(new CustomEvent('sessionExpired'));
-
-          throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.');
-
-        }
-
-        throw new Error(errorData?.detail || `Upload failed with status ${response.status}`)
-
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null)
+      if (response.status === 401) {
+        // 세션 만료 처리
+        window.dispatchEvent(new CustomEvent('sessionExpired'));
+        throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.');
       }
-
-
-
-      const result: IDocumentUploadResponse = await response.json()
-
-      console.log(`upload result : ${JSON.stringify(result)}`)
-
-      
-
-      if (callbacks?.onComplete) {
-
-        callbacks.onComplete(result)
-
-      }
-
-      
-
-      resolve(result)
-
-    } catch (error) {
-
-      console.error('Upload failed:', error)
-
-      if (callbacks?.onError) {
-
-        callbacks.onError(error as Error)
-
-      }
-
-      reject(error)
-
+      throw new Error(errorData?.detail || `Upload failed with status ${response.status}`)
     }
 
-  })
-
+    const result: IDocumentUploadResponse = await response.json()
+    console.log(`upload result : ${JSON.stringify(result)}`)
+    
+    if (callbacks?.onComplete) {
+      callbacks.onComplete(result)
+    }
+    
+    return result
+  } catch (error) {
+    console.error('Upload failed:', error)
+    if (callbacks?.onError) {
+      callbacks.onError(error as Error)
+    }
+    throw error
+  }
 }
 
 
@@ -348,11 +296,8 @@ export const uploadDocument = async (
 // api.ts에 추가
 
 export async function getDocumentContent(documentId: string): Promise<string> {
-
   const response = await apiFetch(`${API_ENDPOINT}/documents/${documentId}/content`);
-
   return response.text();
-
 }
 
 
@@ -762,8 +707,6 @@ export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
 
     });
 
-
-
     // 인증 오류 처리
 
     if (response.status === 401) {
@@ -771,20 +714,12 @@ export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
       console.warn('사용자 인증이 필요합니다.');
 
       return {
-
         today: [],
-
-        yesterday: [],
-
-        four_days_ago: [],
-
-        older: []
-
+        last_7_days: [],
+        last_30_days: []
       };
 
     }
-
-
 
     if (!response.ok) {
 
@@ -792,80 +727,42 @@ export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
 
     }
 
-
-
     const data: IApiRecentProjectsResponse = await response.json();
-
   
-
     // 날짜 포맷팅
 
     const formatProjects = (projects: IApiProject[]): IProject[] => {
-
       return projects.map(project => ({
-
         id: project.id,
-
         title: project.name,
-
         name: project.name,
-
         created_at: project.created_at,
-
         updated_at: project.updated_at,
-
         formatted_date: project.created_at ? 
-
           format(parseISO(project.created_at), 'PPP', { locale: ko }) : 
-
           undefined,
-
         is_temporary: project.is_temporary,
-
         category_id: project.category_id,
-
-        retention_period: 'FIVE_DAYS',
-
+        retention_period: 'THIRTY_DAYS',
         will_be_deleted: project.is_temporary && project.created_at ?
-
-          new Date(project.created_at).getTime() < new Date().getTime() - 4 * 24 * 60 * 60 * 1000 : false
-
+          new Date(project.created_at).getTime() < new Date().getTime() - 30 * 24 * 60 * 60 * 1000 : false
       }));
-
     };
-    console.log(`[getRecentProjects] today : ${data.today}`);
+    
     const result: IRecentProjectsResponse = {
-
       today: formatProjects(data.today || []),
-
-      yesterday: formatProjects(data.yesterday || []),
-
-      four_days_ago: formatProjects(data.four_days_ago || []),
-
-      older: formatProjects(data.older || [])
-
+      last_7_days: formatProjects(data.last_7_days || []),
+      last_30_days: formatProjects(data.last_30_days || [])
     };
-
-
 
     return result;
-
   } catch (error) {
-
     console.error('Error fetching recent projects:', error);
-
     return {
-
       today: [],
-
-      yesterday: [],
-
-      four_days_ago: [],
-
-      older: []
-
+      last_7_days: [],
+      last_30_days: []
     };
-
   }
 
 };
@@ -1038,51 +935,29 @@ export const getCategories = async (): Promise<Category[]> => {
 
 
 // 프로젝트를 카테고리에 추가
-
 export const addProjectToCategory = async (
-
   projectId: string, 
-
   categoryId: string
-
 ): Promise<IProject> => {
-
   const response = await apiFetch(
-
     `${API_ENDPOINT}/categories/${categoryId}/projects`,
-
     {
-
       method: 'POST',
-
       headers: {
-
         'Content-Type': 'application/json'
-
       },
-
       body: JSON.stringify({
-
         project_id: projectId
-
       })
-
     }
-
   );
 
-
-
   if (!response.ok) {
-
-    throw new Error('Failed to add project to category');
-
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.detail || `프로젝트를 카테고리에 추가하는데 실패했습니다. 상태 코드: ${response.status}`);
   }
 
-
-
   return response.json();
-
 }
 
 

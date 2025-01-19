@@ -36,6 +36,7 @@ interface ProjectCategorySectionProps {
   dispatch: any
   onDragEnd: (result: any) => void
   categoryProjects: { [key: string]: IProject[] }  // 추가: 각 카테고리의 프로젝트 목록
+  setCategoryProjects: React.Dispatch<React.SetStateAction<{ [key: string]: IProject[] }>>
 }
 
 export function ProjectCategorySection({
@@ -45,7 +46,8 @@ export function ProjectCategorySection({
   setCategories,
   dispatch,
   onDragEnd,
-  categoryProjects
+  categoryProjects,
+  setCategoryProjects
 }: ProjectCategorySectionProps) {
   const router = useRouter()
   const { state } = useApp()
@@ -166,14 +168,14 @@ export function ProjectCategorySection({
         }, {} as { [key: string]: IProject[] })
 
         // categoryProjects 상태 업데이트
-        dispatch({ type: actionTypes.UPDATE_CATEGORY_PROJECTS, payload: newCategoryProjects })
+        setCategoryProjects(newCategoryProjects)
       } catch (error) {
         console.error('카테고리 로드 실패:', error)
       }
     }
 
     loadCategoriesAndProjects()
-  }, [setCategories, dispatch, isAuthenticated])
+  }, [setCategories, dispatch, isAuthenticated, setCategoryProjects])
 
   const handleProjectClick = async (project: IProject) => {
     if(state.currentProjectId === project.id)
@@ -257,23 +259,63 @@ export function ProjectCategorySection({
     if (destinationId.startsWith('category-')) {
       const categoryId = destinationId.replace('category-', '');
       try {
-        const response = await fetch(`/api/v1/projects/${sourceId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            category_id: categoryId,
-          }),
-        });
+        // 이동된 프로젝트 찾기
+        const movedProject = [...(state.recentProjects.today || []), 
+                            ...(state.recentProjects.last_7_days || []),
+                            ...(state.recentProjects.last_30_days || [])]
+                            .find(p => p.id === sourceId);
 
-        if (!response.ok) {
-          throw new Error('프로젝트 이동에 실패했습니다.');
+        if (!movedProject) {
+          console.error('이동할 프로젝트를 찾을 수 없습니다.');
+          return;
         }
 
+        // 프로젝트를 영구 프로젝트로 변경
+        await api.updateProjectToPermanent(sourceId, categoryId);
+
+        // 백엔드로 카테고리(영구폴더) 변경 요청
+        await api.addProjectToCategory(sourceId, categoryId);
+
+        // 카테고리(영구폴더)에 프로젝트 추가
+        setCategoryProjects((prev: { [key: string]: IProject[] }) => ({
+          ...prev,
+          [categoryId]: [...(prev[categoryId] || []), {
+            id: movedProject.id,
+            name: movedProject.name,
+            is_temporary: false,
+            retention_period: 'PERMANENT',
+            created_at: movedProject.created_at,
+            updated_at: movedProject.updated_at
+          }]
+        }));
+
         // 프로젝트 목록 새로고침
-        const recentProjects:IRecentProjectsResponse= await api.getRecentProjects();
-        dispatch({ type: actionTypes.UPDATE_RECENT_PROJECTS, payload: recentProjects });
+        const recentProjects = await api.getRecentProjects();
+        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: recentProjects });
+
+        // 카테고리 프로젝트 목록 새로고침
+        const categoriesData = await api.getCategories();
+        const projectsPromises = categoriesData.map(async (category) => {
+          try {
+            const projects = await api.getCategoryProjects(category.id);
+            return { categoryId: category.id, projects };
+          } catch (error) {
+            console.error(`카테고리 ${category.id}의 프로젝트 로드 실패:`, error);
+            return { categoryId: category.id, projects: [] };
+          }
+        });
+
+        const projectsResults = await Promise.all(projectsPromises);
+        const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
+          acc[categoryId] = projects;
+          return acc;
+        }, {} as { [key: string]: IProject[] });
+
+        dispatch({
+          type: 'UPDATE_CATEGORY_PROJECTS',
+          payload: newCategoryProjects
+        });
+
       } catch (error) {
         console.error('프로젝트 이동 실패:', error);
       }
@@ -290,16 +332,16 @@ export function ProjectCategorySection({
 
     return (
       <div key={sectionTitle} className="mb-4">
-        <div className="flex items-center mb-2 text-sm font-medium text-gray-500 px-2">
+        <div className="flex items-center mb-2 text-xs font-medium text-gray-500 px-2">
           {sectionTitle}
           <span className="ml-1 text-xs">({projects.length})</span>
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {projects.map((project) => (
             <div
               key={project.id}
               className={cn(
-                "flex items-center px-2 py-1 text-sm rounded-md cursor-pointer",
+                "flex items-center px-3 py-1.5 text-sm rounded-md cursor-pointer",
                 state.currentProject?.id === project.id
                   ? "bg-gray-100 text-gray-900"
                   : "text-gray-600 hover:bg-gray-50"
@@ -347,13 +389,67 @@ export function ProjectCategorySection({
             }`}
             onClick={() => handleProjectClick(project)}
           >
-            <FileText className="w-4 h-4 mr-2" />
             <span className="truncate">{project.name}</span>
           </div>
         )}
       </Draggable>
     ))
   }
+
+  const renderProjects = (projects: IProject[], sectionTitle: string) => {
+    if (!Array.isArray(projects) || !projects?.length) return null;
+
+    return (
+      <div className="space-y-1">
+        <div className="text-xs text-gray-500 px-2">{sectionTitle}</div>
+        {projects.map((project, index) => {
+          if (!project?.id) return null;
+          
+          return (
+            <Draggable
+              key={project.id}
+              draggableId={project.id}
+              index={index}
+            >
+              {(provided, snapshot) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.draggableProps}
+                  {...provided.dragHandleProps}
+                  className={cn(
+                    "relative flex items-center cursor-move",
+                    snapshot.isDragging && "shadow-lg border-2 border-blue-500",
+                    !snapshot.isDragging && "hover:bg-gray-50",
+                    "rounded-md transition-all duration-200 ease-in-out"
+                  )}
+                >
+                  <div className="flex-1 px-2 py-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={cn(
+                        "w-full justify-start gap-2 px-2 max-w-full",
+                        state.currentProjectId === project.id && "bg-gray-100"
+                      )}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleProjectClick(project);
+                      }}
+                    >
+                      <span className="truncate text-left" title={project.name}>
+                        {truncateTitle(project.name, 15)}
+                      </span>
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Draggable>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col space-y-4">
@@ -400,7 +496,7 @@ export function ProjectCategorySection({
                       </Button>
                     </div>
                     {/* 카테고리 내의 프로젝트 목록 */}
-                    <div className="pl-6">
+                    <div className="pl-3">
                       {renderCategoryProjects(category.id)}
                     </div>
                     {provided.placeholder}
@@ -488,9 +584,23 @@ export function ProjectCategorySection({
           <div className="flex items-center justify-between px-2 py-1">
             <span className="text-sm font-semibold text-gray-700">최근 프로젝트</span>
           </div>
-          {renderProjectList("오늘", state.recentProjects.today)}
-          {renderProjectList("지난 7일", state.recentProjects.last_7_days)}
-          {renderProjectList("지난 30일", state.recentProjects.last_30_days)}
+          <Droppable droppableId="recent-projects" type="PROJECT">
+            {(provided, snapshot) => (
+              <div
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+                className={cn(
+                  "space-y-2 min-h-[40px]",
+                  snapshot.isDraggingOver && "bg-gray-100/50"
+                )}
+              >
+                {state.recentProjects?.today && renderProjects(state.recentProjects.today, '오늘')}
+                {state.recentProjects?.last_7_days && renderProjects(state.recentProjects.last_7_days, '지난 7일')}
+                {state.recentProjects?.last_30_days && renderProjects(state.recentProjects.last_30_days, '지난 30일')}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
         </div>
       )}
       {/* 삭제 확인 다이얼로그 */}

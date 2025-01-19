@@ -79,9 +79,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
           type: 'UPDATE_RECENT_PROJECTS', 
           payload: {
             today: response.today || [],
-            yesterday: response.yesterday || [],
-            four_days_ago: response.four_days_ago || [],
-            older: []
+            last_7_days: response.last_7_days || [],
+            last_30_days: response.last_30_days || []
           }
         })
         setIsLoading(false)
@@ -107,9 +106,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
             type: 'UPDATE_RECENT_PROJECTS', 
             payload: {
               today: response.today || [],
-              yesterday: response.yesterday || [],
-              four_days_ago: response.four_days_ago || [],
-              older: []
+              last_7_days: response.last_7_days || [],
+              last_30_days: response.last_30_days || []
             }
           })
 
@@ -181,8 +179,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
       try {
         // 이동된 프로젝트 찾기
         const movedProject = [...(state.recentProjects.today || []), 
-                            ...(state.recentProjects.yesterday || []),
-                            ...(state.recentProjects.four_days_ago || [])]
+                            ...(state.recentProjects.last_7_days || []),
+                            ...(state.recentProjects.last_30_days || [])]
                             .find(p => p.id === draggableId);
 
         if (!movedProject) {
