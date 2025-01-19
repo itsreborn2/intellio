@@ -66,6 +66,7 @@ class TableHistoryService:
                 # 기존 레코드 업데이트
                 existing_history.title = data.title
                 existing_history.result = data.result
+                # updated_at은 SQLAlchemy가 자동으로 처리
                 histories.append(existing_history)
             else:
                 # 새 레코드 생성
@@ -81,7 +82,12 @@ class TableHistoryService:
                 self.db.add(new_history)
                 histories.append(new_history)
         
+        # 한 번에 커밋
         await self.db.commit()
+        
+        # 모든 히스토리 새로고침
+        for history in histories:
+            await self.db.refresh(history)
         
         return [TableHistoryResponse.model_validate(history) for history in histories]
     

@@ -15,7 +15,7 @@ async def verify_admin(session: Session = Depends(get_current_session)):
     #if not session.user or not session.user.is_superuser:
     if not session.user:
         print(f'verify admin1 : {session.user}')
-        print(f'verify admin2 : {session.user.is_superuser}')
+        #print(f'verify admin2 : {session.user.is_superuser}')
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="관리자 권한이 필요합니다."

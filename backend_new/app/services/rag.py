@@ -409,7 +409,7 @@ class RAGService:
         try:
             # 1. 테이블 헤더 생성
             title = await self.table_header_prompt.generate_title(query)
-            logger.info("테이블 헤더 생성 완료")
+            logger.info(f"테이블 헤더 생성 완료 : 총 {len(document_ids)}개 문서 검색")
 
             if not document_ids:
                 return TableResponse(columns=[
@@ -454,13 +454,14 @@ class RAGService:
             tasks = [analyze_document(doc_id) for doc_id in doc_chunks.keys()]
             logger.warning(f"tasks: {tasks}")
             results = [result for result in await asyncio.gather(*tasks) if result]
-            logger.warning(f"results: {results}")
+            logger.warning(f"results[{len(results)}]: {results}")
 
             if not results:
+                _cells = [TableCell(doc_id=result["doc_id"], content="분석 오류") for result in results]
                 return TableResponse(columns=[
                     TableColumn(
                         header=TableHeader(name=title, prompt=query),
-                        cells=[TableCell(doc_id="1", content="문서 분석 중 오류가 발생했습니다.")]
+                        cells=_cells
                     )
                 ])
             
@@ -664,3 +665,13 @@ class RAGService:
         patterns["common_terms"] = [term for term, _ in common_terms]
 
         return patterns
+
+    @measure_time
+    async def process_document(self, document_id: UUID) -> Dict:
+        # 함수 내용
+        pass
+
+    @measure_time
+    async def query_document(self, query: str) -> str:
+        # 함수 내용
+        pass
