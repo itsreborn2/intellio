@@ -451,7 +451,9 @@ class RAGService:
                     return None
 
             tasks = [analyze_document(doc_id) for doc_id in doc_chunks.keys()]
+            logger.warning(f"tasks: {tasks}")
             results = [result for result in await asyncio.gather(*tasks) if result]
+            logger.warning(f"results: {results}")
 
             if not results:
                 return TableResponse(columns=[
@@ -460,41 +462,35 @@ class RAGService:
                         cells=[TableCell(doc_id="1", content="문서 분석 중 오류가 발생했습니다.")]
                     )
                 ])
+            
+            
+            # 셀 생성
+            cells = [TableCell(doc_id=result["doc_id"], content=result["content"]) 
+                    for result in results]
 
-            # 6. TableResponse 생성
-            response = TableResponse(columns=[
+            try:
+                history_service = TableHistoryService(self.db)
+                # 단일 트랜잭션으로 모든 히스토리 저장
+                await history_service.create_many(
+                    [TableHistoryCreate(
+                        project_id=project_id,
+                        document_id=result["doc_id"],
+                        user_id=user_id,
+                        prompt=query,
+                        title=title,
+                        result=str(result["content"])
+                    ) for result in results]
+                )
+                logger.info(f"{len(results)}개의 테이블 히스토리 저장 완료")
+            except Exception as e:
+                logger.error(f"히스토리 저장 중 오류 발생: {str(e)}")
+
+            return TableResponse(columns=[
                 TableColumn(
                     header=TableHeader(name=title, prompt=query),
-                    cells=[
-                        TableCell(
-                            doc_id=result["doc_id"],
-                            content=result["content"]
-                        )
-                        for result in results
-                    ]
+                    cells=cells
                 )
             ])
-
-            # 7. 히스토리 저장 (프로젝트 ID가 있는 경우에만)
-            if project_id:
-                try:
-                    history_service = TableHistoryService(self.db)
-                    await history_service.create(
-                        TableHistoryCreate(
-                            project_id=project_id,
-                            document_id=document_ids[0] if document_ids else None,
-                            user_id=user_id,
-                            prompt=query,
-                            title=title,
-                            result=str(response.model_dump())  # 딕셔너리를 문자열로 변환
-                        )
-                    )
-                    logger.info("테이블 히스토리 저장 완료")
-                except Exception as e:
-                    logger.error(f"히스토리 저장 중 오류 발생: {str(e)}")
-                    # 히스토리 저장 실패는 전체 프로세스에 영향을 주지 않도록 함
-
-            return response
 
         except Exception as e:
             logger.error(f"테이블 모드 처리 실패: {str(e)}")

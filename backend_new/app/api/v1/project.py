@@ -48,17 +48,14 @@ async def create_project(
 async def get_recent_projects(
     limit: int = 5,
     session: Session = Depends(get_current_session),
-    db: AsyncSession = Depends(get_db),
-    #user_service: UserService = Depends(get_user_service),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """최근 프로젝트 목록 조회"""
-    logger.debug(f"최근 프로젝트 조회 - User Id:{session.user_id}")
-    
     try:
-        logger.info(f"get_recent_projects : {session}")
-        # 세션 검증
-        if not session or not session.is_authenticated or not session.user:
+        logger.debug(f"최근 프로젝트 조회 시작 - Session: {session}")
+        
+        # 세션이 없거나 user_id가 없는 경우 빈 결과 반환
+        if not session or not session.user_id:
             logger.warning("인증되지 않은 사용자의 접근")
             return RecentProjectsResponse(
                 today=[],
@@ -67,31 +64,16 @@ async def get_recent_projects(
                 older=[]
             )
 
-        # email = session.user.email
-        # logger.info(f"최근 프로젝트 조회 - 사용자: {email}")
-
-        # 이메일로 사용자 조회
-        # user = await user_service.get_by_email(email)
-        # if not user:
-        #     logger.error(f"사용자를 찾을 수 없음: {email}")
-        #     return RecentProjectsResponse(
-        #         today=[],
-        #         yesterday=[],
-        #         four_days_ago=[],
-        #         older=[]
-        #     )
-
         # 사용자 ID로 최근 프로젝트 조회
         result = await project_service.get_recent_by_user_id(session.user_id, limit)
+        logger.debug(f"프로젝트 조회 결과: {result}")
         return result
 
     except Exception as e:
         logger.error(f"최근 프로젝트 조회 중 오류 발생: {str(e)}", exc_info=True)
-        return RecentProjectsResponse(
-            today=[],
-            yesterday=[],
-            four_days_ago=[],
-            older=[]
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="프로젝트 목록을 조회하는 중 오류가 발생했습니다."
         )
 
 @router.get("/{project_id}", response_model=ProjectSimpleResponse)
@@ -180,13 +162,14 @@ async def list_projects(
 async def update_project(
     project_id: UUID,
     project_in: ProjectUpdate,
+    session: Session = Depends(get_current_session),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 수정"""
     logger.info(f"프로젝트 업데이트 시도: {project_id}")
     logger.info(f"업데이트 데이터: {project_in}")
     try:
-        project = await project_service.update(project_id, project_in)
+        project = await project_service.update(project_id, project_in, user_id=session.user_id)
         if not project:
             logger.warning(f"프로젝트를 찾을 수 없음: {project_id}")
             raise HTTPException(

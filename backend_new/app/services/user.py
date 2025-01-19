@@ -155,23 +155,31 @@ class UserService:
 
     async def get_active_session(self, session_id: str) -> Optional[Session]:
         """활성 세션 조회"""
-        logger.info(f'[get_active_session] 시작: session_id = {session_id}')
-        session = await self.get_session(session_id)
-        logger.info(f'[get_active_session] 세션 조회 결과: {session}')
-        
-        if not session:
-            logger.info(f'[get_active_session] 세션이 없음')
-            return None
+        try:
+            logger.info(f'[get_active_session] 시작: session_id = {session_id}')
+            session = await self.get_session(session_id)
+            logger.info(f'[get_active_session] 세션 조회 결과: {session}')
             
-        if session.is_expired:  # 메서드로 호출
-            logger.info(f'[get_active_session] 세션이 만료됨: last_accessed_at = {session.last_accessed_at}')
+            if not session:
+                logger.info(f'[get_active_session] 세션이 없음')
+                return None
+                
+            if session.is_expired:  
+                logger.info(f'[get_active_session] 세션이 만료됨: last_accessed_at = {session.last_accessed_at}')
+                await self.delete_session(session_id)  
+                return None
+            
+            # 세션 접근 시간 갱신
+            session.touch()
+            await self.db.commit()
+            await self.db.refresh(session)
+            
+            logger.info(f'[get_active_session] 유효한 세션 반환: {session}')
+            return session
+            
+        except Exception as e:
+            logger.error(f'[get_active_session] 오류 발생: {str(e)}', exc_info=True)
             return None
-        
-        logger.info(f'[get_active_session] 유효한 세션 반환: {session}')
-        # 세션 접근 시간 갱신
-        session.touch()
-        await self.db.commit()
-        return session
 
     async def update_session(
         self,
