@@ -15,7 +15,7 @@ from app.models.document import Document
 from app.schemas.table_response import TableHeader, TableCell, TableColumn, TableResponse
 from app.schemas.table_history import TableHistoryCreate
 from app.services.table_history import TableHistoryService
-
+from app.utils.common import measure_time
 logger = logging.getLogger(__name__)
 
 # 문서 상태 상수
@@ -385,7 +385,8 @@ class RAGService:
         except Exception as e:
             logger.error(f"채팅 모드 처리 실패: {str(e)}")
             raise
-
+        
+    @measure_time
     async def handle_table_mode(self, query: str, document_ids: List[str] = None, user_id: str = None, project_id: str = None) -> TableResponse:
         """테이블 모드 처리"""
         try:
