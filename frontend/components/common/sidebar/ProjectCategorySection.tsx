@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Folder, Plus, Trash2, FileText, ChevronDown, ChevronRight, History, AlertCircle } from 'lucide-react'
+import { Folder, Plus, Trash2, ChevronDown, ChevronRight, History, AlertCircle, FileText } from 'lucide-react'
 import * as api from '@/services/api'  // 최상단에 추가
 import { IRecentProjectsResponse, IProject, Category, ProjectDetail, TableResponse,  } from '@/types/index'
 import { getRecentProjects, } from '@/services/api'
@@ -175,20 +175,16 @@ export function ProjectCategorySection({
     loadCategoriesAndProjects()
   }, [setCategories, dispatch, isAuthenticated])
 
-  const handleProjectClick = async (projectId: string, is_temp: any) => {
-
-    console.log(`Current project:${state.currentProjectId}, Project UUID: ${projectId}, is_temp:${is_temp}`);
-    if(state.currentProjectId === projectId )
+  const handleProjectClick = async (project: IProject) => {
+    if(state.currentProjectId === project.id)
       return;
-    // 채팅 영역 초기화
-    // 문서 영역 초기화
-    const projectInfo:ProjectDetail = await api.getProjectInfo(projectId)
-    console.log(`Change Project To ${projectInfo.name}`)
+
+    console.log(`Current project:${state.currentProjectId}, Project UUID: ${project.id}, is_temp:${project.is_temporary}`);
+    
     // 프로젝트 기본정보 요청
-    // 프로젝트의 문서 목록 요청
-    // 문서의 양이 많을때, 프로젝트와 문서를 한번에 불러오려면 로딩시간이 매우 길어질수 있기 때문에
-    // 요청을 2개로 분리한다. UI 제공.
-    // 프로젝트 기본정보 설정
+    const projectInfo:ProjectDetail = await api.getProjectInfo(project.id)
+    console.log(`Change Project To ${projectInfo.name}`)
+    
     console.log(`handleProjectClick current view: ${state.currentView}`)
     
     // 현재 view가 upload인 경우에만 chat으로 변경, 나머지는 유지
@@ -197,25 +193,23 @@ export function ProjectCategorySection({
     }
 
     dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: projectInfo })
-    
     dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: projectInfo.name })
 
     // 채팅 메시지 초기화
     dispatch({ type: actionTypes.CLEAR_CHAT_MESSAGE })
-    const documents = await api.getDocumentList(projectId)
-    dispatch({ type: actionTypes.SET_DOCUMENT_LIST, payload: documents })  // documents 상태 업데이트
+    
+    // 문서 목록 요청
+    const documents = await api.getDocumentList(project.id)
+    dispatch({ type: actionTypes.SET_DOCUMENT_LIST, payload: documents })
 
     // 테이블 히스토리 요청
     try {
-      const tableHistory:TableResponse = await api.getTableHistory(projectId)
+      const tableHistory:TableResponse = await api.getTableHistory(project.id)
       console.log('테이블 히스토리 로드 결과:', tableHistory)
-      
       dispatch({ type: actionTypes.UPDATE_TABLE_DATA, payload: tableHistory })
     } catch (error) {
       console.error('테이블 히스토리 로드 실패:', error)
     }
-
-    //console.log(`프로젝트 handleProjectClick : `, documents)
   }
 
   const handleDeleteCategory = async () => {
@@ -291,62 +285,44 @@ export function ProjectCategorySection({
     return title.length > maxLength ? `${title.slice(0, maxLength)}...` : title;
   };
 
-  const renderProjects = (projects: IProject[], sectionTitle: string) => {
-    if (!Array.isArray(projects) || !projects?.length) return null;
+  const renderProjectList = (sectionTitle: string, projects: IProject[]) => {
+    if (!projects || projects.length === 0) return null;
 
     return (
-      <div className="space-y-1">
-        <div className="text-xs text-gray-500 px-2">{sectionTitle}</div>
-        {projects.map((project, index) => {
-          if (!project?.id) return null;
-          //console.log('Project object:', project);  // 프로젝트 객체 전체 출력
-          
-          return (
-            <Draggable
+      <div key={sectionTitle} className="mb-4">
+        <div className="flex items-center mb-2 text-sm font-medium text-gray-500 px-2">
+          {sectionTitle}
+          <span className="ml-1 text-xs">({projects.length})</span>
+        </div>
+        <div className="space-y-1">
+          {projects.map((project) => (
+            <div
               key={project.id}
-              draggableId={project.id}
-              index={index}
-            >
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.draggableProps}
-                  {...provided.dragHandleProps}
-                  className={cn(
-                    "relative flex items-center cursor-move",
-                    snapshot.isDragging && "shadow-lg border-2 border-blue-500",
-                    !snapshot.isDragging && "hover:bg-gray-50",
-                    "rounded-md transition-all duration-200 ease-in-out"
-                  )}
-                >
-                  <div className="flex-1 px-2 py-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className={cn(
-                        "w-full justify-start gap-2 px-2 max-w-full",
-                        state.currentProjectId === project.id && "bg-gray-100"
-                      )}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleProjectClick(project.id, project.is_temporary);
-                      }}
-                    >
-                      <FileText className={cn(
-                        "h-4 w-4 flex-shrink-0",
-                        snapshot.isDragging && "text-blue-500"
-                      )} />
-                      <span className="truncate text-left" title={project.name}>
-                        {truncateTitle(project.name, 15)}
-                      </span>
-                    </Button>
-                  </div>
-                </div>
+              className={cn(
+                "flex items-center px-2 py-1 text-sm rounded-md cursor-pointer",
+                state.currentProject?.id === project.id
+                  ? "bg-gray-100 text-gray-900"
+                  : "text-gray-600 hover:bg-gray-50"
               )}
-            </Draggable>
-          );
-        })}
+              onClick={() => handleProjectClick(project)}
+            >
+              <span className="truncate">{project.name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderProjectSection = () => {
+    const recentProjects = state.recentProjects;
+    if (!recentProjects) return null;
+
+    return (
+      <div className="overflow-y-auto max-h-[calc(100vh-16rem)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
+        {renderProjectList("오늘", recentProjects.today)}
+        {renderProjectList("지난 7일", recentProjects.last_7_days)}
+        {renderProjectList("지난 30일", recentProjects.last_30_days)}
       </div>
     );
   };
@@ -369,7 +345,7 @@ export function ProjectCategorySection({
             className={`flex items-center px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer ${
               state.currentProjectId === project.id ? 'bg-gray-100' : ''
             }`}
-            onClick={() => handleProjectClick(project.id, project.is_temporary)}
+            onClick={() => handleProjectClick(project)}
           >
             <FileText className="w-4 h-4 mr-2" />
             <span className="truncate">{project.name}</span>
@@ -379,112 +355,12 @@ export function ProjectCategorySection({
     ))
   }
 
-  const renderRecentProjects = () => {
-    if (!Array.isArray(state.recentProjects?.today) || !state.recentProjects?.today?.length) return null;
-
-    return (
-      <div className="space-y-1">
-        <div className="text-xs text-gray-500 px-2">최근 프로젝트</div>
-        {state.recentProjects.today.map((project, index) => {
-          if (!project?.id) return null;
-          //console.log('Project object:', project);  // 프로젝트 객체 전체 출력
-          
-          return (
-            <Draggable
-              key={project.id}
-              draggableId={project.id}
-              index={index}
-            >
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.draggableProps}
-                  {...provided.dragHandleProps}
-                  className={cn(
-                    "relative flex items-center cursor-move",
-                    snapshot.isDragging && "shadow-lg border-2 border-blue-500",
-                    !snapshot.isDragging && "hover:bg-gray-50",
-                    "rounded-md transition-all duration-200 ease-in-out"
-                  )}
-                >
-                  <div className="flex-1 px-2 py-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className={cn(
-                        "w-full justify-start gap-2 px-2 max-w-full",
-                        state.currentProjectId === project.id && "bg-gray-100"
-                      )}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleProjectClick(project.id, project.is_temporary);
-                      }}
-                    >
-                      <FileText className={cn(
-                        "h-4 w-4 flex-shrink-0",
-                        snapshot.isDragging && "text-blue-500"
-                      )} />
-                      <span className="truncate text-left" title={project.name}>
-                        {truncateTitle(project.name, 15)}
-                      </span>
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </Draggable>
-          );
-        })}
-      </div>
-    );
-  };
-
   return (
     <div className="flex flex-col space-y-4">
-      {/* 최근 프로젝트 섹션 */}
-      <div className="flex flex-col">
-        <div className="flex items-center justify-between px-2 py-1">
-          <span className="text-sm font-medium text-gray-700">최근 프로젝트</span>
-        </div>
-        {isAuthenticated ? (
-          expandedSections.includes('recent') && (
-            <Droppable droppableId="recent-projects" type="PROJECT">
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className={cn(
-                    "space-y-2 min-h-[40px]",
-                    snapshot.isDraggingOver && "bg-gray-100/50"
-                  )}
-                >
-                  {state.recentProjects?.today && renderProjects(state.recentProjects.today, '오늘')}
-                  {state.recentProjects?.yesterday && renderProjects(state.recentProjects.yesterday, '어제')}
-                  {state.recentProjects?.four_days_ago && renderProjects(state.recentProjects.four_days_ago, '4일전')}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          )
-        ) : (
-          <div className="text-center text-gray-500 py-2">
-            로그인 후 최근 프로젝트를 볼 수 있습니다.
-          </div>
-        )}
-      </div>
-
       {/* 프로젝트 폴더 섹션 */}
       <div className="flex flex-col">
         <div className="flex items-center justify-between px-2 py-1">
-          <span className="text-sm font-medium text-gray-700">프로젝트 폴더</span>
-          {isAuthenticated && (
-            <button
-              onClick={handleAddCategory}
-              className="p-1 text-gray-500 hover:text-gray-700"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          )}
+          <span className="text-sm font-semibold text-gray-700">프로젝트 폴더</span>
         </div>
         {isAuthenticated ? (
           <>
@@ -606,6 +482,17 @@ export function ProjectCategorySection({
         )}
       </div>
 
+      {/* 최근 프로젝트 섹션 */}
+      {isAuthenticated && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between px-2 py-1">
+            <span className="text-sm font-semibold text-gray-700">최근 프로젝트</span>
+          </div>
+          {renderProjectList("오늘", state.recentProjects.today)}
+          {renderProjectList("지난 7일", state.recentProjects.last_7_days)}
+          {renderProjectList("지난 30일", state.recentProjects.last_30_days)}
+        </div>
+      )}
       {/* 삭제 확인 다이얼로그 */}
       <Dialog open={!!categoryToDelete} onOpenChange={() => setCategoryToDelete(null)}>
         <DialogContent>

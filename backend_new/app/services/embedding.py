@@ -3,6 +3,7 @@ import numpy as np
 from openai import OpenAI, AsyncOpenAI
 from pinecone import Pinecone, ServerlessSpec
 import logging
+import re
 from app.core.config import settings
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -139,7 +140,16 @@ class EmbeddingService:
             filter_dict = {}
             if document_ids:
                 filter_dict["document_id"] = {"$in": document_ids}
-                
+
+            # 제목 검색을 위한 필터 추가
+            company_patterns = [
+                r'기업명|회사명|법인명|상호',
+                r'([가-힣A-Za-z\s&]+)(주식회사|㈜|주식회사|[Cc]orp\.?|[Cc]orporation|[Cc]ompany|[Ii]nc\.?)',
+                r'([가-힣A-Za-z\s&]+)(그룹|[Gg]roup)',
+            ]
+            
+            is_company_query = any(re.search(pattern, query, re.IGNORECASE) for pattern in company_patterns)
+            
             # Pinecone에서 유사한 벡터 검색
             results = self.index.query(
                 vector=query_embedding,
@@ -149,42 +159,42 @@ class EmbeddingService:
             )
             
             # 결과 필터링 및 정렬
-            similar_chunks = []
-            seen_texts = set()  # 중복 제거를 위한 집합
-            
+            filtered_matches = []
             for match in results.matches:
-                # 최소 유사도 점수 필터링
+                # 최소 유사도 점수 체크
                 if match.score < min_score:
                     continue
                     
+                # 메타데이터 포함
                 chunk = {
                     "id": match.id,
                     "score": match.score,
-                    "text": match.metadata.get("text", ""),
-                    "document_id": match.metadata.get("document_id", ""),
-                    "chunk_index": match.metadata.get("chunk_index", 0)
+                    "content": match.metadata.get("text", ""),
+                    "metadata": match.metadata
                 }
                 
-                # 중복 텍스트 제거
-                text_hash = hash(chunk["text"])
-                if text_hash in seen_texts:
-                    continue
-                seen_texts.add(text_hash)
-                
-                similar_chunks.append(chunk)
+                # 기업명 쿼리인 경우 제목 우선 순위 부여
+                if is_company_query:
+                    title = match.metadata.get("title", "")
+                    if any(re.search(pattern, title, re.IGNORECASE) for pattern in company_patterns):
+                        chunk["score"] *= 1.5  # 제목 매칭 시 점수 가중치
+                        
+                filtered_matches.append(chunk)
             
-            # 문맥 고려
-            if use_context and similar_chunks:
-                similar_chunks = await self._add_context_chunks(similar_chunks, context_window)
+            # 점수 기준 정렬
+            filtered_matches.sort(key=lambda x: x["score"], reverse=True)
             
-            # 최종 결과 정렬 및 제한
-            similar_chunks.sort(key=lambda x: x["score"], reverse=True)
-            similar_chunks = similar_chunks[:top_k]
+            # 상위 K개만 선택
+            top_matches = filtered_matches[:top_k]
             
-            return similar_chunks
+            # 문맥 추가
+            if use_context and top_matches:
+                return await self._add_context_chunks(top_matches, context_window)
+            
+            return top_matches
             
         except Exception as e:
-            logger.error(f"유사 청크 검색 실패: {str(e)}")
+            logger.error(f"유사 청크 검색 중 오류 발생: {str(e)}")
             return []
             
     async def _add_context_chunks(
@@ -196,8 +206,8 @@ class EmbeddingService:
         context_chunks = []
         
         for chunk in chunks:
-            doc_id = chunk["document_id"]
-            chunk_idx = chunk["chunk_index"]
+            doc_id = chunk["metadata"].get("document_id", "")
+            chunk_idx = chunk["metadata"].get("chunk_index", 0)
             
             # 현재 청크 추가
             context_chunks.append(chunk)
@@ -252,13 +262,12 @@ class EmbeddingService:
                 chunks.append({
                     "id": match.id,
                     "score": 0.0,  # 문맥 청크는 점수 0으로 설정
-                    "text": match.metadata.get("text", ""),
-                    "document_id": match.metadata.get("document_id", ""),
-                    "chunk_index": match.metadata.get("chunk_index", 0)
+                    "content": match.metadata.get("text", ""),
+                    "metadata": match.metadata
                 })
             
             # 청크 인덱스로 정렬
-            chunks.sort(key=lambda x: x["chunk_index"])
+            chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
             return chunks
             
         except Exception as e:
@@ -281,8 +290,7 @@ class EmbeddingService:
             for match in results.matches:
                 chunk = {
                     "id": match.id,
-                    "text": match.metadata.get("text", ""),
-                    "document_id": match.metadata.get("document_id", ""),
+                    "content": match.metadata.get("text", ""),
                     "metadata": match.metadata
                 }
                 chunks.append(chunk)

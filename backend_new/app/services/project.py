@@ -49,6 +49,10 @@ class ProjectService:
         
         if project_row:
             project = project_row[0] # result.first()는 튜플을 반환하므로 인덱싱 필요
+            # 프로젝트 조회 시 마지막 접근 시간 갱신
+            project.updated_at = datetime.utcnow()
+            await self.db.commit()
+            logger.debug(f"프로젝트 {project_id} 마지막 접근 시간 갱신: {project.updated_at}")
             return project
         else:
             logger.warning("프로젝트를 찾을 수 없습니다.")
@@ -88,58 +92,59 @@ class ProjectService:
     async def get_recent(
         self,
         session: Optional[Session] = None,
-        limit: int = 5
     ) -> Dict[str, List[Project]]:
-        """최근 프로젝트 목록 조회"""
-        # 현재 시간 기준으로 날짜 범위 계산
+        """최근 프로젝트 목록 조회
+        
+        Returns:
+            Dict[str, List[Project]]: 다음 기간별 프로젝트 목록
+            - today: 오늘 생성/수정된 프로젝트
+            - last_7_days: 지난 7일간 생성/수정된 프로젝트
+            - last_30_days: 지난 30일간 생성/수정된 프로젝트
+        """
         logger.info(f"get_recent - UserID: {session.user_id}")
         now = datetime.utcnow()
         today_start = datetime(now.year, now.month, now.day)
-        yesterday_start = today_start - timedelta(days=1)
-        four_days_ago_start = today_start - timedelta(days=4)
-        four_days_ago_end = today_start - timedelta(days=3)
+        last_7_days_start = today_start - timedelta(days=7)
+        last_30_days_start = today_start - timedelta(days=30)
 
         # 기본 쿼리 생성
         base_query = select(Project)
-        #base_query = select(Project).where(Project.is_temporary == True)
-        if session:
-            if session.user_id:
-                base_query = base_query.where(Project.user_id == session.user_id)
-            else:
-                #base_query = base_query.where(Project.session_id == session.session_id)
-                return {
-                    "today": [],
-                    "yesterday": [],
-                    "four_days_ago": []
-                }
+        if session and session.user_id:
+            base_query = base_query.where(Project.user_id == session.user_id)
+        else:
+            return {
+                "today": [],
+                "last_7_days": [],
+                "last_30_days": []
+            }
 
-        # 오늘 생성된 프로젝트
+        # 오늘 생성/수정된 프로젝트
         today_query = base_query.where(
-            Project.created_at >= today_start
-        ).order_by(Project.created_at.desc()).limit(limit)
+            Project.updated_at >= today_start
+        ).order_by(Project.updated_at.desc())
         
-        # 어제 생성된 프로젝트
-        yesterday_query = base_query.where(
-            Project.created_at >= yesterday_start,
-            Project.created_at < today_start
-        ).order_by(Project.created_at.desc()).limit(limit)
+        # 지난 7일간 생성/수정된 프로젝트 (오늘 제외)
+        last_7_days_query = base_query.where(
+            Project.updated_at >= last_7_days_start,
+            Project.updated_at < today_start
+        ).order_by(Project.updated_at.desc())
         
-        # 4일 전 생성된 프로젝트
-        four_days_ago_query = base_query.where(
-            Project.created_at >= four_days_ago_start,
-            Project.created_at < four_days_ago_end
-        ).order_by(Project.created_at.desc()).limit(limit)
+        # 지난 30일간 생성/수정된 프로젝트 (지난 7일 제외)
+        last_30_days_query = base_query.where(
+            Project.updated_at >= last_30_days_start,
+            Project.updated_at < last_7_days_start
+        ).order_by(Project.updated_at.desc())
 
         # 각 쿼리 실행
         today_result = await self.db.execute(today_query)
-        yesterday_result = await self.db.execute(yesterday_query)
-        four_days_ago_result = await self.db.execute(four_days_ago_query)
+        last_7_days_result = await self.db.execute(last_7_days_query)
+        last_30_days_result = await self.db.execute(last_30_days_query)
 
         # 결과 반환
         return {
             "today": list(today_result.scalars().all()),
-            "yesterday": list(yesterday_result.scalars().all()),
-            "four_days_ago": list(four_days_ago_result.scalars().all())
+            "last_7_days": list(last_7_days_result.scalars().all()),
+            "last_30_days": list(last_30_days_result.scalars().all())
         }
 
     async def get_recent_by_user_id(
@@ -213,3 +218,34 @@ class ProjectService:
         await self.db.delete(project)
         await self.db.commit()
         return True
+
+    async def cleanup_expired_projects(self) -> int:
+        """30일 동안 수정되지 않은 임시 프로젝트 정리 작업"""
+        try:
+            # 30일 전 날짜 계산
+            expiration_date = datetime.utcnow() - timedelta(days=30)
+            
+            # 만료된 임시 프로젝트 조회 (마지막 수정일 기준)
+            query = select(Project).where(
+                and_(
+                    Project.is_temporary == True,
+                    Project.updated_at < expiration_date
+                )
+            )
+            
+            result = await self.db.execute(query)
+            expired_projects = result.scalars().all()
+            
+            # 만료된 프로젝트 삭제
+            count = 0
+            for project in expired_projects:
+                await self.db.delete(project)
+                count += 1
+            
+            await self.db.commit()
+            logger.info(f"{count}개의 만료된 임시 프로젝트가 삭제되었습니다. (마지막 수정일로부터 30일 경과)")
+            return count
+            
+        except Exception as e:
+            logger.error(f"임시 프로젝트 정리 중 오류 발생: {str(e)}")
+            raise

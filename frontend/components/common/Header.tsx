@@ -47,11 +47,30 @@ export const Header = ({ className }: { className?: string }) => {
     }
     
     const newTitle = editingTitle.trim()
-    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: newTitle })
+    
+    try {
+      // 백엔드로 프로젝트 이름 변경 요청
+      if (state.currentProject) {
+        await api.updateProjectName(state.currentProject.id, newTitle)
+        
+        // 상태 업데이트
+        dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: newTitle })
+        
+        // 현재 프로젝트 정보도 업데이트
+        const updatedProject = { ...state.currentProject, name: newTitle }
+        dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: updatedProject })
+        
+        // 최근 프로젝트 목록 새로고침
+        const recentProjects = await api.getRecentProjects()
+        dispatch({ type: actionTypes.UPDATE_RECENT_PROJECTS, payload: recentProjects })
+      }
+    } catch (error) {
+      console.error('프로젝트 이름 업데이트 실패:', error)
+      // 에러 발생 시 원래 이름으로 복원
+      setEditingTitle(state.projectTitle || 'Untitled Project')
+    }
+    
     setIsEditingTitle(false)
-    // 백엔드로 프로젝트 이름 변경 요청.
-    // 혹은 프로젝트 업데이트 요청하면서 변경된 이름을 넣어서 보내면 됨.
-
   }
 
   const handleTitleBlur = () => {
