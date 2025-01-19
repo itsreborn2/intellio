@@ -49,6 +49,10 @@ class ProjectService:
         
         if project_row:
             project = project_row[0] # result.first()는 튜플을 반환하므로 인덱싱 필요
+            # 프로젝트 조회 시 마지막 접근 시간 갱신
+            project.updated_at = datetime.utcnow()
+            await self.db.commit()
+            logger.debug(f"프로젝트 {project_id} 마지막 접근 시간 갱신: {project.updated_at}")
             return project
         else:
             logger.warning("프로젝트를 찾을 수 없습니다.")
@@ -212,3 +216,34 @@ class ProjectService:
         await self.db.delete(project)
         await self.db.commit()
         return True
+
+    async def cleanup_expired_projects(self) -> int:
+        """30일 동안 수정되지 않은 임시 프로젝트 정리 작업"""
+        try:
+            # 30일 전 날짜 계산
+            expiration_date = datetime.utcnow() - timedelta(days=30)
+            
+            # 만료된 임시 프로젝트 조회 (마지막 수정일 기준)
+            query = select(Project).where(
+                and_(
+                    Project.is_temporary == True,
+                    Project.updated_at < expiration_date
+                )
+            )
+            
+            result = await self.db.execute(query)
+            expired_projects = result.scalars().all()
+            
+            # 만료된 프로젝트 삭제
+            count = 0
+            for project in expired_projects:
+                await self.db.delete(project)
+                count += 1
+            
+            await self.db.commit()
+            logger.info(f"{count}개의 만료된 임시 프로젝트가 삭제되었습니다. (마지막 수정일로부터 30일 경과)")
+            return count
+            
+        except Exception as e:
+            logger.error(f"임시 프로젝트 정리 중 오류 발생: {str(e)}")
+            raise
