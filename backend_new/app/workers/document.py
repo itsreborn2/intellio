@@ -261,7 +261,7 @@ def process_document_text(doc_id: str):
     """문서 텍스트를 처리하고 임베딩을 생성하는 Celery 태스크"""
     db = SessionLocal()
     try:
-        logger.info(f"문서 처리 시작: {doc_id}")
+        logger.info(f"문서 처리 시작[process_document_text]: {doc_id}")
         
         # DB에서 문서 가져오기
         doc = db.query(Document).filter(Document.id == UUID(doc_id)).first()
