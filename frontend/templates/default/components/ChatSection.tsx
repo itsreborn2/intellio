@@ -177,16 +177,18 @@ export const ChatSection = () => {
                 }`}
               >
                 {message.role === 'user' ? (
-                  <div className="inline-block p-2 rounded-lg bg-blue-500 text-white text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed mr-2">
+                  <div className="inline-block px-2.5 py-1 rounded-lg bg-blue-500 text-white text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed mr-2">
                     <ReactMarkdown 
                       remarkPlugins={[remarkGfm]}
                       className="prose dark:prose-invert max-w-none 
                         [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-                        [&>h3]:mt-3 [&>h3]:mb-1 [&>h3]:text-base [&>h3]:font-semibold
-                        [&>p]:my-1 [&>p]:leading-relaxed [&>p]:whitespace-pre-line
-                        [&>ul]:my-1 [&>ul>li]:mt-0.5
-                        [&>ol]:my-1 [&>ol>li]:mt-0.5
-                        [&>table]:w-full [&>table]:my-2 [&>table]:border-collapse
+                        [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
+                        [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
+                        [&>h3]:mt-2 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
+                        [&>p]:my-3 [&>p]:leading-7 [&>p]:whitespace-pre-line
+                        [&>ul]:my-3 [&>ul>li]:mt-2
+                        [&>ol]:my-3 [&>ol>li]:mt-2
+                        [&>table]:w-full [&>table]:my-4 [&>table]:border-collapse
                         [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
                         [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
                         [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
@@ -194,16 +196,18 @@ export const ChatSection = () => {
                     </ReactMarkdown>
                   </div>
                 ) : (
-                  <div className="inline-block p-2 rounded-lg bg-gray-200 text-gray-800 text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed ml-2">
+                  <div className="inline-block px-2.5 py-1 rounded-lg bg-gray-200 text-gray-800 text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed ml-2">
                     <ReactMarkdown 
                       remarkPlugins={[remarkGfm]}
                       className="prose dark:prose-invert max-w-none 
                         [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-                        [&>h3]:mt-3 [&>h3]:mb-1 [&>h3]:text-base [&>h3]:font-semibold
-                        [&>p]:my-1 [&>p]:leading-relaxed [&>p]:whitespace-pre-line
-                        [&>ul]:my-1 [&>ul>li]:mt-0.5
-                        [&>ol]:my-1 [&>ol>li]:mt-0.5
-                        [&>table]:w-full [&>table]:my-2 [&>table]:border-collapse
+                        [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
+                        [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
+                        [&>h3]:mt-2 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
+                        [&>p]:my-3 [&>p]:leading-7 [&>p]:whitespace-pre-line
+                        [&>ul]:my-3 [&>ul>li]:mt-2
+                        [&>ol]:my-3 [&>ol>li]:mt-2
+                        [&>table]:w-full [&>table]:my-4 [&>table]:border-collapse
                         [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
                         [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
                         [&>table>tbody>tr:nth-child(even)]:bg-gray-50">

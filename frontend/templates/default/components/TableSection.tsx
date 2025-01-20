@@ -71,7 +71,7 @@ const formatContent = (content: string) => {
     .map(sentence => {
       // 마크다운 헤더 처리
       if (sentence.startsWith('# ')) {
-        return sentence + '\n';
+        return sentence;
       }
       
       // 불릿 포인트나 넘버링으로 시작하는 문장 처리
@@ -108,12 +108,6 @@ const formatContent = (content: string) => {
       }
       currentSection.push(sentence);
     } else {
-      // 불릿 포인트나 넘버링이 있는 경우 새 줄에 추가
-      if (sentence.startsWith('•') || sentence.startsWith('-') || /^\d+[\.\)]/.test(sentence.trim())) {
-        if (currentSection.length > 0 && !currentSection[currentSection.length - 1].endsWith('\n')) {
-          currentSection[currentSection.length - 1] += '\n';
-        }
-      }
       currentSection.push(sentence);
     }
   }
@@ -122,11 +116,11 @@ const formatContent = (content: string) => {
     sections.push(currentSection.join('\n'));
   }
 
-  // 최종 포맷팅
+  // 최종 포맷팅 - 이중 줄바꿈을 단일 줄바꿈으로 변경
   let formattedContent = sections
     .map(section => section.trim())
     .filter(section => section)
-    .join('\n\n');
+    .join('\n');
     
   // 특수 태그 복원
   Object.keys(tags).forEach((tag, idx) => {
