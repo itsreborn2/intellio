@@ -52,7 +52,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     const baseColumns: MRT_ColumnDef<IDocument>[] = [
       {
         accessorKey: 'filename',
-        header: 'Title',
+        header: 'Document',
       },
     ];
     
