@@ -40,7 +40,7 @@ class EmbeddingService:
                     # OpenAI API 비동기 호출
                     logger.debug(f"OpenAI API 호출 - 배치 크기: {batch_size}")
                     response = await self.async_client.embeddings.create(
-                        model="text-embedding-ada-002",
+                        model="text-embedding-ada-002",  
                         input=batch
                     )
                     
@@ -53,7 +53,7 @@ class EmbeddingService:
                     
                     # 임베딩 품질 체크
                     for j, emb in enumerate(batch_embeddings):
-                        if not emb or len(emb) != 1536:  # OpenAI ada-002 모델의 임베딩 차원
+                        if not emb or len(emb) != 1536:  
                             logger.error(f"잘못된 임베딩 차원 (배치 {i}, 인덱스 {j}): {len(emb) if emb else 0}")
                             continue
                     
@@ -114,7 +114,7 @@ class EmbeddingService:
                 return []
                 
             response = await self.async_client.embeddings.create(
-                model="text-embedding-ada-002",
+                model="text-embedding-ada-002",  
                 input=text.strip()
             )
             

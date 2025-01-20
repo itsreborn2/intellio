@@ -142,11 +142,40 @@ class BasePrompt:
         try:
             response = await self.gemini_api.generate_content(prompt)
             if response and response.text:
-                return response.text.strip()
-            return None
+                # 응답 텍스트 정리
+                text = response.text.strip()
+                
+                try:
+                    # JSON 형식인지 확인하고 파싱
+                    import json
+                    if text.startswith('{') and text.endswith('}'):
+                        parsed = json.loads(text)
+                        return json.dumps(parsed, ensure_ascii=False)
+                    return text
+                except json.JSONDecodeError:
+                    logger.warning(f"JSON 파싱 실패: {text[:100]}...")
+                    return text
+            
+            logger.error("Gemini API 응답이 비어있음")
+            return json.dumps({
+                "content": "응답을 생성할 수 없습니다.",
+                "metadata": {
+                    "confidence": 0.0,
+                    "source": "error",
+                    "context": "empty_response"
+                }
+            }, ensure_ascii=False)
+            
         except Exception as e:
             logger.error(f"Gemini 컨텐츠 생성 실패: {str(e)}")
-            return None
+            return json.dumps({
+                "content": f"컨텐츠 생성 중 오류 발생: {str(e)}",
+                "metadata": {
+                    "confidence": 0.0,
+                    "source": "error",
+                    "context": "generation_error"
+                }
+            }, ensure_ascii=False)
 
     async def _process_with_openai(self, prompt: str) -> Optional[str]:
         """OpenAI API를 사용한 프롬프트 처리 (폴백 메서드)

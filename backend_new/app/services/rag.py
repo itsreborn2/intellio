@@ -336,18 +336,27 @@ class RAGService:
         return keywords
 
     def _filter_chunks_by_query(self, chunks: List[Dict[str, Any]], query: str, query_analysis: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-        """
-        쿼리와 관련성이 높은 청크만 필터링합니다.
-        
-        Args:
-            chunks: 필터링할 청크 목록
-            query: 사용자 쿼리
-            query_analysis: 쿼리 분석 결과 (선택사항)
-        """
-        if not chunks:
-            logger.warning("필터링할 청크가 없습니다.")
-            return []
+        """쿼리와 관련된 청크 필터링
 
+        Args:
+            chunks: 검색된 청크 리스트
+            query: 사용자 쿼리
+            query_analysis: 쿼리 분석 결과
+
+        Returns:
+            List[Dict[str, Any]]: 필터링된 청크 리스트
+        """
+        # 쿼리 타입 확인
+        query_type = query_analysis.get("query_type", "general") if query_analysis else "general"
+        
+        # 테이블 모드인 경우 모든 청크 반환
+        if query_type == "table":
+            logger.info("테이블 모드: 모든 청크 포함")
+            for chunk in chunks:
+                chunk["score"] = chunk.get("score", 0)  # 점수가 없는 경우 0으로 설정
+            return sorted(chunks, key=lambda x: x.get("score", 0), reverse=True)
+        
+        # 일반 모드에서는 필터링 수행
         filtered_chunks = []
         min_score = self.config.get('min_similarity_score', 0.6)
         
@@ -362,23 +371,15 @@ class RAGService:
 
             # 청크 점수 계산 (Pinecone 유사도 점수)
             similarity_score = chunk.get("score", 0)
+            
+            # 최소 점수보다 낮은 경우 제외
             if similarity_score < min_score:
                 continue
 
-            # 쿼리 분석 결과가 있는 경우 추가 필터링
-            if query_analysis:
-                query_type = query_analysis.get("query_type", "general")
-                if query_type != "general":
-                    # 특정 타입의 쿼리에 대한 추가 처리 로직
-                    pass
-
-            # 최종 점수는 유사도 점수 사용
+            # 최종 점수 설정
             chunk["score"] = similarity_score
-
-            # 최소 점수 임계값을 넘는 경우만 포함
-            if similarity_score >= min_score:
-                filtered_chunks.append(chunk)
-                logger.debug(f"청크 {chunk.get('id')} 선택됨 - 점수: {similarity_score:.2f}")
+            filtered_chunks.append(chunk)
+            logger.debug(f"청크 {chunk.get('id')} 선택됨 - 점수: {similarity_score:.2f}")
 
         # 점수 기준으로 정렬
         filtered_chunks.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -388,9 +389,11 @@ class RAGService:
     async def _get_relevant_chunks(self, query: str, top_k: int = 5, document_ids: List[UUID] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """관련 문서 청크 검색 및 패턴 분석"""
         logger.info(f"청크 검색 시작 - 쿼리: {query}, top_k: {top_k}")
+        
+        # document_ids 처리
+        doc_ids_str = []
         if document_ids:
             logger.info(f"검색 대상 문서 ID: {document_ids}")
-            # UUID를 문자열로 변환
             doc_ids_str = [str(doc_id) for doc_id in document_ids]
         
         # 쿼리 정규화
@@ -398,17 +401,28 @@ class RAGService:
         logger.info(f"정규화된 쿼리: {normalized_query}")
         
         try:
+            # 쿼리 분석으로 모드 확인
+            query_analysis = self._analyze_query(query)
+            query_type = query_analysis.get("query_type", "chat")  # 기본값을 chat으로 설정
+            
+            # 모드별 청크 수 설정
+            if query_type == "table":
+                search_top_k = top_k * 5  # 테이블 모드: 5배
+                logger.info("테이블 모드: 청크 수 5배 증가")
+            else:  # chat 모드
+                search_top_k = top_k * 3  # 챗 모드: 3배
+                logger.info("챗 모드: 청크 수 3배 증가")
+                
+            logger.info(f"검색할 청크 수: {search_top_k}")
+            
             # 문서 검색
             all_chunks = await self.embedding_service.search_similar(
                 query=normalized_query,
-                document_ids=doc_ids_str if document_ids else None,
-                top_k=top_k
+                document_ids=doc_ids_str if doc_ids_str else None,
+                top_k=search_top_k
             )
             
             logger.info(f"검색된 총 청크 수: {len(all_chunks)}")
-            
-            # 쿼리 분석
-            query_analysis = self._analyze_query(query)
             
             # 청크 필터링
             if all_chunks:
@@ -419,10 +433,21 @@ class RAGService:
                 filtered_chunks = []
                 
             return filtered_chunks, query_analysis
-            
         except Exception as e:
-            logger.error(f"청크 검색 중 오류 발생: {str(e)}")
-            return [], {}
+            error_msg = str(e)
+            logger.error(f"청크 검색 중 오류 발생: {error_msg}", exc_info=True)
+            
+            # 상세한 오류 메시지
+            if "insufficient_quota" in error_msg:
+                user_msg = "시스템 사용량이 많아 잠시 후 다시 시도해주세요."
+            elif "rate_limit" in error_msg:
+                user_msg = "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."
+            elif "connection" in error_msg.lower():
+                user_msg = "서버 연결에 실패했습니다. 네트워크 상태를 확인해주세요."
+            else:
+                user_msg = f"문서 검색 중 오류가 발생했습니다: {error_msg}"
+            
+            return [{"error": user_msg}], {}
 
     async def handle_table_mode(self, query: str, document_ids: List[UUID] = None, user_id: str = None, project_id: str = None) -> TableResponse:
         """테이블 모드 처리"""
@@ -435,11 +460,20 @@ class RAGService:
             relevant_chunks, query_analysis = await self._get_relevant_chunks(query, document_ids=document_ids)
             logger.info(f"관련 청크 검색 완료 - 총 {len(relevant_chunks)}개 청크 발견")
 
+            # 오류 메시지가 있는 경우
+            if relevant_chunks and "error" in relevant_chunks[0]:
+                return TableResponse(columns=[
+                    TableColumn(
+                        header=TableHeader(name=title, prompt=query),
+                        cells=[TableCell(doc_id="error", content=relevant_chunks[0]["error"])]
+                    )
+                ])
+
             if not relevant_chunks:
                 return TableResponse(columns=[
                     TableColumn(
                         header=TableHeader(name=title, prompt=query),
-                        cells=[TableCell(doc_id="1", content="관련 문서를 찾을 수 없습니다.")]
+                        cells=[TableCell(doc_id="empty", content="관련 문서를 찾을 수 없습니다.")]
                     )
                 ])
 
@@ -450,45 +484,73 @@ class RAGService:
                 logger.debug(f"청크 데이터: {chunk}")
                 
                 doc_id = chunk["metadata"].get("document_id")
-                if doc_id:
-                    # chunk["text"] 대신 chunk["metadata"]["text"] 사용
-                    chunk_text = chunk["metadata"].get("text", "")
-                    if doc_id not in docs_data:
-                        docs_data[doc_id] = {
-                            "content": chunk_text,
-                            "keywords": self._extract_keywords(chunk_text)
-                        }
+                if not doc_id:
+                    continue
+                    
+                # chunk["text"] 대신 chunk["metadata"]["text"] 사용
+                chunk_text = chunk["metadata"].get("text", "")
+                if not chunk_text:
+                    continue
+                    
+                if doc_id not in docs_data:
+                    docs_data[doc_id] = {
+                        "content": chunk_text,
+                        "keywords": {}  # 딕셔너리로 변경하여 빈도수 저장
+                    }
+                else:
+                    docs_data[doc_id]["content"] += "\n" + chunk_text
+                
+                # 키워드 빈도수 업데이트
+                chunk_keywords = self._extract_keywords(chunk_text)
+                for keyword in chunk_keywords:
+                    if keyword in docs_data[doc_id]["keywords"]:
+                        docs_data[doc_id]["keywords"][keyword] += 1
                     else:
-                        docs_data[doc_id]["content"] += "\n" + chunk_text
-                        # 키워드 업데이트
-                        new_keywords = self._extract_keywords(chunk_text)
-                        docs_data[doc_id]["keywords"].extend(new_keywords)
+                        docs_data[doc_id]["keywords"][keyword] = 1
 
             # 각 문서별로 테이블 분석 수행
             columns = []
             for doc_id, data in docs_data.items():
-                # 키워드 추출 및 딕셔너리로 변환
-                keywords = self._extract_keywords(data["content"])
-                keywords_dict = {
-                    "keywords": keywords,
+                # 빈도수 기반으로 상위 키워드 선택 (예: 상위 10개)
+                sorted_keywords = sorted(
+                    data["keywords"].items(), 
+                    key=lambda x: x[1], 
+                    reverse=True
+                )[:10]
+                
+                keywords = {
+                    "keywords": [
+                        {
+                            "text": kw[0],
+                            "frequency": kw[1]
+                        } for kw in sorted_keywords
+                    ],
                     "type": "extracted",
                     "source": "document_content"
                 }
                 
                 # 테이블 분석 수행
-                analysis_result = await self.table_prompt.analyze(
-                    content=data["content"],
-                    query=query,
-                    keywords=keywords_dict,
-                    query_analysis=query_analysis
-                )
-                
-                # 분석 결과에서 content 필드만 추출
-                result_content = (
-                    analysis_result["content"] 
-                    if isinstance(analysis_result, dict) and "content" in analysis_result 
-                    else str(analysis_result)
-                )
+                try:
+                    analysis_result = await self.table_prompt.analyze(
+                        content=data["content"],
+                        query=query,
+                        keywords=keywords,
+                        query_analysis=query_analysis
+                    )
+                    
+                    if isinstance(analysis_result, str) and analysis_result.startswith('{'):
+                        parsed_result = json.loads(analysis_result)
+                        if isinstance(parsed_result, dict) and "content" in parsed_result:
+                            result_content = parsed_result["content"]
+                        else:
+                            result_content = str(parsed_result)
+                    else:
+                        result_content = str(analysis_result)
+                except json.JSONDecodeError:
+                    result_content = str(analysis_result)
+                except Exception as e:
+                    logger.error(f"분석 결과 처리 중 오류 발생: {str(e)}")
+                    result_content = "분석 결과 처리 중 오류가 발생했습니다."
                 
                 # 셀 추가
                 columns.append(TableColumn(
@@ -502,9 +564,9 @@ class RAGService:
                     history_service = TableHistoryService(self.db)
                     await history_service.create_many([
                         TableHistoryCreate(
-                            project_id=UUID(project_id),
-                            document_id=UUID(cell.doc_id),
-                            user_id=UUID(user_id),
+                            project_id=str(project_id),  # UUID를 문자열로 변환
+                            document_id=str(cell.doc_id),  # UUID를 문자열로 변환
+                            user_id=str(user_id),  # UUID를 문자열로 변환
                             prompt=query,
                             title=title,
                             result=str(cell.content)
@@ -768,7 +830,7 @@ class RAGService:
             'financial_statement': r'재무|회계|재표|손익|자산|부채|자본|현금흐름|매출',
             'investment': r'투자|수익률|성장률|밸류에이션|PER|ROE|배당|주가|시가총액',
             'risk': r'리스크|위험|평가|등급|변동성|안정성|취약성|대응',
-            'industry': r'산업|시장|경쟁|점유율|원가|마진|효율성|경기|규제',
+            'industry': r'산업|시장|경쟁|점유율|트렌드|성장성|전망|예측',
             'esg': r'ESG|환경|사회|지배구조|탄소|에너지|고용|이사회|주주',
             'financial_metric': r'지표|메트릭|스코어|품질|검증|일관성|추세|상관관계|회귀',
             'hr': r'인사|채용|직원|급여|복리후생|교육|훈련|평가|인력',
