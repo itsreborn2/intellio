@@ -31,6 +31,7 @@ import {
 import { IDocument,  IMessage, ITemplate, IProjectItem, IDocumentUploadResponse, IDocumentStatus } from '@/types';  
 import * as actionTypes from '@/types/actions'
 import DocumentTable, { ITableUtils } from "./DocumentTable"
+import ReactMarkdown from 'react-markdown'
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
   <div className="bg-muted/90 w-fit px-2 py-1 rounded">
@@ -177,7 +178,12 @@ const isSignificantContextChange = (currentSentence: string, previousSentence: s
 const CellContent = ({ content, isDocument = false }: { content: string, isDocument?: boolean }) => {
   const formattedContent = formatContent(content);
   
-  // 컨텐츠 길이에 따른 카드 크기 계산
+  // 문서 제목인 경우 기존 렌더링 유지
+  if (isDocument) {
+    return <DocumentTitle fileName={formattedContent} />;
+  }
+
+  // 카드 크기 계산 로직 유지
   const getCardSize = (content: string) => {
     if (!content) return { width: 300, height: 150 };
     
@@ -194,16 +200,20 @@ const CellContent = ({ content, isDocument = false }: { content: string, isDocum
   
   const cardSize = getCardSize(formattedContent);
   
-  if (isDocument) {
-    return <DocumentTitle fileName={formattedContent} />;
-  }
-
   return (
     <HoverCard>
       <HoverCardTrigger asChild>
         <div className="cursor-help">
           <div className="line-clamp-3 text-sm">
-            {formattedContent}
+            <ReactMarkdown 
+              className="prose max-w-none
+                [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
+                [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
+                [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
+                [&>li]:text-gray-600 [&>li]:leading-relaxed"
+            >
+              {formattedContent}
+            </ReactMarkdown>
           </div>
         </div>
       </HoverCardTrigger>
@@ -216,18 +226,15 @@ const CellContent = ({ content, isDocument = false }: { content: string, isDocum
         } as React.CSSProperties}
       >
         <div className="space-y-1">
-          {formattedContent.split('\n').map((line, index) => (
-            <div 
-              key={index} 
-              className={`
-                ${/^[•\d]/.test(line.trim()) ? 'pl-4 py-1' : 'py-0.5'}
-                ${line.includes(':') ? 'font-semibold py-2' : ''}
-                whitespace-pre-wrap break-words
-              `}
-            >
-              {line}
-            </div>
-          ))}
+          <ReactMarkdown 
+            className="prose max-w-none
+              [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
+              [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
+              [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
+              [&>li]:text-gray-600 [&>li]:leading-relaxed"
+          >
+            {formattedContent}
+          </ReactMarkdown>
         </div>
       </HoverCardContent>
     </HoverCard>

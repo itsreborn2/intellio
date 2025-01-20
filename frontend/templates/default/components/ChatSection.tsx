@@ -9,6 +9,8 @@ import { useApp } from '@/contexts/AppContext'
 import { searchTable, sendChatMessage } from '@/services/api'
 import { IMessage, IChatResponse, TableResponse } from '@/types/index'
 import * as actionTypes from '@/types/actions'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export const ChatSection = () => {
   const { state, dispatch } = useApp()
@@ -176,33 +178,37 @@ export const ChatSection = () => {
               >
                 {message.role === 'user' ? (
                   <div className="inline-block p-2 rounded-lg bg-blue-500 text-white text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed mr-2">
-                    {message.content}
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      className="prose dark:prose-invert max-w-none 
+                        [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
+                        [&>h3]:mt-3 [&>h3]:mb-1 [&>h3]:text-base [&>h3]:font-semibold
+                        [&>p]:my-1 [&>p]:leading-relaxed [&>p]:whitespace-pre-line
+                        [&>ul]:my-1 [&>ul>li]:mt-0.5
+                        [&>ol]:my-1 [&>ol>li]:mt-0.5
+                        [&>table]:w-full [&>table]:my-2 [&>table]:border-collapse
+                        [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
+                        [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
+                        [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
+                      {message.content}
+                    </ReactMarkdown>
                   </div>
                 ) : (
                   <div className="inline-block p-2 rounded-lg bg-gray-200 text-gray-800 text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed ml-2">
-                    {message.content?.split(/(<[mnp][pn]?>.*?<\/[mnp][pn]?>)/).map((part, index) => {
-                      const moneyPlusMatch = part.match(/<mp>(.*?)<\/mp>/);
-                      const moneyMinusMatch = part.match(/<mn>(.*?)<\/mn>/);
-                      const moneyMatch = part.match(/<m>(.*?)<\/m>/);
-                      const numberPlusMatch = part.match(/<np>(.*?)<\/np>/);
-                      const numberMinusMatch = part.match(/<nn>(.*?)<\/nn>/);
-                      const numberMatch = part.match(/<n>(.*?)<\/n>/);
-                      
-                      if (moneyPlusMatch) {
-                        return <span key={index} className="text-blue-600 font-bold">+{moneyPlusMatch[1]}</span>;
-                      } else if (moneyMinusMatch) {
-                        return <span key={index} className="text-red-600 font-bold">-{moneyMinusMatch[1]}</span>;
-                      } else if (moneyMatch) {
-                        return <span key={index} className="font-bold">{moneyMatch[1]}</span>;
-                      } else if (numberPlusMatch) {
-                        return <span key={index} className="text-blue-600 font-bold">+{numberPlusMatch[1]}</span>;
-                      } else if (numberMinusMatch) {
-                        return <span key={index} className="text-red-600 font-bold">-{numberMinusMatch[1]}</span>;
-                      } else if (numberMatch) {
-                        return <span key={index} className="font-bold">{numberMatch[1]}</span>;
-                      }
-                      return part;
-                    })}
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      className="prose dark:prose-invert max-w-none 
+                        [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
+                        [&>h3]:mt-3 [&>h3]:mb-1 [&>h3]:text-base [&>h3]:font-semibold
+                        [&>p]:my-1 [&>p]:leading-relaxed [&>p]:whitespace-pre-line
+                        [&>ul]:my-1 [&>ul>li]:mt-0.5
+                        [&>ol]:my-1 [&>ol>li]:mt-0.5
+                        [&>table]:w-full [&>table]:my-2 [&>table]:border-collapse
+                        [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
+                        [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
+                        [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
+                      {message.content}
+                    </ReactMarkdown>
                   </div>
                 )}
               </div>

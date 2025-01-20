@@ -278,6 +278,34 @@ class TablePrompt(BasePrompt):
             
         return context
 
+    def _get_response_format(self) -> str:
+        return """
+응답 작성 규칙:
+
+1. 줄바꿈 규칙 (매우 중요)
+- 소제목(###) 앞에만 정확히 한 줄 띄우기
+- 소제목 바로 다음 줄에 내용 시작 (띄우지 않음)
+- 한 섹션 내에서는 절대로 줄바꿈하지 않음
+- 목록은 " - " 로 구분하여 한 줄에 연속 작성
+
+2. 내용 구성
+- 도입부: 전체 내용 한 줄 요약
+- 본문: 소제목으로 구분된 상세 내용
+- 중요 수치/키워드는 **강조**
+- 부가설명은 *기울임*
+
+예시:
+Visa의 New Flows와 Direct 서비스의 성장세가 두드러지며, B2B 결제와 실시간 결제 시스템이 크게 확대되고 있습니다.
+
+### New Flows 부문 실적
+New Flows 부문이 전년 대비 **18%** 성장했으며, 특히 B2B 거래에서 **25%** 증가세를 보였습니다. - 기업간 거래: **12억 달러** (YoY **+25%**) - 소매 거래: **8억 달러** (YoY **+15%**) - 해외 송금: **5억 달러** (YoY **+20%**)
+
+### Direct 서비스 현황
+전체 거래의 **35%**가 Direct를 통해 처리되고 있으며, *이는 작년 대비 **10%p** 상승한 수치입니다.* - P2P 거래: **20%** 증가 - 마켓플레이스 결제: **30%** 성장 - 기업 간 정산: **15%** 확대
+
+### 향후 전략
+시장 점유율 **40%** 달성을 목표로 다음 전략을 추진합니다: 1. 신규 서비스 출시 2. 기존 시스템 고도화 3. 파트너십 확대"""
+
     def _generate_prompt(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """테이블 모드용 프롬프트 생성
         
@@ -325,6 +353,9 @@ class TablePrompt(BasePrompt):
 추출 지침:
 {extraction_context}
 
+응답 포맷:
+{response_format}
+
 응답 형식:
 {{
     "content": "분석한 내용을 여기에 작성하세요. 문서에서 찾은 {query}와 관련된 내용을 상세히 서술하되, 불필요한 정보는 제외하세요.",
@@ -350,13 +381,15 @@ class TablePrompt(BasePrompt):
 
         # 추출 컨텍스트 가져오기
         extraction_context = self._get_extraction_context(query_analysis, keywords)
+        response_format = self._get_response_format()
         
         # 프롬프트 생성
         prompt = base_instruction.format(
             content=content,
             query=query,
             doc_info=doc_info,
-            extraction_context=extraction_context
+            extraction_context=extraction_context,
+            response_format=response_format
         )
         
         return prompt
