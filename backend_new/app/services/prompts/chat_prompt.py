@@ -17,7 +17,7 @@ class AnalysisType(Enum):
 
 class QueryAnalyzer:
     def __init__(self):
-        self.analysis_patterns = {
+        self.analysis_keywords = {
             AnalysisType.TIME_SERIES: [
                 r"추세|트렌드|변화|추이",
                 r"(전년|전월|전분기)\s*(대비|比)",
@@ -94,8 +94,8 @@ class QueryAnalyzer:
         """쿼리에서 요구하는 분석 유형들을 식별"""
         analysis_types = set()
         
-        for analysis_type, patterns in self.analysis_patterns.items():
-            if any(re.search(pattern, query, re.I | re.U) for pattern in patterns):
+        for analysis_type, keywords in self.analysis_keywords.items():
+            if any(re.search(keyword, query, re.I | re.U) for keyword in keywords):
                 analysis_types.add(analysis_type)
                 
         # 기본값으로 통합 분석 추가
@@ -106,10 +106,13 @@ class QueryAnalyzer:
 
 class ChatPrompt(BasePrompt):
     def __init__(self, *args, **kwargs):
+        # patterns 파라미터가 있다면 제거
+        if 'patterns' in kwargs:
+            del kwargs['patterns']
         super().__init__(*args, **kwargs)
         self.query_analyzer = QueryAnalyzer()
         
-    async def analyze(self, content: str, query: str, patterns: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+    async def analyze(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """문서 분석 및 질문 답변"""
         # 쿼리 분석 수행
         analysis_types = self.query_analyzer.analyze(query)
@@ -120,12 +123,26 @@ class ChatPrompt(BasePrompt):
         context = {
             "content": content,
             "query": query,
-            "patterns": patterns,
+            "keywords": keywords,
             "query_analysis": query_analysis
         }
         
-        prompt = self._generate_prompt(content, query, patterns, query_analysis)
-        return await self.process_prompt(prompt, context)
+        prompt = self._generate_prompt(content, query, keywords, query_analysis)
+        result = await self.process_prompt(prompt, context)
+        
+        # 결과를 문자열로 변환
+        if isinstance(result, (dict, list)):
+            if isinstance(result, dict):
+                # 딕셔너리를 줄바꿈으로 구분된 "키: 값" 형태로 변환
+                result = "\n".join([f"{k}: {v}" for k, v in result.items()])
+            else:  # list인 경우
+                # 리스트를 줄바꿈으로 구분된 문자열로 변환
+                result = "\n".join(str(item) for item in result)
+        else:
+            # 다른 타입인 경우 str() 사용
+            result = str(result)
+            
+        return result
 
     def _get_analysis_type_prompt(self, analysis_type: AnalysisType) -> str:
         """분석 유형별 프롬프트 생성"""
@@ -226,25 +243,24 @@ class ChatPrompt(BasePrompt):
         
         return "\n".join(prompts) if prompts else ""
 
-    def _get_pattern_prompt(self, patterns: Dict[str, Any]) -> str:
-        """패턴 분석 결과에 따른 프롬프트 생성"""
+    def _get_keyword_prompt(self, keywords: Dict[str, Any]) -> str:
+        """키워드 관련 프롬프트 생성"""
         prompts = []
         
-        # 문서 커버리지 확인
-        if patterns.get("total_documents") != patterns.get("found_documents"):
-            prompts.append(f"- 총 {patterns['total_documents']}개의 문서 중 {patterns['found_documents']}개만 분석되었습니다. 누락된 문서가 없는지 확인하세요.")
+        # 문서 수 불일치 확인
+        if keywords.get("total_documents") != keywords.get("found_documents"):
+            prompts.append(f"- 총 {keywords['total_documents']}개의 문서 중 {keywords['found_documents']}개만 분석되었습니다. 누락된 문서가 없는지 확인하세요.")
         
         # 주요 용어 분석
-        if patterns.get("common_terms"):
-            terms = ", ".join(patterns["common_terms"])
-            prompts.append(f"- 다음 주요 용어들의 맥락을 설명하세요: {terms}")
-            
-            # 용어 간 관계 분석
-            if len(patterns["common_terms"]) > 1:
-                prompts.append("- 주요 용어들 간의 연관성을 분석하세요")
-        
+        if keywords.get("common_terms"):
+            terms = ", ".join(keywords["common_terms"])
+            if len(keywords["common_terms"]) > 1:
+                prompts.append(f"- 주요 용어들: {terms}")
+            else:
+                prompts.append(f"- 주요 용어: {terms}")
+
         # 표 데이터 분석
-        if patterns.get("has_tables"):
+        if keywords.get("has_tables"):
             prompts.append("""- 표 데이터 분석 지침:
   1. 표의 구조와 의미 설명
   2. 주요 수치 해석
@@ -252,13 +268,13 @@ class ChatPrompt(BasePrompt):
   4. 특이사항 도출""")
         
         # 날짜 범위 분석
-        if patterns.get("date_range"):
-            date_range = patterns["date_range"]
+        if keywords.get("date_range"):
+            date_range = keywords["date_range"]
             prompts.append(f"- {date_range} 기간 동안의 변화를 분석하세요")
             prompts.append("- 주요 변화 시점과 원인을 식별하세요")
         
         # 반복 패턴 분석
-        if patterns.get("recurring_patterns"):
+        if keywords.get("recurring_patterns"):
             prompts.append("""- 반복 패턴 분석:
   1. 패턴의 주기와 강도
   2. 예외적인 상황
@@ -305,7 +321,7 @@ class ChatPrompt(BasePrompt):
         
         return "\n\n".join(prompts)
 
-    def _generate_prompt(self, content: str, query: str, patterns: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+    def _generate_prompt(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """분석용 프롬프트 생성"""
         # 분석 유형 확인
         analysis_types = {AnalysisType(at) for at in query_analysis.get("analysis_types", [])}
@@ -324,8 +340,8 @@ class ChatPrompt(BasePrompt):
         # 시간 범위 프롬프트
         time_prompt = self._get_time_range_prompt(query_analysis)
         
-        # 패턴 분석 프롬프트
-        pattern_prompt = self._get_pattern_prompt(patterns)
+        # 키워드 프롬프트
+        keyword_prompt = self._get_keyword_prompt(keywords)
         
         # 응답 형식
         response_format = self._get_response_format(analysis_types)
@@ -341,7 +357,7 @@ class ChatPrompt(BasePrompt):
         analysis_instructions = "\n\n".join(filter(None, [
             "\n".join(analysis_prompts),
             time_prompt,
-            pattern_prompt
+            keyword_prompt
         ]))
         
         if analysis_instructions:

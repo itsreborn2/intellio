@@ -15,7 +15,7 @@ class EmbeddingService:
         self.async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         pc = Pinecone(api_key=settings.PINECONE_API_KEY)
         self.index = pc.Index(settings.PINECONE_INDEX_NAME)
-        self.batch_size = 50
+        self.batch_size = 20  # 임베딩 처리의 안정성을 위해 배치 크기 축소 (50 -> 20)
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     async def create_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
@@ -24,16 +24,21 @@ class EmbeddingService:
             # 빈 텍스트 필터링
             valid_texts = [text for text in texts if text and text.strip()]
             if not valid_texts:
+                logger.warning("임베딩 생성 실패: 유효한 텍스트가 없음")
                 return []
                 
+            logger.debug(f"임베딩 생성 시작: 총 {len(valid_texts)}개 텍스트")
             all_embeddings = []
             
             # 배치 단위로 처리
             for i in range(0, len(valid_texts), self.batch_size):
                 batch = valid_texts[i:i + self.batch_size]
+                batch_size = len(batch)
+                logger.debug(f"배치 처리 시작 ({i+1}-{i+batch_size}/{len(valid_texts)})")
                 
                 try:
                     # OpenAI API 비동기 호출
+                    logger.debug(f"OpenAI API 호출 - 배치 크기: {batch_size}")
                     response = await self.async_client.embeddings.create(
                         model="text-embedding-ada-002",
                         input=batch
@@ -45,19 +50,27 @@ class EmbeddingService:
                         
                     # 임베딩 추출 및 저장
                     batch_embeddings = [item.embedding for item in response.data]
-                    all_embeddings.extend(batch_embeddings)
                     
-                    logger.info(f"배치 처리 완료: {i+1}-{i+len(batch)}/{len(valid_texts)}")
+                    # 임베딩 품질 체크
+                    for j, emb in enumerate(batch_embeddings):
+                        if not emb or len(emb) != 1536:  # OpenAI ada-002 모델의 임베딩 차원
+                            logger.error(f"잘못된 임베딩 차원 (배치 {i}, 인덱스 {j}): {len(emb) if emb else 0}")
+                            continue
+                    
+                    all_embeddings.extend(batch_embeddings)
+                    logger.info(f"배치 처리 완료: {i+1}-{i+batch_size}/{len(valid_texts)}")
+                    logger.debug(f"임베딩 생성됨: {len(batch_embeddings)}개")
                 
                 except Exception as e:
-                    logger.error(f"배치 처리 중 오류 발생: {str(e)}")
-                    raise
+                    logger.error(f"배치 처리 중 오류 발생 (배치 {i}): {str(e)}")
+                    continue
             
+            logger.info(f"전체 임베딩 생성 완료: {len(all_embeddings)}개")
             return all_embeddings
             
         except Exception as e:
             logger.error(f"임베딩 생성 실패: {str(e)}")
-            raise
+            return []
 
     async def store_vectors(self, vectors: List[Dict]) -> bool:
         """벡터를 Pinecone에 저장"""
@@ -114,89 +127,82 @@ class EmbeddingService:
     async def search_similar(
         self, 
         query: str, 
-        top_k: int = 5,
-        min_score: float = 0.7,
+        top_k: int = 7,
+        min_score: float = 0.6,
         use_context: bool = True,
         context_window: int = 2,
         document_ids: List[str] = None
     ) -> List[Dict[str, Any]]:
-        """질문과 유사한 문서 청크를 검색합니다.
-        
-        Args:
-            query: 검색 쿼리
-            top_k: 반환할 최대 결과 수
-            min_score: 최소 유사도 점수 (0.0 ~ 1.0)
-            use_context: 문맥 고려 여부
-            context_window: 고려할 주변 청크의 수
-            document_ids: 검색할 문서 ID 목록 (None이면 모든 문서에서 검색)
-        """
+        """질문과 유사한 문서 청크를 검색합니다."""
         try:
+            logger.info(f"유사 문서 검색 시작 - 쿼리: {query}")
+            
             # 쿼리 임베딩 생성
             query_embedding = await self.create_embedding_with_retry(query)
             if not query_embedding:
+                logger.error("쿼리 임베딩 생성 실패")
                 return []
                 
             # 필터 설정
             filter_dict = {}
             if document_ids:
                 filter_dict["document_id"] = {"$in": document_ids}
+                logger.debug(f"문서 필터 설정: {document_ids}")
 
-            # 제목 검색을 위한 필터 추가
-            company_patterns = [
-                r'기업명|회사명|법인명|상호',
-                r'([가-힣A-Za-z\s&]+)(주식회사|㈜|주식회사|[Cc]orp\.?|[Cc]orporation|[Cc]ompany|[Ii]nc\.?)',
-                r'([가-힣A-Za-z\s&]+)(그룹|[Gg]roup)',
-            ]
-            
-            is_company_query = any(re.search(pattern, query, re.IGNORECASE) for pattern in company_patterns)
-            
-            # Pinecone에서 유사한 벡터 검색
-            results = self.index.query(
-                vector=query_embedding,
-                top_k=top_k * (2 if use_context else 1),  # 문맥 고려시 더 많은 결과 조회
-                include_metadata=True,
-                filter=filter_dict
-            )
-            
-            # 결과 필터링 및 정렬
-            filtered_matches = []
-            for match in results.matches:
-                # 최소 유사도 점수 체크
-                if match.score < min_score:
-                    continue
-                    
-                # 메타데이터 포함
-                chunk = {
-                    "id": match.id,
-                    "score": match.score,
-                    "content": match.metadata.get("text", ""),
-                    "metadata": match.metadata
-                }
+            # Pinecone 검색 실행
+            logger.debug(f"Pinecone 검색 시작 (top_k: {top_k}, min_score: {min_score})")
+            try:
+                search_response = self.index.query(
+                    vector=query_embedding,
+                    top_k=top_k * 5,  # 필터링을 위해 더 많은 결과 요청
+                    filter=filter_dict,
+                    include_metadata=True
+                )
                 
-                # 기업명 쿼리인 경우 제목 우선 순위 부여
-                if is_company_query:
-                    title = match.metadata.get("title", "")
-                    if any(re.search(pattern, title, re.IGNORECASE) for pattern in company_patterns):
-                        chunk["score"] *= 1.5  # 제목 매칭 시 점수 가중치
-                        
-                filtered_matches.append(chunk)
-            
-            # 점수 기준 정렬
-            filtered_matches.sort(key=lambda x: x["score"], reverse=True)
-            
-            # 상위 K개만 선택
-            top_matches = filtered_matches[:top_k]
-            
-            # 문맥 추가
-            if use_context and top_matches:
-                return await self._add_context_chunks(top_matches, context_window)
-            
-            return top_matches
+                if not search_response.matches:
+                    logger.warning("검색 결과 없음")
+                    return []
+                    
+                logger.info(f"검색된 총 매치 수: {len(search_response.matches)}")
+                for match in search_response.matches[:3]:
+                    logger.info(f"매치 - ID: {match.id}, 점수: {match.score:.4f}")
+                
+                # 유사도 점수로 필터링
+                filtered_results = [
+                    match for match in search_response.matches 
+                    if match.score >= min_score
+                ]
+                
+                if not filtered_results:
+                    logger.warning(f"최소 유사도({min_score}) 이상의 결과 없음")
+                    return []
+                
+                logger.debug(f"필터링된 결과: {len(filtered_results)}개")
+                
+                # 상위 K개만 선택
+                top_results = filtered_results[:top_k]
+                
+                # 결과 포맷팅
+                formatted_results = []
+                for match in top_results:
+                    result = {
+                        "id": match.id,
+                        "score": match.score,
+                        "metadata": match.metadata
+                    }
+                    formatted_results.append(result)
+                    logger.debug(f"매치 정보 - ID: {match.id}, 점수: {match.score:.4f}")
+                
+                return formatted_results
+                
+            except Exception as e:
+                logger.error(f"Pinecone 검색 실패: {str(e)}")
+                return []
             
         except Exception as e:
-            logger.error(f"유사 청크 검색 중 오류 발생: {str(e)}")
+            logger.error(f"유사 문서 검색 실패: {str(e)}")
             return []
-            
+
     async def _add_context_chunks(
         self,
         chunks: List[Dict[str, Any]],

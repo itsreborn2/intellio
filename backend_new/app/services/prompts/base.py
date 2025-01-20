@@ -61,6 +61,7 @@ class BasePrompt:
                  gemini_api_key: Optional[str] = None,
                  redis_url: Optional[str] = None,
                  cache_expire: Optional[int] = None,
+                 document_id: str = "default",  
                  **kwargs):
         """프롬프트 기본 클래스 초기화
         
@@ -69,10 +70,12 @@ class BasePrompt:
             gemini_api_key: Gemini API 키 (선택)
             redis_url: Redis 서버 URL (선택)
             cache_expire: 캐시 만료 시간 (초)
+            document_id: 문서 ID (기본값: "default")
         """
         self.gemini_api = GeminiAPI()  # 싱글톤 인스턴스
         self.gemini_api_key = gemini_api_key or settings.GEMINI_API_KEY
         self.openai_api_key = openai_api_key or settings.OPENAI_API_KEY
+        self.document_id = document_id  # 문서 ID 저장
         
         # OpenAI 클라이언트 초기화
         self.openai_client = AsyncOpenAI(api_key=self.openai_api_key)
@@ -93,49 +96,61 @@ class BasePrompt:
         Returns:
             str: AI 응답 결과
         """
-        # 캐시에서 응답 확인
-        document_id = context.get("document_id", "")
-        query = context.get("query", "")
-        
-        if document_id and query:
-            cached_response = await self.cache.get(document_id, query)
-            if cached_response:
-                return cached_response["response"]
-        
         try:
-            logger.info(f"Gemini API 호출 시작 - 모델: models/gemini-2.0-flash-exp - 프롬프트: {prompt[:200]}...")
+            # 캐시 키 생성
+            cache_key = f"prompt:{hash(prompt)}"
             
-            # 비동기로 Gemini API 호출
-            response: GenerateContentResponse = await self._generate_content(prompt)
-            
-            if not response or response.candidates is None or len(response.candidates) == 0:
-                raise Exception("No valid response from Gemini API")
-            
-            # 응답 처리 및 검증
-            result = response.text
-            if not result or len(result.strip()) == 0:
-                raise Exception("Empty response from Gemini API")
+            # 캐시된 결과 확인
+            cached_result = await self.cache.get(cache_key, prompt)
+            if cached_result:
+                return cached_result
+
+            # Gemini API로 시도
+            try:
+                result = await self._generate_content(prompt)
+                if result:
+                    # 결과 캐시 저장
+                    await self.cache.set(cache_key, prompt, result)
+                    return result
+            except Exception as e:
+                logger.error(f"Gemini API 오류: {str(e)}")
+                # OpenAI로 폴백
+                result = await self._process_with_openai(prompt)
+                if result:
+                    await self.cache.set(cache_key, prompt, result)
+                    return result
                 
-            logger.info(f"Gemini API 응답 성공 - 결과: {result[:200]}...")
-                    
-        except Exception as e:
-            logger.error(f"Gemini API 호출 실패: {str(e)}", exc_info=True)
-            logger.info("OpenAI API로 폴백")
-            result = await self._process_with_openai(prompt)
+            raise Exception("모든 AI 서비스 호출 실패")
             
-        # 응답 캐싱
-        if document_id and query:
-            await self.cache.set(document_id, query, result)
-        
-        return result
+        except Exception as e:
+            logger.error(f"프롬프트 처리 실패: {str(e)}")
+            raise
+        finally:
+            # 리소스 정리
+            await self._cleanup()
 
-    async def _generate_content(self, prompt: str) -> Optional[GenerateContentResponse]:
+    async def _cleanup(self):
+        """리소스 정리"""
+        try:
+            if hasattr(self, 'openai_client'):
+                await self.openai_client.close()
+        except Exception as e:
+            logger.error(f"리소스 정리 중 오류 발생: {str(e)}")
+
+    async def _generate_content(self, prompt: str) -> str:
         """Gemini API를 사용하여 컨텐츠 생성"""
-        return await self.gemini_api.generate_content(prompt)
+        try:
+            response = await self.gemini_api.generate_content(prompt)
+            if response and response.text:
+                return response.text.strip()
+            return None
+        except Exception as e:
+            logger.error(f"Gemini 컨텐츠 생성 실패: {str(e)}")
+            return None
 
-    async def _process_with_openai(self, prompt: str) -> str:
+    async def _process_with_openai(self, prompt: str) -> Optional[str]:
         """OpenAI API를 사용한 프롬프트 처리 (폴백 메서드)
-        
+    
         Args:
             prompt: 생성된 프롬프트
             
@@ -143,17 +158,40 @@ class BasePrompt:
             str: AI 응답 결과
         """
         try:
+            # 캐시된 응답이 있는지 확인
+            cached_response = await self.cache.get(self.document_id, prompt)
+            if cached_response:
+                logger.debug(f"캐시된 응답 사용 (문서 ID: {self.document_id})")
+                return cached_response
+
+            # OpenAI API 호출
+            logger.debug(f"OpenAI API 호출 시작 (문서 ID: {self.document_id})")
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4-1106-preview",  # GPT-4 Turbo 모델 사용
-                messages=[
-                    {"role": "system", "content": "당신은 문서를 분석하고 사용자의 질문에 답변하는 AI 어시스턴트입니다."},
-                    {"role": "user", "content": prompt}
-                ],
+                model="gpt-3.5-turbo",
+                messages=[{
+                    "role": "system",
+                    "content": "You are a helpful assistant that processes prompts and provides concise responses."
+                }, {
+                    "role": "user",
+                    "content": prompt
+                }],
                 temperature=0.3,
                 max_tokens=1000
             )
             
-            return response.choices[0].message.content
+            if response and response.choices:
+                result = response.choices[0].message.content.strip()
+                # 응답을 캐시에 저장
+                try:
+                    await self.cache.set(self.document_id, prompt, result)
+                    logger.debug(f"응답 캐시 저장 완료 (문서 ID: {self.document_id})")
+                except Exception as cache_error:
+                    logger.warning(f"캐시 저장 실패 (문서 ID: {self.document_id}): {str(cache_error)}")
+                return result
+                
+            logger.warning(f"OpenAI API 응답이 비어있음 (문서 ID: {self.document_id})")
+            return None
             
         except Exception as e:
-            raise Exception(f"OpenAI API 처리 중 오류 발생: {str(e)}")
+            logger.error(f"OpenAI 처리 실패 (문서 ID: {self.document_id}): {str(e)}", exc_info=True)
+            return None
