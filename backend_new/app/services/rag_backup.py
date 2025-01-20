@@ -519,66 +519,6 @@ class RAGService:
             logger.error(f"테이블 모드 처리 실패: {str(e)}")
             raise
 
-    async def _handle_chat_mode(self, query: str, top_k: int = 5, document_ids: List[UUID] = None) -> Dict[str, Any]:
-        """채팅 모드 처리
-        
-        Args:
-            query: 사용자 질문
-            top_k: 검색할 상위 문서 수
-            document_ids: 검색할 문서 ID 목록
-            
-        Returns:
-            Dict[str, Any]: 응답 결과
-            {
-                "answer": str,  # AI 응답
-                "context": List[Dict]  # 관련 문서 컨텍스트
-            }
-        """
-        try:
-            # 관련 문서 검색 및 패턴 분석
-            relevant_chunks, query_analysis = await self._get_relevant_chunks(query, top_k, document_ids)
-            logger.info(f"관련 청크 검색 완료 - 총 {len(relevant_chunks)}개 청크 발견")
-
-            if not relevant_chunks:
-                return {
-                    "answer": "관련 문서를 찾을 수 없습니다.",
-                    "context": []
-                }
-
-            # 문서 컨텍스트 구성
-            doc_contexts = []
-            for chunk in relevant_chunks:
-                metadata = chunk.get("metadata", {})
-                doc_contexts.append(
-                    f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
-                    f"페이지: {metadata.get('page_number', 'N/A')}\n"
-                    f"내용: {metadata.get('text', '')}"
-                )
-
-            # 프롬프트로 분석
-            chain_response = await self.chat_prompt.analyze(
-                content='\n\n'.join(doc_contexts),
-                query=query,
-                keywords={
-                    "keywords": self._extract_keywords('\n'.join(doc_contexts)),
-                    "type": "extracted",
-                    "source": "document_content"
-                },
-                query_analysis=query_analysis
-            )
-
-            return {
-                "answer": chain_response,
-                "context": relevant_chunks
-            }
-
-        except Exception as e:
-            logger.error(f"채팅 모드 처리 중 오류 발생: {str(e)}")
-            return {
-                "answer": "죄송합니다. 응답 생성 중 오류가 발생했습니다.",
-                "context": []
-            }
-
     async def query(
         self,
         query: str,
