@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
 import { useAuth } from "@/hooks/useAuth"
 import * as api from "@/services/api"
+import { IProject, ProjectDetail } from '@/types'
 import * as actionTypes from '@/types/actions'
 import {
   Dialog,
@@ -53,11 +54,18 @@ export const Header = ({ className }: { className?: string }) => {
       if (state.currentProject) {
         await api.updateProjectName(state.currentProject.id, newTitle)
         
+        // 프로젝트 정보 다시 가져오기
+        const projectInfo = await api.getProjectInfo(state.currentProject.id)
+        
+        // ProjectDetail을 IProject 형식으로 변환
+        const updatedProject: IProject = {
+          ...projectInfo,
+          is_temporary: state.currentProject.is_temporary,
+          retention_period: state.currentProject.retention_period
+        }
+        
         // 상태 업데이트
         dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: newTitle })
-        
-        // 현재 프로젝트 정보도 업데이트
-        const updatedProject = { ...state.currentProject, name: newTitle }
         dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: updatedProject })
         
         // 최근 프로젝트 목록 새로고침
@@ -65,9 +73,7 @@ export const Header = ({ className }: { className?: string }) => {
         dispatch({ type: actionTypes.UPDATE_RECENT_PROJECTS, payload: recentProjects })
       }
     } catch (error) {
-      console.error('프로젝트 이름 업데이트 실패:', error)
-      // 에러 발생 시 원래 이름으로 복원
-      setEditingTitle(state.projectTitle || 'Untitled Project')
+      console.error('프로젝트 이름 변경 실패:', error)
     }
     
     setIsEditingTitle(false)

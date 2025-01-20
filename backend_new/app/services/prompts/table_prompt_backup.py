@@ -1,9 +1,6 @@
 from typing import Dict, Any, List
 from .base import BasePrompt
 import asyncio
-import logging
-
-logger = logging.getLogger(__name__)
 
 class TablePrompt(BasePrompt):
     def __init__(self, *args, **kwargs):
@@ -12,7 +9,7 @@ class TablePrompt(BasePrompt):
             del kwargs['patterns']
         super().__init__(*args, **kwargs)
 
-    async def analyze(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+    async def analyze(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """문서 분석 및 정보 추출
         
         Args:
@@ -22,69 +19,76 @@ class TablePrompt(BasePrompt):
             query_analysis: 쿼리 분석 결과
             
         Returns:
-            str: 분석 결과 텍스트
+            Dict: 분석 결과 (각 셀에 들어갈 내용)
+            {
+                "content": str,  # 셀에 들어갈 텍스트 내용
+                "metadata": {    # 추가 메타데이터 (선택사항)
+                    "confidence": float,  # 신뢰도 점수 (0-1)
+                    "source": str,       # 데이터 출처
+                    "context": str       # 관련 컨텍스트
+                }
+            }
         """
         try:
-            # 입력값 검증
-            if not content or not isinstance(content, str):
-                return "문서 내용이 비어있거나 올바르지 않습니다."
-            if not query or not isinstance(query, str):
-                return "질문이 비어있거나 올바르지 않습니다."
-            if not isinstance(keywords, dict):
-                return "키워드가 올바르지 않은 형식입니다."
-            if not isinstance(query_analysis, dict):
-                return "쿼리 분석 결과가 올바르지 않은 형식입니다."
-            
-            # 컨텍스트 준비 및 검증
+            # 컨텍스트 준비
             context = {
-                "content": content[:1000],  # 컨텍스트 크기 제한
+                "content": content,
                 "query": query,
-                "keywords": {k: v for k, v in keywords.items() if v},  # 빈 값 제거
-                "query_analysis": {
-                    "doc_type": query_analysis.get("doc_type", "general"),
-                    "focus_area": query_analysis.get("focus_area", "general"),
-                    "analysis_type": query_analysis.get("analysis_type", "basic")
-                }
+                "keywords": keywords,
+                "query_analysis": query_analysis
             }
             
             # 프롬프트 생성 및 처리
-            try:
-                prompt = self._generate_prompt(content, query, keywords, query_analysis)
-                result = await self.process_prompt(prompt, context)
-                
-                if not result:
-                    return "문서에서 관련 내용을 찾을 수 없습니다."
-                
-                # JSON 문자열인 경우 파싱
-                try:
-                    import json
-                    if isinstance(result, str) and result.strip().startswith('{'):
-                        parsed_result = json.loads(result)
-                        if isinstance(parsed_result, dict):
-                            # content 키가 있으면 해당 내용만 반환
-                            if "content" in parsed_result:
-                                result_content = parsed_result["content"]
-                            else:
-                                result_content = str(parsed_result)
-                        else:
-                            result_content = str(parsed_result)
-                    else:
-                        result_content = str(result)
-                except json.JSONDecodeError:
-                    result_content = str(result)
-                except Exception as e:
-                    logger.error(f"분석 결과 처리 중 오류 발생: {str(e)}")
-                    result_content = str(result)
-                
-                return result_content
-                
-            except Exception as e:
-                logger.error(f"프롬프트 처리 중 오류 발생: {str(e)}")
-                return f"문서 분석 중 오류가 발생했습니다: {str(e)}"
+            prompt = self._generate_prompt(content, query, keywords, query_analysis)
+            result = await self.process_prompt(prompt, context)
+            
+            # 결과값 검증 및 형식화
+            if isinstance(result, str):
+                # 문자열인 경우 기본 형식으로 변환
+                formatted_result = {
+                    "content": result,
+                    "metadata": {
+                        "confidence": 1.0,
+                        "source": "document_content",
+                        "context": "direct_extraction"
+                    }
+                }
+            elif isinstance(result, dict):
+                # 딕셔너리인 경우 필수 필드 확인
+                if "content" not in result:
+                    result = {
+                        "content": str(result),
+                        "metadata": {
+                            "confidence": 0.8,
+                            "source": "document_content",
+                            "context": "parsed_content"
+                        }
+                    }
+                formatted_result = result
+            else:
+                # 다른 타입인 경우 문자열로 변환
+                formatted_result = {
+                    "content": str(result),
+                    "metadata": {
+                        "confidence": 0.5,
+                        "source": "document_content",
+                        "context": "converted_content"
+                    }
+                }
+            
+            return formatted_result
             
         except Exception as e:
-            logger.error(f"문서 분석 중 오류 발생: {str(e)}")
-            return "문서 분석 중 예상치 못한 오류가 발생했습니다."
+            # 에러 발생시 기본 응답 반환
+            error_result = {
+                "content": "문서 분석 중 오류가 발생했습니다.",
+                "metadata": {
+                    "confidence": 0.0,
+                    "source": "error",
+                    "context": str(e)
+                }
+            }
+            return error_result
 
     def _get_extraction_context(self, query_analysis: Dict[str, Any], keywords: Dict[str, Any]) -> str:
         """추출 컨텍스트 생성
@@ -326,20 +330,16 @@ class TablePrompt(BasePrompt):
 {extraction_context}
 
 응답 형식:
-{{
-    "content": "분석한 내용을 여기에 작성하세요. 문서에서 찾은 {query}와 관련된 내용을 상세히 서술하되, 불필요한 정보는 제외하세요.",
-    "metadata": {{
-        "confidence": 0.0,  # 0.0 ~ 1.0 사이의 신뢰도 점수. 내용의 정확도와 관련성에 따라 결정
-        "source": "document_content",  # 데이터 출처
-        "context": "분석에 사용된 컨텍스트 정보"
-    }}
-}}
-
-주의사항:
-1. 응답은 반드시 위 JSON 형식을 따라야 합니다.
-2. confidence는 0.0에서 1.0 사이의 실수여야 합니다.
-3. content에는 분석 결과를 자세히 작성하되, 불필요한 정보는 제외하세요.
-4. 응답은 한국어로 작성하세요."""
+{
+    "rows": [
+        {
+            "item": "항목명",
+            "content": "항목 내용",
+            "confidence": "high/medium/low"  # 추출 신뢰도
+        },
+        ...
+    ]
+}"""
 
         # 문서 정보 문자열 생성
         doc_info = f"""문서 유형: {keywords.get('document_type', '일반')}

@@ -20,7 +20,7 @@ from app.core.redis import redis_client
 from app.models.document import Document, DocumentChunk
 from app.services.storage import StorageService
 from app.services.extractor import DocumentExtractor
-from app.services.chunker import DocumentChunker
+from app.services.chunker import RAGOptimizedChunker
 from app.services.embedding import EmbeddingService
 from app.services.document import DocumentService
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -303,7 +303,7 @@ async def process_document_text_direct(db: Session, doc_id: str, text: str):
     """문서 텍스트 처리 및 임베딩 생성"""
     try:
         # 청크 생성
-        chunker = DocumentChunker()
+        chunker = RAGOptimizedChunker()
         chunks = chunker.create_chunks(text)
         
         if not chunks:

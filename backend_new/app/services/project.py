@@ -156,8 +156,8 @@ class ProjectService:
         # 현재 시간 기준으로 날짜 범위 계산
         now = datetime.utcnow()
         today_start = datetime(now.year, now.month, now.day)
-        yesterday_start = today_start - timedelta(days=1)
-        four_days_ago_start = today_start - timedelta(days=4)
+        last_7_days_start = today_start - timedelta(days=7)
+        last_30_days_start = today_start - timedelta(days=30)
 
         # 기본 쿼리 생성
         base_query = select(Project).where(Project.user_id == user_id)
@@ -167,28 +167,28 @@ class ProjectService:
             Project.created_at >= today_start
         ).order_by(Project.created_at.desc()).limit(limit)
         
-        # 어제 생성된 프로젝트
-        yesterday_query = base_query.where(
-            Project.created_at >= yesterday_start,
+        # 7일 이내 생성된 프로젝트
+        last_7_days_query = base_query.where(
+            Project.created_at >= last_7_days_start,
             Project.created_at < today_start
         ).order_by(Project.created_at.desc()).limit(limit)
         
-        # 4일 전 이전에 생성된 프로젝트
-        older_query = base_query.where(
-            Project.created_at < four_days_ago_start
+        # 30일 이내 생성된 프로젝트
+        last_30_days_query = base_query.where(
+            Project.created_at >= last_30_days_start,
+            Project.created_at < last_7_days_start
         ).order_by(Project.created_at.desc()).limit(limit)
 
         # 각 쿼리 실행
         today_result = await self.db.execute(today_query)
-        yesterday_result = await self.db.execute(yesterday_query)
-        older_result = await self.db.execute(older_query)
+        last_7_days_result = await self.db.execute(last_7_days_query)
+        last_30_days_result = await self.db.execute(last_30_days_query)
 
         # 결과 반환
         return {
             "today": list(today_result.scalars().all()),
-            "yesterday": list(yesterday_result.scalars().all()),
-            "four_days_ago": [],  # 4일 전 프로젝트는 older로 통합
-            "older": list(older_result.scalars().all())
+            "last_7_days": list(last_7_days_result.scalars().all()),
+            "last_30_days": list(last_30_days_result.scalars().all())
         }
 
     async def update(

@@ -90,9 +90,8 @@ const initialState: AppState = {
   hasUnsavedChanges: false,
   recentProjects: {
     today: [],
-    yesterday: [],
-    four_days_ago: [],
-    older: []
+    last_7_days: [],
+    last_30_days: []
   },
   categoryProjects: {}
 }
@@ -119,11 +118,22 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case actionTypes.SET_CURRENT_PROJECT:
+      // 같은 프로젝트인 경우 문서와 분석 데이터를 유지
+      if (state.currentProjectId === action.payload.id) {
+        return {
+          ...state,
+          currentProject: action.payload
+        }
+      }
+      // 다른 프로젝트로 변경하는 경우에만 초기화
       return {
         ...state,
         currentProjectId: action.payload.id,
         currentProject: action.payload,
-        documents: {}
+        documents: {},
+        analysis: {
+          ...initialState.analysis
+        }
       }
 
     case actionTypes.SET_PROJECT_TITLE:

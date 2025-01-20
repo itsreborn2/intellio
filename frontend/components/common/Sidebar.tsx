@@ -51,6 +51,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const router = useRouter()
   const { state, dispatch } = useApp()
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: IProject[] }>({})
   const [templates, setTemplates] = useState<Template[]>([
     { id: 'template1', name: '기본 템플릿', description: '일반적인 문서 분석용 템플릿' },
     { id: 'template2', name: '계약서 분석', description: '계약서 분석 전용 템플릿' },
@@ -63,7 +64,6 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
-  const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: IProject[] }>({})  
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
@@ -79,9 +79,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
           type: 'UPDATE_RECENT_PROJECTS', 
           payload: {
             today: response.today || [],
-            yesterday: response.yesterday || [],
-            four_days_ago: response.four_days_ago || [],
-            older: []
+            last_7_days: response.last_7_days || [],
+            last_30_days: response.last_30_days || []
           }
         })
         setIsLoading(false)
@@ -107,9 +106,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
             type: 'UPDATE_RECENT_PROJECTS', 
             payload: {
               today: response.today || [],
-              yesterday: response.yesterday || [],
-              four_days_ago: response.four_days_ago || [],
-              older: []
+              last_7_days: response.last_7_days || [],
+              last_30_days: response.last_30_days || []
             }
           })
 
@@ -181,8 +179,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
       try {
         // 이동된 프로젝트 찾기
         const movedProject = [...(state.recentProjects.today || []), 
-                            ...(state.recentProjects.yesterday || []),
-                            ...(state.recentProjects.four_days_ago || [])]
+                            ...(state.recentProjects.last_7_days || []),
+                            ...(state.recentProjects.last_30_days || [])]
                             .find(p => p.id === draggableId);
 
         if (!movedProject) {
@@ -396,7 +394,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
                 setCategories={setCategories}
                 dispatch={dispatch}
                 onDragEnd={handleDragEnd}
-                categoryProjects={categoryProjects}  
+                categoryProjects={categoryProjects}
+                setCategoryProjects={setCategoryProjects}
               />
             </div>
           </div>

@@ -176,16 +176,15 @@ export interface ProjectDetail {
 // API 응답 타입 정의
 export interface IApiRecentProjectsResponse {
   today: IApiProject[];
-  yesterday: IApiProject[];
-  four_days_ago: IApiProject[];
-  older: IApiProject[];
+  last_7_days: IApiProject[];
+  last_30_days: IApiProject[];
 }
 
 // 최근 프로젝트 응답 타입 정의
 export interface IRecentProjectsResponse {
-  today: IProject[];
-  last_7_days: IProject[];
-  last_30_days: IProject[];
+  today: IProject[]
+  last_7_days: IProject[]
+  last_30_days: IProject[]
 }
 
 // API 요청을 위한 기본 설정
