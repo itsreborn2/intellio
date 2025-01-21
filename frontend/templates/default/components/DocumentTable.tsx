@@ -8,7 +8,8 @@ import {
 import { useApp } from "@/contexts/AppContext"
 import { Button } from "@/components/ui/button";
 import { IDocument,  IDocumentStatus } from '@/types';  
-
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // 테이블 조작을 위한 유틸리티 함수들
 export interface ITableUtils {
@@ -75,7 +76,26 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
               const matchingCell = row.original.added_col_context?.find(
                 c => c.header === cell.header
               );
-              return matchingCell?.value || '';
+              return (
+                <div className="p-2">
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    className="prose dark:prose-invert max-w-none 
+                      [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
+                      [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
+                      [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
+                      [&>h3]:mt-2 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
+                      [&>p]:my-3 [&>p]:leading-7 [&>p]:whitespace-pre-line
+                      [&>ul]:my-3 [&>ul>li]:mt-2
+                      [&>ol]:my-3 [&>ol>li]:mt-2
+                      [&>table]:w-full [&>table]:my-4 [&>table]:border-collapse
+                      [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
+                      [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
+                      [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
+                    {matchingCell?.value || ''}
+                  </ReactMarkdown>
+                </div>
+              );
             }
           });
         }
@@ -104,8 +124,8 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     enableBottomToolbar: false, // 하단 툴바 비활성화
     positionToolbarAlertBanner: 'none', // 알림 배너 비활성화
     getRowId: (doc) => doc.id,
-    displayColumnDefOptions: { // 기본 헤더의 옵션 설정
-        'mrt-row-select': {
+    displayColumnDefOptions: {
+      'mrt-row-select': {
         size: 10, // 체크박스 컬럼 너비
         grow: false, // 남은 공간을 채우지 않도록 설정
         muiTableHeadCellProps: {
@@ -203,14 +223,25 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     },
     muiTableBodyCellProps: {
       sx: {
-        padding: '12px 16px',
-        fontSize: '0.875rem',
-        color: '#334155',
-        borderBottom: '1px solid #e2e8f0',
-        '&:hover': {
-          backgroundColor: '#f8fafc'
+        padding: '1rem',
+        verticalAlign: 'top',
+        '& .prose': {
+          maxWidth: 'none',
+          '& h1': { fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' },
+          '& h2': { fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' },
+          '& h3': { fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '0.5rem' },
+          '& p': { marginBottom: '1rem' },
+          '& strong': { color: 'rgb(29 78 216)', fontWeight: 'bold' },
+          '& em': { color: 'rgb(75 85 99)', fontStyle: 'italic' },
+          '& code': { backgroundColor: 'rgb(243 244 246)', padding: '0.25rem', borderRadius: '0.25rem', color: 'rgb(220 38 38)' },
+          '& ul': { listStyleType: 'disc', paddingLeft: '1.25rem', marginBottom: '1rem' },
+          '& ol': { listStyleType: 'decimal', paddingLeft: '1.25rem', marginBottom: '1rem' },
+          '& li': { marginBottom: '0.25rem' },
+          '& table': { width: '100%', borderCollapse: 'collapse', marginBottom: '1rem' },
+          '& th': { borderWidth: '1px', borderColor: 'rgb(209 213 219)', padding: '0.5rem 1rem', backgroundColor: 'rgb(249 250 251)', fontWeight: '600' },
+          '& td': { borderWidth: '1px', borderColor: 'rgb(209 213 219)', padding: '0.5rem 1rem' }
         }
-      },
+      }
     },
     layoutMode: 'grid', //모든 칼럼은 남은 공간을 채우는 형태
     muiTableBodyRowProps: ({ row, table }) => ({
@@ -225,8 +256,6 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       },
     }),
   });
-
-  
 
   // 테이블 유틸리티 함수들
   // const tableUtils: ITableUtils = {
