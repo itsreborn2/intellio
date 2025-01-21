@@ -262,9 +262,9 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         verticalAlign: 'top',
         '& .prose': {
           maxWidth: 'none',
-          '& h1': { fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '0.5rem' },
-          '& h2': { fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '0.5rem' },
-          '& h3': { fontSize: '1.2rem', fontWeight: 'normal', marginBottom: '0.5rem' },
+          '& h1': { fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem' },
+          '& h2': { fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem' },
+          '& h3': { fontSize: '1rem', fontWeight: 'normal', marginBottom: '0.5rem' },
           '& p': { marginBottom: '1rem' },
           '& strong': { color: 'rgb(29 78 216)', fontWeight: 'bold' },
           '& em': { color: 'rgb(75 85 99)', fontStyle: 'italic' },
@@ -272,7 +272,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           '& ul': { listStyleType: 'disc', paddingLeft: '1.25rem', marginBottom: '0.5rem' },
           '& ol': { listStyleType: 'decimal', paddingLeft: '1.25rem', marginBottom: '0.5rem' },
           '& li': { marginBottom: '0.25rem' },
-          '& table': { width: '100%', borderCollapse: 'collapse', marginBottom: '1rem' },
+          '& table': { width: '100%', borderCollapse: 'collapse', marginBottom: '0.5rem' },
           '& th': { borderWidth: '1px', borderColor: 'rgb(209 213 219)', padding: '0.5rem 1rem', backgroundColor: 'rgb(249 250 251)', fontWeight: '600' },
           '& td': { borderWidth: '1px', borderColor: 'rgb(209 213 219)', padding: '0.5rem 1rem' }
         },

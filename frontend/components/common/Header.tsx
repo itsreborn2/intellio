@@ -123,10 +123,10 @@ export const Header = ({ className }: { className?: string }) => {
               onChange={handleTitleChange}
               onBlur={handleTitleBlur}
               onKeyDown={handleKeyDown}
-              className="text-lg font-semibold"
+              className="text-base font-semibold"
             />
           ) : (
-            <h1 className="text-lg font-semibold cursor-pointer" onClick={handleTitleClick}>
+            <h1 className="text-base font-semibold cursor-pointer" onClick={handleTitleClick}>
               {state.projectTitle || 'Untitled Project'}
             </h1>
           )
