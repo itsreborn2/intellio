@@ -21,43 +21,43 @@ export interface ITableUtils {
   // getColumnCount: () => number;
 }
 
-// 마크다운 렌더링 스타일 정의
-const markdownStyles = {
-  h1: 'text-2xl font-bold mb-4 mt-6',
-  h2: 'text-xl font-bold mb-3 mt-5',
-  h3: 'text-lg font-bold mb-2 mt-4',
-  p: 'mb-4',
-  strong: 'font-bold text-blue-700',
-  em: 'italic text-gray-600',
-  code: 'px-1 py-0.5 bg-gray-100 rounded text-red-600',
-  ul: 'list-disc pl-5 mb-4',
-  ol: 'list-decimal pl-5 mb-4',
-  li: 'mb-1',
-  table: 'min-w-full border-collapse mb-4',
-  th: 'border border-gray-300 px-4 py-2 bg-gray-50 font-semibold',
-  td: 'border border-gray-300 px-4 py-2',
-}
+// 마크다운 스타일 상수 정의
+const markdownClassName = `prose dark:prose-invert max-w-none 
+  [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
+  [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
+  [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
+  [&>h3]:mt-1 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
+  [&>p]:my-1 [&>p]:leading-7 [&>p]:whitespace-pre-line
+  [&>ul]:my-1 [&>ul>li]:mt-2
+  [&>ol]:my-1 [&>ol>li]:mt-2
+  [&>table]:w-full [&>table]:my-4 [&>table]:border-collapse
+  [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
+  [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
+  [&>table>tbody>tr:nth-child(even)]:bg-gray-50`;
 
-// Cell 컴포넌트 - 마크다운 렌더링 적용
-function Cell({ row }: { row: any }) {
+// 마크다운 셀 컴포넌트
+function MarkdownCell({ content }: { content: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
   return (
-    <div className="p-2">
-      <ReactMarkdown 
-        remarkPlugins={[remarkGfm]}
-        className="prose dark:prose-invert max-w-none 
-          [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-          [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
-          [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
-          [&>h3]:mt-2 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
-          [&>p]:my-3 [&>p]:leading-7 [&>p]:whitespace-pre-line
-          [&>ul]:my-3 [&>ul>li]:mt-2
-          [&>ol]:my-3 [&>ol>li]:mt-2
-          [&>table]:w-full [&>table]:my-4 [&>table]:border-collapse
-          [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
-          [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
-          [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
-        {row.original.content}
-      </ReactMarkdown>
+    <div 
+      className="py-1 px-2 transition-all duration-200 cursor-pointer"
+      onDoubleClick={() => setIsExpanded(!isExpanded)}
+    >
+      <div 
+        className={`${
+          !isExpanded 
+            ? "overflow-hidden text-ellipsis max-h-[3.0em] relative after:content-[''] after:absolute after:bottom-0 after:right-0 after:left-0 after:h-6 after:bg-gradient-to-t after:from-white" 
+            : ""
+        }`}
+      >
+        <ReactMarkdown 
+          remarkPlugins={[remarkGfm]}
+          className={`${markdownClassName} leading-6`}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
     </div>
   );
 }
@@ -98,6 +98,9 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       },
     ];
     
+    // 추가된 컬럼 수를 추적
+    let addedColumnsCount = 0;
+    
     Object.values(state.documents).forEach((doc) => {
       
       doc.added_col_context?.forEach((cell) => {
@@ -109,39 +112,41 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         console.log(`[DocumentTable] col`, cell);
         if (!baseColumns.some(col => col.accessorKey === cell.header)) {
           console.log(`[DocumentTable] col 변경 : ` , cell)
+          addedColumnsCount++;
           baseColumns.push({
             accessorKey: cell.header,
             header: cell.header,
+            grow: true, // 새로 추가되는 컬럼들은 남은 공간을 균등하게 차지
             Cell: ({ row }) => {
               // 해당 row의 added_col_context에서 matching되는 cell의 value를 찾아 표시
               const matchingCell = row.original.added_col_context?.find(
                 c => c.header === cell.header
               );
-              return (
-                <div className="p-2">
-                  <ReactMarkdown 
-                    remarkPlugins={[remarkGfm]}
-                    className="prose dark:prose-invert max-w-none 
-                      [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-                      [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
-                      [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
-                      [&>h3]:mt-2 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
-                      [&>p]:my-3 [&>p]:leading-7 [&>p]:whitespace-pre-line
-                      [&>ul]:my-3 [&>ul>li]:mt-2
-                      [&>ol]:my-3 [&>ol>li]:mt-2
-                      [&>table]:w-full [&>table]:my-4 [&>table]:border-collapse
-                      [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
-                      [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
-                      [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
-                    {matchingCell?.value || ''}
-                  </ReactMarkdown>
-                </div>
-              );
+              return <MarkdownCell content={matchingCell?.value || ''} />;
             }
           });
         }
       })
     });
+
+    // Document 컬럼의 크기를 조절 (추가된 컬럼이 있을 때만)
+    if (addedColumnsCount > 0) {
+      baseColumns[0] = {
+        ...baseColumns[0],
+        size: 200,  // Document 컬럼 너비 500px로 고정
+        grow: false // 남은 공간을 차지하지 않도록 설정
+      };
+
+      // Document 컬럼 이후의 컬럼들에 대해 균등한 너비 설정
+      for (let i = 1; i < baseColumns.length; i++) {
+        baseColumns[i] = {
+          ...baseColumns[i],
+          size: undefined, // 자동으로 크기 조절되도록
+          grow: true      // 남은 공간을 균등하게 차지
+        };
+      }
+    }
+    
     return baseColumns;
   }, [dispatch, documentColContexts, state.documents]);
 
@@ -168,50 +173,39 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     displayColumnDefOptions: {
       'mrt-row-select': {
         size: 10, // 체크박스 컬럼 너비
-        grow: false, // 남은 공간을 채우지 않도록 설정
-        muiTableHeadCellProps: {
-          sx: { 
-            borderRight: 'none',
-            backgroundColor: '#f8fafc'
-          }
-        },
-        muiTableBodyCellProps: {
-          sx: { 
-            borderRight: 'none',
-            backgroundColor: '#ffffff'
-          }
-        }
+        grow: false // 남은 공간을 채우지 않도록 설정
       },
       'mrt-row-numbers': {
         size: 10, // row number를 출력하는 칼럼만 너비10. 고정
-        grow: false, // 남은 공간을 채우지 않도록 설정
-        muiTableHeadCellProps: {
-          sx: { 
-            borderRight: 'none',
-            backgroundColor: '#f8fafc'
-          }
-        },
-        muiTableBodyCellProps: {
-          sx: { 
-            borderRight: 'none',
-            backgroundColor: '#ffffff'
-          }
-        }
+        grow: false // 남은 공간을 채우지 않도록 설정
       },
     },
     muiTableProps: {
       sx: {
         caption: {
-          captionSide: 'top',
+          backgroundColor: '#ffffff',
         },
-        height: '100%', // 상위 컨테이너에 맞춤
-        '& .MuiTable-root': {
-          borderCollapse: 'separate',
-          borderSpacing: 0,
+        // 테이블 스타일링
+        '& .MuiTableBody-root': {
           backgroundColor: '#ffffff',
           boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)'
         },
       },
+    },
+    muiTableHeadProps: {
+      sx: {
+        '& tr': {
+          height: '48px' // 헤더 높이 고정
+        }
+      }
+    },
+    muiTableBodyProps: {
+      sx: {
+        '& tr': {
+          // 추가 컬럼이 없을 때만 고정 높이 적용
+          height: columns.length === 1 ? '48px' : 'auto'
+        }
+      }
     },
     muiTablePaperProps: {
       sx: {
@@ -264,38 +258,39 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     },
     muiTableBodyCellProps: {
       sx: {
-        padding: '1rem',
+        padding: '0.5rem',
         verticalAlign: 'top',
         '& .prose': {
           maxWidth: 'none',
-          '& h1': { fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' },
-          '& h2': { fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' },
-          '& h3': { fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '0.5rem' },
-          '& p': { marginBottom: '1rem' },
+          '& h1': { fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.3rem' },
+          '& h2': { fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.3rem' },
+          '& h3': { fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.3rem' },
+          '& p': { marginBottom: '0.7rem' },
           '& strong': { color: 'rgb(29 78 216)', fontWeight: 'bold' },
           '& em': { color: 'rgb(75 85 99)', fontStyle: 'italic' },
           '& code': { backgroundColor: 'rgb(243 244 246)', padding: '0.25rem', borderRadius: '0.25rem', color: 'rgb(220 38 38)' },
-          '& ul': { listStyleType: 'disc', paddingLeft: '1.25rem', marginBottom: '1rem' },
-          '& ol': { listStyleType: 'decimal', paddingLeft: '1.25rem', marginBottom: '1rem' },
+          '& ul': { listStyleType: 'disc', paddingLeft: '1.25rem', marginBottom: '0.7rem' },
+          '& ol': { listStyleType: 'decimal', paddingLeft: '1.25rem', marginBottom: '0.7rem' },
           '& li': { marginBottom: '0.25rem' },
           '& table': { width: '100%', borderCollapse: 'collapse', marginBottom: '1rem' },
           '& th': { borderWidth: '1px', borderColor: 'rgb(209 213 219)', padding: '0.5rem 1rem', backgroundColor: 'rgb(249 250 251)', fontWeight: '600' },
           '& td': { borderWidth: '1px', borderColor: 'rgb(209 213 219)', padding: '0.5rem 1rem' }
-        }
+        },
+        '&:hover': {
+          backgroundColor: '#f8fafc',
+          cursor: 'pointer',
+        },
       }
     },
-    layoutMode: 'grid', //모든 칼럼은 남은 공간을 채우는 형태
-    muiTableBodyRowProps: ({ row, table }) => ({
+    muiTableBodyRowProps: {
+      hover: false,
       sx: {
         '&:hover': {
-          backgroundColor: '#f1f5f9',
-          transition: 'background-color 0.2s ease-in-out'
+          backgroundColor: 'transparent',
         },
-        height: row.getIsPinned()
-          ? `${table.getState().density === 'compact' ? 37 : table.getState().density === 'comfortable' ? 53 : 69}px`
-          : undefined,
       },
-    }),
+    },
+    layoutMode: 'grid', //모든 칼럼은 남은 공간을 채우는 형태
   });
 
   // 테이블 유틸리티 함수들
