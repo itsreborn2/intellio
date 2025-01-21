@@ -26,7 +26,7 @@ const markdownClassName = `prose dark:prose-invert max-w-none
   [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
   [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
   [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
-  [&>h3]:mt-1 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
+  [&>h3]:mt-1 [&>h3]:mb-1.5 [&>h3]:text-base [&>h3]:font-normal
   [&>p]:my-1 [&>p]:leading-7 [&>p]:whitespace-pre-line
   [&>ul]:my-1 [&>ul>li]:mt-2
   [&>ol]:my-1 [&>ol>li]:mt-2
@@ -258,19 +258,19 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     },
     muiTableBodyCellProps: {
       sx: {
-        padding: '0.5rem',
+        padding: '1rem',
         verticalAlign: 'top',
         '& .prose': {
           maxWidth: 'none',
-          '& h1': { fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.3rem' },
-          '& h2': { fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.3rem' },
-          '& h3': { fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.3rem' },
-          '& p': { marginBottom: '0.7rem' },
+          '& h1': { fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '0.5rem' },
+          '& h2': { fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '0.5rem' },
+          '& h3': { fontSize: '1.2rem', fontWeight: 'normal', marginBottom: '0.5rem' },
+          '& p': { marginBottom: '1rem' },
           '& strong': { color: 'rgb(29 78 216)', fontWeight: 'bold' },
           '& em': { color: 'rgb(75 85 99)', fontStyle: 'italic' },
           '& code': { backgroundColor: 'rgb(243 244 246)', padding: '0.25rem', borderRadius: '0.25rem', color: 'rgb(220 38 38)' },
-          '& ul': { listStyleType: 'disc', paddingLeft: '1.25rem', marginBottom: '0.7rem' },
-          '& ol': { listStyleType: 'decimal', paddingLeft: '1.25rem', marginBottom: '0.7rem' },
+          '& ul': { listStyleType: 'disc', paddingLeft: '1.25rem', marginBottom: '0.5rem' },
+          '& ol': { listStyleType: 'decimal', paddingLeft: '1.25rem', marginBottom: '0.5rem' },
           '& li': { marginBottom: '0.25rem' },
           '& table': { width: '100%', borderCollapse: 'collapse', marginBottom: '1rem' },
           '& th': { borderWidth: '1px', borderColor: 'rgb(209 213 219)', padding: '0.5rem 1rem', backgroundColor: 'rgb(249 250 251)', fontWeight: '600' },
