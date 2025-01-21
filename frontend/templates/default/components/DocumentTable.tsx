@@ -21,6 +21,47 @@ export interface ITableUtils {
   // getColumnCount: () => number;
 }
 
+// 마크다운 렌더링 스타일 정의
+const markdownStyles = {
+  h1: 'text-2xl font-bold mb-4 mt-6',
+  h2: 'text-xl font-bold mb-3 mt-5',
+  h3: 'text-lg font-bold mb-2 mt-4',
+  p: 'mb-4',
+  strong: 'font-bold text-blue-700',
+  em: 'italic text-gray-600',
+  code: 'px-1 py-0.5 bg-gray-100 rounded text-red-600',
+  ul: 'list-disc pl-5 mb-4',
+  ol: 'list-decimal pl-5 mb-4',
+  li: 'mb-1',
+  table: 'min-w-full border-collapse mb-4',
+  th: 'border border-gray-300 px-4 py-2 bg-gray-50 font-semibold',
+  td: 'border border-gray-300 px-4 py-2',
+}
+
+// Cell 컴포넌트 - 마크다운 렌더링 적용
+function Cell({ row }: { row: any }) {
+  return (
+    <div className="p-2">
+      <ReactMarkdown 
+        remarkPlugins={[remarkGfm]}
+        className="prose dark:prose-invert max-w-none 
+          [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
+          [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
+          [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
+          [&>h3]:mt-2 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
+          [&>p]:my-3 [&>p]:leading-7 [&>p]:whitespace-pre-line
+          [&>ul]:my-3 [&>ul>li]:mt-2
+          [&>ol]:my-3 [&>ol>li]:mt-2
+          [&>table]:w-full [&>table]:my-4 [&>table]:border-collapse
+          [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
+          [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
+          [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
+        {row.original.content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
   const { state, dispatch } = useApp()
   const [showAgeColumn, setShowAgeColumn] = useState(true);
