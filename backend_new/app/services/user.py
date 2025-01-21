@@ -137,14 +137,14 @@ class UserService:
 
     async def get_session(self, session_id: str) -> Optional[Session]:
         """세션 조회"""
-        logger.info(f'[get_session] trying to find session_id: {session_id}')
+        #logger.info(f'[get_session] trying to find session_id: {session_id}')
         query = (
             select(Session)
             .where(Session.session_id == session_id)
         )
         # 실제 SQL 쿼리와 파라미터를 함께 출력
         compiled_query = query.compile(compile_kwargs={"literal_binds": True})
-        logger.info(f'[get_session] SQL query with params: {compiled_query}')
+        #logger.info(f'[get_session] SQL query with params: {compiled_query}')
         
         result = await self.db.execute(query)
         session = result.scalar_one_or_none()
@@ -156,9 +156,9 @@ class UserService:
     async def get_active_session(self, session_id: str) -> Optional[Session]:
         """활성 세션 조회"""
         try:
-            logger.info(f'[get_active_session] 시작: session_id = {session_id}')
+            #logger.info(f'[get_active_session] 시작: session_id = {session_id}')
             session = await self.get_session(session_id)
-            logger.info(f'[get_active_session] 세션 조회 결과: {session}')
+            #logger.info(f'[get_active_session] 세션 조회 결과: {session}')
             
             if not session:
                 logger.info(f'[get_active_session] 세션이 없음')

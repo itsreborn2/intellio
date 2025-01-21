@@ -6,19 +6,20 @@ import pandas as pd
 import re
 from datetime import datetime
 import asyncio
+import time
+import json
 from loguru import logger
-from app.services.llm import LLMService
 from app.services.embedding import EmbeddingService
 from app.services.prompts import ChatPrompt, TablePrompt, TableHeaderPrompt
-from app.services.chunker import Chunk, ChunkMetadata
 from app.core.config import settings
 from app.models.document import Document
 from app.schemas.table_response import TableHeader, TableCell, TableColumn, TableResponse
 from app.schemas.table_history import TableHistoryCreate
 from app.services.table_history import TableHistoryService
 from collections import defaultdict
-from fastapi import HTTPException
 from sqlalchemy import select
+from app.utils.common import measure_time_async
+from app.workers.rag import analyze_mode_task
 
 # logging 설정
 logger = logger
@@ -386,6 +387,7 @@ class RAGService:
         
         return filtered_chunks
 
+    @measure_time_async
     async def _get_relevant_chunks(self, query: str, top_k: int = 5, document_ids: List[UUID] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """관련 문서 청크 검색 및 패턴 분석"""
         logger.info(f"청크 검색 시작 - 쿼리: {query}, top_k: {top_k}")
@@ -448,13 +450,15 @@ class RAGService:
                 user_msg = f"문서 검색 중 오류가 발생했습니다: {error_msg}"
             
             return [{"error": user_msg}], {}
-
+    
+    @measure_time_async
     async def handle_table_mode(self, query: str, document_ids: List[UUID] = None, user_id: str = None, project_id: str = None) -> TableResponse:
         """테이블 모드 처리"""
         try:
+            logger.warning("테이블 모드 처리 시작")
             # 테이블 제목 생성
             title = await self.table_header_prompt.generate_title(query)
-            logger.info("테이블 헤더 생성 완료")
+            logger.warning("테이블 헤더 생성 완료")
 
             # 관련 청크 검색
             relevant_chunks, query_analysis = await self._get_relevant_chunks(query, document_ids=document_ids)
@@ -476,12 +480,12 @@ class RAGService:
                         cells=[TableCell(doc_id="empty", content="관련 문서를 찾을 수 없습니다.")]
                     )
                 ])
-
+            logger.warning(f"청크 추출 완료")
             # 문서별로 청크 그룹화 및 키워드 추출
             docs_data = {}
             for chunk in relevant_chunks:
                 # 디버그 로깅 추가
-                logger.debug(f"청크 데이터: {chunk}")
+                #logger.debug(f"청크 데이터: {chunk}")
                 
                 doc_id = chunk["metadata"].get("document_id")
                 if not doc_id:
@@ -509,7 +513,10 @@ class RAGService:
                         docs_data[doc_id]["keywords"][keyword] = 1
 
             # 각 문서별로 테이블 분석 수행
-            columns = []
+            start_time = time.time()
+            task_results = []  # 태스크 결과를 저장할 리스트
+            
+            # 태스크 시작
             for doc_id, data in docs_data.items():
                 # 빈도수 기반으로 상위 키워드 선택 (예: 상위 10개)
                 sorted_keywords = sorted(
@@ -531,32 +538,72 @@ class RAGService:
                 
                 # 테이블 분석 수행
                 try:
-                    analysis_result = await self.table_prompt.analyze(
-                        content=data["content"],
-                        query=query,
-                        keywords=keywords,
-                        query_analysis=query_analysis
+                    logger.info("="*50)
+                    logger.info(f"테이블 분석Task 시작 - 문서 ID: {doc_id}")
+                    logger.info(f"Content length: {len(data['content'])}")
+                    logger.info(f"Keywords count: {len(keywords['keywords'])}")
+                    
+                    # Celery task 실행
+                    task_result = analyze_mode_task.apply_async(
+                        kwargs={
+                            "content": data["content"],
+                            "query": query,
+                            "keywords": keywords,
+                            "query_analysis": query_analysis
+                        }
                     )
                     
-                    if isinstance(analysis_result, str) and analysis_result.startswith('{'):
-                        parsed_result = json.loads(analysis_result)
-                        if isinstance(parsed_result, dict) and "content" in parsed_result:
-                            result_content = parsed_result["content"]
-                        else:
-                            result_content = str(parsed_result)
-                    else:
-                        result_content = str(analysis_result)
-                except json.JSONDecodeError:
-                    result_content = str(analysis_result)
+                    
+                    # 태스크 결과와 문서 ID를 함께 저장
+                    task_results.append((doc_id, task_result))
+                    
                 except Exception as e:
-                    logger.error(f"분석 결과 처리 중 오류 발생: {str(e)}")
-                    result_content = "분석 결과 처리 중 오류가 발생했습니다."
+                    logger.error(f"Task 실행 중 오류: {str(e)}")
+                    # 실패한 태스크도 결과 리스트에 추가 (에러 처리를 위해)
+                    task_results.append((doc_id, None))
+                finally:
+                    logger.info("="*50)
+            
+            # 모든 태스크의 결과 대기 및 처리
+            columns = []
+            for doc_id, task_result in task_results:
+                try:
+                    if task_result is None:
+                        result_content = "분석 작업을 시작할 수 없습니다."
+                    else:
+                        logger.info(f"Task {task_result.id} 결과 대기 중...")
+                        analysis_result = task_result.get(timeout=30)  # 시간 초과 30초로 증가
+                        logger.info(f"Task 결과 수신 - Type: {type(analysis_result)}")
+                        
+                        if not analysis_result:
+                            result_content = "분석 결과가 없습니다."
+                        else:
+                            try:
+                                if isinstance(analysis_result, str) and analysis_result.startswith('{'):
+                                    parsed_result = json.loads(analysis_result)
+                                    result_content = parsed_result.get("content", str(analysis_result))
+                                else:
+                                    result_content = str(analysis_result)
+                                logger.info("결과 처리 완료")
+                            except json.JSONDecodeError:
+                                logger.error("JSON 파싱 실패")
+                                result_content = str(analysis_result)
+                except TimeoutError:
+                    logger.error(f"Task {task_result.id if task_result else 'Unknown'} 시간 초과")
+                    result_content = "분석 시간이 초과되었습니다."
+                except Exception as e:
+                    logger.error(f"Task 처리 중 오류: {str(e)}")
+                    result_content = f"분석 중 오류가 발생했습니다: {str(e)}"
                 
                 # 셀 추가
                 columns.append(TableColumn(
                     header=TableHeader(name=title, prompt=query),
                     cells=[TableCell(doc_id=doc_id, content=result_content)]
                 ))
+            
+            end_time = time.time()
+            execution_time = end_time - start_time
+            logger.warning(f"테이블 분석 수행시간 : {execution_time:.2f} sec")
 
             # 히스토리 저장
             if user_id and project_id:

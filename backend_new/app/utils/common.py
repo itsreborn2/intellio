@@ -8,7 +8,7 @@ import asyncio
 # 로거 설정
 logger = logging.getLogger(__name__)
 
-def measure_time(func: Callable) -> Callable:
+def measure_time_async(func: Callable) -> Callable:
     """
     함수의 실행 시간을 측정하고 로깅하는 데코레이터
     
@@ -32,11 +32,10 @@ def measure_time(func: Callable) -> Callable:
             execution_time = end_time - start_time
             #memory_used = end_memory - start_memory
             
-            logger.info(
-                f"Function: {func.__name__}\n"
-                f"Execution time: {execution_time:.2f} seconds\n"
+            logger.warn(
+                f"함수 실행시간 : {func.__name__} : {execution_time:.2f} sec\n"
                 #f"Memory usage: {memory_used:.2f} MB\n"
-                f"Arguments: args={args}, kwargs={kwargs}"
+                #f"Arguments: args={args}, kwargs={kwargs}"
             )
             
             return result
@@ -51,7 +50,7 @@ def measure_time(func: Callable) -> Callable:
         result = func(*args, **kwargs)
         end_time = time.time()
         execution_time = end_time - start_time
-        logger.info(f"Function '{func.__name__}' took {execution_time:.2f} seconds to execute")
+        logger.warn(f"함수 실행시간 : {func.__name__} : {execution_time:.2f} sec\n")
         return result
 
     return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper

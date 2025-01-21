@@ -23,7 +23,7 @@ class TablePrompt(BasePrompt):
         }
         
         prompt = self._generate_prompt(content, query, patterns, query_analysis)
-        return await self.process_prompt(prompt, context)
+        return await self.process_prompt_async(prompt, context)
 
     def _get_extraction_context(self, query_analysis: Dict[str, Any], patterns: Dict[str, Any]) -> str:
         """추출 컨텍스트 생성"""
@@ -113,6 +113,6 @@ class TablePrompt(BasePrompt):
                 "query_analysis": query_analysis
             }
             prompt = self._generate_prompt(doc['content'], query, patterns, query_analysis)
-            tasks.append(self.process_prompt(prompt, context.copy()))
+            tasks.append(self.process_prompt_async(prompt, context.copy()))
         
         return await asyncio.gather(*tasks)

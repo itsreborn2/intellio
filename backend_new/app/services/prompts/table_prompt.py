@@ -2,6 +2,9 @@ from typing import Dict, Any, List
 from .base import BasePrompt
 import asyncio
 import logging
+from loguru import logger
+import json
+from app.utils.common import measure_time_async
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +15,7 @@ class TablePrompt(BasePrompt):
             del kwargs['patterns']
         super().__init__(*args, **kwargs)
 
-    async def analyze(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+    async def analyze_async(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """문서 분석 및 정보 추출
         
         Args:
@@ -25,6 +28,84 @@ class TablePrompt(BasePrompt):
             str: 분석 결과 텍스트
         """
         try:
+            logger.info(f"analyze_async 진입")
+            # 입력값 검증
+            if not content or not isinstance(content, str):
+                return "문서 내용이 비어있거나 올바르지 않습니다."
+            if not query or not isinstance(query, str):
+                return "질문이 비어있거나 올바르지 않습니다."
+            if not isinstance(keywords, dict):
+                return "키워드가 올바르지 않은 형식입니다."
+            if not isinstance(query_analysis, dict):
+                return "쿼리 분석 결과가 올바르지 않은 형식입니다."
+            
+            # 컨텍스트 준비 및 검증
+            context = {
+                "content": content[:1000],  # 컨텍스트 크기 제한
+                "query": query,
+                "keywords": {k: v for k, v in keywords.items() if v},  # 빈 값 제거
+                "query_analysis": {
+                    "doc_type": query_analysis.get("doc_type", "general"),
+                    "focus_area": query_analysis.get("focus_area", "general"),
+                    "analysis_type": query_analysis.get("analysis_type", "basic")
+                }
+            }
+            
+            # 프롬프트 생성 및 처리
+            try:
+                logger.info(f"analyze_async 진입 2")
+                prompt = self._generate_prompt(content, query, keywords, query_analysis)
+                logger.info(f"prompt : {prompt[:100]}")
+                result = await self.process_prompt_async(prompt, context)
+                logger.info(f"result : {result[:100]}")
+                
+                if not result:
+                    return "문서에서 관련 내용을 찾을 수 없습니다."
+                
+                # JSON 문자열인 경우 파싱
+                try:
+                    if isinstance(result, str) and result.strip().startswith('{'):
+                        parsed_result = json.loads(result)
+                        if isinstance(parsed_result, dict):
+                            # content 키가 있으면 해당 내용만 반환
+                            if "content" in parsed_result:
+                                result_content = parsed_result["content"]
+                            else:
+                                result_content = str(parsed_result)
+                        else:
+                            result_content = str(parsed_result)
+                    else:
+                        result_content = str(result)
+                except json.JSONDecodeError:
+                    result_content = str(result)
+                except Exception as e:
+                    logger.error(f"분석 결과 처리 중 오류 발생: {str(e)}")
+                    result_content = str(result)
+                
+                return result_content
+                
+            except Exception as e:
+                logger.error(f"프롬프트 처리 중 오류 발생: {str(e)}")
+                return f"문서 분석 중 오류가 발생했습니다: {str(e)}"
+            
+        except Exception as e:
+            logger.error(f"문서 분석 중 오류 발생: {str(e)}")
+            return "문서 분석 중 예상치 못한 오류가 발생했습니다."
+    @measure_time_async
+    def analyze(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+        """문서 분석 및 정보 추출
+        
+        Args:
+            content: 문서 내용
+            query: 사용자 질문
+            keywords: 문서 키워드
+            query_analysis: 쿼리 분석 결과
+            
+        Returns:
+            str: 분석 결과 텍스트
+        """
+        try:
+            logger.error(f"analyze 진입")
             # 입력값 검증
             if not content or not isinstance(content, str):
                 return "문서 내용이 비어있거나 올바르지 않습니다."
@@ -50,7 +131,7 @@ class TablePrompt(BasePrompt):
             # 프롬프트 생성 및 처리
             try:
                 prompt = self._generate_prompt(content, query, keywords, query_analysis)
-                result = await self.process_prompt(prompt, context)
+                result = self.process_prompt(prompt, context)
                 
                 if not result:
                     return "문서에서 관련 내용을 찾을 수 없습니다."
@@ -361,27 +442,4 @@ class TablePrompt(BasePrompt):
         
         return prompt
 
-    async def analyze_documents(self, documents: List[Dict[str, str]], query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """테이블 모드: 여러 문서 동시 분석
-        
-        Args:
-            documents: 분석할 문서 리스트
-            query: 분석 요청
-            keywords: 문서 키워드
-            query_analysis: 쿼리 분석 결과
-            
-        Returns:
-            List[Dict[str, Any]]: 각 문서별 분석 결과
-        """
-        tasks = []
-        for doc in documents:
-            task = self.analyze(
-                content=doc['content'],
-                query=query,
-                keywords=keywords,
-                query_analysis=query_analysis
-            )
-            tasks.append(task)
-            
-        results = await asyncio.gather(*tasks)
-        return results
+    

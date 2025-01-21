@@ -387,7 +387,7 @@ class RAGService:
                 )
 
             # 프롬프트로 분석
-            chain_response = await self.chat_prompt.analyze(
+            chain_response = await self.chat_prompt.analyze_async(
                 content='\n\n'.join(doc_contexts),
                 query=query,
                 patterns=patterns,
@@ -590,7 +590,7 @@ class RAGService:
             results = []
             for chunk in chunks:
                 try:
-                    completion = await self.table_prompt.analyze(
+                    completion = await self.table_prompt.analyze_async(
                         content=chunk,
                         query=header,
                         patterns=patterns,

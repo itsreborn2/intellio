@@ -24,7 +24,7 @@ celery = Celery(
     "app",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.workers.document", "app.workers.project"]
+    include=["app.workers.document", "app.workers.project", "app.workers.rag"]
 )
 
 @task_success.connect
@@ -45,21 +45,24 @@ celery.autodiscover_tasks()
 # Exchange 정의
 document_exchange = Exchange('document-processing', type='direct')
 main_exchange = Exchange('main-queue', type='direct')
-
+rag_exchange = Exchange('rag-processing', type='direct')
 # 큐 정의
 celery.conf.task_queues = [
     Queue('document-processing', document_exchange, routing_key='document-processing'),
     Queue('main-queue', main_exchange, routing_key='main-queue'),
+    Queue('rag-processing', rag_exchange, routing_key='rag-processing'),
 ]
 
 # 라우팅 설정
 celery.conf.task_routes = {
     "app.workers.document.*": {"queue": "document-processing", "routing_key": "document-processing"},
     "app.workers.project.*": {"queue": "main-queue", "routing_key": "main-queue"},
+    "app.workers.rag.*": {"queue": "rag-processing", "routing_key": "rag-processing"},
     "app.worker.celery_worker:process_document": "main-queue"
 }
 
 # Celery 설정
+celery.conf.broker_connection_retry_on_startup = True  # 시작 시 브로커 연결 재시도 활성화
 celery.conf.update(
     # 브로커 설정
     broker_transport_options={
@@ -81,14 +84,14 @@ celery.conf.update(
     result_serializer='json',
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=3600,  # 1시간
-    task_soft_time_limit=3000,  # 50분
+    task_time_limit=300,  # 1시간
+    task_soft_time_limit=300,  # 50분
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     
     # 결과 설정
     result_backend='redis://localhost:6379/0',
-    result_expires=3600,  # 1시간
+    result_expires=300,  # 5분
     
     # 로깅 설정
     worker_redirect_stdouts=False,

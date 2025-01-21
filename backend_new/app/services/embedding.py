@@ -1,12 +1,14 @@
 from typing import List, Dict, Any
 import numpy as np
 from openai import OpenAI, AsyncOpenAI
-from pinecone import Pinecone, ServerlessSpec
+from pinecone import Pinecone
 import logging
 import re
 from app.core.config import settings
-from tenacity import retry, stop_after_attempt, wait_exponential
-
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from app.utils.common import measure_time_async
+import openai
+from openai import OpenAIError, Timeout
 logger = logging.getLogger(__name__)
 
 class EmbeddingService:
@@ -59,7 +61,7 @@ class EmbeddingService:
                     
                     all_embeddings.extend(batch_embeddings)
                     logger.info(f"배치 처리 완료: {i+1}-{i+batch_size}/{len(valid_texts)}")
-                    logger.debug(f"임베딩 생성됨: {len(batch_embeddings)}개")
+                    logger.info(f"임베딩 생성됨: {len(batch_embeddings)}개")
                 
                 except Exception as e:
                     logger.error(f"배치 처리 중 오류 발생 (배치 {i}): {str(e)}")
@@ -72,7 +74,67 @@ class EmbeddingService:
             logger.error(f"임베딩 생성 실패: {str(e)}")
             return []
 
-    async def store_vectors(self, vectors: List[Dict]) -> bool:
+    @retry(
+        stop=stop_after_attempt(3),  # 최대 3번 시도
+        wait=wait_exponential(multiplier=1, min=4, max=10),  # 지수 백오프
+        retry=retry_if_exception_type(Timeout)  # 타임아웃 예외 시 재시도
+    )
+    def create_embeddings_batch_sync(self, texts: List[str]) -> List[List[float]]:
+        """텍스트 배치의 임베딩을 생성"""
+        try:
+            # 빈 텍스트 필터링
+            valid_texts = [text for text in texts if text and text.strip()]
+            if not valid_texts:
+                logger.warning("임베딩 생성 실패: 유효한 텍스트가 없음")
+                return []
+                
+            logger.debug(f"임베딩 생성 시작: 총 {len(valid_texts)}개 텍스트")
+            all_embeddings = []
+            
+            # 배치 단위로 처리
+            for i in range(0, len(valid_texts), self.batch_size):
+                batch = valid_texts[i:i + self.batch_size]
+                batch_size = len(batch)
+                logger.debug(f"배치 처리 시작 ({i+1}-{i+batch_size}/{len(valid_texts)})")
+                
+                try:
+                    # OpenAI API 비동기 호출
+                    logger.debug(f"OpenAI API 호출 - 배치 크기: {batch_size}")
+                    response = self.client.embeddings.create(
+                        model="text-embedding-ada-002",  
+                        input=batch,
+                        timeout=5  # 타임아웃 설
+                    )
+                    
+                    if not response.data:
+                        logger.error(f"임베딩 생성 실패: 응답 데이터 없음 (배치 {i})")
+                        continue
+                        
+                    # 임베딩 추출 및 저장
+                    batch_embeddings = [item.embedding for item in response.data]
+                    
+                    # 임베딩 품질 체크
+                    for j, emb in enumerate(batch_embeddings):
+                        if not emb or len(emb) != 1536:  
+                            logger.error(f"잘못된 임베딩 차원 (배치 {i}, 인덱스 {j}): {len(emb) if emb else 0}")
+                            continue
+                    
+                    all_embeddings.extend(batch_embeddings)
+                    logger.info(f"배치 처리 완료: {i+1}-{i+batch_size}/{len(valid_texts)}")
+                    logger.info(f"임베딩 생성됨: {len(batch_embeddings)}개")
+                
+                except Exception as e:
+                    logger.error(f"배치 처리 중 오류 발생 (배치 {i}): {str(e)}")
+                    continue
+            
+            logger.info(f"전체 임베딩 생성 완료: {len(all_embeddings)}개")
+            return all_embeddings
+            
+        except Exception as e:
+            logger.error(f"임베딩 생성 실패: {str(e)}")
+            return []
+
+    def store_vectors(self, vectors: List[Dict]) -> bool:
         """벡터를 Pinecone에 저장"""
         try:
             if not vectors:
@@ -96,11 +158,20 @@ class EmbeddingService:
         except Exception as e:
             logger.error(f"벡터 저장 실패: {str(e)}")
             return False
+    
 
     async def create_embedding_with_retry(self, text: str) -> List[float]:
         """재시도 로직이 포함된 임베딩 생성"""
         try:
             embeddings = await self.create_embeddings_batch([text])
+            return embeddings[0] if embeddings else []
+        except Exception as e:
+            logger.error(f"임베딩 생성 실패 (재시도 후): {str(e)}")
+            raise
+    def create_embedding_with_retry_sync(self, text: str) -> List[float]:
+        """재시도 로직이 포함된 임베딩 생성"""
+        try:
+            embeddings = self.create_embeddings_batch_sync([text])
             return embeddings[0] if embeddings else []
         except Exception as e:
             logger.error(f"임베딩 생성 실패 (재시도 후): {str(e)}")
@@ -123,7 +194,7 @@ class EmbeddingService:
         except Exception as e:
             logger.error(f"Error creating embedding: {str(e)}")
             raise
-
+    @measure_time_async
     async def search_similar(
         self, 
         query: str, 
@@ -139,9 +210,11 @@ class EmbeddingService:
             
             # 쿼리 임베딩 생성
             query_embedding = await self.create_embedding_with_retry(query)
+            #query_embedding = self.create_embedding_with_retry_sync(query)
             if not query_embedding:
                 logger.error("쿼리 임베딩 생성 실패")
                 return []
+
                 
             # 필터 설정
             filter_dict = {}
@@ -150,7 +223,7 @@ class EmbeddingService:
                 logger.debug(f"문서 필터 설정: {document_ids}")
 
             # Pinecone 검색 실행
-            logger.debug(f"Pinecone 검색 시작 (top_k: {top_k}, min_score: {min_score})")
+            logger.info(f"Pinecone 검색 시작 (top_k: {top_k}, min_score: {min_score})")
             try:
                 search_response = self.index.query(
                     vector=query_embedding,

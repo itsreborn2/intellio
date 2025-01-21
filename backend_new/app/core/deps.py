@@ -14,7 +14,7 @@ import logging
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+#logger.setLevel(logging.DEBUG)
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """데이터베이스 세션 의존성"""

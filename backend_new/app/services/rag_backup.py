@@ -476,7 +476,7 @@ class RAGService:
                 }
                 
                 # 테이블 분석 수행
-                analysis_result = await self.table_prompt.analyze(
+                analysis_result = await self.table_prompt.analyze_async(
                     content=data["content"],
                     query=query,
                     keywords=keywords_dict,

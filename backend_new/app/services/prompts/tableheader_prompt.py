@@ -1,7 +1,9 @@
 from typing import Dict, Any
 from .base import BasePrompt
+from app.utils.common import measure_time_async
 
 class TableHeaderPrompt(BasePrompt):
+    @measure_time_async
     async def generate_title(self, query: str) -> str:
         """테이블 제목 생성
         
@@ -16,7 +18,7 @@ class TableHeaderPrompt(BasePrompt):
         }
         
         prompt = self._generate_prompt(query)
-        return await self.process_prompt(prompt, context)
+        return await self.process_prompt_async(prompt, context)
 
     def _generate_prompt(self, query: str) -> str:
         """테이블 제목 생성용 프롬프트 생성

@@ -71,7 +71,7 @@ async def table_search(
     """테이블 모드 검색 및 질의응답"""
     try:
 
-        logger.info(f"테이블 검색 요청 - 쿼리: {request.query}, 문서 ID: {request.document_ids}")
+        logger.info(f"테이블 검색 요청 - 쿼리: {request.query}, 문서 ID: {request.document_ids}, Mode: {request.mode}")
         
         # 문서 접근 권한 확인
         # if request.document_ids:

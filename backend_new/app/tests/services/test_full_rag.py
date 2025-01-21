@@ -143,7 +143,7 @@ async def test_chat_mode(services):
     query_analysis = {}
     
     # 응답 생성
-    chat_response = await chat_prompt.analyze(
+    chat_response = await chat_prompt.analyze_async(
         content="\n".join(context_texts),
         query=chat_query,
         keywords=keywords,
@@ -191,7 +191,7 @@ async def test_table_mode(services):
     query_analysis = {}
     
     # 응답 생성
-    table_response = await table_prompt.analyze(
+    table_response = await table_prompt.analyze_async(
         content="\n".join(context_texts),
         query=table_query,
         keywords=keywords,

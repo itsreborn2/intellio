@@ -56,7 +56,20 @@ class DocumentService:
                 args=[str(doc_id)],
                 queue='document-processing'
             )
-            logger.info(f"문서 처리 태스크 시작됨: {doc_id}")
+            logger.info(f"문서 처리 태스크 시작됨[async]: {doc_id}")
+        except Exception as e:
+            logger.error(f"문서 처리 태스크 시작 실패: {doc_id}, error: {str(e)}")
+            raise
+    def process_document_sync(self, doc_id: UUID) -> None:
+        """문서 처리 Celery 태스크 실행"""
+        try:
+            # Celery 태스크 이름으로 태스크 실행
+            celery.send_task(
+                'app.workers.document.process_document',
+                args=[str(doc_id)],
+                queue='document-processing'
+            )
+            logger.info(f"문서 처리 태스크 시작됨[sync]: {doc_id}")
         except Exception as e:
             logger.error(f"문서 처리 태스크 시작 실패: {doc_id}, error: {str(e)}")
             raise
@@ -175,7 +188,8 @@ class DocumentService:
                     
                     # 14. 비동기 처리 태스크 등록
                     # 여기는 바로 celery 등록하면 될텐데 왜 굳이 등록하는 행위 자체를 또 비동기 task에 맡기는거지?
-                    background_tasks.add_task(self.process_document_async, doc_id)
+                    #background_tasks.add_task(self.process_document_async, doc_id)
+                    self.process_document_sync(doc_id)
                     
                 except Exception as e:
                     logger.error(f"File processing error: {str(e)}")

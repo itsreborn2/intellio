@@ -112,7 +112,7 @@ class ChatPrompt(BasePrompt):
         super().__init__(*args, **kwargs)
         self.query_analyzer = QueryAnalyzer()
         
-    async def analyze(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+    async def analyze_async(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """문서 분석 및 질문 답변"""
         # 쿼리 분석 수행
         analysis_types = self.query_analyzer.analyze(query)
@@ -128,7 +128,7 @@ class ChatPrompt(BasePrompt):
         }
         
         prompt = self._generate_prompt(content, query, keywords, query_analysis)
-        result = await self.process_prompt(prompt, context)
+        result = await self.process_prompt_async(prompt, context)
         
         # 결과를 문자열로 변환
         if isinstance(result, (dict, list)):
@@ -143,6 +143,37 @@ class ChatPrompt(BasePrompt):
             result = str(result)
             
         return result
+    # def analyze(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+    #     """문서 분석 및 질문 답변"""
+    #     # 쿼리 분석 수행
+    #     analysis_types = self.query_analyzer.analyze(query)
+        
+    #     # 분석 결과를 query_analysis에 추가
+    #     query_analysis["analysis_types"] = [at.value for at in analysis_types]
+        
+    #     context = {
+    #         "content": content,
+    #         "query": query,
+    #         "keywords": keywords,
+    #         "query_analysis": query_analysis
+    #     }
+        
+    #     prompt = self._generate_prompt(content, query, keywords, query_analysis)
+    #     result = self.process_prompt(prompt, context)
+        
+    #     # 결과를 문자열로 변환
+    #     if isinstance(result, (dict, list)):
+    #         if isinstance(result, dict):
+    #             # 딕셔너리를 줄바꿈으로 구분된 "키: 값" 형태로 변환
+    #             result = "\n".join([f"{k}: {v}" for k, v in result.items()])
+    #         else:  # list인 경우
+    #             # 리스트를 줄바꿈으로 구분된 문자열로 변환
+    #             result = "\n".join(str(item) for item in result)
+    #     else:
+    #         # 다른 타입인 경우 str() 사용
+    #         result = str(result)
+            
+    #     return result
 
     def _get_analysis_type_prompt(self, analysis_type: AnalysisType) -> str:
         """분석 유형별 프롬프트 생성"""

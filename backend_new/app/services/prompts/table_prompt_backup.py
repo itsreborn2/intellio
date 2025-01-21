@@ -40,7 +40,7 @@ class TablePrompt(BasePrompt):
             
             # 프롬프트 생성 및 처리
             prompt = self._generate_prompt(content, query, keywords, query_analysis)
-            result = await self.process_prompt(prompt, context)
+            result = await self.process_prompt_async(prompt, context)
             
             # 결과값 검증 및 형식화
             if isinstance(result, str):

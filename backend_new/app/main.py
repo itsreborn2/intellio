@@ -76,7 +76,7 @@ except Exception as e:
 # 로깅 설정
 logging_config = {
     "version": 1,
-    "disable_existing_loggers": False,
+    "disable_existing_loggers": True,
     "formatters": {
         "color": {
             "()": ColorFormatter,
