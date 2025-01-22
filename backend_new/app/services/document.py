@@ -380,77 +380,78 @@ class DocumentService:
         except Exception as e:
             logger.error(f"Error extracting text: {str(e)}")
             return None
-
-    async def _process_chunks(self, document_id: str, extracted_text: str) -> Optional[list]:
-        """청크 생성 및 임베딩 처리
+    # 삭제 금지 RAGOptimizedChunker TEST
+    # chunker.py를 호출하는곳이 있는지 테스트용도
+    # async def _process_chunks(self, document_id: str, extracted_text: str) -> Optional[list]:
+    #     """청크 생성 및 임베딩 처리
         
-        Args:
-            document_id: 문서 ID
-            extracted_text: 추출된 텍스트
+    #     Args:
+    #         document_id: 문서 ID
+    #         extracted_text: 추출된 텍스트
             
-        Returns:
-            Optional[list]: 임베딩 ID 목록
-        """
-        try:
-            # 1. 문서 정보 조회
-            document = await self._get_document(document_id)
-            if not document:
-                logger.error(f"문서를 찾을 수 없음: {document_id}")
-                return None
+    #     Returns:
+    #         Optional[list]: 임베딩 ID 목록
+    #     """
+    #     try:
+    #         # 1. 문서 정보 조회
+    #         document = await self._get_document(document_id)
+    #         if not document:
+    #             logger.error(f"문서를 찾을 수 없음: {document_id}")
+    #             return None
 
-            # 2. 청크 생성
-            chunker = DocumentChunker()
-            chunks = chunker.create_chunks(
-                text=extracted_text,
-                title=document.title
-            )
-            if not chunks:
-                logger.error(f"청크 생성 실패: {document_id}")
-                return None
+    #         # 2. 청크 생성
+    #         chunker = DocumentChunker()
+    #         chunks = chunker.create_chunks(
+    #             text=extracted_text,
+    #             title=document.title
+    #         )
+    #         if not chunks:
+    #             logger.error(f"청크 생성 실패: {document_id}")
+    #             return None
             
-            # 3. 임베딩 생성 및 저장
-            embedding_service = EmbeddingService()
-            chunk_ids = []
+    #         # 3. 임베딩 생성 및 저장
+    #         embedding_service = EmbeddingService()
+    #         chunk_ids = []
             
-            for chunk in chunks:
-                try:
-                    # 임베딩 생성
-                    embeddings = await embedding_service.create_embedding_with_retry(chunk["content"])
-                    if not embeddings:
-                        continue
+    #         for chunk in chunks:
+    #             try:
+    #                 # 임베딩 생성
+    #                 embeddings = await embedding_service.create_embedding_with_retry(chunk["content"])
+    #                 if not embeddings:
+    #                     continue
                         
-                    # 벡터 저장
-                    chunk_id = str(uuid4())
-                    vector = {
-                        "id": chunk_id,
-                        "values": embeddings,
-                        "metadata": {
-                            "text": chunk["content"],
-                            "document_id": document_id,
-                            "chunk_index": chunk["metadata"]["chunk_index"],
-                            "total_chunks": chunk["metadata"]["total_chunks"],
-                            "title": chunk["metadata"]["title"]
-                        }
-                    }
+    #                 # 벡터 저장
+    #                 chunk_id = str(uuid4())
+    #                 vector = {
+    #                     "id": chunk_id,
+    #                     "values": embeddings,
+    #                     "metadata": {
+    #                         "text": chunk["content"],
+    #                         "document_id": document_id,
+    #                         "chunk_index": chunk["metadata"]["chunk_index"],
+    #                         "total_chunks": chunk["metadata"]["total_chunks"],
+    #                         "title": chunk["metadata"]["title"]
+    #                     }
+    #                 }
                     
-                    success = await embedding_service.store_vectors([vector])
-                    if success:
-                        chunk_ids.append(chunk_id)
+    #                 success = await embedding_service.store_vectors([vector])
+    #                 if success:
+    #                     chunk_ids.append(chunk_id)
                         
-                except Exception as e:
-                    logger.error(f"청크 {chunk['metadata']['chunk_index']} 처리 실패: {str(e)}")
-                    continue
+    #             except Exception as e:
+    #                 logger.error(f"청크 {chunk['metadata']['chunk_index']} 처리 실패: {str(e)}")
+    #                 continue
             
-            if not chunk_ids:
-                logger.error(f"모든 청크 처리 실패: {document_id}")
-                return None
+    #         if not chunk_ids:
+    #             logger.error(f"모든 청크 처리 실패: {document_id}")
+    #             return None
                 
-            logger.info(f"문서 {document_id}의 {len(chunk_ids)}개 청크 처리 완료")
-            return chunk_ids
+    #         logger.info(f"문서 {document_id}의 {len(chunk_ids)}개 청크 처리 완료")
+    #         return chunk_ids
             
-        except Exception as e:
-            logger.error(f"청크 처리 중 오류 발생: {str(e)}")
-            return None
+    #     except Exception as e:
+    #         logger.error(f"청크 처리 중 오류 발생: {str(e)}")
+    #         return None
 
     async def get_documents_by_project(self, project_id: str) -> List[Document]:
         """프로젝트에 속한 모든 문서를 조회합니다."""

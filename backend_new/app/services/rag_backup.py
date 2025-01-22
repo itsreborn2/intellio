@@ -10,7 +10,7 @@ from loguru import logger
 from app.services.llm import LLMService
 from app.services.embedding import EmbeddingService
 from app.services.prompts import ChatPrompt, TablePrompt, TableHeaderPrompt
-from app.services.chunker import Chunk, ChunkMetadata
+from backend_new.app.services.chunker_blocked import Chunk, ChunkMetadata
 from app.core.config import settings
 from app.models.document import Document
 from app.schemas.table_response import TableHeader, TableCell, TableColumn, TableResponse

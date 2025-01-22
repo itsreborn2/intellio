@@ -6,7 +6,7 @@ from PyPDF2 import PdfWriter, PdfReader
 import io
 from reportlab.pdfgen import canvas
 from app.services.extractor import DocumentExtractor
-from app.services.chunker import DocumentChunker
+from backend_new.app.services.chunker_blocked import DocumentChunker
 from app.services.embedding import EmbeddingService
 
 def create_large_pdf():
