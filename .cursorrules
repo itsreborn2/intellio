@@ -11,7 +11,7 @@ Key Principles
 - Prefer iteration and modularization over code duplication.
 - Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError).
 - Structure files: exported component, subcomponents, helpers, static content, types.
-
+- 백엔드에서 새로운 기능을 생성할때는 Langchain을 사용은 최우선 고려하여 구현한다.
 
 Naming Conventions
 - Use lowercase with dashes for directories (e.g., components/auth-wizard).
@@ -104,10 +104,7 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 - **Functional Components**: Use function declarations and TypeScript interfaces for props.
 - **Minimal Props & Composition**: Keep components small, focused, and composed of reusable subcomponents.
 - **Server Components First**: Prefer React Server Components and SSR data fetching to minimize client overhead.
-- **Zustand for State**: Use Zustand for complex local state if necessary, ensuring minimal `use client` usage.
 - **Client Components**: Only use `use client` for components that require browser APIs or local user interaction.
-- **Responsive Design**: Use Tailwind CSS utility classes, with a PC or tablet-first approach.
-- **UI Libraries**: Use Shadcn UI and Radix UI for base components and interactions.
 - **Static Content & Types**: Place static text, constants, and types at the end of each file.
 - **Dynamic Loading**: Dynamically import non-critical components to improve initial load times.
 - **Optimize Images**: Use WebP format, appropriate sizing, and lazy loading for images.
@@ -130,22 +127,8 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 - **Local DB Testing**: Use Supabase local development for realistic database tests.
 - **Coverage**: Maintain a minimum test coverage threshold for PR merges.
 
-## Styling and Accessibility
-
-- **Tailwind CSS**: Use utility classes with a mobile-first responsive approach.
-- **Radix UI**: Utilize Radix primitives for accessible UI patterns.
-- **Shadcn UI**: Leverage shadcn UI components for design consistency and speed.
-
-## Documentation
-
-- **Comments & JSDoc**: Comment complex logic and use JSDoc for functions and components.
-- **Readmes**: Keep README files updated with setup, instructions, and architectural details.
-- **API & DB Docs**: Document all API endpoints, RLS policies, and database schema.
-- **Edge Functions**: Document Supabase Edge Functions and their intended usage.
-- **Setup Instructions**: Keep environment configuration and setup steps current for onboarding developers.
-
 ## other rules
 - frontend/types/index.ts 파일은 모든 타입을 모아놓은 파일이다.
 - frontend에서 사용하는 모든 interface는 frontend/types/index.ts에 정의한다.
-
-
+- 주석문을 마음대로 삭제하지 말것.
+- 주석문은 최대한 자세하게 작성하고 코드 변경시 주석도 함께 변경할것.

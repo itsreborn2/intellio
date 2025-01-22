@@ -5,7 +5,7 @@ from loguru import logger
 import json
 import os
 from app.services.prompts.table_prompt import TablePrompt
-from app.services.prompts.base import GeminiAPI
+from app.services.prompts.base import GeminiAPI, GeminiLangChain
 from app.core.config import settings
 from celery.signals import worker_ready
 import threading
@@ -14,7 +14,7 @@ import threading
 def init_worker(**kwargs):
     """Celery worker 초기화 시 실행되는 함수"""
     logger.info(f"RAG Worker 초기화 [ProcessID: {os.getpid()}]")
-    gemini_api = GeminiAPI()
+    gemini_api = GeminiLangChain()
     gemini_api.initialize(settings.GEMINI_API_KEY)
 
 @shared_task(

@@ -132,6 +132,9 @@ class TablePrompt(BasePrompt):
             try:
                 prompt = self._generate_prompt(content, query, keywords, query_analysis)
                 result = self.process_prompt(prompt, context)
+                # result는 dictionary 형식이어야함.
+                # result에는 content와 각종 meta data와 같은 정보가 있어야함.
+                # 아래에서 저런식으로 이중, 삼중 파싱하는 형태를 취하면 안됨.
                 
                 if not result:
                     return "문서에서 관련 내용을 찾을 수 없습니다."
