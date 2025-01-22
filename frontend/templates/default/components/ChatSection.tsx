@@ -182,15 +182,15 @@ export const ChatSection = () => {
                       remarkPlugins={[remarkGfm]}
                       className="prose dark:prose-invert max-w-none 
                         [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-                        [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
-                        [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
-                        [&>h3]:mt-2 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
-                        [&>p]:my-3 [&>p]:leading-7 [&>p]:whitespace-pre-line
-                        [&>ul]:my-3 [&>ul>li]:mt-2
-                        [&>ol]:my-3 [&>ol>li]:mt-2
-                        [&>table]:w-full [&>table]:my-4 [&>table]:border-collapse
-                        [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
-                        [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
+                        [&>h1]:mt-2 [&>h1]:mb-1.5 [&>h1]:text-lg [&>h1]:font-bold
+                        [&>h2]:mt-2 [&>h2]:mb-1.5 [&>h2]:text-base [&>h2]:font-semibold
+                        [&>h3]:mt-1.5 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
+                        [&>p]:my-2 [&>p]:leading-7 [&>p]:whitespace-pre-line
+                        [&>ul]:my-2 [&>ul>li]:mt-2
+                        [&>ol]:my-2 [&>ol>li]:mt-2
+                        [&>table]:w-full [&>table]:my-2 [&>table]:border-collapse
+                        [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-1.5 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
+                        [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-1.5
                         [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
                       {message.content}
                     </ReactMarkdown>
@@ -201,15 +201,15 @@ export const ChatSection = () => {
                       remarkPlugins={[remarkGfm]}
                       className="prose dark:prose-invert max-w-none 
                         [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-                        [&>h1]:mt-4 [&>h1]:mb-2 [&>h1]:text-lg [&>h1]:font-bold
-                        [&>h2]:mt-3 [&>h2]:mb-2 [&>h2]:text-base [&>h2]:font-semibold
-                        [&>h3]:mt-2 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
-                        [&>p]:my-3 [&>p]:leading-7 [&>p]:whitespace-pre-line
-                        [&>ul]:my-3 [&>ul>li]:mt-2
-                        [&>ol]:my-3 [&>ol>li]:mt-2
-                        [&>table]:w-full [&>table]:my-4 [&>table]:border-collapse
-                        [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-2 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
-                        [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-2
+                        [&>h1]:mt-2 [&>h1]:mb-1.5 [&>h1]:text-lg [&>h1]:font-bold
+                        [&>h2]:mt-2 [&>h2]:mb-1.5 [&>h2]:text-base [&>h2]:font-semibold
+                        [&>h3]:mt-1.5 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
+                        [&>p]:my-2 [&>p]:leading-7 [&>p]:whitespace-pre-line
+                        [&>ul]:my-2 [&>ul>li]:mt-2
+                        [&>ol]:my-2 [&>ol>li]:mt-2
+                        [&>table]:w-full [&>table]:my-2 [&>table]:border-collapse
+                        [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-1.5 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
+                        [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-1.5
                         [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
                       {message.content}
                     </ReactMarkdown>
