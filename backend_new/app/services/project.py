@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, List, Dict
 from uuid import UUID
 from sqlalchemy import select, func, and_
@@ -102,10 +102,17 @@ class ProjectService:
             - last_30_days: 지난 30일간 생성/수정된 프로젝트
         """
         logger.info(f"get_recent - UserID: {session.user_id}")
-        now = datetime.utcnow()
-        today_start = datetime(now.year, now.month, now.day)
+        # KST (UTC+9) 시간대 설정
+        kst = timezone(timedelta(hours=9))
+        now = datetime.now(kst)
+        today_start = datetime(now.year, now.month, now.day, tzinfo=kst)
         last_7_days_start = today_start - timedelta(days=7)
         last_30_days_start = today_start - timedelta(days=30)
+
+        # UTC로 변환
+        today_start_utc = today_start.astimezone(timezone.utc)
+        last_7_days_start_utc = last_7_days_start.astimezone(timezone.utc)
+        last_30_days_start_utc = last_30_days_start.astimezone(timezone.utc)
 
         # 기본 쿼리 생성
         base_query = select(Project)
@@ -120,19 +127,19 @@ class ProjectService:
 
         # 오늘 생성/수정된 프로젝트
         today_query = base_query.where(
-            Project.updated_at >= today_start
+            Project.updated_at >= today_start_utc
         ).order_by(Project.updated_at.desc())
         
         # 지난 7일간 생성/수정된 프로젝트 (오늘 제외)
         last_7_days_query = base_query.where(
-            Project.updated_at >= last_7_days_start,
-            Project.updated_at < today_start
+            Project.updated_at >= last_7_days_start_utc,
+            Project.updated_at < today_start_utc
         ).order_by(Project.updated_at.desc())
         
         # 지난 30일간 생성/수정된 프로젝트 (지난 7일 제외)
         last_30_days_query = base_query.where(
-            Project.updated_at >= last_30_days_start,
-            Project.updated_at < last_7_days_start
+            Project.updated_at >= last_30_days_start_utc,
+            Project.updated_at < last_7_days_start_utc
         ).order_by(Project.updated_at.desc())
 
         # 각 쿼리 실행

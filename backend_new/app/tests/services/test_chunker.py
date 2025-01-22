@@ -1,6 +1,6 @@
 import pytest
 from typing import List, Dict
-from backend_new.app.services.chunker_blocked import RAGOptimizedChunker, Chunk, ChunkMetadata
+from backend_new.app.services.chunker import RAGOptimizedChunker, Chunk, ChunkMetadata
 from app.services.llm import LLMService
 
 class MockLLMService:

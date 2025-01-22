@@ -43,20 +43,57 @@ class RAGOptimizedChunker:
         except LookupError:
             nltk.download('punkt')
 
+    def _calculate_importance(self, section_type: str, content: str) -> int:
+        """섹션 중요도 계산
+        
+        Args:
+            section_type (str): 섹션 타입
+            content (str): 섹션 내용
+            
+        Returns:
+            int: 계산된 중요도 (1-10)
+        """
+        importance = 5  # 기본값
+        
+        # 섹션 타입별 기본 중요도
+        if section_type == 'heading':
+            importance = 8
+        elif section_type == 'table':
+            importance = 7
+        elif section_type == 'list':
+            importance = 6
+        elif section_type == 'code':
+            importance = 6
+            
+        # 텍스트 길이와 키워드 밀도 고려
+        content_length = len(content)
+        if content_length > 500:
+            importance += 1
+            
+        return min(importance, 10)
+
     async def _analyze_document_structure(self, text: str) -> Dict:
-        """문서 구조 분석"""
+        """문서 구조 분석
+        
+        Args:
+            text (str): 분석할 문서 텍스트
+            
+        Returns:
+            Dict: 문서 구조 분석 결과
+        """
         sections = []
         lines = text.split('\n')
         current_section = None
         current_section_start = 0
+        current_content = []
         
-        # 섹션 패턴 정의
+        # 기본적인 문서 구조 패턴
         section_patterns = {
-            'header': r'.*Corporation.*Earnings Call.*\d{4}',
-            'summary': r'.*회계연도.*분기.*실적.*요약',
-            'qa_start': r'Q&A|질의.*응답|Question.*Answer',
-            'qa_question': r'^Q:|질문:|Question:',
-            'qa_answer': r'^A:|답변:|Answer:'
+            'heading': r'^#{1,6}\s+.+|^[A-Z][^.!?]*$',  # 마크다운 스타일 헤더나 대문자로 시작하는 짧은 라인
+            'list': r'^\s*[-*•]\s+|^\s*\d+\.\s+',       # 글머리 기호나 번호 리스트
+            'table': r'^\s*\|.*\|\s*$',                 # 테이블 구분
+            'code': r'^\s*```|^\s*\{code\}',            # 코드 블록
+            'paragraph': r'^.{1,}$'                      # 일반 텍스트 단락
         }
         
         for i, line in enumerate(lines):
@@ -64,85 +101,56 @@ class RAGOptimizedChunker:
             if not line:
                 continue
                 
-            # 헤더 섹션 확인
-            if re.match(section_patterns['header'], line):
-                if current_section:
+            # 현재 라인의 섹션 타입 확인
+            current_type = 'paragraph'  # 기본값
+            for type_name, pattern in section_patterns.items():
+                if re.match(pattern, line):
+                    current_type = type_name
+                    break
+            
+            # 새로운 섹션 시작 또는 섹션 타입 변경
+            if current_section != current_type:
+                if current_section and current_content:
+                    # 이전 섹션 저장
+                    content_text = '\n'.join(current_content)
                     sections.append({
                         'type': current_section,
                         'start': current_section_start,
                         'end': i,
-                        'importance': 8 if current_section == 'qa' else 5
+                        'importance': self._calculate_importance(current_section, content_text)
                     })
-                current_section = 'header'
+                current_section = current_type
                 current_section_start = i
-                continue
-                
-            # 요약 섹션 확인
-            if re.match(section_patterns['summary'], line):
-                if current_section:
-                    sections.append({
-                        'type': current_section,
-                        'start': current_section_start,
-                        'end': i,
-                        'importance': 8 if current_section == 'qa' else 5
-                    })
-                current_section = 'summary'
-                current_section_start = i
-                continue
-                
-            # Q&A 섹션 시작 확인
-            if re.match(section_patterns['qa_start'], line):
-                if current_section:
-                    sections.append({
-                        'type': current_section,
-                        'start': current_section_start,
-                        'end': i,
-                        'importance': 8 if current_section == 'qa' else 5
-                    })
-                current_section = 'qa'
-                current_section_start = i
-                continue
-                
-            # Q&A 내의 질문/답변 구분
-            if current_section == 'qa':
-                if re.match(section_patterns['qa_question'], line):
-                    if i > current_section_start + 1:  # 이전 Q&A 쌍이 있으면 저장
-                        sections.append({
-                            'type': 'qa',
-                            'start': current_section_start,
-                            'end': i,
-                            'importance': 8
-                        })
-                    current_section_start = i
-                
-            # 아직 섹션이 없으면 본문으로 시작
-            if not current_section:
-                current_section = 'content'
-                current_section_start = i
+                current_content = [line]
+            else:
+                current_content.append(line)
         
         # 마지막 섹션 추가
-        if current_section:
+        if current_section and current_content:
+            content_text = '\n'.join(current_content)
             sections.append({
                 'type': current_section,
                 'start': current_section_start,
                 'end': len(lines),
-                'importance': 8 if current_section == 'qa' else 5
+                'importance': self._calculate_importance(current_section, content_text)
             })
         
-        # 문서 타입 결정
-        doc_type = 'earnings_call'  # 현재는 earnings_call만 처리
+        # 문서 타입 결정 (기본값 설정)
+        doc_type = 'general'
         
-        # 엔티티 추출 (실제로는 더 정교한 분석 필요)
+        # 기본 엔티티 설정
         entities = {
             'people': [],
-            'organizations': ['NVIDIA', 'NVIDIA Corporation'],
-            'topics': ['실적', 'AI', '데이터센터', '게임']
+            'organizations': [],
+            'topics': []
         }
         
         # 청킹 전략 설정
         chunking_strategy = {
             'size': self.chunk_size,
-            'preserve': ['qa', 'header', 'summary']  # 이 섹션들은 분할하지 않음
+            'preserve': ['heading', 'table'],  # 헤더와 테이블은 분할하지 않음
+            'overlap': self.chunk_overlap,
+            'min_size': self.min_chunk_size
         }
         
         return {

@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Folder, Plus, Trash2, ChevronDown, ChevronRight, History, AlertCircle, FileText } from 'lucide-react'
+import { Folder, FolderOpen, Plus, Trash2, ChevronDown, ChevronRight, History, AlertCircle, FileText } from 'lucide-react'
 import * as api from '@/services/api'  // 최상단에 추가
 import { IRecentProjectsResponse, IProject, Category, ProjectDetail, TableResponse,  } from '@/types/index'
 import { getRecentProjects, } from '@/services/api'
@@ -336,14 +336,14 @@ export function ProjectCategorySection({
           {sectionTitle}
           <span className="ml-1 text-xs">({projects.length})</span>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-0.4">
           {projects.map((project) => (
             <div
               key={project.id}
               className={cn(
                 "flex items-center px-3 py-1.5 text-sm rounded-md cursor-pointer",
                 state.currentProject?.id === project.id
-                  ? "bg-gray-100 text-gray-900"
+                  ? "bg-gray-50 text-gray-700"
                   : "text-gray-600 hover:bg-gray-50"
               )}
               onClick={() => handleProjectClick(project)}
@@ -384,8 +384,8 @@ export function ProjectCategorySection({
             ref={provided.innerRef}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
-            className={`flex items-center px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer ${
-              state.currentProjectId === project.id ? 'bg-gray-100' : ''
+            className={`flex items-center px-2 py-1 text-sm text-gray-600 cursor-pointer ${
+              state.currentProjectId === project.id ? 'bg-gray-50' : 'hover:bg-gray-50'
             }`}
             onClick={() => handleProjectClick(project)}
           >
@@ -400,7 +400,7 @@ export function ProjectCategorySection({
     if (!Array.isArray(projects) || !projects?.length) return null;
 
     return (
-      <div className="space-y-1">
+      <div className="space-y-0.4">
         <div className="text-xs text-gray-500 px-2">{sectionTitle}</div>
         {projects.map((project, index) => {
           if (!project?.id) return null;
@@ -418,8 +418,7 @@ export function ProjectCategorySection({
                   {...provided.dragHandleProps}
                   className={cn(
                     "relative flex items-center cursor-move",
-                    snapshot.isDragging && "shadow-lg border-2 border-blue-500",
-                    !snapshot.isDragging && "hover:bg-gray-50",
+                    snapshot.isDragging && "shadow-lg border-2 border-gray-200",
                     "rounded-md transition-all duration-200 ease-in-out"
                   )}
                 >
@@ -429,7 +428,8 @@ export function ProjectCategorySection({
                       variant="ghost"
                       className={cn(
                         "w-full justify-start gap-2 px-2 max-w-full",
-                        state.currentProjectId === project.id && "bg-gray-100"
+                        state.currentProjectId === project.id && "bg-gray-50",
+                        !snapshot.isDragging && "hover:bg-gray-50"
                       )}
                       onClick={(e) => {
                         e.preventDefault();
@@ -468,7 +468,7 @@ export function ProjectCategorySection({
                     {...provided.droppableProps}
                     className={cn(
                       "rounded-md border-2 border-transparent",
-                      snapshot.isDraggingOver && "border-blue-500 bg-blue-50",
+                      snapshot.isDraggingOver && "border-gray-200 bg-gray-50",
                       "transition-all duration-200 ease-in-out"
                     )}
                   >
@@ -477,13 +477,21 @@ export function ProjectCategorySection({
                         variant="ghost"
                         className={cn(
                           "w-full justify-start text-sm h-8 pl-4",
-                          snapshot.isDraggingOver && "bg-blue-50"
+                          snapshot.isDraggingOver && "bg-gray-50"
                         )}
+                        onClick={() => toggleSection(`category-${category.id}`)}
                       >
-                        <Folder className={cn(
-                          "h-4 w-4 mr-2",
-                          snapshot.isDraggingOver && "text-blue-500"
-                        )} />
+                        {expandedSections.includes(`category-${category.id}`) ? (
+                          <FolderOpen className={cn(
+                            "h-4 w-4 mr-2",
+                            snapshot.isDraggingOver && "text-gray-600"
+                          )} />
+                        ) : (
+                          <Folder className={cn(
+                            "h-4 w-4 mr-2",
+                            snapshot.isDraggingOver && "text-gray-600"
+                          )} />
+                        )}
                         <span className="flex-1 text-left truncate">{category.name}</span>
                       </Button>
                       <Button
@@ -496,9 +504,11 @@ export function ProjectCategorySection({
                       </Button>
                     </div>
                     {/* 카테고리 내의 프로젝트 목록 */}
-                    <div className="pl-3">
-                      {renderCategoryProjects(category.id)}
-                    </div>
+                    {expandedSections.includes(`category-${category.id}`) && (
+                      <div className="pl-3">
+                        {renderCategoryProjects(category.id)}
+                      </div>
+                    )}
                     {provided.placeholder}
                   </div>
                 )}
@@ -580,7 +590,7 @@ export function ProjectCategorySection({
 
       {/* 최근 프로젝트 섹션 */}
       {isAuthenticated && (
-        <div className="space-y-1">
+        <div className="space-y-3">
           <div className="flex items-center justify-between px-2 py-1">
             <span className="text-sm font-semibold text-gray-700">최근 프로젝트</span>
           </div>
@@ -590,7 +600,7 @@ export function ProjectCategorySection({
                 ref={provided.innerRef}
                 {...provided.droppableProps}
                 className={cn(
-                  "space-y-2 min-h-[40px]",
+                  "space-y-4 min-h-[40px] overflow-y-auto max-h-[calc(100vh-16rem)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400",
                   snapshot.isDraggingOver && "bg-gray-100/50"
                 )}
               >
