@@ -314,43 +314,90 @@ class ChatPrompt(BasePrompt):
         return "\n".join(prompts) if prompts else ""
 
     def _get_response_format(self, analysis_types: Set[AnalysisType]) -> str:
-        """분석 유형에 따른 응답 형식 생성"""
-        prompts = []
-        
-        # 기본 지침
-        prompts.append("""주어진 질문의 의도를 파악하여 가장 적절한 형태로 답변하세요.
-내용이 구분되어야 하는 경우 적절한 섹션으로 나누어 설명하세요.""")
-        
-        # 분석 유형별 지침
-        type_hints = []
-        if AnalysisType.TIME_SERIES in analysis_types:
-            type_hints.append("시간에 따른 변화와 그 의미")
-            
-        if AnalysisType.COMPARISON in analysis_types:
-            type_hints.append("의미 있는 차이점과 원인")
-            
-        if AnalysisType.RANKING in analysis_types:
-            type_hints.append("순위 정보의 중요한 특징")
+        """응답 형식 지침 생성"""
+        base_format = """응답 형식 지침:
 
-        if AnalysisType.PATTERN in analysis_types:
-            type_hints.append("발견된 패턴의 의미")
+1. 기본 원칙:
+- 불필요한 이중줄바꿈과 공백을 사용하지마.
+- 제목과 본문을 이중줄바꿈을 하지마.
+- 문장은 간결하고 명확하게 작성.
+- 중복되는 내용은 제거.
+- 문단 구분은 내용이 확실히 구분되는 경우에만 사용.
 
-        if AnalysisType.AGGREGATION in analysis_types:
-            type_hints.append("데이터의 핵심 인사이트")
+2. 문장 구성:
+- 핵심 정보를 문장 앞부분에 배치.
+- 부연 설명이 필요한 경우 콤마(,)로 구분하여 이어서 작성.
+- 리스트나 열거형 데이터는 쉼표로 구분하여 한 줄에 작성.
+- 문장은 명사형이나 간결한 서술형으로 끝내.
 
-        if AnalysisType.RELATIONSHIP in analysis_types:
-            type_hints.append("요소들 간의 관계")
+3. 강조와 하이라이트:
+- 주요 섹션은 ## (h2)로 시작.
+- 하위 섹션은 ### (h3)로 시작.
+- 핵심 내용은 **굵은 글씨**로 강조.
+- 주목할 변화나 차이는 `코드 형식`으로 표시.
+- 중요 수치는 **굵은 글씨**와 단위를 함께 표기.
+- 첨언이나 주석은 *이탤릭체*로 표시.
+
+4. 표와 목록:
+- 데이터 비교는 가능한 마크다운 표 사용
+- 항목 나열은 순서 있는/없는 목록 활용
+- 복잡한 정보는 계층적 목록으로 구조화
+
+5. 결론:
+- 분석 결과는 "## 결론" 섹션에서 요약
+- 핵심 시사점은 굵게 강조하여 제시"""
+
+        type_specific_format = {
+            AnalysisType.TIME_SERIES: """시계열 분석 형식:
+- 시간순 변화 설명, 주요 변화 시점 **굵게** 강조
+- 증감률/변화량은 구체적 수치와 함께 표시""",
+
+            AnalysisType.COMPARISON: """비교 분석 형식:
+- 비교 항목을 표로 정리
+- 주요 차이점 **굵게** 강조""",
+
+            AnalysisType.RANKING: """순위 분석 형식:
+- 순위는 순서 있는 목록으로 표시
+- 상위/하위 항목 특징 **굵게** 강조""",
+
+            AnalysisType.PATTERN: """패턴 분석 형식:
+- 패턴을 구조화된 목록으로 제시
+- 중요 패턴/예외 **굵게** 강조""",
+
+            AnalysisType.RELATIONSHIP: """관계 분석 형식:
+- 관계를 도식화하여 설명
+- 인과/상관관계 **굵게** 표시""",
+
+            AnalysisType.INTEGRATION: """통합 분석 형식:
+- 핵심 내용을 섹션별로 요약
+- 중요 결론/시사점 **굵게** 강조
+- "## 결론"에서 전체 내용 통합 정리"""
+        }
+
+        format_str = base_format
+        for analysis_type in analysis_types:
+            if analysis_type in type_specific_format:
+                format_str += f"\n\n{type_specific_format[analysis_type]}"
+
+        return format_str
+
+    def _format_table_data(self, data: str) -> str:
+        """테이블 형식 데이터를 마크다운 테이블로 변환"""
+        lines = data.split('\n')
+        if len(lines) < 2:  # 헤더와 데이터가 최소 1줄씩 필요
+            return data
             
-        if type_hints:
-            prompts.append("다음 관점들을 고려하세요: " + ", ".join(type_hints))
-            
-        # 응답 품질 지침
-        prompts.append("""답변 작성 시:
-* 핵심적인 내용만 간단명료하게 전달
-* 관련된 내용끼리 적절히 그룹화하여 구분
-* 확실한 내용만 포함""")
+        # 구분자 행 생성
+        headers = [h.strip() for h in lines[0].split('|')]
+        separator = '|' + '|'.join(['---' for _ in headers]) + '|'
         
-        return "\n\n".join(prompts)
+        # 헤더 행과 구분자 행을 결합
+        formatted_lines = [lines[0], separator]
+        
+        # 데이터 행 추가
+        formatted_lines.extend(lines[1:])
+        
+        return '\n'.join(formatted_lines)
 
     def _generate_prompt(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """분석용 프롬프트 생성"""

@@ -32,7 +32,7 @@ class GeminiAPI:
                 "temperature": 0.3,
                 "top_p": 0.8,
                 "top_k": 40,
-                "max_output_tokens": 2048,
+                "max_output_tokens": 8192,
             })
             
             safety_settings = kwargs.get('safety_settings', [

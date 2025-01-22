@@ -359,6 +359,45 @@ class TablePrompt(BasePrompt):
             
         return context
 
+    def _get_response_format(self) -> str:
+        """응답 형식 지침 생성"""
+        return """응답 형식 지침:
+
+1. 기본 원칙:
+- 단락구분, 이중줄바꿈과 빈칸 공백을 절대 사용하지마.
+- 문장은 간결하고 명확하게 작성.
+- 중복되는 내용은 제거.
+- 문단 구분은 내용이 확실히 구분되는 경우에만 사용.
+
+2. 문장 구성:
+- 핵심 정보를 문장 앞부분에 배치.
+- 부연 설명이 필요한 경우 콤마(,)로 구분하여 이어서 작성.
+- 리스트나 열거형 데이터는 쉼표로 구분하여 한 줄에 작성.
+- 문장은 명사형이나 간결한 서술형으로 끝내.
+
+3. 강조와 하이라이트:
+- 제목도 본문과 같은 글자 사이즈를 사용해.
+- 핵심 내용은 **굵은 글씨**로 강조.
+- 주목할 변화나 차이는 `코드 형식`으로 표시.
+- 중요 수치는 **굵은 글씨**와 단위를 함께 표기.
+- 첨언이나 주석은 *이탤릭체*로 표시.
+
+4. 표와 목록:
+- 데이터 비교는 가능한 마크다운 표 사용
+- 항목 나열은 순서 있는/없는 목록 활용
+- 복잡한 정보는 계층적 목록으로 구조화
+
+5. 결론:
+- 분석 결과는 "## 결론" 섹션에서 요약
+- 핵심 시사점은 굵게 강조하여 제시
+
+6. 표 분석 형식:
+- 표의 구조와 특징을 "## 표 구조" 섹션에서 설명
+- 주요 컬럼과 데이터 타입을 "### 컬럼 구성" 섹션에서 설명
+- 데이터 패턴과 특이사항을 "### 데이터 특성" 섹션에서 설명
+- 핵심 통계와 인사이트를 "### 주요 발견" 섹션에서 설명
+- 전체 요약과 시사점을 "## 결론" 섹션에서 제시"""
+
     def _generate_prompt(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """테이블 모드용 프롬프트 생성
         
@@ -406,20 +445,10 @@ class TablePrompt(BasePrompt):
 추출 지침:
 {extraction_context}
 
-응답 형식:
-{{
-    "content": "분석한 내용을 여기에 작성하세요. 문서에서 찾은 {query}와 관련된 내용을 상세히 서술하되, 불필요한 정보는 제외하세요.",
-    "metadata": {{
-        "confidence": 0.0,  # 0.0 ~ 1.0 사이의 신뢰도 점수. 내용의 정확도와 관련성에 따라 결정
-        "source": "document_content",  # 데이터 출처
-        "context": "분석에 사용된 컨텍스트 정보"
-    }}
-}}
-
 주의사항:
-1. 응답은 반드시 위 JSON 형식을 따라야 합니다.
-2. confidence는 0.0에서 1.0 사이의 실수여야 합니다.
-3. content에는 분석 결과를 자세히 작성하되, 불필요한 정보는 제외하세요.
+1. 응답은 반드시 마크다운 형식을 따라야 합니다.
+2. 테이블, 목록, 강조 등 마크다운의 다양한 문법을 적절히 활용하세요.
+3. 내용은 논리적 구조를 가지도록 구성하세요.
 4. 응답은 한국어로 작성하세요."""
 
         # 문서 정보 문자열 생성
@@ -431,6 +460,7 @@ class TablePrompt(BasePrompt):
 
         # 추출 컨텍스트 가져오기
         extraction_context = self._get_extraction_context(query_analysis, keywords)
+        response_format = self._get_response_format()
         
         # 프롬프트 생성
         prompt = base_instruction.format(
@@ -439,6 +469,8 @@ class TablePrompt(BasePrompt):
             doc_info=doc_info,
             extraction_context=extraction_context
         )
+        
+        prompt += "\n\n응답 형식:\n" + response_format
         
         return prompt
 

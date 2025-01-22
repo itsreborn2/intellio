@@ -31,6 +31,7 @@ import {
 import { IDocument,  IMessage, ITemplate, IProjectItem, IDocumentUploadResponse, IDocumentStatus } from '@/types';  
 import * as actionTypes from '@/types/actions'
 import DocumentTable, { ITableUtils } from "./DocumentTable"
+import ReactMarkdown from 'react-markdown'
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
   <div className="bg-muted/90 w-fit px-2 py-1 rounded">
@@ -70,7 +71,7 @@ const formatContent = (content: string) => {
     .map(sentence => {
       // 마크다운 헤더 처리
       if (sentence.startsWith('# ')) {
-        return sentence + '\n';
+        return sentence;
       }
       
       // 불릿 포인트나 넘버링으로 시작하는 문장 처리
@@ -107,12 +108,6 @@ const formatContent = (content: string) => {
       }
       currentSection.push(sentence);
     } else {
-      // 불릿 포인트나 넘버링이 있는 경우 새 줄에 추가
-      if (sentence.startsWith('•') || sentence.startsWith('-') || /^\d+[\.\)]/.test(sentence.trim())) {
-        if (currentSection.length > 0 && !currentSection[currentSection.length - 1].endsWith('\n')) {
-          currentSection[currentSection.length - 1] += '\n';
-        }
-      }
       currentSection.push(sentence);
     }
   }
@@ -121,11 +116,11 @@ const formatContent = (content: string) => {
     sections.push(currentSection.join('\n'));
   }
 
-  // 최종 포맷팅
+  // 최종 포맷팅 - 이중 줄바꿈을 단일 줄바꿈으로 변경
   let formattedContent = sections
     .map(section => section.trim())
     .filter(section => section)
-    .join('\n\n');
+    .join('\n');
     
   // 특수 태그 복원
   Object.keys(tags).forEach((tag, idx) => {
@@ -177,7 +172,12 @@ const isSignificantContextChange = (currentSentence: string, previousSentence: s
 const CellContent = ({ content, isDocument = false }: { content: string, isDocument?: boolean }) => {
   const formattedContent = formatContent(content);
   
-  // 컨텐츠 길이에 따른 카드 크기 계산
+  // 문서 제목인 경우 기존 렌더링 유지
+  if (isDocument) {
+    return <DocumentTitle fileName={formattedContent} />;
+  }
+
+  // 카드 크기 계산 로직 유지
   const getCardSize = (content: string) => {
     if (!content) return { width: 300, height: 150 };
     
@@ -194,16 +194,20 @@ const CellContent = ({ content, isDocument = false }: { content: string, isDocum
   
   const cardSize = getCardSize(formattedContent);
   
-  if (isDocument) {
-    return <DocumentTitle fileName={formattedContent} />;
-  }
-
   return (
     <HoverCard>
       <HoverCardTrigger asChild>
         <div className="cursor-help">
           <div className="line-clamp-3 text-sm">
-            {formattedContent}
+            <ReactMarkdown 
+              className="prose max-w-none
+                [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
+                [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
+                [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
+                [&>li]:text-gray-600 [&>li]:leading-relaxed"
+            >
+              {formattedContent}
+            </ReactMarkdown>
           </div>
         </div>
       </HoverCardTrigger>
@@ -216,18 +220,15 @@ const CellContent = ({ content, isDocument = false }: { content: string, isDocum
         } as React.CSSProperties}
       >
         <div className="space-y-1">
-          {formattedContent.split('\n').map((line, index) => (
-            <div 
-              key={index} 
-              className={`
-                ${/^[•\d]/.test(line.trim()) ? 'pl-4 py-1' : 'py-0.5'}
-                ${line.includes(':') ? 'font-semibold py-2' : ''}
-                whitespace-pre-wrap break-words
-              `}
-            >
-              {line}
-            </div>
-          ))}
+          <ReactMarkdown 
+            className="prose max-w-none
+              [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
+              [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
+              [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
+              [&>li]:text-gray-600 [&>li]:leading-relaxed"
+          >
+            {formattedContent}
+          </ReactMarkdown>
         </div>
       </HoverCardContent>
     </HoverCard>

@@ -701,7 +701,7 @@ export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
 
   try {
 
-    const response = await apiFetch(`${API_ENDPOINT}/projects/recent?limit=3`, {
+    const response = await apiFetch(`${API_ENDPOINT}/projects/recent`, {
 
       credentials: 'include' // 단순히 브라우저에 저장된 쿠키를 HTTP 요청에 포함시키라는 의미
 
