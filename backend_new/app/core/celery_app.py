@@ -58,7 +58,7 @@ celery.conf.task_routes = {
     "app.workers.document.*": {"queue": "document-processing", "routing_key": "document-processing"},
     "app.workers.project.*": {"queue": "main-queue", "routing_key": "main-queue"},
     "app.workers.rag.*": {"queue": "rag-processing", "routing_key": "rag-processing"},
-    "app.worker.celery_worker:process_document": "main-queue"
+    "app.worker.celery_worker:process_document_chucking": "main-queue"
 }
 
 # Celery 설정

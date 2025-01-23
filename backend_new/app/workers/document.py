@@ -9,10 +9,9 @@ import asyncio
 import json
 from uuid import UUID
 from typing import List, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, BackgroundTasks, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
-from app.api import deps
+from app.api.deps import get_async_db
 
 from app.core.celery_app import celery
 from app.core.database import SessionLocal, get_async_session, AsyncSessionLocal
@@ -20,13 +19,17 @@ from app.core.redis import redis_client
 from app.models.document import Document
 from app.services.storage import StorageService
 from app.services.extractor import DocumentExtractor
-#from backend_new.app.services.chunker_blocked import RAGOptimizedChunker
+from app.services.chunker import RAGOptimizedChunker
 from app.services.embedding import EmbeddingService
 from app.services.document import DocumentService
 from tenacity import retry, stop_after_attempt, wait_exponential
-
 from celery import shared_task, group
 from app.core.celery_app import celery
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from llama_index.core.node_parser import LangchainNodeParser
+
+from app.services.textsplitter import TextSplitter
+
 
 logger = logging.getLogger(__name__)
 
@@ -128,148 +131,148 @@ def create_chunk_embedding(doc_id: str, chunk_text: str, chunk_index: int):
         logger.error(f"임베딩 생성 중 오류 발생: {str(e)}")
         raise
 # RAGOptimizedChunker TEST
-# @celery.task(name="process_document_text")
-# def process_document_text(doc_id: str):
-#     """문서 텍스트를 처리하고 임베딩을 생성하는 Celery 태스크"""
-#     db = SessionLocal()
-#     try:
-#         logger.info(f"문서 처리 시작[process_document_text]: {doc_id}")
+@celery.task(name="process_document_text")
+def process_document_text(doc_id: str):
+    """문서 텍스트를 처리하고 임베딩을 생성하는 Celery 태스크"""
+    db = SessionLocal()
+    try:
+        logger.info(f"문서 처리 시작[process_document_text]: {doc_id}")
         
-#         # DB에서 문서 가져오기
-#         doc = db.query(Document).filter(Document.id == UUID(doc_id)).first()
-#         if not doc:
-#             raise ValueError(f"Document {doc_id} not found")
+        # DB에서 문서 가져오기
+        doc = db.query(Document).filter(Document.id == UUID(doc_id)).first()
+        if not doc:
+            raise ValueError(f"Document {doc_id} not found")
         
-#         # 상태 업데이트: PROCESSING
-#         update_document_status(
-#             db=db,
-#             document_id=doc_id,
-#             doc_status=DOCUMENT_STATUS_PROCESSING,
-#             metadata={"status": "Processing document text"}
-#         )
+        # 상태 업데이트: PROCESSING
+        update_document_status(
+            db=db,
+            document_id=doc_id,
+            doc_status=DOCUMENT_STATUS_PROCESSING,
+            metadata={"status": "Processing document text"}
+        )
 
-#         # 텍스트 가져오기
-#         extracted_text = doc.extracted_text
-#         if not extracted_text:
-#             raise ValueError(f"No extracted text found for document {doc_id}")
+        # 텍스트 가져오기
+        extracted_text = doc.extracted_text
+        if not extracted_text:
+            raise ValueError(f"No extracted text found for document {doc_id}")
 
-#         # 임베딩 생성 로직 직접 처리
-#         process_document_text_direct(db, doc_id, extracted_text)
+        # 임베딩 생성 로직 직접 처리
+        process_document_text_direct(db, doc_id, extracted_text)
         
-#         logger.info(f"문서 처리 완료: {doc_id}")
-#         return True
+        logger.info(f"문서 처리 완료: {doc_id}")
+        return True
             
-#     except Exception as e:
-#         logger.error(f"문서 처리 중 오류 발생: {doc_id}, error: {str(e)}")
-#         update_document_status(
-#             db=db,
-#             document_id=doc_id,
-#             doc_status=DOCUMENT_STATUS_ERROR,
-#             error=str(e)
-#         )
-#         raise
-#     finally:
-#         db.close()
+    except Exception as e:
+        logger.error(f"문서 처리 중 오류 발생: {doc_id}, error: {str(e)}")
+        update_document_status(
+            db=db,
+            document_id=doc_id,
+            doc_status=DOCUMENT_STATUS_ERROR,
+            error=str(e)
+        )
+        raise
+    finally:
+        db.close()
 # RAGOptimizedChunker TEST
-# async def process_document_text_direct(db: Session, doc_id: str, text: str):
-#     """문서 텍스트 처리 및 임베딩 생성"""
-#     try:
-#         # 청크 생성
-#         chunker = RAGOptimizedChunker()
-#         chunks = chunker.create_chunks(text)
+async def process_document_text_direct(db: Session, doc_id: str, text: str):
+    """문서 텍스트 처리 및 임베딩 생성"""
+    try:
+        # 청크 생성
+        chunker = RAGOptimizedChunker()
+        chunks = chunker.create_chunks(text)
         
-#         if not chunks:
-#             raise ValueError(f"Failed to create chunks for document {doc_id}")
+        if not chunks:
+            raise ValueError(f"Failed to create chunks for document {doc_id}")
 
-#         logger.info(f"문서 {doc_id}의 청크 생성 완료: {len(chunks)}개")
+        logger.info(f"문서 {doc_id}의 청크 생성 완료: {len(chunks)}개")
 
-#         # 임베딩 생성 및 저장
-#         async_session = get_async_session()
-#         async with async_session() as session:
-#             embedding_service = EmbeddingService()
-#             chunk_ids = []
-#             failed_chunks = []
+        # 임베딩 생성 및 저장
+        async_session = get_async_session()
+        async with async_session() as session:
+            embedding_service = EmbeddingService()
+            chunk_ids = []
+            failed_chunks = []
             
-#             for i, chunk_text in enumerate(chunks):
-#                 try:
-#                     # 청크 텍스트가 딕셔너리인 경우 처리
-#                     if isinstance(chunk_text, dict):
-#                         chunk_content = chunk_text.get('text', '')
-#                     else:
-#                         chunk_content = chunk_text
+            for i, chunk_text in enumerate(chunks):
+                try:
+                    # 청크 텍스트가 딕셔너리인 경우 처리
+                    if isinstance(chunk_text, dict):
+                        chunk_content = chunk_text.get('text', '')
+                    else:
+                        chunk_content = chunk_text
 
-#                     if not chunk_content:
-#                         logger.warning(f"빈 청크 발견 - 문서: {doc_id}, 청크: {i}")
-#                         failed_chunks.append(i)
-#                         continue
+                    if not chunk_content:
+                        logger.warning(f"빈 청크 발견 - 문서: {doc_id}, 청크: {i}")
+                        failed_chunks.append(i)
+                        continue
 
-#                     # 중간 상태 업데이트
-#                     await update_document_status_async(
-#                         session,
-#                         document_id=doc_id,
-#                         doc_status=DOCUMENT_STATUS_PROCESSING,
-#                         metadata={"progress": f"Processing chunk {i+1}/{len(chunks)}"}
-#                     )
+                    # 중간 상태 업데이트
+                    await update_document_status_async(
+                        session,
+                        document_id=doc_id,
+                        doc_status=DOCUMENT_STATUS_PROCESSING,
+                        metadata={"progress": f"Processing chunk {i+1}/{len(chunks)}"}
+                    )
                     
-#                     logger.info(f"청크 {i+1} 처리 시작 - 길이: {len(chunk_content)}")
+                    logger.info(f"청크 {i+1} 처리 시작 - 길이: {len(chunk_content)}")
                     
-#                     # 임베딩 생성
-#                     embedding = await embedding_service.create_embedding_with_retry(chunk_content)
+                    # 임베딩 생성
+                    embedding = await embedding_service.create_embedding_with_retry(chunk_content)
                     
-#                     if embedding and len(embedding) > 0:
-#                         chunk_id = f"{doc_id}_chunk_{i}"
-#                         # Pinecone에 저장
-#                         embedding_service.index.upsert(
-#                             vectors=[(
-#                                 chunk_id,
-#                                 embedding,
-#                                 {
-#                                     "document_id": doc_id,
-#                                     "chunk_index": i,
-#                                     "text": chunk_content
-#                                 }
-#                             )]
-#                         )
-#                         chunk_ids.append(chunk_id)
-#                         logger.info(f"청크 {i+1} 임베딩 생성 및 저장 완료")
-#                     else:
-#                         failed_chunks.append(i)
-#                         logger.warning(f"임베딩 생성 실패 - 문서: {doc_id}, 청크: {i}, 임베딩이 비어있음")
+                    if embedding and len(embedding) > 0:
+                        chunk_id = f"{doc_id}_chunk_{i}"
+                        # Pinecone에 저장
+                        embedding_service.index.upsert(
+                            vectors=[(
+                                chunk_id,
+                                embedding,
+                                {
+                                    "document_id": doc_id,
+                                    "chunk_index": i,
+                                    "text": chunk_content
+                                }
+                            )]
+                        )
+                        chunk_ids.append(chunk_id)
+                        logger.info(f"청크 {i+1} 임베딩 생성 및 저장 완료")
+                    else:
+                        failed_chunks.append(i)
+                        logger.warning(f"임베딩 생성 실패 - 문서: {doc_id}, 청크: {i}, 임베딩이 비어있음")
                     
-#                 except Exception as chunk_error:
-#                     failed_chunks.append(i)
-#                     logger.error(f"청크 처리 실패 - 문서: {doc_id}, 청크: {i}, 오류: {str(chunk_error)}")
-#                     continue
+                except Exception as chunk_error:
+                    failed_chunks.append(i)
+                    logger.error(f"청크 처리 실패 - 문서: {doc_id}, 청크: {i}, 오류: {str(chunk_error)}")
+                    continue
             
-#             if not chunk_ids:
-#                 raise ValueError(f"모든 청크의 임베딩 생성이 실패했습니다: {doc_id}")
+            if not chunk_ids:
+                raise ValueError(f"모든 청크의 임베딩 생성이 실패했습니다: {doc_id}")
             
-#             # 최종 상태 업데이트
-#             final_status = DOCUMENT_STATUS_COMPLETED if not failed_chunks else DOCUMENT_STATUS_PARTIAL
-#             await update_document_status_async(
-#                 session,
-#                 document_id=doc_id,
-#                 doc_status=final_status,
-#                 metadata={
-#                     "chunk_ids": chunk_ids,
-#                     "failed_chunks": failed_chunks,
-#                     "total_chunks": len(chunks),
-#                     "successful_chunks": len(chunk_ids)
-#                 }
-#             )
+            # 최종 상태 업데이트
+            final_status = DOCUMENT_STATUS_COMPLETED if not failed_chunks else DOCUMENT_STATUS_PARTIAL
+            await update_document_status_async(
+                session,
+                document_id=doc_id,
+                doc_status=final_status,
+                metadata={
+                    "chunk_ids": chunk_ids,
+                    "failed_chunks": failed_chunks,
+                    "total_chunks": len(chunks),
+                    "successful_chunks": len(chunk_ids)
+                }
+            )
             
-#             logger.info(f"문서 {doc_id} 처리 완료 - 성공: {len(chunk_ids)}, 실패: {len(failed_chunks)}")
-#             return chunk_ids
+            logger.info(f"문서 {doc_id} 처리 완료 - 성공: {len(chunk_ids)}, 실패: {len(failed_chunks)}")
+            return chunk_ids
         
-#     except Exception as e:
-#         logger.error(f"문서 텍스트 처리 중 오류 발생: {doc_id}, error: {str(e)}")
-#         await update_document_status_async(
-#             session,
-#             document_id=doc_id,
-#             doc_status=DOCUMENT_STATUS_ERROR,
-#             error=str(e)
-#         )
-#         raise
+    except Exception as e:
+        logger.error(f"문서 텍스트 처리 중 오류 발생: {doc_id}, error: {str(e)}")
+        await update_document_status_async(
+            session,
+            document_id=doc_id,
+            doc_status=DOCUMENT_STATUS_ERROR,
+            error=str(e)
+        )
+        raise
 
 def get_document(db: Session, document_id: str) -> Document:
     """문서 조회"""
@@ -295,12 +298,16 @@ def validate_document_text(doc: Document, document_id: str) -> str:
 
 @shared_task(
     bind=True,
-    name="app.workers.document.process_document",
+    name="app.workers.document.process_document_chucking",
     queue="document-processing",
     max_retries=3
 )
-def process_document(self, document_id: str):
-    """문서 처리 태스크"""
+def process_document_chucking(self, document_id: str):
+    """업로드 후 문서 처리 작업
+        1. 텍스트 추출
+        2. 청킹
+        3. 임베딩(make_embedding_data_batch, 배치 처리)
+    """
     try:
         with SessionLocal() as db:
             # 문서 가져오기
@@ -320,10 +327,17 @@ def process_document(self, document_id: str):
             if not extracted_text:
                 raise ValueError(f"추출된 텍스트가 없습니다: {document_id}")
 
-            # 임베딩 생성 및 저장
-            chunks = split_text(extracted_text, chunk_size=1500)
-            if not chunks:
-                raise ValueError(f"문서를 청크로 분할할 수 없습니다: {document_id}")
+            # 청크 생성
+            #text_splitter = TextSplitter(splitter_type="recursive", chunk_size=1500, chunk_overlap=300) # 입력하지 않으면 .env값 사용
+            text_splitter = TextSplitter(splitter_type="sentence") 
+            #text_splitter = TextSplitter(splitter_type="semantic_llama") 
+            
+            chunks = text_splitter.split_text(extracted_text)
+
+            # 기존 코드
+            #chunks = split_text(extracted_text, chunk_size=1500)
+            # if not chunks:
+            #     raise ValueError(f"문서를 청크로 분할할 수 없습니다: {document_id}")
 
             # 청크를 배치로 나누어 처리
             batch_size = 50  # OpenAI API의 토큰 제한을 고려한 배치 크기
@@ -331,12 +345,11 @@ def process_document(self, document_id: str):
             
             logger.info(f"임베딩 생성 시작: 총 {total_chunks}개 청크")
             
-            # 청크 처리 태스크 생성
+            # 청크로 임베딩 데이터 생성 태스크
             chunk_tasks = []
             for i in range(0, len(chunks), batch_size):
                 batch = chunks[i:i + batch_size]
-                task = process_chunk_batch.delay(document_id, batch, i)
-                #task = asyncio.create_task(process_chunk_batch(document_id, batch, i))
+                task = make_embedding_data_batch.delay(document_id, batch, i)
                 chunk_tasks.append(task.id)
             
             # 상태 업데이트
@@ -385,7 +398,7 @@ def process_document_task(self, document_id: str):
             # 문서 상태를 PROCESSING으로 업데이트
             await update_document_status_async(None, document_id, DOCUMENT_STATUS_PROCESSING)
             
-            document_service = DocumentService(deps.get_async_db())
+            document_service = DocumentService(get_async_db())
             # 문서 처리
             document = document_service.get_document(document_id)
             if not document:
@@ -428,7 +441,13 @@ def process_document_task(self, document_id: str):
                         logger.info(f"청크 {i+1} 처리 시작 - 길이: {len(chunk_content)}")
                         
                         # 임베딩 생성
-                        embedding = await embedding_service.create_embedding_with_retry(chunk_content)
+                        embedding = await embedding_service.create_embeddings_batch([chunk_content])
+                        # 빈 배열 체크
+                        if not embedding or len(embedding) == 0:
+                            failed_chunks.append(i)
+                            logger.warning(f"임베딩 생성 실패 - 문서: {document_id}, 청크: {i}, 임베딩이 비어있음")
+                            continue
+                        embedding = embedding[0]
                         
                         if embedding and len(embedding) > 0:
                             chunk_id = f"{document_id}_chunk_{i}"
@@ -495,7 +514,7 @@ def process_document_task(self, document_id: str):
     return loop.run_until_complete(async_process())
 
 @celery.task(bind=True, max_retries=3, acks_late=True)
-def process_chunk_batch(self, document_id: str, chunks: List[str], batch_start_idx: int):
+def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_start_idx: int):
     """청크 배치 처리"""
     try:
         # Redis에서 배치 처리 상태 확인
@@ -510,6 +529,8 @@ def process_chunk_batch(self, document_id: str, chunks: List[str], batch_start_i
         embedding_service = EmbeddingService()
         
         bApplyAsync = True
+        # 현재는 청크가 List[str]이네.
+        # 청크의 데이터 타입을 바꿔야하는게 우선.
         #embeddings = await embedding_service.create_embeddings_batch(chunks)
 
         #embeddings = loop.run_until_complete(embedding_service.create_embeddings_batch(chunks))

@@ -133,26 +133,18 @@ class EmbeddingService:
         except Exception as e:
             logger.error(f"임베딩 생성 실패: {str(e)}")
             return []
-
-    def store_vectors(self, vectors: List[Dict]) -> bool:
+    
+    def store_vectors(self, _vectors: List[Dict]) -> bool:
         """벡터를 Pinecone에 저장"""
         try:
-            if not vectors:
+            if not _vectors:
                 logger.warning("저장할 벡터가 없습니다")
                 return False
 
-            # Pinecone 형식으로 변환
-            pinecone_vectors = []
-            for vector in vectors:
-                if not all(k in vector for k in ["id", "values", "metadata"]):
-                    logger.error(f"잘못된 벡터 형식: {vector.keys()}")
-                    continue
-                pinecone_vectors.append(vector)
-
             # 벡터 저장
-            logger.info(f"벡터 {len(vectors)}개 저장 중")
-            self.index.upsert(vectors=pinecone_vectors)
-            logger.info(f"벡터 {len(vectors)}개 저장 완료")
+            logger.info(f"벡터 {len(_vectors)}개 저장 중")
+            self.index.upsert(vectors=_vectors)
+            logger.info(f"벡터 {len(_vectors)}개 저장 완료")
             return True
 
         except Exception as e:
@@ -160,22 +152,22 @@ class EmbeddingService:
             return False
     
 
-    async def create_embedding_with_retry(self, text: str) -> List[float]:
-        """재시도 로직이 포함된 임베딩 생성"""
-        try:
-            embeddings = await self.create_embeddings_batch([text])
-            return embeddings[0] if embeddings else []
-        except Exception as e:
-            logger.error(f"임베딩 생성 실패 (재시도 후): {str(e)}")
-            raise
-    def create_embedding_with_retry_sync(self, text: str) -> List[float]:
-        """재시도 로직이 포함된 임베딩 생성"""
-        try:
-            embeddings = self.create_embeddings_batch_sync([text])
-            return embeddings[0] if embeddings else []
-        except Exception as e:
-            logger.error(f"임베딩 생성 실패 (재시도 후): {str(e)}")
-            raise
+    # async def create_embedding_with_retry(self, text: str) -> List[float]:
+    #     """재시도 로직이 포함된 임베딩 생성"""
+    #     try:
+    #         embeddings = await self.create_embeddings_batch([text])
+    #         return embeddings[0] if embeddings else []
+    #     except Exception as e:
+    #         logger.error(f"임베딩 생성 실패 (재시도 후): {str(e)}")
+    #         raise
+    # def create_embedding_with_retry_sync(self, text: str) -> List[float]:
+    #     """재시도 로직이 포함된 임베딩 생성"""
+    #     try:
+    #         embeddings = self.create_embeddings_batch_sync([text])
+    #         return embeddings[0] if embeddings else []
+    #     except Exception as e:
+    #         logger.error(f"임베딩 생성 실패 (재시도 후): {str(e)}")
+    #         raise
             
     async def create_embedding(self, text: str) -> List[float]:
         """OpenAI API를 사용하여 텍스트의 임베딩 생성"""
@@ -209,11 +201,12 @@ class EmbeddingService:
             logger.info(f"유사 문서 검색 시작 - 쿼리: {query}")
             
             # 쿼리 임베딩 생성
-            query_embedding = await self.create_embedding_with_retry(query)
+            query_embedding = await self.create_embeddings_batch([query])
             #query_embedding = self.create_embedding_with_retry_sync(query)
             if not query_embedding:
                 logger.error("쿼리 임베딩 생성 실패")
                 return []
+            query_embedding = query_embedding[0]
 
                 
             # 필터 설정

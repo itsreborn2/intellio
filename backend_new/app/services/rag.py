@@ -564,6 +564,7 @@ class RAGService:
                 
                 # 결과 처리
                 columns = []
+                #result_content 는 그냥 text다.
                 for doc_id, result in zip(docs_data.keys(), results):
                     try:
                         if not result:

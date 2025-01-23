@@ -96,24 +96,45 @@ class DocumentExtractor:
     def extract_from_pdf(file_content: bytes) -> str:
         """PDF 파일에서 텍스트 추출"""
         try:
-            import fitz
+            # import fitz
             
-            # 메모리에서 직접 PDF 열기
-            doc = fitz.open(stream=file_content, filetype="pdf")
-            try:
-                text = []
-                for page in doc:
-                    text.append(page.get_text())
+            # # 메모리에서 직접 PDF 열기
+            # doc = fitz.open(stream=file_content, filetype="pdf")
+            # try:
+            #     text = []
+            #     for page in doc:
+            #         text.append(page.get_text())
                     
-                extracted_text = "\n".join(text).strip()
-                if not extracted_text:
-                    logger.warning("PDF에서 텍스트를 추출했으나 내용이 비어있습니다. OCR 처리를 시도합니다.")
-                    # OCR 처리 시도
-                    return DocumentExtractor().extract_using_document_ai(file_content, "application/pdf")
+            #     extracted_text = "".join(text).strip()
+            #     if not extracted_text:
+            #         logger.warning("PDF에서 텍스트를 추출했으나 내용이 비어있습니다. OCR 처리를 시도합니다.")
+            #         # OCR 처리 시도
+            #         return DocumentExtractor().extract_using_document_ai(file_content, "application/pdf")
+            #     print(f"extracted_text: {extracted_text}")
+            #     return extracted_text
+            from langchain_community.document_loaders import PyPDFLoader
+            try:
+                # 임시 파일 생성하여 PDF 내용 저장
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
+                    temp_pdf.write(file_content)
+                    temp_pdf_path = temp_pdf.name
+                loader = PyPDFLoader(temp_pdf_path)
+                pages = loader.load()
+                
+                print("=== PDF 내용 ===")
+                print(f"총 페이지 수: {len(pages)}")
+                cleaned_text_list =[]
+                for page in pages:
+                    # print(f"\n=== Page {page.metadata['page']} ===")
+                    # print(f"메타데이터: {page.metadata}")
+                    cleaned_text_list.append( page.page_content.strip())
+
+                extracted_text = "".join(cleaned_text_list)
+                #print(f"extracted_text: {extracted_text}")
                 return extracted_text
             finally:
-                doc.close()
-                    
+                #doc.close()
+                pass
         except ImportError as e:
             logger.error(f"PyMuPDF(fitz) 라이브러리가 설치되지 않았습니다: {str(e)}")
             raise RuntimeError(f"PDF 처리를 위한 라이브러리 오류: {str(e)}")
@@ -137,6 +158,8 @@ class DocumentExtractor:
                 return None
                 
             text = parsed.get('content', '')
+            metadata = parsed.get('metadata', {})
+            #print(f"metadata: {metadata}")
             if not text or not text.strip():
                 logger.warning("문서에서 텍스트를 추출했으나 내용이 비어있습니다.")
                 return None

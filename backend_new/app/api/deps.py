@@ -1,4 +1,4 @@
-from typing import Generator, Annotated
+from typing import Generator, Annotated, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, Request
@@ -7,7 +7,6 @@ from app.core.database import SessionLocal, AsyncSessionLocal
 from app.services.user import UserService
 from app.models.user import User
 from app.services.document import DocumentService
-from app.services.rag import RAGService
 from app.services.session import SessionService
 
 def get_db() -> Generator[Session, None, None]:
@@ -40,8 +39,9 @@ def get_session_service(db: AsyncSession = Depends(get_async_db)) -> SessionServ
     """세션 서비스 의존성"""
     return SessionService(db)
 
-async def get_rag_service(db: AsyncSession = Depends(get_async_db)) -> RAGService:
+async def get_rag_service(db: AsyncSession = Depends(get_async_db)) -> Any:
     """RAG 서비스 의존성"""
+    from app.services.rag import RAGService  # 지연 임포트
     service = RAGService()
     await service.initialize(db)
     return service
@@ -51,4 +51,4 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 AsyncDB = Annotated[AsyncSession, Depends(get_async_db)]
 DocumentService = Annotated[DocumentService, Depends(get_document_service)]
 SessionService = Annotated[SessionService, Depends(get_session_service)]
-RAGService = Annotated[RAGService, Depends(get_rag_service)]
+RAGService = Annotated[Any, Depends(get_rag_service)]  # Any 타입 사용
