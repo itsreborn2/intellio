@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     GOOGLE_CLOUD_STORAGE_BUCKET: str = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET", "")
     GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME", "")
 
+    # Google Cloud for Vertex AI
+    GOOGLE_PROJECT_ID_VERTEXAI: str = os.getenv("GOOGLE_PROJECT_ID_VERTEXAI", "")
+    GOOGLE_LOCATION_VERTEXAI: str = os.getenv("GOOGLE_LOCATION_VERTEXAI", "")
+    GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI", "")
+
     def get_google_cloud_credentials(self) -> str:
         """Google Cloud 인증 정보를 파일에서 읽어옴"""
         try:

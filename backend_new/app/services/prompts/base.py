@@ -11,7 +11,7 @@ import json
 from loguru import logger
 from app.utils.common import measure_time_async
 from app.services.llm_models import LLMModels
-
+from langchain_core.messages import ai
 
 logger = logging.getLogger(__name__)
 

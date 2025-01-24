@@ -1,6 +1,6 @@
-
 #from llama_index.node_parser.text import SentenceWindowNodeParser
 #import llama_index.core.node_parser
+
 from llama_index.core.node_parser import SentenceWindowNodeParser, SemanticSplitterNodeParser
 from llama_index.embeddings.openai import OpenAIEmbedding
 from langchain.text_splitter import (
@@ -14,6 +14,8 @@ from typing import List, Optional
 import os
 
 from dotenv import load_dotenv
+import logging
+logger = logging.getLogger(__name__)
 
 class TextSplitter:
     """텍스트 분할을 처리하는 클래스
@@ -28,15 +30,22 @@ class TextSplitter:
     """
     
     def __init__(self, splitter_type:Optional[str]=None, chunk_size:Optional[int]=1000, chunk_overlap:Optional[int]=200):
-        load_dotenv()
-        if splitter_type is None:
-            self.splitter_type = os.getenv("TEXT_SPLITTER", "recursive").lower()
-            self.chunk_size = int(os.getenv("CHUNK_SIZE", "1000"))
-            self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "200"))
-        else:
-            self.splitter_type = splitter_type.lower()
-            self.chunk_size = chunk_size
-            self.chunk_overlap = chunk_overlap
+        #load_dotenv()
+        # 환경변수 강제 재로드, 개발모드에서만 사용. 나중에는 풀어야함. 
+        # text splitter 호출할때마다 IO가 발생해서 느려짐
+        load_dotenv(override=True)
+        
+        # 환경변수에서 기본값 로드
+        default_splitter = os.getenv("TEXT_SPLITTER", "recursive").lower()
+        default_chunk_size = int(os.getenv("CHUNK_SIZE", "1500"))
+        default_chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "300"))
+        
+        # 파라미터로 전달된 값이 있으면 사용하고, 없으면 환경변수 값 사용
+        self.splitter_type = splitter_type.lower() if splitter_type else default_splitter
+        self.chunk_size = chunk_size if chunk_size else default_chunk_size
+        self.chunk_overlap = chunk_overlap if chunk_overlap else default_chunk_overlap
+        logger.info(f"TEXT_SPLITTER : {self.splitter_type}, CHUNK_SIZE : {self.chunk_size}, CHUNK_OVERLAP : {self.chunk_overlap}")
+
         
         
         # splitter 초기화
@@ -86,9 +95,11 @@ class TextSplitter:
         Returns:
             List[str]: 분할된 텍스트 청크 리스트
         """
-        if self.splitter_type == "sentence":
+        if self.splitter_type == "sentencewindow":
             # SentenceWindowNodeParser는 다른 인터페이스를 사용하므로 별도 처리
-            nodes = self.splitter.get_nodes_from_documents([text])
+            from llama_index.core import Document
+            doc = Document(text=text)
+            nodes = self.splitter.get_nodes_from_documents([doc])
             return [node.get_content() for node in nodes]
         elif self.splitter_type == "semantic_llama":
             # SemanticSplitterNodeParser는 Document 객체를 입력으로 받음

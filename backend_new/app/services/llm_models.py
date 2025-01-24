@@ -42,7 +42,11 @@ class KfDebertaAI(BaseChatModel):
         
         # 모델 추론
         with torch.no_grad():
-            model_output = model(**inputs)
+            model_output = model(**inputs) # 이것은 임베딩이 포함된 모델의 출력, 순수한 임베딩은 아님.
+            # {
+            #     'last_hidden_state': tensor(...),  # 시퀀스의 각 토큰에 대한 문맥화된 임베딩
+            #     'pooler_output': tensor(...),      # [CLS] 토큰의 변환된 표현 (문장 전체 표현)
+            # }
         
         # 마지막 히든 스테이트 사용
         last_hidden_state = model_output.last_hidden_state
@@ -51,7 +55,7 @@ class KfDebertaAI(BaseChatModel):
         last_token_embedding = last_hidden_state[0, -1, :]
         
         # 임베딩을 문자열로 변환 (실제 사용 시에는 더 복잡한 디코딩 로직이 필요할 수 있음)
-        response = f"Generated response based on embedding: {last_token_embedding[:5].tolist()}"
+        response = f"{last_token_embedding[:5].tolist()}"
         
         # ChatResult 객체 생성 및 반환
         ai_message = ai.AIMessage(content=response)
@@ -83,7 +87,7 @@ class KfDebertaAI(BaseChatModel):
         last_token_embedding = last_hidden_state[0, -1, :]
         
         # 임베딩을 문자열로 변환
-        response = f"Generated response based on embedding: {last_token_embedding[:5].tolist()}"
+        response = f"{last_token_embedding[:5].tolist()}"
         
         # ChatResult 객체 생성 및 반환
         ai_message = ai.AIMessage(content=response)
