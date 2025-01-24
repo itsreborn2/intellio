@@ -1,63 +1,139 @@
+import google.generativeai as genai
 import os
-import openai
-import pinecone
+import sys
+import vertexai
+from vertexai.language_models import TextEmbeddingModel
+import logging
+from dotenv import load_dotenv
+from google.oauth2 import service_account
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import PyPDFLoader
+from openai import OpenAI
 
-# Step 1: OpenAI 및 Pinecone API 키 설정
-openai.api_key = os.getenv("OPENAI_API_KEY")  # OpenAI API 키
-pinecone.init(
-    api_key=os.getenv("PINECONE_API_KEY"),  # Pinecone API 키
-    environment="us-west1-gcp"  # Pinecone 환경 (예: us-west1-gcp)
-)
+# 환경 변수 로드
+load_dotenv()
 
-# Step 2: Pinecone 인덱스 생성 또는 연결
-index_name = "example-index"
-if index_name not in pinecone.list_indexes():
-    pinecone.create_index(name=index_name, dimension=1536, metric="cosine")
-index = pinecone.Index(index_name)
 
-# Step 3: 파일에서 텍스트 추출 (PDF 로더 사용)
-def extract_text_from_file(file_path):
-    loader = PyPDFLoader(file_path)
-    documents = loader.load()
-    return " ".join([doc.page_content for doc in documents])
+def test_embedding():
+    genai.configure(api_key='AIzaSyAAxQVz3-tMYra4YDIYp5JAoNrzdOaVl1Q')
 
-# Step 4: 텍스트 분리 (청킹)
-def split_text_into_chunks(text, chunk_size=1500, chunk_overlap=200):
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", " "]
+    result = genai.embed_content(
+            model="models/text-embedding-004",
+            #model="models/multilingual-text-embedding",
+            #content="What is the meaning of life?")
+            content="안녕하세요 이런것도 되긴하나")
+
+    print(str(result['embedding']))
+
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def test_vertex_embedding():
+    # Vertex AI 초기화
+    project_id = os.getenv("GOOGLE_PROJECT_ID_VERTEXAI")
+    location = os.getenv("GOOGLE_LOCATION_VERTEXAI", "asia-northeast3")
+    credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI", "")
+    if not project_id:
+        raise ValueError("GOOGLE_PROJECT_ID_VERTEXAI 환경 변수가 설정되지 않았습니다.")
+    # 서비스 계정 키 JSON 파일로부터 credentials 객체 생성
+    credentials = service_account.Credentials.from_service_account_file(credentials_path)
+    
+
+    vertexai.init(project=project_id, location=location, credentials=credentials)
+    
+    # 임베딩 모델 로드
+    #model = TextEmbeddingModel.from_pretrained("textembedding-gecko@latest")
+    model = TextEmbeddingModel.from_pretrained("text-multilingual-embedding-002")
+    #model = TextEmbeddingModel.from_pretrained("text-embedding-004")
+    
+    # 테스트할 텍스트
+    texts = [
+        "안녕하세요, 한국어 텍스트입니다.",
+            "자연어 처리는 인공지능의 중요한 분야입니다.",
+            "KF-Deberta는 한국어에 특화된 모델입니다.",
+            "이 모델은 한국어 문장의 의미를 잘 파악합니다."
+    ]
+    
+    try:
+        # 임베딩 생성
+        embeddings = model.get_embeddings(texts)
+        
+        # 결과 출력
+        for i, embedding in enumerate(embeddings):
+            logger.info(f"Text {i+1}: {texts[i]}")
+            logger.info(f"Embedding dimension: {len(embedding.values)}")
+            logger.info(f"First 5 values: {embedding.values[:5]}")
+            logger.info("-" * 50)
+            
+        return True
+        
+    except Exception as e:
+        logger.error(f"임베딩 생성 중 오류 발생: {str(e)}")
+        raise
+
+def test_kakao_embedding():
+    """KF-Deberta 모델을 사용한 임베딩 테스트"""
+    try:
+        from transformers import AutoModel, AutoTokenizer
+        import torch
+        
+        # 모델과 토크나이저 로드
+        model = AutoModel.from_pretrained("app/kf-deberta")
+        tokenizer = AutoTokenizer.from_pretrained("app/kf-deberta")
+        
+        # 테스트할 텍스트
+        texts = [
+            "안녕하세요, 한국어 텍스트입니다.",
+            "자연어 처리는 인공지능의 중요한 분야입니다.",
+            "KF-Deberta는 한국어에 특화된 모델입니다.",
+            "이 모델은 한국어 문장의 의미를 잘 파악합니다."
+        ]
+        
+        logger.info("KF-Deberta 임베딩 테스트 시작")
+        
+        #text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(tokenizer)
+        for i, text in enumerate(texts):
+            # 토큰화
+            inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+            tokens = tokenizer.tokenize(text)
+            other_tokens = tokenizer.encode(text)
+            logger.info(f"토큰화 결과: {tokens}, 토큰수: {len(tokens)}")
+            logger.info(f"토큰화 결과: {other_tokens}, 토큰수: {len(other_tokens)}")
+            # 모델 추론
+            with torch.no_grad():
+                outputs = model(**inputs)
+            
+            # [CLS] 토큰의 임베딩 추출 (문장 전체 표현)
+            sentence_embedding = outputs.last_hidden_state[0, 0, :].numpy()
+            
+            logger.info(f"\nText {i+1}: {text}")
+            #logger.info(f"임베딩 차원: {len(sentence_embedding)}")
+            #logger.info(f"처음 5개 값: {sentence_embedding[:5]}")
+            logger.info("-" * 50)
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"KF-Deberta 임베딩 생성 중 오류 발생: {str(e)}")
+        raise
+
+def test_deepseek():
+    API_KEY = "sk-3a57a56bfeae4a5288a6757c3d5b243a"
+    client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
+
+    response = client.chat.completions.create(
+        model="deepseek-chat",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": "Hello"},
+        ],
+        stream=False
     )
-    chunks = splitter.split_text(text)
-    return chunks
 
-# Step 5: OpenAI 임베딩 생성 함수 정의
-def get_embedding(text, model="text-embedding-ada-002"):
-    response = openai.Embedding.create(input=[text], model=model)
-    return response['data'][0]['embedding']
-
-# Step 6: 청크 임베딩 생성 및 Pinecone에 업로드
-def embed_and_store_chunks(chunks):
-    for i, chunk in enumerate(chunks):
-        embedding = get_embedding(chunk)  # 임베딩 생성
-        metadata = {"text": chunk}       # 메타데이터 추가 (원본 텍스트 저장)
-        index.upsert([(str(i), embedding, metadata)])  # Pinecone에 업로드
-
-# Step 7: 전체 파이프라인 실행
-def process_file(file_path):
-    print("Step 1: Extracting text from file...")
-    text = extract_text_from_file(file_path)
-    
-    print("Step 2: Splitting text into chunks...")
-    chunks = split_text_into_chunks(text)
-    
-    print(f"Step 3: Generating embeddings and storing in Pinecone ({len(chunks)} chunks)...")
-    embed_and_store_chunks(chunks)
-    
-    print("Process completed successfully!")
-
-# 실행 예시 (사용자 업로드 파일 경로)
-file_path = "path_to_your_uploaded_file.pdf"  # 사용자 업로드 파일 경로 입력
-process_file(file_path)
+    print(response.choices[0].message.content)
+    pass
+if __name__ == "__main__":
+    #test_vertex_embedding()
+    #test_kakao_embedding() 
+    test_deepseek()

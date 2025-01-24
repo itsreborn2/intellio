@@ -108,13 +108,14 @@ def create_chunk_embedding(doc_id: str, chunk_text: str, chunk_index: int):
     """단일 청크에 대한 임베딩 생성"""
     try:
         embedding_service = EmbeddingService()
-        embedding = embedding_service.create_embedding(chunk_text)
+        #embedding = embedding_service.create_embedding(chunk_text)
+        embedding = embedding_service.get_single_embedding(chunk_text)
         
         # 청크 ID 생성
         chunk_id = f"{doc_id}_chunk_{chunk_index}"
         
         # Pinecone에 저장
-        embedding_service.index.upsert(
+        embedding_service.pinecone_index.upsert(
             vectors=[(
                 chunk_id,
                 embedding,
@@ -222,7 +223,7 @@ async def process_document_text_direct(db: Session, doc_id: str, text: str):
                     if embedding and len(embedding) > 0:
                         chunk_id = f"{doc_id}_chunk_{i}"
                         # Pinecone에 저장
-                        embedding_service.index.upsert(
+                        embedding_service.pinecone_index.upsert(
                             vectors=[(
                                 chunk_id,
                                 embedding,
@@ -329,7 +330,7 @@ def process_document_chucking(self, document_id: str):
 
             # 청크 생성
             #text_splitter = TextSplitter(splitter_type="recursive", chunk_size=1500, chunk_overlap=300) # 입력하지 않으면 .env값 사용
-            text_splitter = TextSplitter(splitter_type="sentence") 
+            text_splitter = TextSplitter() 
             #text_splitter = TextSplitter(splitter_type="semantic_llama") 
             
             chunks = text_splitter.split_text(extracted_text)
@@ -452,7 +453,7 @@ def process_document_task(self, document_id: str):
                         if embedding and len(embedding) > 0:
                             chunk_id = f"{document_id}_chunk_{i}"
                             # Pinecone에 저장
-                            await embedding_service.index.upsert_async(
+                            await embedding_service.pinecone_index.upsert_async(
                                 vectors=[(
                                     chunk_id,
                                     embedding,

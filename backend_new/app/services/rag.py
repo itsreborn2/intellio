@@ -361,7 +361,7 @@ class RAGService:
         # 일반 모드에서는 필터링 수행
         filtered_chunks = []
         min_score = self.config.get('min_similarity_score', 0.6)
-        
+
         for chunk in chunks:
             # 청크 메타데이터에서 텍스트 추출
             metadata = chunk.get("metadata", {})
