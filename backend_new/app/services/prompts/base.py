@@ -1,9 +1,7 @@
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
-import asyncio
-import threading
-import os
+
 from openai import AsyncOpenAI
 import google.generativeai as genai
 from google.generativeai.types import GenerateContentResponse
@@ -12,184 +10,68 @@ from app.core.cache import AsyncRedisCache, RedisCache
 import json
 from loguru import logger
 from app.utils.common import measure_time_async
+from app.services.llm_models import LLMModels
 
-#from langchain_community.llms import OpenAI, AsyncOpenAI
-#from langchain.llms import OpenAI
-from langchain_openai import ChatOpenAI
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.language_models import BaseChatModel
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+
 logger = logging.getLogger(__name__)
 
-# class GeminiAPI:
-#     """Gemini API 싱글톤"""
-#     _instance = None
-#     _llm_chain = None
-    
-#     def __new__(cls):
-#         if cls._instance is None:
-#             cls._instance = super().__new__(cls)
-#         return cls._instance
-    
-#     def initialize(self, api_key: str, **kwargs):
-#         """API 초기화"""
-#         if self._llm_chain is None:
-#             generation_config = kwargs.get('generation_config', {
-#                 "temperature": 0.3,
-#                 "top_p": 0.8,
-#                 "top_k": 40,
-#                 "max_output_tokens": 2048,
-#             })
-            
-#             safety_settings = kwargs.get('safety_settings', [
-#                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-#                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-#                 {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-#                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-#             ])
-            
-#             logger.info("Gemini API 초기화")
-#             genai.configure(api_key=api_key)
-#             self._llm_chain = genai.GenerativeModel(
-#                 model_name=kwargs.get('model_name', "models/gemini-2.0-flash-exp"),
-#                 generation_config=genai.GenerationConfig(**generation_config),
-#                 safety_settings=safety_settings
-#             )
-#             logger.info("Gemini API 초기화 완료")
-    
-#     def generate_content(self, prompt: str) -> Optional[GenerateContentResponse]:
-#         """동기 컨텐츠 생성"""
-#         if self._llm_chain is None:
-#             self.initialize(settings.GEMINI_API_KEY)
-            
-#         logger.info(f"Gemini API[Sync] 호출 - 프롬프트: {prompt[:100]}...")
-#         response = self._llm_chain.generate_content(prompt)
-#         logger.info("Gemini API 호출 완료")
-#         return response
-
-#     async def generate_content_async(self, prompt: str) -> Optional[GenerateContentResponse]:
-#         """비동기 컨텐츠 생성"""
-#         if self._llm_chain is None:
-#             self.initialize(settings.GEMINI_API_KEY)
-            
-#         logger.info(f"Gemini API[Async] 호출 - 프롬프트: {prompt[:100]}...")
-#         response = await self._llm_chain.generate_content_async(prompt)
-#         logger.info("Gemini API 호출 완료")
-#         return response
-# class LLMLangChain:
-#     _instance = None
-#     _llm_chain = None
-#     def generate_content(self, prompt: str) -> Optional[str]:
-#         """동기 컨텐츠 생성 - 추상 메서드"""
-#         raise NotImplementedError("Subclasses must implement generate_content")
-
-#     async def generate_content_async(self, prompt: str) -> Optional[str]:
-#         """비동기 컨텐츠 생성 - 추상 메서드"""
-#         raise NotImplementedError("Subclasses must implement generate_content_async")
-
-
-class LLMLangChain:
-    """AI Model을 랭체인에 맞게 구현"""
+# 안씀.
+class GeminiAPI:
+    """Gemini API 싱글톤"""
     _instance = None
     _llm_chain = None
-    _llm_type = "gemini"
-    _llm = None
-    def __new__(cls, llm_type: str, api_key: str, **kwargs):
+    
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance.initialize(llm_type, api_key, **kwargs)
         return cls._instance
-
-    def initialize(self, llm_type: str, api_key: str, **kwargs):
-        """LangChain 초기화"""
-        if self._llm_chain is None:
-            self._llm_type = llm_type
-            logger.info(f"LangChain 기반 {self._llm_type} API 초기화")
-
-            # LLM 모델 설정
-            self._llm = self.get_llm(llm_type, api_key, **kwargs)
-
-            # OpenAI LLM 설정 (여기서 Gemini 모델로 교체 가능)
-
-
-            # 프롬프트 템플릿 설정
-            # prompt_template = PromptTemplate(
-            #     input_variables=["prompt"],
-            #     template="""{prompt}""",
-            # )
-
-            # self._llm_chain = LLMChain(llm=llm, prompt=prompt_template)
-
-            logger.info(f"LangChain 기반 {self._llm_type} API 초기화 완료")
-            #prompt = ChatPromptTemplate.from_template("")
-
-    def get_llm(self, model_name: str, api_key: str, **kwargs) -> BaseChatModel:
-        if model_name == "openai":
-            return ChatOpenAI(
-                            model="gpt-3.5-turbo",
-                            openai_api_key=api_key,
-                            temperature=kwargs.get("temperature", 0.3),
-                            max_tokens=kwargs.get("max_output_tokens", 2048),
-                            top_p=kwargs.get("top_p", 0.8),
-                            top_k=kwargs.get("top_k", 40),
-                            )
-        elif model_name == "gemini":
-            return ChatGoogleGenerativeAI(
-                    model="models/gemini-2.0-flash-exp",
-                    google_api_key=api_key,
-                    temperature=kwargs.get("temperature", 0.3),
-                    max_output_tokens=kwargs.get("max_output_tokens", 2048),
-                    top_p=kwargs.get("top_p", 0.8),
-                    top_k=kwargs.get("top_k", 40),
-                )
-        else:
-            raise ValueError("Unsupported model")
-        
     
-        
-        raise ValueError(f"지원되지 않는 LLM 타입입니다: {self._llm_type}")
-
-
-    def generate_content(self, prompt: str) -> Optional[str]:
+    def initialize(self, api_key: str, **kwargs):
+        """API 초기화"""
+        if self._llm_chain is None:
+            generation_config = kwargs.get('generation_config', {
+                "temperature": 0.3,
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 2048,
+            })
+            
+            safety_settings = kwargs.get('safety_settings', [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            ])
+            
+            logger.info("Gemini API 초기화")
+            genai.configure(api_key=api_key)
+            self._llm_chain = genai.GenerativeModel(
+                model_name=kwargs.get('model_name', "models/gemini-2.0-flash-exp"),
+                generation_config=genai.GenerationConfig(**generation_config),
+                safety_settings=safety_settings
+            )
+            logger.info("Gemini API 초기화 완료")
+    
+    def generate_content(self, prompt: str) -> Optional[GenerateContentResponse]:
         """동기 컨텐츠 생성"""
+        if self._llm_chain is None:
+            self.initialize(settings.GEMINI_API_KEY)
+            
         logger.info(f"Gemini API[Sync] 호출 - 프롬프트: {prompt[:100]}...")
-        # 프롬프트 템플릿 설정
-        prompt_template = ChatPromptTemplate.from_template("{prompt}")
-
-        # 파이프라인 구성
-        chain = prompt_template | self._llm | StrOutputParser()
-
-        # 파이프라인 실행
-        response = chain.invoke({"prompt": prompt})
+        response = self._llm_chain.generate_content(prompt)
         logger.info("Gemini API 호출 완료")
         return response
-    async def generate_content_async(self, prompt: str) -> Optional[str]:
+
+    async def generate_content_async(self, prompt: str) -> Optional[GenerateContentResponse]:
         """비동기 컨텐츠 생성"""
+        if self._llm_chain is None:
+            self.initialize(settings.GEMINI_API_KEY)
+            
         logger.info(f"Gemini API[Async] 호출 - 프롬프트: {prompt[:100]}...")
-        # 프롬프트 템플릿 설정
-        prompt_template = ChatPromptTemplate.from_template("{prompt}")
-
-        # 파이프라인 구성
-        chain = prompt_template | self._llm | StrOutputParser()
-
-        # 파이프라인 비동기 실행
-        response = await chain.ainvoke({"prompt": prompt})
+        response = await self._llm_chain.generate_content_async(prompt)
         logger.info("Gemini API 호출 완료")
         return response
 
-
-    # async def generate_content_async(self, prompt: str) -> Optional[str]:
-    #     """비동기 컨텐츠 생성"""
-    #     if self._llm_chain is None:
-    #         self.initialize(settings.GEMINI_API_KEY)
-
-    #     logger.info(f"Gemini API[Async] 호출 - 프롬프트: {prompt[:100]}...")
-    #     response = await self._llm_chain.acall(inputs={"prompt": prompt})
-    #     logger.info("Gemini API 호출 완료")
-    #     return response["text"]
     
 class BasePrompt:
     """기본 프롬프트 클래스"""
@@ -210,7 +92,7 @@ class BasePrompt:
             document_id: 문서 ID (기본값: "default")
         """
         #self.gemini_api = GeminiAPI()  # 싱글톤 인스턴스
-        self.LLM = LLMLangChain("gemini", gemini_api_key or settings.GEMINI_API_KEY)  # 싱글톤 인스턴스
+        self.LLM = LLMModels()  # 싱글톤 인스턴스
         self.gemini_api_key = gemini_api_key or settings.GEMINI_API_KEY
         self.openai_api_key = openai_api_key or settings.OPENAI_API_KEY
         self.document_id = document_id
@@ -249,19 +131,13 @@ class BasePrompt:
                 return cached_result
             # Gemini API로 시도
             try:
-                #logger.info(f"[process_prompt_async] gemini_api._model : {self.LLM._llm_chain}")
-                # if self.gemini_api._llm_chain is None:
-                #     #self.gemini_api.initialize(settings.GEMINI_API_KEY)
-                #     logger.info(f"[process_prompt_async] gemini_api. initialize")
-                #     self.gemini_api = LLMLangChain()
-                #     if self.gemini_api._llm_chain is None:
-                #         logger.info(f"[process_prompt_async] gemini_api. initialize again")
-                #         self.gemini_api.initialize(settings.GEMINI_API_KEY)
-                logger.info(f"Gemini API 호출 [ThreadID: {threading.get_ident()}, ProcessID: {os.getpid()}]")
-                logger.info(f"Gemini API 호출 - 프롬프트: {prompt[:100]}...")
+                #self.LLM.change_llm("kf-deberta", None)
+                model_info = self.LLM.get_current_llm_info()
+                model_name = model_info["model"]
+                logger.info(f"{model_name} API 호출 - 프롬프트: {prompt[:100]}...")
                 #response = await self.gemini_api._llm_chain.generate_content_async(prompt)
-                response = await self.LLM.generate_content_async(prompt)
-                logger.info("Gemini API 호출 완료")
+                response = await self.generate_content_async(prompt)
+                logger.info(f"{model_name} API 호출 완료")
 
                 #response는 그냥 문자열이다.
                 if response :
@@ -280,7 +156,7 @@ class BasePrompt:
                         logger.warning(f"JSON 파싱 실패: {text[:100]}...")
                         return text
 
-                logger.error("Gemini API 응답이 비어있음")
+                logger.error(f"{model_name} API 응답이 비어있음")
                 return json.dumps({
                     "content": "응답을 생성할 수 없습니다.",
                     "metadata": {
@@ -296,7 +172,7 @@ class BasePrompt:
                 #     await self.cache.set(cache_key, prompt, result)
                 #     return result
             except Exception as e:
-                logger.error(f"Gemini API 오류: {str(e)}")
+                logger.error(f"{model_name} API 오류: {str(e)}")
                 # OpenAI로 폴백
                 result = await self._process_with_openai(prompt)
                 if result:
@@ -335,57 +211,25 @@ class BasePrompt:
             if cached_result:
                 logger.info(f"hit cache")
                 return cached_result
-            # LLM에게 prompt, context 전달하고 응답받음
-            # 응답은 적절하게 파싱처리하여 dictionary 형식으로 리턴함
+            
             # Gemini API로 시도
             try:
-                #logger.info(f"[process_prompt] gemini_api._model : {self.gemini_api._model}")
-                # if self.gemini_api._model is None:
-                #     self.gemini_api = GeminiAPI()
-                #     if self.gemini_api._model is None:
-                #         self.gemini_api.initialize(settings.GEMINI_API_KEY)
-                logger.info(f"Gemini API 호출[Sync] [ThreadID: {threading.get_ident()}, ProcessID: {os.getpid()}]")
                 #logger.info(f"Gemini API 호출 - 프롬프트: {prompt[:20]}...")
                 start_time = time.time()
-                #response = self.gemini_api._llm_chain.generate_content(prompt)
-                response = self.generate_content(prompt)
+                content = self.generate_content(prompt)
                 end_time = time.time()
                 execution_time = end_time - start_time
                 logger.info(f"Gemini API 호출 시간: {execution_time:.2f} 초")
 
-                if response:
-                    # 응답 텍스트 정리
-                    text = response.strip()
-                    logger.info(f"Gemini API 응답 text: {text}")
-                    try:
-                        if text.startswith('{') and text.endswith('}'):
-                            parsed = json.loads(text)
-                            self.sync_cache.set(cache_key, prompt, parsed)
-                            return json.dumps(parsed, ensure_ascii=False)
-
-                        self.sync_cache.set(cache_key, prompt, text)
-                        return text
-                    except json.JSONDecodeError:
-                        logger.warning(f"JSON 파싱 실패: {text[:100]}...")
-                        return text
+                if content:
+                    self.sync_cache.set(cache_key, prompt, content)
+                    return content
 
                 logger.error("Gemini API 응답이 비어있음")
-                return json.dumps({
-                    "content": "응답을 생성할 수 없습니다.",
-                    "metadata": {
-                        "confidence": 0.0,
-                        "source": "error",
-                        "context": "empty_response"
-                    }
-                }, ensure_ascii=False)
+                return "죄송합니다. 응답을 생성할 수 없습니다"
                 
             except Exception as e:
                 logger.error(f"Gemini API 오류: {str(e)}")
-                # OpenAI로 폴백
-                # result = await self._process_with_openai(prompt)
-                # if result:
-                #     await self.cache.set(cache_key, prompt, result)
-                #     return result
                 raise
                 
             raise Exception("모든 AI 서비스 호출 실패")
@@ -407,64 +251,47 @@ class BasePrompt:
     def generate_content(self, prompt: str) -> str:
         """LLM API를 사용하여 컨텐츠 생성"""
         try:
-            return self.LLM.generate_content(prompt)        
+            response: ai.AIMessage = self.LLM.generate(prompt)        
+            if response:
+                # 응답 텍스트 정리
+                text = response.content
+                #logger.info(f"Gemini API 응답 text: {text}")
+                # 파싱 필요 없음.
+                return text
+            return "죄송합니다. 응답을 생성할 수 없습니다."
         except Exception as e:
-            raise
-            # logger.error(f"Gemini 컨텐츠 생성 실패: {str(e)}")
-            # return json.dumps({
-            #     "content": f"컨텐츠 생성 중 오류 발생: {str(e)}",
-            #     "metadata": {
-            #         "confidence": 0.0,
-            #         "source": "error",
-            #         "context": "generation_error"
-            #     }
-            # }, ensure_ascii=False)
+            self.LLM.select_next_llm() # 다음 우선순위 llm 선택
+            try:
+                response: ai.AIMessage = self.LLM.generate(prompt)        
+                if response:
+                    # 응답 텍스트 정리
+                    text = response.content
+                    return text
+                return "죄송합니다. 응답을 생성할 수 없습니다."
+            except Exception as e:
+                #여기서도 에러나면 raise
+                raise
+    async def generate_content_async(self, prompt: str) -> str:
+        """LLM API를 사용하여 컨텐츠 생성"""
+        try:
+            response: ai.AIMessage = await self.LLM.agenerate(prompt)        
+            if response:
+                text = response.content
+                return text
+            return "죄송합니다. 응답을 생성할 수 없습니다."
+        except Exception as e:
+            self.LLM.select_next_llm() # 다음 우선순위 llm 선택
+            try:
+                response: ai.AIMessage = await self.LLM.agenerate(prompt)        
+                if response:
+                    # 응답 텍스트 정리
+                    text = response.content
+                    return text
+                return "죄송합니다. 응답을 생성할 수 없습니다."
+            except Exception as e:
+                #여기서도 에러나면 raise
+                raise
 
-    # async def _generate_content(self, prompt: str) -> str:
-    #     """Gemini API를 사용하여 컨텐츠 생성"""
-    #     try:
-    #         if self.gemini_api is None:
-    #             #self.initialize(settings.GEMINI_API_KEY)
-    #             self.gemini_api = LLMLangChain()
-            
-    #         logger.info(f"Gemini API 호출 - 프롬프트: {prompt[:100]}...")
-    #         response = await self.gemini_api._llm_chain.generate_content_async(prompt)
-    #         logger.info("Gemini API 호출 완료")
-    #         if response and response.text:
-    #             # 응답 텍스트 정리
-    #             text = response.text.strip()
-                
-    #             try:
-    #                 # JSON 형식인지 확인하고 파싱
-    #                 import json
-    #                 if text.startswith('{') and text.endswith('}'):
-    #                     parsed = json.loads(text)
-    #                     return json.dumps(parsed, ensure_ascii=False)
-    #                 return text
-    #             except json.JSONDecodeError:
-    #                 logger.warning(f"JSON 파싱 실패: {text[:100]}...")
-    #                 return text
-    #         else:
-    #             logger.error("Gemini API 응답이 비어있음")
-    #             return json.dumps({
-    #                 "content": "응답을 생성할 수 없습니다.",
-    #                 "metadata": {
-    #                     "confidence": 0.0,
-    #                     "source": "error",
-    #                     "context": "empty_response"
-    #                 }
-    #             }, ensure_ascii=False)
-            
-    #     except Exception as e:
-    #         logger.error(f"Gemini 컨텐츠 생성 실패: {str(e)}")
-    #         return json.dumps({
-    #             "content": f"컨텐츠 생성 중 오류 발생: {str(e)}",
-    #             "metadata": {
-    #                 "confidence": 0.0,
-    #                 "source": "error",
-    #                 "context": "generation_error"
-    #             }
-    #         }, ensure_ascii=False)
 
     async def _process_with_openai(self, prompt: str) -> Optional[str]:
         """OpenAI API를 사용한 프롬프트 처리 (폴백 메서드)

@@ -144,6 +144,15 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
+    ###############
+    ## RAG Settings
+    ###############
+    # Text Splitter
+
+    TEXT_SPLITTER:str = os.getenv("TEXT_SPLITTER", "recursive")
+    CHUNK_SIZE:int = int(os.getenv("CHUNK_SIZE", "1000"))
+    CHUNK_OVERLAP:int = int(os.getenv("CHUNK_OVERLAP", "200"))
+
     class Config:
         env_file = ".env" #예전위치.
         #env_file = "../../.env"  # 프로젝트 루트의 .env 파일 참조

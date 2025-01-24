@@ -47,25 +47,12 @@ class DocumentService:
         """파일 타입 검증"""
         return content_type in self.allowed_mime_types
 
-    async def process_document_async(self, doc_id: UUID) -> None:
-        """문서 처리 Celery 태스크 실행"""
-        try:
-            # Celery 태스크 이름으로 태스크 실행
-            celery.send_task(
-                'app.workers.document.process_document',
-                args=[str(doc_id)],
-                queue='document-processing'
-            )
-            logger.info(f"문서 처리 태스크 시작됨[async]: {doc_id}")
-        except Exception as e:
-            logger.error(f"문서 처리 태스크 시작 실패: {doc_id}, error: {str(e)}")
-            raise
     def process_document_sync(self, doc_id: UUID) -> None:
         """문서 처리 Celery 태스크 실행"""
         try:
             # Celery 태스크 이름으로 태스크 실행
             celery.send_task(
-                'app.workers.document.process_document',
+                'app.workers.document.process_document_chucking',
                 args=[str(doc_id)],
                 queue='document-processing'
             )
@@ -92,6 +79,8 @@ class DocumentService:
         Returns:
             생성된 Document 객체 목록
         """
+       
+        
         if not files:
             raise HTTPException(status_code=400, detail="No files provided")
             
@@ -139,6 +128,7 @@ class DocumentService:
                 
                 try:
                     # 7. 파일 내용 읽기 및 검증
+                    
                     content = await file.read()
                     if not content:
                         raise ValueError("Empty file")
@@ -151,7 +141,8 @@ class DocumentService:
                     file_path = f"{project_id}/{doc_id}/{file.filename}"
                     
                     # 9. 파일 저장
-                    await self.storage.upload_file(file_path, content)
+                    # 구글 클라우드에 올린다. 일단 막자.
+                    #await self.storage.upload_file(file_path, content)
                     
                     # 10. 텍스트 추출
                     try:
@@ -186,9 +177,7 @@ class DocumentService:
                     
                     documents.append(document)
                     
-                    # 14. 비동기 처리 태스크 등록
-                    # 여기는 바로 celery 등록하면 될텐데 왜 굳이 등록하는 행위 자체를 또 비동기 task에 맡기는거지?
-                    #background_tasks.add_task(self.process_document_async, doc_id)
+                    # 14. 문서 처리 태스크 등록
                     self.process_document_sync(doc_id)
                     
                 except Exception as e:

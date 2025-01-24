@@ -105,7 +105,6 @@ class TablePrompt(BasePrompt):
             str: 분석 결과 텍스트
         """
         try:
-            logger.error(f"analyze 진입")
             # 입력값 검증
             if not content or not isinstance(content, str):
                 return "문서 내용이 비어있거나 올바르지 않습니다."

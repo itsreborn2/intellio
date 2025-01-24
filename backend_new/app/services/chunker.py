@@ -455,7 +455,7 @@ class RAGOptimizedChunker:
         doc_structure = await self._analyze_document_structure(text)
         if not doc_structure or "sections" not in doc_structure:
             return []
-            q
+            
         # 2. 기본 청크 생성
         base_chunks = self._create_base_chunks(text, doc_structure)
         if not base_chunks:
