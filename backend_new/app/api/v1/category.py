@@ -1,7 +1,6 @@
 """카테고리 관련 API 라우터"""
 
 from fastapi import APIRouter, Depends, Response, HTTPException
-from fastapi.exceptions import HTTPException
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -9,12 +8,13 @@ from app.schemas.category import CategoryResponse, CategoryCreate, AddProjectToC
 from app.schemas.project import ProjectSimpleResponse
 from app.models.category import Category
 from app.models.project import Project
+from app.models.document import Document, DocumentChunk
+from app.models.table_history import TableHistory
 from app.models.user import Session
 from app.core.deps import get_db, get_current_session
 from uuid import UUID
 import logging
 from fastapi.responses import JSONResponse
-from fastapi import status
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ async def get_categories(
         if session.is_anonymous or not session.user_id:
             logger.warning("익명 사용자는 카테고리를 조회할 수 없습니다.")
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=403,
                 detail="로그인이 필요한 기능입니다."
             )
             
@@ -171,6 +171,68 @@ async def delete_category(
             detail=f"Failed to delete category: {str(e)}"
         )
 
+@router.put("/{category_id}", response_model=CategoryResponse)
+async def update_category(
+    category_id: str,
+    category_data: CategoryCreate,
+    session: Session = Depends(get_current_session),
+    db: AsyncSession = Depends(get_db)
+):
+    """카테고리 정보를 업데이트합니다."""
+    logger.info(f"PUT /categories/{category_id} 요청 받음 - User ID: {session.user_id}")
+    
+    try:
+        # 카테고리 존재 여부 확인
+        query = select(Category).where(Category.id == category_id)
+        result = await db.execute(query)
+        category = result.scalar_one_or_none()
+        
+        if not category:
+            logger.warning(f"카테고리를 찾을 수 없음: {category_id}")
+            raise HTTPException(
+                status_code=404,
+                detail="카테고리를 찾을 수 없습니다."
+            )
+            
+        # 권한 확인
+        if category.user_id != session.user_id:
+            logger.warning(f"카테고리 수정 권한 없음: {category_id}")
+            raise HTTPException(
+                status_code=403,
+                detail="이 카테고리를 수정할 권한이 없습니다."
+            )
+            
+        # 동일한 이름의 다른 카테고리가 있는지 확인
+        name_check = select(Category).where(
+            Category.name == category_data.name,
+            Category.id != category_id,
+            Category.user_id == session.user_id
+        )
+        existing = await db.execute(name_check)
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=400,
+                detail="같은 이름의 카테고리가 이미 존재합니다."
+            )
+            
+        # 카테고리 업데이트
+        category.name = category_data.name
+        await db.commit()
+        await db.refresh(category)
+        
+        logger.info(f"카테고리 업데이트 성공: {category_id}")
+        return category
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"카테고리 업데이트 중 오류 발생: {str(e)}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="카테고리 업데이트 중 오류가 발생했습니다."
+        )
+
 @router.post("/{category_id}/projects", response_model=ProjectSimpleResponse)
 async def add_project_to_category(
     category_id: str,
@@ -257,3 +319,65 @@ async def get_category_projects(
         is_temporary=project.is_temporary,
         category_id=category_id
     ) for project in projects]
+
+@router.delete("/projects/{project_id}", response_model=None)
+async def delete_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Session = Depends(get_current_session)
+):
+    """
+    프로젝트와 관련된 모든 데이터를 삭제합니다.
+    
+    Args:
+        project_id (str): 삭제할 프로젝트의 ID
+        db (AsyncSession): 데이터베이스 세션
+        current_user (Session): 현재 로그인한 사용자
+    
+    Returns:
+        JSONResponse: 삭제 성공 메시지
+        
+    Raises:
+        HTTPException: 프로젝트가 존재하지 않거나 권한이 없는 경우
+    """
+    try:
+        # 프로젝트 존재 여부 및 권한 확인
+        query = select(Project).where(
+            Project.id == project_id,
+            Project.user_id == current_user.user_id
+        )
+        result = await db.execute(query)
+        project = result.scalar_one_or_none()
+        
+        if not project:
+            raise HTTPException(
+                status_code=404,
+                detail="프로젝트를 찾을 수 없거나 접근 권한이 없습니다."
+            )
+            
+        # 프로젝트와 연관된 모든 데이터 삭제
+        # 1. 문서 및 문서 청크 삭제
+        # (Document 모델의 cascade="all, delete-orphan" 설정으로 인해 
+        # 프로젝트 삭제 시 자동으로 관련 문서와 청크가 삭제됩니다)
+        
+        # 2. 테이블 검색 기록 삭제
+        await db.execute(
+            delete(TableHistory).where(TableHistory.project_id == project_id)
+        )
+        
+        # 3. 프로젝트 삭제
+        # (프로젝트 삭제 시 cascade 설정에 의해 관련 문서들도 자동 삭제됨)
+        await db.delete(project)
+        
+        # 변경사항 커밋
+        await db.commit()
+        
+        return {"message": "프로젝트가 성공적으로 삭제되었습니다."}
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"프로젝트 삭제 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"프로젝트 삭제 중 오류가 발생했습니다: {str(e)}"
+        )

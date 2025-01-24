@@ -157,34 +157,56 @@ class ProjectService:
     async def get_recent_by_user_id(
         self,
         user_id: UUID,
-        limit: int = 5
+        limit: int = None  # limit 파라미터를 옵션으로 변경
     ) -> Dict[str, List[Project]]:
-        """사용자 ID로 최근 프로젝트 목록 조회"""
-        # 현재 시간 기준으로 날짜 범위 계산
+        """사용자 ID로 최근 프로젝트 목록 조회
+        
+        프로젝트는 마지막 업데이트(updated_at) 시간을 기준으로 필터링됩니다.
+        updated_at은 다음과 같은 경우에 갱신됩니다:
+        - 프로젝트 내용이 수정될 때
+        - 사용자가 프로젝트를 열람할 때 (get 메서드 호출 시)
+        
+        Args:
+            user_id (UUID): 사용자 ID
+            limit (int, optional): 각 기간별 최대 프로젝트 수. None이면 모든 프로젝트 반환.
+            
+        Returns:
+            Dict[str, List[Project]]: 기간별 프로젝트 목록
+            - today: 오늘 열람/수정한 프로젝트
+            - last_7_days: 최근 7일간 열람/수정한 프로젝트
+            - last_30_days: 최근 30일간 열람/수정한 프로젝트
+        """
+        # 현재 시간 기준으로 날짜 범위 계산 (UTC 기준)
         now = datetime.utcnow()
         today_start = datetime(now.year, now.month, now.day)
         last_7_days_start = today_start - timedelta(days=7)
         last_30_days_start = today_start - timedelta(days=30)
 
-        # 기본 쿼리 생성
+        # 기본 쿼리 생성 - 특정 사용자의 프로젝트만 조회
         base_query = select(Project).where(Project.user_id == user_id)
 
-        # 오늘 생성된 프로젝트
+        # 오늘 열람/수정한 프로젝트
         today_query = base_query.where(
-            Project.created_at >= today_start
-        ).order_by(Project.created_at.desc()).limit(limit)
+            Project.updated_at >= today_start
+        ).order_by(Project.updated_at.desc())
         
-        # 7일 이내 생성된 프로젝트
+        # 최근 7일간 열람/수정한 프로젝트 (오늘 제외)
         last_7_days_query = base_query.where(
-            Project.created_at >= last_7_days_start,
-            Project.created_at < today_start
-        ).order_by(Project.created_at.desc()).limit(limit)
+            Project.updated_at >= last_7_days_start,
+            Project.updated_at < today_start
+        ).order_by(Project.updated_at.desc())
         
-        # 30일 이내 생성된 프로젝트
+        # 최근 30일간 열람/수정한 프로젝트 (최근 7일 제외)
         last_30_days_query = base_query.where(
-            Project.created_at >= last_30_days_start,
-            Project.created_at < last_7_days_start
-        ).order_by(Project.created_at.desc()).limit(limit)
+            Project.updated_at >= last_30_days_start,
+            Project.updated_at < last_7_days_start
+        ).order_by(Project.updated_at.desc())
+
+        # limit이 지정된 경우에만 적용
+        if limit is not None:
+            today_query = today_query.limit(limit)
+            last_7_days_query = last_7_days_query.limit(limit)
+            last_30_days_query = last_30_days_query.limit(limit)
 
         # 각 쿼리 실행
         today_result = await self.db.execute(today_query)

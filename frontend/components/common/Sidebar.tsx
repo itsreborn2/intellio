@@ -334,7 +334,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
       }}
     >
       <div className="w-[250px] border-r bg-gray-200 flex flex-col h-full">
-        <div className="p-4 flex items-center justify-between flex-shrink-0 border-b">
+        <div className="p-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <ScrollText className="h-6 w-6 text-primary" />
             <h2 className="text-lg font-semibold tracking-tight">DocEasy</h2>
@@ -370,7 +370,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
                     }
                   }}
                 >
-                  <PenSquare className={cn("h-4 w-4", isLoading && "animate-spin")} />
+                  <PenSquare className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>

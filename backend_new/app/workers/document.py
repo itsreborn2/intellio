@@ -329,7 +329,7 @@ def process_document_chucking(self, document_id: str):
 
             # 청크 생성
             #text_splitter = TextSplitter(splitter_type="recursive", chunk_size=1500, chunk_overlap=300) # 입력하지 않으면 .env값 사용
-            text_splitter = TextSplitter(splitter_type="sentence") 
+            text_splitter = TextSplitter() 
             #text_splitter = TextSplitter(splitter_type="semantic_llama") 
             
             chunks = text_splitter.split_text(extracted_text)

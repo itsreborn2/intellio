@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Folder, FolderOpen, Plus, Trash2, ChevronDown, ChevronRight, History, AlertCircle, FileText } from 'lucide-react'
+import { Folder, FolderOpen, Plus, Trash2, ChevronDown, ChevronRight, History, AlertCircle, FileText, X } from 'lucide-react'
 import * as api from '@/services/api'  // 최상단에 추가
 import { IRecentProjectsResponse, IProject, Category, ProjectDetail, TableResponse,  } from '@/types/index'
 import { getRecentProjects, } from '@/services/api'
@@ -248,8 +248,43 @@ export function ProjectCategorySection({
     }
   };
 
+  // 프로젝트 삭제 처리
+  const handleDeleteProject = async (projectId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // 클릭 이벤트 전파 방지
+    
+    try {
+      await api.deleteProject(projectId);
+      
+      // 최근 프로젝트 목록에서 제거
+      dispatch({
+        type: actionTypes.UPDATE_RECENT_PROJECTS,
+        payload: {
+          today: (state.recentProjects.today || []).filter(p => p.id !== projectId),
+          last_7_days: (state.recentProjects.last_7_days || []).filter(p => p.id !== projectId),
+          last_30_days: (state.recentProjects.last_30_days || []).filter(p => p.id !== projectId)
+        }
+      });
+      
+      // 카테고리 프로젝트 목록에서 제거
+      setCategoryProjects(prev => {
+        const newCategoryProjects = { ...prev };
+        Object.keys(newCategoryProjects).forEach(categoryId => {
+          newCategoryProjects[categoryId] = newCategoryProjects[categoryId].filter(
+            p => p.id !== projectId
+          );
+        });
+        return newCategoryProjects;
+      });
+    } catch (error) {
+      console.error('프로젝트 삭제 실패:', error);
+    }
+  };
+
   // 드래그 종료 핸들러
   const handleDragEnd = async (result: any) => {
+    // 상위 컴포넌트의 onDragEnd 호출
+    onDragEnd(result);
+
     if (!result.destination) return;
 
     const sourceId = result.draggableId;
@@ -276,25 +311,39 @@ export function ProjectCategorySection({
         // 백엔드로 카테고리(영구폴더) 변경 요청
         await api.addProjectToCategory(sourceId, categoryId);
 
-        // 카테고리(영구폴더)에 프로젝트 추가
-        setCategoryProjects((prev: { [key: string]: IProject[] }) => ({
+        // 상태 업데이트를 위한 새 프로젝트 객체 생성
+        const updatedProject = {
+          ...movedProject,
+          is_temporary: false,
+          retention_period: 'PERMANENT',
+        };
+
+        // 로컬 상태 업데이트
+        setCategoryProjects(prev => ({
           ...prev,
-          [categoryId]: [...(prev[categoryId] || []), {
-            id: movedProject.id,
-            name: movedProject.name,
-            is_temporary: false,
-            retention_period: 'PERMANENT',
-            created_at: movedProject.created_at,
-            updated_at: movedProject.updated_at
-          }]
+          [categoryId]: [...(prev[categoryId] || []), updatedProject]
         }));
 
-        // 프로젝트 목록 새로고침
-        const recentProjects = await api.getRecentProjects();
+        // 최근 프로젝트 목록에서 제거
+        dispatch({
+          type: 'UPDATE_RECENT_PROJECTS',
+          payload: {
+            today: (state.recentProjects.today || []).filter(p => p.id !== sourceId),
+            last_7_days: (state.recentProjects.last_7_days || []).filter(p => p.id !== sourceId),
+            last_30_days: (state.recentProjects.last_30_days || []).filter(p => p.id !== sourceId)
+          }
+        });
+
+        // 서버에서 최신 데이터 다시 가져오기
+        const [recentProjects, categoriesData] = await Promise.all([
+          api.getRecentProjects(),
+          api.getCategories()
+        ]);
+
+        // 최근 프로젝트 업데이트
         dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: recentProjects });
 
         // 카테고리 프로젝트 목록 새로고침
-        const categoriesData = await api.getCategories();
         const projectsPromises = categoriesData.map(async (category) => {
           try {
             const projects = await api.getCategoryProjects(category.id);
@@ -311,10 +360,8 @@ export function ProjectCategorySection({
           return acc;
         }, {} as { [key: string]: IProject[] });
 
-        dispatch({
-          type: 'UPDATE_CATEGORY_PROJECTS',
-          payload: newCategoryProjects
-        });
+        // 카테고리 프로젝트 상태 업데이트
+        setCategoryProjects(newCategoryProjects);
 
       } catch (error) {
         console.error('프로젝트 이동 실패:', error);
@@ -331,25 +378,86 @@ export function ProjectCategorySection({
     if (!projects || projects.length === 0) return null;
 
     return (
-      <div key={sectionTitle} className="mb-4">
-        <div className="flex items-center mb-2 text-xs font-medium text-gray-500 px-2">
+      <div key={sectionTitle} className="mb-2">
+        <div className="flex items-center mb-1 text-xs font-medium text-gray-500 px-2">
           {sectionTitle}
           <span className="ml-1 text-xs">({projects.length})</span>
         </div>
-        <div className="space-y-0.4">
-          {projects.map((project) => (
-            <div
+        <div className="space-y-0.5">
+          {projects.map((project, index) => (
+            <Draggable
               key={project.id}
-              className={cn(
-                "flex items-center px-3 py-1.5 text-sm rounded-md cursor-pointer",
-                state.currentProject?.id === project.id
-                  ? "bg-gray-50 text-gray-700"
-                  : "text-gray-600 hover:bg-gray-50"
-              )}
-              onClick={() => handleProjectClick(project)}
+              draggableId={project.id}
+              index={index}
             >
-              <span className="truncate">{project.name}</span>
-            </div>
+              {(provided, snapshot) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.draggableProps}
+                  {...provided.dragHandleProps}
+                  className={cn(
+                    "flex items-center px-3 py-1 text-sm rounded-md cursor-pointer group w-full",
+                    state.currentProject?.id === project.id
+                      ? "bg-gray-50 text-gray-700"
+                      : "text-gray-600 hover:bg-gray-50",
+                    snapshot.isDragging && "bg-blue-50 shadow-sm"
+                  )}
+                  onClick={() => handleProjectClick(project)}
+                >
+                  <span className="truncate flex-1 min-w-0">{project.name}</span>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 hover:text-red-500 p-1 rounded-sm flex-shrink-0 ml-2"
+                    onClick={(e) => handleDeleteProject(project.id, e)}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </Draggable>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderRecentProjects = () => {
+    return (
+      <div className="mb-4">
+        <div className="flex items-center px-2 mb-1">
+          <History className="w-4 h-4 mr-1 text-gray-400" />
+          <span className="text-xs text-gray-500">최근 프로젝트</span>
+        </div>
+        <div className="space-y-0.5">
+          {state.recentProjects?.today?.map((project, index) => (
+            <Draggable
+              key={project.id}
+              draggableId={project.id}
+              index={index}
+            >
+              {(provided, snapshot) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.draggableProps}
+                  {...provided.dragHandleProps}
+                  className={cn(
+                    "flex items-center px-3 py-1 text-sm rounded-md cursor-pointer group w-full",
+                    state.currentProject?.id === project.id
+                      ? "bg-gray-50 text-gray-700"
+                      : "text-gray-600 hover:bg-gray-50",
+                    snapshot.isDragging && "bg-blue-50 shadow-sm"
+                  )}
+                  onClick={() => handleProjectClick(project)}
+                >
+                  <span className="truncate flex-1 min-w-0">{project.name}</span>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 hover:text-red-500 p-1 rounded-sm flex-shrink-0 ml-2"
+                    onClick={(e) => handleDeleteProject(project.id, e)}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </Draggable>
           ))}
         </div>
       </div>
@@ -361,7 +469,7 @@ export function ProjectCategorySection({
     if (!recentProjects) return null;
 
     return (
-      <div className="overflow-y-auto max-h-[calc(100vh-16rem)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
+      <div className="overflow-y-auto overflow-x-hidden max-h-[calc(100vh-16rem)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
         {renderProjectList("오늘", recentProjects.today)}
         {renderProjectList("지난 7일", recentProjects.last_7_days)}
         {renderProjectList("지난 30일", recentProjects.last_30_days)}
@@ -370,10 +478,9 @@ export function ProjectCategorySection({
   };
 
   const renderCategoryProjects = (categoryId: string) => {
-    const projects = state.categoryProjects[categoryId] || []
-    //console.log(`카테고리 ${categoryId}의 프로젝트:`, projects)
+    const projects = categoryProjects[categoryId] || []
     
-    return projects.map((project: any, index: number) => (
+    return projects.map((project, index) => (
       <Draggable
         key={project.id}
         draggableId={project.id}
@@ -384,12 +491,22 @@ export function ProjectCategorySection({
             ref={provided.innerRef}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
-            className={`flex items-center px-2 py-1 text-sm text-gray-600 cursor-pointer ${
-              state.currentProjectId === project.id ? 'bg-gray-50' : 'hover:bg-gray-50'
-            }`}
+            className={cn(
+              "flex items-center px-3 py-1 text-sm rounded-md cursor-pointer group w-full",
+              state.currentProject?.id === project.id
+                ? "bg-gray-50 text-gray-700"
+                : "text-gray-600 hover:bg-gray-50",
+              snapshot.isDragging && "bg-blue-50 shadow-sm"
+            )}
             onClick={() => handleProjectClick(project)}
           >
-            <span className="truncate">{project.name}</span>
+            <span className="truncate flex-1 min-w-0">{project.name}</span>
+            <button
+              className="opacity-0 group-hover:opacity-100 hover:text-red-500 p-1 rounded-sm flex-shrink-0 ml-2"
+              onClick={(e) => handleDeleteProject(project.id, e)}
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
       </Draggable>
@@ -451,8 +568,53 @@ export function ProjectCategorySection({
     );
   };
 
+  // 상태 추가
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>("");
+
+  // 카테고리 이름 수정 시작
+  const handleCategoryDoubleClick = (category: Category) => {
+    setEditingCategoryId(category.id);
+    setEditingName(category.name);  // 원래 이름을 상태에 저장
+  };
+
+  // 카테고리 이름 수정 취소
+  const handleCategoryEditCancel = (category: Category) => {
+    setEditingCategoryId(null);
+    setEditingName(category.name);  // 원래 이름으로 복원
+  };
+
+  // 카테고리 이름 수정 완료
+  const handleCategoryNameSubmit = async (categoryId: string, category: Category) => {
+    try {
+      if (!editingName.trim()) {
+        handleCategoryEditCancel(category);  // 빈 문자열이면 원래 이름으로 복원
+        return;
+      }
+
+      // 이름이 변경되지 않았다면 수정 취소
+      if (editingName === category.name) {
+        handleCategoryEditCancel(category);
+        return;
+      }
+
+      await api.updateCategory(categoryId, { name: editingName });
+
+      setCategories(prev => 
+        prev.map(cat => 
+          cat.id === categoryId ? { ...cat, name: editingName } : cat
+        )
+      );
+    } catch (error) {
+      console.error('카테고리 이름 수정 실패:', error);
+      handleCategoryEditCancel(category);  // 에러 발생 시 원래 이름으로 복원
+    } finally {
+      setEditingCategoryId(null);
+    }
+  };
+
   return (
-    <div className="flex flex-col space-y-4">
+    <div className="flex flex-col space-y-2">
       {/* 프로젝트 폴더 섹션 */}
       <div className="flex flex-col">
         <div className="flex items-center justify-between px-2 py-1">
@@ -479,20 +641,49 @@ export function ProjectCategorySection({
                           "w-full justify-start text-sm h-8 pl-4",
                           snapshot.isDraggingOver && "bg-gray-50"
                         )}
-                        onClick={() => toggleSection(`category-${category.id}`)}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleCategoryDoubleClick(category);
+                        }}
                       >
-                        {expandedSections.includes(`category-${category.id}`) ? (
-                          <FolderOpen className={cn(
-                            "h-4 w-4 mr-2",
-                            snapshot.isDraggingOver && "text-gray-600"
-                          )} />
+                        <div 
+                          className="mr-1" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSection(`category-${category.id}`);
+                          }}
+                        >
+                          {expandedSections.includes(`category-${category.id}`) ? (
+                            <FolderOpen className={cn(
+                              "h-4 w-4",
+                              snapshot.isDraggingOver && "text-gray-600"
+                            )} />
+                          ) : (
+                            <Folder className={cn(
+                              "h-4 w-4",
+                              snapshot.isDraggingOver && "text-gray-600"
+                            )} />
+                          )}
+                        </div>
+                        {editingCategoryId === category.id ? (
+                          <Input
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onBlur={() => handleCategoryNameSubmit(category.id, category)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleCategoryNameSubmit(category.id, category);
+                              } else if (e.key === 'Escape') {
+                                handleCategoryEditCancel(category);
+                              }
+                            }}
+                            className="h-6 px-1 py-0 text-sm"
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                          />
                         ) : (
-                          <Folder className={cn(
-                            "h-4 w-4 mr-2",
-                            snapshot.isDraggingOver && "text-gray-600"
-                          )} />
+                          <span className="flex-1 text-left truncate">{category.name}</span>
                         )}
-                        <span className="flex-1 text-left truncate">{category.name}</span>
                       </Button>
                       <Button
                         variant="ghost"
@@ -521,7 +712,7 @@ export function ProjectCategorySection({
                   variant="ghost"
                   className="w-full justify-start text-sm h-8 pl-4 text-gray-500 hover:text-gray-900"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="h-4 w-4 mr-0.5" />
                   <span className="flex-1 text-left">새 폴더</span>
                 </Button>
               </PopoverTrigger>
@@ -600,13 +791,15 @@ export function ProjectCategorySection({
                 ref={provided.innerRef}
                 {...provided.droppableProps}
                 className={cn(
-                  "space-y-4 min-h-[40px] overflow-y-auto max-h-[calc(100vh-16rem)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400",
+                  "flex-1 overflow-hidden",
                   snapshot.isDraggingOver && "bg-gray-100/50"
                 )}
               >
-                {state.recentProjects?.today && renderProjects(state.recentProjects.today, '오늘')}
-                {state.recentProjects?.last_7_days && renderProjects(state.recentProjects.last_7_days, '지난 7일')}
-                {state.recentProjects?.last_30_days && renderProjects(state.recentProjects.last_30_days, '지난 30일')}
+                <div className="space-y-2">
+                  {state.recentProjects?.today && renderProjectList('오늘', state.recentProjects.today)}
+                  {state.recentProjects?.last_7_days && renderProjectList('지난 7일', state.recentProjects.last_7_days)}
+                  {state.recentProjects?.last_30_days && renderProjectList('지난 30일', state.recentProjects.last_30_days)}
+                </div>
                 {provided.placeholder}
               </div>
             )}
