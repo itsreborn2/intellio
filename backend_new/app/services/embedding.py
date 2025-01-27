@@ -19,6 +19,7 @@ class EmbeddingService:
         self.batch_size = 20  # 임베딩 처리의 안정성을 위해 배치 크기 축소 (50 -> 20)
         self.model_manager = EmbeddingModelManager()
         #self.current_model = self.model_manager.get_default_model() # 기본 모델은 openai
+        #self.current_model = self.model_manager.get_model(EmbeddingModelType.OPENAI_ADA_002) # 구글 다국어 모델
         self.current_model = self.model_manager.get_model(EmbeddingModelType.GOOGLE_MULTI_LANG) # 구글 다국어 모델
         #self.current_model = self.model_manager.get_model(EmbeddingModelType.KAKAO_EMBEDDING) # 구글 다국어 모델
 
@@ -48,11 +49,11 @@ class EmbeddingService:
                     name=_model,
                     dimension=_dimension,        # 임베딩 차원수
                     metric="cosine",      # 유사도 측정 방식
-                    # spec=PodSpec(
-                    #     environment=settings.PINECONE_ENVIRONMENT, 
-                    #     pod_type="p1"         # 기본 pod 타입
-                    # )
-                    spec=ServerlessSpec(cloud="aws", region="us-west-2")
+                    spec=PodSpec(
+                        environment=settings.PINECONE_ENVIRONMENT, 
+                        pod_type="p1"         # 기본 pod 타입
+                    )
+                    #spec=ServerlessSpec(cloud="aws", region="us-west-2")
                 )
                 logger.info(f"Pinecone 인덱스 {_model} 생성 완료")
                 self.pinecone_index = pinecone.Index(_model)
@@ -240,7 +241,7 @@ class EmbeddingService:
         self, 
         query: str, 
         top_k: int = 7,
-        min_score: float = 0.6,
+        min_score: float = 0.5,
         use_context: bool = True,
         context_window: int = 2,
         document_ids: List[str] = None
@@ -300,12 +301,14 @@ class EmbeddingService:
                 for match in top_results:
                     result = {
                         "id": match.id,
-                        "score": match.score,
+                        "score": getattr(match, 'score', 0),  # score 속성이 없으면 0 반환
                         "metadata": match.metadata
                     }
                     formatted_results.append(result)
                     logger.debug(f"매치 정보 - ID: {match.id}, 점수: {match.score:.4f}")
                 
+                # score 기준으로 내림차순 정렬
+                formatted_results.sort(key=lambda x: x["score"], reverse=True)
                 return formatted_results
                 
             except Exception as e:

@@ -57,11 +57,16 @@ export type IDocumentStatus = 'UPLOADING' | 'PROCESSING' | 'COMPLETED' | 'FAILED
 
 // 메시지 인터페이스
 export interface IMessage {
+  id?: string
   role: 'user' | 'assistant'
   content: string
   timestamp?: string
 }
 
+export interface UpdateChatMessagePayload {
+  id: string;
+  content: string | ((prevContent: string) => string);
+}
 // 테이블 데이터 인터페이스
 export interface ITableData {
   Document: string

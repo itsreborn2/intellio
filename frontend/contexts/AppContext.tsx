@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react'
-import { DocumentStatus, IProject } from '@/types'
+import { DocumentStatus, IProject, UpdateChatMessagePayload } from '@/types'
 import * as api from '@/services/api'
 import { IMessage, TableResponse, TableColumn,IDocument, IRecentProjectsResponse } from '@/types'
 import * as actionTypes from '@/types/actions'
@@ -64,6 +64,7 @@ type Action =
   | { type: typeof actionTypes.UPDATE_COLUMN_RESULT; payload: { documentId: string; columnName: string; result: any } }
   | { type: typeof actionTypes.SET_LAST_AUTOSAVED; payload: Date }
   | { type: typeof actionTypes.SET_DOCUMENT_LIST; payload: { [key: string]: IDocument } }
+  | { type: typeof actionTypes.UPDATE_CHAT_MESSAGE; payload:UpdateChatMessagePayload }
 
 const initialState: AppState = {
   sessionId: null,
@@ -566,6 +567,22 @@ const appReducer = (state: AppState, action: Action): AppState => {
         ...state,
         categoryProjects: action.payload
       }
+
+    case actionTypes.UPDATE_CHAT_MESSAGE:
+      return {
+        ...state,
+        messages: state.messages.map(message => 
+          message.id === action.payload.id
+            ? {
+                ...message,
+                content: typeof action.payload.content === 'function'
+                  ? action.payload.content(message.content)
+                  : action.payload.content
+              }
+            : message
+        )
+      }
+    
 
     default:
       newState = state;

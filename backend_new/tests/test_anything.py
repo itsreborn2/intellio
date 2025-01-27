@@ -118,22 +118,38 @@ def test_kakao_embedding():
         logger.error(f"KF-Deberta 임베딩 생성 중 오류 발생: {str(e)}")
         raise
 
-def test_deepseek():
-    API_KEY = "sk-3a57a56bfeae4a5288a6757c3d5b243a"
-    client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
+def test_openai():
+    API_KEY = os.getenv("OPENAI_API_KEY")
+    if not API_KEY:
+        raise ValueError("OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.")
+    
+    client = OpenAI(api_key=API_KEY)
 
     response = client.chat.completions.create(
-        model="deepseek-chat",
+        model="gpt-4-turbo-preview",  # GPT-4 모델 사용
         messages=[
             {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": "Hello"},
+            {"role": "user", "content": "DeepSeek 성능이 매우 좋아졌다고 최근 기사에 많이 나오네. 얼마나 좋아졌니?"},
         ],
-        stream=False
+        stream=True
     )
 
-    print(response.choices[0].message.content)
-    pass
+    full_response = ""
+    for chunk in response:
+        if chunk.choices[0].delta.content is not None:
+            content = chunk.choices[0].delta.content
+            full_response += content
+            print(content, end="", flush=True)
+
+    #print(full_response)
+    #pass
+def test_func():
+    token = "###"
+    is_only_markdown = bool(token.strip().replace('#', '').replace('*', '').replace('_', '').strip() == '')
+    print(is_only_markdown)
 if __name__ == "__main__":
     #test_vertex_embedding()
     #test_kakao_embedding() 
-    test_deepseek()
+    #test_openai()
+    test_func()
+    

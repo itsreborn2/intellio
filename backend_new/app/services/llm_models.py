@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union, Callable, Dict
 from langchain_core.messages import BaseMessage
 from langchain.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -9,6 +9,8 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import BaseMessage, ChatMessage, ai
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 from langchain_core.outputs import ChatResult
+from langchain_core.callbacks import BaseCallbackHandler
+
 from langchain_openai import ChatOpenAI
 import logging
 import torch
@@ -17,6 +19,18 @@ from loguru import logger
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+class StreamingCallbackHandler(BaseCallbackHandler):
+    """스트리밍 응답을 처리하는 콜백 핸들러"""
+    
+    def __init__(self, on_new_token: Callable[[str], None]):
+        self.on_new_token = on_new_token
+        logger.info(f"StreamingCallbackHandler 초기화 - 콜백 함수: {on_new_token}")
+
+    def on_llm_new_token(self, token: str, **kwargs) -> None:
+        """새로운 토큰이 생성될 때마다 호출되는 메서드"""
+        logger.debug(f"New token received: {token}")
+        if self.on_new_token:
+            self.on_new_token(token)
 
 class KfDebertaAI(BaseChatModel):
     
@@ -93,6 +107,8 @@ class KfDebertaAI(BaseChatModel):
         ai_message = ai.AIMessage(content=response)
         return ChatResult(generations=[ai_message])
     
+    
+    
     @property
     def _llm_type(self) -> str:
         """이 챗 모델에서 사용하는 언어 모델의 유형을 반환합니다."""
@@ -104,11 +120,14 @@ class LLMModels:
     _llm_chain = None
     _llm_type = "gemini"
     _llm = None
+    _llm_streaming = None
     _current_model_idx = 0
+    _streaming_callback = None
     
-    def __new__(cls, **kwargs):
+    def __new__(cls, streaming_callback: Optional[Callable[[str], None]] = None, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._streaming_callback = streaming_callback
             cls._instance.initialize([  {"model":"gemini", "api_key":settings.GEMINI_API_KEY },
                                         {"model":"openai", "api_key":settings.OPENAI_API_KEY },
                                         {"model":"kf-deberta", "api_key":None }
@@ -119,25 +138,44 @@ class LLMModels:
     def initialize(self, llm_list:list, **kwargs):
         """LangChain 초기화"""
         if self._llm_chain is None:
-
             self._llm_list = llm_list
             # 첫 번째 모델로 초기화
             model_info = llm_list[self._current_model_idx]
             self._llm = self.get_llm(model_info["model"], model_info["api_key"], **kwargs)
-
+            
+            # streaming callback이 있는 경우 StreamingCallbackHandler 생성
+            callback_handler = None
+            if self._streaming_callback:
+                callback_handler = StreamingCallbackHandler(self._streaming_callback)
+            
+                self._llm_streaming = self.get_llm(
+                    model_info["model"], 
+                    model_info["api_key"], 
+                    streaming=True, 
+                    callback_handler=callback_handler,
+                    **kwargs
+                )
             logger.info(f"LLMModels : {model_info['model']} API 초기화")
 
-    def get_llm(self, model_name: str, api_key: str, **kwargs) -> BaseChatModel:
+    def get_llm(self, model_name: str, 
+                    api_key: str, 
+                    streaming: bool = False, 
+                    callback_handler: Optional[BaseCallbackHandler] = None,
+                    **kwargs) -> BaseChatModel:
         if model_name == "openai":
+            callbacks = [callback_handler] if callback_handler else None  # 콜백을 리스트로 전달
             return ChatOpenAI(
-                        model="gpt-3.5-turbo",
+                        model="gpt-4-0125-preview",
                         openai_api_key=api_key,
                         temperature=kwargs.get("temperature", 0.3),
                         max_tokens=kwargs.get("max_output_tokens", 2048),
                         top_p=kwargs.get("top_p", 0.8),
                         top_k=kwargs.get("top_k", 40),
+                        streaming=streaming,
+                        callbacks=callbacks,
                     )
         elif model_name == "gemini":
+            callbacks = [callback_handler] if callback_handler else None  # 콜백을 리스트로 전달
             return ChatGoogleGenerativeAI(
                         model="models/gemini-2.0-flash-exp",
                         google_api_key=api_key,
@@ -145,6 +183,8 @@ class LLMModels:
                         max_output_tokens=kwargs.get("max_output_tokens", 2048),
                         top_p=kwargs.get("top_p", 0.8),
                         top_k=kwargs.get("top_k", 40),
+                        streaming=streaming,
+                        callbacks=callbacks,
                     )
         elif model_name == "kf-deberta":
             return KfDebertaAI()
@@ -215,16 +255,27 @@ class LLMModels:
         #    'prompt_feedback': {'block_reason': 0, 'safety_ratings': []}, 
         #    'finish_reason': 'STOP', 
         #    'safety_ratings': [
-        # 			{'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
-        # 			{'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
-        # 			{'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
-        # 			{'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}]}
+        #           {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
+        #           {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
+        #           {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
+        #           {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}]}
         #  id='run-cd10c37c-c733-4607-a9e4-b543bbecbb2c-0' 
         #  usage_metadata={'input_tokens': 1827, 'output_tokens': 818, 'total_tokens': 2645, 'input_token_details': {'cache_read': 0}}
         logger.info(f"Gemini API 호출 완료")# : {full_response}")
 
         # 여기서는 full_response를 리턴하자. 메세지를 재조립하는것은 위에서 알아서 할일.
+        logger.info(f"Gemini API 호출 완료")
         return full_response
+    
+    def generate_stream(self, prompt: str):
+        """동기 스트리밍 컨텐츠 생성"""
+        logger.info(f"Gemini API stream[Sync] 호출 - 프롬프트: {prompt[:100]}...")
+        prompt_template = ChatPromptTemplate.from_template("{prompt}")
+        messages = prompt_template.format_messages(prompt=prompt)
+        
+        # 스트리밍 응답 생성
+        for chunk in self._llm_streaming.stream(messages):
+            yield chunk
     
     def agenerate(self, prompt: str) -> Optional[ai.AIMessage]:
         prompt_template = ChatPromptTemplate.from_template("{prompt}")
@@ -234,8 +285,17 @@ class LLMModels:
         # API 호출 및 전체 응답 받기
         full_response = self._llm.ainvoke(messages)
         return full_response
-
     
+    async def agenerate_stream(self, prompt: str):
+        """비동기 스트리밍 컨텐츠 생성"""
+        logger.info(f"Gemini API stream[Async] 호출 - 프롬프트: {prompt[:100]}...")
+        prompt_template = ChatPromptTemplate.from_template("{prompt}")
+        messages = prompt_template.format_messages(prompt=prompt)
+        
+        # 스트리밍 응답 생성
+        async for chunk in self._llm_streaming.astream(messages):
+            yield chunk
+
     def generate_content_only(self, prompt: str) -> Optional[str]:
         """동기 컨텐츠 생성"""
         response = self.generate(prompt=prompt)
@@ -257,3 +317,4 @@ class LLMModels:
         logger.info(f"Gemini API[Async] 호출 - 프롬프트: {prompt[:100]}...")
         response: ai.AIMessage = await self.agenerate(prompt=prompt)
         return response.content
+    

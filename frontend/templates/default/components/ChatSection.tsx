@@ -1,38 +1,133 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Send } from 'lucide-react'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/contexts/AppContext'
-import { searchTable, sendChatMessage } from '@/services/api'
+import { searchTable, sendChatMessage, sendChatMessage_streaming } from '@/services/api'
 import { IMessage, IChatResponse, TableResponse } from '@/types/index'
 import * as actionTypes from '@/types/actions'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import React from 'react'
+
+// ChatMessage 컴포넌트를 메모이제이션
+const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { message: IMessage; isStreaming?: boolean }) {
+  return (
+    <div className="flex flex-col items-end mb-2 w-full">
+      <div className={`flex items-start gap-3 ${
+        message.role === 'assistant' ? 'bg-gray-200 dark:bg-gray-800 w-full' : 'bg-sky-100 dark:bg-sky-900 max-w-[80%]'
+      } p-4 rounded-lg ${
+        message.role === 'user' ? 'ml-auto' : 'mr-auto'
+      }`}>
+        <div className={`overflow-hidden w-full ${isStreaming ? 'typing' : ''}`}>
+          <ReactMarkdown 
+            remarkPlugins={[remarkGfm]}
+            className="prose max-w-none markdown
+                [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
+                [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
+                [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
+                [&>li]:text-gray-600 [&>li]:leading-relaxed"
+          >
+            {message.content}
+          </ReactMarkdown>
+          {isStreaming && <span className="cursor">|</span>}
+        </div>
+      </div>
+    </div>
+  )
+});
+
+class StreamingMarkdownHandler {
+  private buffer: string = '';
+  private markdownPrefix: string = '';
+  private isFirstChunk: boolean = true;
+
+  processChunk(chunk: string, dispatch: any, tempMessageId: string): void {
+    // data: [DONE] 체크
+    if (chunk === 'data: [DONE]' || chunk === '[DONE]') {
+      this.flushBuffer(dispatch, tempMessageId);
+      return;
+    }
+
+    // data: 프리픽스 제거
+    const cleanedChunk = chunk.replace(/^data: /, '').trim();
+    if (!cleanedChunk) return;
+
+    // [DONE] 문자열이 포함된 경우 제거
+    const finalChunk = cleanedChunk.replace(/\[DONE\]$/, '').trim();
+    if (!finalChunk) return;
+
+    // 첫 번째 청크가 ## 인 경우 저장해두기
+    if (this.isFirstChunk && finalChunk === '##') {
+      this.markdownPrefix = finalChunk;
+      this.isFirstChunk = false;
+      return;
+    }
+    this.isFirstChunk = false;
+
+    // 저장된 마크다운 프리픽스가 있다면 다음 청크와 합쳐서 처리
+    if (this.markdownPrefix) {
+      const combinedChunk = this.markdownPrefix + finalChunk;
+      this.markdownPrefix = '';
+      console.log(combinedChunk)
+      dispatch({
+        type: actionTypes.UPDATE_CHAT_MESSAGE,
+        payload: {
+          id: tempMessageId,
+          content: (prevContent: string) => prevContent + combinedChunk
+        }
+      });
+      return;
+    }
+    console.log(finalChunk)
+    // 일반 텍스트 처리
+    dispatch({
+      type: actionTypes.UPDATE_CHAT_MESSAGE,
+      payload: {
+        id: tempMessageId,
+        content: (prevContent: string) => prevContent + finalChunk
+      }
+    });
+  }
+
+  private flushBuffer(dispatch: any, tempMessageId: string): void {
+    if (this.buffer) {
+      dispatch({
+        type: actionTypes.UPDATE_CHAT_MESSAGE,
+        payload: {
+          id: tempMessageId,
+          content: (prevContent: string) => prevContent + this.buffer
+        }
+      });
+      this.buffer = '';
+    }
+  }
+
+  reset(): void {
+    this.buffer = '';
+    this.markdownPrefix = '';
+    this.isFirstChunk = true;
+  }
+}
 
 export const ChatSection = () => {
   const { state, dispatch } = useApp()
   const [input, setInput] = useState('')
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const messageCountRef = useRef(0)  // 메시지 카운터 추가
 
-  // useEffect(() => {
-  //   console.log('메시지 상태 변경:', {
-  //     messages: state.messages,
-  //     lastMessage: state.messages[state.messages.length - 1]
-  //   })
-  // }, [state.messages])
+  // 고유한 메시지 ID 생성 함수
+  const generateMessageId = useCallback(() => {
+    messageCountRef.current += 1
+    return `${Date.now()}-${messageCountRef.current}`
+  }, [])
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [state.messages])
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim()) return
 
@@ -43,11 +138,14 @@ export const ChatSection = () => {
     dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: true })
 
     // 사용자 메시지 추가
+    const userMessageId = generateMessageId()
     dispatch({
       type: actionTypes.ADD_CHAT_MESSAGE,
       payload: {
+        id: userMessageId,
         role: 'user',
-        content: currentInput
+        content: currentInput,
+        timestamp: new Date().toISOString()
       }
     })
 
@@ -109,42 +207,103 @@ export const ChatSection = () => {
         dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false })
       }
     } else {
+      const streamingHandler = new StreamingMarkdownHandler();
+      const tempMessageId = generateMessageId();
 
       try {
-        const response: IChatResponse = await sendChatMessage(
-          state.currentProjectId!,
-          state.analysis.selectedDocumentIds,
-          currentInput
-        )
+        
 
-        // 응답 메시지 추가
-        if (response) {
-          console.log('채팅 응답 상세:', {
-            response,
-          })
-          dispatch({
-            type: actionTypes.ADD_CHAT_MESSAGE,
-            payload: {
-              role: response.role,
-              content: response.content,
-              timestamp: response.timestamp
-            }
-          })
+        // 초기 빈 메시지 추가
+        dispatch({
+          type: actionTypes.ADD_CHAT_MESSAGE,
+          payload: {
+            id: tempMessageId,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date().toISOString()
+          }
+        });
+        const docIds = Object.values(state.documents).map(doc => doc.id)
+        console.log('doc ids : ', docIds)
+        const response = await sendChatMessage_streaming(
+          state.currentProjectId!,
+          //state.analysis.selectedDocumentIds,
+          docIds,
+          currentInput
+        );
+    
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+    
+        if (!reader) throw new Error('No reader available');
+        setStreamingMessageId(tempMessageId);
+    
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          
+          if (chunk === 'data: [DONE]' || chunk === '[DONE]') {
+            setStreamingMessageId(null);
+            break;
+          }
+    
+          streamingHandler.processChunk(chunk, dispatch, tempMessageId);
         }
+    
       } catch (error) {
-        console.error('채팅 중 오류:', error)
+        console.error('채팅 중 오류:', error);
         dispatch({
           type: actionTypes.ADD_CHAT_MESSAGE,
           payload: {
             role: 'assistant',
             content: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.'
           }
-        })
+        });
       } finally {
-        dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false })
+        streamingHandler.reset();
+        dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false });
       }
     }
+  }, [input, state.analysis.mode, state.currentProjectId, state.analysis.selectedDocumentIds, dispatch, generateMessageId]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value)
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  }, [handleSubmit]);
+
+  // 메시지 렌더링 최적화
+  const renderMessages = useMemo(() => {
+    return state.messages.map((message) => (
+      <ChatMessage 
+        key={message.id || `${message.timestamp}-${message.role}`} 
+        message={message} 
+        isStreaming={message.id === streamingMessageId}
+      />
+    ));
+  }, [state.messages, streamingMessageId]);
+
+  // useEffect(() => {
+  //   console.log('메시지 상태 변경:', {
+  //     messages: state.messages,
+  //     lastMessage: state.messages[state.messages.length - 1]
+  //   })
+  // }, [state.messages])
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [state.messages])
 
   return (
     <div className="h-full w-full overflow-y-auto bg-muted/90">
@@ -169,88 +328,22 @@ export const ChatSection = () => {
             </Button>
           </div>
           <div className="flex-1 overflow-y-auto p-2">
-            {state.messages.map((message, index) => (
-              <div
-                key={index}
-                className={`mb-2 ${
-                  message.role === 'user' ? 'text-right' : 'text-left'
-                }`}
-              >
-                {message.role === 'user' ? (
-                  <div className="inline-block px-2.5 py-1 rounded-lg bg-blue-500 text-white text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed mr-2">
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkGfm]}
-                      className="prose dark:prose-invert max-w-none 
-                        [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-                        [&>h1]:mt-2 [&>h1]:mb-1.5 [&>h1]:text-lg [&>h1]:font-bold
-                        [&>h2]:mt-2 [&>h2]:mb-1.5 [&>h2]:text-base [&>h2]:font-semibold
-                        [&>h3]:mt-1.5 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
-                        [&>p]:my-2 [&>p]:leading-7 [&>p]:whitespace-pre-line
-                        [&>ul]:my-2 [&>ul>li]:mt-2
-                        [&>ol]:my-2 [&>ol>li]:mt-2
-                        [&>table]:w-full [&>table]:my-2 [&>table]:border-collapse
-                        [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-1.5 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
-                        [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-1.5
-                        [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <div className="inline-block px-2.5 py-1 rounded-lg bg-gray-200 text-gray-800 text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed ml-2">
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkGfm]}
-                      className="prose dark:prose-invert max-w-none 
-                        [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-                        [&>h1]:mt-2 [&>h1]:mb-1.5 [&>h1]:text-lg [&>h1]:font-bold
-                        [&>h2]:mt-2 [&>h2]:mb-1.5 [&>h2]:text-base [&>h2]:font-semibold
-                        [&>h3]:mt-1.5 [&>h3]:mb-1.5 [&>h3]:text-sm [&>h3]:font-semibold
-                        [&>p]:my-2 [&>p]:leading-7 [&>p]:whitespace-pre-line
-                        [&>ul]:my-2 [&>ul>li]:mt-2
-                        [&>ol]:my-2 [&>ol>li]:mt-2
-                        [&>table]:w-full [&>table]:my-2 [&>table]:border-collapse
-                        [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-1.5 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left
-                        [&>table>tbody>tr>td]:border [&>table>tbody>tr>td]:border-gray-300 [&>table>tbody>tr>td]:p-1.5
-                        [&>table>tbody>tr:nth-child(even)]:bg-gray-50">
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
-                )}
-              </div>
-            ))}
-            {state.isAnalyzing && (
-              <div className="text-left">
-                <div className="flex items-center gap-2 p-2">
-                  <div className="w-6 h-6 rounded-full bg-gray-200 pulse" />
-                  <div className="inline-block p-2 rounded-lg bg-gray-200 text-gray-800">
-                    <div className="typing-indicator">
-                      <span></span>
-                      <span></span>
-                      <span></span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500 ml-8 mt-1">분석중...</div>
-              </div>
-            )}
+            {renderMessages}
             <div ref={messagesEndRef} />
           </div>
           <div className="flex items-center gap-2 relative mt-2 pt-2 border-t">
             <Input
+              ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
               placeholder="메시지를 입력하세요..."
               className="pr-20"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }
-              }}
             />
             <Button
               size="icon"
               className="absolute right-0"
-              onClick={(e) => handleSubmit(e)}
+              onClick={handleSubmit}
               disabled={state.isAnalyzing}
             >
               <Send className="w-4 h-4" />
@@ -258,6 +351,21 @@ export const ChatSection = () => {
           </div>
         </div>
       </div>
+      <style jsx global>{`
+        .typing .cursor {
+          display: inline-block;
+          width: 2px;
+          height: 1.2em;
+          background-color: currentColor;
+          margin-left: 2px;
+          animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
     </div>
   )
 }

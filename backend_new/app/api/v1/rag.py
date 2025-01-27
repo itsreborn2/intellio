@@ -1,7 +1,8 @@
 """RAG 검색 API 라우터"""
 
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import logging
 from uuid import UUID
@@ -56,6 +57,19 @@ class ChatRequest(BaseModel):
     document_ids: List[str]  # 문서 ID 목록
     message: str  # 사용자 메시지
 
+async def stream_response(generator: AsyncGenerator) -> StreamingResponse:
+    """SSE 응답 생성"""
+    print(generator, end="", flush=True)
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Encoding": "none",
+        },
+    )
+
 @router.post("/table/search", response_model=TableResponse)
 async def table_search(
     request: TableQueryRequest,
@@ -77,16 +91,16 @@ async def table_search(
         #                 detail=f"문서를 찾을 수 없거나 접근할 수 없습니다: {doc_id}"
         #             )
 
-        result = await rag_service.query(
+        doc_ids = [UUID(doc_id) for doc_id in request.document_ids]
+        response = await rag_service.handle_table_mode(
             query=request.query,
-            mode=request.mode,
-            document_ids=request.document_ids,
+            document_ids=doc_ids,
             user_id=session.user_id,
             project_id=request.project_id
         )
-        
-        logger.info(f"테이블 검색 완료 : {result}")
-        return result
+        logger.info(f"테이블 검색 완료 : {response}")
+        return response
+
         
     except Exception as e:
         logger.error(f"테이블 검색 중 오류 발생: {str(e)}")
@@ -102,42 +116,90 @@ async def query_rag(
 ):
     
     """RAG 쿼리 처리"""
-    service = RAGService()
-    await service.initialize(db)
+    # service = RAGService()
+    # await service.initialize(db)
     
-    # 문서 접근 권한 확인
-    if query.document_ids:
-        for doc_id in query.document_ids:
-            if not await service.verify_document_access(doc_id):
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"문서를 찾을 수 없거나 접근할 수 없습니다: {doc_id}"
-                )
+    # # 문서 접근 권한 확인
+    # if query.document_ids:
+    #     for doc_id in query.document_ids:
+    #         if not await service.verify_document_access(doc_id):
+    #             raise HTTPException(
+    #                 status_code=404,
+    #                 detail=f"문서를 찾을 수 없거나 접근할 수 없습니다: {doc_id}"
+    #             )
     
-    return await service.query(
-        query=query.query,
-        mode=query.mode,
-        document_ids=query.document_ids,
-        user_id=query.user_id,
-        project_id=query.project_id
-    )
+    # return await service.query(
+    #     query=query.query,
+    #     mode=query.mode,
+    #     document_ids=query.document_ids,
+    #     user_id=query.user_id,
+    #     project_id=query.project_id
+    # )
+    return None
 
 @router.post("/chat")
 async def chat_search(
     request: ChatRequest,
-    rag_service: RAGService = Depends(deps.get_rag_service)
+    db: AsyncSession = Depends(get_db),
+    session: Session = Depends(get_current_session)
 ):
     """채팅 모드 검색 및 질의응답"""
     try:
-        logger.info(f"채팅 검색 요청 - 메시지: {request.message}, 문서 ID: {request.document_ids}")
-        result = await rag_service.query(
-            query=request.message,
-            mode="chat",
-            document_ids=request.document_ids
+        async def generate_stream():
+            buffer = ""
+            
+            def handle_token(token: str):
+                nonlocal buffer
+                #logger.info(f"Handling token: {token}")
+                
+                
+                # 토큰이 5자 미만이면 버퍼에 저장
+                if len(token.strip()) < 5:
+                    buffer += token
+                    #print(f"저장:[{buffer}]", end="", flush=True)
+                    return None  # 아직 전송하지 않음
+                
+                if buffer:
+                    # 버퍼에 있던 내용과 현재 토큰을 합쳐서 전송
+                    combined = buffer + token
+                    #print(f"'{combined}'", end="", flush=True)
+                    buffer = ""
+                    return f"data: {combined}\n\n"
+                
+                return f"data: {token}\n\n"
+
+            # RAG 서비스 초기화
+            rag_service = RAGService(handle_token)
+            await rag_service.initialize(db)
+            
+            logger.info(f"채팅 검색 요청 - 메시지: {request.message}, 문서 ID: {request.document_ids}")
+            
+            # 스트리밍 응답 처리
+            async for token in rag_service.query_stream(
+                query=request.message,
+                mode="chat",
+                document_ids=request.document_ids
+            ):
+                if token is not None:  # None이 아닐 때만 yield
+                    yield token
+            
+            # 버퍼에 남은 내용이 있다면 마지막으로 전송
+            if buffer:
+                yield f"data: {buffer}\n\n"
+            
+            # 스트리밍 종료 신호
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Encoding": "none",
+            }
         )
-        answer = result.get('answer')
-        logger.info(f"채팅 검색 완료 - 답변: {result.get('answer')}")
-        return answer
+        
     except Exception as e:
         logger.error(f"채팅 검색 중 오류 발생: {str(e)}")
         raise HTTPException(

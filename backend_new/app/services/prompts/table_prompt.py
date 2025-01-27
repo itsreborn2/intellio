@@ -9,6 +9,7 @@ from app.utils.common import measure_time_async
 logger = logging.getLogger(__name__)
 
 class TablePrompt(BasePrompt):
+    prompt_mode = "table"
     def __init__(self, *args, **kwargs):
         # patterns 파라미터가 있다면 제거
         if 'patterns' in kwargs:

@@ -1,5 +1,5 @@
 import time
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 import logging
 
 from openai import AsyncOpenAI
@@ -12,6 +12,7 @@ from loguru import logger
 from app.utils.common import measure_time_async
 from app.services.llm_models import LLMModels
 from langchain_core.messages import ai
+
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ class GeminiAPI:
 
     
 class BasePrompt:
+    prompt_mode = None
     """기본 프롬프트 클래스"""
     def __init__(self, 
                  openai_api_key: Optional[str] = None, 
@@ -81,6 +83,7 @@ class BasePrompt:
                  redis_url: Optional[str] = None,
                  cache_expire: Optional[int] = None,
                  document_id: str = "default",  
+                 streaming_callback: Optional[Callable[[str], None]] = None,
                  **kwargs):
         """프롬프트 기본 클래스 초기화
         
@@ -90,9 +93,10 @@ class BasePrompt:
             redis_url: Redis 서버 URL (선택)
             cache_expire: 캐시 만료 시간 (초)
             document_id: 문서 ID (기본값: "default")
+            streaming_callback: 스트리밍 응답을 처리할 콜백 함수
         """
         #self.gemini_api = GeminiAPI()  # 싱글톤 인스턴스
-        self.LLM = LLMModels()  # 싱글톤 인스턴스
+        self.LLM = LLMModels(streaming_callback=streaming_callback)  # 싱글톤 인스턴스
         self.gemini_api_key = gemini_api_key or settings.GEMINI_API_KEY
         self.openai_api_key = openai_api_key or settings.OPENAI_API_KEY
         self.document_id = document_id
@@ -136,7 +140,10 @@ class BasePrompt:
                 model_name = model_info["model"]
                 logger.info(f"{model_name} API 호출 - 프롬프트: {prompt[:100]}...")
                 #response = await self.gemini_api._llm_chain.generate_content_async(prompt)
-                response = await self.generate_content_async(prompt)
+                if self.prompt_mode == "chat":
+                    response = await self.generate_content_streaming_async(prompt)
+                else:   
+                    response = await self.generate_content_async(prompt)
                 logger.info(f"{model_name} API 호출 완료")
 
                 #response는 그냥 문자열이다.
@@ -288,6 +295,21 @@ class BasePrompt:
                     text = response.content
                     return text
                 return "죄송합니다. 응답을 생성할 수 없습니다."
+            except Exception as e:
+                #여기서도 에러나면 raise
+                raise
+    async def generate_content_streaming_async(self, prompt: str):
+        """LLM API를 사용하여 streaming 컨텐츠 생성"""
+        try:
+            async for chunk in self.LLM.agenerate_stream(prompt=prompt):
+                if hasattr(chunk, 'content'):
+                    yield chunk.content
+        except Exception as e:
+            self.LLM.select_next_llm() # 다음 우선순위 llm 선택
+            try:
+                async for chunk in self.LLM.agenerate_stream(prompt=prompt):
+                    if hasattr(chunk, 'content'):
+                        yield chunk.content
             except Exception as e:
                 #여기서도 에러나면 raise
                 raise

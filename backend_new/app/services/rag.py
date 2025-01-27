@@ -1,6 +1,6 @@
 """RAG 서비스"""
 
-from typing import Dict, Any, List, Union, Tuple
+from typing import Dict, Any, List, Union, Tuple, Optional, Callable
 from uuid import UUID
 import pandas as pd
 import re
@@ -38,13 +38,18 @@ DOCUMENT_STATUS_DELETED = 'DELETED'
 class RAGService:
     """RAG 서비스"""
 
-    def __init__(self):
+    def __init__(self, streaming_callback: Optional[Callable[[str], None]] = None):
         """RAG 서비스 초기화"""
         self.embedding_service = EmbeddingService()
-        self.chat_prompt = ChatPrompt()
+        self._streaming_callback = streaming_callback
+        if streaming_callback:
+            self.chat_prompt = ChatPrompt(streaming_callback=streaming_callback)
+        else:
+            self.chat_prompt = ChatPrompt()
         self.table_header_prompt = TableHeaderPrompt()
         self.table_prompt = TablePrompt()  # 테이블 분석을 위한 프롬프트 추가
         self.db = None
+        self._streaming_callback = None
         # 동시 처리할 최대 문서 수 (rate limit 고려)
         self.max_concurrent = 5
         # 청크 수 관련 설정
@@ -177,7 +182,7 @@ class RAGService:
             'min_similarity_score': 0.6  # 최소 유사도 점수
         }
 
-    async def initialize(self, db):
+    async def initialize(self, db, streaming_callback: Optional[Callable[[str], None]] = None):
         """DB 세션 초기화"""
         self.db = db
 
@@ -337,8 +342,8 @@ class RAGService:
         
         return keywords
 
-    def _filter_chunks_by_query(self, chunks: List[Dict[str, Any]], query: str, query_analysis: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-        """쿼리와 관련된 청크 필터링
+    def _sort_chunks_by_score(self, chunks: List[Dict[str, Any]], query: str, query_analysis: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """쿼리와 관련된 청크 정렬. 필터링은 이미 search_similar 함수에서 수행됨.
 
         Args:
             chunks: 검색된 청크 리스트
@@ -358,6 +363,7 @@ class RAGService:
                 chunk["score"] = chunk.get("score", 0)  # 점수가 없는 경우 0으로 설정
             return sorted(chunks, key=lambda x: x.get("score", 0), reverse=True)
         
+        # 이미 similarity_score 로 필터링 되어있음.
         # 일반 모드에서는 필터링 수행
         filtered_chunks = []
         min_score = self.config.get('min_similarity_score', 0.6)
@@ -383,7 +389,7 @@ class RAGService:
             filtered_chunks.append(chunk)
             logger.debug(f"청크 {chunk.get('id')} 선택됨 - 점수: {similarity_score:.2f}")
 
-        # 점수 기준으로 정렬
+
         filtered_chunks.sort(key=lambda x: x.get("score", 0), reverse=True)
         
         return filtered_chunks
@@ -406,7 +412,7 @@ class RAGService:
         try:
             # 쿼리 분석으로 모드 확인
             query_analysis = self._analyze_query(query)
-            query_type = query_analysis.get("query_type", "chat")  # 기본값을 chat으로 설정
+            query_type = query_analysis.get("query_type", "chat")  # 기본값을 chat으로 설정 "query_type" 리턴하지 않음. 항상 "chat"
             
             # 모드별 청크 수 설정
             if query_type == "table":
@@ -428,14 +434,17 @@ class RAGService:
             logger.info(f"검색된 총 청크 수: {len(all_chunks)}")
             
             # 청크 필터링
-            if all_chunks:
-                filtered_chunks = self._filter_chunks_by_query(all_chunks, query, query_analysis)
-                logger.info(f"필터링 후 청크 수: {len(filtered_chunks)}")
-            else:
-                logger.warning("검색된 청크가 없습니다.")
-                filtered_chunks = []
+            # if all_chunks:
+            #     # 유사도 점수. 기준 이상의 임베딩 데이터만 필터링
+            #     # search_similar 함수에서 이미 유사도 점수로 필터링 되어있음.
+            #     # 그런데 굳이 여기서 같은 기준으로 다시 필터링을 왜 하지?
+            #     filtered_chunks = self._sort_chunks_by_score(all_chunks, query, query_analysis)
+            #     logger.info(f"필터링 후 청크 수: {len(filtered_chunks)}")
+            # else:
+            #     logger.warning("검색된 청크가 없습니다.")
+            #     filtered_chunks = []
                 
-            return filtered_chunks, query_analysis
+            return all_chunks, query_analysis
         except Exception as e:
             error_msg = str(e)
             logger.error(f"청크 검색 중 오류 발생: {error_msg}", exc_info=True)
@@ -662,11 +671,12 @@ class RAGService:
                 metadata = chunk.get("metadata", {})
                 doc_contexts.append(
                     f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
-                    f"페이지: {metadata.get('page_number', 'N/A')}\n"
+                    f"페이지: {metadata.get('page_number', 'N/A')}\n" # pinecone의 metadata에는 page_number가 없음.
                     f"내용: {metadata.get('text', '')}"
                 )
 
             # 프롬프트로 분석
+            # 사용자의 질문 + 문서 컨텍스트(relevant_chunks)
             chain_response = await self.chat_prompt.analyze_async(
                 content='\n\n'.join(doc_contexts),
                 query=query,
@@ -725,7 +735,59 @@ class RAGService:
                 user_id=user_id,
                 project_id=project_id
             )
+        
+        # chat 모드에서는 이미 initialize에서 설정된 streaming_callback 사용
         return await self._handle_chat_mode(query, top_k, document_ids=document_ids)
+
+    async def query_stream(
+        self,
+        query: str,
+        mode: str = "chat",
+        top_k: int = 5,
+        document_ids: List[str] = None,
+        **kwargs
+    ):
+        """스트리밍 응답을 위한 쿼리 처리"""
+        try:
+            relevant_chunks, query_analysis = await self._get_relevant_chunks(query, top_k, document_ids)
+            logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks)}개 청크 발견")
+
+            if not relevant_chunks:
+                yield "관련 문서를 찾을 수 없습니다."
+                return
+            if document_ids is None or len(document_ids) == 0:
+                logger.warning("[query_stream] 선택된 문서가 없습니다.")
+                yield "선택된 문서가 없습니다."
+                return
+
+            # 문서 컨텍스트 구성
+            doc_contexts = []
+            for chunk in relevant_chunks:
+                metadata = chunk.get("metadata", {})
+                doc_contexts.append(
+                    f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
+                    f"페이지: {metadata.get('page_number', 'N/A')}\n" # pinecone의 metadata에는 page_number가 없음.
+                    f"내용: {metadata.get('text', '')}"
+                )
+
+
+            
+            # 프롬프트 생성 및 응답
+            async for token in self.chat_prompt.analyze_streaming(
+                                    content='\n\n'.join(doc_contexts),
+                                    query=query,
+                                    keywords={
+                                        "keywords": self._extract_keywords('\n'.join(doc_contexts)),
+                                        "type": "extracted",
+                                        "source": "document_content"
+                                    },
+                                    query_analysis=query_analysis
+                                ):
+                yield token
+
+        except Exception as e:
+            logger.error(f"스트리밍 쿼리 처리 중 오류 발생: {str(e)}", exc_info=True)
+            raise
 
     async def get_document_status(self, document_id: str) -> Dict[str, Any]:
         """문서의 상태 조회
@@ -856,7 +918,7 @@ class RAGService:
             "has_numbers": bool(re.search(r'\d', query)),  # 숫자 포함 여부
             "has_special_chars": bool(re.search(r'[^\w\s]', query)),  # 특수문자 포함 여부
             "timestamp": datetime.now().isoformat(),  # 분석 시간
-            "focus_area": self._get_query_focus(query_lower),  # 쿼리 초점 영역
+            "focus_area": self._get_query_focus(query_lower),  # 쿼리 초점 영역(어떤 분야에 대한 질문인지)
             "doc_type": self._get_doc_type(query_lower)  # 문서 타입 추론
         }
         
@@ -935,3 +997,5 @@ class RAGService:
             return max(type_weights.items(), key=lambda x: x[1])[0]
                 
         return "general"
+
+    
