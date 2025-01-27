@@ -127,6 +127,11 @@ class Settings(BaseSettings):
             "client_x509_cert_url": os.getenv("GOOGLE_CLOUD_CLIENT_CERT_URL")
         }
 
+    # Vertex AI Settings
+    GOOGLE_PROJECT_ID_VERTEXAI: str = os.getenv("GOOGLE_PROJECT_ID_VERTEXAI", "")
+    GOOGLE_LOCATION_VERTEXAI: str = os.getenv("GOOGLE_LOCATION_VERTEXAI", "asia-northeast3")
+    GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI", "")
+
     # Pinecone Settings
     PINECONE_API_KEY: str
     PINECONE_ENVIRONMENT: str = "us-east-1"
