@@ -1210,3 +1210,43 @@ export async function updateProjectName(projectId: string, newName: string): Pro
     throw error;
   }
 }
+
+export async function updateCategory(
+  categoryId: string, 
+  data: { name: string }
+): Promise<Category> {
+  const response = await apiFetch(
+    `${API_ENDPOINT}/categories/${categoryId}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('카테고리 업데이트 실패');
+  }
+
+  return response.json();
+}
+
+// 프로젝트 삭제
+export const deleteProject = async (projectId: string): Promise<void> => {
+  try {
+    // 카테고리 라우터를 통한 프로젝트 삭제
+    const response = await apiFetch(`${API_ENDPOINT}/categories/projects/${projectId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || '프로젝트 삭제 실패');
+    }
+  } catch (error) {
+    console.error('프로젝트 삭제 중 오류 발생:', error);
+    throw error;
+  }
+};

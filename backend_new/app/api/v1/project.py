@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy import select
@@ -46,7 +46,7 @@ async def create_project(
 
 @router.get("/recent", response_model=RecentProjectsResponse)
 async def get_recent_projects(
-    limit: int = 5,
+    limit: Optional[int] = None,
     session: Session = Depends(get_current_session),
     project_service: ProjectService = Depends(get_project_service)
 ):
