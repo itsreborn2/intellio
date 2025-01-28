@@ -136,7 +136,7 @@ class EmbeddingService:
                 return []
             
             # 제공자를 통해 임베딩 생성
-            embeddings = self.provider.create_embeddings(validated_texts)
+            embeddings = self.provider.create_embeddings(validated_texts, embeddings_task_type="RETRIEVAL_DOCUMENT")
             
             # 임베딩 품질 검사
             for i, emb in enumerate(embeddings):

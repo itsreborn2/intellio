@@ -247,6 +247,7 @@ class LLMModels:
         # API 호출 및 전체 응답 받기
         # 응답 타입(Google) : 'langchain_core.messages.ai.AIMessage'
         full_response = self._llm.invoke(messages)
+        
         logger.info(f"응답 타입: {type(full_response)}")
         # content='## 분석 결과 어쩌고 저쩌고..'
         # 응답 메세지 상세.

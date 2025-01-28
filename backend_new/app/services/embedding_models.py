@@ -7,6 +7,8 @@ import google.generativeai as genai
 from google.ai import generativelanguage as glm
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
+from langchain_google_vertexai.embeddings import VertexAIEmbeddings
+
 import numpy as np
 from app.core.config import settings
 import tiktoken
@@ -19,6 +21,8 @@ import asyncio
 from google.oauth2 import service_account
 import re
 import torch
+
+from langchain_openai import OpenAIEmbeddings
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +232,7 @@ class EmbeddingProvider(ABC):
         pass
 
     @abstractmethod
-    def create_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def create_embeddings(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
         """텍스트 리스트의 임베딩을 동기로 생성"""
         pass
 
@@ -315,11 +319,14 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
             
             # 서비스 계정 키 JSON 파일로부터 credentials 객체 생성
             credentials = service_account.Credentials.from_service_account_file(credentials_path)
-            vertexai.init(project=project_id, location=location, credentials=credentials)
+            #vertexai.init(project=project_id, location=location, credentials=credentials)
             
             # 임베딩 모델 로드
-            self.model = TextEmbeddingModel.from_pretrained(model_name)
             #self.model = TextEmbeddingModel.from_pretrained(model_name)
+            self.model = VertexAIEmbeddings(
+                                    model=model_name,
+                                    location=location,
+                                    credentials=credentials)
             logger.info("Google Embedding 모델 초기화 완료")
         except Exception as e:
             logger.error(f"Google Embedding 모델 초기화 실패: {str(e)}")
@@ -334,7 +341,7 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
         """Google Vertex AI는 현재 비동기를 직접 지원하지 않아 동기 메서드를 호출"""
         return await asyncio.to_thread(self.create_embeddings, texts)
     
-    def create_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def create_embeddings(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
         try:
             # 구글 토큰 제한, str당 2048 토큰 이내, List[str]은 20000 토큰 이내
             all_embeddings = []
@@ -359,7 +366,7 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
                     else:
                         batches = self.validate_and_split_texts(current_chunk)
                         for batch in batches:
-                            batch_embeddings = self._embed_batch(batch)
+                            batch_embeddings = self._embed_batch(batch, embeddings_task_type)
                             all_embeddings.extend(batch_embeddings)
                         current_chunk = [text]
                         current_chunk_tokens = text_tokens
@@ -367,13 +374,13 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
                 if current_chunk:
                     batches = self.validate_and_split_texts(current_chunk)
                     for batch in batches:
-                        batch_embeddings = self._embed_batch(batch)
+                        batch_embeddings = self._embed_batch(batch, embeddings_task_type)
                         all_embeddings.extend(batch_embeddings)
             else:
                 batches = self.validate_and_split_texts(texts)
                 logger.info(f"Google VertexAI 임베딩 생성 시작: {len(batches)} 배치")
                 for batch in batches:
-                    batch_embeddings = self._embed_batch(batch)
+                    batch_embeddings = self._embed_batch(batch, embeddings_task_type)
                     all_embeddings.extend(batch_embeddings)
 
             return all_embeddings
@@ -430,13 +437,29 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
         retry=tenacity.retry_if_exception_type(google.api_core.exceptions.GoogleAPIError), # Google API 오류 시 재시도
         reraise=True # 마지막 시도 실패 시 예외 발생
     )
-    def _embed_batch(self, batch: List[str]) -> List[List[float]]:
+    def _embed_batch(self, batch: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
         """배치 임베딩 생성 및 재시도 로직"""
         try:
+            #  embeddings_task_type: [str] optional embeddings task type,
+            #     one of the following
+            #         RETRIEVAL_QUERY	- Text is a query
+            #                           in a search/retrieval setting.
+            #         RETRIEVAL_DOCUMENT - Text is a document
+            #                              in a search/retrieval setting.
+            #         SEMANTIC_SIMILARITY - Embeddings will be used
+            #                               for Semantic Textual Similarity (STS).
+            #         CLASSIFICATION - Embeddings will be used for classification.
+            #         CLUSTERING - Embeddings will be used for clustering.
+            #         The following are only supported on preview models:
+            #         QUESTION_ANSWERING
+            #         FACT_VERIFICATION
             # 배치 전체를 한 번에 요청
-            embeddings = self.model.get_embeddings(batch)
+            #embeddings = self.model.get_embeddings(batch)
+            embeddings = self.model.embed(batch, embeddings_task_type=embeddings_task_type)
+
             # 임베딩 값 추출
-            return [embedding.values for embedding in embeddings]
+            #return [embedding.values for embedding in embeddings]
+            return embeddings
         except google.api_core.exceptions.GoogleAPIError as e:
             logger.error(f"Google 임베딩 API 오류: {str(e)} | 배치 크기: {len(batch)}")
             raise

@@ -151,18 +151,15 @@ async def chat_search(
             def handle_token(token: str):
                 nonlocal buffer
                 #logger.info(f"Handling token: {token}")
-                
-                
+                print(f"{token}", end="", flush=True)
                 # 토큰이 5자 미만이면 버퍼에 저장
                 if len(token.strip()) < 5:
                     buffer += token
-                    #print(f"저장:[{buffer}]", end="", flush=True)
                     return None  # 아직 전송하지 않음
                 
                 if buffer:
                     # 버퍼에 있던 내용과 현재 토큰을 합쳐서 전송
                     combined = buffer + token
-                    #print(f"'{combined}'", end="", flush=True)
                     buffer = ""
                     return f"data: {combined}\n\n"
                 
@@ -186,7 +183,7 @@ async def chat_search(
             # 버퍼에 남은 내용이 있다면 마지막으로 전송
             if buffer:
                 yield f"data: {buffer}\n\n"
-            
+            print(f"[DONE]")
             # 스트리밍 종료 신호
             yield "data: [DONE]\n\n"
 
