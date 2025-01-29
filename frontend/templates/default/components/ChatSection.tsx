@@ -11,6 +11,7 @@ import { IMessage, IChatResponse, TableResponse } from '@/types/index'
 import * as actionTypes from '@/types/actions'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import React from 'react'
 
 // ChatMessage 컴포넌트를 메모이제이션
@@ -29,7 +30,7 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
     <div className="flex flex-col items-end mb-2 w-full">
       <div className={`flex items-start gap-3 ${
         message.role === 'assistant' 
-          ? `bg-gray-200 dark:bg-gray-800 ${isLongContent ? 'w-full' : 'w-fit'}`
+          ? `bg-gray-100 dark:bg-gray-800 ${isLongContent ? 'w-full' : 'w-fit'}`
           : `bg-sky-100 dark:bg-sky-900 ${isLongContent ? 'w-full' : 'w-fit'}`
       } ${isLongContent ? 'px-4 py-3' : 'px-3 py-2'} rounded-lg ${
         message.role === 'user' ? 'ml-auto' : 'mr-auto'
@@ -39,17 +40,22 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
           className={`overflow-hidden ${isStreaming ? 'typing' : ''}`}
         >
           <ReactMarkdown 
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkBreaks]}
+            skipHtml={true}
+            unwrapDisallowed={true}
             className="prose max-w-none markdown
                 [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
                 [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
                 [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
                 [&>li]:text-gray-600 [&>li]:leading-relaxed
                 [&>p:only-child]:m-0"
+            components={{
+              text: ({node, ...props}) => <>{props.children}</>
+            }}
           >
             {message.content}
           </ReactMarkdown>
-          {isStreaming && <span className="cursor">|</span>}
+          {isStreaming && <span className="cursor" />}
         </div>
       </div>
     </div>
@@ -60,44 +66,23 @@ class StreamingMarkdownHandler {
   private buffer: string = '';
   private markdownPrefix: string = '';
   private isFirstChunk: boolean = true;
+  private readonly listSymbols = ['#', '*', '-'];
 
   processChunk(chunk: string, dispatch: any, tempMessageId: string): void {
     // data: [DONE] 체크
-    if (chunk === 'data: [DONE]' || chunk === '[DONE]') {
+    if (chunk.includes('[DONE]')) {
       this.flushBuffer(dispatch, tempMessageId);
       return;
     }
 
-    // data: 프리픽스 제거
-    const cleanedChunk = chunk.replace(/^data: /, '').trim();
+    // data: 프리픽스 제거 (끝의 공백만 제거)
+    const cleanedChunk = chunk.replace(/^data: /, '');
     if (!cleanedChunk) return;
 
-    // [DONE] 문자열이 포함된 경우 제거
-    const finalChunk = cleanedChunk.replace(/\[DONE\]$/, '').trim();
+    // [DONE] 문자열이 포함된 경우 제거 (끝의 공백만 제거)
+    const finalChunk = cleanedChunk.replace(/\[DONE\]$/, '');
     if (!finalChunk) return;
 
-    // 첫 번째 청크가 ## 인 경우 저장해두기
-    if (this.isFirstChunk && finalChunk === '##') {
-      this.markdownPrefix = finalChunk;
-      this.isFirstChunk = false;
-      return;
-    }
-    this.isFirstChunk = false;
-
-    // 저장된 마크다운 프리픽스가 있다면 다음 청크와 합쳐서 처리
-    if (this.markdownPrefix) {
-      const combinedChunk = this.markdownPrefix + finalChunk;
-      this.markdownPrefix = '';
-      console.log(combinedChunk)
-      dispatch({
-        type: actionTypes.UPDATE_CHAT_MESSAGE,
-        payload: {
-          id: tempMessageId,
-          content: (prevContent: string) => prevContent + combinedChunk
-        }
-      });
-      return;
-    }
     console.log(finalChunk)
     // 일반 텍스트 처리
     dispatch({
@@ -208,9 +193,7 @@ export const ChatSection = () => {
           dispatch({
             type: actionTypes.UPDATE_TABLE_DATA,
             payload: result //{
-              //columns: [...state.analysis.tableData.columns, ...result.columns]
-            //   columns: [...state.analysis.tableData.columns, ...result.columns
-            // }
+
           })
 
           // 성공 메시지 추가
@@ -221,6 +204,7 @@ export const ChatSection = () => {
               content: '새로운 컬럼이 추가되었습니다.'
             }
           })
+          setIsGenerating(false)
         }
       } catch (error) {
         console.error('테이블 분석 중 오류:', error)
@@ -271,6 +255,7 @@ export const ChatSection = () => {
         while (true) {
           const { value, done } = await reader.read();
           if (done) {
+            setStreamingMessageId(null);
             setIsGenerating(false)
             break;
           }
@@ -287,6 +272,8 @@ export const ChatSection = () => {
         }
     
       } catch (error) {
+        setStreamingMessageId(null);
+        setIsGenerating(false)
         console.error('채팅 중 오류:', error);
         dispatch({
           type: actionTypes.ADD_CHAT_MESSAGE,
@@ -298,6 +285,7 @@ export const ChatSection = () => {
       } finally {
         streamingHandler.reset();
         dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false });
+        setStreamingMessageId(null);
         setIsGenerating(false)
       }
     }
@@ -324,13 +312,6 @@ export const ChatSection = () => {
       />
     ));
   }, [state.messages, streamingMessageId]);
-
-  // useEffect(() => {
-  //   console.log('메시지 상태 변경:', {
-  //     messages: state.messages,
-  //     lastMessage: state.messages[state.messages.length - 1]
-  //   })
-  // }, [state.messages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -373,8 +354,7 @@ export const ChatSection = () => {
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={isGenerating ? "응답 중..." : "메시지를 입력하세요..."}
-              //disabled={isGenerating}
-              className="pr-20 cursor-text"
+              className="pr-20"
             />
             <Button
               size="icon"
@@ -394,16 +374,19 @@ export const ChatSection = () => {
       <style jsx global>{`
         .typing .cursor {
           display: inline-block;
-          width: 2px;
-          height: 1.2em;
+          width: 13px;
+          height: 13px;
+          border-radius: 50%;
           background-color: currentColor;
-          margin-left: 2px;
-          animation: blink 1s infinite;
+          margin-left: 4px;
+          margin-bottom: 2px;
+          animation: pulse 1s infinite;
+          vertical-align: middle;
         }
 
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.2); }
         }
       `}</style>
     </div>

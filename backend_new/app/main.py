@@ -12,7 +12,12 @@ from app.core.config import settings
 from app.models.base import Base
 from app.core.database import engine
 from logging.handlers import RotatingFileHandler
+from dotenv import load_dotenv
 import os
+
+# 환경변수를 가장 먼저 로드
+load_dotenv(override=True)
+
 
 # ANSI 이스케이프 코드를 사용한 색상 정의
 class ColorFormatter(logging.Formatter):

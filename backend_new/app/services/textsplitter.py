@@ -12,7 +12,7 @@ from langchain.text_splitter import (
 #from langchain_text_splitters import SemanticChunker
 from typing import List, Optional
 import os
-
+from app.core.config import settings
 from dotenv import load_dotenv
 import logging
 logger = logging.getLogger(__name__)
@@ -33,12 +33,12 @@ class TextSplitter:
         #load_dotenv()
         # 환경변수 강제 재로드, 개발모드에서만 사용. 나중에는 풀어야함. 
         # text splitter 호출할때마다 IO가 발생해서 느려짐
-        load_dotenv(override=True)
+        #load_dotenv(override=True)
         
         # 환경변수에서 기본값 로드
-        default_splitter = os.getenv("TEXT_SPLITTER", "recursive").lower()
-        default_chunk_size = int(os.getenv("CHUNK_SIZE", "1500"))
-        default_chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "300"))
+        default_splitter = settings.TEXT_SPLITTER
+        default_chunk_size = settings.CHUNK_SIZE
+        default_chunk_overlap = settings.CHUNK_OVERLAP
         
         # 파라미터로 전달된 값이 있으면 사용하고, 없으면 환경변수 값 사용
         self.splitter_type = splitter_type.lower() if splitter_type else default_splitter

@@ -158,6 +158,12 @@ class Settings(BaseSettings):
     CHUNK_SIZE:int = int(os.getenv("CHUNK_SIZE", "1000"))
     CHUNK_OVERLAP:int = int(os.getenv("CHUNK_OVERLAP", "200"))
 
+    # LangSmith
+    LANGCHAIN_TRACING_V2:str = os.getenv("LANGCHAIN_TRACING_V2", "true")
+    LANGCHAIN_ENDPOINT:str = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+    LANGCHAIN_API_KEY:str = os.getenv("LANGCHAIN_API_KEY", "")
+    LANGCHAIN_PROJECT:str = os.getenv("LANGCHAIN_PROJECT", "intellio_doceasy_base")
+
     class Config:
         env_file = ".env" #예전위치.
         #env_file = "../../.env"  # 프로젝트 루트의 .env 파일 참조

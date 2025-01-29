@@ -1,5 +1,6 @@
 import asyncio
 from typing import Any, List, Optional, Union, Callable, Dict
+from dotenv import load_dotenv
 from langchain_core.messages import BaseMessage
 from langchain.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -10,14 +11,15 @@ from langchain_core.messages import BaseMessage, ChatMessage, ai
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 from langchain_core.outputs import ChatResult
 from langchain_core.callbacks import BaseCallbackHandler
-
+from langchain.callbacks.manager import tracing_enabled, tracing_v2_enabled
 from langchain_openai import ChatOpenAI
 
 import torch
 from transformers import AutoModel, AutoTokenizer
-from loguru import logger
+#from loguru import logger
 from app.core.config import settings
 import logging
+
 logger = logging.getLogger(__name__)
 class StreamingCallbackHandler(BaseCallbackHandler):
     """스트리밍 응답을 처리하는 콜백 핸들러"""
@@ -166,6 +168,7 @@ class LLMModels:
                     callback_handler=callback_handler,
                     **kwargs
                 )
+                logger.info(f"LLMModels : {model_info['model']} Streaming")
             logger.info(f"LLMModels : {model_info['model']} API 초기화")
 
     def get_llm(self, model_name: str, 
@@ -300,8 +303,11 @@ class LLMModels:
     
     async def agenerate_stream(self, prompt: str):
         """비동기 스트리밍 컨텐츠 생성"""
-        logger.info(f"LLM API streaming[Async] 호출 - 프롬프트: {prompt[:100]}...")
+        logger.info(f"{self._llm_type} API streaming[Async] 호출 - 프롬프트: {prompt[:100]}...")
         self._should_stop = False
+        logger.info(f"LANGCHAIN_TRACING_V2: {settings.LANGCHAIN_TRACING_V2}")
+        logger.info(f"LANGCHAIN_PROJECT: {settings.LANGCHAIN_PROJECT}")
+
         
         try:
             async with self._stream_lock:  # 스트림 세션 동기화
