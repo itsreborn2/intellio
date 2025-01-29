@@ -50,6 +50,7 @@ class RAGService:
         self.table_prompt = TablePrompt()  # 테이블 분석을 위한 프롬프트 추가
         self.db = None
         self._streaming_callback = None
+        self._should_stop = False  # 생성 중지 플래그 추가
         # 동시 처리할 최대 문서 수 (rate limit 고려)
         self.max_concurrent = 5
         # 청크 수 관련 설정
@@ -783,6 +784,8 @@ class RAGService:
                                     },
                                     query_analysis=query_analysis
                                 ):
+                if self._should_stop:  # 중지 플래그 확인
+                    break
                 yield token
 
         except Exception as e:
@@ -997,5 +1000,11 @@ class RAGService:
             return max(type_weights.items(), key=lambda x: x[1])[0]
                 
         return "general"
+
+    async def stop_generation(self):
+        """메시지 생성 중지"""
+        self._should_stop = True
+        if hasattr(self.chat_prompt, 'stop_generation'):
+            await self.chat_prompt.stop_generation()
 
     

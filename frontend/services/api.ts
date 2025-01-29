@@ -789,3 +789,19 @@ export const deleteProject = async (projectId: string): Promise<void> => {
   }
 }
 
+export async function stopChatMessageGeneration(
+  projectId: string
+): Promise<void> {
+  const response = await apiFetch(`${API_ENDPOINT}/rag/chat/stop`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ project_id: projectId }),
+  })
+
+  if (!response.ok) {
+    throw new Error('메시지 생성 중지 요청 실패')
+  }
+}
+

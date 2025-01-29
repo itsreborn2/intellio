@@ -12,12 +12,12 @@ from langchain_core.outputs import ChatResult
 from langchain_core.callbacks import BaseCallbackHandler
 
 from langchain_openai import ChatOpenAI
-import logging
+
 import torch
 from transformers import AutoModel, AutoTokenizer
 from loguru import logger
 from app.core.config import settings
-
+import logging
 logger = logging.getLogger(__name__)
 class StreamingCallbackHandler(BaseCallbackHandler):
     """스트리밍 응답을 처리하는 콜백 핸들러"""
@@ -116,24 +116,35 @@ class KfDebertaAI(BaseChatModel):
     
 class LLMModels:
     """AI Model을 랭체인에 맞게 구현"""
-    _instance = None
-    _llm_chain = None
-    _llm_type = "gemini"
-    _llm = None
-    _llm_streaming = None
-    _current_model_idx = 0
-    _streaming_callback = None
+    _instance = None  # 클래스 변수로 이동
     
     def __new__(cls, streaming_callback: Optional[Callable[[str], None]] = None, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._streaming_callback = streaming_callback
-            cls._instance.initialize([  {"model":"gemini", "api_key":settings.GEMINI_API_KEY },
-                                        {"model":"openai", "api_key":settings.OPENAI_API_KEY },
-                                        {"model":"kf-deberta", "api_key":None }
-                                     ], 
-                                      **kwargs)
+            # __init__에서 초기화하도록 변경
+            cls._instance._initialized = False
         return cls._instance
+
+    def __init__(self, streaming_callback: Optional[Callable[[str], None]] = None, **kwargs):
+        if not self._initialized:  # 한 번만 초기화되도록
+            self._llm_chain = None
+            self._llm_type = "gemini"
+            self._llm = None
+            self._llm_streaming = None
+            self._current_model_idx = 0
+            self._streaming_callback = streaming_callback
+            self._should_stop = False
+            self._current_task: Optional[asyncio.Task] = None
+            self._stream_lock = asyncio.Lock()
+            
+            # 초기화 실행
+            self.initialize([
+                {"model":"gemini", "api_key":settings.GEMINI_API_KEY },
+                {"model":"openai", "api_key":settings.OPENAI_API_KEY },
+                {"model":"kf-deberta", "api_key":None }
+            ], **kwargs)
+            
+            self._initialized = True
 
     def initialize(self, llm_list:list, **kwargs):
         """LangChain 초기화"""
@@ -289,13 +300,40 @@ class LLMModels:
     
     async def agenerate_stream(self, prompt: str):
         """비동기 스트리밍 컨텐츠 생성"""
-        logger.info(f"Gemini API stream[Async] 호출 - 프롬프트: {prompt[:100]}...")
-        prompt_template = ChatPromptTemplate.from_template("{prompt}")
-        messages = prompt_template.format_messages(prompt=prompt)
+        logger.info(f"LLM API streaming[Async] 호출 - 프롬프트: {prompt[:100]}...")
+        self._should_stop = False
         
-        # 스트리밍 응답 생성
-        async for chunk in self._llm_streaming.astream(messages):
-            yield chunk
+        try:
+            async with self._stream_lock:  # 스트림 세션 동기화
+                prompt_template = ChatPromptTemplate.from_template("{prompt}")
+                messages = prompt_template.format_messages(prompt=prompt)
+                
+                # 스트리밍 시작
+                stream = self._llm_streaming.astream(messages)
+                
+                try:
+                    # 현재 태스크 저장
+                    self._current_task = asyncio.current_task()
+                    
+                    async for chunk in stream:
+                        if self._should_stop:
+                            logger.info("LLM 메시지 생성이 중지되었습니다.")
+                            break
+                        if chunk and chunk.content:
+                            yield chunk
+                            
+                except asyncio.CancelledError:
+                    logger.info("스트리밍 태스크가 취소되었습니다.")
+                    raise
+                finally:
+                    self._current_task = None
+                    
+        except Exception as e:
+            logger.error(f"스트리밍 응답 생성 중 오류 발생: {str(e)}")
+            raise e
+        finally:
+            self._should_stop = False
+            self._current_task = None
 
     def generate_content_only(self, prompt: str) -> Optional[str]:
         """동기 컨텐츠 생성"""
@@ -318,4 +356,20 @@ class LLMModels:
         logger.info(f"Gemini API[Async] 호출 - 프롬프트: {prompt[:100]}...")
         response: ai.AIMessage = await self.agenerate(prompt=prompt)
         return response.content
+    
+    async def stop_generation(self):
+        """메시지 생성 중지"""
+        self._should_stop = True
+        if self._current_task and not self._current_task.done():
+            try:
+                # 현재 실행 중인 태스크 취소
+                self._current_task.cancel()
+                await asyncio.shield(self._current_task)  # 태스크가 정리될 때까지 대기
+            except asyncio.CancelledError:
+                logger.info("스트리밍 태스크가 성공적으로 취소되었습니다.")
+            except Exception as e:
+                logger.error(f"태스크 취소 중 오류 발생: {str(e)}")
+            finally:
+                self._current_task = None
+
     

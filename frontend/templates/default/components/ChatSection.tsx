@@ -1,12 +1,12 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Send } from 'lucide-react'
+import { Send, Square } from 'lucide-react'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/contexts/AppContext'
-import { searchTable, sendChatMessage, sendChatMessage_streaming } from '@/services/api'
+import { searchTable, sendChatMessage, sendChatMessage_streaming, stopChatMessageGeneration } from '@/services/api'
 import { IMessage, IChatResponse, TableResponse } from '@/types/index'
 import * as actionTypes from '@/types/actions'
 import ReactMarkdown from 'react-markdown'
@@ -15,21 +15,37 @@ import React from 'react'
 
 // ChatMessage 컴포넌트를 메모이제이션
 const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { message: IMessage; isStreaming?: boolean }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isLongContent, setIsLongContent] = useState(false);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      const { scrollHeight, clientHeight, scrollWidth, clientWidth } = contentRef.current;
+      setIsLongContent(scrollHeight > clientHeight || scrollWidth > clientWidth);
+    }
+  }, [message.content]);
+
   return (
     <div className="flex flex-col items-end mb-2 w-full">
       <div className={`flex items-start gap-3 ${
-        message.role === 'assistant' ? 'bg-gray-200 dark:bg-gray-800 w-full' : 'bg-sky-100 dark:bg-sky-900 max-w-[80%]'
-      } p-4 rounded-lg ${
+        message.role === 'assistant' 
+          ? `bg-gray-200 dark:bg-gray-800 ${isLongContent ? 'w-full' : 'w-fit'}`
+          : `bg-sky-100 dark:bg-sky-900 ${isLongContent ? 'w-full' : 'w-fit'}`
+      } ${isLongContent ? 'px-4 py-3' : 'px-3 py-2'} rounded-lg ${
         message.role === 'user' ? 'ml-auto' : 'mr-auto'
       }`}>
-        <div className={`overflow-hidden w-full ${isStreaming ? 'typing' : ''}`}>
+        <div 
+          ref={contentRef}
+          className={`overflow-hidden ${isStreaming ? 'typing' : ''}`}
+        >
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
             className="prose max-w-none markdown
                 [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
                 [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
                 [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
-                [&>li]:text-gray-600 [&>li]:leading-relaxed"
+                [&>li]:text-gray-600 [&>li]:leading-relaxed
+                [&>p:only-child]:m-0"
           >
             {message.content}
           </ReactMarkdown>
@@ -117,15 +133,28 @@ export const ChatSection = () => {
   const { state, dispatch } = useApp()
   const [input, setInput] = useState('')
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const messageCountRef = useRef(0)  // 메시지 카운터 추가
+  const messageCountRef = useRef(0)
 
   // 고유한 메시지 ID 생성 함수
   const generateMessageId = useCallback(() => {
     messageCountRef.current += 1
     return `${Date.now()}-${messageCountRef.current}`
   }, [])
+
+  const handleStopGeneration = useCallback(async () => {
+    if (!state.currentProjectId) return
+    
+    try {
+      await stopChatMessageGeneration(state.currentProjectId)
+      setIsGenerating(false)
+      setStreamingMessageId(null)
+    } catch (error) {
+      console.error('메시지 생성 중지 중 오류:', error)
+    }
+  }, [state.currentProjectId])
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -136,6 +165,7 @@ export const ChatSection = () => {
 
     // 분석 시작 상태 설정
     dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: true })
+    setIsGenerating(true)
 
     // 사용자 메시지 추가
     const userMessageId = generateMessageId()
@@ -240,12 +270,16 @@ export const ChatSection = () => {
     
         while (true) {
           const { value, done } = await reader.read();
-          if (done) break;
+          if (done) {
+            setIsGenerating(false)
+            break;
+          }
           
           const chunk = decoder.decode(value);
           
           if (chunk === 'data: [DONE]' || chunk === '[DONE]') {
             setStreamingMessageId(null);
+            setIsGenerating(false)
             break;
           }
     
@@ -264,6 +298,7 @@ export const ChatSection = () => {
       } finally {
         streamingHandler.reset();
         dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false });
+        setIsGenerating(false)
       }
     }
   }, [input, state.analysis.mode, state.currentProjectId, state.analysis.selectedDocumentIds, dispatch, generateMessageId]);
@@ -337,16 +372,21 @@ export const ChatSection = () => {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="메시지를 입력하세요..."
-              className="pr-20"
+              placeholder={isGenerating ? "응답 중..." : "메시지를 입력하세요..."}
+              //disabled={isGenerating}
+              className="pr-20 cursor-text"
             />
             <Button
               size="icon"
               className="absolute right-0"
-              onClick={handleSubmit}
-              disabled={state.isAnalyzing}
+              onClick={isGenerating ? handleStopGeneration : handleSubmit}
+              disabled={state.isAnalyzing && !isGenerating}
             >
-              <Send className="w-4 h-4" />
+              {isGenerating ? (
+                <Square className="w-4 h-4" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>

@@ -57,6 +57,10 @@ class ChatRequest(BaseModel):
     document_ids: List[str]  # 문서 ID 목록
     message: str  # 사용자 메시지
 
+class StopGenerationRequest(BaseModel):
+    """생성 중지 요청"""
+    project_id: str
+
 async def stream_response(generator: AsyncGenerator) -> StreamingResponse:
     """SSE 응답 생성"""
     print(generator, end="", flush=True)
@@ -165,27 +169,34 @@ async def chat_search(
                 
                 return f"data: {token}\n\n"
 
-            # RAG 서비스 초기화
-            rag_service = RAGService(handle_token)
-            await rag_service.initialize(db)
-            
-            logger.info(f"채팅 검색 요청 - 메시지: {request.message}, 문서 ID: {request.document_ids}")
-            
-            # 스트리밍 응답 처리
-            async for token in rag_service.query_stream(
-                query=request.message,
-                mode="chat",
-                document_ids=request.document_ids
-            ):
-                if token is not None:  # None이 아닐 때만 yield
-                    yield token
-            
-            # 버퍼에 남은 내용이 있다면 마지막으로 전송
-            if buffer:
-                yield f"data: {buffer}\n\n"
-            print(f"[DONE]")
-            # 스트리밍 종료 신호
-            yield "data: [DONE]\n\n"
+            try:
+                # RAG 서비스 초기화
+                rag_service = RAGService(handle_token)
+                await rag_service.initialize(db)
+                
+                logger.info(f"채팅 검색 요청 - 메시지: {request.message}, 문서 ID: {request.document_ids}")
+                
+                # 스트리밍 응답 처리
+                async for token in rag_service.query_stream(
+                    query=request.message,
+                    mode="chat",
+                    document_ids=request.document_ids
+                ):
+                    if token is not None:  # None이 아닐 때만 yield
+                        yield token
+                
+                # 버퍼에 남은 내용이 있다면 마지막으로 전송
+                if buffer:
+                    yield f"data: {buffer}\n\n"
+                
+                # 스트리밍 종료 신호
+                yield "data: [DONE]\n\n"
+                
+            except Exception as e:
+                logger.error(f"스트리밍 생성 중 오류 발생: {str(e)}")
+                error_message = f"data: 죄송합니다. 응답 생성 중 오류가 발생했습니다: {str(e)}\n\n"
+                yield error_message
+                yield "data: [DONE]\n\n"
 
         return StreamingResponse(
             generate_stream(),
@@ -194,6 +205,7 @@ async def chat_search(
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "Content-Encoding": "none",
+                "X-Accel-Buffering": "no"  # Nginx 프록시 버퍼링 비활성화
             }
         )
         
@@ -266,4 +278,25 @@ async def get_documents_status(
         raise HTTPException(
             status_code=500,
             detail=f"문서 상태 조회 중 오류 발생: {str(e)}"
+        )
+
+@router.post("/chat/stop")
+async def stop_chat_generation(
+    request: StopGenerationRequest,
+    session: Session = Depends(get_current_session),
+    db: AsyncSession = Depends(get_db)
+):
+    """채팅 메시지 생성 중지"""
+    try:
+        logger.info(f"메시지 생성 중지 요청 - 프로젝트 ID: {request.project_id}")
+        # RAG 서비스 직접 초기화
+        rag_service = RAGService()
+        await rag_service.initialize(db)
+        await rag_service.stop_generation()
+        return {"status": "success", "message": "메시지 생성이 중지되었습니다."}
+    except Exception as e:
+        logger.error(f"메시지 생성 중지 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"메시지 생성 중지 중 오류 발생: {str(e)}"
         )

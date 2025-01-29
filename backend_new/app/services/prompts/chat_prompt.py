@@ -3,6 +3,9 @@ from .base import BasePrompt
 import re
 from enum import Enum
 
+import logging
+logger = logging.getLogger(__name__)
+
 class AnalysisType(Enum):
     TIME_SERIES = "시계열"
     COMPARISON = "비교"
@@ -112,7 +115,14 @@ class ChatPrompt(BasePrompt):
             del kwargs['patterns']
         super().__init__(streaming_callback=streaming_callback, **kwargs)
         self.query_analyzer = QueryAnalyzer()
+        self._should_stop = False  # 생성 중지 플래그 추가
         
+    async def stop_generation(self):
+        """메시지 생성 중지"""
+        self._should_stop = True
+        if hasattr(self.LLM, 'stop_generation'):
+            await self.LLM.stop_generation()
+
     async def analyze_async(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """문서 분석 및 질문 답변"""
         # 쿼리 분석 수행
@@ -146,24 +156,37 @@ class ChatPrompt(BasePrompt):
         return result
     async def analyze_streaming(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any], streaming: bool = False) -> AsyncGenerator[str, None]:
         """문서 분석 및 질문 답변"""
-        # 쿼리 분석 수행
-        analysis_types = self.query_analyzer.analyze(query)
-        
-        # 분석 결과를 query_analysis에 추가
-        query_analysis["analysis_types"] = [at.value for at in analysis_types]
-        
-        context = {
-            "content": content,
-            "query": query,
-            "keywords": keywords,
-            "query_analysis": query_analysis
-        }
-        
-        prompt = self._generate_prompt(content, query, keywords, query_analysis)
-        async for token in self.generate_content_streaming_async(prompt):
-            yield token
-        
-    
+        try:
+            # 쿼리 분석 수행
+            analysis_types = self.query_analyzer.analyze(query)
+            
+            # 분석 결과를 query_analysis에 추가
+            query_analysis["analysis_types"] = [at.value for at in analysis_types]
+            
+            context = {
+                "content": content,
+                "query": query,
+                "keywords": keywords,
+                "query_analysis": query_analysis
+            }
+            
+            prompt = self._generate_prompt(content, query, keywords, query_analysis)
+            
+            try:
+                async for token in self.generate_content_streaming_async(prompt):
+                    if self._should_stop:  # 중지 플래그 확인
+                        logger.info("메시지 생성이 중지되었습니다.")
+                        break
+                    if token:
+                        yield token
+                        
+            except Exception as e:
+                logger.error(f"스트리밍 응답 생성 중 오류 발생: {str(e)}")
+                raise
+                
+        except Exception as e:
+            logger.error(f"분석 스트리밍 중 오류 발생: {str(e)}")
+            raise
 
     def _get_analysis_type_prompt(self, analysis_type: AnalysisType) -> str:
         """분석 유형별 프롬프트 생성"""
