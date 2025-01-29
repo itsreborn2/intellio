@@ -204,7 +204,6 @@ export const ChatSection = () => {
               content: '새로운 컬럼이 추가되었습니다.'
             }
           })
-          setIsGenerating(false)
         }
       } catch (error) {
         console.error('테이블 분석 중 오류:', error)
@@ -217,8 +216,10 @@ export const ChatSection = () => {
             content: '죄송합니다. 분석 중 오류가 발생했습니다.'
           }
         })
+        
       } finally {
         dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false })
+        setIsGenerating(false)
       }
     } else {
       const streamingHandler = new StreamingMarkdownHandler();

@@ -123,23 +123,16 @@ class ChatPrompt(BasePrompt):
         if hasattr(self.LLM, 'stop_generation'):
             await self.LLM.stop_generation()
 
-    async def analyze_async(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+    async def analyze_async(self, content: str, user_query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """문서 분석 및 질문 답변"""
         # 쿼리 분석 수행
-        analysis_types = self.query_analyzer.analyze(query)
+        analysis_types = self.query_analyzer.analyze(user_query)
         
         # 분석 결과를 query_analysis에 추가
         query_analysis["analysis_types"] = [at.value for at in analysis_types]
         
-        context = {
-            "content": content,
-            "query": query,
-            "keywords": keywords,
-            "query_analysis": query_analysis
-        }
-        
-        prompt = self._generate_prompt(content, query, keywords, query_analysis)
-        result = await self.process_prompt_async(prompt, context)
+        prompt_context = self._generate_prompt(content, user_query, keywords, query_analysis)
+        result = await self.process_prompt_async(user_query, prompt_context)
             
         # 결과를 문자열로 변환
         if isinstance(result, (dict, list)):
@@ -154,26 +147,19 @@ class ChatPrompt(BasePrompt):
             result = str(result)
             
         return result
-    async def analyze_streaming(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any], streaming: bool = False) -> AsyncGenerator[str, None]:
+    async def analyze_streaming(self, content: str, user_query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any], streaming: bool = False) -> AsyncGenerator[str, None]:
         """문서 분석 및 질문 답변"""
         try:
             # 쿼리 분석 수행
-            analysis_types = self.query_analyzer.analyze(query)
+            analysis_types = self.query_analyzer.analyze(user_query)
             
             # 분석 결과를 query_analysis에 추가
             query_analysis["analysis_types"] = [at.value for at in analysis_types]
-            
-            context = {
-                "content": content,
-                "query": query,
-                "keywords": keywords,
-                "query_analysis": query_analysis
-            }
-            
-            prompt = self._generate_prompt(content, query, keywords, query_analysis)
+           
+            prompt_context = self._generate_prompt(content, user_query, keywords, query_analysis)
             
             try:
-                async for token in self.generate_content_streaming_async(prompt):
+                async for token in self.generate_content_streaming_async(user_query, prompt_context):
                     if self._should_stop:  # 중지 플래그 확인
                         logger.info("메시지 생성이 중지되었습니다.")
                         break
@@ -181,7 +167,7 @@ class ChatPrompt(BasePrompt):
                         yield token
                         
             except Exception as e:
-                logger.error(f"스트리밍 응답 생성 중 오류 발생: {str(e)}")
+                logger.error(f"스트리밍 응답 생성 중 오류 발생[Streaming]: {str(e)}")
                 raise
                 
         except Exception as e:
@@ -469,7 +455,7 @@ Root
         parts = [
             base_prompt,
             f"\n문서 내용:\n{content}",
-            f"\n질문:\n{query}"
+            #f"\n질문:\n{query}" # 사용자의 질문 제외.
         ]
         
         # 분석 지침 결합

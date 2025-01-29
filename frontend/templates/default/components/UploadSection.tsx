@@ -166,6 +166,7 @@ export const UploadSection = () => {
             content: `문서 업로드를 시작합니다. 총 ${acceptedFiles.length}개의 파일이 업로드됩니다.`
           }
         })
+        
 
         // 모든 파일의 상태를 UPLOADING으로 업데이트하고 테이블에 즉시 추가
         const initialTableData: TableResponse = {
@@ -214,6 +215,7 @@ export const UploadSection = () => {
           }
         })
 
+        // 업로드가 완료된 이후에는 업로드 성공/실패 여부에 따라 각 문서의 상태를 업데이트 해줘야한다.
         // 새 문서 목록 생성
         const newDocuments:IDocument[] = (response.document_ids || []).map((docId, index) => ({
           id: docId,

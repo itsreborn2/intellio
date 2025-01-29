@@ -4,7 +4,7 @@ from app.utils.common import measure_time_async
 
 class TableHeaderPrompt(BasePrompt):
     @measure_time_async
-    async def generate_title(self, query: str) -> str:
+    async def generate_title(self, user_query: str) -> str:
         """테이블 제목 생성
         
         Args:
@@ -14,11 +14,11 @@ class TableHeaderPrompt(BasePrompt):
             str: 생성된 테이블 제목
         """
         context = {
-            "query": query
+            "query": user_query
         }
         
-        prompt = self._generate_prompt(query)
-        return await self.process_prompt_async(prompt, context)
+        prompt_context = self._generate_prompt(user_query)
+        return await self.process_prompt_async(user_query, prompt_context)
 
     def _generate_prompt(self, query: str) -> str:
         """테이블 제목 생성용 프롬프트 생성
@@ -29,10 +29,12 @@ class TableHeaderPrompt(BasePrompt):
         Returns:
             str: 생성된 프롬프트
         """
+# 요구사항: 위에 들어감.
+#요청 내용:
+#{query}
+#
         return f"""사용자의 요청을 테이블 제목으로 변환해주세요.
 
-요청 내용:
-{query}
 
 요구사항:
 - 요청 내용을 2-3단어로 된 간단한 테이블 제목으로 만들어주세요

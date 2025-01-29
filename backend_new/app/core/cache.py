@@ -48,7 +48,7 @@ class RedisCache:
             return json.loads(cached)
         return None
     
-    def set(self, document_id: str, query: str, response: str):
+    def set(self, document_id: str, user_query: str, response: str):
         """응답을 캐시에 저장
         
         Args:
@@ -56,7 +56,7 @@ class RedisCache:
             query: 사용자 쿼리
             response: AI 응답
         """
-        key = self._generate_key(document_id, query)
+        key = self._generate_key(document_id, user_query)
         value = json.dumps({
             "response": response,
             "timestamp": datetime.now().isoformat(),

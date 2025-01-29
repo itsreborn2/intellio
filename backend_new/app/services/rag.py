@@ -551,7 +551,7 @@ class RAGService:
                 
                 # task 생성
                 task = analyze_mode_task.s(
-                    content=data["content"],
+                    chunk_content=data["content"],
                     query=query,
                     keywords=keywords,
                     query_analysis=query_analysis
@@ -680,7 +680,7 @@ class RAGService:
             # 사용자의 질문 + 문서 컨텍스트(relevant_chunks)
             chain_response = await self.chat_prompt.analyze_async(
                 content='\n\n'.join(doc_contexts),
-                query=query,
+                user_query=query,
                 keywords={
                     "keywords": self._extract_keywords('\n'.join(doc_contexts)),
                     "type": "extracted",
@@ -776,7 +776,7 @@ class RAGService:
             # 프롬프트 생성 및 응답
             async for token in self.chat_prompt.analyze_streaming(
                                     content='\n\n'.join(doc_contexts),
-                                    query=query,
+                                    user_query=query,
                                     keywords={
                                         "keywords": self._extract_keywords('\n'.join(doc_contexts)),
                                         "type": "extracted",

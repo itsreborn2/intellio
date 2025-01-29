@@ -1,17 +1,17 @@
 import asyncio
 from typing import Any, List, Optional, Union, Callable, Dict
-from dotenv import load_dotenv
+
 from langchain_core.messages import BaseMessage
 from langchain.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.language_models import BaseChatModel
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import BaseMessage, ChatMessage, ai
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 from langchain_core.outputs import ChatResult
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain.callbacks.manager import tracing_enabled, tracing_v2_enabled
+
 from langchain_openai import ChatOpenAI
 
 import torch
@@ -168,8 +168,8 @@ class LLMModels:
                     callback_handler=callback_handler,
                     **kwargs
                 )
-                logger.info(f"LLMModels : {model_info['model']} Streaming")
-            logger.info(f"LLMModels : {model_info['model']} API 초기화")
+                logger.warn(f"LLMModels : {model_info['model']} Streaming")
+            logger.warn(f"LLMModels : {model_info['model']} API 초기화")
 
     def get_llm(self, model_name: str, 
                     api_key: str, 
@@ -250,72 +250,102 @@ class LLMModels:
         return [model_info["model"] for model_info in self._llm_list]
         
 
-    def generate(self, prompt: str) -> Optional[ai.AIMessage]:
+    def generate(self, user_query: str, prompt_context: str) -> Optional[ai.AIMessage]:
         """동기 컨텐츠 생성"""
-        logger.info(f"Gemini API full[Sync] 호출 - 프롬프트: {prompt[:100]}...")
-        # 프롬프트 템플릿 설정
-        prompt_template = ChatPromptTemplate.from_template("{prompt}")
-        # 프롬프트 생성
-        messages = prompt_template.format_messages(prompt=prompt)
-        
-        # API 호출 및 전체 응답 받기
-        # 응답 타입(Google) : 'langchain_core.messages.ai.AIMessage'
-        full_response = self._llm.invoke(messages)
-        
-        logger.info(f"응답 타입: {type(full_response)}")
-        # content='## 분석 결과 어쩌고 저쩌고..'
-        # 응답 메세지 상세.
-        #  additional_kwargs={}
-        #  response_metadata={
-        #    'prompt_feedback': {'block_reason': 0, 'safety_ratings': []}, 
-        #    'finish_reason': 'STOP', 
-        #    'safety_ratings': [
-        #           {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
-        #           {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
-        #           {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
-        #           {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}]}
-        #  id='run-cd10c37c-c733-4607-a9e4-b543bbecbb2c-0' 
-        #  usage_metadata={'input_tokens': 1827, 'output_tokens': 818, 'total_tokens': 2645, 'input_token_details': {'cache_read': 0}}
-        logger.info(f"Gemini API 호출 완료")# : {full_response}")
+        try:
+            truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
+            logger.info(f"Gemini API full[Sync] 호출 - 프롬프트: {truncated[:100]}...")
+            # 프롬프트 템플릿 설정
+            system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
+            user_message_prompt = HumanMessagePromptTemplate.from_template(user_query)
+            prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
+            formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
 
-        # 여기서는 full_response를 리턴하자. 메세지를 재조립하는것은 위에서 알아서 할일.
-        logger.info(f"Gemini API 호출 완료")
+            
+            # API 호출 및 전체 응답 받기
+            # 응답 타입(Google) : 'langchain_core.messages.ai.AIMessage'
+            full_response = self._llm.invoke(formatted_messages)
+            
+            logger.info(f"응답 타입: {type(full_response)}")
+            # content='## 분석 결과 어쩌고 저쩌고..'
+            # 응답 메세지 상세.
+            #  additional_kwargs={}
+            #  response_metadata={
+            #    'prompt_feedback': {'block_reason': 0, 'safety_ratings': []}, 
+            #    'finish_reason': 'STOP', 
+            #    'safety_ratings': [
+            #           {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
+            #           {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
+            #           {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
+            #           {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}]}
+            #  id='run-cd10c37c-c733-4607-a9e4-b543bbecbb2c-0' 
+            #  usage_metadata={'input_tokens': 1827, 'output_tokens': 818, 'total_tokens': 2645, 'input_token_details': {'cache_read': 0}}
+            logger.info(f"Gemini API 호출 완료")# : {full_response}")
+
+            # 여기서는 full_response를 리턴하자. 메세지를 재조립하는것은 위에서 알아서 할일.
+            logger.info(f"Gemini API 호출 완료")
+        except Exception as e:
+            logger.error(f"Gemini API 호출 실패: {str(e)}")
+            raise
         return full_response
     
-    def generate_stream(self, prompt: str):
+    def generate_stream(self, user_query: str, prompt_context: str):
         """동기 스트리밍 컨텐츠 생성"""
-        logger.info(f"Gemini API stream[Sync] 호출 - 프롬프트: {prompt[:100]}...")
-        prompt_template = ChatPromptTemplate.from_template("{prompt}")
-        messages = prompt_template.format_messages(prompt=prompt)
+        truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
+        logger.info(f"Gemini API stream[Sync] 호출 - 프롬프트: {truncated}")
+        system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
+        user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+        prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
+        formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
         
         # 스트리밍 응답 생성
-        for chunk in self._llm_streaming.stream(messages):
+        for chunk in self._llm_streaming.stream(formatted_messages):
             yield chunk
     
-    def agenerate(self, prompt: str) -> Optional[ai.AIMessage]:
-        prompt_template = ChatPromptTemplate.from_template("{prompt}")
-        # 프롬프트 생성
-        messages = prompt_template.format_messages(prompt=prompt)
+    async def agenerate(self, user_query: str, prompt_context: str) -> Optional[ai.AIMessage]:
+        #prompt_template = ChatPromptTemplate.from_template("{prompt}")
+        ## 프롬프트 생성
+        #messages = prompt_template.format_messages(prompt=prompt)
+        try:
+            truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
+            logger.info(f"{self._llm_type} API [Async] 호출 - 프롬프트: {truncated}")
+            system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
+            user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+            prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
+            formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
+
+            # API 호출 및 전체 응답 받기
+            full_response = await self._llm.ainvoke(formatted_messages)
+        except Exception as e:
+            logger.error(f"Gemini API[agenerate] 호출 실패: {str(e)}")
+            raise
         
-        # API 호출 및 전체 응답 받기
-        full_response = self._llm.ainvoke(messages)
+
         return full_response
     
-    async def agenerate_stream(self, prompt: str):
+    async def agenerate_stream(self, user_query: str, prompt_context: str):
         """비동기 스트리밍 컨텐츠 생성"""
-        logger.info(f"{self._llm_type} API streaming[Async] 호출 - 프롬프트: {prompt[:100]}...")
+        truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
+        logger.info(f"{self._llm_type} API streaming[Async] 호출 - 프롬프트: {truncated}")
         self._should_stop = False
         logger.info(f"LANGCHAIN_TRACING_V2: {settings.LANGCHAIN_TRACING_V2}")
-        logger.info(f"LANGCHAIN_PROJECT: {settings.LANGCHAIN_PROJECT}")
-
+        #logger.info(f"LANGCHAIN_PROJECT: {settings.LANGCHAIN_PROJECT}")
         
         try:
             async with self._stream_lock:  # 스트림 세션 동기화
-                prompt_template = ChatPromptTemplate.from_template("{prompt}")
-                messages = prompt_template.format_messages(prompt=prompt)
+                #prompt_template = ChatPromptTemplate.from_template("{prompt}")
+                system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
+                # User 메시지 템플릿
+                user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+
+                # ChatPromptTemplate 구성
+                prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
+
+                # 메시지 생성
+                formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
                 
                 # 스트리밍 시작
-                stream = self._llm_streaming.astream(messages)
+                stream = self._llm_streaming.astream(formatted_messages)
                 
                 try:
                     # 현재 태스크 저장
@@ -335,15 +365,15 @@ class LLMModels:
                     self._current_task = None
                     
         except Exception as e:
-            logger.error(f"스트리밍 응답 생성 중 오류 발생: {str(e)}")
+            logger.error(f"스트리밍 응답 생성 중 오류 발생[Async]: {str(e)}")
             raise e
         finally:
             self._should_stop = False
             self._current_task = None
 
-    def generate_content_only(self, prompt: str) -> Optional[str]:
+    def generate_content_only(self, user_query: str, prompt_context: str) -> Optional[str]:
         """동기 컨텐츠 생성"""
-        response = self.generate(prompt=prompt)
+        response = self.generate(user_query, prompt_context)
         return response.content
         # logger.info(f"Gemini API[Sync] 호출 - 프롬프트: {prompt[:100]}...")
         # # 프롬프트 템플릿 설정

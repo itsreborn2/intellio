@@ -93,7 +93,7 @@ class TablePrompt(BasePrompt):
             logger.error(f"문서 분석 중 오류 발생: {str(e)}")
             return "문서 분석 중 예상치 못한 오류가 발생했습니다."
     @measure_time_async
-    def analyze(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+    def analyze(self, chunk_content: str, user_query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """문서 분석 및 정보 추출
         
         Args:
@@ -107,31 +107,31 @@ class TablePrompt(BasePrompt):
         """
         try:
             # 입력값 검증
-            if not content or not isinstance(content, str):
+            if not chunk_content or not isinstance(chunk_content, str):
                 return "문서 내용이 비어있거나 올바르지 않습니다."
-            if not query or not isinstance(query, str):
+            if not user_query or not isinstance(user_query, str):
                 return "질문이 비어있거나 올바르지 않습니다."
             if not isinstance(keywords, dict):
                 return "키워드가 올바르지 않은 형식입니다."
             if not isinstance(query_analysis, dict):
                 return "쿼리 분석 결과가 올바르지 않은 형식입니다."
             
-            # 컨텍스트 준비 및 검증
-            context = {
-                "content": content[:1000],  # 컨텍스트 크기 제한
-                "query": query,
-                "keywords": {k: v for k, v in keywords.items() if v},  # 빈 값 제거
-                "query_analysis": {
-                    "doc_type": query_analysis.get("doc_type", "general"),
-                    "focus_area": query_analysis.get("focus_area", "general"),
-                    "analysis_type": query_analysis.get("analysis_type", "basic")
-                }
-            }
+            # # 컨텍스트 준비 및 검증
+            # context = {
+            #     "content": chunk_content[:1000],  # 컨텍스트 크기 제한
+            #     "query": user_query,
+            #     "keywords": {k: v for k, v in keywords.items() if v},  # 빈 값 제거
+            #     "query_analysis": {
+            #         "doc_type": query_analysis.get("doc_type", "general"),
+            #         "focus_area": query_analysis.get("focus_area", "general"),
+            #         "analysis_type": query_analysis.get("analysis_type", "basic")
+            #     }
+            # }
             
             # 프롬프트 생성 및 처리
             try:
-                prompt = self._generate_prompt(content, query, keywords, query_analysis)
-                result = self.process_prompt(prompt, context)
+                prompt = self._generate_prompt(chunk_content, user_query, keywords, query_analysis)
+                result = self.process_prompt(user_query, prompt)
                 # result는 dictionary 형식이어야함.
                 # result에는 content와 각종 meta data와 같은 정보가 있어야함.
                 # 아래에서 저런식으로 이중, 삼중 파싱하는 형태를 취하면 안됨.
@@ -401,6 +401,9 @@ class TablePrompt(BasePrompt):
 - 핵심 통계와 인사이트를 "### 주요 발견" 섹션에서 설명
 - 전체 요약과 시사점을 "## 결론" 섹션에서 제시"""
 
+# 분석할 내용: 다음에 들어갔던 것.
+# 분석 요청:
+# {query}
     def _generate_prompt(self, content: str, query: str, keywords: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
         """테이블 모드용 프롬프트 생성
         
@@ -439,9 +442,6 @@ class TablePrompt(BasePrompt):
 분석할 내용:
 {content}
 
-분석 요청:
-{query}
-
 문서 정보:
 {doc_info}
 
@@ -469,7 +469,7 @@ class TablePrompt(BasePrompt):
         # 프롬프트 생성
         prompt = base_instruction.format(
             content=content,
-            query=query,
+            #query=query,
             doc_info=doc_info,
             extraction_context=extraction_context
         )

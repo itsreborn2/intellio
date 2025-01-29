@@ -145,7 +145,7 @@ async def test_chat_mode(services):
     # 응답 생성
     chat_response = await chat_prompt.analyze_async(
         content="\n".join(context_texts),
-        query=chat_query,
+        user_query=chat_query,
         keywords=keywords,
         query_analysis=query_analysis
     )

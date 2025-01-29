@@ -114,7 +114,7 @@ class BasePrompt:
             expire_time=cache_expire or settings.REDIS_CACHE_EXPIRE
         )
 
-    async def process_prompt_async(self, prompt: str, context: Dict[str, Any]) -> str:
+    async def process_prompt_async(self, user_query: str, prompt_context:str) -> str:
         """프롬프트 처리 기본 메서드
         
         Args:
@@ -126,25 +126,21 @@ class BasePrompt:
         """
         try:
             # 캐시 키 생성
-            cache_key = f"prompt:{hash(prompt)}"
-            logger.info(f"[process_prompt_async] cache_key : {cache_key}")
-            # 캐시된 결과 확인
-            cached_result = await self.async_cache.get(cache_key, prompt)
-            if cached_result:
-                logger.info(f"[process_prompt_async] cached_result : {cached_result}")
-                return cached_result
+            # cache_key = f"prompt:{hash(user_query)}"
+            # logger.info(f"[process_prompt_async] cache_key : {cache_key}")
+            # # 캐시된 결과 확인
+            # cached_result = await self.async_cache.get(cache_key, user_query)
+            # if cached_result:
+            #     logger.info(f"[process_prompt_async] cached_result : {cached_result}")
+            #     return cached_result
             # Gemini API로 시도
             try:
                 #self.LLM.change_llm("kf-deberta", None)
                 model_info = self.LLM.get_current_llm_info()
                 model_name = model_info["model"]
-                logger.info(f"{model_name} API 호출 - 프롬프트: {prompt[:100]}...")
-                #response = await self.gemini_api._llm_chain.generate_content_async(prompt)
-                if self.prompt_mode == "chat":
-                    response = await self.generate_content_streaming_async(prompt)
-                else:   
-                    response = await self.generate_content_async(prompt)
-                logger.info(f"{model_name} API 호출 완료")
+                logger.info(f"[process_prompt_async] {model_name} API 호출 - 프롬프트: {user_query[:100]}...")
+                response = await self.generate_content_async(user_query, prompt_context)
+                logger.info(f"[process_prompt_async] {model_name} API 호출 완료")
 
                 #response는 그냥 문자열이다.
                 if response :
@@ -154,10 +150,10 @@ class BasePrompt:
                     try:
                         if text.startswith('{') and text.endswith('}'):
                             parsed = json.loads(text)
-                            await self.async_cache.set(cache_key, prompt, parsed)
+                            #await self.async_cache.set(cache_key, prompt_context, parsed)
                             return json.dumps(parsed, ensure_ascii=False)
 
-                        await self.async_cache.set(cache_key, prompt, text)
+                        #await self.async_cache.set(cache_key, prompt_context, text)
                         return text
                     except json.JSONDecodeError:
                         logger.warning(f"JSON 파싱 실패: {text[:100]}...")
@@ -180,13 +176,8 @@ class BasePrompt:
                 #     return result
             except Exception as e:
                 logger.error(f"{model_name} API 오류: {str(e)}")
-                # OpenAI로 폴백
-                result = await self._process_with_openai(prompt)
-                if result:
-                    await self.cache.set(cache_key, prompt, result)
-                    return result
-                
-            raise Exception("모든 AI 서비스 호출 실패")
+                                
+                raise Exception("모든 AI 서비스 호출 실패")
             
         except Exception as e:
             logger.error(f"프롬프트 처리 실패[async]: {str(e)}")
@@ -195,7 +186,7 @@ class BasePrompt:
             # 리소스 정리
             await self._cleanup()
     @measure_time_async
-    def process_prompt(self, prompt: str, context: Dict[str, Any]) -> str:
+    def process_prompt(self, user_query:str, prompt_context: str) -> str:
         """프롬프트 처리 기본 메서드
         
         Args:
@@ -207,29 +198,29 @@ class BasePrompt:
         """
         try:
             # 캐시 키 생성
-            cache_key = f"prompt:{hash(prompt)}"
+            # cache_key = f"prompt:{hash(user_query)}" # 해시키를 사용자 질문과 매칭.
             
-            #캐시된 결과 확인
-            start_time = time.time()
-            cached_result = self.sync_cache.get(cache_key, prompt)
-            end_time = time.time()
-            execution_time = end_time - start_time
-            logger.info(f"캐시 확인 시간: {execution_time:.2f} 초")
-            if cached_result:
-                logger.info(f"hit cache")
-                return cached_result
+            # #캐시된 결과 확인
+            # start_time = time.time()
+            # cached_result = self.sync_cache.get(cache_key, user_query)
+            # end_time = time.time()
+            # execution_time = end_time - start_time
+            # logger.info(f"캐시 확인 시간: {execution_time:.2f} 초")
+            # if cached_result:
+            #     logger.info(f"hit cache")
+            #     return cached_result
             
             # Gemini API로 시도
             try:
                 #logger.info(f"Gemini API 호출 - 프롬프트: {prompt[:20]}...")
                 start_time = time.time()
-                content = self.generate_content(prompt)
+                content = self.generate_content(user_query, prompt_context)
                 end_time = time.time()
                 execution_time = end_time - start_time
                 logger.info(f"Gemini API 호출 시간: {execution_time:.2f} 초")
 
                 if content:
-                    self.sync_cache.set(cache_key, prompt, content)
+                    #self.sync_cache.set(cache_key, user_query, content) # 사용자의 질문:AI응답을 캐시에 저장.
                     return content
 
                 logger.error("Gemini API 응답이 비어있음")
@@ -255,10 +246,10 @@ class BasePrompt:
                 await self.openai_client.close()
         except Exception as e:
             logger.error(f"리소스 정리 중 오류 발생: {str(e)}")
-    def generate_content(self, prompt: str) -> str:
+    def generate_content(self,  user_query: str, prompt_context: str) -> str:
         """LLM API를 사용하여 컨텐츠 생성"""
         try:
-            response: ai.AIMessage = self.LLM.generate(prompt)        
+            response: ai.AIMessage = self.LLM.generate(user_query, prompt_context)        
             if response:
                 # 응답 텍스트 정리
                 text = response.content
@@ -269,7 +260,7 @@ class BasePrompt:
         except Exception as e:
             self.LLM.select_next_llm() # 다음 우선순위 llm 선택
             try:
-                response: ai.AIMessage = self.LLM.generate(prompt)        
+                response: ai.AIMessage = self.LLM.generate(user_query, prompt_context)        
                 if response:
                     # 응답 텍스트 정리
                     text = response.content
@@ -278,10 +269,10 @@ class BasePrompt:
             except Exception as e:
                 #여기서도 에러나면 raise
                 raise
-    async def generate_content_async(self, prompt: str) -> str:
+    async def generate_content_async(self, user_query: str, prompt_context: str) -> str:
         """LLM API를 사용하여 컨텐츠 생성"""
         try:
-            response: ai.AIMessage = await self.LLM.agenerate(prompt)        
+            response: ai.AIMessage = await self.LLM.agenerate(user_query, prompt_context)        
             if response:
                 text = response.content
                 return text
@@ -289,7 +280,7 @@ class BasePrompt:
         except Exception as e:
             self.LLM.select_next_llm() # 다음 우선순위 llm 선택
             try:
-                response: ai.AIMessage = await self.LLM.agenerate(prompt)        
+                response: ai.AIMessage = await self.LLM.agenerate(user_query, prompt_context)        
                 if response:
                     # 응답 텍스트 정리
                     text = response.content
@@ -298,16 +289,17 @@ class BasePrompt:
             except Exception as e:
                 #여기서도 에러나면 raise
                 raise
-    async def generate_content_streaming_async(self, prompt: str):
+    async def generate_content_streaming_async(self, user_query: str, prompt_context: str):
         """LLM API를 사용하여 streaming 컨텐츠 생성"""
+        
         try:
-            async for chunk in self.LLM.agenerate_stream(prompt=prompt):
+            async for chunk in self.LLM.agenerate_stream(user_query, prompt_context):
                 if hasattr(chunk, 'content'):
                     yield chunk.content
         except Exception as e:
             self.LLM.select_next_llm() # 다음 우선순위 llm 선택
             try:
-                async for chunk in self.LLM.agenerate_stream(prompt=prompt):
+                async for chunk in self.LLM.agenerate_stream(user_query, prompt_context):
                     if hasattr(chunk, 'content'):
                         yield chunk.content
             except Exception as e:
@@ -326,10 +318,10 @@ class BasePrompt:
         """
         try:
             # 캐시된 응답이 있는지 확인
-            cached_response = await self.async_cache.get(self.document_id, prompt)
-            if cached_response:
-                logger.debug(f"캐시된 응답 사용 (문서 ID: {self.document_id})")
-                return cached_response
+            # cached_response = await self.async_cache.get(self.document_id, prompt)
+            # if cached_response:
+            #     logger.debug(f"캐시된 응답 사용 (문서 ID: {self.document_id})")
+            #     return cached_response
 
             # OpenAI API 호출
             logger.debug(f"OpenAI API 호출 시작 (문서 ID: {self.document_id})")
@@ -350,7 +342,7 @@ class BasePrompt:
                 result = response.choices[0].message.content.strip()
                 # 응답을 캐시에 저장
                 try:
-                    await self.async_cache.set(self.document_id, prompt, result)
+                    #await self.async_cache.set(self.document_id, prompt, result)
                     logger.debug(f"응답 캐시 저장 완료 (문서 ID: {self.document_id})")
                 except Exception as cache_error:
                     logger.warning(f"캐시 저장 실패 (문서 ID: {self.document_id}): {str(cache_error)}")

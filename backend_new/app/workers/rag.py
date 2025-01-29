@@ -24,10 +24,10 @@ def init_worker(**kwargs):
     soft_time_limit=30,
     time_limit=35
 )
-def analyze_mode_task(content, query, keywords, query_analysis):
+def analyze_mode_task(chunk_content, query, keywords, query_analysis):
     """테이블 분석 작업을 수행하는 Celery task
         Args:
-        content: 분석할 테이블 내용
+        content: 분석할 테이블 내용. 문서의 청크 내용이 들어있음.
         query: 사용자 질의
         keywords: 키워드 정보 (선택)
         query_analysis: 질의 분석 정보 (선택)
@@ -39,17 +39,17 @@ def analyze_mode_task(content, query, keywords, query_analysis):
     logger.info("analyze_mode_task")
     logger.info(f"Query: {query}")
     logger.info(f"Keywords: {json.dumps(keywords, ensure_ascii=False)}")
-    logger.info(f"Content length: {len(content) if content else 0}")
+    logger.info(f"Content length: {len(chunk_content) if chunk_content else 0}")
     
 
     try:
         table_prompt = TablePrompt()
         logger.info(f"테이블 분석 태스크 시작 [ThreadID: {threading.get_ident()}, ProcessID: {os.getpid()}]")
-        logger.info(f"컨텐츠 길이: {len(content)}, 쿼리: {query}")
+        logger.info(f"컨텐츠 길이: {len(chunk_content)}, 쿼리: {query}")
         
         result = table_prompt.analyze(
-            content=content,
-            query=query,
+            chunk_content=chunk_content,
+            user_query=query,
             keywords=keywords,
             query_analysis=query_analysis
         )
