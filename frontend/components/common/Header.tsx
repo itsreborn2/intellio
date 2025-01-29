@@ -21,8 +21,10 @@ import { FontSettings } from "@/components/settings/FontSettings"
 import { LoginButton } from "@/components/auth/LoginButton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { useRouter } from "next/navigation"
 
 export const Header = ({ className }: { className?: string }) => {
+  const router = useRouter()
   const { state, dispatch } = useApp()
   const auth = useAuth()
   const { isAuthenticated, name, email, logout } = auth
@@ -92,6 +94,14 @@ export const Header = ({ className }: { className?: string }) => {
       setEditingTitle(state.projectTitle || 'Untitled Project')
     }
   }
+
+  const handleLogout = async () => {
+    await logout()
+    // AppContext 상태 초기화
+    dispatch({ type: actionTypes.SET_INITIAL_STATE })
+    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: '' })
+  }
+
   useEffect(() => {
     //setEditingTitle(state.projectTitle || 'Untitled Project')
     console.log('[Header1] Auth State Updated:', {
@@ -144,7 +154,7 @@ export const Header = ({ className }: { className?: string }) => {
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={logout}>
+                <DropdownMenuItem onClick={handleLogout}>
                   로그아웃
                 </DropdownMenuItem>
               </DropdownMenuContent>

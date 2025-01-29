@@ -167,7 +167,7 @@ async def oauth_callback(
     
     try:
         # state 검증 (네이버의 경우)
-        if provider == "naver" and state != settings.NAVER_STATE:
+        if provider == "naver" and state != settings.NAVER_OAUTH_STATE:
             raise HTTPException(
                 status_code=400,
                 detail="Invalid state parameter"

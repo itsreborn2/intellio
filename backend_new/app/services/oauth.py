@@ -47,9 +47,9 @@ class OAuthService:
                     'https://oauth2.googleapis.com/token',
                     data={
                         'code': code,
-                        'client_id': settings.GOOGLE_CLIENT_ID,
-                        'client_secret': settings.GOOGLE_CLIENT_SECRET,
-                        'redirect_uri': settings.GOOGLE_REDIRECT_URI,
+                        'client_id': settings.GOOGLE_OAUTH_CLIENT_ID,
+                        'client_secret': settings.GOOGLE_OAUTH_CLIENT_SECRET,
+                        'redirect_uri': settings.GOOGLE_OAUTH_REDIRECT_URI,
                         'grant_type': 'authorization_code'
                     }
                 )
@@ -79,10 +79,10 @@ class OAuthService:
                     'https://nid.naver.com/oauth2.0/token',
                     data={
                         'grant_type': 'authorization_code',
-                        'client_id': settings.NAVER_CLIENT_ID,
-                        'client_secret': settings.NAVER_CLIENT_SECRET,
+                        'client_id': settings.NAVER_OAUTH_CLIENT_ID,
+                        'client_secret': settings.NAVER_OAUTH_CLIENT_SECRET,
                         'code': code,
-                        'state': settings.NAVER_STATE
+                        'state': settings.NAVER_OAUTH_STATE
                     }
                 )
                 token_data = response.json()
@@ -132,13 +132,13 @@ class OAuthService:
         backend_url = settings.FASTAPI_URL
         """OAuth 인증 URL 생성"""
         if provider == "naver":
-            state = settings.NAVER_STATE or "RANDOM"  # state 값 설정
+            state = settings.NAVER_OAUTH_STATE or "RANDOM"  # state 값 설정
             
             return (
                 f"https://nid.naver.com/oauth2.0/authorize"
                 f"?response_type=code"
-                f"&client_id={settings.NAVER_CLIENT_ID}"
-                f"&redirect_uri={settings.NAVER_REDIRECT_URI}"
+                f"&client_id={settings.NAVER_OAUTH_CLIENT_ID}"
+                f"&redirect_uri={settings.NAVER_OAUTH_REDIRECT_URI}"
                 f"&state={state}"
                 f"&scope=name email"
             )
@@ -146,16 +146,16 @@ class OAuthService:
             return (
                 f"https://accounts.google.com/o/oauth2/v2/auth"
                 f"?response_type=code"
-                f"&client_id={settings.GOOGLE_CLIENT_ID}"
-                f"&redirect_uri={settings.GOOGLE_REDIRECT_URI}"
+                f"&client_id={settings.GOOGLE_OAUTH_CLIENT_ID}"
+                f"&redirect_uri={settings.GOOGLE_OAUTH_REDIRECT_URI}"
                 f"&scope=email profile"
             )
         elif provider == "kakao":
             return (
                 f"https://kauth.kakao.com/oauth/authorize"
                 f"?response_type=code"
-                f"&client_id={settings.KAKAO_CLIENT_ID}"
-                f"&redirect_uri={settings.KAKAO_REDIRECT_URI}"
+                f"&client_id={settings.KAKAO_OAUTH_CLIENT_ID}"
+                f"&redirect_uri={settings.KAKAO_OAUTH_REDIRECT_URI}"
                 f"&scope=profile_nickname account_email"
             )
         else:

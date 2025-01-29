@@ -67,8 +67,6 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
   const [showAgeColumn, setShowAgeColumn] = useState(true);
   const [countCol, setCountCol] = useState(0);
   const [countRow, setCountRow] = useState(0);
-  // 굳이 제어할 필요가 있나?
-  // state로 알아서 업데이트하면 되잖아..??
   
   const tableData = useMemo(() => {
     // 기본 데이터

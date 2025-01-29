@@ -166,40 +166,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
 
       // 테이블 데이터가 비어있을 때만 초기화
       let updatedTableData = state.analysis.tableData;
-      // if (!updatedTableData.columns || updatedTableData.columns.length === 0) {
-      //   const documentCells = action.payload
-      //     .filter(doc => doc.project_id === state.currentProjectId)
-      //     .map(doc => ({
-      //       doc_id: doc.id,
-      //       content: doc.filename
-      //     }));
-
-      //   updatedTableData = {
-      //     columns: documentCells.length > 0 ? [
-      //       {
-      //         header: {
-      //           name: 'Document',
-      //           prompt: '문서 이름을 표시합니다'
-      //         },
-      //         cells: documentCells
-      //       }
-      //     ] : []
-      //   };
-      // } else {
-      //   // Document 칼럼의 cells만 업데이트
-      //   const documentColumn = updatedTableData.columns.find(col => col.header.name === 'Document');
-      //   if (documentColumn) {
-      //     const existingDocIds = new Set(documentColumn.cells.map(cell => cell.doc_id));
-      //     const newCells = action.payload
-      //       .filter(doc => doc.project_id === state.currentProjectId && !existingDocIds.has(doc.id))
-      //       .map(doc => ({
-      //         doc_id: doc.id,
-      //         content: doc.filename
-      //       }));
-
-      //     documentColumn.cells = [...documentColumn.cells, ...newCells];
-      //   }
-      // }
 
       console.log('SET_DOCUMENTS - 상태 업데이트:', {
         totalDocumentsCount: Object.keys(newDocuments).length,

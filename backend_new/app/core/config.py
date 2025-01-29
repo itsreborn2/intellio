@@ -88,9 +88,9 @@ class Settings(BaseSettings):
     
     # OAuth Settings
     # Kakao
-    KAKAO_CLIENT_ID: str = os.getenv("KAKAO_CLIENT_ID", "")
-    KAKAO_CLIENT_SECRET: str = os.getenv("KAKAO_CLIENT_SECRET", "")
-    KAKAO_REDIRECT_URI: str = os.getenv("KAKAO_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/kakao/callback")
+    KAKAO_OAUTH_CLIENT_ID: str = os.getenv("KAKAO_OAUTH_CLIENT_ID", "")
+    KAKAO_OAUTH_CLIENT_SECRET: str = os.getenv("KAKAO_OAUTH_CLIENT_SECRET", "")
+    KAKAO_OAUTH_REDIRECT_URI: str = os.getenv("KAKAO_OAUTH_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/kakao/callback")
 
     # Google OAuth
     GOOGLE_OAUTH_CLIENT_ID: str = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
@@ -98,10 +98,10 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_REDIRECT_URI: str = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/google/callback")
 
     # Naver
-    NAVER_CLIENT_ID: str = os.getenv("NAVER_CLIENT_ID", "")
-    NAVER_CLIENT_SECRET: str = os.getenv("NAVER_CLIENT_SECRET", "")
-    NAVER_REDIRECT_URI: str = os.getenv("NAVER_REDIRECT_URI")
-    NAVER_STATE: str = os.getenv("NAVER_STATE", "RANDOM_STATE")
+    NAVER_OAUTH_CLIENT_ID: str = os.getenv("NAVER_OAUTH_CLIENT_ID", "")
+    NAVER_OAUTH_CLIENT_SECRET: str = os.getenv("NAVER_OAUTH_CLIENT_SECRET", "")
+    NAVER_OAUTH_REDIRECT_URI: str = os.getenv("NAVER_OAUTH_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/naver/callback")
+    NAVER_OAUTH_STATE: str = os.getenv("NAVER_OAUTH_STATE", "RANDOM_STATE")
 
     # JWT Settings for OAuth
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-oauth-jwt-secret-key")
