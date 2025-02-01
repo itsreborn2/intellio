@@ -1,10 +1,19 @@
 from typing import List, Dict, Optional, Tuple
-from .base import BaseRetriever, RetrieverConfig
-from .models import Document, RetrievalResult
-from pydantic import BaseModel
-from app.services.embedding import EmbeddingService
 import logging
 from uuid import UUID
+from .base import BaseRetriever, RetrieverConfig
+from .models import Document, RetrievalResult
+
+from app.services.vector_store_manager import VectorStoreManager
+from pydantic import BaseModel
+from app.services.embedding import EmbeddingService
+from app.core.config import settings
+from app.services.embedding_models import EmbeddingModelManager, EmbeddingProviderFactory, EmbeddingModelConfig, EmbeddingModelType
+
+from langchain_community.vectorstores import Pinecone
+from langchain_core.documents import Document as LangchainDocument
+
+import pinecone
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +30,7 @@ class SemanticRetriever(BaseRetriever):
         super().__init__(config)
         self.config = config
         self.embedding_service = EmbeddingService()
+        self.embedding_model_manager = EmbeddingModelManager()
         
     async def retrieve(
         self,
@@ -32,8 +42,6 @@ class SemanticRetriever(BaseRetriever):
         try:
             # 기본값 설정
             _top_k = top_k or self.config.top_k
-            document_ids = filters.get("document_ids") if filters else None
-            
             # AI 삭제금지.
             # 검색 수행. 검색 결과는 점수 순으로 정렬되어 있음.
             # search_similar() 리턴값
@@ -48,36 +56,36 @@ class SemanticRetriever(BaseRetriever):
             # 	    "chunk_index": batch_start_idx + i,
             # 	    "text": chunk
             #   }
-            search_results = await self.embedding_service.search_similar(
+
+            # VectorStoreManager 사용
+            vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type())
+            search_results = vs_manager.search(
                 query=query,
                 top_k=_top_k * self.config.search_multiplier,  # 더 많은 결과를 가져와서 필터링
-                min_score=self.config.min_score,
-                document_ids=document_ids
+                filters=filters
             )
+            #search_results = [(Document, score), (Document, score), ...]
+            # Document.metadata는 저장할때 넣었던 metadata와 같은 구조다.
             
             if not search_results:
                 logger.warning("검색 결과가 없습니다.")
                 return RetrievalResult(documents=[])
+            logger.info(f"검색된 총 매치 수: {len(search_results)}")
             
-            # Document 객체로 변환
+            # 상위 K개만 선택하고 Document 객체만 추출
+            actual_top_k = min(len(search_results), _top_k)
+            filtered_results = search_results[:actual_top_k]
+            
+            # Document 객체에 score 정보를 포함시킴
             documents = []
-            for result in search_results:
-                metadata = result["metadata"]
-                documents.append(
-                    Document(
-                        content=metadata.get("text", ""),
-                        metadata={
-                            "document_id": metadata.get("document_id"),
-                            "page_number": metadata.get("page_number", 0), #없음
-                            "chunk_index": metadata.get("chunk_index"),
-                            "source": metadata.get("source") # 없음.
-                        },
-                        score=result["score"]
-                    )
+            for doc, score in filtered_results:
+                # 기존 Document 객체의 속성을 복사하여 새로운 Document 생성
+                new_doc = Document(
+                    page_content=doc.page_content,
+                    metadata=doc.metadata.copy(),  # metadata는 깊은 복사
+                    score=score  # score 추가
                 )
-            
-            # 상위 K개만 선택
-            documents = documents[:_top_k]
+                documents.append(new_doc)
             
             # 쿼리 분석 정보 추가
             query_analysis = {

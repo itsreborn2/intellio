@@ -456,11 +456,11 @@ class TablePrompt(BasePrompt):
 5. 응답은 한국어로 작성해줘."""
 
         # 문서 정보 문자열 생성
-        doc_info = f"""문서 유형: {keywords.get('document_type', '일반')}
-문서 제목: {keywords.get('title', '제목 없음')}
-작성일자: {keywords.get('date', '날짜 없음')}
-분석 초점: {query_analysis.get('focus_area', '일반')}
-분석 유형: {query_analysis.get('doc_type', '일반')}"""
+        doc_info = f"""분석 초점: {query_analysis.get('focus_area', '일반')}
+분석 유형: {query_analysis.get('doc_type', '일반')}
+키워드 추출 방식: {keywords.get('type', 'extracted')}
+키워드 출처: {keywords.get('source', 'document_content')}
+주요 키워드: {', '.join([f"{kw['text']}({kw['frequency']})" for kw in keywords.get('keywords', [])][:5])}"""
 
         # 추출 컨텍스트 가져오기
         extraction_context = self._get_extraction_context(query_analysis, keywords)

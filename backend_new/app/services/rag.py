@@ -22,8 +22,12 @@ from app.utils.common import measure_time_async
 from app.workers.rag import analyze_mode_task
 from celery import group
 
+from app.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
+from app.services.retrievers.models import RetrievalResult
+
+from langchain_core.documents import Document as LangchainDocument
 # logging 설정
-logger = logger
+
 
 # 문서 상태 상수
 DOCUMENT_STATUS_REGISTERED = 'REGISTERED'
@@ -259,36 +263,38 @@ class RAGService:
             query = re.sub(pattern, replacement, query)
 
         return query
+    
+    # AI삭제금지.
+    # 안쓰이는 함수
+    # async def _search_document_chunks(self, doc_id: str, query: str, top_k: int) -> List[Dict[str, Any]]:
+    #     """단일 문서의 청크 검색 (에러 처리 포함)"""
+    #     try:
+    #         # 쿼리 분석
+    #         query_analysis = self._analyze_query(query)
 
-    async def _search_document_chunks(self, doc_id: str, query: str, top_k: int) -> List[Dict[str, Any]]:
-        """단일 문서의 청크 검색 (에러 처리 포함)"""
-        try:
-            # 쿼리 분석
-            query_analysis = self._analyze_query(query)
+    #         # 증권사 관련 쿼리인 경우, 문서 시작 부분도 포함
+    #         if query_analysis["requires_all_docs"] or query_analysis["query_type"] == "securities":
+    #             first_chunk = self.embedding_service.get_first_chunk(doc_id)
+    #             chunks = await self.embedding_service.search_similar(
+    #                 query=query,
+    #                 document_ids=[doc_id],
+    #                 top_k=min(self.max_chunks_per_doc - 1, self.chunk_multiplier * top_k)
+    #             )
+    #             if first_chunk:
+    #                 # 첫 번째 청크를 앞에 추가 (증권사 정보가 주로 여기에 있음)
+    #                 return [first_chunk] + (chunks or [])
 
-            # 증권사 관련 쿼리인 경우, 문서 시작 부분도 포함
-            if query_analysis["requires_all_docs"] or query_analysis["query_type"] == "securities":
-                first_chunk = self.embedding_service.get_first_chunk(doc_id)
-                chunks = await self.embedding_service.search_similar(
-                    query=query,
-                    document_ids=[doc_id],
-                    top_k=min(self.max_chunks_per_doc - 1, self.chunk_multiplier * top_k)
-                )
-                if first_chunk:
-                    # 첫 번째 청크를 앞에 추가 (증권사 정보가 주로 여기에 있음)
-                    return [first_chunk] + (chunks or [])
+    #         # 일반 쿼리
+    #         chunks = await self.embedding_service.search_similar(
+    #             query=query,
+    #             document_ids=[doc_id],
+    #             top_k=min(self.max_chunks_per_doc, self.chunk_multiplier * top_k)
+    #         )
+    #         return chunks or []
 
-            # 일반 쿼리
-            chunks = await self.embedding_service.search_similar(
-                query=query,
-                document_ids=[doc_id],
-                top_k=min(self.max_chunks_per_doc, self.chunk_multiplier * top_k)
-            )
-            return chunks or []
-
-        except Exception as e:
-            logger.error(f"문서 {doc_id} 검색 중 오류 발생: {str(e)}")
-            return []
+    #     except Exception as e:
+    #         logger.error(f"문서 {doc_id} 검색 중 오류 발생: {str(e)}")
+    #         return []
 
     async def _get_first_chunks_parallel(self, doc_ids: List[str]) -> List[Dict[str, Any]]:
         """여러 문서의 첫 번째 청크 병렬 검색"""
@@ -396,7 +402,7 @@ class RAGService:
         return filtered_chunks
 
     @measure_time_async
-    async def _get_relevant_chunks(self, query: str, top_k: int = 5, document_ids: List[UUID] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    async def _get_relevant_chunks(self, query: str, top_k: int = 5, document_ids: List[UUID] = None) -> Tuple[RetrievalResult, Dict[str, Any]]:
         """관련 문서 청크 검색 및 패턴 분석"""
         logger.info(f"청크 검색 시작 - 쿼리: {query}, top_k: {top_k}")
         
@@ -424,15 +430,40 @@ class RAGService:
                 logger.info("챗 모드: 청크 수 3배 증가")
                 
             logger.info(f"검색할 청크 수: {search_top_k}")
+            logger.info(f"123")
             
             # 문서 검색
-            all_chunks = await self.embedding_service.search_similar(
-                query=normalized_query,
-                document_ids=doc_ids_str if doc_ids_str else None,
-                top_k=search_top_k
-            )
+            # all_chunks = await self.embedding_service.search_similar(
+            #     query=normalized_query,
+            #     document_ids=doc_ids_str if doc_ids_str else None,
+            #     top_k=search_top_k
+            # )
+            semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
+                embedding_model=self.embedding_service.current_model_config.name,
+                min_score=0.6,
+                search_multiplier=3
+            ))
             
-            logger.info(f"검색된 총 청크 수: {len(all_chunks)}")
+            logger.info(f"semantic_retriever 전")
+            filtersMetadata = {"document_ids": doc_ids_str} if doc_ids_str else None
+            all_chunks:RetrievalResult = await semantic_retriever.retrieve(
+                query=normalized_query, 
+                top_k=search_top_k,
+                filters=filtersMetadata
+            )
+            logger.info(f"semantic_retriever 후")
+            # 상위 3개의 문서 텍스트 출력
+            for idx, doc in enumerate(all_chunks.documents[:3], start=1):
+                # 삭제금지.
+                 # content: str = Field(..., description="문서의 실제 내용")
+                # metadata: Dict = Field(default_factory=dict, description="문서의 메타데이터 (ID, 제목, 페이지 번호 등)")
+                # score: Optional[float] = Field(None, description="검색 결과의 관련성 점수")
+                logger.warning(f"문서 #{idx}")
+                score_str = f"{doc.score:.4f}" if doc.score is not None else "0.0000"
+                logger.warning(f"- 유사도 점수: {score_str}")
+                logger.warning(f"- 메타데이터: {json.dumps(doc.metadata, ensure_ascii=False)}")
+                logger.warning(f"- 내용: {doc.page_content[:100]}...")  # 내용이 너무 길 수 있으므로 200자로 제한
+            logger.info(f"검색된 총 청크 수: {len(all_chunks.documents)}")
             
             # 청크 필터링
             # if all_chunks:
@@ -447,8 +478,9 @@ class RAGService:
                 
             return all_chunks, query_analysis
         except Exception as e:
+            
             error_msg = str(e)
-            logger.error(f"청크 검색 중 오류 발생: {error_msg}", exc_info=True)
+            logger.exception(f"청크 검색 중 오류 발생: {error_msg}")
             
             # 상세한 오류 메시지
             if "insufficient_quota" in error_msg:
@@ -633,11 +665,11 @@ class RAGService:
                         ) for column in columns for cell in column.cells
                     ])
                 except Exception as e:
-                    logger.error(f"히스토리 저장 실패: {str(e)}")
+                    logger.exception(f"히스토리 저장 실패: {str(e)}")
 
             return TableResponse(columns=columns)
         except Exception as e:
-            logger.error(f"테이블 모드 처리 실패: {str(e)}")
+            logger.exception(f"테이블 모드 처리 실패: {str(e)}")
             raise
 
     async def _handle_chat_mode(self, query: str, top_k: int = 5, document_ids: List[UUID] = None) -> Dict[str, Any]:
@@ -751,7 +783,7 @@ class RAGService:
         """스트리밍 응답을 위한 쿼리 처리"""
         try:
             relevant_chunks, query_analysis = await self._get_relevant_chunks(query, top_k, document_ids)
-            logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks)}개 청크 발견")
+            logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks.documents)}개 청크 발견")
 
             if not relevant_chunks:
                 yield "관련 문서를 찾을 수 없습니다."
@@ -763,16 +795,15 @@ class RAGService:
 
             # 문서 컨텍스트 구성
             doc_contexts = []
-            for chunk in relevant_chunks:
-                metadata = chunk.get("metadata", {})
+            for doc in relevant_chunks.documents:
+                metadata = doc.metadata
                 doc_contexts.append(
                     f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
                     f"페이지: {metadata.get('page_number', 'N/A')}\n" # pinecone의 metadata에는 page_number가 없음.
-                    f"내용: {metadata.get('text', '')}"
+                    #f"내용: {metadata.get('text', '')}"
+                    f"내용: {doc.page_content}"  # LangchainDocument의 page_content 사용
                 )
 
-
-            
             # 프롬프트 생성 및 응답
             async for token in self.chat_prompt.analyze_streaming(
                                     content='\n\n'.join(doc_contexts),
@@ -789,7 +820,7 @@ class RAGService:
                 yield token
 
         except Exception as e:
-            logger.error(f"스트리밍 쿼리 처리 중 오류 발생: {str(e)}", exc_info=True)
+            logger.exception(f"스트리밍 쿼리 처리 중 오류 발생: {str(e)}")
             raise
 
     async def get_document_status(self, document_id: str) -> Dict[str, Any]:

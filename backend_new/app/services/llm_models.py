@@ -253,6 +253,9 @@ class LLMModels:
     def generate(self, user_query: str, prompt_context: str) -> Optional[ai.AIMessage]:
         """동기 컨텐츠 생성"""
         try:
+            logger.info(f"LANGCHAIN_TRACING_V2[Settings]: {settings.LANGCHAIN_TRACING_V2}")
+            import os
+            logger.info(f"LANGCHAIN_TRACING_V2[OS]: {os.getenv('LANGCHAIN_TRACING_V2')}")
             truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
             logger.info(f"Gemini API full[Sync] 호출 - 프롬프트: {truncated[:100]}...")
             # 프롬프트 템플릿 설정

@@ -1,4 +1,4 @@
-from .models import Document, RetrievalResult
+from .models import LangchainDocument, RetrievalResult
 from .base import BaseRetriever, RetrieverConfig
 from .factory import RetrieverFactory, RetrieverType
 from .semantic import SemanticRetriever, SemanticRetrieverConfig
@@ -11,7 +11,7 @@ RetrieverFactory.register(RetrieverType.KEYWORD, KeywordRetriever)
 RetrieverFactory.register(RetrieverType.HYBRID, HybridRetriever)
 
 __all__ = [
-    'Document',
+    'LangchainDocument',
     'RetrievalResult',
     'BaseRetriever',
     'RetrieverConfig',

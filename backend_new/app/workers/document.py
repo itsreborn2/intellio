@@ -1,6 +1,7 @@
 from typing import List
 from uuid import UUID
 from celery import group, chain, Task, shared_task
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from datetime import datetime
@@ -29,9 +30,11 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from llama_index.core.node_parser import LangchainNodeParser
 
 from app.services.textsplitter import TextSplitter
-
-
-logger = logging.getLogger(__name__)
+from app.services.vector_store_manager import VectorStoreManager
+from app.services.embedding_models import EmbeddingModelType
+from celery.signals import worker_ready
+import os
+from loguru import logger
 
 # 문서 상태 상수
 DOCUMENT_STATUS_REGISTERED = 'REGISTERED'
@@ -42,6 +45,17 @@ DOCUMENT_STATUS_COMPLETED = 'COMPLETED'
 DOCUMENT_STATUS_PARTIAL = 'PARTIAL'
 DOCUMENT_STATUS_ERROR = 'ERROR'
 DOCUMENT_STATUS_DELETED = 'DELETED'
+
+@worker_ready.connect
+def init_worker(sender=None, **kwargs):
+    """Document worker 초기화 시 실행되는 함수"""
+    try:
+        load_dotenv(override=True)
+        logger.info(f"Document Worker 초기화 [ProcessID: {os.getpid()}]")
+    except Exception as e:
+        logger.error(f"Worker 초기화 중 오류 발생: {str(e)}")
+        raise
+
 
 async def update_document_status_async(session, document_id: str, doc_status: str, metadata: dict = None, error: str = None):
     """Update document status in both database and Redis asynchronously"""
@@ -516,7 +530,13 @@ def process_document_task(self, document_id: str):
 
 @celery.task(bind=True, max_retries=3, acks_late=True)
 def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_start_idx: int):
-    """청크 배치 처리"""
+    """
+    문서의 청크들을 임베딩하고 벡터 스토어에 저장하는 배치 작업
+    Args:
+        document_id: 문서 ID
+        chunks: 청크 텍스트 리스트
+        batch_start_idx: 배치 시작 인덱스
+    """
     try:
         # Redis에서 배치 처리 상태 확인
         key = f"chunk_batch:{document_id}:{batch_start_idx}"
@@ -526,7 +546,6 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
             
         # 처리 시작 표시
         redis_client.set_key(key, "1", expire=1800)  # 30분 후 만료
-        
         embedding_service = EmbeddingService()
         
         bApplyAsync = True
@@ -534,8 +553,6 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
         # 청크의 데이터 타입을 바꿔야하는게 우선.
         #embeddings = await embedding_service.create_embeddings_batch(chunks)
 
-        #embeddings = loop.run_until_complete(embedding_service.create_embeddings_batch(chunks))
-        #embeddings = run_async(embedding_service.create_embeddings_batch(chunks))
         embeddings = embedding_service.create_embeddings_batch_sync(chunks)
 
         if not embeddings:
@@ -555,11 +572,9 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
                 }
             })
         
-        # 벡터 저장 (비동기)
-        # if bApplyAsync:
-        #     loop.run_until_complete(embedding_service.store_vectors(vectors))
-        # else:
-        embedding_service.store_vectors(vectors)
+        # 벡터 저장 (동기)
+        vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type())
+        vs_manager.store_vectors(vectors)
             
         # 모든 청크가 처리되었는지 확인
         with SessionLocal() as db:
@@ -636,7 +651,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
         }
         
     except Exception as e:
-        logger.error(f"청크 배치 처리 실패 (문서: {document_id}, 배치: {batch_start_idx}): {str(e)}")
+        logger.exception(f"청크 배치 처리 실패 (문서: {document_id}, 배치: {batch_start_idx}): {str(e)}")
         if self.request.retries < self.max_retries:
             raise self.retry(exc=e)
         raise

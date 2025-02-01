@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional
 from .base import BaseRetriever, RetrieverConfig
-from .models import Document, RetrievalResult
+from .models import LangchainDocument, RetrievalResult
 from .semantic import SemanticRetriever, SemanticRetrieverConfig
 from .keyword import KeywordRetriever, KeywordRetrieverConfig
 from pydantic import BaseModel
@@ -57,10 +57,10 @@ class HybridRetriever(BaseRetriever):
     
     def _merge_results(
         self,
-        semantic_docs: List[Document],
-        keyword_docs: List[Document],
+        semantic_docs: List[LangchainDocument],
+        keyword_docs: List[LangchainDocument],
         top_k: int
-    ) -> List[Document]:
+    ) -> List[LangchainDocument]:
         """검색 결과 병합"""
         # 문서 ID를 키로 사용하여 결과 병합
         merged_docs = {}
@@ -103,7 +103,7 @@ class HybridRetriever(BaseRetriever):
             
         return result_docs
         
-    async def add_documents(self, documents: List[Document]) -> bool:
+    async def add_documents(self, documents: List[LangchainDocument]) -> bool:
         """두 검색 엔진에 모두 문서 추가"""
         results = await asyncio.gather(
             self.semantic_retriever.add_documents(documents),
@@ -119,7 +119,7 @@ class HybridRetriever(BaseRetriever):
         )
         return all(results)
         
-    async def update_documents(self, documents: List[Document]) -> bool:
+    async def update_documents(self, documents: List[LangchainDocument]) -> bool:
         """두 검색 엔진에서 모두 문서 업데이트"""
         results = await asyncio.gather(
             self.semantic_retriever.update_documents(documents),

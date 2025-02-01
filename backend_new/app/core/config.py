@@ -1,9 +1,9 @@
 from typing import List
 from pydantic_settings import BaseSettings
 import os
-import logging
+from loguru import logger
+from functools import lru_cache
 
-logger = logging.getLogger(__name__)
 
 def detect_file_encoding(file_path):
     """파일의 인코딩을 자동으로 감지"""
@@ -164,18 +164,26 @@ class Settings(BaseSettings):
     LANGCHAIN_API_KEY:str = os.getenv("LANGCHAIN_API_KEY", "")
     LANGCHAIN_PROJECT:str = os.getenv("LANGCHAIN_PROJECT", "intellio_doceasy_base")
 
-    class Config:
-        env_file = ".env" #예전위치.
-        #env_file = "../../.env"  # 프로젝트 루트의 .env 파일 참조
-        case_sensitive = True
-        
-        @classmethod
-        def customise_sources(cls, init_settings, env_settings, file_secret_settings):
-            # .env 파일의 인코딩 자동 감지
-            env_file = init_settings.get('env_file', '.env')
-            if os.path.exists(env_file):
-                encoding = detect_file_encoding(env_file)
-                init_settings['env_file_encoding'] = encoding
-            return (init_settings, env_settings, file_secret_settings)
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "env_file_encoding": "utf-8"
+    }
 
-settings = Settings()
+    def __init__(self, **kwargs):
+        env_file = self.model_config.get("env_file", ".env")
+        if os.path.exists(env_file):
+            encoding = detect_file_encoding(env_file)
+            self.model_config["env_file_encoding"] = encoding
+            #logger.info(f"Load Complete env_file : {env_file}, [ProcessID: {os.getpid()}]")
+        else:
+            logger.error(f"환경 변수 파일을 찾을 수 없습니다: {env_file}")
+        super().__init__(**kwargs)
+
+@lru_cache()
+def get_settings() -> Settings:
+    """싱글톤 패턴으로 Settings 인스턴스를 반환"""
+    return Settings()
+
+settings = get_settings()
+
