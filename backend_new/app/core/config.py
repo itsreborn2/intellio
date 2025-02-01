@@ -72,6 +72,15 @@ class Settings(BaseSettings):
     GOOGLE_CLOUD_STORAGE_BUCKET: str = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET", "")
     GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME", "")
 
+    # Telegram Settings
+    GCS_CREDENTIALS_PATH: str = os.getenv("GCS_CREDENTIALS_PATH", "")
+    GCS_PROJECT_ID: str = os.getenv("GCS_PROJECT_ID", "")
+    TELEGRAM_API_ID: str = os.getenv("TELEGRAM_API_ID", "")
+    TELEGRAM_API_HASH: str = os.getenv("TELEGRAM_API_HASH", "")
+    TELEGRAM_PHONE: str = os.getenv("TELEGRAM_PHONE", "")
+    TELEGRAM_SESSION_NAME: str = os.getenv("TELEGRAM_SESSION_NAME", "")
+    TELEGRAM_CHANNEL_IDS: str = os.getenv("TELEGRAM_CHANNEL_IDS", "")
+
     # Google Cloud for Vertex AI
     GOOGLE_PROJECT_ID_VERTEXAI: str = os.getenv("GOOGLE_PROJECT_ID_VERTEXAI", "")
     GOOGLE_LOCATION_VERTEXAI: str = os.getenv("GOOGLE_LOCATION_VERTEXAI", "")
@@ -153,7 +162,6 @@ class Settings(BaseSettings):
     ## RAG Settings
     ###############
     # Text Splitter
-
     TEXT_SPLITTER:str = os.getenv("TEXT_SPLITTER", "recursive")
     CHUNK_SIZE:int = int(os.getenv("CHUNK_SIZE", "1000"))
     CHUNK_OVERLAP:int = int(os.getenv("CHUNK_OVERLAP", "200"))
@@ -165,8 +173,7 @@ class Settings(BaseSettings):
     LANGCHAIN_PROJECT:str = os.getenv("LANGCHAIN_PROJECT", "intellio_doceasy_base")
 
     class Config:
-        env_file = ".env" #예전위치.
-        #env_file = "../../.env"  # 프로젝트 루트의 .env 파일 참조
+        env_file = ".env"
         case_sensitive = True
         
         @classmethod
