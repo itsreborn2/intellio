@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import numpy as np
 from openai import OpenAI, AsyncOpenAI
 from pinecone import Pinecone, PodSpec, ServerlessSpec
@@ -10,7 +10,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from app.utils.common import measure_time_async
 import openai
 from openai import OpenAIError, Timeout
-from app.services.embedding_models import EmbeddingModelManager, EmbeddingProviderFactory, EmbeddingModelConfig, EmbeddingModelType
+from app.services.embedding_models import EmbeddingModelManager, EmbeddingProvider, EmbeddingProviderFactory, EmbeddingModelConfig, EmbeddingModelType
+from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -20,64 +21,66 @@ class EmbeddingService:
         self.model_manager = EmbeddingModelManager()
         #self.current_model = self.model_manager.get_default_model() # 기본 모델은 openai
         #self.current_model = self.model_manager.get_model(EmbeddingModelType.OPENAI_ADA_002) # 구글 다국어 모델
-        self.current_model = self.model_manager.get_model(EmbeddingModelType.GOOGLE_MULTI_LANG) # 구글 다국어 모델
+        self.current_model_config = self.model_manager.get_model_config(EmbeddingModelType.GOOGLE_MULTI_LANG) # 구글 다국어 모델
         #self.current_model = self.model_manager.get_model(EmbeddingModelType.KAKAO_EMBEDDING) # 구글 다국어 모델
 
         # 현재 모델에 맞는 제공자 생성
         self.provider = EmbeddingProviderFactory.create_provider(
-            self.current_model.provider,
-            self.current_model.name
+            self.current_model_config.provider_name,
+            self.current_model_config.name
         )
         
+        #self.create_pinecone_index(self.current_model)
 
-        self.create_pinecone_index(self.current_model)
+    def get_model_type(self) -> EmbeddingModelType:
+        return EmbeddingModelType(self.current_model_config.name)
         
 
-    def create_pinecone_index(self, embedding_model: EmbeddingModelConfig):
-        pinecone = Pinecone(api_key=settings.PINECONE_API_KEY)
-        # 인덱스가 있는지 확인하고 없으면 생성
-        _model = embedding_model.name
-        _dimension = embedding_model.dimension
-        try:
-            self.pinecone_index = pinecone.Index(_model)
-            logger.info(f"Pinecone 인덱스 {_model} 설정 완료")
-        except:
-            logger.info(f"Pinecone 인덱스 {_model} 없음. 생성 중...")
-            try:
-                # 새 인덱스 생성
-                pinecone.create_index(
-                    name=_model,
-                    dimension=_dimension,        # 임베딩 차원수
-                    metric="cosine",      # 유사도 측정 방식
-                    spec=PodSpec(
-                        environment=settings.PINECONE_ENVIRONMENT, 
-                        pod_type="p1"         # 기본 pod 타입
-                    )
-                    #spec=ServerlessSpec(cloud="aws", region="us-west-2")
-                )
-                logger.info(f"Pinecone 인덱스 {_model} 생성 완료")
-                self.pinecone_index = pinecone.Index(_model)
-                logger.info(f"Pinecone 인덱스 {_model} 설정 완료")
-            except Exception as e:
-                logger.error(f"Pinecone 인덱스 {_model} 생성/조회 실패: {str(e)}")
-                raise
-        return self.pinecone_index
-    def get_pinecone_index(self):
-        return self.pinecone_index
+    # def create_pinecone_index(self, embedding_model: EmbeddingModelConfig):
+    #     pinecone = Pinecone(api_key=settings.PINECONE_API_KEY)
+    #     # 인덱스가 있는지 확인하고 없으면 생성
+    #     _model = embedding_model.name
+    #     _dimension = embedding_model.dimension
+    #     try:
+    #         self.pinecone_index = pinecone.Index(_model)
+    #         logger.info(f"Pinecone 인덱스 {_model} 설정 완료")
+    #     except:
+    #         logger.info(f"Pinecone 인덱스 {_model} 없음. 생성 중...")
+    #         try:
+    #             # 새 인덱스 생성
+    #             pinecone.create_index(
+    #                 name=_model,
+    #                 dimension=_dimension,        # 임베딩 차원수
+    #                 metric="cosine",      # 유사도 측정 방식
+    #                 spec=PodSpec(
+    #                     environment=settings.PINECONE_ENVIRONMENT, 
+    #                     pod_type="p1"         # 기본 pod 타입
+    #                 )
+    #                 #spec=ServerlessSpec(cloud="aws", region="us-west-2")
+    #             )
+    #             logger.info(f"Pinecone 인덱스 {_model} 생성 완료")
+    #             self.pinecone_index = pinecone.Index(_model)
+    #             logger.info(f"Pinecone 인덱스 {_model} 설정 완료")
+    #         except Exception as e:
+    #             logger.error(f"Pinecone 인덱스 {_model} 생성/조회 실패: {str(e)}")
+    #             raise
+    #     return self.pinecone_index
+    # def get_pinecone_index(self):
+    #     return self.pinecone_index
     
-    def set_model(self, model_name: str) -> None:
-        """임베딩 모델 변경"""
-        model = self.model_manager.get_model(model_name)
-        if model:
-            self.current_model = model
-            # 새로운 모델에 맞는 제공자로 교체
-            self.provider = EmbeddingProviderFactory.create_provider(
-                model.provider,
-                model.name
-            )
-            self.create_pinecone_index(model)
-        else:
-            raise ValueError(f"Unknown model: {model_name}")
+    # def set_model(self, model_name: str) -> None:
+    #     """임베딩 모델 변경"""
+    #     model = self.model_manager.get_model(model_name)
+    #     if model:
+    #         self.current_model = model
+    #         # 새로운 모델에 맞는 제공자로 교체
+    #         self.provider = EmbeddingProviderFactory.create_provider(
+    #             model.provider,
+    #             model.name
+    #         )
+    #         self.create_pinecone_index(model)
+    #     else:
+    #         raise ValueError(f"Unknown model: {model_name}")
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     async def create_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
@@ -103,7 +106,7 @@ class EmbeddingService:
             
             # 임베딩 품질 검사
             for i, emb in enumerate(embeddings):
-                if not emb or len(emb) != self.current_model.dimension:
+                if not emb or len(emb) != self.current_model_config.dimension:
                     logger.error(f"잘못된 임베딩 차원 (인덱스 {i}): {len(emb) if emb else 0}")
                     continue
             
@@ -140,7 +143,7 @@ class EmbeddingService:
             
             # 임베딩 품질 검사
             for i, emb in enumerate(embeddings):
-                if not emb or len(emb) != self.current_model.dimension:
+                if not emb or len(emb) != self.current_model_config.dimension:
                     logger.error(f"잘못된 임베딩 차원 (인덱스 {i}): {len(emb) if emb else 0}")
                     continue
             
@@ -184,7 +187,7 @@ class EmbeddingService:
             embedding = embeddings[0]
             
             # 임베딩 벡터 검증
-            if not isinstance(embedding, list) or len(embedding) != self.current_model.dimension:
+            if not isinstance(embedding, list) or len(embedding) != self.current_model_config.dimension:
                 logger.error(f"잘못된 임베딩 형식 또는 차원: {len(embedding) if isinstance(embedding, list) else type(embedding)}")
                 raise ValueError("잘못된 임베딩 형식")
             
@@ -209,7 +212,7 @@ class EmbeddingService:
             embedding = embeddings[0]
             
             # 임베딩 벡터 검증
-            if not isinstance(embedding, list) or len(embedding) != self.current_model.dimension:
+            if not isinstance(embedding, list) or len(embedding) != self.current_model_config.dimension:
                 logger.error(f"잘못된 임베딩 형식 또는 차원: {len(embedding) if isinstance(embedding, list) else type(embedding)}")
                 raise ValueError("잘못된 임베딩 형식")
                 
@@ -250,7 +253,7 @@ class EmbeddingService:
         try:
             logger.info(f"유사 문서 검색 시작 - 쿼리: {query}")
             
-            # 쿼리 임베딩 생성
+            # 쿼리 임베딩 생성. 프롬프트 조절하는 과정은 없네.
             query_embedding = await self.get_single_embedding_async(query)
             if not query_embedding:
                 logger.error("쿼리 임베딩 생성 실패")
@@ -309,6 +312,7 @@ class EmbeddingService:
                 
                 # score 기준으로 내림차순 정렬
                 formatted_results.sort(key=lambda x: x["score"], reverse=True)
+
                 return formatted_results
                 
             except Exception as e:
@@ -443,3 +447,9 @@ class EmbeddingService:
             logger.info("Pinecone 인덱스 초기화 완료")
         except Exception as e:
             logger.error(f"인덱스 초기화 중 오류 발생: {str(e)}")
+
+    def get_provider(self) -> EmbeddingProvider:
+        return self.provider
+
+    def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
+        return self.provider.get_embeddings_obj()

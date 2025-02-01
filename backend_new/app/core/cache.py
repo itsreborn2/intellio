@@ -29,6 +29,7 @@ class RedisCache:
             str: 캐시 키
         """
         combined = f"{document_id}:{query}"
+        #BLAKE2는 설계 자체가 보안성과 속도를 모두 고려했기 때문에, 일반적으로 MD5보다 빠르면서도 더 안전
         return hashlib.md5(combined.encode()).hexdigest()
     
     def get(self, document_id: str, query: str) -> Optional[str]:

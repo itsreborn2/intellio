@@ -1,20 +1,17 @@
-#from llama_index.node_parser.text import SentenceWindowNodeParser
-#import llama_index.core.node_parser
-
 from llama_index.core.node_parser import SentenceWindowNodeParser, SemanticSplitterNodeParser
 from llama_index.embeddings.openai import OpenAIEmbedding
 from langchain.text_splitter import (
     RecursiveCharacterTextSplitter,
     CharacterTextSplitter,
     TokenTextSplitter,
-    SentenceTransformersTokenTextSplitter
 )
-#from langchain_text_splitters import SemanticChunker
+from app.core.config import settings
 from typing import List, Optional
 import os
-from app.core.config import settings
+
 from dotenv import load_dotenv
 import logging
+
 logger = logging.getLogger(__name__)
 
 class TextSplitter:
@@ -29,7 +26,7 @@ class TextSplitter:
     - sentence: SentenceWindowNodeParser (문장 윈도우 기반 분할)
     """
     
-    def __init__(self, splitter_type:Optional[str]=None, chunk_size:Optional[int]=1000, chunk_overlap:Optional[int]=200):
+    def __init__(self, splitter_type:Optional[str]=None, chunk_size:Optional[int]=None, chunk_overlap:Optional[int]=None):
         #load_dotenv()
         # 환경변수 강제 재로드, 개발모드에서만 사용. 나중에는 풀어야함. 
         # text splitter 호출할때마다 IO가 발생해서 느려짐
@@ -44,7 +41,7 @@ class TextSplitter:
         self.splitter_type = splitter_type.lower() if splitter_type else default_splitter
         self.chunk_size = chunk_size if chunk_size else default_chunk_size
         self.chunk_overlap = chunk_overlap if chunk_overlap else default_chunk_overlap
-        logger.info(f"TEXT_SPLITTER : {self.splitter_type}, CHUNK_SIZE : {self.chunk_size}, CHUNK_OVERLAP : {self.chunk_overlap}")
+        logger.info(f"TEXT_SPLITTER : {self.splitter_type}, CHUNK_SIZE : {self.chunk_size}, CHUNK_OVERLAP : {self.chunk_overlap}, [ProcessID: {os.getpid()}]")
 
         
         

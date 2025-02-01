@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, Optional, List, Union
+from typing import Dict, Optional, List, Union, Tuple
 from pydantic import BaseModel
 from abc import ABC, abstractmethod
 from openai import AsyncOpenAI, OpenAI
@@ -8,7 +8,7 @@ from google.ai import generativelanguage as glm
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
-
+from langchain_core.embeddings import Embeddings
 import numpy as np
 from app.core.config import settings
 import tiktoken
@@ -35,7 +35,7 @@ class EmbeddingModelType(str, Enum):
 class EmbeddingModelConfig(BaseModel):
     name: str
     dimension: int
-    provider: EmbeddingModelType
+    provider_name: EmbeddingModelType
     description: Optional[str] = None
     max_tokens: Optional[int] = None
     
@@ -45,14 +45,14 @@ class EmbeddingModelManager:
             EmbeddingModelType.OPENAI_ADA_002: EmbeddingModelConfig(
                 name=EmbeddingModelType.OPENAI_ADA_002,
                 dimension=1536,
-                provider=EmbeddingModelType.OPENAI_ADA_002,
+                provider_name=EmbeddingModelType.OPENAI_ADA_002,
                 description="OpenAI의 범용 임베딩 모델",
                 max_tokens=8191 #전체 입력 토큰만 봄.
             ),
             EmbeddingModelType.GOOGLE_MULTI_LANG : EmbeddingModelConfig(
                 name=EmbeddingModelType.GOOGLE_MULTI_LANG ,
                 dimension=768,
-                provider=EmbeddingModelType.GOOGLE_MULTI_LANG,
+                provider_name=EmbeddingModelType.GOOGLE_MULTI_LANG,
                 description="Google의 다국어 지원 임베딩 모델",
                 max_tokens=2048 # 청크단위 2048이내, 전체 토큰 20000이내
             ),
@@ -60,20 +60,20 @@ class EmbeddingModelManager:
                 name=EmbeddingModelType.GOOGLE_EN,
                 # text-embedding-preview-0815최신 임베딩 모델이라는데..
                 dimension=768,
-                provider=EmbeddingModelType.GOOGLE_EN,
+                provider_name=EmbeddingModelType.GOOGLE_EN,
                 description="Google의 영어 임베딩 모델",
                 max_tokens=2048
             ),
             EmbeddingModelType.KAKAO_EMBEDDING: EmbeddingModelConfig(
                 name=EmbeddingModelType.KAKAO_EMBEDDING,
                 dimension=768,
-                provider=EmbeddingModelType.KAKAO_EMBEDDING,
+                provider_name=EmbeddingModelType.KAKAO_EMBEDDING,
                 description="Kakao의 한국어 임베딩 모델",
                 max_tokens=512
             )
         }
         
-    def get_model(self, model_name: str | EmbeddingModelType) -> Optional[EmbeddingModelConfig]:
+    def get_model_config(self, model_name: str | EmbeddingModelType) -> Optional[EmbeddingModelConfig]:
         """모델 이름으로 모델 설정 조회
         Args:
             model_name: 모델 이름 (문자열 또는 EmbeddingModelType enum)
@@ -224,7 +224,10 @@ class EmbeddingProvider(ABC):
             batches.append(current_batch)
             
         return batches
-    
+    @abstractmethod
+    def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
+        """임베딩 객체 반환, [Sync, Async]"""
+        pass
 
     @abstractmethod
     async def create_embeddings_async(self, texts: List[str]) -> List[List[float]]:
@@ -250,7 +253,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def count_tokens(self, text: str) -> int:
         return TokenCounter.count_tokens_openai(text, self.model_name)
     
-    
+    def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
+        """임베딩 객체 반환, [Sync, Async]"""
+        return self.client.embeddings, self.async_client.embeddings
     
     async def create_embeddings_async(self, texts: List[str]) -> List[List[float]]:
         try:
@@ -332,7 +337,9 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
             logger.error(f"Google Embedding 모델 초기화 실패: {str(e)}")
             raise
         
-        
+    def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
+        """임베딩 객체 반환, [Sync, Async]"""
+        return self.model, self.model
 
     def count_tokens(self, text: str) -> int:
         return TokenCounter.count_tokens_google(text)    
@@ -470,7 +477,11 @@ class KakaoEmbeddingProvider(EmbeddingProvider):
         super().__init__(model_name, max_tokens)
         self.tokenizer = AutoTokenizer.from_pretrained("app/kf-deberta")
         self.model = None  # 실제 모델은 필요할 때 로드
-        
+    
+    def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
+        """임베딩 객체 반환, [Sync, Async]"""
+        return self.model, self.model
+    
     def count_tokens(self, text: str) -> int:
         """카카오 토크나이저를 사용하여 토큰 수 계산"""
         try:

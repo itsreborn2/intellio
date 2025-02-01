@@ -198,11 +198,11 @@ class BasePrompt:
         """
         try:
             # 캐시 키 생성
-            # cache_key = f"prompt:{hash(user_query)}" # 해시키를 사용자 질문과 매칭.
+            cache_key = f"prompt:{hash(user_query)}" # 해시키를 사용자 질문과 매칭.
             
             # #캐시된 결과 확인
             # start_time = time.time()
-            # cached_result = self.sync_cache.get(cache_key, user_query)
+            cached_result = self.sync_cache.get(cache_key, user_query)
             # end_time = time.time()
             # execution_time = end_time - start_time
             # logger.info(f"캐시 확인 시간: {execution_time:.2f} 초")

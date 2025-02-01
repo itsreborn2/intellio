@@ -7,18 +7,6 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# 문서 상태 상수
-DOCUMENT_STATUS = {
-    'REGISTERED': 'REGISTERED',
-    'UPLOADING': 'UPLOADING',
-    'UPLOADED': 'UPLOADED',
-    'PROCESSING': 'PROCESSING',
-    'COMPLETED': 'COMPLETED',
-    'PARTIAL': 'PARTIAL',
-    'ERROR': 'ERROR',
-    'DELETED': 'DELETED'
-}
-
 # Celery 앱 초기화
 celery = Celery(
     "app",

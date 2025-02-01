@@ -1,0 +1,260 @@
+from typing import List, Dict, Optional, Tuple
+from langchain_community.vectorstores import Pinecone as PineconeLangchain
+from langchain_core.documents import Document as LangchainDocument
+from pinecone import Pinecone as PineconeClient, PodSpec
+import pinecone
+from app.core.config import settings
+from app.services.embedding_models import EmbeddingModelManager, EmbeddingModelType, EmbeddingProviderFactory
+import logging
+from threading import Lock
+import asyncio
+from functools import wraps
+from app.services.embedding import EmbeddingService
+#from langchain_teddynote.community.pinecone import upsert_documents, upsert_documents_parallel
+
+logger = logging.getLogger(__name__)
+
+def async_init(func):
+    """비동기 초기화를 위한 데코레이터"""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not hasattr(self, '_initialized_future'):
+            self._initialized_future = asyncio.Future()
+            asyncio.create_task(self._async_initialize(*args, **kwargs))
+        return self._initialized_future
+    return wrapper
+
+class VectorStoreManager:
+    """벡터 스토어 관리 클래스 (싱글턴)"""
+    _instance = None
+    _lock = Lock()
+    _initialized = False
+    _initialization_error = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            with cls._lock:
+                if not cls._instance:
+                    cls._instance = super(VectorStoreManager, cls).__new__(cls)
+        return cls._instance
+
+    def __init__(self, embedding_model_type: EmbeddingModelType = None):
+        """
+        VectorStoreManager 초기화
+        Args:
+            embedding_model_type: 임베딩 모델 타입
+        """
+        if self._initialized:
+            return
+        
+        with self._lock:
+            if self._initialized:
+                return
+            
+            if not self._initialized and embedding_model_type is None:
+                raise ValueError("첫 초기화 시에는 embedding_model_type이 필요합니다.")
+            
+            self.embedding_model_type = embedding_model_type
+            #self.embedding_model_manager = None
+            self.embedding_model_config = None
+            self.pinecone_client = None
+            self.index = None
+            
+            # 동기적으로 초기화 실행
+            self._sync_initialize()
+
+    def _sync_initialize(self):
+        """동기 초기화 메서드"""
+        try:
+            embedding_service = EmbeddingService()
+            self.embedding_model_provider = embedding_service.provider
+            self.embedding_obj, self.embedding_obj_async = self.embedding_model_provider.get_embeddings_obj()
+            #self.embedding_model_manager = EmbeddingModelManager()
+            self.embedding_model_config = embedding_service.current_model_config
+
+            # Pinecone 초기화 (새로운 방식)
+            self.pinecone_client = PineconeClient(
+                api_key=settings.PINECONE_API_KEY,
+                environment=settings.PINECONE_ENVIRONMENT
+            )
+
+            # 인덱스 존재 여부 확인
+            if self.embedding_model_config.name not in self.pinecone_client.list_indexes().names():
+                logger.error(f"Pinecone 인덱스 {self.embedding_model_config.name} 없음. 생성 중...")
+                try:
+                    # 인덱스 생성
+                    self.pinecone_client.create_index(
+                        name=self.embedding_model_config.name,
+                        dimension=self.embedding_model_config.dimension,
+                        metric="cosine",
+                        spec=PodSpec(
+                            environment=settings.PINECONE_ENVIRONMENT,
+                            pod_type="p1"
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Pinecone 인덱스 생성 실패: {str(e)}")
+                    raise
+
+            # 인덱스 가져오기
+            self.index = self.pinecone_client.Index(self.embedding_model_config.name)
+            self.vector_store = PineconeLangchain(
+                index=self.index, 
+                embedding=self.embedding_obj,
+                text_key="text"  # 문서 내용을 저장할 메타데이터 필드 키
+            )
+            # AI 주석삭제금지.
+            # pinecone에 저장할때 vectors.metadata.text 사용. 따라서 위에서 text_key는 "text"가 들어가야함.
+            # vectors.append({
+            # 	"id": chunk_id,
+            # 	"values": embedding,
+            # 	"metadata": {
+            # 		"document_id": document_id,
+            # 		"chunk_index": batch_start_idx + i,
+            # 		"text": chunk
+            # 	}
+            # })
+            self._initialized = True
+        except Exception as e:
+            self._initialization_error = e
+            raise e
+
+    def search(self, query: str, top_k: int, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
+        """벡터 스토어에서 검색 수행"""
+        logger.info(f"벡터 스토어 검색 시작 : {query}")
+
+        ####################################
+        # 1. 사용자 쿼리를 임베딩
+        # 2. 임베딩 결과를 벡터 스토어에 검색
+        # 3. 검색 결과를 반환
+        ####################################
+        # 사용자 쿼리 임베딩
+        embeddings = self.embedding_model_provider.create_embeddings([query])
+            
+        # 임베딩 결과 검증
+        if not embeddings or len(embeddings) == 0:
+            logger.error("임베딩 생성 결과가 비어있음")
+            raise ValueError("임베딩 생성 실패")
+            
+        embedding = embeddings[0]
+        
+        # 임베딩 벡터 검증
+        if not isinstance(embedding, list) or len(embedding) != self.embedding_model_config.dimension:
+            logger.error(f"잘못된 임베딩 형식 또는 차원: {len(embedding) if isinstance(embedding, list) else type(embedding)}")
+            raise ValueError("잘못된 임베딩 형식")
+        # results = self.vector_store.similarity_search_by_vector_with_score(embedding=embedding, k=top_k, filter=filters)
+        # #[(Document, score), (Document, score), ...]
+        # filters 형식 변환
+        if filters and 'document_ids' in filters:
+            filters = {"document_id": {"$in": filters['document_ids']}}
+
+        # k: Number of Documents to return. Defaults to 4.
+        # filter: Dictionary of argument(s) to filter on metadata
+        results = self.vector_store.similarity_search_by_vector_with_score(
+            embedding=embedding,
+            k=top_k,
+            filter=filters
+        )
+        return results
+
+    async def search_async(self, query: str, top_k: int, filters: Optional[Dict] = None) -> List[Dict]:
+        """벡터 스토어에서 검색 수행"""
+        await self.ensure_initialized()
+        logger.info(f"벡터 스토어 검색 시작 : {query}")
+
+        ####################################
+        # 1. 사용자 쿼리를 임베딩
+        # 2. 임베딩 결과를 벡터 스토어에 검색
+        # 3. 검색 결과를 반환
+        ####################################
+        # 사용자 쿼리 임베딩
+        embeddings = await self.embedding_model_provider.create_embeddings_async([query])
+            
+        # 임베딩 결과 검증
+        if not embeddings or len(embeddings) == 0:
+            logger.error("임베딩 생성 결과가 비어있음")
+            raise ValueError("임베딩 생성 실패")
+            
+        embedding = embeddings[0]
+        
+        # 임베딩 벡터 검증
+        if not isinstance(embedding, list) or len(embedding) != self.embedding_model_config.dimension:
+            logger.error(f"잘못된 임베딩 형식 또는 차원: {len(embedding) if isinstance(embedding, list) else type(embedding)}")
+            raise ValueError("잘못된 임베딩 형식")
+
+        # filters 형식 변환
+        if filters and 'document_ids' in filters:
+            filters = {"document_id": {"$in": filters['document_ids']}}
+      
+        results = self.vector_store.similarity_search_by_vector_with_score(
+            embedding=embedding,
+            k=top_k,
+            filter=filters
+        )
+        return results
+
+    def store_vectors(self, _vectors: List[Dict]) -> bool:
+        """벡터를 Pinecone에 저장"""
+
+        try:
+            if not _vectors:
+                logger.warning("저장할 벡터가 없습니다")
+                return False
+            
+            # 벡터 저장
+            logger.info(f"벡터 {len(_vectors)}개 저장 중")
+            self.index.upsert(vectors=_vectors)
+            logger.info(f"벡터 {len(_vectors)}개 저장 완료")
+            return True
+
+        except Exception as e:
+            logger.error(f"벡터 저장 실패: {str(e)}")
+            return False
+
+    async def store_vectors_async(self, _vectors: List[Dict]) -> bool:
+        """벡터를 Pinecone에 저장"""
+        await self.ensure_initialized()
+        try:
+            if not _vectors:
+                logger.warning("저장할 벡터가 없습니다")
+                return False
+            
+            # 벡터 저장
+            logger.info(f"벡터 {len(_vectors)}개 저장 중")
+            await self.index.upsert(vectors=_vectors)
+            logger.info(f"벡터 {len(_vectors)}개 저장 완료")
+            return True
+
+        except Exception as e:
+            logger.error(f"벡터 저장 실패: {str(e)}")
+            return False
+
+    async def add_documents(self, documents: List[Dict]) -> bool:
+        """문서를 벡터 스토어에 추가"""
+        await self.ensure_initialized()
+        try:
+            await self.index.upsert(vectors=documents)
+            return True
+        except Exception as e:
+            logger.error(f"문서 추가 중 오류 발생: {str(e)}")
+            return False
+
+    async def delete_documents(self, document_ids: List[str]) -> bool:
+        """벡터 스토어에서 문서 삭제"""
+        await self.ensure_initialized()
+        try:
+            await self.index.delete(ids=document_ids)
+            return True
+        except Exception as e:
+            logger.error(f"문서 삭제 중 오류 발생: {str(e)}")
+            return False
+
+    async def update_documents(self, documents: List[Dict]) -> bool:
+        """벡터 스토어의 문서 업데이트"""
+        await self.ensure_initialized()
+        try:
+            await self.index.upsert(vectors=documents)
+            return True
+        except Exception as e:
+            logger.error(f"문서 업데이트 중 오류 발생: {str(e)}")
+            return False 
