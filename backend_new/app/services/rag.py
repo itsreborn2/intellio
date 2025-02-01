@@ -402,35 +402,25 @@ class RAGService:
         return filtered_chunks
 
     @measure_time_async
-    async def _get_relevant_chunks(self, query: str, top_k: int = 5, document_ids: List[UUID] = None) -> Tuple[RetrievalResult, Dict[str, Any]]:
+    async def process_retrival(self, query: str, top_k: int = 5, document_ids: List[str] = None, query_type:str = "chat") -> RetrievalResult:
         """관련 문서 청크 검색 및 패턴 분석"""
-        logger.info(f"청크 검색 시작 - 쿼리: {query}, top_k: {top_k}")
-        
-        # document_ids 처리
-        doc_ids_str = []
-        if document_ids:
-            logger.info(f"검색 대상 문서 ID: {document_ids}")
-            doc_ids_str = [str(doc_id) for doc_id in document_ids]
-        
         # 쿼리 정규화
         normalized_query = self._normalize_query(query)
-        logger.info(f"정규화된 쿼리: {normalized_query}")
+        #logger.info(f"정규화된 쿼리: {normalized_query}")
+        logger.info(f"청크 검색 시작 - 쿼리: {normalized_query}, top_k: {top_k}")
         
         try:
-            # 쿼리 분석으로 모드 확인
-            query_analysis = self._analyze_query(query)
-            query_type = query_analysis.get("query_type", "chat")  # 기본값을 chat으로 설정 "query_type" 리턴하지 않음. 항상 "chat"
-            
-            # 모드별 청크 수 설정
+            # 모드별로 청크가 왜 달라야하는지는 모름. 일단 보존.
+            # 모드별 청크 수 설정. 
             if query_type == "table":
-                search_top_k = top_k * 5  # 테이블 모드: 5배
+                #search_top_k = top_k * 5  # 테이블 모드: 5배
+                search_multiplier = 5
                 logger.info("테이블 모드: 청크 수 5배 증가")
             else:  # chat 모드
-                search_top_k = top_k * 3  # 챗 모드: 3배
+                #search_top_k = top_k * 3  # 챗 모드: 3배
+                search_multiplier = 3
                 logger.info("챗 모드: 청크 수 3배 증가")
                 
-            logger.info(f"검색할 청크 수: {search_top_k}")
-            logger.info(f"123")
             
             # 문서 검색
             # all_chunks = await self.embedding_service.search_similar(
@@ -438,20 +428,27 @@ class RAGService:
             #     document_ids=doc_ids_str if doc_ids_str else None,
             #     top_k=search_top_k
             # )
+
+            # Retriever
+            # 현재는 시멘틱. 
+            # 추후 다른 형태의 retriever를 쓰던지, 하이브리드 하던지 여기서 처리하면 됨.
             semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
                 embedding_model=self.embedding_service.current_model_config.name,
-                min_score=0.6,
-                search_multiplier=3
+                min_score=0.6, # 최소 유사도 0.6 고정
+                search_multiplier=search_multiplier
             ))
+
+            logger.info(f"검색할 청크 수: {top_k * search_multiplier}")
             
-            logger.info(f"semantic_retriever 전")
-            filtersMetadata = {"document_ids": doc_ids_str} if doc_ids_str else None
+            #logger.info(f"semantic_retriever 전")
+            filtersMetadata = {"document_ids": document_ids} if document_ids else None
             all_chunks:RetrievalResult = await semantic_retriever.retrieve(
                 query=normalized_query, 
-                top_k=search_top_k,
+                top_k=top_k,
                 filters=filtersMetadata
             )
-            logger.info(f"semantic_retriever 후")
+            #logger.info(f"semantic_retriever 후")
+
             # 상위 3개의 문서 텍스트 출력
             for idx, doc in enumerate(all_chunks.documents[:3], start=1):
                 # 삭제금지.
@@ -465,18 +462,8 @@ class RAGService:
                 logger.warning(f"- 내용: {doc.page_content[:100]}...")  # 내용이 너무 길 수 있으므로 200자로 제한
             logger.info(f"검색된 총 청크 수: {len(all_chunks.documents)}")
             
-            # 청크 필터링
-            # if all_chunks:
-            #     # 유사도 점수. 기준 이상의 임베딩 데이터만 필터링
-            #     # search_similar 함수에서 이미 유사도 점수로 필터링 되어있음.
-            #     # 그런데 굳이 여기서 같은 기준으로 다시 필터링을 왜 하지?
-            #     filtered_chunks = self._sort_chunks_by_score(all_chunks, query, query_analysis)
-            #     logger.info(f"필터링 후 청크 수: {len(filtered_chunks)}")
-            # else:
-            #     logger.warning("검색된 청크가 없습니다.")
-            #     filtered_chunks = []
                 
-            return all_chunks, query_analysis
+            return all_chunks
         except Exception as e:
             
             error_msg = str(e)
@@ -495,47 +482,37 @@ class RAGService:
             return [{"error": user_msg}], {}
     
     @measure_time_async
-    async def handle_table_mode(self, query: str, document_ids: List[UUID] = None, user_id: str = None, project_id: str = None) -> TableResponse:
+    async def handle_table_mode(self, query: str, document_ids: List[str] = None, user_id: str = None, project_id: str = None) -> TableResponse:
         """테이블 모드 처리"""
         try:
             logger.warning("테이블 모드 처리 시작")
             # 테이블 제목 생성
             title = await self.table_header_prompt.generate_title(query)
-            logger.warning("테이블 헤더 생성 완료")
+            logger.warning(f"테이블 헤더 생성 완료 : {title}")
 
+            query_analysis = self._analyze_query(query)
+            
+            #########################################################
             # 관련 청크 검색
-            relevant_chunks, query_analysis = await self._get_relevant_chunks(query, document_ids=document_ids)
-            logger.info(f"관련 청크 검색 완료 - 총 {len(relevant_chunks)}개 청크 발견")
+            rr:RetrievalResult = await self.process_retrival(query=query, top_k=5, document_ids=document_ids, query_type="table")
+            logger.warning(f"청크 추출 완료 : {len(rr.documents)} 개")
 
-            # 오류 메시지가 있는 경우
-            if relevant_chunks and "error" in relevant_chunks[0]:
-                return TableResponse(columns=[
-                    TableColumn(
-                        header=TableHeader(name=title, prompt=query),
-                        cells=[TableCell(doc_id="error", content=relevant_chunks[0]["error"])]
-                    )
-                ])
+            if not rr.documents:
+                return TableResponse(columns=[TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="empty", content="관련 문서를 찾을 수 없습니다.")]) ])
+            
 
-            if not relevant_chunks:
-                return TableResponse(columns=[
-                    TableColumn(
-                        header=TableHeader(name=title, prompt=query),
-                        cells=[TableCell(doc_id="empty", content="관련 문서를 찾을 수 없습니다.")]
-                    )
-                ])
-            logger.warning(f"청크 추출 완료")
+            # 여기부터는 키워드 검색인데, 이 부분도 retrival 안으로 들어가야하는 부분.
             # 문서별로 청크 그룹화 및 키워드 추출
             docs_data = {}
-            for chunk in relevant_chunks:
+            for doc in rr.documents:
                 # 디버그 로깅 추가
-                logger.debug(f"청크 데이터: {chunk}")
+                logger.debug(f"청크 데이터: {doc}")
                 
-                doc_id = chunk["metadata"].get("document_id")
+                doc_id = doc.metadata.get("document_id")
                 if not doc_id:
                     continue
-                    
-                # chunk["text"] 대신 chunk["metadata"]["text"] 사용
-                chunk_text = chunk["metadata"].get("text", "")
+
+                chunk_text = doc.page_content
                 if not chunk_text:
                     continue
                     
@@ -607,21 +584,12 @@ class RAGService:
                 # 결과 처리
                 columns = []
                 #result_content 는 그냥 text다.
-                for doc_id, result in zip(docs_data.keys(), results):
+                for doc_id, rr in zip(docs_data.keys(), results):
                     try:
-                        if not result:
+                        if not rr:
                             result_content = "분석 결과가 없습니다."
-                        else:
-                            try:
-                                if isinstance(result, str) and result.startswith('{'):
-                                    parsed_result = json.loads(result)
-                                    result_content = parsed_result.get("content", str(result))
-                                else:
-                                    result_content = str(result)
-                                logger.info("결과 처리 완료")
-                            except json.JSONDecodeError:
-                                logger.error("JSON 파싱 실패")
-                                result_content = str(result)
+
+                        result_content = rr
                     except Exception as e:
                         logger.error(f"결과 처리 중 오류: {str(e)}")
                         result_content = f"분석 중 오류가 발생했습니다: {str(e)}"
@@ -634,16 +602,11 @@ class RAGService:
                 
             except TimeoutError:
                 logger.error("태스크 그룹 실행 시간 초과")
-                columns = [TableColumn(
-                    header=TableHeader(name=title, prompt=query),
-                    cells=[TableCell(doc_id="timeout", content="분석 시간이 초과되었습니다.")]
-                )]
+                columns = [TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="timeout", content="분석 시간이 초과되었습니다.")]                )]
             except Exception as e:
                 logger.error(f"태스크 그룹 실행 중 오류: {str(e)}")
                 logger.error(f"title: {title}")
-                columns = [TableColumn(
-                    header=TableHeader(name=title, prompt=query),
-                    cells=[TableCell(doc_id="error", content=f"분석 중 오류가 발생했습니다: {str(e)}")]
+                columns = [TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="error", content=f"분석 중 오류가 발생했습니다: {str(e)}")]
                 )]
             
             end_time = time.time()
@@ -689,10 +652,11 @@ class RAGService:
         """
         try:
             # 관련 문서 검색 및 패턴 분석
-            relevant_chunks, query_analysis = await self._get_relevant_chunks(query, top_k, document_ids)
-            logger.info(f"관련 청크 검색 완료 - 총 {len(relevant_chunks)}개 청크 발견")
+            query_analysis = self._analyze_query(query)
+            rr: RetrievalResult = await self.process_retrival(query=query, top_k=top_k, document_ids=document_ids, query_type="chat")
+            logger.info(f"관련 청크 검색 완료 - 총 {len(rr)}개 청크 발견")
 
-            if not relevant_chunks:
+            if not rr:
                 return {
                     "answer": "관련 문서를 찾을 수 없습니다.",
                     "context": []
@@ -700,7 +664,7 @@ class RAGService:
 
             # 문서 컨텍스트 구성
             doc_contexts = []
-            for chunk in relevant_chunks:
+            for chunk in rr:
                 metadata = chunk.get("metadata", {})
                 doc_contexts.append(
                     f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
@@ -723,7 +687,7 @@ class RAGService:
 
             return {
                 "answer": chain_response,
-                "context": relevant_chunks
+                "context": rr
             }
 
         except Exception as e:
@@ -761,10 +725,10 @@ class RAGService:
         """
         if mode == "table":
             # UUID로 변환하여 전달
-            doc_ids = [UUID(doc_id) for doc_id in document_ids]
+            #doc_ids = [UUID(doc_id) for doc_id in document_ids]
             return await self.handle_table_mode(
                 query=query,
-                document_ids=doc_ids,
+                document_ids=document_ids,
                 user_id=user_id,
                 project_id=project_id
             )
@@ -782,10 +746,16 @@ class RAGService:
     ):
         """스트리밍 응답을 위한 쿼리 처리"""
         try:
-            relevant_chunks, query_analysis = await self._get_relevant_chunks(query, top_k, document_ids)
-            logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks.documents)}개 청크 발견")
+            # 쿼리 타입 분석
+            # retrival후 결과에 딸려오는 RetrievalResult.query_analysis 랑 헷갈리면 안됨.
+            query_analysis = self._analyze_query(query)
 
-            if not relevant_chunks:
+            ###############################################
+            # 관련 청크 검색   
+            rr:RetrievalResult = await self.process_retrival(query=query, top_k=top_k, document_ids=document_ids, query_type="chat")
+            #logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks.documents)}개 청크 발견")
+
+            if not rr.documents:
                 yield "관련 문서를 찾을 수 없습니다."
                 return
             if document_ids is None or len(document_ids) == 0:
@@ -795,7 +765,7 @@ class RAGService:
 
             # 문서 컨텍스트 구성
             doc_contexts = []
-            for doc in relevant_chunks.documents:
+            for doc in rr.documents:
                 metadata = doc.metadata
                 doc_contexts.append(
                     f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
@@ -804,6 +774,7 @@ class RAGService:
                     f"내용: {doc.page_content}"  # LangchainDocument의 page_content 사용
                 )
 
+            # 생성형AI에게 수집한 context를 바탕으로 query를 질문
             # 프롬프트 생성 및 응답
             async for token in self.chat_prompt.analyze_streaming(
                                     content='\n\n'.join(doc_contexts),

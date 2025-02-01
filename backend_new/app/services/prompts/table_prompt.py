@@ -130,37 +130,17 @@ class TablePrompt(BasePrompt):
             
             # 프롬프트 생성 및 처리
             try:
+                # chunk_content 바탕으로 프롬프트 생성
                 prompt = self._generate_prompt(chunk_content, user_query, keywords, query_analysis)
+
+                # 생성형AI에게 수집한 context를 바탕으로 query를 질문
+                # process_prompt()는 캐시 and generate_content()를 호출함.
                 result = self.process_prompt(user_query, prompt)
-                # result는 dictionary 형식이어야함.
-                # result에는 content와 각종 meta data와 같은 정보가 있어야함.
-                # 아래에서 저런식으로 이중, 삼중 파싱하는 형태를 취하면 안됨.
                 
                 if not result:
                     return "문서에서 관련 내용을 찾을 수 없습니다."
                 
-                # JSON 문자열인 경우 파싱
-                try:
-                    import json
-                    if isinstance(result, str) and result.strip().startswith('{'):
-                        parsed_result = json.loads(result)
-                        if isinstance(parsed_result, dict):
-                            # content 키가 있으면 해당 내용만 반환
-                            if "content" in parsed_result:
-                                result_content = parsed_result["content"]
-                            else:
-                                result_content = str(parsed_result)
-                        else:
-                            result_content = str(parsed_result)
-                    else:
-                        result_content = str(result)
-                except json.JSONDecodeError:
-                    result_content = str(result)
-                except Exception as e:
-                    logger.error(f"분석 결과 처리 중 오류 발생: {str(e)}")
-                    result_content = str(result)
-                
-                return result_content
+                return result
                 
             except Exception as e:
                 logger.error(f"프롬프트 처리 중 오류 발생: {str(e)}")

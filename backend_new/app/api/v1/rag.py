@@ -95,10 +95,10 @@ async def table_search(
         #                 detail=f"문서를 찾을 수 없거나 접근할 수 없습니다: {doc_id}"
         #             )
 
-        doc_ids = [UUID(doc_id) for doc_id in request.document_ids]
+        #doc_ids = [UUID(doc_id) for doc_id in request.document_ids]
         response = await rag_service.handle_table_mode(
             query=request.query,
-            document_ids=doc_ids,
+            document_ids=request.document_ids,
             user_id=session.user_id,
             project_id=request.project_id
         )

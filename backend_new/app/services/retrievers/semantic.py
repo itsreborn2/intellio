@@ -64,6 +64,7 @@ class SemanticRetriever(BaseRetriever):
                 top_k=_top_k * self.config.search_multiplier,  # 더 많은 결과를 가져와서 필터링
                 filters=filters
             )
+
             #search_results = [(Document, score), (Document, score), ...]
             # Document.metadata는 저장할때 넣었던 metadata와 같은 구조다.
             
