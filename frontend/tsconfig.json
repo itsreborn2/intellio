@@ -22,18 +22,10 @@
       }
     ],
     "paths": {
-<<<<<<< HEAD
-      "@/*": [
-        "./*"
-      ]
-    },
-    "target": "ES2017"
-=======
       "@/*": ["./*"]
     },
     "target": "es2015",
     "downlevelIteration": true
->>>>>>> develop
   },
   "include": [
     "next-env.d.ts",
