@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy import select
@@ -10,7 +10,7 @@ import pdb
 from app.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
-    ProjectResponse,
+    ProjectSimpleResponse,
     ProjectListResponse,
     RecentProjectsResponse
 )
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 #logger = logging.getLogger("app.api.v1.project")
 logger.setLevel(logging.DEBUG)
 
-@router.post("/", response_model=ProjectResponse)
+@router.post("/", response_model=ProjectSimpleResponse)
 async def create_project(
     project_in: ProjectCreate,
     session: Session = Depends(get_current_session),
@@ -46,19 +46,16 @@ async def create_project(
 
 @router.get("/recent", response_model=RecentProjectsResponse)
 async def get_recent_projects(
-    limit: int = 5,
+    limit: Optional[int] = None,
     session: Session = Depends(get_current_session),
-    db: AsyncSession = Depends(get_db),
-    user_service: UserService = Depends(get_user_service),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """최근 프로젝트 목록 조회"""
-    logger.debug(f"최근 프로젝트 조회 - User Id:{session.user_id}, 세션 ID: {session.session_id}")
-    
     try:
-        logger.info(f"get_recent_projects : {session}")
-        # 세션 검증
-        if not session or not session.is_authenticated or not session.user:
+        logger.debug(f"최근 프로젝트 조회 시작 - Session: {session}")
+        
+        # 세션이 없거나 user_id가 없는 경우 빈 결과 반환
+        if not session or not session.user_id:
             logger.warning("인증되지 않은 사용자의 접근")
             return RecentProjectsResponse(
                 today=[],
@@ -67,49 +64,37 @@ async def get_recent_projects(
                 older=[]
             )
 
-        email = session.user.email
-        logger.info(f"최근 프로젝트 조회 - 사용자: {email}")
-
-        # 이메일로 사용자 조회
-        user = await user_service.get_by_email(email)
-        if not user:
-            logger.error(f"사용자를 찾을 수 없음: {email}")
-            return RecentProjectsResponse(
-                today=[],
-                yesterday=[],
-                four_days_ago=[],
-                older=[]
-            )
-
         # 사용자 ID로 최근 프로젝트 조회
-        result = await project_service.get_recent_by_user_id(user.id, limit)
+        result = await project_service.get_recent_by_user_id(session.user_id, limit)
+        logger.debug(f"프로젝트 조회 결과: {result}")
         return result
 
     except Exception as e:
         logger.error(f"최근 프로젝트 조회 중 오류 발생: {str(e)}", exc_info=True)
-        return RecentProjectsResponse(
-            today=[],
-            yesterday=[],
-            four_days_ago=[],
-            older=[]
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="프로젝트 목록을 조회하는 중 오류가 발생했습니다."
         )
 
-@router.get("/{project_id}", response_model=ProjectResponse)
-async def get_project(
+@router.get("/{project_id}", response_model=ProjectSimpleResponse)
+async def get_project_info(
     project_id: UUID,
+    session: Session = Depends(get_current_session),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 조회"""
-    logger.info(f"프로젝트 조회 시도: {project_id}")
+    logger.info(f"프로젝트 조회 시도: {project_id}, 세션의 userid : {session.user_id}")
     try:
-        project = await project_service.get(project_id)
+        user_id = session.user.id
+        project = await project_service.get(project_id, user_id)
         if not project:
             logger.warning(f"프로젝트를 찾을 수 없음: {project_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="프로젝트를 찾을 수 없습니다."
             )
-        logger.info(f"프로젝트 조회 결과: {project}")
+        logger.info(f"프로젝트 조회 결과: {project.name}, {project.id}")
+
         return project
     except Exception as e:
         logger.error(f"프로젝트 조회 중 오류 발생: {str(e)}", exc_info=True)
@@ -153,7 +138,7 @@ async def list_projects(
 ):
     """프로젝트 목록 조회"""
     try:
-        logger.info(f"프로젝트 목록 조회 시도 - 세션 ID: {session.session_id}")
+        logger.info(f"프로젝트 목록 조회 시도 - user ID: {session.user_id}")
         projects = await project_service.get_multi(
             skip=skip,
             limit=limit,
@@ -173,17 +158,18 @@ async def list_projects(
             detail="프로젝트 목록 조회 중 오류가 발생했습니다."
         )
 
-@router.put("/{project_id}", response_model=ProjectResponse)
+@router.put("/{project_id}", response_model=ProjectSimpleResponse)
 async def update_project(
     project_id: UUID,
     project_in: ProjectUpdate,
+    session: Session = Depends(get_current_session),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 수정"""
     logger.info(f"프로젝트 업데이트 시도: {project_id}")
     logger.info(f"업데이트 데이터: {project_in}")
     try:
-        project = await project_service.update(project_id, project_in)
+        project = await project_service.update(project_id, project_in, user_id=session.user_id)
         if not project:
             logger.warning(f"프로젝트를 찾을 수 없음: {project_id}")
             raise HTTPException(
@@ -203,21 +189,24 @@ async def autosave_project(
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 자동 저장"""
-    try:
-        project = await project_service.update(project_id, project_in)
-        if not project:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="프로젝트를 찾을 수 없습니다."
-            )
-        return {"message": "자동 저장 완료"}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"자동 저장 실패: {str(e)}"
-        )
+    # 굳이 사용할 필요없음. 일단 주석으로만 블록처리.
+    # logger.info(f"프로젝트 자동 저장 시도: {project_id}")
+    # logger.info(f"자동 저장 데이터: {project_in}")
+    # try:
+    #     project = await project_service.update(project_id, project_in)
+    #     if not project:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_404_NOT_FOUND,
+    #             detail="프로젝트를 찾을 수 없습니다."
+    #         )
+    #     return {"message": "자동 저장 완료"}
+    # except Exception as e:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    #         detail=f"자동 저장 실패: {str(e)}"
+    #     )
 
-@router.patch("/{project_id}", response_model=ProjectResponse)
+@router.patch("/{project_id}", response_model=ProjectSimpleResponse)
 async def update_project_category(
     project_id: UUID,
     project_update: ProjectUpdate,
@@ -267,12 +256,13 @@ async def update_project_category(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: UUID,
+    session: Session = Depends(get_current_session),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """프로젝트 삭제"""
     logger.info(f"프로젝트 삭제 시도: {project_id}")
     try:
-        success = await project_service.delete(project_id)
+        success = await project_service.delete(project_id, session.user_id)
         if not success:
             logger.warning(f"프로젝트를 찾을 수 없음: {project_id}")
             raise HTTPException(

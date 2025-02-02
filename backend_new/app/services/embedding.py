@@ -1,99 +1,225 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import numpy as np
 from openai import OpenAI, AsyncOpenAI
-from pinecone import Pinecone, ServerlessSpec
-from datetime import datetime, timezone
+from pinecone import Pinecone, PodSpec, ServerlessSpec
+
 import logging
+import re
 from app.core.config import settings
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from app.utils.common import measure_time_async
+import openai
+from openai import OpenAIError, Timeout
+from app.services.embedding_models import EmbeddingModelManager, EmbeddingProvider, EmbeddingProviderFactory, EmbeddingModelConfig, EmbeddingModelType
+from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
 
 class EmbeddingService:
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        pc = Pinecone(api_key=settings.PINECONE_API_KEY)
-        self.index = pc.Index(settings.PINECONE_INDEX_NAME)
-        self.batch_size = 50
+        self.batch_size = 20  # 임베딩 처리의 안정성을 위해 배치 크기 축소 (50 -> 20)
+        self.model_manager = EmbeddingModelManager()
+        #self.current_model = self.model_manager.get_default_model() # 기본 모델은 openai
+        #self.current_model = self.model_manager.get_model(EmbeddingModelType.OPENAI_ADA_002) # 구글 다국어 모델
+        self.current_model_config = self.model_manager.get_model_config(EmbeddingModelType.GOOGLE_MULTI_LANG) # 구글 다국어 모델
+        #self.current_model = self.model_manager.get_model(EmbeddingModelType.KAKAO_EMBEDDING) # 구글 다국어 모델
+
+        # 현재 모델에 맞는 제공자 생성
+        self.provider = EmbeddingProviderFactory.create_provider(
+            self.current_model_config.provider_name,
+            self.current_model_config.name
+        )
+        
+        #self.create_pinecone_index(self.current_model)
+
+    def get_model_type(self) -> EmbeddingModelType:
+        return EmbeddingModelType(self.current_model_config.name)
+        
+
+    # def create_pinecone_index(self, embedding_model: EmbeddingModelConfig):
+    #     pinecone = Pinecone(api_key=settings.PINECONE_API_KEY)
+    #     # 인덱스가 있는지 확인하고 없으면 생성
+    #     _model = embedding_model.name
+    #     _dimension = embedding_model.dimension
+    #     try:
+    #         self.pinecone_index = pinecone.Index(_model)
+    #         logger.info(f"Pinecone 인덱스 {_model} 설정 완료")
+    #     except:
+    #         logger.info(f"Pinecone 인덱스 {_model} 없음. 생성 중...")
+    #         try:
+    #             # 새 인덱스 생성
+    #             pinecone.create_index(
+    #                 name=_model,
+    #                 dimension=_dimension,        # 임베딩 차원수
+    #                 metric="cosine",      # 유사도 측정 방식
+    #                 spec=PodSpec(
+    #                     environment=settings.PINECONE_ENVIRONMENT, 
+    #                     pod_type="p1"         # 기본 pod 타입
+    #                 )
+    #                 #spec=ServerlessSpec(cloud="aws", region="us-west-2")
+    #             )
+    #             logger.info(f"Pinecone 인덱스 {_model} 생성 완료")
+    #             self.pinecone_index = pinecone.Index(_model)
+    #             logger.info(f"Pinecone 인덱스 {_model} 설정 완료")
+    #         except Exception as e:
+    #             logger.error(f"Pinecone 인덱스 {_model} 생성/조회 실패: {str(e)}")
+    #             raise
+    #     return self.pinecone_index
+    # def get_pinecone_index(self):
+    #     return self.pinecone_index
+    
+    # def set_model(self, model_name: str) -> None:
+    #     """임베딩 모델 변경"""
+    #     model = self.model_manager.get_model(model_name)
+    #     if model:
+    #         self.current_model = model
+    #         # 새로운 모델에 맞는 제공자로 교체
+    #         self.provider = EmbeddingProviderFactory.create_provider(
+    #             model.provider,
+    #             model.name
+    #         )
+    #         self.create_pinecone_index(model)
+    #     else:
+    #         raise ValueError(f"Unknown model: {model_name}")
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     async def create_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
-        """여러 텍스트의 임베딩을 한 번에 생성"""
+        """텍스트 배치의 임베딩을 생성"""
         try:
-            # 빈 텍스트 필터링
-            valid_texts = [text.strip() for text in texts if text and text.strip()]
-            if not valid_texts:
+            # texts는 사용자의 프롬프트 1개 일수도 있고, 문서의 청크 여러개 일수도 있음.
+            if not texts:
+                return []
+                
+            # 텍스트 유효성 검사
+            validated_texts = []
+            for text in texts:
+                if not text or not text.strip():
+                    logger.warning("빈 텍스트 건너뜀")
+                    continue
+                validated_texts.append(text.strip())
+            
+            if not validated_texts:
                 return []
             
-            all_embeddings = []
+            # 제공자를 통해 임베딩 생성
+            embeddings = await self.provider.create_embeddings_async(validated_texts)
             
-            # 배치 단위로 처리
-            for i in range(0, len(valid_texts), self.batch_size):
-                batch = valid_texts[i:i + self.batch_size]
-                
-                try:
-                    # OpenAI API 비동기 호출
-                    response = await self.async_client.embeddings.create(
-                        model="text-embedding-ada-002",
-                        input=batch
-                    )
-                    
-                    if not response.data:
-                        logger.error(f"임베딩 생성 실패: 응답 데이터 없음 (배치 {i})")
-                        continue
-                        
-                    # 임베딩 추출 및 저장
-                    batch_embeddings = [item.embedding for item in response.data]
-                    all_embeddings.extend(batch_embeddings)
-                    
-                    logger.info(f"배치 처리 완료: {i+1}-{i+len(batch)}/{len(valid_texts)}")
-                
-                except Exception as e:
-                    logger.error(f"배치 처리 실패 ({i}): {str(e)}")
-                    raise
+            # 임베딩 품질 검사
+            for i, emb in enumerate(embeddings):
+                if not emb or len(emb) != self.current_model_config.dimension:
+                    logger.error(f"잘못된 임베딩 차원 (인덱스 {i}): {len(emb) if emb else 0}")
+                    continue
             
-            return all_embeddings
+            return embeddings
             
         except Exception as e:
-            logger.error(f"임베딩 생성 실패: {str(e)}")
+            logger.error(f"임베딩 생성 중 오류 발생: {str(e)}")
             raise
-            
-    async def store_vectors(self, vectors: List[Dict[str, Any]]) -> bool:
-        """비동기식 벡터 저장 메서드"""
+
+    @retry(
+        stop=stop_after_attempt(3),  # 최대 3번 시도
+        wait=wait_exponential(multiplier=1, min=4, max=10),  # 지수 백오프
+        retry=retry_if_exception_type(Timeout)  # 타임아웃 예외 시 재시도
+    )
+    def create_embeddings_batch_sync(self, texts: List[str]) -> List[List[float]]:
+        """텍스트 배치의 임베딩을 생성 (동기 버전)"""
         try:
-            if not vectors:
-                logger.warning("저장할 벡터 없음")
+            if not texts:
+                return []
+                
+            # 텍스트 유효성 검사
+            validated_texts = []
+            for text in texts:
+                if not text or not text.strip():
+                    logger.warning("빈 텍스트 건너뜀")
+                    continue
+                validated_texts.append(text.strip())
+            
+            if not validated_texts:
+                return []
+            
+            # 제공자를 통해 임베딩 생성
+            embeddings = self.provider.create_embeddings(validated_texts, embeddings_task_type="RETRIEVAL_DOCUMENT")
+            
+            # 임베딩 품질 검사
+            for i, emb in enumerate(embeddings):
+                if not emb or len(emb) != self.current_model_config.dimension:
+                    logger.error(f"잘못된 임베딩 차원 (인덱스 {i}): {len(emb) if emb else 0}")
+                    continue
+            
+            return embeddings
+            
+        except Exception as e:
+            logger.error(f"임베딩 생성 중 오류 발생: {str(e)}")
+            raise
+    
+    def store_vectors(self, _vectors: List[Dict]) -> bool:
+        """벡터를 Pinecone에 저장"""
+        try:
+            if not _vectors:
+                logger.warning("저장할 벡터가 없습니다")
                 return False
 
-            # Pinecone 형식으로 변환
-            pinecone_vectors = [
-                {
-                    "id": str(vector["id"]),
-                    "values": vector["values"],
-                    "metadata": vector["metadata"]
-                }
-                for vector in vectors
-            ]
-
             # 벡터 저장
-            logger.info(f"벡터 {len(vectors)}개 저장 중")
-            self.index.upsert(vectors=pinecone_vectors)
-            logger.info(f"벡터 {len(vectors)}개 저장 완료")
+            logger.info(f"벡터 {len(_vectors)}개 저장 중")
+            self.pinecone_index.upsert(vectors=_vectors)
+            logger.info(f"벡터 {len(_vectors)}개 저장 완료")
             return True
 
         except Exception as e:
             logger.error(f"벡터 저장 실패: {str(e)}")
-            raise
-            
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    async def create_embedding_with_retry(self, text: str) -> List[float]:
-        """단일 텍스트의 임베딩을 생성 (이전 버전과의 호환성 유지)"""
+            return False
+    
+    async def get_single_embedding_async(self, query: str) -> List[float]:
+        """단일 텍스트에 대한 임베딩을 생성하고 검증"""
         try:
-            embeddings = await self.create_embeddings_batch([text])
-            return embeddings[0] if embeddings else None
+            if not query or not query.strip():
+                logger.error("빈 쿼리 문자열")
+                raise ValueError("쿼리 문자열이 비어있습니다")
+
+            embeddings = await self.provider.create_embeddings_async([query.strip()])
+            
+            # 임베딩 결과 검증
+            if not embeddings or len(embeddings) == 0:
+                logger.error("임베딩 생성 결과가 비어있음")
+                raise ValueError("임베딩 생성 실패")
+                
+            embedding = embeddings[0]
+            
+            # 임베딩 벡터 검증
+            if not isinstance(embedding, list) or len(embedding) != self.current_model_config.dimension:
+                logger.error(f"잘못된 임베딩 형식 또는 차원: {len(embedding) if isinstance(embedding, list) else type(embedding)}")
+                raise ValueError("잘못된 임베딩 형식")
+            
+            return embedding
         except Exception as e:
-            logger.error(f"임베딩 생성 실패: {str(e)}")
+                logger.error(f"단일 임베딩 생성 실패: {str(e)}")
+                raise
+    def get_single_embedding(self, query: str) -> List[float]:
+        """단일 텍스트에 대한 임베딩을 생성하고 검증 (동기 버전)"""
+        try:
+            if not query or not query.strip():
+                logger.error("빈 쿼리 문자열")
+                raise ValueError("쿼리 문자열이 비어있습니다")
+
+            embeddings = self.provider.create_embeddings([query.strip()])
+            
+            # 임베딩 결과 검증
+            if not embeddings or len(embeddings) == 0:
+                logger.error("임베딩 생성 결과가 비어있음")
+                raise ValueError("임베딩 생성 실패")
+                
+            embedding = embeddings[0]
+            
+            # 임베딩 벡터 검증
+            if not isinstance(embedding, list) or len(embedding) != self.current_model_config.dimension:
+                logger.error(f"잘못된 임베딩 형식 또는 차원: {len(embedding) if isinstance(embedding, list) else type(embedding)}")
+                raise ValueError("잘못된 임베딩 형식")
+                
+            return embedding
+            
+        except Exception as e:
+            logger.error(f"단일 임베딩 생성 실패: {str(e)}")
             raise
             
     async def create_embedding(self, text: str) -> List[float]:
@@ -101,150 +227,200 @@ class EmbeddingService:
         try:
             if not text or not text.strip():
                 logger.warning("Empty text provided for embedding")
-                return None
+                return []
                 
-            embedding = await self.create_embedding_with_retry(text)
-            if embedding is None:
-                logger.error("Failed to create embedding - got None result")
-                return None
-                
-            return embedding
+            response = await self.async_client.embeddings.create(
+                model="text-embedding-ada-002",  
+                input=text.strip()
+            )
+            
+            return response.data[0].embedding
             
         except Exception as e:
-            logger.error(f"Failed to create embedding: {str(e)}")
-            return None
-
+            logger.error(f"Error creating embedding: {str(e)}")
+            raise
+    @measure_time_async
     async def search_similar(
         self, 
         query: str, 
-        top_k: int = 5,
+        top_k: int = 7,
+        min_score: float = 0.5,
+        use_context: bool = True,
+        context_window: int = 2,
         document_ids: List[str] = None
     ) -> List[Dict[str, Any]]:
-        """질문과 유사한 문서 청크를 검색합니다.
-        
-        Args:
-            query: 검색 쿼리
-            top_k: 반환할 최대 결과 수
-            document_ids: 검색할 문서 ID 목록 (None이면 모든 문서에서 검색)
-        """
+        """질문과 유사한 문서 청크를 검색합니다."""
         try:
-            # 쿼리 임베딩 생성
-            query_embedding = await self.create_embedding_with_retry(query)
-            if not query_embedding:
-                raise ValueError("Failed to create query embedding")
+            logger.info(f"유사 문서 검색 시작 - 쿼리: {query}")
             
-            # 필터 조건 설정
+            # 쿼리 임베딩 생성. 프롬프트 조절하는 과정은 없네.
+            query_embedding = await self.get_single_embedding_async(query)
+            if not query_embedding:
+                logger.error("쿼리 임베딩 생성 실패")
+                return []
+                
+            # 필터 설정
             filter_dict = {}
             if document_ids:
                 filter_dict["document_id"] = {"$in": document_ids}
+                logger.debug(f"문서 필터 설정: {document_ids}")
+
+            # Pinecone 검색 실행
+            logger.info(f"Pinecone 검색 시작 (top_k: {top_k}, min_score: {min_score})")
+            try:
+                search_response = self.pinecone_index.query(
+                    namespace="",
+                    vector=query_embedding,
+                    top_k=top_k * 5,  # 필터링을 위해 더 많은 결과 요청
+                    filter=filter_dict if filter_dict else None,
+                    include_metadata=True
+                )
                 
-            # Pinecone에서 유사한 벡터 검색
-            results = self.index.query(
-                vector=query_embedding,
-                top_k=top_k,
-                include_metadata=True,
-                filter=filter_dict
-            )
-            
-            # 결과 정리
-            similar_chunks = []
-            for match in results.matches:
-                similar_chunks.append({
-                    "chunk_id": match.id,
-                    "score": match.score,
-                    "text": match.metadata.get("text", ""),
-                    "document_id": match.metadata.get("document_id", ""),
-                    "chunk_index": match.metadata.get("chunk_index", -1)
-                })
+                if not search_response.matches:
+                    logger.warning("검색 결과 없음")
+                    return []
+                    
+                logger.info(f"검색된 총 매치 수: {len(search_response.matches)}")
+                for match in search_response.matches[:3]:
+                    logger.info(f"매치 - ID: {match.id}, 점수: {match.score:.4f}")
                 
-            return similar_chunks
+                # 유사도 점수로 필터링
+                filtered_results = [
+                    match for match in search_response.matches 
+                    if match.score >= min_score
+                ]
+                
+                if not filtered_results:
+                    logger.warning(f"최소 유사도({min_score}) 이상의 결과 없음")
+                    return []
+                
+                logger.debug(f"필터링된 결과: {len(filtered_results)}개")
+                
+                # 상위 K개만 선택
+                top_results = filtered_results[:top_k]
+                
+                # 결과 포맷팅
+                formatted_results = []
+                for match in top_results:
+                    result = {
+                        "id": match.id,
+                        "score": getattr(match, 'score', 0),  # score 속성이 없으면 0 반환
+                        "metadata": match.metadata
+                    }
+                    formatted_results.append(result)
+                    logger.debug(f"매치 정보 - ID: {match.id}, 점수: {match.score:.4f}")
+                
+                # score 기준으로 내림차순 정렬
+                formatted_results.sort(key=lambda x: x["score"], reverse=True)
+
+                return formatted_results
+                
+            except Exception as e:
+                logger.error(f"Pinecone 검색 실패: {str(e)}")
+                return []
             
         except Exception as e:
             logger.error(f"유사 문서 검색 실패: {str(e)}")
-            raise
+            return []
 
-    async def store_embeddings(
+    async def _add_context_chunks(
         self,
-        document_id: str,
-        chunk_texts: List[str],
-        metadata: dict = None
-    ) -> List[str]:
-        """청크의 임베딩을 생성하고 Pinecone에 저장"""
-        chunk_ids = []
-        current_batch = []
-        batch_size = 100
-
-        try:
-            logger.info(f"Starting to process embeddings for document {document_id} with {len(chunk_texts)} chunks")
+        chunks: List[Dict[str, Any]],
+        context_window: int
+    ) -> List[Dict[str, Any]]:
+        """주변 청크의 문맥을 추가"""
+        context_chunks = []
+        
+        for chunk in chunks:
+            doc_id = chunk["metadata"].get("document_id", "")
+            chunk_idx = chunk["metadata"].get("chunk_index", 0)
             
-            for i, text in enumerate(chunk_texts):
-                embedding = await self.create_embedding_with_retry(text)
-                chunk_id = f"{document_id}_chunk_{i}"
-                # 기존 메타데이터에 doc_id 추가
-                chunk_metadata = {
-                    **(metadata or {}),
-                    "document_id": str(document_id),  # 명시적으로 문자열로 변환
-                    "chunk_index": i,
-                    "text": text  # 청크 텍스트를 메타데이터에 추가
-                }
-                current_batch.append({
-                    "id": chunk_id,
-                    "values": embedding,
-                    "metadata": chunk_metadata
-                })
-                chunk_ids.append(chunk_id)
+            # 현재 청크 추가
+            context_chunks.append(chunk)
+            
+            try:
+                # 이전 청크들 가져오기
+                start_idx = max(0, chunk_idx - context_window)
+                prev_chunks = await self._get_document_chunks_by_range(
+                    doc_id, start_idx, chunk_idx
+                )
+                context_chunks.extend(prev_chunks)
                 
-                if len(current_batch) >= batch_size:
-                    logger.info(f"Storing batch of {len(current_batch)} embeddings")
-                    await self.store_vectors(current_batch)
-                    current_batch = []
-
-            if current_batch:
-                logger.info(f"Storing final batch of {len(current_batch)} embeddings")
-                await self.store_vectors(current_batch)
-
-            logger.info(f"Successfully processed and stored {len(chunk_ids)} embeddings for document {document_id}")
-
-        except Exception as e:
-            logger.error(f"Error processing embeddings for document {document_id}: {str(e)}")
-            raise
-
-        return chunk_ids
-
-    async def query_embeddings(self, query_embedding: List[float], top_k: int = 5) -> List[Dict]:
-        """임베딩으로 유사한 문서 검색"""
+                # 다음 청크들 가져오기
+                next_chunks = await self._get_document_chunks_by_range(
+                    doc_id, chunk_idx + 1, chunk_idx + context_window + 1
+                )
+                context_chunks.extend(next_chunks)
+                
+            except Exception as e:
+                logger.warning(f"문맥 청크 추가 실패: {str(e)}")
+                continue
+        
+        # 중복 제거 및 정렬
+        unique_chunks = {chunk["id"]: chunk for chunk in context_chunks}
+        return list(unique_chunks.values())
+        
+    async def _get_document_chunks_by_range(
+        self,
+        doc_id: str,
+        start_idx: int,
+        end_idx: int
+    ) -> List[Dict[str, Any]]:
+        """문서의 특정 범위 청크 조회"""
         try:
-            results = self.index.query(
-                vector=query_embedding,
-                top_k=top_k,
-                include_metadata=True
+            # 범위 검증
+            if start_idx >= end_idx:
+                return []
+                
+            # Pinecone 쿼리
+            results = self.pinecone_index.query(
+                vector=[0.0] * 1536,  # 더미 벡터
+                top_k=max(1, end_idx - start_idx),  # 최소 1 보장
+                include_metadata=True,
+                filter={
+                    "document_id": doc_id,
+                    "chunk_index": {"$gte": start_idx, "$lt": end_idx}
+                }
             )
-            return results.matches
-        except Exception as e:
-            logger.error(f"임베딩 검색 중 오류 발생: {str(e)}")
-            raise
             
+            chunks = []
+            for match in results.matches:
+                chunks.append({
+                    "id": match.id,
+                    "score": 0.0,  # 문맥 청크는 점수 0으로 설정
+                    "content": match.metadata.get("text", ""),
+                    "metadata": match.metadata
+                })
+            
+            # 청크 인덱스로 정렬
+            chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"청크 범위 조회 실패: {str(e)}")
+            return []
+
     async def get_document_chunks(self, doc_id: str) -> List[Dict[str, Any]]:
-        """문서 ID에 해당하는 모든 청크 가져오기"""
+        """특정 문서의 모든 청크를 가져옵니다."""
         try:
-            # Pinecone에서 문서 ID로 필터링하여 모든 청크 검색
-            results = self.index.query(
+            # 문서 ID로 필터링하여 모든 청크 검색
+            results = self.pinecone_index.query(
                 vector=[0] * 1536,  # 더미 벡터
                 top_k=10000,  # 충분히 큰 값
                 include_metadata=True,
-                filter={"document_id": str(doc_id)}  # 문서 ID로 필터링
+                filter={"document_id": doc_id}
             )
             
-            # 청크 인덱스 순서대로 정렬
-            chunks = sorted([
-                {
-                    "chunk_id": match.id,
-                    "text": match.metadata.get("text", ""),
-                    "chunk_index": match.metadata.get("chunk_index", -1)
+            # 결과 형식화
+            chunks = []
+            for match in results.matches:
+                chunk = {
+                    "id": match.id,
+                    "content": match.metadata.get("text", ""),
+                    "metadata": match.metadata
                 }
-                for match in results.matches
-            ], key=lambda x: x["chunk_index"])
-            
+                chunks.append(chunk)
+                
             return chunks
             
         except Exception as e:
@@ -258,18 +434,22 @@ class EmbeddingService:
                 return
                 
             # Pinecone에서 임베딩 삭제
-            self.index.delete(ids=embedding_ids)
+            self.pinecone_index.delete(ids=embedding_ids)
             logger.info(f"임베딩 삭제 완료: {len(embedding_ids)}개")
             
         except Exception as e:
-            logger.error(f"임베딩 삭제 중 오류 발생: {str(e)}")
-            raise
+            logger.error(f"임베딩 삭제 실패: {str(e)}")
 
     async def clear_index(self) -> None:
         """인덱스의 모든 벡터 삭제"""
         try:
-            self.index.delete(delete_all=True)
+            self.pinecone_index.delete(delete_all=True)
             logger.info("Pinecone 인덱스 초기화 완료")
         except Exception as e:
             logger.error(f"인덱스 초기화 중 오류 발생: {str(e)}")
-            raise
+
+    def get_provider(self) -> EmbeddingProvider:
+        return self.provider
+
+    def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
+        return self.provider.get_embeddings_obj()

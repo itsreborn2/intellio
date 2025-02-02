@@ -1,27 +1,147 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
-import { Send } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Send, Square } from 'lucide-react'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/contexts/AppContext'
-import { searchTable, chat } from '@/services/api'
+import { searchTable, sendChatMessage, sendChatMessage_streaming, stopChatMessageGeneration } from '@/services/api'
+import { IMessage, IChatResponse, TableResponse } from '@/types/index'
+import * as actionTypes from '@/types/actions'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
+import React from 'react'
+
+// ChatMessage 컴포넌트를 메모이제이션
+const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { message: IMessage; isStreaming?: boolean }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isLongContent, setIsLongContent] = useState(false);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      const { scrollHeight, clientHeight, scrollWidth, clientWidth } = contentRef.current;
+      setIsLongContent(scrollHeight > clientHeight || scrollWidth > clientWidth);
+    }
+  }, [message.content]);
+
+  return (
+    <div className="flex flex-col items-end mb-2 w-full">
+      <div className={`flex items-start gap-3 ${
+        message.role === 'assistant' 
+          ? `bg-gray-100 dark:bg-gray-800 ${isLongContent ? 'w-full' : 'w-fit'}`
+          : `bg-sky-100 dark:bg-sky-900 ${isLongContent ? 'w-full' : 'w-fit'}`
+      } ${isLongContent ? 'px-4 py-3' : 'px-3 py-2'} rounded-lg ${
+        message.role === 'user' ? 'ml-auto' : 'mr-auto'
+      }`}>
+        <div 
+          ref={contentRef}
+          className={`overflow-hidden ${isStreaming ? 'typing' : ''}`}
+        >
+          <ReactMarkdown 
+            remarkPlugins={[remarkGfm, remarkBreaks]}
+            skipHtml={true}
+            unwrapDisallowed={true}
+            className="prose max-w-none markdown
+                [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
+                [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
+                [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
+                [&>li]:text-gray-600 [&>li]:leading-relaxed
+                [&>p:only-child]:m-0"
+            components={{
+              text: ({node, ...props}) => <>{props.children}</>
+            }}
+          >
+            {message.content}
+          </ReactMarkdown>
+          {isStreaming && <span className="cursor" />}
+        </div>
+      </div>
+    </div>
+  )
+});
+
+class StreamingMarkdownHandler {
+  private buffer: string = '';
+  private markdownPrefix: string = '';
+  private isFirstChunk: boolean = true;
+  private readonly listSymbols = ['#', '*', '-'];
+
+  processChunk(chunk: string, dispatch: any, tempMessageId: string): void {
+    // data: [DONE] 체크
+    if (chunk.includes('[DONE]')) {
+      this.flushBuffer(dispatch, tempMessageId);
+      return;
+    }
+
+    // data: 프리픽스 제거 (끝의 공백만 제거)
+    const cleanedChunk = chunk.replace(/^data: /, '');
+    if (!cleanedChunk) return;
+
+    // [DONE] 문자열이 포함된 경우 제거 (끝의 공백만 제거)
+    const finalChunk = cleanedChunk.replace(/\[DONE\]$/, '');
+    if (!finalChunk) return;
+
+    console.log(finalChunk)
+    // 일반 텍스트 처리
+    dispatch({
+      type: actionTypes.UPDATE_CHAT_MESSAGE,
+      payload: {
+        id: tempMessageId,
+        content: (prevContent: string) => prevContent + finalChunk
+      }
+    });
+  }
+
+  private flushBuffer(dispatch: any, tempMessageId: string): void {
+    if (this.buffer) {
+      dispatch({
+        type: actionTypes.UPDATE_CHAT_MESSAGE,
+        payload: {
+          id: tempMessageId,
+          content: (prevContent: string) => prevContent + this.buffer
+        }
+      });
+      this.buffer = '';
+    }
+  }
+
+  reset(): void {
+    this.buffer = '';
+    this.markdownPrefix = '';
+    this.isFirstChunk = true;
+  }
+}
 
 export const ChatSection = () => {
   const { state, dispatch } = useApp()
   const [input, setInput] = useState('')
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const messageCountRef = useRef(0)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  // 고유한 메시지 ID 생성 함수
+  const generateMessageId = useCallback(() => {
+    messageCountRef.current += 1
+    return `${Date.now()}-${messageCountRef.current}`
+  }, [])
 
-  useEffect(() => {
-    scrollToBottom()
-  }, [state.messages])
+  const handleStopGeneration = useCallback(async () => {
+    if (!state.currentProjectId) return
+    
+    try {
+      await stopChatMessageGeneration(state.currentProjectId)
+      setIsGenerating(false)
+      setStreamingMessageId(null)
+    } catch (error) {
+      console.error('메시지 생성 중지 중 오류:', error)
+    }
+  }, [state.currentProjectId])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim()) return
 
@@ -29,21 +149,25 @@ export const ChatSection = () => {
     setInput('')
 
     // 분석 시작 상태 설정
-    dispatch({ type: 'SET_IS_ANALYZING', payload: true })
+    dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: true })
+    setIsGenerating(true)
 
-    // 사용자 메시지 추가 (모든 모드에서 공통)
+    // 사용자 메시지 추가
+    const userMessageId = generateMessageId()
     dispatch({
-      type: 'ADD_MESSAGE',
+      type: actionTypes.ADD_CHAT_MESSAGE,
       payload: {
+        id: userMessageId,
         role: 'user',
-        content: currentInput
+        content: currentInput,
+        timestamp: new Date().toISOString()
       }
     })
 
     if (state.analysis.mode === 'table') {
       if (!state.currentProjectId || !state.analysis.selectedDocumentIds.length) {
         console.warn('프로젝트 ID 또는 선택된 문서가 없습니다')
-        dispatch({ type: 'SET_IS_ANALYZING', payload: false })
+        dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false })
         return
       }
 
@@ -56,25 +180,25 @@ export const ChatSection = () => {
 
       // AI 요청
       try {
-        const result = await searchTable(
+        const result:TableResponse = await searchTable(
           state.currentProjectId,
           state.analysis.selectedDocumentIds,
           currentInput
         )
+        
 
         console.log('테이블 검색 결과:', result)
 
         if (result.columns?.length > 0) {
           dispatch({
-            type: 'UPDATE_TABLE_DATA',
-            payload: {
-              columns: [...state.analysis.tableData.columns, ...result.columns]
-            }
+            type: actionTypes.UPDATE_TABLE_DATA,
+            payload: result //{
+
           })
 
           // 성공 메시지 추가
           dispatch({
-            type: 'ADD_MESSAGE',
+            type: actionTypes.ADD_CHAT_MESSAGE,
             payload: {
               role: 'assistant',
               content: '새로운 컬럼이 추가되었습니다.'
@@ -86,45 +210,117 @@ export const ChatSection = () => {
         
         // 오류 메시지 추가
         dispatch({
-          type: 'ADD_MESSAGE',
+          type: actionTypes.ADD_CHAT_MESSAGE,
           payload: {
             role: 'assistant',
             content: '죄송합니다. 분석 중 오류가 발생했습니다.'
           }
         })
+        
       } finally {
-        dispatch({ type: 'SET_IS_ANALYZING', payload: false })
+        dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false })
+        setIsGenerating(false)
       }
     } else {
-      // 채팅 모드
-      try {
-        const response = await chat(
-          state.currentProjectId!,
-          state.analysis.selectedDocumentIds,
-          currentInput
-        )
+      const streamingHandler = new StreamingMarkdownHandler();
+      const tempMessageId = generateMessageId();
 
+      try {
+        
+
+        // 초기 빈 메시지 추가
         dispatch({
-          type: 'ADD_MESSAGE',
+          type: actionTypes.ADD_CHAT_MESSAGE,
           payload: {
+            id: tempMessageId,
             role: 'assistant',
-            content: response.message
+            content: '',
+            timestamp: new Date().toISOString()
           }
-        })
+        });
+        const docIds = Object.values(state.documents).map(doc => doc.id)
+        console.log('doc ids : ', docIds)
+        const response = await sendChatMessage_streaming(
+          state.currentProjectId!,
+          //state.analysis.selectedDocumentIds,
+          docIds,
+          currentInput
+        );
+    
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+    
+        if (!reader) throw new Error('No reader available');
+        setStreamingMessageId(tempMessageId);
+    
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            setStreamingMessageId(null);
+            setIsGenerating(false)
+            break;
+          }
+          
+          const chunk = decoder.decode(value);
+          
+          if (chunk === 'data: [DONE]' || chunk === '[DONE]') {
+            setStreamingMessageId(null);
+            setIsGenerating(false)
+            break;
+          }
+    
+          streamingHandler.processChunk(chunk, dispatch, tempMessageId);
+        }
+    
       } catch (error) {
-        console.error('채팅 중 오류:', error)
+        setStreamingMessageId(null);
+        setIsGenerating(false)
+        console.error('채팅 중 오류:', error);
         dispatch({
-          type: 'ADD_MESSAGE',
+          type: actionTypes.ADD_CHAT_MESSAGE,
           payload: {
             role: 'assistant',
             content: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.'
           }
-        })
+        });
       } finally {
-        dispatch({ type: 'SET_IS_ANALYZING', payload: false })
+        streamingHandler.reset();
+        dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false });
+        setStreamingMessageId(null);
+        setIsGenerating(false)
       }
     }
+  }, [input, state.analysis.mode, state.currentProjectId, state.analysis.selectedDocumentIds, dispatch, generateMessageId]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value)
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  }, [handleSubmit]);
+
+  // 메시지 렌더링 최적화
+  const renderMessages = useMemo(() => {
+    return state.messages.map((message) => (
+      <ChatMessage 
+        key={message.id || `${message.timestamp}-${message.role}`} 
+        message={message} 
+        isStreaming={message.id === streamingMessageId}
+      />
+    ));
+  }, [state.messages, streamingMessageId]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [state.messages])
 
   return (
     <div className="h-full w-full overflow-y-auto bg-muted/90">
@@ -134,7 +330,7 @@ export const ChatSection = () => {
             <Button
               variant={state.analysis.mode === 'chat' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => dispatch({ type: 'SET_MODE', payload: 'chat' })}
+              onClick={() => dispatch({ type: actionTypes.SET_MODE, payload: 'chat' })}
               className="text-xs"
             >
               Chat
@@ -142,94 +338,58 @@ export const ChatSection = () => {
             <Button
               variant={state.analysis.mode === 'table' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => dispatch({ type: 'SET_MODE', payload: 'table' })}
+              onClick={() => dispatch({ type: actionTypes.SET_MODE, payload: 'table' })}
               className="text-xs"
             >
               Table
             </Button>
           </div>
           <div className="flex-1 overflow-y-auto p-2">
-            {state.messages.map((message, index) => (
-              <div
-                key={index}
-                className={`mb-2 ${
-                  message.role === 'user' ? 'text-right' : 'text-left'
-                }`}
-              >
-                {message.role === 'user' ? (
-                  <div className="inline-block p-2 rounded-lg bg-blue-500 text-white text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed mr-2">
-                    {message.content}
-                  </div>
-                ) : (
-                  <div className="inline-block p-2 rounded-lg bg-gray-200 text-gray-800 text-sm whitespace-pre-wrap max-w-[95%] leading-relaxed ml-2">
-                    {message.content.split(/(<[mnp][pn]?>.*?<\/[mnp][pn]?>)/).map((part, index) => {
-                      const moneyPlusMatch = part.match(/<mp>(.*?)<\/mp>/);
-                      const moneyMinusMatch = part.match(/<mn>(.*?)<\/mn>/);
-                      const moneyMatch = part.match(/<m>(.*?)<\/m>/);
-                      const numberPlusMatch = part.match(/<np>(.*?)<\/np>/);
-                      const numberMinusMatch = part.match(/<nn>(.*?)<\/nn>/);
-                      const numberMatch = part.match(/<n>(.*?)<\/n>/);
-                      
-                      if (moneyPlusMatch) {
-                        return <span key={index} className="text-blue-600 font-bold">+{moneyPlusMatch[1]}</span>;
-                      } else if (moneyMinusMatch) {
-                        return <span key={index} className="text-red-600 font-bold">-{moneyMinusMatch[1]}</span>;
-                      } else if (moneyMatch) {
-                        return <span key={index} className="font-bold">{moneyMatch[1]}</span>;
-                      } else if (numberPlusMatch) {
-                        return <span key={index} className="text-blue-600 font-bold">+{numberPlusMatch[1]}</span>;
-                      } else if (numberMinusMatch) {
-                        return <span key={index} className="text-red-600 font-bold">-{numberMinusMatch[1]}</span>;
-                      } else if (numberMatch) {
-                        return <span key={index} className="font-bold">{numberMatch[1]}</span>;
-                      }
-                      return part;
-                    })}
-                  </div>
-                )}
-              </div>
-            ))}
-            {state.isAnalyzing && (
-              <div className="text-left">
-                <div className="flex items-center gap-2 p-2">
-                  <div className="w-6 h-6 rounded-full bg-gray-200 pulse" />
-                  <div className="inline-block p-2 rounded-lg bg-gray-200 text-gray-800">
-                    <div className="typing-indicator">
-                      <span></span>
-                      <span></span>
-                      <span></span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500 ml-8 mt-1">분석중...</div>
-              </div>
-            )}
+            {renderMessages}
             <div ref={messagesEndRef} />
           </div>
           <div className="flex items-center gap-2 relative mt-2 pt-2 border-t">
             <Input
+              ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="메시지를 입력하세요..."
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={isGenerating ? "응답 중..." : "메시지를 입력하세요..."}
               className="pr-20"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }
-              }}
             />
             <Button
               size="icon"
               className="absolute right-0"
-              onClick={(e) => handleSubmit(e)}
-              disabled={state.isAnalyzing}
+              onClick={isGenerating ? handleStopGeneration : handleSubmit}
+              disabled={state.isAnalyzing && !isGenerating}
             >
-              <Send className="w-4 h-4" />
+              {isGenerating ? (
+                <Square className="w-4 h-4" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>
       </div>
+      <style jsx global>{`
+        .typing .cursor {
+          display: inline-block;
+          width: 13px;
+          height: 13px;
+          border-radius: 50%;
+          background-color: currentColor;
+          margin-left: 4px;
+          margin-bottom: 2px;
+          animation: pulse 1s infinite;
+          vertical-align: middle;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.2); }
+        }
+      `}</style>
     </div>
   )
 }

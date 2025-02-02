@@ -1,11 +1,10 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
+
 import { useRouter } from 'next/navigation'
-import { format } from 'date-fns'
-import { ko } from 'date-fns/locale'
-import { AppContext, useApp } from '@/contexts/AppContext'
+
+import { useApp } from '@/contexts/AppContext'
 import * as api from '@/services/api'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { cn } from "@/lib/utils"
@@ -44,43 +43,15 @@ import {
 import { ProjectCategorySection } from './sidebar/ProjectCategorySection'
 import { TemplateSection } from './sidebar/TemplateSection'
 import { useAuth } from '@/hooks/useAuth';
-import { getRecentProjects, IRecentProjectsResponse } from '@/services/api'
+import { getRecentProjects, } from '@/services/api'
+import { IRecentProjectsResponse, IProject, IMessage, ProjectDetail, Category, SidebarProps, Template } from '@/types/index'
 
-interface Project {
-  id: string
-  name: string
-  created_at: string
-  formatted_date?: string
-  is_temporary: boolean
-  will_be_deleted?: boolean
-}
-
-interface ProjectGroup {
-  today: Project[]
-  yesterday: Project[]
-  fourDaysAgo: Project[]
-  older: Project[]
-}
-
-interface Category {
-  id: string
-  name: string
-}
-
-interface Template {
-  id: string
-  name: string
-  description: string
-}
-
-interface SidebarProps {
-  className?: string;
-}
 
 export const Sidebar = ({ className }: SidebarProps) => {
   const router = useRouter()
   const { state, dispatch } = useApp()
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: IProject[] }>({})
   const [templates, setTemplates] = useState<Template[]>([
     { id: 'template1', name: '기본 템플릿', description: '일반적인 문서 분석용 템플릿' },
     { id: 'template2', name: '계약서 분석', description: '계약서 분석 전용 템플릿' },
@@ -93,7 +64,6 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
-  const [categoryProjects, setCategoryProjects] = useState<{ [key: string]: Project[] }>({})  
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
@@ -109,9 +79,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
           type: 'UPDATE_RECENT_PROJECTS', 
           payload: {
             today: response.today || [],
-            yesterday: response.yesterday || [],
-            four_days_ago: response.four_days_ago || [],
-            older: []
+            last_7_days: response.last_7_days || [],
+            last_30_days: response.last_30_days || []
           }
         })
         setIsLoading(false)
@@ -137,9 +106,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
             type: 'UPDATE_RECENT_PROJECTS', 
             payload: {
               today: response.today || [],
-              yesterday: response.yesterday || [],
-              four_days_ago: response.four_days_ago || [],
-              older: []
+              last_7_days: response.last_7_days || [],
+              last_30_days: response.last_30_days || []
             }
           })
 
@@ -162,7 +130,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
           const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
             acc[categoryId] = projects
             return acc
-          }, {} as { [key: string]: Project[] })
+          }, {} as { [key: string]: IProject[] })
 
           dispatch({
             type: 'UPDATE_CATEGORY_PROJECTS',
@@ -211,8 +179,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
       try {
         // 이동된 프로젝트 찾기
         const movedProject = [...(state.recentProjects.today || []), 
-                            ...(state.recentProjects.yesterday || []),
-                            ...(state.recentProjects.four_days_ago || [])]
+                            ...(state.recentProjects.last_7_days || []),
+                            ...(state.recentProjects.last_30_days || [])]
                             .find(p => p.id === draggableId);
 
         if (!movedProject) {
@@ -240,7 +208,11 @@ export const Sidebar = ({ className }: SidebarProps) => {
           ...prev,
           [categoryId]: [...(prev[categoryId] || []), {
             id: movedProject.id,
-            name: movedProject.title,
+            name: movedProject.name,
+            is_temporary: false,
+            retention_period: 'PERMANENT',
+            created_at: movedProject.created_at,
+            updated_at: movedProject.updated_at
           }]
         }));
 
@@ -263,10 +235,11 @@ export const Sidebar = ({ className }: SidebarProps) => {
         })
 
         const projectsResults = await Promise.all(projectsPromises)
+        //const a:Project = 
         const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
           acc[categoryId] = projects
           return acc
-        }, {} as { [key: string]: Project[] })
+        }, {} as { [key: string]: IProject[] })
 
         dispatch({
           type: 'UPDATE_CATEGORY_PROJECTS',
@@ -317,55 +290,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
     }
   }
 
-  const handleProjectClick = async (projectId: string) => {
-    try {
-      dispatch({ type: 'SET_INITIAL_STATE' })
-      
-      const project = await api.getProject(projectId)
-      
-      dispatch({ type: 'SET_CURRENT_PROJECT', payload: projectId })
-      dispatch({ type: 'SET_PROJECT_TITLE', payload: project.name })
-      
-      if (project.documents) {
-        dispatch({ 
-          type: 'SET_DOCUMENTS', 
-          payload: project.documents
-        })
-      }
-      
-      if (project.analysis) {
-        dispatch({
-          type: 'SET_MODE',
-          payload: project.analysis.mode
-        })
-        
-        if (project.analysis.tableData) {
-          dispatch({
-            type: 'UPDATE_TABLE_DATA',
-            payload: project.analysis.tableData
-          })
-        }
-      }
-      
-      if (project.messages) {
-        project.messages.forEach(message => {
-          dispatch({
-            type: 'ADD_MESSAGE',
-            payload: message
-          })
-        })
-      }
-      
-      dispatch({ 
-        type: 'SET_VIEW', 
-        payload: project.analysis?.mode || 'table' 
-      })
-      
-    } catch (error) {
-      console.error('프로젝트 로드 실패:', error)
-    }
-  }
-
+  
   const toggleSection = (section: string) => {
     setExpandedSections(prev =>
       prev.includes(section)
@@ -409,7 +334,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
       }}
     >
       <div className="w-[250px] border-r bg-gray-200 flex flex-col h-full">
-        <div className="p-4 flex items-center justify-between flex-shrink-0 border-b">
+        <div className="p-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <ScrollText className="h-6 w-6 text-primary" />
             <h2 className="text-lg font-semibold tracking-tight">DocEasy</h2>
@@ -422,17 +347,17 @@ export const Sidebar = ({ className }: SidebarProps) => {
                   size="icon" 
                   className="h-8 w-8"
                   onClick={async () => {
-                    setIsLoading(true);
+                      setIsLoading(true);
                     try {
                       // 현재 프로젝트 상태 저장
-                      if (state.currentProject) {
-                        await api.autosaveProject(state.currentProject, {
-                          title: state.projectTitle,
-                          documents: state.documents,
-                          messages: state.messages,
-                          analysis: state.analysis,
-                          currentView: state.currentView
-                        });
+                      if (state.currentProjectId) {
+                        // await api.autosaveProject(state.currentProjectId, {
+                        //   title: state.projectTitle,
+                        //   documents: state.documents,
+                        //   messages: state.messages,
+                        //   analysis: state.analysis,
+                        //   currentView: state.currentView
+                        // });
                       }
 
                       // 앱 상태 초기화
@@ -445,7 +370,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
                     }
                   }}
                 >
-                  <PenSquare className={cn("h-4 w-4", isLoading && "animate-spin")} />
+                  <PenSquare className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -469,7 +394,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
                 setCategories={setCategories}
                 dispatch={dispatch}
                 onDragEnd={handleDragEnd}
-                categoryProjects={categoryProjects}  
+                categoryProjects={categoryProjects}
+                setCategoryProjects={setCategoryProjects}
               />
             </div>
           </div>

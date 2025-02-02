@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from . import document, project, rag, session, auth, category, admin
+from . import document, project, rag, session, auth, category, admin, table_history
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ logger.info("문서 라우터 등록 완료")
 api_router.include_router(project.router, prefix="/projects", tags=["projects"])
 logger.info("프로젝트 라우터 등록 완료")
 
-api_router.include_router(rag.router, prefix="/rag", tags=["rag"])
+api_router.include_router(rag.router)
 logger.info("RAG 라우터 등록 완료")
 
 api_router.include_router(session.router, tags=["sessions"]) #prefix가 없다. 나중에 추가하는게 유지보수에 좋다.
@@ -29,5 +29,8 @@ logger.info("카테고리 라우터 등록 완료")
 
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 logger.info("관리자 라우터 등록 완료")
+
+api_router.include_router(table_history.router)
+logger.info("테이블 히스토리 라우터 등록 완료")
 
 logger.info("모든 API 라우터 등록 완료")

@@ -47,16 +47,16 @@ class DocumentService:
         """파일 타입 검증"""
         return content_type in self.allowed_mime_types
 
-    async def process_document_async(self, doc_id: UUID) -> None:
+    def process_document_sync(self, doc_id: UUID) -> None:
         """문서 처리 Celery 태스크 실행"""
         try:
             # Celery 태스크 이름으로 태스크 실행
             celery.send_task(
-                'app.workers.document.process_document',
+                'app.workers.document.process_document_chucking',
                 args=[str(doc_id)],
                 queue='document-processing'
             )
-            logger.info(f"문서 처리 태스크 시작됨: {doc_id}")
+            logger.info(f"문서 처리 태스크 시작됨[sync]: {doc_id}")
         except Exception as e:
             logger.error(f"문서 처리 태스크 시작 실패: {doc_id}, error: {str(e)}")
             raise
@@ -64,7 +64,7 @@ class DocumentService:
     async def upload_documents(
         self,
         project_id: UUID,
-        session_id: str,
+        user_id: UUID,
         files: List[UploadFile],
         background_tasks: BackgroundTasks
     ) -> List[Document]:
@@ -72,23 +72,20 @@ class DocumentService:
         
         Args:
             project_id: 프로젝트 ID
-            session_id: 세션 ID
+            user_id: 사용자 ID
             files: 업로드할 파일 목록
             background_tasks: 백그라운드 태스크
             
         Returns:
             생성된 Document 객체 목록
         """
+       
+        
         if not files:
             raise HTTPException(status_code=400, detail="No files provided")
             
-        # 1. 세션 검증
-        session = await self._validate_session(session_id)
-        if not session:
-            raise HTTPException(status_code=401, detail="Invalid session")
-            
-        # 2. 프로젝트 검증
-        project = await self._validate_project(project_id, session_id)
+        # 1. 프로젝트 검증 - user_id로 접근 권한 확인
+        project = await self._validate_project(project_id, user_id)
         if not project:
             raise HTTPException(status_code=403, detail="Invalid project access")
             
@@ -131,6 +128,7 @@ class DocumentService:
                 
                 try:
                     # 7. 파일 내용 읽기 및 검증
+                    
                     content = await file.read()
                     if not content:
                         raise ValueError("Empty file")
@@ -143,7 +141,8 @@ class DocumentService:
                     file_path = f"{project_id}/{doc_id}/{file.filename}"
                     
                     # 9. 파일 저장
-                    await self.storage.upload_file(file_path, content)
+                    # 구글 클라우드에 올린다. 일단 막자.
+                    #await self.storage.upload_file(file_path, content)
                     
                     # 10. 텍스트 추출
                     try:
@@ -178,8 +177,8 @@ class DocumentService:
                     
                     documents.append(document)
                     
-                    # 14. 비동기 처리 태스크 등록
-                    background_tasks.add_task(self.process_document_async, doc_id)
+                    # 14. 문서 처리 태스크 등록
+                    self.process_document_sync(doc_id)
                     
                 except Exception as e:
                     logger.error(f"File processing error: {str(e)}")
@@ -208,18 +207,12 @@ class DocumentService:
             
         return documents
 
-    async def _validate_session(self, session_id: str):
-        """세션 유효성 검증"""
-        from app.services.session import SessionService
-        session_service = SessionService(self.db)
-        return await session_service.get_by_id(session_id)
-        
-    async def _validate_project(self, project_id: UUID, session_id: str) -> Project:
+    async def _validate_project(self, project_id: UUID, user_id: UUID) -> Project:
         """프로젝트 접근 권한 검증"""
         project = await self.db.execute(
             select(Project).where(
                 Project.id == project_id,
-                Project.session_id == session_id
+                Project.user_id == user_id
             )
         )
         return project.scalar_one_or_none()
@@ -376,12 +369,89 @@ class DocumentService:
         except Exception as e:
             logger.error(f"Error extracting text: {str(e)}")
             return None
+    # 삭제 금지 RAGOptimizedChunker TEST
+    # chunker.py를 호출하는곳이 있는지 테스트용도
+    # async def _process_chunks(self, document_id: str, extracted_text: str) -> Optional[list]:
+    #     """청크 생성 및 임베딩 처리
+        
+    #     Args:
+    #         document_id: 문서 ID
+    #         extracted_text: 추출된 텍스트
+            
+    #     Returns:
+    #         Optional[list]: 임베딩 ID 목록
+    #     """
+    #     try:
+    #         # 1. 문서 정보 조회
+    #         document = await self._get_document(document_id)
+    #         if not document:
+    #             logger.error(f"문서를 찾을 수 없음: {document_id}")
+    #             return None
 
-    async def _process_chunks(self, document_id: str, extracted_text: str) -> Optional[list]:
-        """청크 생성 및 임베딩 처리"""
+    #         # 2. 청크 생성
+    #         chunker = DocumentChunker()
+    #         chunks = chunker.create_chunks(
+    #             text=extracted_text,
+    #             title=document.title
+    #         )
+    #         if not chunks:
+    #             logger.error(f"청크 생성 실패: {document_id}")
+    #             return None
+            
+    #         # 3. 임베딩 생성 및 저장
+    #         embedding_service = EmbeddingService()
+    #         chunk_ids = []
+            
+    #         for chunk in chunks:
+    #             try:
+    #                 # 임베딩 생성
+    #                 embeddings = await embedding_service.create_embedding_with_retry(chunk["content"])
+    #                 if not embeddings:
+    #                     continue
+                        
+    #                 # 벡터 저장
+    #                 chunk_id = str(uuid4())
+    #                 vector = {
+    #                     "id": chunk_id,
+    #                     "values": embeddings,
+    #                     "metadata": {
+    #                         "text": chunk["content"],
+    #                         "document_id": document_id,
+    #                         "chunk_index": chunk["metadata"]["chunk_index"],
+    #                         "total_chunks": chunk["metadata"]["total_chunks"],
+    #                         "title": chunk["metadata"]["title"]
+    #                     }
+    #                 }
+                    
+    #                 success = await embedding_service.store_vectors([vector])
+    #                 if success:
+    #                     chunk_ids.append(chunk_id)
+                        
+    #             except Exception as e:
+    #                 logger.error(f"청크 {chunk['metadata']['chunk_index']} 처리 실패: {str(e)}")
+    #                 continue
+            
+    #         if not chunk_ids:
+    #             logger.error(f"모든 청크 처리 실패: {document_id}")
+    #             return None
+                
+    #         logger.info(f"문서 {document_id}의 {len(chunk_ids)}개 청크 처리 완료")
+    #         return chunk_ids
+            
+    #     except Exception as e:
+    #         logger.error(f"청크 처리 중 오류 발생: {str(e)}")
+    #         return None
+
+    async def get_documents_by_project(self, project_id: str) -> List[Document]:
+        """프로젝트에 속한 모든 문서를 조회합니다."""
         try:
-            # 청크 생성 및 임베딩 로직 구현
-            return ["임베딩 ID 1", "임베딩 ID 2"]
+            logger.info(f"프로젝트 {project_id}의 문서 조회 시작")
+            async with self.db as session:
+                query = select(Document).where(Document.project_id == project_id)
+                result = await session.execute(query)
+                documents = result.scalars().all()
+                logger.info(f"조회된 문서 수: {len(list(documents))}")
+                return documents
         except Exception as e:
-            logger.error(f"Error processing chunks: {str(e)}")
-            return None
+            logger.error(f"문서 조회 중 오류 발생: {str(e)}")
+            raise

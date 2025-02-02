@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { FileType, ChevronDown, ChevronRight } from 'lucide-react'
+import cn from 'classnames'
 
 interface TemplateSectionProps {
   expandedSections: string[]
@@ -16,11 +17,14 @@ export function TemplateSection({
     <div className="space-y-1">
       <Button
         variant="ghost"
-        className="w-full justify-start gap-2 px-2"
+        className={cn(
+          "w-full justify-start gap-2 px-2",
+          expandedSections.includes('templates') ? "bg-gray-50" : "hover:bg-gray-50"
+        )}
         onClick={() => toggleSection('templates')}
       >
         <FileType className="h-4 w-4 flex-shrink-0" />
-        <span className="text-left flex-grow">닥이지 템플릿</span>
+        <span className="text-left flex-grow font-medium">닥이지 템플릿</span>
         {expandedSections.includes('templates') ? (
           <ChevronDown className="h-4 w-4" />
         ) : (

@@ -21,108 +21,17 @@ import {
 } from "lucide-react"
 import { useApp } from "@/contexts/AppContext"
 import { createProject, uploadDocument } from "@/services/api"
-import { Tooltip, Box, DragIndicatorIcon } from "@mui/material"
+import { Tooltip, Box } from "@mui/material"
 import { cn } from "@/lib/utils"
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
-
-// Shadcn Table Components
-const Table = React.forwardRef<
-  HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm border-collapse", className)}
-      {...props}
-    />
-  </div>
-))
-Table.displayName = "Table"
-
-const TableHeader = React.forwardRef<
-  HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement>
->(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("[&_tr]:border-b bg-gray-200 border-gray-200", className)} {...props} />
-))
-TableHeader.displayName = "TableHeader"
-
-const TableBody = React.forwardRef<
-  HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement>
->(({ className, ...props }, ref) => (
-  <tbody
-    ref={ref}
-    className={cn("", className)}
-    {...props}
-  />
-))
-TableBody.displayName = "TableBody"
-
-const TableRow = React.forwardRef<
-  HTMLTableRowElement,
-  React.HTMLAttributes<HTMLTableRowElement>
->(({ className, ...props }, ref) => (
-  <tr
-    ref={ref}
-    className={cn(
-      "border-b border-gray-200 transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
-      className
-    )}
-    {...props}
-  />
-))
-TableRow.displayName = "TableRow"
-
-const TableHead = React.forwardRef<
-  HTMLTableCellElement,
-  React.ThHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
-  <th
-    ref={ref}
-    className={cn(
-      "h-10 px-2 text-left align-middle font-medium text-muted-foreground border-r border-gray-200 last:border-r-0 [&:has([role=checkbox])]:px-0 [&:has([role=checkbox])]:text-center [&>[role=checkbox]]:translate-y-[2px] [&>[role=checkbox]]:ml-0.5",
-      className
-    )}
-    {...props}
-  />
-))
-TableHead.displayName = "TableHead"
-
-const TableCell = React.forwardRef<
-  HTMLTableCellElement,
-  React.TdHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
-  <td
-    ref={ref}
-    className={cn(
-      "p-2 align-middle border-r border-gray-200 last:border-r-0 [&:has([role=checkbox])]:px-0 [&:has([role=checkbox])]:text-center [&>[role=checkbox]]:translate-y-[2px] [&>[role=checkbox]]:ml-0.5",
-      className
-    )}
-    {...props}
-  />
-))
-TableCell.displayName = "TableCell"
-
-interface TableColumn {
-  name: string
-  key: string
-}
-
-interface TableRow {
-  id: string
-  [key: string]: string
-}
-
-interface TableData {
-  columns: TableColumn[]
-  rows: TableRow[]
-}
+import { IDocument,  IMessage, ITemplate, IProjectItem, IDocumentUploadResponse, IDocumentStatus } from '@/types';  
+import * as actionTypes from '@/types/actions'
+import DocumentTable, { ITableUtils } from "./DocumentTable"
+import ReactMarkdown from 'react-markdown'
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
   <div className="bg-muted/90 w-fit px-2 py-1 rounded">
@@ -162,7 +71,7 @@ const formatContent = (content: string) => {
     .map(sentence => {
       // 마크다운 헤더 처리
       if (sentence.startsWith('# ')) {
-        return sentence + '\n';
+        return sentence;
       }
       
       // 불릿 포인트나 넘버링으로 시작하는 문장 처리
@@ -199,12 +108,6 @@ const formatContent = (content: string) => {
       }
       currentSection.push(sentence);
     } else {
-      // 불릿 포인트나 넘버링이 있는 경우 새 줄에 추가
-      if (sentence.startsWith('•') || sentence.startsWith('-') || /^\d+[\.\)]/.test(sentence.trim())) {
-        if (currentSection.length > 0 && !currentSection[currentSection.length - 1].endsWith('\n')) {
-          currentSection[currentSection.length - 1] += '\n';
-        }
-      }
       currentSection.push(sentence);
     }
   }
@@ -213,11 +116,11 @@ const formatContent = (content: string) => {
     sections.push(currentSection.join('\n'));
   }
 
-  // 최종 포맷팅
+  // 최종 포맷팅 - 이중 줄바꿈을 단일 줄바꿈으로 변경
   let formattedContent = sections
     .map(section => section.trim())
     .filter(section => section)
-    .join('\n\n');
+    .join('\n');
     
   // 특수 태그 복원
   Object.keys(tags).forEach((tag, idx) => {
@@ -269,7 +172,12 @@ const isSignificantContextChange = (currentSentence: string, previousSentence: s
 const CellContent = ({ content, isDocument = false }: { content: string, isDocument?: boolean }) => {
   const formattedContent = formatContent(content);
   
-  // 컨텐츠 길이에 따른 카드 크기 계산
+  // 문서 제목인 경우 기존 렌더링 유지
+  if (isDocument) {
+    return <DocumentTitle fileName={formattedContent} />;
+  }
+
+  // 카드 크기 계산 로직 유지
   const getCardSize = (content: string) => {
     if (!content) return { width: 300, height: 150 };
     
@@ -286,16 +194,20 @@ const CellContent = ({ content, isDocument = false }: { content: string, isDocum
   
   const cardSize = getCardSize(formattedContent);
   
-  if (isDocument) {
-    return <DocumentTitle fileName={formattedContent} />;
-  }
-
   return (
     <HoverCard>
       <HoverCardTrigger asChild>
         <div className="cursor-help">
           <div className="line-clamp-3 text-sm">
-            {formattedContent}
+            <ReactMarkdown 
+              className="prose max-w-none
+                [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
+                [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
+                [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
+                [&>li]:text-gray-600 [&>li]:leading-relaxed"
+            >
+              {formattedContent}
+            </ReactMarkdown>
           </div>
         </div>
       </HoverCardTrigger>
@@ -308,18 +220,15 @@ const CellContent = ({ content, isDocument = false }: { content: string, isDocum
         } as React.CSSProperties}
       >
         <div className="space-y-1">
-          {formattedContent.split('\n').map((line, index) => (
-            <div 
-              key={index} 
-              className={`
-                ${/^[•\d]/.test(line.trim()) ? 'pl-4 py-1' : 'py-0.5'}
-                ${line.includes(':') ? 'font-semibold py-2' : ''}
-                whitespace-pre-wrap break-words
-              `}
-            >
-              {line}
-            </div>
-          ))}
+          <ReactMarkdown 
+            className="prose max-w-none
+              [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
+              [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
+              [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
+              [&>li]:text-gray-600 [&>li]:leading-relaxed"
+          >
+            {formattedContent}
+          </ReactMarkdown>
         </div>
       </HoverCardContent>
     </HoverCard>
@@ -339,6 +248,7 @@ export const TableSection = () => {
   const [columnWidths, setColumnWidths] = useState<{ [key: string]: number }>({})
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const tableRef = useRef<ITableUtils>(null);
 
   // 컬럼 상태 동기화
   useEffect(() => {
@@ -375,35 +285,104 @@ export const TableSection = () => {
     try {
       let projectId = state.currentProjectId
       if (!projectId) {
-        const project = await createProject('Temporary Project', 'Created for document upload')
-        projectId = project.id
-        dispatch({ type: 'SET_CURRENT_PROJECT', payload: projectId })
+        console.warn("Not Created Project")
+        // const project = await createProject('Temporary Project', 'Created for document upload')
+        // projectId = project.id
+        // dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: projectId })
         
-        // 프로젝트 생성 이벤트 발생
-        window.dispatchEvent(new CustomEvent('projectCreated'))
+        // // 프로젝트 생성 이벤트 발생
+        // window.dispatchEvent(new CustomEvent('projectCreated'))
+        return;
       }
-
-      const response = await uploadDocument(projectId, Array.from(files))
+      
       dispatch({
-        type: 'SET_DOCUMENTS',
-        payload: response.documents.map(doc => ({
-          id: doc.id,
-          filename: doc.filename,
-          status: doc.status,
-          content_type: doc.content_type
-        }))
-      })
-
-      dispatch({
-        type: 'ADD_CHAT_MESSAGE',
+        type: actionTypes.ADD_CHAT_MESSAGE,
         payload: {
-          role: 'system',
-          content: response.message
+          role: 'assistant',
+          content: `문서 업로드를 시작합니다. 총 ${files.length}개의 파일이 업로드됩니다.`
+        }
+      });
+
+      const response: IDocumentUploadResponse = await uploadDocument(projectId, Array.from(files))
+      if(response.success === true)
+        console.log('Upload response:[TableSection]', response)
+      else
+        console.warn('Upload response:[TableSection]', response)
+      
+      // 1. 문서 상태 업데이트
+      const documents: IDocument[] = response.documents.map(doc => ({
+        id: doc.id,
+        filename: doc.filename,
+        project_id: doc.project_id,
+        status: doc.status,
+        created_at: new Date().toISOString(),  // 현재 시간을 ISO 문자열로 추가 // 서버에서 생성된 create_at과 다른값일텐데.. 일단 나중에..
+        updated_at: new Date().toISOString(),   // 현재 시간을 ISO 문자열로 추가
+        content_type: doc.content_type
+      }));
+      console.log('Created document[TableSection], dispatch(\'SET_DOCUMENTS_IN_TABLESECTION\', payload) : ', documents)
+    
+
+      dispatch({
+        type: actionTypes.ADD_DOCUMENTS,
+        payload: documents
+      });
+      console.log(`2. 테이블 데이터 초기화 - Document 컬럼 추가. 현재프로젝트 : ${state.currentProjectId}`)
+      // export interface TableColumn {
+      //   header: {
+      //     name: string;
+      //     prompt: string;
+      //   };
+      //   cells: {
+      //     doc_id: string;
+      //     content: string;
+      //   }[];
+      //   [key: string]: any;
+      // }
+      
+      // export interface TableResponse {
+      //   columns: TableColumn[];
+      // }
+      // 2. 테이블 데이터 초기화 - Document 컬럼 추가
+      if (documents.length > 0) {
+        // const tableData  = {
+        //   columns: [{
+        //     header: {
+        //       name: 'Document',
+        //       prompt: '문서 이름을 표시합니다'
+        //     },
+        //     cells: documents.map(doc => ({
+        //       doc_id: doc.id,
+        //       content: doc.filename
+        //     }))
+        //   }]
+        // }
+        // console.log(`2-1. tableData : ${tableData}`)
+        // dispatch({
+        //   type: actionTypes.UPDATE_TABLE_DATA,
+        //   payload: tableData
+        // })
+
+        console.log('3. 분석 모드를 테이블로 변경')
+        // 3. 분석 모드를 테이블로 변경
+        dispatch({
+          type: actionTypes.SET_VIEW,
+          payload: 'table'
+        })
+      }
+      console.log('ADD_MESSAGE')
+      // 기존 메시지 dispatch
+      dispatch({
+        type: actionTypes.ADD_CHAT_MESSAGE,
+        payload: {
+          role: 'assistant',
+          content: `문서 추가 완료`
         }
       })
+
     } catch (error) {
       console.error('Failed to upload documents:', error)
     }
+      
   }
 
   const toggleRowSelection = (id: number) => {
@@ -426,6 +405,8 @@ export const TableSection = () => {
 
   const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>, column: string) => {
     const tableHead = e.currentTarget.parentElement
+    if (!tableHead) return;  // 조기 반환으로 null 체크
+    
     const table = tableHead.parentElement
     const columnWidth = tableHead.style.width
     const startX = e.clientX
@@ -509,9 +490,8 @@ export const TableSection = () => {
       // 여기에 컨텍스트 메뉴 로직 추가
     }
   }
-
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col h-full overflow-hidden">  
       <div className="sticky top-0 z-10 bg-background border-b">
         <div className="flex items-center justify-between p-2 gap-2">
           <Button
@@ -532,147 +512,10 @@ export const TableSection = () => {
           />
         </div>
       </div>
-
-      <div className="flex-1 overflow-auto relative">
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] relative">
-          <Table className="w-full border-collapse table-fixed">
-            <colgroup>
-              <col className="w-[40px] min-w-[40px] max-w-[40px]" />
-              {columnOrder.map((colName) => (
-                <col key={colName} className="w-auto" />
-              ))}
-            </colgroup>
-            <TableHeader>
-              <TableRow className="border-b">
-                <TableHead className="w-[40px] min-w-[40px] max-w-[40px] p-2 bg-muted/50">
-                  <div className="flex items-center justify-center">
-                    {state.analysis.tableData?.columns?.[0]?.cells?.length > 0 && (
-                      <Checkbox
-                        checked={selectedRows.length > 0}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            const allRows = state.analysis.tableData?.columns?.[0]?.cells?.map((_, index) => index) || [];
-                            setSelectedRows(allRows);
-                          } else {
-                            setSelectedRows([]);
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
-                </TableHead>
-                {columnOrder.map((colName) => {
-                  const column = state.analysis.tableData?.columns?.find(col => col.header.name === colName);
-                  if (!column) return null;
-                  return (
-                    <TableHead
-                      key={colName}
-                      className={`p-2 bg-muted/50 ${
-                        colName === "Document" ? "sticky left-[40px] z-20 bg-muted/50" : ""
-                      }`}
-                    >
-                      {state.analysis.tableData?.columns?.[0]?.cells?.length > 0 && (
-                        <div className="flex items-center justify-center text-center">
-                          <span className="font-medium">{colName}</span>
-                        </div>
-                      )}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {state.analysis.tableData?.columns?.[0]?.cells?.map((cell, rowIndex) => (
-                <TableRow
-                  key={cell.doc_id}
-                  className={`group border-b hover:bg-muted/30 ${
-                    selectedRows.includes(rowIndex) ? "bg-muted/50" : ""
-                  }`}
-                >
-                  <TableCell className="w-[40px] min-w-[40px] max-w-[40px] p-2">
-                    <div className="flex items-center justify-center">
-                      <div className="relative group/row">
-                        <span className="text-sm text-muted-foreground group-hover/row:invisible absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                          {rowIndex + 1}
-                        </span>
-                        <div className="invisible group-hover/row:visible">
-                          <Checkbox
-                            checked={selectedRows.includes(rowIndex)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedRows([...selectedRows, rowIndex]);
-                              } else {
-                                setSelectedRows(selectedRows.filter(row => row !== rowIndex));
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  {columnOrder.map((colName) => {
-                    const column = state.analysis.tableData?.columns?.find(col => col.header.name === colName);
-                    if (!column) return null;
-                    return (
-                      <TableCell
-                        key={colName}
-                        onClick={() => {
-                          if (colName !== "Document") {
-                            const isSelected = selectedCells.some(
-                              (selectedCell) =>
-                                selectedCell.row === rowIndex && selectedCell.col === colName
-                            );
-                            if (isSelected) {
-                              setSelectedCells(selectedCells.filter(
-                                (cell) => !(cell.row === rowIndex && cell.col === colName)
-                              ));
-                            } else {
-                              setSelectedCells([...selectedCells, { row: rowIndex, col: colName }]);
-                            }
-                          }
-                        }}
-                        className={`p-2 cursor-pointer ${
-                          colName === "Document"
-                            ? "sticky left-[40px] z-20 bg-background"
-                            : ""
-                        } ${
-                          selectedCells.some(
-                            (selectedCell) =>
-                              selectedCell.row === rowIndex && selectedCell.col === colName
-                          )
-                            ? "bg-muted/80"
-                            : ""
-                        } ${
-                          colName !== "Document" ? "hover:bg-muted/30" : ""
-                        }`}
-                      >
-                        <CellContent 
-                          content={column.cells[rowIndex]?.content || ''} 
-                          isDocument={colName === "Document"}
-                        />
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+      <div className="flex-1 overflow-auto">  
+        <DocumentTable ref={tableRef} />
       </div>
-
-      {selectedRows.length > 0 && (
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-background shadow-lg rounded-lg p-4 flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">{selectedRows.length}개의 행이 선택됨</span>
-          <Button variant="destructive" size="sm" onClick={deleteSelectedRows}>
-            <Trash2 className="h-4 w-4 mr-2" />
-            선택 행 삭제
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setSelectedRows([])}>
-            <X className="h-4 w-4 mr-2" />
-            선택 취소
-          </Button>
-        </div>
-      )}
     </div>
+    
   )
 }

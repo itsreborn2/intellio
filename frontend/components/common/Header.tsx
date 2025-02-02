@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
 import { useAuth } from "@/hooks/useAuth"
 import * as api from "@/services/api"
+import { IProject, ProjectDetail } from '@/types'
+import * as actionTypes from '@/types/actions'
 import {
   Dialog,
   DialogContent,
@@ -19,15 +21,12 @@ import { FontSettings } from "@/components/settings/FontSettings"
 import { LoginButton } from "@/components/auth/LoginButton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { useRouter } from "next/navigation"
 
 export const Header = ({ className }: { className?: string }) => {
+  const router = useRouter()
   const { state, dispatch } = useApp()
   const auth = useAuth()
-  
-  // 디버깅을 위한 상태 로깅
-  //console.log('[Header] Current Auth State:', auth)
-  //console.log('LocalStorage Token:', localStorage.getItem('token'))
-  
   const { isAuthenticated, name, email, logout } = auth
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')
@@ -51,24 +50,35 @@ export const Header = ({ className }: { className?: string }) => {
     }
     
     const newTitle = editingTitle.trim()
-    dispatch({ type: 'SET_PROJECT_TITLE', payload: newTitle })
-    setIsEditingTitle(false)
-
-    // 현재 프로젝트가 있을 때만 저장
-    if (state.currentProjectId) {
-      try {
-        // 프로젝트 상태 저장
-        await api.autosaveProject(state.currentProjectId, {
-          title: newTitle,
-          documents: state.documents,
-          messages: state.messages,
-          analysis: state.analysis,
-          currentView: state.currentView
-        });
-      } catch (error) {
-        console.error('프로젝트 저장 실패:', error)
+    
+    try {
+      // 백엔드로 프로젝트 이름 변경 요청
+      if (state.currentProject) {
+        await api.updateProjectName(state.currentProject.id, newTitle)
+        
+        // 프로젝트 정보 다시 가져오기
+        const projectInfo = await api.getProjectInfo(state.currentProject.id)
+        
+        // ProjectDetail을 IProject 형식으로 변환
+        const updatedProject: IProject = {
+          ...projectInfo,
+          is_temporary: state.currentProject.is_temporary,
+          retention_period: state.currentProject.retention_period
+        }
+        
+        // 상태 업데이트
+        dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: newTitle })
+        dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: updatedProject })
+        
+        // 최근 프로젝트 목록 새로고침
+        const recentProjects = await api.getRecentProjects()
+        dispatch({ type: actionTypes.UPDATE_RECENT_PROJECTS, payload: recentProjects })
       }
+    } catch (error) {
+      console.error('프로젝트 이름 변경 실패:', error)
     }
+    
+    setIsEditingTitle(false)
   }
 
   const handleTitleBlur = () => {
@@ -84,6 +94,14 @@ export const Header = ({ className }: { className?: string }) => {
       setEditingTitle(state.projectTitle || 'Untitled Project')
     }
   }
+
+  const handleLogout = async () => {
+    await logout()
+    // AppContext 상태 초기화
+    dispatch({ type: actionTypes.SET_INITIAL_STATE })
+    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: '' })
+  }
+
   useEffect(() => {
     //setEditingTitle(state.projectTitle || 'Untitled Project')
     console.log('[Header1] Auth State Updated:', {
@@ -96,6 +114,7 @@ export const Header = ({ className }: { className?: string }) => {
   }, [auth])
 
   useEffect(() => {
+    console.log("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     if (isEditingTitle && titleInputRef.current) {
       titleInputRef.current.focus()
       titleInputRef.current.select() // 텍스트 전체 선택
@@ -103,7 +122,8 @@ export const Header = ({ className }: { className?: string }) => {
   }, [isEditingTitle])
 
   return (
-    <div className={`border-b p-4 flex items-center justify-between ${className || ''}`}>
+    // header 태그로 변경하고 className 통합
+    <header className={`border-b p-4 flex items-center justify-between ${className || ''}`}>
       <div className="flex items-center gap-2">
         {isAuthenticated ? (
           isEditingTitle ? (
@@ -113,10 +133,10 @@ export const Header = ({ className }: { className?: string }) => {
               onChange={handleTitleChange}
               onBlur={handleTitleBlur}
               onKeyDown={handleKeyDown}
-              className="text-lg font-semibold"
+              className="text-base font-semibold"
             />
           ) : (
-            <h1 className="text-lg font-semibold cursor-pointer" onClick={handleTitleClick}>
+            <h1 className="text-base font-semibold cursor-pointer" onClick={handleTitleClick}>
               {state.projectTitle || 'Untitled Project'}
             </h1>
           )
@@ -128,13 +148,13 @@ export const Header = ({ className }: { className?: string }) => {
           <>
             <span className="text-sm text-gray-600">{email}</span>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" name="user">
+              <DropdownMenuTrigger>
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
                   <User className="h-4 w-4" />
-                </Button>
+                </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={logout}>
+                <DropdownMenuItem onClick={handleLogout}>
                   로그아웃
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -144,10 +164,10 @@ export const Header = ({ className }: { className?: string }) => {
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">로그인이 필요합니다</span>
             <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" name="user">
+              <DialogTrigger>
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
                   <User className="h-4 w-4" />
-                </Button>
+                </div>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -169,10 +189,10 @@ export const Header = ({ className }: { className?: string }) => {
         )}
 
         <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="icon" name="settings" >
+          <DialogTrigger>
+            <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
               <Settings className="h-4 w-4" />
-            </Button>
+            </div>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -185,6 +205,6 @@ export const Header = ({ className }: { className?: string }) => {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </header>
   )
 }

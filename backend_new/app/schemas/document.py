@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 from pydantic import BaseModel, Field, HttpUrl, ConfigDict, field_validator, validator
 from datetime import datetime
 import json
@@ -21,7 +21,7 @@ DocumentStatusType = Literal[
 class DocumentBase(BaseSchema):
     """문서 기본 스키마"""
     filename: str = Field(..., min_length=1, max_length=255, description="문서 파일명")
-    mime_type: str = Field(..., max_length=100, description="MIME 타입")
+    mime_type: Optional[str] = Field(None, max_length=100, description="MIME 타입")
     file_size: int = Field(..., gt=0, description="파일 크기 (bytes)")
 
 class DocumentCreate(DocumentBase):
@@ -71,7 +71,7 @@ class DocumentResponse(DocumentBase, TimestampSchema):
 
 class DocumentListResponse(BaseSchema):
     """문서 목록 응답 스키마"""
-    total: int = Field(..., description="문서 총 개수")
+    #total: int = Field(..., description="문서 총 개수")
     items: List[DocumentResponse] = Field(..., description="문서 목록")
 
 class DocumentChunkBase(BaseSchema):
@@ -98,6 +98,10 @@ class DocumentUploadResponse(BaseSchema):
     success: bool = Field(True, description="업로드 성공 여부")
     project_id: UUID = Field(..., description="프로젝트 ID")
     document_ids: List[UUID] = Field(..., description="문서 ID 목록")
+    documents: List[Dict] = Field(..., description="업로드된 문서 상세 정보 목록")
+    errors: List[Dict] = Field(default_factory=list, description="업로드 실패한 문서 에러 정보")
+    failed_uploads: int = Field(0, description="업로드 실패한 문서 수")
+    message: str = Field("Upload started", description="업로드 상태 메시지")
 
 class DocumentQueryRequest(BaseSchema):
     """문서 쿼리 요청 스키마"""

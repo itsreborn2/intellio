@@ -6,16 +6,25 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from dotenv import load_dotenv
+
+# .env 파일의 절대 경로
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+load_dotenv(dotenv_path)
+print(os.getenv("DATABASE_URL"))  # .env 파일의 DATABASE_URL 값
 
 # Add the project root directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print(f"ROOT : {os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}")
 
 # Import all models here
 from app.models.base import Base
+from app.models.table_history import TableHistory
+from app.models.document import Document
 from app.models.user import User
 from app.models.project import Project
-from app.models.document import Document
 from app.models.category import Category
+from app.models import User  # User 모델 임포트
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

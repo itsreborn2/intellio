@@ -1,17 +1,113 @@
-답변을 할때 아래의 폴더에 있는 소스들을 참고해
-backend_new
-frontend
+You are an expert in TypeScript, Node.js, Next.js App Router, React, Shadcn UI, Radix UI, Tailwind, Python, Supabase
 
-프로젝트 폴더의 구조는 docs/개발_가이드.md의 '2. 프로젝트 폴더 구조'를 참고해
+You use Python 3.11.9
+- framework: pydantic, fastapi, ,sqlalchemy 
+You use React 18.3.1
 
-## TypeScript 인터페이스 정의 규칙: 'I' 접두사 사용
 
--   **인터페이스 정의 시 이름 앞에 'I'를 접두사로 추가하세요.**
--   예시:
-    ```typescript
-    export interface IComment {
-        id: string
-        text: string
-        author: string
-    }
-    ```
+Key Principles
+- Write concise, technical TypeScript code with accurate examples.
+- Use functional and declarative programming patterns; avoid classes.
+- Prefer iteration and modularization over code duplication.
+- Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError).
+- Structure files: exported component, subcomponents, helpers, static content, types.
+- 백엔드에서 새로운 기능을 생성할때는 Langchain을 사용은 최우선 고려하여 구현한다.
+
+
+Naming Conventions
+- Use lowercase with dashes for directories (e.g., components/auth-wizard).
+- Favor named exports for components.
+
+
+TypeScript Usage
+- Use TypeScript for all code; prefer interfaces over types.
+- Avoid enums; use maps instead.
+- Use functional components with TypeScript interfaces.
+
+
+Syntax and Formatting
+- Use the "function" keyword for pure functions.
+- Avoid unnecessary curly braces in conditionals; use concise syntax for simple statements.
+- Use declarative JSX.
+
+
+UI and Styling
+- Use Shadcn UI, Radix, and Tailwind for components and styling.
+- Implement a responsive design that takes into account a PC or tablet-first approach.
+
+
+Performance Optimization
+- Minimize 'use client', 'useEffect', and 'setState'; favor React Server Components (RSC).
+- Wrap client components in Suspense with fallback.
+- Use dynamic loading for non-critical components.
+- Optimize images: use WebP format, include size data, implement lazy loading.
+
+
+Key Conventions
+- Use 'nuqs' for URL search parameter state management.
+- Optimize Web Vitals (LCP, CLS, FID).
+- Favor server components and Next.js SSR.
+- Use only for Web API access in small components.
+- Avoid for data fetching or state management.
+
+Follow Next.js docs for Data Fetching, Rendering, and Routing.
+
+## Next.js: Route Handler 우선 사용
+
+-   **모든 API 엔드포인트는 Route Handler를 사용하여 구현하세요.**
+-   **데이터베이스 작업, 외부 API 호출, 인증 등 복잡한 서버 작업은 반드시 Route Handler를 사용하세요.**   
+
+
+## Error Handling, Validation, and Services
+
+- Handle errors at the start of functions with guard clauses and early returns.
+- Keep the “happy path” visible at the bottom of the function.
+- Avoid `else` statements by using if-return patterns to reduce nesting.
+- Use Zod for schema validation and form validation.
+- Use `react-hook-form` with `useActionState` to manage form state and submission flows.
+- In `services/` directories, always throw user-friendly errors that can be caught upstream and displayed to the user.
+- Implement proper error logging and user-friendly messages.
+- Employ error boundaries (`error.tsx`, `global-error.tsx`) for unexpected errors.
+- Use `next-safe-action` for secure and type-safe server actions.
+
+
+## AI Integration
+
+-사용자가 문서를 업로드하면 바로 문서 포맷에 맞는 기능으로 문서를 추출하고 청크하여 임배딩을 완료한다.
+- 그 이후 사용자는 프롬프트를 입력하고 결과를 디폴트 템플릿에선 모드에 따라  두가지로 받는다.
+ -Chat 모드: 여러 문서의 데이터를 종합하여 패턴 도출
+ -Table 모드: 한 문서 내의 데이터를 상세히 분석하고 문맥화
+
+- Handle rate limiting, quota, and model availability gracefully.
+- Implement fallback logic if AI models are unavailable.
+- Sanitize user inputs before sending them to the AI.
+- Store API keys and sensitive information in environment variables.
+- Provide clear, user-friendly error messages in case of AI service failures.
+
+
+## React/Next.js Component Development
+
+- **Functional Components**: Use function declarations and TypeScript interfaces for props.
+- **Minimal Props & Composition**: Keep components small, focused, and composed of reusable subcomponents.
+- **Server Components First**: Prefer React Server Components and SSR data fetching to minimize client overhead.
+- **Client Components**: Only use `use client` for components that require browser APIs or local user interaction.
+- **Static Content & Types**: Place static text, constants, and types at the end of each file.
+- **Dynamic Loading**: Dynamically import non-critical components to improve initial load times.
+- **Optimize Images**: Use WebP format, appropriate sizing, and lazy loading for images.
+
+
+## Version Control and Workflow
+
+- **Branch Naming**: `feature/`, `bugfix/`, `hotfix/`, `refactor/`, `docs/`.
+- **Commit Messages**: Use `type(scope): description` format. Common types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
+- **Pull Requests**: Use PR templates with a summary, change type, testing steps, and any database changes noted.
+- **Schema Updates**: Update `schema.sql` and commit the changes after each migration.
+- **Testing Before PR**: Always test changes locally before submitting PRs.
+
+# dispatch
+ - dispatch를 사용하여 코드를 추가할때, type은 types/actions.ts를 참조하고 없다면 정의를 한다.
+  dispatch({ type:actionTypes.SET_LAST_AUTOSAVED, plyload:...})
+  export const SET_LAST_AUTOSAVED = 'SET_LAST_AUTOSAVED'
+## other rules
+- frontend/types/index.ts 파일은 모든 타입을 모아놓은 파일이다.
+- frontend에서 사용하는 모든 interface는 frontend/types/index.ts에 정의한다.

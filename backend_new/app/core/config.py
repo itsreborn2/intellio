@@ -1,9 +1,9 @@
 from typing import List
 from pydantic_settings import BaseSettings
 import os
-import logging
+from loguru import logger
+from functools import lru_cache
 
-logger = logging.getLogger(__name__)
 
 def detect_file_encoding(file_path):
     """파일의 인코딩을 자동으로 감지"""
@@ -46,22 +46,19 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     SESSION_EXPIRY_DAYS: int = 30  # 30 days for session expiry
-
-    # JWT Settings
     JWT_SECRET: str
+
+    # AI Model Settings - from .env
+    OPENAI_API_KEY: str
+    GEMINI_API_KEY: str
+    GEMINI_PROJECT: str = os.getenv("GEMINI_PROJECT", "your-project-id")
+    GEMINI_LOCATION: str = os.getenv("GEMINI_LOCATION", "us-central1")  # Gemini API 기본 리전
     
-    # OpenAI Settings - from .env
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
-    OPENAI_SYSTEM_PROMPT: str | None = None
-    OPENAI_DOCUMENT_PROMPT: str | None = None
-    OPENAI_SUMMARY_PROMPT: str | None = None
-    
-    # Google AI (Gemini) Settings
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    
-    # Redis - from .env
-    REDIS_URL: str
+    # Redis 설정
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_CACHE_EXPIRE: int = 3600  # 1시간
     
     # PGAdmin - from .env
     PGADMIN_EMAIL: str
@@ -75,6 +72,11 @@ class Settings(BaseSettings):
     GOOGLE_CLOUD_STORAGE_BUCKET: str = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET", "")
     GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME", "")
 
+    # Google Cloud for Vertex AI
+    GOOGLE_PROJECT_ID_VERTEXAI: str = os.getenv("GOOGLE_PROJECT_ID_VERTEXAI", "")
+    GOOGLE_LOCATION_VERTEXAI: str = os.getenv("GOOGLE_LOCATION_VERTEXAI", "")
+    GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI", "")
+
     def get_google_cloud_credentials(self) -> str:
         """Google Cloud 인증 정보를 파일에서 읽어옴"""
         try:
@@ -86,9 +88,9 @@ class Settings(BaseSettings):
     
     # OAuth Settings
     # Kakao
-    KAKAO_CLIENT_ID: str = os.getenv("KAKAO_CLIENT_ID", "")
-    KAKAO_CLIENT_SECRET: str = os.getenv("KAKAO_CLIENT_SECRET", "")
-    KAKAO_REDIRECT_URI: str = os.getenv("KAKAO_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/kakao/callback")
+    KAKAO_OAUTH_CLIENT_ID: str = os.getenv("KAKAO_OAUTH_CLIENT_ID", "")
+    KAKAO_OAUTH_CLIENT_SECRET: str = os.getenv("KAKAO_OAUTH_CLIENT_SECRET", "")
+    KAKAO_OAUTH_REDIRECT_URI: str = os.getenv("KAKAO_OAUTH_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/kakao/callback")
 
     # Google OAuth
     GOOGLE_OAUTH_CLIENT_ID: str = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
@@ -96,10 +98,10 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_REDIRECT_URI: str = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/google/callback")
 
     # Naver
-    NAVER_CLIENT_ID: str = os.getenv("NAVER_CLIENT_ID", "")
-    NAVER_CLIENT_SECRET: str = os.getenv("NAVER_CLIENT_SECRET", "")
-    NAVER_REDIRECT_URI: str = os.getenv("NAVER_REDIRECT_URI")
-    NAVER_STATE: str = os.getenv("NAVER_STATE", "RANDOM_STATE")
+    NAVER_OAUTH_CLIENT_ID: str = os.getenv("NAVER_OAUTH_CLIENT_ID", "")
+    NAVER_OAUTH_CLIENT_SECRET: str = os.getenv("NAVER_OAUTH_CLIENT_SECRET", "")
+    NAVER_OAUTH_REDIRECT_URI: str = os.getenv("NAVER_OAUTH_REDIRECT_URI", f"{FRONTEND_URL}/api/v1/auth/naver/callback")
+    NAVER_OAUTH_STATE: str = os.getenv("NAVER_OAUTH_STATE", "RANDOM_STATE")
 
     # JWT Settings for OAuth
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-oauth-jwt-secret-key")
@@ -147,18 +149,41 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
-    class Config:
-        env_file = ".env" #예전위치.
-        #env_file = "../../.env"  # 프로젝트 루트의 .env 파일 참조
-        case_sensitive = True
-        
-        @classmethod
-        def customise_sources(cls, init_settings, env_settings, file_secret_settings):
-            # .env 파일의 인코딩 자동 감지
-            env_file = init_settings.get('env_file', '.env')
-            if os.path.exists(env_file):
-                encoding = detect_file_encoding(env_file)
-                init_settings['env_file_encoding'] = encoding
-            return (init_settings, env_settings, file_secret_settings)
+    ###############
+    ## RAG Settings
+    ###############
+    # Text Splitter
 
-settings = Settings()
+    TEXT_SPLITTER:str = os.getenv("TEXT_SPLITTER", "recursive")
+    CHUNK_SIZE:int = int(os.getenv("CHUNK_SIZE", "1000"))
+    CHUNK_OVERLAP:int = int(os.getenv("CHUNK_OVERLAP", "200"))
+
+    # LangSmith
+    LANGCHAIN_TRACING_V2:str = os.getenv("LANGCHAIN_TRACING_V2", "true")
+    LANGCHAIN_ENDPOINT:str = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+    LANGCHAIN_API_KEY:str = os.getenv("LANGCHAIN_API_KEY", "")
+    LANGCHAIN_PROJECT:str = os.getenv("LANGCHAIN_PROJECT", "intellio_doceasy_base")
+
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "env_file_encoding": "utf-8"
+    }
+
+    def __init__(self, **kwargs):
+        env_file = self.model_config.get("env_file", ".env")
+        if os.path.exists(env_file):
+            encoding = detect_file_encoding(env_file)
+            self.model_config["env_file_encoding"] = encoding
+            #logger.info(f"Load Complete env_file : {env_file}, [ProcessID: {os.getpid()}]")
+        else:
+            logger.error(f"환경 변수 파일을 찾을 수 없습니다: {env_file}")
+        super().__init__(**kwargs)
+
+@lru_cache()
+def get_settings() -> Settings:
+    """싱글톤 패턴으로 Settings 인스턴스를 반환"""
+    return Settings()
+
+settings = get_settings()
+

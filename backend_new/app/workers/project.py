@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 @celery.task(name="app.workers.project.cleanup_expired_projects")
 async def cleanup_expired_projects():
-    """만료된 임시 프로젝트 정리 작업 (5일 이상된 임시 프로젝트 삭제)"""
+    """만료된 임시 프로젝트 정리 작업 (마지막 수정일로부터 30일 경과된 임시 프로젝트 삭제)"""
     async with SessionLocal() as db:
         try:
             project_service = ProjectService(db)
