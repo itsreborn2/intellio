@@ -1,0 +1,17 @@
+{
+  "packageManager": "npm@9.6.7",
+  "private": true,
+  "workspaces": [
+    "frontend/*",
+    "backend/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "turbo": "^1.10.0"
+  }
+}
