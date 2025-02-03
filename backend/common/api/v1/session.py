@@ -8,7 +8,7 @@ from app.models.user import Session
 from app.services.user import UserService
 from app.schemas.user import SessionResponse, SessionCreate
 
-router = APIRouter()
+router = APIRouter(tags=["sessions"])
 
 @router.post("/", response_model=SessionResponse)
 async def create_session(

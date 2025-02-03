@@ -3,7 +3,7 @@
   "private": true,
   "workspaces": [
     "frontend/*",
-    "backend/*"
+    "backend"
   ],
   "scripts": {
     "dev": "turbo run dev",

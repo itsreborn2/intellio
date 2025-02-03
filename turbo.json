@@ -3,6 +3,11 @@
   "pipeline": {
     "dev": {
       "cache": false,
+      "persistent": true,
+      "dependsOn": ["^dev"]
+    },
+    "backend:dev": {
+      "cache": false,
       "persistent": true
     },
     "build": {

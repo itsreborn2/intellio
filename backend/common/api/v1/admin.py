@@ -8,7 +8,7 @@ from app.models.base import Base
 from app.models.user import Session
 import json
 
-router = APIRouter(tags=["admin"])
+router = APIRouter(prefix="/admin", tags=["admin"])
 
 async def verify_admin(session: Session = Depends(get_current_session)):
     """관리자 권한 확인"""
