@@ -3,22 +3,23 @@ from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, BackgroundTasks, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
-from app.models.user import Session
+from common.models.user import Session
 
-from app.api import deps
-from app.core.deps import get_current_session
-from app.schemas.document import (
+from common.core.database import get_db_async
+from common.core.deps import get_current_session
+
+from doceasy.core import deps
+from doceasy.schemas.document import (
     DocumentResponse,
     DocumentListResponse,
     DocumentQueryRequest,
     DocumentUploadResponse
 )
-from app.services.document import DocumentService
-from app.services.project import ProjectService
-from app.services.rag import RAGService
+from doceasy.services.document import DocumentService
+from doceasy.services.project import ProjectService
+from doceasy.services.rag import RAGService
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 router = APIRouter()  # prefix 제거, 태그만 설정
@@ -28,7 +29,7 @@ async def upload_documents(
     project_id: UUID,
     files: list[UploadFile] = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: AsyncSession = Depends(deps.get_async_db),
+    db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(get_current_session),
 ) -> DocumentUploadResponse:
     #print("upload_documents 여기 오나 안오나")
@@ -120,7 +121,9 @@ async def delete_document(
 ) -> dict:
     """문서 삭제"""
     try:
+        logger.info(f"문서 삭제 시작: {document_id}")
         await document_service.delete_document(document_id)
+        logger.info(f"문서 삭제 완료: {document_id}")
         return {"success": True, "message": "Document deleted successfully"}
     except HTTPException:
         raise

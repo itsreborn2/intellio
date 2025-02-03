@@ -4,14 +4,18 @@ from fastapi import APIRouter, Depends, Response, HTTPException
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-from app.schemas.category import CategoryResponse, CategoryCreate, AddProjectToCategory
-from app.schemas.project import ProjectSimpleResponse
-from app.models.category import Category
-from app.models.project import Project
-from app.models.document import Document, DocumentChunk
-from app.models.table_history import TableHistory
-from app.models.user import Session
-from app.core.deps import get_db, get_current_session
+from common.services.embedding import EmbeddingService
+from common.services.vector_store_manager import VectorStoreManager
+from doceasy.models.document import Document
+from doceasy.services.document import DocumentService
+from doceasy.schemas.category import CategoryResponse, CategoryCreate, AddProjectToCategory
+from doceasy.schemas.project import ProjectSimpleResponse
+from doceasy.models.category import Category
+from doceasy.models.project import Project
+from doceasy.models.table_history import TableHistory
+from common.models.user import Session
+from common.core.deps import get_current_session, get_embedding_service, get_vector_manager
+from common.core.database import  get_db_async
 from uuid import UUID
 import logging
 from fastapi.responses import JSONResponse
@@ -25,12 +29,12 @@ logger.info("카테고리 라우터 초기화")
 @router.get("", response_model=List[CategoryResponse])
 async def get_categories(
     session: Session = Depends(get_current_session),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """사용자의 모든 카테고리를 조회합니다."""
-    logger.info(f"GET /categories 요청 받음 - User ID: {session.user_id}")
-    
     try:
+        logger.info(f"GET /categories 요청 받음 - User ID: {session.user_id}")
+
         # 익명 사용자 체크
         if session.is_anonymous or not session.user_id:
             logger.warning("익명 사용자는 카테고리를 조회할 수 없습니다.")
@@ -69,7 +73,7 @@ async def get_categories(
 async def create_category(
     category_in: CategoryCreate,
     session: Session = Depends(get_current_session), 
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     logger.error(f"Create 프로젝트 폴더")
     """새로운 카테고리(영구 폴더)를 생성합니다."""
@@ -107,7 +111,7 @@ async def create_category(
 @router.delete("/{category_id}")
 async def delete_category(
     category_id: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     logger.info(f"=== 카테고리 삭제 시작 ===")
     logger.info(f"카테고리 ID (문자열): {category_id}")
@@ -176,7 +180,7 @@ async def update_category(
     category_id: str,
     category_data: CategoryCreate,
     session: Session = Depends(get_current_session),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """카테고리 정보를 업데이트합니다."""
     logger.info(f"PUT /categories/{category_id} 요청 받음 - User ID: {session.user_id}")
@@ -237,7 +241,7 @@ async def update_category(
 async def add_project_to_category(
     category_id: str,
     project_data: AddProjectToCategory,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """카테고리(영구 폴더)에 프로젝트를 추가합니다."""
     try:
@@ -295,7 +299,7 @@ async def add_project_to_category(
 @router.get("/{category_id}/projects", response_model=List[ProjectSimpleResponse])
 async def get_category_projects(
     category_id: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """카테고리에 속한 프로젝트 목록을 조회합니다."""
     # 카테고리 존재 여부 확인
@@ -320,11 +324,12 @@ async def get_category_projects(
         category_id=category_id
     ) for project in projects]
 
-@router.delete("/projects/{project_id}", response_model=None)
+@router.delete("/projects/{project_id}")
 async def delete_project(
     project_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: Session = Depends(get_current_session)
+    db: AsyncSession = Depends(get_db_async),
+    current_user: Session = Depends(get_current_session),
+    vs:VectorStoreManager = Depends(get_vector_manager)
 ):
     """
     프로젝트와 관련된 모든 데이터를 삭제합니다.
@@ -342,6 +347,7 @@ async def delete_project(
     """
     try:
         # 프로젝트 존재 여부 및 권한 확인
+        logger.info(f"프로젝트 삭제 시작: {project_id}")
         query = select(Project).where(
             Project.id == project_id,
             Project.user_id == current_user.user_id
@@ -354,7 +360,28 @@ async def delete_project(
                 status_code=404,
                 detail="프로젝트를 찾을 수 없거나 접근 권한이 없습니다."
             )
-            
+        
+        # Pinecone 임베딩 삭제
+        # 프로젝트와 연관된 모든 문서의 임베딩 ID 조회
+        query = select(Document.embedding_ids).where(
+            Document.project_id == project_id,
+        )
+        result = await db.execute(query)
+        ids = result.scalars().all()
+        logger.info(f"삭제할 문서 : {len(ids)}개")
+        
+        import json
+        remove_list = []
+        for id in ids:
+            if id:  # None 체크
+                chunk_ids = json.loads(id)
+                remove_list.extend(chunk_ids)
+        
+        logger.info(f"삭제할 문서 : {len(ids)}개, 임베딩 ID : {len(remove_list)}개")
+
+        #vs.delete_documents_by_embedding_id(remove_list)
+        await vs.delete_documents_by_embedding_id_async(remove_list)
+
         # 프로젝트와 연관된 모든 데이터 삭제
         # 1. 문서 및 문서 청크 삭제
         # (Document 모델의 cascade="all, delete-orphan" 설정으로 인해 
@@ -371,12 +398,14 @@ async def delete_project(
         
         # 변경사항 커밋
         await db.commit()
-        
+
+
+        logger.info(f"프로젝트 삭제 완료: {project_id}")
         return {"message": "프로젝트가 성공적으로 삭제되었습니다."}
         
     except Exception as e:
         await db.rollback()
-        logger.error(f"프로젝트 삭제 중 오류 발생: {str(e)}")
+        logger.exception(f"프로젝트 삭제 중 오류 발생: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"프로젝트 삭제 중 오류가 발생했습니다: {str(e)}"

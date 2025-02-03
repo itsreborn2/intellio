@@ -18,7 +18,6 @@ Naming Conventions
 - Use lowercase with dashes for directories (e.g., components/auth-wizard).
 - Favor named exports for components.
 
-
 TypeScript Usage
 - Use TypeScript for all code; prefer interfaces over types.
 - Avoid enums; use maps instead.
@@ -57,57 +56,16 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 -   **모든 API 엔드포인트는 Route Handler를 사용하여 구현하세요.**
 -   **데이터베이스 작업, 외부 API 호출, 인증 등 복잡한 서버 작업은 반드시 Route Handler를 사용하세요.**   
 
-
-## Error Handling, Validation, and Services
-
-- Handle errors at the start of functions with guard clauses and early returns.
-- Keep the “happy path” visible at the bottom of the function.
-- Avoid `else` statements by using if-return patterns to reduce nesting.
-- Use Zod for schema validation and form validation.
-- Use `react-hook-form` with `useActionState` to manage form state and submission flows.
-- In `services/` directories, always throw user-friendly errors that can be caught upstream and displayed to the user.
-- Implement proper error logging and user-friendly messages.
-- Employ error boundaries (`error.tsx`, `global-error.tsx`) for unexpected errors.
-- Use `next-safe-action` for secure and type-safe server actions.
-
-
-## AI Integration
-
--사용자가 문서를 업로드하면 바로 문서 포맷에 맞는 기능으로 문서를 추출하고 청크하여 임배딩을 완료한다.
-- 그 이후 사용자는 프롬프트를 입력하고 결과를 디폴트 템플릿에선 모드에 따라  두가지로 받는다.
- -Chat 모드: 여러 문서의 데이터를 종합하여 패턴 도출
- -Table 모드: 한 문서 내의 데이터를 상세히 분석하고 문맥화
-
-- Handle rate limiting, quota, and model availability gracefully.
-- Implement fallback logic if AI models are unavailable.
-- Sanitize user inputs before sending them to the AI.
-- Store API keys and sensitive information in environment variables.
-- Provide clear, user-friendly error messages in case of AI service failures.
-
-
-## React/Next.js Component Development
-
-- **Functional Components**: Use function declarations and TypeScript interfaces for props.
-- **Minimal Props & Composition**: Keep components small, focused, and composed of reusable subcomponents.
-- **Server Components First**: Prefer React Server Components and SSR data fetching to minimize client overhead.
-- **Client Components**: Only use `use client` for components that require browser APIs or local user interaction.
-- **Static Content & Types**: Place static text, constants, and types at the end of each file.
-- **Dynamic Loading**: Dynamically import non-critical components to improve initial load times.
-- **Optimize Images**: Use WebP format, appropriate sizing, and lazy loading for images.
-
-
-## Version Control and Workflow
-
-- **Branch Naming**: `feature/`, `bugfix/`, `hotfix/`, `refactor/`, `docs/`.
-- **Commit Messages**: Use `type(scope): description` format. Common types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
-- **Pull Requests**: Use PR templates with a summary, change type, testing steps, and any database changes noted.
-- **Schema Updates**: Update `schema.sql` and commit the changes after each migration.
-- **Testing Before PR**: Always test changes locally before submitting PRs.
-
 # dispatch
  - dispatch를 사용하여 코드를 추가할때, type은 types/actions.ts를 참조하고 없다면 정의를 한다.
   dispatch({ type:actionTypes.SET_LAST_AUTOSAVED, plyload:...})
   export const SET_LAST_AUTOSAVED = 'SET_LAST_AUTOSAVED'
-## other rules
-- frontend/types/index.ts 파일은 모든 타입을 모아놓은 파일이다.
-- frontend에서 사용하는 모든 interface는 frontend/types/index.ts에 정의한다.
+
+## FrontEnd Rules
+ - npm install을 수행한 폴더는 루트 디렉토리
+ - 패키지 설치는 프로젝트 루트에서 수행한다.
+ - turborepo를 사용한다.
+ - Shadcn UI,  Tailwind css를 적극적으로 사용해.
+ - 공용 컴포넌트 적극 사용 : frontend\common\components\ui
+ - frontend/doceasy는 next.config.mjs 를 사용한다.
+ 

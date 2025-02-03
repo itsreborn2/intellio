@@ -1,19 +1,22 @@
-from uuid import uuid4
+from datetime import datetime, timedelta
 from typing import Optional
+import logging
 from fastapi import APIRouter, Depends, Response, Cookie, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db
-from app.models.user import Session
-from app.services.user import UserService
-from app.schemas.user import SessionResponse, SessionCreate
+from common.core.database import get_db_async
+from common.models.user import Session
+from common.services.user import UserService
+from common.schemas.user import SessionResponse, SessionBase
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["sessions"])
 
 @router.post("/", response_model=SessionResponse)
 async def create_session(
     response: Response,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """새로운 세션 생성
     
@@ -21,8 +24,7 @@ async def create_session(
     생성된 세션 ID는 쿠키에 저장됩니다.
     """
     user_service = UserService(db)
-    session_create = SessionCreate(
-        session_id=str(uuid4()),
+    session_create = SessionBase(
         is_anonymous=True
     )
     
@@ -31,7 +33,7 @@ async def create_session(
     # 세션 ID를 쿠키에 설정
     response.set_cookie(
         key="session_id",
-        value=session.session_id,
+        value=session.id,
         max_age=30 * 24 * 60 * 60,  # 30일
         httponly=True,
         secure=True,  # HTTPS 전용
@@ -43,7 +45,7 @@ async def create_session(
 @router.get("/current", response_model=SessionResponse)
 async def get_current_session(
     session_id: Optional[str] = Cookie(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """현재 세션 정보 조회"""
     if not session_id:
@@ -67,7 +69,7 @@ async def get_current_session(
 async def delete_current_session(
     response: Response,
     session_id: Optional[str] = Cookie(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """현재 세션 삭제"""
     if session_id:
@@ -86,7 +88,7 @@ async def delete_current_session(
 
 @router.post("/cleanup")
 async def cleanup_expired_sessions(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """만료된 세션 정리"""
     user_service = UserService(db)

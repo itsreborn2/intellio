@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, text, inspect
-from app.core.config import settings
+from common.core.config import settings
 
 def reset_alembic():
     engine = create_engine(settings.DATABASE_URL)

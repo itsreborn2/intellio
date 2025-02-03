@@ -18,13 +18,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 print(f"ROOT : {os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}")
 
 # Import all models here
-from app.models.base import Base
-from app.models.table_history import TableHistory
-from app.models.document import Document
-from app.models.user import User
-from app.models.project import Project
-from app.models.category import Category
-from app.models import User  # User 모델 임포트
+from common.models.base import Base
+from doceasy.models.table_history import TableHistory
+from doceasy.models.document import Document
+from common.models.user import User
+from doceasy.models.project import Project
+from doceasy.models.category import Category
+
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

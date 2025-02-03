@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Send, Square } from 'lucide-react'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Avatar, AvatarImage, AvatarFallback } from 'intellio-common/components/ui/avatar'
+import { Button } from 'intellio-common/components/ui/button'
+import { Input } from 'intellio-common/components/ui/input'
 import { useApp } from '@/contexts/AppContext'
 import { searchTable, sendChatMessage, sendChatMessage_streaming, stopChatMessageGeneration } from '@/services/api'
 import { IMessage, IChatResponse, TableResponse } from '@/types/index'

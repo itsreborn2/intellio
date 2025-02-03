@@ -5,12 +5,12 @@ import logging
 from openai import AsyncOpenAI
 import google.generativeai as genai
 from google.generativeai.types import GenerateContentResponse
-from app.core.config import settings
-from app.core.cache import AsyncRedisCache, RedisCache
+from doceasy.core.config import settings_doceasy
+from common.core.cache import AsyncRedisCache, RedisCache
 import json
 from loguru import logger
-from app.utils.common import measure_time_async
-from app.services.llm_models import LLMModels
+from common.utils.util import measure_time_async
+from common.services.llm_models import LLMModels
 from langchain_core.messages import ai
 
 
@@ -56,7 +56,7 @@ class GeminiAPI:
     def generate_content(self, prompt: str) -> Optional[GenerateContentResponse]:
         """동기 컨텐츠 생성"""
         if self._llm_chain is None:
-            self.initialize(settings.GEMINI_API_KEY)
+            self.initialize(settings_doceasy.GEMINI_API_KEY)
             
         logger.info(f"Gemini API[Sync] 호출 - 프롬프트: {prompt[:100]}...")
         response = self._llm_chain.generate_content(prompt)
@@ -66,7 +66,7 @@ class GeminiAPI:
     async def generate_content_async(self, prompt: str) -> Optional[GenerateContentResponse]:
         """비동기 컨텐츠 생성"""
         if self._llm_chain is None:
-            self.initialize(settings.GEMINI_API_KEY)
+            self.initialize(settings_doceasy.GEMINI_API_KEY)
             
         logger.info(f"Gemini API[Async] 호출 - 프롬프트: {prompt[:100]}...")
         response = await self._llm_chain.generate_content_async(prompt)
@@ -97,8 +97,8 @@ class BasePrompt:
         """
         #self.gemini_api = GeminiAPI()  # 싱글톤 인스턴스
         self.LLM = LLMModels(streaming_callback=streaming_callback)  # 싱글톤 인스턴스
-        self.gemini_api_key = gemini_api_key or settings.GEMINI_API_KEY
-        self.openai_api_key = openai_api_key or settings.OPENAI_API_KEY
+        self.gemini_api_key = gemini_api_key or settings_doceasy.GEMINI_API_KEY
+        self.openai_api_key = openai_api_key or settings_doceasy.OPENAI_API_KEY
         self.document_id = document_id
         
         # OpenAI 클라이언트 초기화
@@ -106,12 +106,12 @@ class BasePrompt:
         
         # 캐시 초기화
         self.async_cache = AsyncRedisCache(
-            redis_url=redis_url or settings.REDIS_URL,
-            expire_time=cache_expire or settings.REDIS_CACHE_EXPIRE
+            redis_url=redis_url or settings_doceasy.REDIS_URL,
+            expire_time=cache_expire or settings_doceasy.REDIS_CACHE_EXPIRE
         )
         self.sync_cache = RedisCache(
-            redis_url=redis_url or settings.REDIS_URL,
-            expire_time=cache_expire or settings.REDIS_CACHE_EXPIRE
+            redis_url=redis_url or settings_doceasy.REDIS_URL,
+            expire_time=cache_expire or settings_doceasy.REDIS_CACHE_EXPIRE
         )
 
     async def process_prompt_async(self, user_query: str, prompt_context:str) -> str:

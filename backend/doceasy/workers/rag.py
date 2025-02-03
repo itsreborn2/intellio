@@ -1,13 +1,12 @@
 import asyncio
 from celery import shared_task
 from dotenv import load_dotenv
-from app.core.celery_app import celery
+from doceasy.core.celery_app import celery
 from loguru import logger
 import json
 import os
-from app.services.prompts.table_prompt import TablePrompt
-from app.services.prompts.base import  LLMModels
-from app.core.config import settings
+from doceasy.services.prompts.table_prompt import TablePrompt
+from doceasy.services.prompts.base import  LLMModels
 from celery.signals import worker_ready
 import threading
 
@@ -20,7 +19,7 @@ def init_worker(**kwargs):
     #gemini_api.initialize(settings.GEMINI_API_KEY)
 
 @shared_task(
-    name="app.workers.rag.analyze_mode_task",
+    name="doceasy.workers.rag.analyze_mode_task",
     queue="rag-processing",
     max_retries=3,
     soft_time_limit=30,

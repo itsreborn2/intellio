@@ -1,12 +1,17 @@
 from typing import List, Dict, Any
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.deps import get_db, get_current_session
-from app.models.base import Base
-from app.models.user import Session
+
+from common.core.database import get_db_async
+from common.core.deps import  get_current_session
+from common.models.base import Base
+from common.models.user import Session
 import json
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -144,7 +149,7 @@ async def admin_page(
 
 @router.get("/tables", response_model=List[str])
 async def get_tables(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(verify_admin)
 ):
     """데이터베이스의 모든 테이블 목록을 반환합니다."""
@@ -156,7 +161,7 @@ async def get_tables(
 @router.get("/table/{table_name}", response_model=List[Dict[str, Any]])
 async def get_table_data(
     table_name: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(verify_admin)
 ):
     """특정 테이블의 모든 데이터를 반환합니다."""

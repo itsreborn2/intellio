@@ -6,7 +6,7 @@ import {
   type MRT_ColumnDef,
 } from 'material-react-table';
 import { useApp } from "@/contexts/AppContext"
-import { Button } from "@/components/ui/button";
+import { Button } from "intellio-common/components/ui/button";
 import { IDocument,  IDocumentStatus } from '@/types';  
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';

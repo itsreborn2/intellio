@@ -57,9 +57,8 @@ cover/
 .env.production.local
 
 # Credentials
-app/credentials/*.json
+credentials/*.json
 *.pem
 *.key
-credentials.json
 service-account.json
 app/kf-deberta/pytorch_model.bin

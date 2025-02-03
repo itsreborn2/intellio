@@ -4,9 +4,9 @@ from uuid import UUID
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.project import Project
-from app.models.user import Session
-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectInDB
+from doceasy.models.project import Project
+from common.models.user import Session
+from doceasy.schemas.project import ProjectCreate, ProjectUpdate, ProjectInDB
 import logging
 
 logger = logging.getLogger(__name__)

@@ -2,7 +2,7 @@ import os
 from typing import Optional
 import io
 import logging
-from app.core.config import settings
+from doceasy.core.config import settings_doceasy
 import tempfile
 from tika import parser
 import tika
@@ -17,7 +17,7 @@ class DocumentExtractor:
         """DocumentExtractor 초기화"""
         self.document_client = None
         self.vision_client = None
-        self.processor_name = f"projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/us/processors/{settings.GOOGLE_DOCUMENT_AI_PROCESSOR_ID}"
+        self.processor_name = f"projects/{settings_doceasy.GOOGLE_CLOUD_PROJECT}/locations/us/processors/{settings_doceasy.GOOGLE_DOCUMENT_AI_PROCESSOR_ID}"
         # Tika 서버 설정
         os.environ['TIKA_SERVER_ENDPOINT'] = "http://localhost:9998"
         os.environ['TIKA_CLIENT_ONLY'] = "True"
@@ -36,7 +36,7 @@ class DocumentExtractor:
             import json
             
             # settings에서 서비스 계정 키 정보 가져오기
-            credentials_info = json.loads(settings.GOOGLE_CLOUD_CREDENTIALS)
+            credentials_info = json.loads(settings_doceasy.GOOGLE_CLOUD_CREDENTIALS)
             credentials = service_account.Credentials.from_service_account_info(credentials_info)
             self.vision_client = vision.ImageAnnotatorClient(credentials=credentials)
 

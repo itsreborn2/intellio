@@ -3,8 +3,8 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.table_history import TableHistory
-from app.schemas.table_history import TableHistoryCreate, TableHistoryResponse
+from doceasy.models.table_history import TableHistory
+from doceasy.schemas.table_history import TableHistoryCreate, TableHistoryResponse
 
 class TableHistoryService:
     """테이블 히스토리 서비스"""
@@ -79,7 +79,7 @@ class TableHistoryService:
                     title=data.title,
                     result=data.result
                 )
-                self.db.add(new_history)
+                self.db.add(new_history)  # add는 await 하지 않음
                 histories.append(new_history)
         
         # 한 번에 커밋
@@ -98,7 +98,7 @@ class TableHistoryService:
             .where(TableHistory.project_id == project_id)
             .order_by(TableHistory.created_at.asc())
         )
-        result = self.db.execute(stmt)
+        result = await self.db.execute(stmt)
         histories = result.scalars().all()
         return [TableHistoryResponse.model_validate(history) for history in histories]
         
@@ -109,6 +109,6 @@ class TableHistoryService:
             .where(TableHistory.document_id == document_id)
             .order_by(TableHistory.created_at.asc())
         )
-        result = self.db.execute(stmt)
+        result = await self.db.execute(stmt)
         histories = result.scalars().all()
         return [TableHistoryResponse.model_validate(history) for history in histories]

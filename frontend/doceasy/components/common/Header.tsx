@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Settings, User } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Settings, User, X } from "lucide-react"
+import { Button } from "intellio-common/components/ui/button"
+import { Input } from "intellio-common/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
 import { useAuth } from "@/hooks/useAuth"
 import * as api from "@/services/api"
@@ -16,11 +16,12 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogDescription,
-} from "@/components/ui/dialog"
+  DialogPortal,
+} from "intellio-common/components/ui/dialog"
 import { FontSettings } from "@/components/settings/FontSettings"
 import { LoginButton } from "@/components/auth/LoginButton"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "intellio-common/components/ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "intellio-common/components/ui/popover"
 import { useRouter } from "next/navigation"
 
 export const Header = ({ className }: { className?: string }) => {
@@ -30,6 +31,7 @@ export const Header = ({ className }: { className?: string }) => {
   const { isAuthenticated, name, email, logout } = auth
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')
+  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)  // Dialog 상태 추가
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   const handleTitleClick = () => {
@@ -163,11 +165,15 @@ export const Header = ({ className }: { className?: string }) => {
         ) : (
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">로그인이 필요합니다</span>
-            <Dialog>
-              <DialogTrigger>
-                <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
+            <Dialog open={isLoginDialogOpen} onOpenChange={setIsLoginDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-md hover:bg-gray-100"
+                >
                   <User className="h-4 w-4" />
-                </div>
+                </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -180,7 +186,6 @@ export const Header = ({ className }: { className?: string }) => {
                   <div className="flex flex-col space-y-2">
                     <LoginButton provider="google" />
                     <LoginButton provider="naver" />
-                    <LoginButton provider="kakao" />
                   </div>
                 </div>
               </DialogContent>
@@ -189,7 +194,7 @@ export const Header = ({ className }: { className?: string }) => {
         )}
 
         <Dialog>
-          <DialogTrigger>
+          <DialogTrigger asChild>
             <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
               <Settings className="h-4 w-4" />
             </div>

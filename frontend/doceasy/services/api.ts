@@ -394,6 +394,7 @@ export const checkSession = async (): Promise<{
 export const getRecentProjects = async (): Promise<IRecentProjectsResponse> => {
   try {
     const response = await apiFetch(`${API_ENDPOINT}/projects/recent`, {
+      method: 'GET', // 명시적 메서드 지정
       credentials: 'include' // 단순히 브라우저에 저장된 쿠키를 HTTP 요청에 포함시키라는 의미
     });
     // 인증 오류 처리
@@ -532,6 +533,7 @@ export const createCategory = async (name: string, parent_id?: string): Promise<
 export const getCategories = async (): Promise<Category[]> => {
   try {
     const response = await apiFetch(`${API_ENDPOINT}/categories`, {
+      method: 'GET', // 명시적 메서드 지정
       credentials: 'include'
     });
 

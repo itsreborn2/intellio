@@ -3,16 +3,16 @@ from celery.schedules import crontab
 from kombu import Queue, Exchange
 from celery.signals import task_success, task_failure
 import logging
-from app.core.config import settings
+from doceasy.core.config import settings_doceasy
 
 logger = logging.getLogger(__name__)
 
 # Celery 앱 초기화
 celery = Celery(
     "app",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL,
-    include=["app.workers.document", "app.workers.project", "app.workers.rag"]
+    broker=settings_doceasy.REDIS_URL,
+    backend=settings_doceasy.REDIS_URL,
+    include=["doceasy.workers.document", "doceasy.workers.project", "doceasy.workers.rag"]
 )
 
 @task_success.connect
@@ -43,10 +43,10 @@ celery.conf.task_queues = [
 
 # 라우팅 설정
 celery.conf.task_routes = {
-    "app.workers.document.*": {"queue": "document-processing", "routing_key": "document-processing"},
-    "app.workers.project.*": {"queue": "main-queue", "routing_key": "main-queue"},
-    "app.workers.rag.*": {"queue": "rag-processing", "routing_key": "rag-processing"},
-    "app.worker.celery_worker:process_document_chucking": "main-queue"
+    "doceasy.workers.document.*": {"queue": "document-processing", "routing_key": "document-processing"},
+    "doceasy.workers.project.*": {"queue": "main-queue", "routing_key": "main-queue"},
+    "doceasy.workers.rag.*": {"queue": "rag-processing", "routing_key": "rag-processing"},
+    "doceasy.worker.celery_worker:process_document_chucking": "main-queue"
 }
 
 # Celery 설정
@@ -86,14 +86,5 @@ celery.conf.update(
     worker_redirect_stdouts_level='INFO',
 )
 
-# 스케줄러 설정
-celery.conf.beat_schedule = {
-    "cleanup-expired-projects": {
-        "task": "app.workers.project.cleanup_expired_projects",
-        "schedule": crontab(hour="0", minute="0"),  # 매일 자정에 실행
-    },
-    "update-retention-periods": {
-        "task": "app.workers.project.update_retention_periods",
-        "schedule": crontab(hour="*", minute="0"),  # 매시간 실행
-    },
-}
+# 스케줄러 설정은 common/core/celery_app.py로 이동됨
+# 프로젝트 관리와 관련된 공통 작업은 common에서 중앙 집중적으로 관리

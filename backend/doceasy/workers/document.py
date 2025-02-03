@@ -1,37 +1,30 @@
 from typing import List
 from uuid import UUID
-from celery import group, chain, Task, shared_task
+from celery import group, shared_task
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
-from sqlalchemy import select
 from datetime import datetime
-import logging
 import asyncio
 import json
 from uuid import UUID
 from typing import List, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
 import logging
-from app.api.deps import get_async_db
 
-from app.core.celery_app import celery
-from app.core.database import SessionLocal, get_async_session, AsyncSessionLocal
-from app.core.redis import redis_client
-from app.models.document import Document
-from app.services.storage import StorageService
-from app.services.extractor import DocumentExtractor
-from app.services.chunker import RAGOptimizedChunker
-from app.services.embedding import EmbeddingService
-from app.services.document import DocumentService
-from tenacity import retry, stop_after_attempt, wait_exponential
-from celery import shared_task, group
-from app.core.celery_app import celery
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from llama_index.core.node_parser import LangchainNodeParser
 
-from app.services.textsplitter import TextSplitter
-from app.services.vector_store_manager import VectorStoreManager
-from app.services.embedding_models import EmbeddingModelType
+from common.core.database import SessionLocal, get_db_async, AsyncSessionLocal
+from common.core.redis import redis_client
+from common.services.embedding import EmbeddingService
+
+from doceasy.core.celery_app import celery
+from doceasy.models.document import Document
+#from doceasy.services.chunker import RAGOptimizedChunker
+from doceasy.services.document import DocumentService
+
+
+
+from common.services.textsplitter import TextSplitter
+from common.services.vector_store_manager import VectorStoreManager
+from common.services.embedding_models import EmbeddingModelType
 from celery.signals import worker_ready
 import os
 from loguru import logger
@@ -202,7 +195,7 @@ async def process_document_text_direct(db: Session, doc_id: str, text: str):
         logger.info(f"문서 {doc_id}의 청크 생성 완료: {len(chunks)}개")
 
         # 임베딩 생성 및 저장
-        async_session = get_async_session()
+        async_session = get_db_async()
         async with async_session() as session:
             embedding_service = EmbeddingService()
             chunk_ids = []
@@ -313,7 +306,7 @@ def validate_document_text(doc: Document, document_id: str) -> str:
 
 @shared_task(
     bind=True,
-    name="app.workers.document.process_document_chucking",
+    name="doceasy.workers.document.process_document_chucking",
     queue="document-processing",
     max_retries=3
 )
@@ -384,7 +377,7 @@ def process_document_chucking(self, document_id: str):
             }
             
     except Exception as e:
-        logger.error(f"문서 처리 실패 ({document_id}): {str(e)}")
+        logger.error(f"문서 처리 실패 ({document_id}): {str(e)}", exc_info=True)
         update_document_status(
             document_id=document_id,
             doc_status=DOCUMENT_STATUS_ERROR,

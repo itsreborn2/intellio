@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime
 from sqlalchemy.dialects.postgresql import UUID
-from app.models.base import Base
+from common.models.base import Base
 import uuid
 
 class Category(Base):

@@ -5,7 +5,7 @@ import {
   useMaterialReactTable,
   type MRT_ColumnDef,
 } from 'material-react-table';
-import { Button } from "@/components/ui/button"
+import { Button } from "intellio-common/components/ui/button"
 
 export type Person = {
   idx3123:number;

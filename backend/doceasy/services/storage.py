@@ -7,14 +7,14 @@ from functools import partial
 from google.cloud import storage
 from google.oauth2 import service_account
 
-from app.core.config import settings
+from doceasy.core.config import settings_doceasy
 
 logger = logging.getLogger(__name__)
 
 class StorageService:
     def __init__(self):
         try:
-            credentials_json = settings.get_google_cloud_credentials()
+            credentials_json = settings_doceasy.get_google_cloud_credentials()
             if not credentials_json:
                 raise ValueError("Google Cloud credentials not found")
                 
@@ -22,11 +22,11 @@ class StorageService:
                 json.loads(credentials_json)
             )
             self.client = storage.Client(
-                project=settings.GOOGLE_CLOUD_PROJECT,
+                project=settings_doceasy.GOOGLE_CLOUD_PROJECT,
                 credentials=credentials
             )
-            self.bucket = self.client.bucket(settings.GCS_BUCKET_NAME)
-            logger.info(f"StorageService initialized with bucket: {settings.GCS_BUCKET_NAME}")
+            self.bucket = self.client.bucket(settings_doceasy.GCS_BUCKET_NAME)
+            logger.info(f"StorageService initialized with bucket: {settings_doceasy.GCS_BUCKET_NAME}")
         except Exception as e:
             logger.error(f"Failed to initialize StorageService: {str(e)}")
             raise RuntimeError(f"Failed to initialize Google Cloud Storage: {str(e)}")

@@ -24,7 +24,9 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@common/*": ["../packages/common/*"]
+      "intellio-common/*": ["../common/*"]  // common-ui로 변경
+      //"intellio-common/*": ["../common/*"]
+      //"intellio-common/*": ["./*"]
     },
     "target": "es2015",
     "downlevelIteration": true
@@ -34,7 +36,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts"
-  ],
+, "../main/error/page.tsx"  ],
   "exclude": [
     "node_modules"
   ]

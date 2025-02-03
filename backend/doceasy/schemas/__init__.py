@@ -1,5 +1,5 @@
 """스키마 모듈"""
-from app.schemas.project import (
+from doceasy.schemas.project import (
     ProjectBase,
     ProjectCreate,
     ProjectUpdate,
@@ -8,24 +8,24 @@ from app.schemas.project import (
     ProjectListResponse,
     RecentProjectsResponse
 )
-from app.schemas.user import (
-    # 사용자 관련 스키마
-    UserBase,
-    UserCreate,
-    UserUpdate,
-    UserInDB,
-    UserLogin,
-    UserResponse,
-    UserListResponse,
-    # 세션 관련 스키마
-    SessionBase,
-    SessionCreate,
-    SessionUpdate,
-    SessionInDB,
-    SessionResponse,
-    SessionListResponse
-)
-from app.schemas.document import (
+# from doceasy.schemas.user import (
+#     # 사용자 관련 스키마
+#     UserBase,
+#     UserCreate,
+#     UserUpdate,
+#     UserInDB,
+#     UserLogin,
+#     UserResponse,
+#     UserListResponse,
+#     # 세션 관련 스키마
+#     SessionBase,
+#     SessionCreate,
+#     SessionUpdate,
+#     SessionInDB,
+#     SessionResponse,
+#     SessionListResponse
+# )
+from doceasy.schemas.document import (
     DocumentCreate,
     DocumentUpdate,
     DocumentInDB,
@@ -42,21 +42,21 @@ __all__ = [
     "ProjectSimpleResponse",
     "ProjectListResponse",
     "RecentProjectsResponse",
-    # 사용자 스키마
-    "UserBase",
-    "UserCreate",
-    "UserUpdate",
-    "UserInDB",
-    "UserLogin",
-    "UserResponse",
-    "UserListResponse",
-    # 세션 스키마
-    "SessionBase",
-    "SessionCreate",
-    "SessionUpdate",
-    "SessionInDB",
-    "SessionResponse",
-    "SessionListResponse",
+    # # 사용자 스키마
+    # "UserBase",
+    # "UserCreate",
+    # "UserUpdate",
+    # "UserInDB",
+    # "UserLogin",
+    # "UserResponse",
+    # "UserListResponse",
+    # # 세션 스키마
+    # "SessionBase",
+    # "SessionCreate",
+    # "SessionUpdate",
+    # "SessionInDB",
+    # "SessionResponse",
+    # "SessionListResponse",
     # 문서 스키마
     "DocumentCreate",
     "DocumentUpdate",

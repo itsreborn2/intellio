@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, HttpUrl, ConfigDict, field_validator, val
 from datetime import datetime
 import json
 
-from app.schemas.base import BaseSchema, TimestampSchema, ResponseSchema
+from common.schemas.base import BaseSchema, TimestampSchema, ResponseSchema
 
 # 문서 상태 타입 정의
 DocumentStatusType = Literal[

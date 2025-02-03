@@ -1,8 +1,8 @@
 "use client"
 
 import { Droppable, Draggable } from '@hello-pangea/dnd'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Button } from 'intellio-common/components/ui/button'
+import { Input } from 'intellio-common/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -10,12 +10,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+  DialogTrigger,
+} from 'intellio-common/components/ui/dialog'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
+} from 'intellio-common/components/ui/popover'
 import { Folder, FolderOpen, Plus, Trash2, ChevronDown, ChevronRight, History, AlertCircle, FileText, X } from 'lucide-react'
 import * as api from '@/services/api'  // 최상단에 추가
 import { IRecentProjectsResponse, IProject, Category, ProjectDetail, TableResponse,  } from '@/types/index'

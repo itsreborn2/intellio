@@ -4,7 +4,7 @@ import asyncio
 import logging
 from loguru import logger
 import json
-from app.utils.common import measure_time_async
+from common.utils.util import measure_time_async
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 import asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from app.core.config import settings
+from common.core.config import settings
 
 async def reset_database():
     # Create engine with superuser privileges

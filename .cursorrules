@@ -85,13 +85,6 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 - Use `next-safe-action` for secure and type-safe server actions.
 
 
-## AI Integration
-
--사용자가 문서를 업로드하면 바로 문서 포맷에 맞는 기능으로 문서를 추출하고 청크하여 임배딩을 완료한다.
-- 그 이후 사용자는 프롬프트를 입력하고 결과를 디폴트 템플릿에선 모드에 따라  두가지로 받는다.
- -Chat 모드: 여러 문서의 데이터를 종합하여 패턴 도출
- -Table 모드: 한 문서 내의 데이터를 상세히 분석하고 문맥화
-
 - Handle rate limiting, quota, and model availability gracefully.
 - Implement fallback logic if AI models are unavailable.
 - Sanitize user inputs before sending them to the AI.
@@ -132,3 +125,4 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 - frontend에서 사용하는 모든 interface는 frontend/types/index.ts에 정의한다.
 - 주석문을 마음대로 삭제하지 말것.
 - 주석문은 최대한 자세하게 작성하고 코드 변경시 주석도 함께 변경할것.
+- 함수의 리턴값은 사용자가 명시적으로 요청하지 않는 이상 변경하지 말것. 필요하다면 사용자에게 질문할 것.

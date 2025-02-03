@@ -1,7 +1,7 @@
 import pytest
 from typing import List, Dict
-from backend_new.app.services.chunker import RAGOptimizedChunker, Chunk, ChunkMetadata
-from app.services.llm import LLMService
+from backend_new.doceasy.services.chunker import RAGOptimizedChunker, Chunk, ChunkMetadata
+from doceasy.services.llm import LLMService
 
 class MockLLMService:
     """테스트용 LLM 서비스 모의 객체"""

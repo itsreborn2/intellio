@@ -6,12 +6,15 @@ import json
 import re
 from datetime import datetime
 
-from app.models.document import Document
-from app.models.project import Project
-from app.services.storage import StorageService
-from app.services.extractor import DocumentExtractor
-from app.core.redis import redis_client
-from app.core.celery_app import celery
+from common.services.vector_store_manager import VectorStoreManager
+from common.core.redis import redis_client
+
+from doceasy.models.document import Document
+from doceasy.models.project import Project
+from doceasy.services.storage import StorageService
+from doceasy.services.extractor import DocumentExtractor
+
+from doceasy.core.celery_app import celery
 from sqlalchemy import select
 
 # 문서 상태 상수 정의
@@ -52,7 +55,7 @@ class DocumentService:
         try:
             # Celery 태스크 이름으로 태스크 실행
             celery.send_task(
-                'app.workers.document.process_document_chucking',
+                'doceasy.workers.document.process_document_chucking',
                 args=[str(doc_id)],
                 queue='document-processing'
             )

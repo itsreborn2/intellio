@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from .base import BasePrompt
-from app.utils.common import measure_time_async
+from common.utils.util import measure_time_async
 
 class TableHeaderPrompt(BasePrompt):
     @measure_time_async

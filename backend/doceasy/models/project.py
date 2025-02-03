@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from app.models.base import Base
+from common.models.base import Base
 import uuid
 
 class Project(Base):

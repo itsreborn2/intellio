@@ -1,9 +1,9 @@
-"use client"
+//"use client"
 
 import { useState, useRef, useEffect } from "react"
 import { Settings, User } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Button } from "intellio-common/components/ui/button"
+import { Input } from "intellio-common/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
 import * as api from "@/services/api"
 
@@ -22,11 +22,20 @@ interface IOAuthConfig {
 
 
 export const LoginButton: React.FC<ILoginButtonProps> = ({ provider }) => {
+  const [isLoading, setIsLoading] = useState(false);
 
   // 로그인 처리 함수
-  const handleLogin = () => {
-    // 백엔드의 OAuth 로그인 엔드포인트로 리다이렉트
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/${provider}/login`;
+  const handleLogin = async () => {
+    if (isLoading) return; // 중복 클릭 방지
+    
+    try {
+      setIsLoading(true);
+      // 백엔드 URL을 직접 사용 (Next.js 리다이렉트 우회)
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      window.location.href = `${backendUrl}/api/v1/auth/${provider}/login`;
+    } catch (error) {
+      console.error('Login error:', error);
+    }
   };
 
   // 제공자별 버튼 스타일 설정
@@ -51,10 +60,10 @@ export const LoginButton: React.FC<ILoginButtonProps> = ({ provider }) => {
   return (
     <Button
       className={`w-full mb-2 ${getButtonStyle()}`}
-      //onClick={handleLogin}
       onClick={handleLogin}
+      disabled={isLoading}
     >
-      {getButtonText()}
+      {isLoading ? '로그인 중...' : getButtonText()}
     </Button>
   );
 };

@@ -9,21 +9,21 @@ import asyncio
 import time
 import json
 from loguru import logger
-from app.services.embedding import EmbeddingService
-from app.services.prompts import ChatPrompt, TablePrompt, TableHeaderPrompt
-from app.core.config import settings
-from app.models.document import Document
-from app.schemas.table_response import TableHeader, TableCell, TableColumn, TableResponse
-from app.schemas.table_history import TableHistoryCreate
-from app.services.table_history import TableHistoryService
+from common.services.embedding import EmbeddingService
+from doceasy.services.prompts import ChatPrompt, TablePrompt, TableHeaderPrompt
+
+from doceasy.models.document import Document
+from doceasy.schemas.table_response import TableHeader, TableCell, TableColumn, TableResponse
+from doceasy.schemas.table_history import TableHistoryCreate
+from doceasy.services.table_history import TableHistoryService
 from collections import defaultdict
 from sqlalchemy import select
-from app.utils.common import measure_time_async
-from app.workers.rag import analyze_mode_task
+from common.utils.util import measure_time_async
+from doceasy.workers.rag import analyze_mode_task
 from celery import group
 
-from app.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
-from app.services.retrievers.models import RetrievalResult
+from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
+from common.services.retrievers.models import RetrievalResult
 
 from langchain_core.documents import Document as LangchainDocument
 # logging 설정

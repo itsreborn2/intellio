@@ -1,13 +1,13 @@
 "use client"
 
 import React, { useRef, useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Button } from "intellio-common/components/ui/button"
+import { Checkbox } from "intellio-common/components/ui/checkbox"
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "@/components/ui/popover"
+} from "intellio-common/components/ui/popover"
 import { 
   FileText, 
   Plus, 
@@ -27,7 +27,7 @@ import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
-} from "@/components/ui/hover-card"
+} from "intellio-common/components/ui/hover-card"
 import { IDocument,  IMessage, ITemplate, IProjectItem, IDocumentUploadResponse, IDocumentStatus } from '@/types';  
 import * as actionTypes from '@/types/actions'
 import DocumentTable, { ITableUtils } from "./DocumentTable"

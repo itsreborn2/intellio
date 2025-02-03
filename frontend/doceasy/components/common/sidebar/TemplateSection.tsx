@@ -1,6 +1,6 @@
 "use client"
 
-import { Button } from '@/components/ui/button'
+import { Button } from 'intellio-common/components/ui/button'
 import { FileType, ChevronDown, ChevronRight } from 'lucide-react'
 import cn from 'classnames'
 

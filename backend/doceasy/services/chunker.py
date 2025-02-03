@@ -3,8 +3,9 @@ from dataclasses import dataclass
 import re
 import nltk
 from loguru import logger
-from app.services.llm import LLMService
+from common.services.llm import LLMService
 
+# 안씀.
 @dataclass
 class ChunkMetadata:
     """청크 메타데이터"""

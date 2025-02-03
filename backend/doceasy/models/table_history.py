@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, ForeignKey, DateTime, UniqueConstraint, t
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models import Base
+from common.models.base import Base
 
 class TableHistory(Base):
     """테이블 모드 히스토리 모델"""

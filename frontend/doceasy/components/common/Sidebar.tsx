@@ -23,7 +23,7 @@ import {
   PenSquare,
   ScrollText
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button } from "intellio-common/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -31,15 +31,15 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+} from "intellio-common/components/ui/dialog"
+import { Input } from "intellio-common/components/ui/input"
+import { Popover, PopoverTrigger, PopoverContent } from "intellio-common/components/ui/popover"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
+} from "intellio-common/components/ui/tooltip"
 import { ProjectCategorySection } from './sidebar/ProjectCategorySection'
 import { TemplateSection } from './sidebar/TemplateSection'
 import { useAuth } from '@/hooks/useAuth';

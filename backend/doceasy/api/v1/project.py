@@ -5,23 +5,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 from datetime import datetime, timedelta
-import pdb
 
-from app.schemas.project import (
+from doceasy.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
     ProjectSimpleResponse,
     ProjectListResponse,
     RecentProjectsResponse
 )
-from app.models.user import Session
-from app.models.project import Project
-from app.models.category import Category
-from app.core.deps import get_db, get_current_session, get_project_service, get_user_service
-from app.services.project import ProjectService
-from app.services.user import UserService
-import sys
-router = APIRouter()
+from common.models.user import Session
+from common.core.deps import get_current_session
+from common.core.database import get_db_async
+from doceasy.core.deps import get_project_service
+from doceasy.models.project import Project
+from doceasy.models.category import Category
+from doceasy.services.project import ProjectService
+
+router = APIRouter() # 상위에서 등록 prefix="/projects", tags=["projects"]
 
 logger = logging.getLogger(__name__)
 #logger = logging.getLogger("app.api.v1.project")
@@ -210,7 +210,7 @@ async def autosave_project(
 async def update_project_category(
     project_id: UUID,
     project_update: ProjectUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """프로젝트 카테고리 업데이트"""
     try:

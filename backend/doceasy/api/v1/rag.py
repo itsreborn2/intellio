@@ -8,14 +8,18 @@ import logging
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.rag import RAGService
-from app.api import deps
-from app.schemas.table_response import TableResponse, TableHeader
-from app.schemas.document import DocumentQueryRequest
-from app.core.database import get_db
-from app.schemas.rag import RAGQuery, RAGResponse
-from app.models.user import Session
-from app.core.deps import get_current_session
+from common.core.database import get_db_async
+from common.models.user import Session
+from common.core.deps import get_current_session
+
+
+from doceasy.services.rag import RAGService
+from doceasy.api import deps
+from doceasy.schemas.table_response import TableResponse, TableHeader
+from doceasy.schemas.document import DocumentQueryRequest
+from doceasy.schemas.rag import RAGQuery, RAGResponse
+
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # 디버그 로깅 활성화
@@ -79,7 +83,7 @@ async def table_search(
     request: TableQueryRequest,
     session: Session = Depends(get_current_session),
     rag_service: RAGService = Depends(deps.get_rag_service),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ) -> TableResponse:
     """테이블 모드 검색 및 질의응답"""
     try:
@@ -116,7 +120,7 @@ async def table_search(
 @router.post("", response_model=Union[Dict[str, Any], TableResponse])
 async def query_rag(
     query: RAGQuery,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     
     """RAG 쿼리 처리"""
@@ -144,7 +148,7 @@ async def query_rag(
 @router.post("/chat")
 async def chat_search(
     request: ChatRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(get_current_session)
 ):
     """채팅 모드 검색 및 질의응답"""
@@ -275,7 +279,7 @@ async def get_documents_status(
 async def stop_chat_generation(
     request: StopGenerationRequest,
     session: Session = Depends(get_current_session),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_async)
 ):
     """채팅 메시지 생성 중지"""
     try:

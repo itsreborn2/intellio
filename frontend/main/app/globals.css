@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 기본 스타일 설정 */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+  }
+}
+
+/* 커스텀 버튼 기본 스타일 */
+.custom-button {
+  @apply relative inline-flex items-center justify-center px-10 py-6 text-lg font-semibold text-white 
+         rounded-lg transition-all duration-300 transform hover:scale-105 
+         focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+/* 버튼 호버 시 글로우 효과 */
+.button-glow {
+  @apply relative overflow-hidden;
+}
+
+.button-glow::after {
+  @apply content-[''] absolute inset-0 rounded-lg opacity-0 transition-opacity duration-300
+         bg-gradient-to-r from-white/20 to-transparent;
+}
+
+.button-glow:hover::after {
+  @apply opacity-100;
+}

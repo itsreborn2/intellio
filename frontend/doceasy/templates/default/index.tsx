@@ -6,8 +6,8 @@ import { TableSection } from './components/TableSection'
 import { UploadSection } from './components/UploadSection'
 import { useState } from 'react'
 import { Maximize2, Minimize2 } from 'lucide-react'
-import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Button } from "intellio-common/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "intellio-common/components/ui/tooltip"
 
 export const DefaultTemplate = () => {
   const { state } = useApp()
