@@ -8,18 +8,25 @@ from common.core.config import settings
 DATABASE_URL_SYNC = settings.DATABASE_URL
 DATABASE_URL = DATABASE_URL_SYNC.replace('postgresql+psycopg2://', 'postgresql+asyncpg://')
 
+# SQLAlchemy의 pool_size + max_overflow는 max_connections의 75% 이하로 설정하는 것이 안전. 기본값 100
 # 엔진 생성
 engine = create_engine(
     DATABASE_URL_SYNC,
     pool_pre_ping=True,
-    echo=True
+    echo=True,
+    pool_size=30,
+    max_overflow=45,
+    pool_timeout=60
 )
 
 # 비동기 엔진 생성
 async_engine = create_async_engine(
     DATABASE_URL,
     pool_pre_ping=True,
-    echo=True
+    echo=True,
+    pool_size=30,
+    max_overflow=50,
+    pool_timeout=60
 )
 
 # 세션 팩토리 생성

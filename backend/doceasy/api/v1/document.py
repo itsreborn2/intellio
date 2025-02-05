@@ -174,7 +174,7 @@ async def get_document_list(
         document_responses = []
         for doc in documents:
             try:
-                logger.info(f"문서 변환 시도: {doc.id}")
+                #logger.info(f"문서 변환 시도: {doc.id}")
                 response = DocumentResponse(
                     id=doc.id,
                     project_id=doc.project_id,
