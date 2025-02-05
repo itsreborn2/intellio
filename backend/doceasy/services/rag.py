@@ -47,8 +47,10 @@ class RAGService:
         self.embedding_service = EmbeddingService()
         self._streaming_callback = streaming_callback
         if streaming_callback:
+            logger.warning(f"RAG Init with callback")
             self.chat_prompt = ChatPrompt(streaming_callback=streaming_callback)
         else:
+            logger.warning(f"RAG Init without callback")
             self.chat_prompt = ChatPrompt()
         self.table_header_prompt = TableHeaderPrompt()
         self.table_prompt = TablePrompt()  # 테이블 분석을 위한 프롬프트 추가
