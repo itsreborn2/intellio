@@ -138,7 +138,7 @@ class UserService:
 
     async def get_session(self, session_id: str) -> Optional[Session]:
         """세션 조회"""
-        logger.info(f'[get_session] trying to find session_id: {session_id}')
+        #logger.info(f'[get_session] trying to find session_id: {session_id}')
         query = (
             select(Session)
             .where(Session.id == session_id)
@@ -149,7 +149,7 @@ class UserService:
         
         result = await self.db.execute(query)
         session = result.scalar_one_or_none()
-        logger.info(f'[get_session] found session: {session}')
+        #logger.info(f'[get_session] found session: {session}')
         if session:
             logger.info(f'[get_session] associated user: {session.user}')
         return session
@@ -157,9 +157,9 @@ class UserService:
     async def get_active_session(self, session_id: str) -> Optional[Session]:
         """활성 세션 조회"""
         try:
-            logger.info(f'[get_active_session] 시작: session_id = {session_id}')
+            #logger.info(f'[get_active_session] 시작: session_id = {session_id}')
             session = await self.get_session(session_id)
-            logger.info(f'[get_active_session] 세션 조회 결과: {session}')
+            #logger.info(f'[get_active_session] 세션 조회 결과: {session}')
             
             if not session:
                 logger.info(f'[get_active_session] 세션이 없음')

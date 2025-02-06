@@ -9,6 +9,9 @@ import { createProject } from '@/services/api'
 import { uploadDocument } from '@/services/api'
 import { IDocument, IDocumentStatus, IDocumentUploadResponse, ITableData, TableResponse } from '@/types'
 import * as actionTypes from '@/types/actions'
+import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
+import { IUploadProgressData } from "@/types"
+import { useFileUpload } from "@/hooks/useFileUpload"
 
 // 문서 상태 타입 정의
 interface DocumentStatus {
@@ -64,12 +67,14 @@ interface ITableRowData {
 
 export const UploadSection = () => {
   const { state, dispatch } = useApp()
+  //const { currentProject } = state
   const [uploadStatus, setUploadStatus] = useState({
     total: 0,
     error: 0,
     failedFiles: [] as string[]
   })
   const [documentStatuses, setDocumentStatuses] = useState<DocumentStatus[]>([])
+  const { uploadProgress, handleFileUpload } = useFileUpload()
 
   // 문서 상태 조회 함수
   const fetchDocumentStatuses = async (documentIds: string[]) => {
@@ -128,160 +133,8 @@ export const UploadSection = () => {
   )
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    console.log('Files dropped:', acceptedFiles.map(f => f.name))
-    
-    try {
-      // 새로운 프로젝트 생성 전에 상태 초기화
-      dispatch({ type: actionTypes.SET_INITIAL_STATE })
-
-      // 첫 번째 파일의 이름을 프로젝트 이름으로 사용
-      const projectName = acceptedFiles[0]?.name.replace(/\.[^/.]+$/, '') || 'Untitled Project'
-
-      // 새 프로젝트 생성
-      console.log('Creating new project...')
-      const project = await createProject(projectName, 'Created for document upload')
-      console.log('Created new project:', project)
-      
-      // 프로젝트 ID와 제목 설정
-      dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: project })
-      dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: projectName})
-
-      // 사이드바의 프로젝트 목록 갱신을 위해 이벤트 발생
-      window.dispatchEvent(new CustomEvent('projectCreated'))
-
-      console.log('Using project ID:', project.id)
-      
-      try {
-        // 초기 상태 설정
-        updateUploadStatus(
-          acceptedFiles.length, 
-          0, 
-          []
-        )
-        // 채팅 메시지로 상태 업데이트
-        dispatch({
-          type: actionTypes.ADD_CHAT_MESSAGE,
-          payload: {
-            role: 'assistant',
-            content: `문서 업로드를 시작합니다. 총 ${acceptedFiles.length}개의 파일이 업로드됩니다.`
-          }
-        })
-        
-
-        // 모든 파일의 상태를 UPLOADING으로 업데이트하고 테이블에 즉시 추가
-        const initialTableData: TableResponse = {
-          columns: [{
-            header: {
-              name: 'Document',
-              prompt: '문서 이름을 표시합니다'
-            },
-            cells: acceptedFiles.map(file => ({
-              doc_id: file.name,
-              content: file.name
-            }))
-          }]
-        };
-
-        // 테이블 데이터 즉시 업데이트
-        dispatch({
-          type: actionTypes.UPDATE_TABLE_DATA,
-          payload: initialTableData
-        })
-
-        // 업로드 섹션에서 채팅 섹션으로 전환
-        dispatch({ type: actionTypes.SET_VIEW, payload: 'chat' })
-
-        // 파일 업로드 진행
-        console.log(`Uploading ${acceptedFiles.length} files to project ${project.id}`)
-        const response:IDocumentUploadResponse = await uploadDocument(project.id, acceptedFiles)
-        if(response.success === true)
-          console.log('Upload response:[UploadSection1]', response)
-        else
-          console.warn('Upload response:[UploadSection2]', response)
-        
-
-        // 업로드 상태 업데이트
-        updateUploadStatus(
-          acceptedFiles.length,
-          response.errors.length,
-          response.failed_uploads || []
-        )
-        // 채팅 메시지로 상태 업데이트
-        dispatch({
-          type: actionTypes.ADD_CHAT_MESSAGE,
-          payload: {
-            role: 'assistant',
-            content: `문서 업로드 완료`
-          }
-        })
-
-        // 업로드가 완료된 이후에는 업로드 성공/실패 여부에 따라 각 문서의 상태를 업데이트 해줘야한다.
-        // 새 문서 목록 생성
-        const newDocuments:IDocument[] = (response.document_ids || []).map((docId, index) => ({
-          id: docId,
-          filename: acceptedFiles[index].name,
-          project_id: project.id,
-          status: 'UPLOADING',
-          created_at: new Date().toISOString(),  // 현재 시간을 ISO 문자열로 추가 // 서버에서 생성된 create_at과 다른값일텐데.. 일단 나중에..
-          updated_at: new Date().toISOString()   // 현재 시간을 ISO 문자열로 추가
-        }));
-
-        // 문서 목록 업데이트
-        dispatch({
-          type: actionTypes.ADD_DOCUMENTS,
-          payload: newDocuments
-        });
-
-        // 문서 상태 모니터링 시작
-        setDocumentStatuses(
-          response.document_ids.map(docId => ({
-            document_id: docId,
-            status: 'PROCESSING',
-            is_accessible: true
-          }))
-        );
-
-        // 채팅 모드 유지
-        dispatch({ type: actionTypes.SET_VIEW, payload: 'chat' })
-
-      } catch (error) {
-        console.error('Upload failed:', error)
-        // 실패한 파일 이름 목록 생성
-        const failedFiles = acceptedFiles.map(file => file.name)
-        console.log('Failed files:', failedFiles)
-        // 실패한 업로드 상태 업데이트
-        updateUploadStatus(
-          acceptedFiles.length,
-          acceptedFiles.length,
-          failedFiles
-        )
-
-        // 실패한 파일들의 상태를 ERROR로 업데이트
-        const failedTableData: TableResponse = {
-          columns: [{
-            header: {
-              name: 'Document',
-              prompt: '문서 이름을 표시합니다'
-            },
-            cells: failedFiles.map(filename => ({
-              doc_id: filename,
-              content: filename
-            }))
-          }]
-        };
-
-        dispatch({
-          type: actionTypes.UPDATE_TABLE_DATA,
-          payload: failedTableData
-        })
-
-        throw error
-      }
-    } catch (error) {
-      console.error('Project creation or upload failed:', error)
-      throw error
-    }
-  }, [dispatch])
+    await handleFileUpload(acceptedFiles)
+  }, [handleFileUpload])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
@@ -302,80 +155,83 @@ export const UploadSection = () => {
   })
 
   return (
-    <div className="w-full h-[50vh] flex items-center justify-center p-4">
-      <div
-        {...getRootProps()}
-        className={`w-full h-full max-w-4xl p-8 rounded-lg border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center cursor-pointer
-          ${isDragActive 
-            ? 'border-primary bg-primary/10 scale-[0.99] shadow-lg' 
-            : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5'}`}
-      >
-        <div className="flex flex-col items-center text-center space-y-6">
-          <div className={`p-6 rounded-full transition-colors duration-200 ${isDragActive ? 'bg-primary/20' : 'bg-primary/10'}`}>
-            <Upload className={`w-8 h-8 transition-colors duration-200 ${isDragActive ? 'text-primary' : 'text-primary/80'}`} />
-          </div>
-          <div className="space-y-2">
-            <h3 className="font-semibold text-xl">문서 업로드</h3>
-            <p className="text-sm text-muted-foreground">
-              이곳에 문서를 끌어다 놓거나 클릭하여 선택하세요
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              PDF, Word(doc/docx), 한글(hwp/hwpx), 엑셀(xls/xlsx), 이미지(jpg/jpeg/png/gif/tiff), 텍스트(txt)
-            </p>
-          </div>
-
-          <input {...getInputProps()} />
-
-          {/* 업로드 상태 표시 */}
-          {uploadStatus.total > 0 && (
-            <div className="mt-4 text-sm">
-              <div className="flex items-center space-x-2">
-                <div className="text-green-600">성공: {uploadStatus.total - uploadStatus.error}</div>
-                {uploadStatus.error > 0 && (
-                  <div className="text-red-600">
-                    실패: {uploadStatus.error}
-                    {uploadStatus.failedFiles.length > 0 && (
-                      <div className="text-xs mt-1">
-                        실패한 파일: {uploadStatus.failedFiles.join(', ')}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                <div
-                  className="bg-primary rounded-full h-2 transition-all duration-500"
-                  style={{
-                    width: `${((uploadStatus.total - uploadStatus.error) / uploadStatus.total) * 100}%`
-                  }}
-                />
-              </div>
+    <>
+      <UploadProgressDialog {...uploadProgress} />
+      <div className="w-full h-[50vh] flex items-center justify-center p-4">
+        <div
+          {...getRootProps()}
+          className={`w-full h-full max-w-4xl p-8 rounded-lg border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center cursor-pointer
+            ${isDragActive 
+              ? 'border-primary bg-primary/10 scale-[0.99] shadow-lg' 
+              : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5'}`}
+        >
+          <div className="flex flex-col items-center text-center space-y-6">
+            <div className={`p-6 rounded-full transition-colors duration-200 ${isDragActive ? 'bg-primary/20' : 'bg-primary/10'}`}>
+              <Upload className={`w-8 h-8 transition-colors duration-200 ${isDragActive ? 'text-primary' : 'text-primary/80'}`} />
             </div>
-          )}
-          
-          {/* 문서 처리 상태 표시 */}
-          {documentStatuses.length > 0 && (
-            <div className="mt-4">
-              <h3 className="text-sm font-medium mb-2">문서 처리 상태</h3>
-              <div className="space-y-2">
-                {documentStatuses.map((status) => (
-                  <div
-                    key={status.document_id}
-                    className="flex items-center justify-between p-2 bg-white rounded-lg shadow-sm"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <DocumentStatusBadge status={status.status} />
-                      <span className="text-sm text-gray-600">
-                        {status.error_message || (status.is_accessible ? '분석 가능' : '처리 중...')}
-                      </span>
+            <div className="space-y-2">
+              <h3 className="font-semibold text-xl">문서 업로드</h3>
+              <p className="text-sm text-muted-foreground">
+                이곳에 문서를 끌어다 놓거나 클릭하여 선택하세요
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                PDF, Word(doc/docx), 한글(hwp/hwpx), 엑셀(xls/xlsx), 이미지(jpg/jpeg/png/gif/tiff), 텍스트(txt)
+              </p>
+            </div>
+
+            <input {...getInputProps()} />
+
+            {/* 업로드 상태 표시 */}
+            {uploadStatus.total > 0 && (
+              <div className="mt-4 text-sm">
+                <div className="flex items-center space-x-2">
+                  <div className="text-green-600">성공: {uploadStatus.total - uploadStatus.error}</div>
+                  {uploadStatus.error > 0 && (
+                    <div className="text-red-600">
+                      실패: {uploadStatus.error}
+                      {uploadStatus.failedFiles.length > 0 && (
+                        <div className="text-xs mt-1">
+                          실패한 파일: {uploadStatus.failedFiles.join(', ')}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )}
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                  <div
+                    className="bg-primary rounded-full h-2 transition-all duration-500"
+                    style={{
+                      width: `${((uploadStatus.total - uploadStatus.error) / uploadStatus.total) * 100}%`
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            
+            {/* 문서 처리 상태 표시 */}
+            {documentStatuses.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-sm font-medium mb-2">문서 처리 상태</h3>
+                <div className="space-y-2">
+                  {documentStatuses.map((status) => (
+                    <div
+                      key={status.document_id}
+                      className="flex items-center justify-between p-2 bg-white rounded-lg shadow-sm"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <DocumentStatusBadge status={status.status} />
+                        <span className="text-sm text-gray-600">
+                          {status.error_message || (status.is_accessible ? '분석 가능' : '처리 중...')}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }

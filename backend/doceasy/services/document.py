@@ -69,7 +69,7 @@ class DocumentService:
         project_id: UUID,
         user_id: UUID,
         files: List[UploadFile],
-        background_tasks: BackgroundTasks
+        #background_tasks: BackgroundTasks
     ) -> List[Document]:
         """문서 업로드 및 처리
         
@@ -184,7 +184,7 @@ class DocumentService:
                     self.process_document_sync(doc_id)
                     
                 except Exception as e:
-                    logger.error(f"File processing error: {str(e)}")
+                    logger.exception(f"File processing error.: {str(e)}")
                     await self.db.rollback()
                     failed_files.append({
                         "filename": file.filename,
@@ -209,7 +209,7 @@ class DocumentService:
             )
             
         return documents
-
+    
     async def _validate_project(self, project_id: UUID, user_id: UUID) -> Project:
         """프로젝트 접근 권한 검증"""
         project = await self.db.execute(
@@ -372,78 +372,7 @@ class DocumentService:
         except Exception as e:
             logger.error(f"Error extracting text: {str(e)}")
             return None
-    # 삭제 금지 RAGOptimizedChunker TEST
-    # chunker.py를 호출하는곳이 있는지 테스트용도
-    # async def _process_chunks(self, document_id: str, extracted_text: str) -> Optional[list]:
-    #     """청크 생성 및 임베딩 처리
-        
-    #     Args:
-    #         document_id: 문서 ID
-    #         extracted_text: 추출된 텍스트
-            
-    #     Returns:
-    #         Optional[list]: 임베딩 ID 목록
-    #     """
-    #     try:
-    #         # 1. 문서 정보 조회
-    #         document = await self._get_document(document_id)
-    #         if not document:
-    #             logger.error(f"문서를 찾을 수 없음: {document_id}")
-    #             return None
-
-    #         # 2. 청크 생성
-    #         chunker = DocumentChunker()
-    #         chunks = chunker.create_chunks(
-    #             text=extracted_text,
-    #             title=document.title
-    #         )
-    #         if not chunks:
-    #             logger.error(f"청크 생성 실패: {document_id}")
-    #             return None
-            
-    #         # 3. 임베딩 생성 및 저장
-    #         embedding_service = EmbeddingService()
-    #         chunk_ids = []
-            
-    #         for chunk in chunks:
-    #             try:
-    #                 # 임베딩 생성
-    #                 embeddings = await embedding_service.create_embedding_with_retry(chunk["content"])
-    #                 if not embeddings:
-    #                     continue
-                        
-    #                 # 벡터 저장
-    #                 chunk_id = str(uuid4())
-    #                 vector = {
-    #                     "id": chunk_id,
-    #                     "values": embeddings,
-    #                     "metadata": {
-    #                         "text": chunk["content"],
-    #                         "document_id": document_id,
-    #                         "chunk_index": chunk["metadata"]["chunk_index"],
-    #                         "total_chunks": chunk["metadata"]["total_chunks"],
-    #                         "title": chunk["metadata"]["title"]
-    #                     }
-    #                 }
-                    
-    #                 success = await embedding_service.store_vectors([vector])
-    #                 if success:
-    #                     chunk_ids.append(chunk_id)
-                        
-    #             except Exception as e:
-    #                 logger.error(f"청크 {chunk['metadata']['chunk_index']} 처리 실패: {str(e)}")
-    #                 continue
-            
-    #         if not chunk_ids:
-    #             logger.error(f"모든 청크 처리 실패: {document_id}")
-    #             return None
-                
-    #         logger.info(f"문서 {document_id}의 {len(chunk_ids)}개 청크 처리 완료")
-    #         return chunk_ids
-            
-    #     except Exception as e:
-    #         logger.error(f"청크 처리 중 오류 발생: {str(e)}")
-    #         return None
+    
 
     async def get_documents_by_project(self, project_id: str) -> List[Document]:
         """프로젝트에 속한 모든 문서를 조회합니다."""
@@ -458,3 +387,94 @@ class DocumentService:
         except Exception as e:
             logger.error(f"문서 조회 중 오류 발생: {str(e)}")
             raise
+
+    async def upload_single_document(
+        self,
+        project_id: UUID,
+        user_id: UUID,
+        filename: str,
+        content: bytes,
+        content_type: str,
+        file_size: int
+    ) -> Document:
+        """파일 내용을 직접 처리하여 문서를 생성합니다.
+        
+        Args:
+            project_id: 프로젝트 ID
+            user_id: 사용자 ID
+            filename: 파일 이름
+            content: 파일 내용
+            content_type: 파일 타입
+            file_size: 파일 크기
+            
+        Returns:
+            생성된 Document 객체
+        """
+        logger.info(f"Processing file content: {filename}")
+        
+        # 1. 파일 타입 검증
+        if not self._is_allowed_file(content_type):
+            raise ValueError(f"Unsupported file type: {content_type}")
+            
+        # 2. 파일 크기 검증
+        if file_size > 100 * 1024 * 1024:  # 100MB 제한
+            raise ValueError(f"File too large: {filename}")
+            
+        # 3. 파일명 검증
+        if not self._is_valid_filename(filename):
+            raise ValueError(f"Invalid filename: {filename}")
+            
+        try:
+            # 4. 파일 내용 검증
+            if not content:
+                raise ValueError("Empty file")
+            
+            # 5. 저장 경로 생성
+            doc_id = uuid4()
+            file_path = f"{project_id}/{doc_id}/{filename}"
+            
+            # 6. 파일 저장 (스토리지 업로드는 일단 주석 처리)
+            #await self.storage.upload_file(file_path, content)
+            
+            # 7. 텍스트 추출
+            try:
+                extracted_text = self.extractor.extract_text(content, content_type)
+            except Exception as e:
+                logger.error(f"Text extraction error: {str(e)}")
+                extracted_text = None
+                
+            # 8. Document 객체 생성
+            document = Document(
+                id=doc_id,
+                project_id=project_id,
+                filename=filename,
+                file_path=file_path,
+                file_type=content_type,
+                file_size=file_size,
+                status=DOCUMENT_STATUS_UPLOADED,
+                extracted_text=extracted_text
+            )
+            
+            # 9. DB 저장
+            self.db.add(document)
+            await self.db.commit()
+            await self.db.refresh(document)
+            
+            # 10. Redis에 문서 상태 저장
+            redis_client.set_document_status(
+                str(doc_id),
+                DOCUMENT_STATUS_UPLOADED,
+                None
+            )
+            
+            # 11. 문서 처리 태스크 등록
+            self.process_document_sync(doc_id)
+            
+            return document
+            
+        except Exception as e:
+            logger.exception(f"File content processing error: {str(e)}")
+            await self.db.rollback()
+            raise
+
+    

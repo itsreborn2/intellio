@@ -370,6 +370,8 @@ def process_document_chucking(self, document_id: str):
                 }
             )
             
+            #현재 코드에서는 send_task()를 사용하고 있어서 실제로는 이 리턴값을 직접적으로 사용하지는 않음.
+            # Celery Task 결과값으로 반환되어, 모니터링 시스템에서 확인은 가능.
             return {
                 "status": "PROCESSING",
                 "total_chunks": total_chunks,

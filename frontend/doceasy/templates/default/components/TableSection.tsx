@@ -2,36 +2,25 @@
 
 import React, { useRef, useState, useEffect } from "react"
 import { Button } from "intellio-common/components/ui/button"
-import { Checkbox } from "intellio-common/components/ui/checkbox"
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "intellio-common/components/ui/popover"
+
 import { 
-  FileText, 
+
   Plus, 
-  Send, 
-  Trash2, 
-  Search,
-  PenSquare,
-  X,
-  Share,
-  GripHorizontal
+
 } from "lucide-react"
 import { useApp } from "@/contexts/AppContext"
-import { createProject, uploadDocument } from "@/services/api"
-import { Tooltip, Box } from "@mui/material"
-import { cn } from "@/lib/utils"
+
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from "intellio-common/components/ui/hover-card"
-import { IDocument,  IMessage, ITemplate, IProjectItem, IDocumentUploadResponse, IDocumentStatus } from '@/types';  
+
 import * as actionTypes from '@/types/actions'
 import DocumentTable, { ITableUtils } from "./DocumentTable"
 import ReactMarkdown from 'react-markdown'
+import { useFileUpload } from "@/hooks/useFileUpload"
+import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
   <div className="bg-muted/90 w-fit px-2 py-1 rounded">
@@ -249,6 +238,7 @@ export const TableSection = () => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const tableRef = useRef<ITableUtils>(null);
+  const { uploadProgress, handleFileUpload } = useFileUpload()
 
   // 컬럼 상태 동기화
   useEffect(() => {
@@ -278,23 +268,19 @@ export const TableSection = () => {
     }
   }, [state.analysis.tableData]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddDocuments = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (!files) return
 
     try {
       let projectId = state.currentProjectId
+
       if (!projectId) {
-        console.warn("Not Created Project")
-        // const project = await createProject('Temporary Project', 'Created for document upload')
-        // projectId = project.id
-        // dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: projectId })
-        
-        // // 프로젝트 생성 이벤트 발생
-        // window.dispatchEvent(new CustomEvent('projectCreated'))
-        return;
+        console.error('No project ID available')
+        return
       }
-      
+
+      // 채팅 메시지는 직접 추가하고, useFileUpload에서는 메시지 추가를 건너뜁니다
       dispatch({
         type: actionTypes.ADD_CHAT_MESSAGE,
         payload: {
@@ -303,86 +289,26 @@ export const TableSection = () => {
         }
       });
 
-      const response: IDocumentUploadResponse = await uploadDocument(projectId, Array.from(files))
-      if(response.success === true)
-        console.log('Upload response:[TableSection]', response)
-      else
-        console.warn('Upload response:[TableSection]', response)
-      
-      // 1. 문서 상태 업데이트
-      const documents: IDocument[] = response.documents.map(doc => ({
-        id: doc.id,
-        filename: doc.filename,
-        project_id: doc.project_id,
-        status: doc.status,
-        created_at: new Date().toISOString(),  // 현재 시간을 ISO 문자열로 추가 // 서버에서 생성된 create_at과 다른값일텐데.. 일단 나중에..
-        updated_at: new Date().toISOString(),   // 현재 시간을 ISO 문자열로 추가
-        content_type: doc.content_type
-      }));
-      console.log('Created document[TableSection], dispatch(\'SET_DOCUMENTS_IN_TABLESECTION\', payload) : ', documents)
-    
+      await handleFileUpload(Array.from(files), projectId)
 
-      dispatch({
-        type: actionTypes.ADD_DOCUMENTS,
-        payload: documents
-      });
-      console.log(`2. 테이블 데이터 초기화 - Document 컬럼 추가. 현재프로젝트 : ${state.currentProjectId}`)
-      // export interface TableColumn {
-      //   header: {
-      //     name: string;
-      //     prompt: string;
-      //   };
-      //   cells: {
-      //     doc_id: string;
-      //     content: string;
-      //   }[];
-      //   [key: string]: any;
-      // }
-      
-      // export interface TableResponse {
-      //   columns: TableColumn[];
-      // }
-      // 2. 테이블 데이터 초기화 - Document 컬럼 추가
-      if (documents.length > 0) {
-        // const tableData  = {
-        //   columns: [{
-        //     header: {
-        //       name: 'Document',
-        //       prompt: '문서 이름을 표시합니다'
-        //     },
-        //     cells: documents.map(doc => ({
-        //       doc_id: doc.id,
-        //       content: doc.filename
-        //     }))
-        //   }]
-        // }
-        // console.log(`2-1. tableData : ${tableData}`)
-        // dispatch({
-        //   type: actionTypes.UPDATE_TABLE_DATA,
-        //   payload: tableData
-        // })
+      // dispatch({
+      //   type: actionTypes.ADD_CHAT_MESSAGE,
+      //   payload: {
+      //     role: 'assistant',
+      //     content: '문서 업로드가 완료되었습니다.'
+      //   }
+      // });
 
-        console.log('3. 분석 모드를 테이블로 변경')
-        // 3. 분석 모드를 테이블로 변경
-        dispatch({
-          type: actionTypes.SET_VIEW,
-          payload: 'table'
-        })
-      }
-      console.log('ADD_MESSAGE')
-      // 기존 메시지 dispatch
+    } catch (error) {
+      console.error('File upload failed:', error)
       dispatch({
         type: actionTypes.ADD_CHAT_MESSAGE,
         payload: {
           role: 'assistant',
-          content: `문서 추가 완료`
+          content: `문서 업로드 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
         }
-      })
-
-    } catch (error) {
-      console.error('Failed to upload documents:', error)
+      });
     }
-      
   }
 
   const toggleRowSelection = (id: number) => {
@@ -492,6 +418,7 @@ export const TableSection = () => {
   }
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">  
+      <UploadProgressDialog {...uploadProgress} />
       <div className="sticky top-0 z-10 bg-background border-b">
         <div className="flex items-center justify-between p-2 gap-2">
           <Button
@@ -508,7 +435,7 @@ export const TableSection = () => {
             ref={fileInputRef}
             className="hidden"
             multiple
-            onChange={handleFileUpload}
+            onChange={handleAddDocuments}
           />
         </div>
       </div>

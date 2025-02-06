@@ -89,9 +89,22 @@ export interface IProjectItem {
 
 // 업로드 진행 상태 콜백 인터페이스
 export interface IUploadProgressCallback {
-  onProgress?: (totalProgress: number) => void;
-  onComplete?: (response: IDocumentUploadResponse) => void;
-  onError?: (error: Error) => void;
+  onProgress?: (data: IUploadProgressData) => void
+  onComplete?: (data: { message: string; total_processed: number }) => void
+  onError?: (error: Error) => void
+}
+
+// 업로드 진행 상태 데이터 인터페이스
+export interface IUploadProgressData {
+  filename: string
+  total_files: number
+  processed_files: number
+  document?: {
+    id: string
+    filename: string
+    content_type?: string
+    status: string
+  }
 }
 
 // Table관련되는 인터페이스
@@ -125,7 +138,9 @@ export interface IDocument {
   project_id: string
   status: IDocumentStatus
   content_type?: string
-  added_col_context?: Array<ICell> // 추가된 셀. 헤더정보(name), 셀내용
+  added_col_context?: Array<ICell>
+  created_at?: string
+  updated_at?: string
 }
 
 // 문서 상태 인터페이스
@@ -211,4 +226,14 @@ export interface IChatResponse {
   role: 'assistant'
   content: string
   timestamp?: string
+}
+
+// 앱 상태 인터페이스
+export interface AppState {
+  project: IProject | null
+  documents: IDocument[]
+  messages: IMessage[]
+  view: 'upload' | 'chat' | 'table'
+  tableData: TableResponse | null
+  projectTitle: string
 }

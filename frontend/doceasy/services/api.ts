@@ -127,16 +127,26 @@ const sanitizeFileName = (fileName: string): string => {
   return sanitized + ext;
 };
 
+export interface IUploadProgressData {
+  filename: string
+  total_files: number
+  processed_files: number
+  document?: {
+    id: string
+    filename: string
+    content_type?: string
+    status: string
+  }
+}
+
 export const uploadDocument = async (
   projectId: string, 
-  files: File | File[],
+  files: File[],
   callbacks?: IUploadProgressCallback
-): Promise<IDocumentUploadResponse> => {
+): Promise<void> => {
   try {
     const formData = new FormData()
-    const fileList = Array.isArray(files) ? files : [files]
-    
-    fileList.forEach(file => {
+    files.forEach(file => {
       const sanitizedName = sanitizeFileName(file.name)
       formData.append('files', file, sanitizedName)
     })
@@ -144,35 +154,74 @@ export const uploadDocument = async (
     const response = await apiFetch(`${API_ENDPOINT}/documents/projects/${projectId}/upload`, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        'Accept': 'text/event-stream',
         'X-Requested-With': 'XMLHttpRequest'
       },
       body: formData
-    });
+    })
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => null)
       if (response.status === 401) {
-        // 세션 만료 처리
-        window.dispatchEvent(new CustomEvent('sessionExpired'));
-        throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.');
+        window.dispatchEvent(new CustomEvent('sessionExpired'))
+        throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.')
       }
-      throw new Error(errorData?.detail || `Upload failed with status ${response.status}`)
+      throw new Error(`Upload failed with status ${response.status}`)
     }
 
-    const result: IDocumentUploadResponse = await response.json()
-    console.log(`upload result : ${JSON.stringify(result)}`)
-    
-    if (callbacks?.onComplete) {
-      callbacks.onComplete(result)
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('Failed to get response reader')
     }
-    
-    return result
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.trim() === '') continue
+        if (!line.startsWith('data:')) continue
+
+        try {
+          const eventData = line.slice(5).trim() // Remove 'data:' prefix and trim whitespace
+          if (!eventData) continue
+          try {
+            const parsedData = JSON.parse(eventData)
+            if (!parsedData.event || !parsedData.data) continue
+
+            switch (parsedData.event) {
+              case 'upload_progress':
+                callbacks?.onProgress?.(parsedData.data)
+                break
+              case 'upload_error':
+                const errorData = parsedData.data
+                callbacks?.onError?.(new Error(errorData.error))
+                break
+              case 'upload_complete':
+                callbacks?.onComplete?.(parsedData.data)
+                break
+              case 'error':
+                const error = parsedData.data
+                throw new Error(error.error)
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE data:', e, 'Line:', line)
+            continue
+          }
+        } catch (e) {
+          console.error('Failed to parse SSE data:', e, 'Line:', line)
+        }
+      }
+    }
   } catch (error) {
     console.error('Upload failed:', error)
-    if (callbacks?.onError) {
-      callbacks.onError(error as Error)
-    }
+    callbacks?.onError?.(error instanceof Error ? error : new Error(String(error)))
     throw error
   }
 }

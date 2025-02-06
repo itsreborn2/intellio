@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, B
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 from common.models.user import Session
+from sse_starlette.sse import EventSourceResponse
+import json
 
 from common.core.database import get_db_async
 from common.core.deps import get_current_session
@@ -24,16 +26,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()  # prefix 제거, 태그만 설정
 
-@router.post("/projects/{project_id}/upload", response_model=DocumentUploadResponse)
+@router.post("/projects/{project_id}/upload")
 async def upload_documents(
     project_id: UUID,
     files: list[UploadFile] = File(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(get_current_session),
-) -> DocumentUploadResponse:
-    #print("upload_documents 여기 오나 안오나")
-    """문서 업로드 API - 지정된 프로젝트에 문서 업로드"""
+) -> EventSourceResponse:
+    """문서 업로드 API - 지정된 프로젝트에 문서 업로드
+    SSE(Server-Sent Events)를 사용하여 실시간으로 업로드 진행상황을 클라이언트에 전송
+    """
     logger.info(f"문서 업로드 시작")
     logger.info(f"업로드된 파일 수: {len(files)}")
     
@@ -42,61 +44,101 @@ async def upload_documents(
         
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
-        
-    # 파일 정보 로깅
-    for file in files:
-        logger.info(f"파일 정보 - 이름: {file.filename}, 타입: {file.content_type}")
+
+    # 파일 내용을 미리 읽어서 메모리에 저장
+    file_contents = []
+    failed_files = []
     
-    try:
-        logger.info(f"프로젝트 확인")
-        # 프로젝트 존재 여부 확인
-        project_service = ProjectService(db)
-        project = await project_service.get(project_id, session.user_id)#session_id)
-        if not project:
-            logger.info(f"Project not found or not accessible")
-            raise HTTPException(status_code=404, detail="Project not found or not accessible")
-        logger.info(f"문서 업로드 중.")
-        # 문서 업로드 처리
-        document_service = DocumentService(db)
-        documents = await document_service.upload_documents(
-            project_id=project_id,
-            user_id=session.user_id,
-            files=files,
-            background_tasks=background_tasks
+    for file in files:
+        try:
+            content = await file.read()
+            file_contents.append({
+                "filename": file.filename,
+                "content": content,
+                "content_type": file.content_type,
+                "size": len(content)
+            })
+        except Exception as e:
+            logger.exception(f"파일 읽기 실패 {file.filename}: {str(e)}")
+            failed_files.append({
+                "filename": file.filename,
+                "error": f"파일 읽기 실패: {str(e)}"
+            })
+
+    # 파일 읽기 실패가 있으면 바로 에러 응답
+    if len(failed_files) == len(files):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "모든 파일 읽기 실패",
+                "failed_files": failed_files
+            }
         )
-        logger.info(f"완료")
-        logger.info(f"user id:{session.user_id}, prject id:{project_id}")
-        for doc in documents:
-            logger.info(f"doc_id:{doc.id}, file:{doc.filename}, status:{doc.status}")
-        return DocumentUploadResponse(
-            success=True,
-            project_id=project_id,
-            document_ids=[doc.id for doc in documents],
-            documents=[{
-                "id": doc.id,
-                "filename": doc.filename,
-                "content_type": doc.mime_type,
-                "status": doc.status
-            } for doc in documents],
-            errors=[],
-            failed_uploads=0,
-            message="Upload started"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"문서 업로드 중 오류 발생: {str(e)}")
-        # 더 자세한 에러 메시지 반환
-        return DocumentUploadResponse(
-            success=False,
-            project_id=project_id,
-            document_ids=[],
-            documents=[],
-            errors=[{"filename": file.filename, "error": str(e)} for file in files],
-            failed_uploads=len(files),
-            message=f"Upload failed: {str(e)}"
-        )
+
+    async def event_generator():
+        try:
+            # 문서 업로드 처리
+            document_service = DocumentService(db)
+            total_files = len(file_contents)
+            processed_files = 0
+
+            # 읽은 파일 내용으로 처리 진행
+            for file_data in file_contents:
+                try:
+                    logger.info(f"Processing file: {file_data['filename']}")
+                    document = await document_service.upload_single_document(
+                        project_id=project_id,
+                        user_id=session.user_id,
+                        filename=file_data['filename'],
+                        content=file_data['content'],
+                        content_type=file_data['content_type'],
+                        file_size=file_data['size']
+                    )
+                    processed_files += 1
+                    #logger.warning(f"Processed file: {file_data['filename']}")
+
+                    # 진행상황 전송
+                    progress_data = {
+                        "filename": file_data['filename'],
+                        "total_files": total_files,
+                        "processed_files": processed_files,
+                        "document": {
+                            "id": str(document.id),
+                            "filename": document.filename,
+                            "content_type": document.file_type,
+                            "status": document.status
+                        }
+                    }
+                    result = json.dumps({'event': 'upload_progress', 'data': progress_data})
+                    logger.warning(f"Progress data: {result}")
+                    yield result
+
+                except Exception as e:
+                    logger.exception(f"File processing error: {str(e)}")
+                    error_data = {
+                        "filename": file_data['filename'],
+                        "error": str(e)
+                    }
+                    yield json.dumps({'event': 'upload_error', 'data': error_data})
+
+            # 실패한 파일이 있으면 에러 메시지 전송
+            for failed_file in failed_files:
+                yield json.dumps({'event': 'upload_error', 'data': failed_file})
+
+            # 모든 파일 처리 완료
+            complete_data = {
+                "message": "All files processed",
+                "total_processed": processed_files,
+                "total_failed": len(failed_files)
+            }
+            yield json.dumps({'event': 'upload_complete', 'data': complete_data})
+
+        except Exception as e:
+            logger.error(f"문서 업로드 중 오류 발생: {str(e)}")
+            error_data = {"error": str(e)}
+            yield json.dumps({'event': 'error', 'data': error_data})
+
+    return EventSourceResponse(event_generator())
 
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
