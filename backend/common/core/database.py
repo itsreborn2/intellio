@@ -16,17 +16,21 @@ engine = create_engine(
     echo=True,
     pool_size=30,
     max_overflow=45,
-    pool_timeout=60
+    pool_timeout=30,
+    pool_recycle=1800   # 30분마다 연결 재사용 (세션 누적 방지
 )
 
+# asyncpg는 자체 커넥션 풀을 사용하고, pool_size는 asyncpg.Pool과 충돌할 수 있음
+# async_engine에서 커넥션 풀 관련 설정을 직접 관리하지 않는 것이 일반적인 권장사항
+# max_overflow 옵션도 비동기 엔진에서는 무의미
 # 비동기 엔진 생성
 async_engine = create_async_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     echo=True,
-    pool_size=30,
-    max_overflow=50,
-    pool_timeout=60
+    #max_overflow=50,
+    pool_timeout=30,
+    pool_recycle=1800   # 30분마다 연결 재사용 (세션 누적 방지
 )
 
 # 세션 팩토리 생성
@@ -45,11 +49,9 @@ def get_db() -> Generator[Session, None, None]:
 
 async def get_db_async() -> AsyncGenerator[AsyncSession, None]:
     """데이터베이스 세션 의존성"""
+    #try-finally를 쓸 필요 없음. async with 자체가 세션 정리
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
 
 # async def get_db_async() -> AsyncSession:
 #     """비동기 데이터베이스 세션 생성"""
