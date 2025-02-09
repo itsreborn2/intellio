@@ -1,0 +1,50 @@
+---
+description: backend rules
+globs: 
+---
+# 폴더 구조
+
+intellio/
+├── backend/              # 백엔드 (FastAPI) 
+│   ├── common/           # 공통 모듈(회원관리, text 처리, 임베딩 등)
+│   │   ├── api/          # API 엔드포인트
+│   │   ├── core/         
+│   │   ├── models/       
+│   │   ├── schemas/      
+│   │   ├── services/     
+│   │   └── utils/        
+│   │
+│   ├── doceasy/          # 닥이지 관련 모듈 ( Chat, Table mode 처리, 문서 프로젝트 관리 등 )
+│   │   ├── api/          # API 엔드포인트
+│   │   ├── core/         
+│   │   ├── models/       
+│   │   ├── schemas/      
+│   │   ├── services/     
+│   │   ├── tests/        
+│   │   └── workers/      # 백그라운드 작업
+│   ├── stockeasy/          # 스탁이지 관련 모듈 ( 작업 예정 )
+│   │   ├── api/          # API 엔드포인트
+│   │   ├── core/         
+│   │
+│   ├── migrations/       # 데이터베이스 마이그레이션
+│   ├── credentials/      # api key 등
+
+# virtual environment
+- base directory : backend\
+- 가상환경 폴더 : backend\venv\
+
+# Your rule content
+- base directory : backend/
+- Use Pydantic V2 style
+- 코드 재사용 룰
+- LLM 모델에게 컨텐츠 생산 요청 : common/services/llm_modes.py의 LLMModels()
+    ```
+    LLM = LLMModels(streaming_callback=streaming_callback)
+    response: ai.AIMessage = self.LLM.generate(user_query, prompt_context)
+    ```
+- Need to embedding for vector data : backend\common\services\embedding.py
+    ```
+    embedding_service = EmbeddingService()
+    embedding = embedding_service.get_single_embedding(chunk_text) # 단일 질문, 단일 청크
+    embeddings = embedding_service.create_embeddings_batch_sync(chunks) # 다수의 청크
+

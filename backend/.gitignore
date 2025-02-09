@@ -61,4 +61,17 @@ credentials/*.json
 *.pem
 *.key
 service-account.json
-app/kf-deberta/pytorch_model.bin
+common/external/kf-deberta/pytorch_model.bin
+
+#doceasy
+
+# stockeasy
+telegram_files/
+telegram_collector.session*
+# 채널 파일은 git에 절대 업로드하면 안됨.
+stockeasy/telegram_channels.json
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid

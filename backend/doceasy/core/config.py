@@ -1,10 +1,8 @@
 from typing import List
-from pydantic_settings import BaseSettings
 import os
 from loguru import logger
 from functools import lru_cache
 from common.core.config import CommonSettings
-
 
 def detect_file_encoding(file_path):
     """파일의 인코딩을 자동으로 감지"""
@@ -70,5 +68,12 @@ def get_settings() -> SettingsDoceasy:
 
 settings_doceasy = get_settings()
 
-from loguru import logger
-#logger.info(f"TEXT_SPLITTER: {settings_doceasy.TEXT_SPLITTER}, CHUNK_SIZE: {settings_doceasy.CHUNK_SIZE}, CHUNK_OVERLAP: {settings_doceasy.CHUNK_OVERLAP}")
+logger.info(f"SettingsDoceasy")
+logger.info(f"ENV: {settings_doceasy.ENV}")
+logger.info(f"REDIS_HOST: {settings_doceasy.REDIS_HOST}")
+logger.info(f"REDIS_PORT: {settings_doceasy.REDIS_PORT}")
+logger.info(f"REDIS_URL: {settings_doceasy.REDIS_URL}")
+logger.info(f"CELERY_BROKER_URL: {settings_doceasy.CELERY_BROKER_URL}")
+logger.info(f"CELERY_RESULT_BACKEND: {settings_doceasy.CELERY_RESULT_BACKEND}")
+logger.info(f"TIKA_HOST: {settings_doceasy.TIKA_HOST}")
+logger.info(f"TIKA_SERVER_ENDPOINT: {settings_doceasy.TIKA_SERVER_ENDPOINT}")

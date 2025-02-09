@@ -19,13 +19,13 @@ def init_worker(**kwargs):
     #gemini_api.initialize(settings.GEMINI_API_KEY)
 
 @shared_task(
-    name="doceasy.workers.rag.analyze_mode_task",
+    name="doceasy.workers.rag.analyze_table_mode_task",
     queue="rag-processing",
     max_retries=3,
     soft_time_limit=30,
     time_limit=35
 )
-def analyze_mode_task(chunk_content, query, keywords, query_analysis):
+def analyze_table_mode_task(chunk_content, query, keywords, query_analysis):
     """테이블 분석 작업을 수행하는 Celery task
         Args:
         content: 분석할 테이블 내용. 문서의 청크 내용이 들어있음.

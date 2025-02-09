@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class EmbeddingService:
     def __init__(self):
-        self.batch_size = 20  # 임베딩 처리의 안정성을 위해 배치 크기 축소 (50 -> 20)
+        self.batch_size = 100  # 임베딩 처리의 안정성을 위해 배치 크기 축소 (50 -> 20)
         self.model_manager = EmbeddingModelManager()
         #self.current_model = self.model_manager.get_default_model() # 기본 모델은 openai
         #self.current_model = self.model_manager.get_model(EmbeddingModelType.OPENAI_ADA_002) # 구글 다국어 모델
@@ -105,24 +105,9 @@ class EmbeddingService:
             logger.error(f"임베딩 생성 중 오류 발생: {str(e)}")
             raise
     
-    def store_vectors(self, _vectors: List[Dict]) -> bool:
-        """벡터를 Pinecone에 저장"""
-        try:
-            if not _vectors:
-                logger.warning("저장할 벡터가 없습니다")
-                return False
 
-            # 벡터 저장
-            logger.info(f"벡터 {len(_vectors)}개 저장 중")
-            self.pinecone_index.upsert(vectors=_vectors)
-            logger.info(f"벡터 {len(_vectors)}개 저장 완료")
-            return True
-
-        except Exception as e:
-            logger.error(f"벡터 저장 실패: {str(e)}")
-            return False
     
-    async def get_single_embedding_async(self, query: str) -> List[float]:
+    async def create_single_embedding_async(self, query: str) -> List[float]:
         """단일 텍스트에 대한 임베딩을 생성하고 검증"""
         try:
             if not query or not query.strip():
@@ -147,7 +132,7 @@ class EmbeddingService:
         except Exception as e:
                 logger.error(f"단일 임베딩 생성 실패: {str(e)}")
                 raise
-    def get_single_embedding(self, query: str) -> List[float]:
+    def create_single_embedding(self, query: str) -> List[float]:
         """단일 텍스트에 대한 임베딩을 생성하고 검증 (동기 버전)"""
         try:
             if not query or not query.strip():
@@ -206,7 +191,7 @@ class EmbeddingService:
             logger.info(f"유사 문서 검색 시작 - 쿼리: {query}")
             
             # 쿼리 임베딩 생성. 프롬프트 조절하는 과정은 없네.
-            query_embedding = await self.get_single_embedding_async(query)
+            query_embedding = await self.create_single_embedding_async(query)
             if not query_embedding:
                 logger.error("쿼리 임베딩 생성 실패")
                 return []
@@ -312,93 +297,6 @@ class EmbeddingService:
         unique_chunks = {chunk["id"]: chunk for chunk in context_chunks}
         return list(unique_chunks.values())
         
-    async def _get_document_chunks_by_range(
-        self,
-        doc_id: str,
-        start_idx: int,
-        end_idx: int
-    ) -> List[Dict[str, Any]]:
-        """문서의 특정 범위 청크 조회"""
-        try:
-            # 범위 검증
-            if start_idx >= end_idx:
-                return []
-                
-            # Pinecone 쿼리
-            results = self.pinecone_index.query(
-                vector=[0.0] * 1536,  # 더미 벡터
-                top_k=max(1, end_idx - start_idx),  # 최소 1 보장
-                include_metadata=True,
-                filter={
-                    "document_id": doc_id,
-                    "chunk_index": {"$gte": start_idx, "$lt": end_idx}
-                }
-            )
-            
-            chunks = []
-            for match in results.matches:
-                chunks.append({
-                    "id": match.id,
-                    "score": 0.0,  # 문맥 청크는 점수 0으로 설정
-                    "content": match.metadata.get("text", ""),
-                    "metadata": match.metadata
-                })
-            
-            # 청크 인덱스로 정렬
-            chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
-            return chunks
-            
-        except Exception as e:
-            logger.error(f"청크 범위 조회 실패: {str(e)}")
-            return []
-
-    async def get_document_chunks(self, doc_id: str) -> List[Dict[str, Any]]:
-        """특정 문서의 모든 청크를 가져옵니다."""
-        try:
-            # 문서 ID로 필터링하여 모든 청크 검색
-            results = self.pinecone_index.query(
-                vector=[0] * 1536,  # 더미 벡터
-                top_k=10000,  # 충분히 큰 값
-                include_metadata=True,
-                filter={"document_id": doc_id}
-            )
-            
-            # 결과 형식화
-            chunks = []
-            for match in results.matches:
-                chunk = {
-                    "id": match.id,
-                    "content": match.metadata.get("text", ""),
-                    "metadata": match.metadata
-                }
-                chunks.append(chunk)
-                
-            return chunks
-            
-        except Exception as e:
-            logger.error(f"문서 청크 조회 실패 (문서 ID: {doc_id}): {str(e)}")
-            return []
-
-    async def delete_embeddings(self, embedding_ids: List[str]) -> None:
-        """임베딩 삭제"""
-        try:
-            if not embedding_ids:
-                return
-                
-            # Pinecone에서 임베딩 삭제
-            self.pinecone_index.delete(ids=embedding_ids)
-            logger.info(f"임베딩 삭제 완료: {len(embedding_ids)}개")
-            
-        except Exception as e:
-            logger.error(f"임베딩 삭제 실패: {str(e)}")
-
-    async def clear_index(self) -> None:
-        """인덱스의 모든 벡터 삭제"""
-        try:
-            self.pinecone_index.delete(delete_all=True)
-            logger.info("Pinecone 인덱스 초기화 완료")
-        except Exception as e:
-            logger.error(f"인덱스 초기화 중 오류 발생: {str(e)}")
 
     def get_provider(self) -> EmbeddingProvider:
         return self.provider

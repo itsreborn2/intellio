@@ -149,25 +149,31 @@ async def query_rag(
 async def chat_search(
     request: ChatRequest,
     db: AsyncSession = Depends(get_db_async),
-    session: Session = Depends(get_current_session)
+    session: Session = Depends(get_current_session),
+    
 ):
     """채팅 모드 검색 및 질의응답"""
     try:
+        
+        
         async def generate_stream():
-            buffer = ""
+
             
+            # AI 모델에 등록하는 콜백 핸들러.
+            # AI 모델에 도달하기 전에 예외처리 리턴되는 케이스는 handle_token을 수행하지 않음.
             def handle_token(token: str):
-                nonlocal buffer
+
                 #logger.info(f"Handling token: {token}")
                 print(f"{token}", end="", flush=True)
-
-                
+                #logger.warning(f"handle_token : {token}")
                 return f"data: {token}\n\n"
 
             try:
                 # RAG 서비스 초기화
                 rag_service = RAGService(handle_token)
                 await rag_service.initialize(db)
+                rag_service.set_streaming_callback(handle_token)
+                
                 
                 logger.info(f"채팅 검색 요청 - 메시지: {request.message}, 문서 ID: {request.document_ids}")
                 
@@ -178,12 +184,9 @@ async def chat_search(
                     document_ids=request.document_ids
                 ):
                     if token is not None:  # None이 아닐 때만 yield
+                        # 여기는 handle_token에서 yield 될때, 예외처리 구간에서 도달.
                         yield token
-                
-                # 버퍼에 남은 내용이 있다면 마지막으로 전송
-                if buffer:
-                    yield f"data: {buffer}\n\n"
-                
+
                 # 스트리밍 종료 신호
                 yield "data: [DONE]\n\n"
                 
@@ -192,7 +195,7 @@ async def chat_search(
                 error_message = f"data: 죄송합니다. 응답 생성 중 오류가 발생했습니다: {str(e)}\n\n"
                 yield error_message
                 yield "data: [DONE]\n\n"
-
+            
         return StreamingResponse(
             generate_stream(),
             media_type="text/event-stream",
@@ -210,6 +213,8 @@ async def chat_search(
             status_code=500,
             detail=f"채팅 검색 중 오류 발생: {str(e)}"
         )
+
+
 
 @router.post("/verify-access")
 async def verify_access(

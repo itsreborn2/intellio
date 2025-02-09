@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import Optional, List, Literal, Dict
-from pydantic import BaseModel, Field, HttpUrl, ConfigDict, field_validator, validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, ConfigDict
 from datetime import datetime
 import json
 
@@ -54,13 +54,11 @@ class DocumentResponse(DocumentBase, TimestampSchema):
     embedding_ids: Optional[List[str]] = Field(None, description="임베딩 ID 목록")
     extracted_text: Optional[str] = Field(None, description="추출된 텍스트")
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        populate_by_name=True
-    )
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    @validator('embedding_ids', pre=True)
-    def parse_embedding_ids(cls, v):
+    @field_validator('embedding_ids', mode='before')
+    @classmethod
+    def parse_embedding_ids(cls, v: Optional[str]) -> Optional[List[str]]:
         """Parse embedding_ids from JSON string to list"""
         if isinstance(v, str):
             try:
@@ -71,7 +69,6 @@ class DocumentResponse(DocumentBase, TimestampSchema):
 
 class DocumentListResponse(BaseSchema):
     """문서 목록 응답 스키마"""
-    #total: int = Field(..., description="문서 총 개수")
     items: List[DocumentResponse] = Field(..., description="문서 목록")
 
 class DocumentChunkBase(BaseSchema):
@@ -91,7 +88,7 @@ class DocumentChunkInDB(DocumentChunkBase, TimestampSchema):
 
 class DocumentChunkResponse(DocumentChunkInDB):
     """문서 청크 응답 스키마"""
-    pass
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 class DocumentUploadResponse(BaseSchema):
     """문서 업로드 응답"""

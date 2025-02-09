@@ -1,0 +1,43 @@
+---
+description: 
+globs: 
+---
+---
+description: frontend 작업 시 참고 및 요구사항
+globs: 
+---
+
+# 폴더 구조
+├── frontend/            ### 프론트엔드 (Next.js)
+│   ├── common/          ## 공통 컴포넌트
+│   │   ├── components/   # 재사용 가능한 컴포넌트
+│   │   └── lib/          # 유틸리티 함수
+│   │
+│   ├── doceasy/         # 문서 처리 관련 프론트엔드
+│   │   ├── app/         # Next.js 앱 라우터
+│   │   └── types/       # TypeScript 타입 정의
+│   │
+│   ├── main/            ## 인텔리오 홈페이지
+│   │   ├── app/         # Next.js 앱 라우터
+│   │   ├── error/       # 에러 처리
+│   │   └── styles/      # 스타일 파일
+│   │
+│   └── stockeasy/       # 주식 관련 모듈
+│       ├── app/         
+│       ├── components/  # 컴포넌트
+│       └── lib/         # 유틸리티 함수
+
+# Syntax and Formatting
+- Use the "function" keyword for pure functions.
+- Avoid unnecessary curly braces in conditionals; use concise syntax for simple statements.
+- Use declarative JSX.
+
+
+# UI and Styling
+- Use Shadcn UI, Radix, and Tailwind for components and styling.
+- Implement a responsive design that takes into account a PC or mobile first approach.
+
+# 요구사항
+ - npm install을 수행한 폴더는 루트 디렉토리
+ - 패키지 설치는 프로젝트 루트에서 수행한다.
+- 공용 컴포넌트 적극 사용 : frontend\common\components\ui -> alias 적용 intellio-common

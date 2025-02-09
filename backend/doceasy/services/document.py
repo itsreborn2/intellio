@@ -8,14 +8,15 @@ from datetime import datetime
 
 from common.services.vector_store_manager import VectorStoreManager
 from common.core.redis import redis_client
+from common.services.storage import GoogleCloudStorageService
 
 from doceasy.models.document import Document
 from doceasy.models.project import Project
-from doceasy.services.storage import StorageService
 from doceasy.services.extractor import DocumentExtractor
 
 from doceasy.core.celery_app import celery
 from sqlalchemy import select
+from doceasy.core.config import settings_doceasy
 
 # 문서 상태 상수 정의
 DOCUMENT_STATUS_REGISTERED = 'REGISTERED'
@@ -43,8 +44,13 @@ class DocumentService:
             'application/haansofthwp',  # 대체 HWP MIME 타입
             'application/vnd.hancom.hwp'  # 또 다른 HWP MIME 타입
         ]
-        self.storage = StorageService()
+        self.storage = GoogleCloudStorageService(
+            project_id=settings_doceasy.GOOGLE_CLOUD_PROJECT,
+            bucket_name=settings_doceasy.GOOGLE_CLOUD_STORAGE_BUCKET,
+            credentials_path=settings_doceasy.GOOGLE_APPLICATION_CREDENTIALS
+        )
         self.extractor = DocumentExtractor()
+
 
     def _is_allowed_file(self, content_type: str) -> bool:
         """파일 타입 검증"""

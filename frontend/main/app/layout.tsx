@@ -1,21 +1,28 @@
-import type { Metadata } from "next"
 import "./globals.css"
+import { Inter } from "next/font/google"
+import type React from "react"
+import type { Metadata } from "next"
+import MouseMoveEffect from "@/components/ui/mouse-move-effect"
 
-// 메타데이터 설정
+const inter = Inter({ subsets: ["latin"] })
+
 export const metadata: Metadata = {
   title: "Intellio",
-  description: "Intellio - Your AI Assistant",
+  description: "Amane Soft delivers innovative, high-performance software solutions for businesses of the future.",
 }
 
-// 레이아웃 컴포넌트
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" className="dark">
+      <body className={`${inter.className} bg-background text-foreground antialiased`}>
+        <MouseMoveEffect />
+        {children}
+      </body>
     </html>
   )
 }
+

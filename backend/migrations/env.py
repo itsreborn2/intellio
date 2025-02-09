@@ -10,8 +10,11 @@ from dotenv import load_dotenv
 
 # .env 파일의 절대 경로
 dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-load_dotenv(dotenv_path)
-print(os.getenv("DATABASE_URL"))  # .env 파일의 DATABASE_URL 값
+load_dotenv(dotenv_path, override=True)
+print(f"DATABASE_URL[After] : {os.getenv('DATABASE_URL')}")
+print(f"POSTGRES_HOST : {os.getenv('POSTGRES_HOST')}")
+print(f"POSTGRES_PORT : {os.getenv('POSTGRES_PORT')}")
+print(f"POSTGRES_DB : {os.getenv('POSTGRES_DB')}")
 
 # Add the project root directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,6 +27,7 @@ from doceasy.models.document import Document
 from common.models.user import User
 from doceasy.models.project import Project
 from doceasy.models.category import Category
+from stockeasy.models.telegram_message import TelegramMessage
 
 
 # this is the Alembic Config object, which provides
@@ -38,6 +42,9 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 target_metadata = Base.metadata
+
+# Load environment variables
+config.set_main_option('sqlalchemy.url', os.getenv('DATABASE_URL'))
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

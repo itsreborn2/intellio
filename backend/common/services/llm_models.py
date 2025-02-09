@@ -1,21 +1,24 @@
 import asyncio
-from typing import Any, List, Optional, Union, Callable, Dict
+from typing import Any, List, Optional, Union, Callable, Dict, Iterator, AsyncIterator
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, AIMessage, ChatMessage, AIMessageChunk
+from langchain_core.messages.base import BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatResult, ChatGenerationChunk
 from langchain.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import BaseMessage, ChatMessage, ai
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
-from langchain_core.outputs import ChatResult
 from langchain_core.callbacks import BaseCallbackHandler
 
 from langchain_openai import ChatOpenAI
+from langchain_google_vertexai import ChatVertexAI
 
 import torch
 from transformers import AutoModel, AutoTokenizer
+from google.oauth2 import service_account
+import json
 #from loguru import logger
 from common.core.config import settings
 import logging
@@ -34,88 +37,6 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         if self.on_new_token:
             self.on_new_token(token)
 
-class KfDebertaAI(BaseChatModel):
-    
-    def _load_model_and_tokenizer(self):
-        model = AutoModel.from_pretrained("app/kf-deberta")
-        tokenizer = AutoTokenizer.from_pretrained("app/kf-deberta")
-        return model, tokenizer
-    def _generate(
-        self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
-        **kwargs: Any,
-    ) -> ChatResult:
-        # 모델과 토크나이저 로드
-        model, tokenizer = self._load_model_and_tokenizer()
-        
-        # 메시지 내용 추출
-        text = messages[-1].content
-        
-        # 토큰화 및 모델 입력 준비
-        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
-        
-        # 모델 추론
-        with torch.no_grad():
-            model_output = model(**inputs) # 이것은 임베딩이 포함된 모델의 출력, 순수한 임베딩은 아님.
-            # {
-            #     'last_hidden_state': tensor(...),  # 시퀀스의 각 토큰에 대한 문맥화된 임베딩
-            #     'pooler_output': tensor(...),      # [CLS] 토큰의 변환된 표현 (문장 전체 표현)
-            # }
-        
-        # 마지막 히든 스테이트 사용
-        last_hidden_state = model_output.last_hidden_state
-        
-        # 간단한 예시: 마지막 토큰의 임베딩을 사용하여 응답 생성
-        last_token_embedding = last_hidden_state[0, -1, :]
-        
-        # 임베딩을 문자열로 변환 (실제 사용 시에는 더 복잡한 디코딩 로직이 필요할 수 있음)
-        response = f"{last_token_embedding[:5].tolist()}"
-        
-        # ChatResult 객체 생성 및 반환
-        ai_message = ai.AIMessage(content=response)
-        return ChatResult(generations=[ai_message])
-    async def _agenerate(
-        self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
-        **kwargs: Any,
-    ) -> ChatResult:
-        # 모델과 토크나이저 로드 (비동기 컨텍스트에서 실행)
-        model, tokenizer = await asyncio.to_thread(self._load_model_and_tokenizer)
-        
-        # 메시지 내용 추출
-        text = messages[-1].content
-        
-        # 토큰화 및 모델 입력 준비 (비동기 컨텍스트에서 실행)
-        inputs = await asyncio.to_thread(lambda: tokenizer(text, return_tensors="pt", truncation=True, max_length=512))
-        
-        # 모델 추론 (비동기 컨텍스트에서 실행)
-        with torch.no_grad():
-            model_output = await asyncio.to_thread(lambda: model(**inputs))
-        
-        # 마지막 히든 스테이트 사용
-        last_hidden_state = model_output.last_hidden_state
-        
-        # 간단한 예시: 마지막 토큰의 임베딩을 사용하여 응답 생성
-        last_token_embedding = last_hidden_state[0, -1, :]
-        
-        # 임베딩을 문자열로 변환
-        response = f"{last_token_embedding[:5].tolist()}"
-        
-        # ChatResult 객체 생성 및 반환
-        ai_message = ai.AIMessage(content=response)
-        return ChatResult(generations=[ai_message])
-    
-    
-    
-    @property
-    def _llm_type(self) -> str:
-        """이 챗 모델에서 사용하는 언어 모델의 유형을 반환합니다."""
-        return "KfDeberta"
-    
 class LLMModels:
     """AI Model을 랭체인에 맞게 구현"""
     _instance = None  # 클래스 변수로 이동
@@ -143,19 +64,21 @@ class LLMModels:
             self.initialize([
                 {"model":"gemini", "api_key":settings.GEMINI_API_KEY },
                 {"model":"openai", "api_key":settings.OPENAI_API_KEY },
-                {"model":"kf-deberta", "api_key":None }
             ], **kwargs)
             
             self._initialized = True
+
 
     def initialize(self, llm_list:list, **kwargs):
         """LangChain 초기화"""
         if self._llm_chain is None:
             self._llm_list = llm_list
+
             # 첫 번째 모델로 초기화
             model_info = llm_list[self._current_model_idx]
             self._llm = self.get_llm(model_info["model"], model_info["api_key"], **kwargs)
-            
+            self._llm_type = model_info["model"]
+            self._llm.model
             # streaming callback이 있는 경우 StreamingCallbackHandler 생성
             callback_handler = None
             if self._streaming_callback:
@@ -170,38 +93,108 @@ class LLMModels:
                 )
                 logger.warn(f"LLMModels : {model_info['model']} Streaming")
             logger.warn(f"LLMModels : {model_info['model']} API 초기화")
+    def set_streaming_callback(self, streaming_callback: Optional[Callable[[str], None]] = None):
+        """스트리밍 콜백 설정"""
+        self._streaming_callback = streaming_callback
+        model_info = self._llm_list[self._current_model_idx]
+        callback_handler = StreamingCallbackHandler(self._streaming_callback)
+
+        self._llm_streaming = self.get_llm(
+            model_info["model"], 
+            model_info["api_key"], 
+            streaming=True, 
+            callback_handler=callback_handler,
+        )
+        logger.warn(f"LLMModels : {model_info['model']} Streaming")
+
 
     def get_llm(self, model_name: str, 
-                    api_key: str, 
+                    api_key: str | None, 
                     streaming: bool = False, 
                     callback_handler: Optional[BaseCallbackHandler] = None,
                     **kwargs) -> BaseChatModel:
         if model_name == "openai":
-            callbacks = [callback_handler] if callback_handler else None  # 콜백을 리스트로 전달
+            callbacks = [callback_handler] if callback_handler else None
             return ChatOpenAI(
                         model="gpt-4-0125-preview",
                         openai_api_key=api_key,
-                        temperature=kwargs.get("temperature", 0.3),
+                        temperature=kwargs.get("temperature", 0.2),
                         max_tokens=kwargs.get("max_output_tokens", 2048),
-                        top_p=kwargs.get("top_p", 0.8),
-                        top_k=kwargs.get("top_k", 40),
+                        top_p=kwargs.get("top_p", 0.7),
                         streaming=streaming,
                         callbacks=callbacks,
                     )
         elif model_name == "gemini":
-            callbacks = [callback_handler] if callback_handler else None  # 콜백을 리스트로 전달
+            # 모델 이름: models/gemini-2.0-flash-exp
+            # 표시 이름: Gemini 2.0 Flash Experimental
+            # ---
+            # 모델 이름: models/gemini-2.0-flash
+            # 표시 이름: Gemini 2.0 Flash
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-001
+            # 표시 이름: Gemini 2.0 Flash 001
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-lite-preview
+            # 표시 이름: Gemini 2.0 Flash-Lite Preview
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-lite-preview-02-05
+            # 표시 이름: Gemini 2.0 Flash-Lite Preview 02-05
+            # ---
+            # 모델 이름: models/gemini-2.0-pro-exp
+            # 표시 이름: Gemini 2.0 Pro Experimental
+            # ---
+            # 모델 이름: models/gemini-2.0-pro-exp-02-05
+            # 표시 이름: Gemini 2.0 Pro Experimental 02-05
+            # ---
+            # 모델 이름: models/gemini-exp-1206
+            # 표시 이름: Gemini Experimental 1206
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-thinking-exp-01-21
+            # 표시 이름: Gemini 2.0 Flash Thinking Experimental 01-21
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-thinking-exp
+            # 표시 이름: Gemini 2.0 Flash Thinking Experimental 01-21
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-thinking-exp-1219
+            # 표시 이름: Gemini 2.0 Flash Thinking Experimental            
+            callbacks = [callback_handler] if callback_handler else None
             return ChatGoogleGenerativeAI(
-                        model="models/gemini-2.0-flash-exp",
+                        #model="models/gemini-2.0-flash-001",
+                        model="models/gemini-2.0-pro-exp-02-05",
+                        #model="models/gemini-2.0-pro-exp-02-05", # 추론모델 시간 오래걸림.
                         google_api_key=api_key,
-                        temperature=kwargs.get("temperature", 0.3),
+                        temperature=kwargs.get("temperature", 0.2),
                         max_output_tokens=kwargs.get("max_output_tokens", 2048),
-                        top_p=kwargs.get("top_p", 0.8),
-                        top_k=kwargs.get("top_k", 40),
+                        top_p=kwargs.get("top_p", 0.7),
+                        top_k=kwargs.get("top_k", 20),
                         streaming=streaming,
                         callbacks=callbacks,
                     )
-        elif model_name == "kf-deberta":
-            return KfDebertaAI()
+        elif model_name == "gemini_vertex":
+            callbacks = [callback_handler] if callback_handler else None
+            
+            # 서비스 계정 키 JSON 파일에서 credentials 생성
+            try:
+                credentials = service_account.Credentials.from_service_account_file(
+                    settings.GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI,
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+            except Exception as e:
+                logger.error(f"서비스 계정 credentials 생성 실패: {str(e)}")
+                raise
+                
+            return ChatVertexAI(
+                model_name="gemini-pro",
+                temperature=kwargs.get("temperature", 0.2),
+                max_output_tokens=kwargs.get("max_output_tokens", 2048),
+                top_p=kwargs.get("top_p", 0.7),
+                top_k=kwargs.get("top_k", 20),
+                project=settings.GOOGLE_PROJECT_ID_VERTEXAI,
+                location=settings.GOOGLE_LOCATION_VERTEXAI,
+                credentials=credentials,
+                streaming=streaming,
+                callbacks=callbacks,
+            )
         else:
             raise ValueError("Unsupported model")
         
@@ -250,14 +243,14 @@ class LLMModels:
         return [model_info["model"] for model_info in self._llm_list]
         
 
-    def generate(self, user_query: str, prompt_context: str) -> Optional[ai.AIMessage]:
+    def generate(self, user_query: str, prompt_context: str) -> Optional[AIMessage]:
         """동기 컨텐츠 생성"""
         try:
             logger.info(f"LANGCHAIN_TRACING_V2[Settings]: {settings.LANGCHAIN_TRACING_V2}")
             import os
             logger.info(f"LANGCHAIN_TRACING_V2[OS]: {os.getenv('LANGCHAIN_TRACING_V2')}")
             truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
-            logger.info(f"Gemini API full[Sync] 호출 - 프롬프트: {truncated[:100]}...")
+            logger.info(f" {self._llm_type} full[Sync] 호출 - 프롬프트: {truncated[:100]}...")
             # 프롬프트 템플릿 설정
             system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
             user_message_prompt = HumanMessagePromptTemplate.from_template(user_query)
@@ -283,12 +276,11 @@ class LLMModels:
             #           {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}]}
             #  id='run-cd10c37c-c733-4607-a9e4-b543bbecbb2c-0' 
             #  usage_metadata={'input_tokens': 1827, 'output_tokens': 818, 'total_tokens': 2645, 'input_token_details': {'cache_read': 0}}
-            logger.info(f"Gemini API 호출 완료")# : {full_response}")
 
             # 여기서는 full_response를 리턴하자. 메세지를 재조립하는것은 위에서 알아서 할일.
-            logger.info(f"Gemini API 호출 완료")
+            logger.info(f"{self._llm_type} API 호출 완료")
         except Exception as e:
-            logger.error(f"Gemini API 호출 실패: {str(e)}")
+            logger.error(f"{self._llm_type} 호출 실패: {str(e)}")
             raise
         return full_response
     
@@ -305,7 +297,7 @@ class LLMModels:
         for chunk in self._llm_streaming.stream(formatted_messages):
             yield chunk
     
-    async def agenerate(self, user_query: str, prompt_context: str) -> Optional[ai.AIMessage]:
+    async def agenerate(self, user_query: str, prompt_context: str) -> Optional[AIMessage]:
         #prompt_template = ChatPromptTemplate.from_template("{prompt}")
         ## 프롬프트 생성
         #messages = prompt_template.format_messages(prompt=prompt)
@@ -320,7 +312,7 @@ class LLMModels:
             # API 호출 및 전체 응답 받기
             full_response = await self._llm.ainvoke(formatted_messages)
         except Exception as e:
-            logger.error(f"Gemini API[agenerate] 호출 실패: {str(e)}")
+            logger.error(f"{self._llm_type}[agenerate] 호출 실패: {str(e)}")
             raise
         
 
@@ -393,8 +385,8 @@ class LLMModels:
         # return response
     async def generate_content_only_async(self, prompt: str) -> Optional[str]:
         """비동기 컨텐츠 생성"""
-        logger.info(f"Gemini API[Async] 호출 - 프롬프트: {prompt[:100]}...")
-        response: ai.AIMessage = await self.agenerate(prompt=prompt)
+        logger.info(f"{self._llm_type} API[Async] 호출 - 프롬프트: {prompt[:100]}...")
+        response: AIMessage = await self.agenerate(prompt=prompt)
         return response.content
     
     async def stop_generation(self):

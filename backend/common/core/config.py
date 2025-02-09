@@ -1,4 +1,5 @@
 import os
+import json
 from typing import Any, Dict, Optional, List
 from pydantic_settings import BaseSettings
 from pydantic import validator
@@ -57,10 +58,18 @@ class CommonSettings(BaseSettings):
     GEMINI_LOCATION: str = os.getenv("GEMINI_LOCATION", "us-central1")  # Gemini API 기본 리전
     
     # Redis 설정
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_URL: str = "redis://localhost:6379"
-    REDIS_CACHE_EXPIRE: int = 3600  # 1시간
+    # REDIS_HOST: str = "localhost" if ENV == "development" else "redis"
+    # REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    # REDIS_URL: str = os.getenv("REDIS_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
+    # REDIS_CACHE_EXPIRE: int = int(os.getenv("REDIS_CACHE_EXPIRE", "3600"))  # 1시간
+    # CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
+    # CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
+    REDIS_HOST: str 
+    REDIS_PORT: int 
+    REDIS_URL: str
+    REDIS_CACHE_EXPIRE: int = int(os.getenv("REDIS_CACHE_EXPIRE", "3600"))  # 1시간
+    CELERY_BROKER_URL: str 
+    CELERY_RESULT_BACKEND: str 
     
     # PGAdmin - from .env
     PGADMIN_EMAIL: str
@@ -72,12 +81,20 @@ class CommonSettings(BaseSettings):
     GOOGLE_DOCUMENT_AI_PROCESSOR_ID: str = os.getenv("GOOGLE_DOCUMENT_AI_PROCESSOR_ID", "")
     GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "")
     GOOGLE_CLOUD_STORAGE_BUCKET: str = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET", "")
-    GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME", "")
 
     # Google Cloud for Vertex AI
     GOOGLE_PROJECT_ID_VERTEXAI: str = os.getenv("GOOGLE_PROJECT_ID_VERTEXAI", "")
     GOOGLE_LOCATION_VERTEXAI: str = os.getenv("GOOGLE_LOCATION_VERTEXAI", "")
     GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI", "")
+
+    # GCP Vertex AI 설정
+    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "")
+    GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-central1")
+
+    # Tika 설정
+    TIKA_HOST: str
+    TIKA_SERVER_ENDPOINT: str
+    TIKA_CLIENT_ONLY: bool
 
     def get_google_cloud_credentials(self) -> str:
         """Google Cloud 인증 정보를 파일에서 읽어옴"""
@@ -138,7 +155,10 @@ class CommonSettings(BaseSettings):
     PINECONE_API_KEY: str
     PINECONE_ENVIRONMENT: str = "us-east-1"
     PINECONE_INDEX_NAME: str = "intellio-embeddings"
-    
+    PINECONE_NAMESPACE_DOCEASY:str
+    PINECONE_NAMESPACE_STOCKEASY:str
+    PINECONE_NAMESPACE_STOCKEASY_TELEGRAM:str
+
     # Admin Test
     ADMIN_TEST_USER_ID: str = "admin_test"
     ADMIN_TEST_API_KEY: str = "test_key_123"
@@ -147,7 +167,13 @@ class CommonSettings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
-    
+    # Telegram
+    TELEGRAM_SESSION_NAME: str = 'telegram_collector'
+    TELEGRAM_API_ID: str
+    TELEGRAM_API_HASH: str
+    #TELEGRAM_CHANNEL_IDS: List[Dict[str, str]] = []
+
+
     # LangSmith
     LANGCHAIN_TRACING_V2:str = os.getenv("LANGCHAIN_TRACING_V2", "true")
     LANGCHAIN_ENDPOINT:str = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
@@ -167,7 +193,7 @@ class CommonSettings(BaseSettings):
     CHUNK_SIZE:int
     CHUNK_OVERLAP:int
     # 임베딩 설정. 아직 안씀
-    
+    KAKAO_EMBEDDING_MODEL_PATH:str = "common/external/kf-deberta"
 
     model_config = {
         "env_file": ".env",
@@ -193,3 +219,12 @@ def get_settings() -> CommonSettings:
     return CommonSettings()
 
 settings = get_settings()
+logger.info(f"commonsetting")
+logger.info(f"ENV: {settings.ENV}")
+logger.info(f"REDIS_HOST: {settings.REDIS_HOST}")
+logger.info(f"REDIS_PORT: {settings.REDIS_PORT}")
+logger.info(f"REDIS_URL: {settings.REDIS_URL}")
+logger.info(f"CELERY_BROKER_URL: {settings.CELERY_BROKER_URL}")
+logger.info(f"CELERY_RESULT_BACKEND: {settings.CELERY_RESULT_BACKEND}")
+logger.info(f"TIKA_HOST: {settings.TIKA_HOST}")
+logger.info(f"TIKA_SERVER_ENDPOINT: {settings.TIKA_SERVER_ENDPOINT}")

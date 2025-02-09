@@ -63,20 +63,28 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
 });
 
 class StreamingMarkdownHandler {
-  private buffer: string = '';
-  private markdownPrefix: string = '';
-  private isFirstChunk: boolean = true;
-  private readonly listSymbols = ['#', '*', '-'];
 
   processChunk(chunk: string, dispatch: any, tempMessageId: string): void {
     // data: [DONE] 체크
-    if (chunk.includes('[DONE]')) {
-      this.flushBuffer(dispatch, tempMessageId);
+    
+    if (chunk.endsWith('[DONE]\n\n')) {
+
+      // 앞뒤 공백을 포함한 data: [DONE] 제거
+      const cleanedChunk = chunk.replace('data: [DONE]\n\n', '');
+      if (cleanedChunk)
+        // 일반 텍스트 처리
+        dispatch({
+          type: actionTypes.UPDATE_CHAT_MESSAGE,
+          payload: {
+            id: tempMessageId,
+            content: (prevContent: string) => prevContent + cleanedChunk
+          }
+        });
       return;
     }
 
-    // data: 프리픽스 제거 (끝의 공백만 제거)
-    const cleanedChunk = chunk.replace(/^data: /, '');
+    // 앞뒤 공백을 포함한 data: 프리픽스 제거
+    const cleanedChunk = chunk.replace(/^\s*data:\s*/, '');
     if (!cleanedChunk) return;
 
     // [DONE] 문자열이 포함된 경우 제거 (끝의 공백만 제거)
@@ -94,23 +102,8 @@ class StreamingMarkdownHandler {
     });
   }
 
-  private flushBuffer(dispatch: any, tempMessageId: string): void {
-    if (this.buffer) {
-      dispatch({
-        type: actionTypes.UPDATE_CHAT_MESSAGE,
-        payload: {
-          id: tempMessageId,
-          content: (prevContent: string) => prevContent + this.buffer
-        }
-      });
-      this.buffer = '';
-    }
-  }
-
   reset(): void {
-    this.buffer = '';
-    this.markdownPrefix = '';
-    this.isFirstChunk = true;
+
   }
 }
 
@@ -190,6 +183,16 @@ export const ChatSection = () => {
         console.log('테이블 검색 결과:', result)
 
         if (result.columns?.length > 0) {
+          if(result.columns[0].cells[0].doc_id === 'empty') {
+            dispatch({
+              type: actionTypes.ADD_CHAT_MESSAGE,
+              payload: {
+                role: 'assistant',
+                content: result.columns[0].cells[0].content
+              }
+            })
+            return;
+          }
           dispatch({
             type: actionTypes.UPDATE_TABLE_DATA,
             payload: result //{
@@ -262,7 +265,7 @@ export const ChatSection = () => {
           }
           
           const chunk = decoder.decode(value);
-          
+          console.log('chunk : ', chunk)
           if (chunk === 'data: [DONE]' || chunk === '[DONE]') {
             setStreamingMessageId(null);
             setIsGenerating(false)

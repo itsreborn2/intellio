@@ -8,23 +8,18 @@ import asyncio
 import json
 from uuid import UUID
 from typing import List, Optional
-import logging
-
 
 from common.core.database import SessionLocal, get_db_async, AsyncSessionLocal
-from common.core.redis import redis_client
+from common.core.redis import RedisClient
 from common.services.embedding import EmbeddingService
+from common.services.textsplitter import TextSplitter
+from common.services.vector_store_manager import VectorStoreManager
 
 from doceasy.core.celery_app import celery
 from doceasy.models.document import Document
-#from doceasy.services.chunker import RAGOptimizedChunker
 from doceasy.services.document import DocumentService
+from doceasy.core.config import settings_doceasy
 
-
-
-from common.services.textsplitter import TextSplitter
-from common.services.vector_store_manager import VectorStoreManager
-from common.services.embedding_models import EmbeddingModelType
 from celery.signals import worker_ready
 import os
 from loguru import logger
@@ -45,6 +40,9 @@ def init_worker(sender=None, **kwargs):
     try:
         load_dotenv(override=True)
         logger.info(f"Document Worker 초기화 [ProcessID: {os.getpid()}]")
+        global redis_client_for_document
+        redis_client_for_document = RedisClient()
+
     except Exception as e:
         logger.error(f"Worker 초기화 중 오류 발생: {str(e)}")
         raise
@@ -73,7 +71,7 @@ async def update_document_status_async(session, document_id: str, doc_status: st
             status_data['error_message'] = error
             
         key = f"doc_status:{document_id}"
-        redis_client.set_key(key, status_data)
+        redis_client_for_document.set_key(key, status_data)
             
     except Exception as e:
         logger.error(f"Error updating document status: {str(e)}")
@@ -103,7 +101,7 @@ def update_document_status(document_id: str, doc_status: str, metadata: dict = N
             status_data['error_message'] = error
             
         key = f"doc_status:{document_id}"
-        redis_client.set_key(key, status_data)
+        redis_client_for_document.set_key(key, status_data)
             
     except Exception as e:
         logger.error(f"상태 업데이트 실패: {str(e)}")
@@ -116,7 +114,7 @@ def create_chunk_embedding(doc_id: str, chunk_text: str, chunk_index: int):
     try:
         embedding_service = EmbeddingService()
         #embedding = embedding_service.create_embedding(chunk_text)
-        embedding = embedding_service.get_single_embedding(chunk_text)
+        embedding = embedding_service.create_single_embedding(chunk_text)
         
         # 청크 ID 생성
         chunk_id = f"{doc_id}_chunk_{chunk_index}"
@@ -137,149 +135,6 @@ def create_chunk_embedding(doc_id: str, chunk_text: str, chunk_index: int):
         return chunk_id
     except Exception as e:
         logger.error(f"임베딩 생성 중 오류 발생: {str(e)}")
-        raise
-# RAGOptimizedChunker TEST
-@celery.task(name="process_document_text")
-def process_document_text(doc_id: str):
-    """문서 텍스트를 처리하고 임베딩을 생성하는 Celery 태스크"""
-    db = SessionLocal()
-    try:
-        logger.info(f"문서 처리 시작[process_document_text]: {doc_id}")
-        
-        # DB에서 문서 가져오기
-        doc = db.query(Document).filter(Document.id == UUID(doc_id)).first()
-        if not doc:
-            raise ValueError(f"Document {doc_id} not found")
-        
-        # 상태 업데이트: PROCESSING
-        update_document_status(
-            db=db,
-            document_id=doc_id,
-            doc_status=DOCUMENT_STATUS_PROCESSING,
-            metadata={"status": "Processing document text"}
-        )
-
-        # 텍스트 가져오기
-        extracted_text = doc.extracted_text
-        if not extracted_text:
-            raise ValueError(f"No extracted text found for document {doc_id}")
-
-        # 임베딩 생성 로직 직접 처리
-        process_document_text_direct(db, doc_id, extracted_text)
-        
-        logger.info(f"문서 처리 완료: {doc_id}")
-        return True
-            
-    except Exception as e:
-        logger.error(f"문서 처리 중 오류 발생: {doc_id}, error: {str(e)}")
-        update_document_status(
-            db=db,
-            document_id=doc_id,
-            doc_status=DOCUMENT_STATUS_ERROR,
-            error=str(e)
-        )
-        raise
-    finally:
-        db.close()
-# RAGOptimizedChunker TEST
-async def process_document_text_direct(db: Session, doc_id: str, text: str):
-    """문서 텍스트 처리 및 임베딩 생성"""
-    try:
-        # 청크 생성
-        chunker = RAGOptimizedChunker()
-        chunks = chunker.create_chunks(text)
-        
-        if not chunks:
-            raise ValueError(f"Failed to create chunks for document {doc_id}")
-
-        logger.info(f"문서 {doc_id}의 청크 생성 완료: {len(chunks)}개")
-
-        # 임베딩 생성 및 저장
-        async_session = get_db_async()
-        async with async_session() as session:
-            embedding_service = EmbeddingService()
-            chunk_ids = []
-            failed_chunks = []
-            
-            for i, chunk_text in enumerate(chunks):
-                try:
-                    # 청크 텍스트가 딕셔너리인 경우 처리
-                    if isinstance(chunk_text, dict):
-                        chunk_content = chunk_text.get('text', '')
-                    else:
-                        chunk_content = chunk_text
-
-                    if not chunk_content:
-                        logger.warning(f"빈 청크 발견 - 문서: {doc_id}, 청크: {i}")
-                        failed_chunks.append(i)
-                        continue
-
-                    # 중간 상태 업데이트
-                    await update_document_status_async(
-                        session,
-                        document_id=doc_id,
-                        doc_status=DOCUMENT_STATUS_PROCESSING,
-                        metadata={"progress": f"Processing chunk {i+1}/{len(chunks)}"}
-                    )
-                    
-                    logger.info(f"청크 {i+1} 처리 시작 - 길이: {len(chunk_content)}")
-                    
-                    # 임베딩 생성
-                    embedding = await embedding_service.create_embedding_with_retry(chunk_content)
-                    
-                    if embedding and len(embedding) > 0:
-                        chunk_id = f"{doc_id}_chunk_{i}"
-                        # Pinecone에 저장
-                        embedding_service.pinecone_index.upsert(
-                            vectors=[(
-                                chunk_id,
-                                embedding,
-                                {
-                                    "document_id": doc_id,
-                                    "chunk_index": i,
-                                    "text": chunk_content
-                                }
-                            )]
-                        )
-                        chunk_ids.append(chunk_id)
-                        logger.info(f"청크 {i+1} 임베딩 생성 및 저장 완료")
-                    else:
-                        failed_chunks.append(i)
-                        logger.warning(f"임베딩 생성 실패 - 문서: {doc_id}, 청크: {i}, 임베딩이 비어있음")
-                    
-                except Exception as chunk_error:
-                    failed_chunks.append(i)
-                    logger.error(f"청크 처리 실패 - 문서: {doc_id}, 청크: {i}, 오류: {str(chunk_error)}")
-                    continue
-            
-            if not chunk_ids:
-                raise ValueError(f"모든 청크의 임베딩 생성이 실패했습니다: {doc_id}")
-            
-            # 최종 상태 업데이트
-            final_status = DOCUMENT_STATUS_COMPLETED if not failed_chunks else DOCUMENT_STATUS_PARTIAL
-            await update_document_status_async(
-                session,
-                document_id=doc_id,
-                doc_status=final_status,
-                metadata={
-                    "chunk_ids": chunk_ids,
-                    "failed_chunks": failed_chunks,
-                    "total_chunks": len(chunks),
-                    "successful_chunks": len(chunk_ids)
-                }
-            )
-            
-            logger.info(f"문서 {doc_id} 처리 완료 - 성공: {len(chunk_ids)}, 실패: {len(failed_chunks)}")
-            return chunk_ids
-        
-    except Exception as e:
-        logger.error(f"문서 텍스트 처리 중 오류 발생: {doc_id}, error: {str(e)}")
-        await update_document_status_async(
-            session,
-            document_id=doc_id,
-            doc_status=DOCUMENT_STATUS_ERROR,
-            error=str(e)
-        )
         raise
 
 def get_document(db: Session, document_id: str) -> Document:
@@ -398,17 +253,17 @@ def process_document_task(self, document_id: str):
             
             # Redis에서 처리 상태 확인
             key = f"doc_processing:{document_id}"
-            if redis_client.get_key(key):
+            if redis_client_for_document.get_key(key):
                 logger.info(f"문서 {document_id}는 이미 처리 중입니다.")
                 return {"status": "ALREADY_PROCESSING"}
                 
             # 처리 시작 표시
-            redis_client.set_key(key, "1", ex=3600)  # 1시간 후 만료
+            redis_client_for_document.set_key(key, "1", ex=3600)  # 1시간 후 만료
             
             # 문서 상태를 PROCESSING으로 업데이트
             await update_document_status_async(None, document_id, DOCUMENT_STATUS_PROCESSING)
             
-            document_service = DocumentService(get_async_db())
+            document_service = DocumentService(get_db_async())
             # 문서 처리
             document = document_service.get_document(document_id)
             if not document:
@@ -517,7 +372,7 @@ def process_document_task(self, document_id: str):
             raise
         finally:
             # 처리 완료 표시 제거
-            redis_client.delete_key(key)
+            redis_client_for_document.delete_key(key)
 
     # 비동기 함수 실행
     loop = asyncio.get_event_loop()
@@ -535,12 +390,12 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
     try:
         # Redis에서 배치 처리 상태 확인
         key = f"chunk_batch:{document_id}:{batch_start_idx}"
-        if redis_client.get_key(key):
+        if redis_client_for_document.get_key(key):
             logger.info(f"배치 {batch_start_idx}는 이미 처리 중입니다.")
             return {"status": "ALREADY_PROCESSING"}
             
         # 처리 시작 표시
-        redis_client.set_key(key, "1", expire=1800)  # 30분 후 만료
+        redis_client_for_document.set_key(key, "1", expire=1800)  # 30분 후 만료
         embedding_service = EmbeddingService()
         
         bApplyAsync = True
@@ -568,7 +423,8 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
             })
         
         # 벡터 저장 (동기)
-        vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type())
+        vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(), 
+                                        namespace=settings_doceasy.PINECONE_NAMESPACE_DOCEASY)
         vs_manager.store_vectors(vectors)
             
         # 모든 청크가 처리되었는지 확인
@@ -577,18 +433,18 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
             if doc:
                 # 문서의 총 청크 수 먼저 확인 및 설정
                 total_key = f"total_chunks:{document_id}"
-                total_chunks = redis_client.get_key(total_key)
+                total_chunks = redis_client_for_document.get_key(total_key)
                 if not total_chunks:
                     if doc.extracted_text:
                         all_chunks = split_text(doc.extracted_text)
                         total_chunks = len(all_chunks)
-                        redis_client.set_key(total_key, str(total_chunks))
+                        redis_client_for_document.set_key(total_key, str(total_chunks))
                 else:
                     total_chunks = int(total_chunks)
 
                 # Redis에서 현재까지 처리된 총 청크 수 확인 및 업데이트
                 processed_key = f"processed_chunks:{document_id}"
-                current_processed = redis_client.incr(processed_key, len(chunks))  # 원자적 증가
+                current_processed = redis_client_for_document.incr(processed_key, len(chunks))  # 원자적 증가
 
                 # 생성된 청크 ID 저장
                 chunk_ids = [v["id"] for v in vectors]
@@ -652,7 +508,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
         raise
     finally:
         # 처리 완료 표시 제거
-        redis_client.delete_key(key)
+        redis_client_for_document.delete_key(key)
         # if bApplyAsync:
             #     loop.close()
 
