@@ -72,7 +72,6 @@ class CommonSettings(BaseSettings):
     GOOGLE_DOCUMENT_AI_PROCESSOR_ID: str = os.getenv("GOOGLE_DOCUMENT_AI_PROCESSOR_ID", "")
     GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "")
     GOOGLE_CLOUD_STORAGE_BUCKET: str = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET", "")
-    GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME", "")
 
     # Google Cloud for Vertex AI
     GOOGLE_PROJECT_ID_VERTEXAI: str = os.getenv("GOOGLE_PROJECT_ID_VERTEXAI", "")
@@ -142,6 +141,8 @@ class CommonSettings(BaseSettings):
     PINECONE_API_KEY: str
     PINECONE_ENVIRONMENT: str = "us-east-1"
     PINECONE_INDEX_NAME: str = "intellio-embeddings"
+    PINECONE_NAMESPACE_DOCEASY:str
+    PINECONE_NAMESPACE_STOCKEASY:str
     
     # Admin Test
     ADMIN_TEST_USER_ID: str = "admin_test"

@@ -2,14 +2,15 @@
 
 from typing import Dict, Any, List, Union, Tuple, Optional, Callable
 from uuid import UUID
-import pandas as pd
+
 import re
 from datetime import datetime
 import asyncio
 import time
 import json
 from loguru import logger
-from common.core.database import get_db_async
+from common.services.vector_store_manager import VectorStoreManager
+from common.core.config import settings
 from common.services.retrievers.tablemode_semantic import TableModeSemanticRetriever
 from common.services.embedding import EmbeddingService
 from doceasy.services.prompts import ChatPrompt, TablePrompt, TableHeaderPrompt
@@ -451,21 +452,23 @@ class RAGService:
             
             filtersMetadata = {"document_ids": document_ids} if document_ids else None
             
+            vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type(),
+                                            namespace=settings.PINECONE_NAMESPACE_DOCEASY)
+
             if query_type == "table":
                 tablemode_retriever = TableModeSemanticRetriever(config=SemanticRetrieverConfig(
-                                                                embedding_model=self.embedding_service.current_model_config.name,
                                                                 min_score=0.6, # 최소 유사도 0.6 고정
-                                                                ))
+                                                                ), vs_manager=vs_manager)
                 all_chunks:RetrievalResult = await tablemode_retriever.retrieve(
                     query=normalized_query, 
                     top_k=top_k,
                     filters=filtersMetadata
                 )
             else:
+                # Chat Mode
                 semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
-                                                        embedding_model=self.embedding_service.current_model_config.name,
                                                         min_score=0.6, # 최소 유사도 0.6 고정
-                                                        ))
+                                                        ), vs_manager=vs_manager)
                 
                 all_chunks:RetrievalResult = await semantic_retriever.retrieve(
                     query=normalized_query, 
@@ -518,8 +521,9 @@ class RAGService:
             
             #########################################################
             # 관련 청크 검색
-            doc_count = len(document_ids)
-            rr:RetrievalResult = await self.process_retrival(query=query, top_k=doc_count*2, document_ids=document_ids, query_type="table")
+            k = len(document_ids) * 5 # 문서당 5개. 이 옵션이 문서별로 5개를 뽑아주진 않음.
+            # 그러나 적어도 전체 문서 * 5개 정도는 기본적으로 뽑아서 데이터를 추출하도록 처리
+            rr:RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="table")
             logger.warning(f"청크 추출 완료 : {len(rr.documents)} 개")
 
             if not rr.documents:
@@ -679,7 +683,8 @@ class RAGService:
         try:
             # 관련 문서 검색 및 패턴 분석
             query_analysis = self._analyze_query(query)
-            k = len(document_ids) * 2
+            k = len(document_ids) * 5 # 문서당 5개. 이 옵션이 문서별로 5개를 뽑아주진 않음.
+            # 그러나 적어도 전체 문서 * 5개 정도는 기본적으로 뽑아서 데이터를 추출하도록 처리
             rr: RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="chat")
             logger.info(f"관련 청크 검색 완료 - 총 {len(rr)}개 청크 발견")
 
@@ -778,8 +783,14 @@ class RAGService:
 
             ###############################################
             # 관련 청크 검색   
-            k = len(document_ids) * 2
+            k = len(document_ids) * 5 # 문서당 5개. 이 옵션이 문서별로 5개를 뽑아주진 않음.
+            # 그러나 적어도 전체 문서 * 5개 정도는 기본적으로 뽑아서 데이터를 추출하도록 처리
+            # k 값에 대한 고민이 필요함
+            # 짧은 문서는 k=5로 충분. 그러나 매우 긴 문서는? k=5로는 턱없이 부족할텐데.
+            # 사용자 입력에 따라서, 어떤 스타일로 k값을 결정하고 응답을 줄지 
+            # 사용자 입력의 전처리 과정 필요. _analyze_query로는 안됨.
             rr:RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="chat")
+
             #logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks.documents)}개 청크 발견")
 
             if not rr.documents:

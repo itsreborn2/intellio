@@ -20,16 +20,15 @@ class TableModeSemanticRetriever(SemanticRetriever):
     부모 클래스인 SemanticRetriever의 검색 결과를 받아서 테이블 모드에 맞게 처리합니다.
     """
     
-    def __init__(self, config: SemanticRetrieverConfig):
+    def __init__(self, config: SemanticRetrieverConfig, vs_manager: VectorStoreManager):
         """초기화
         
         Args:
             config (SemanticRetrieverConfig): 시맨틱 검색 설정
         """
-        super().__init__(config)
+        super().__init__(config, vs_manager=vs_manager)
         self.config = config
-        self.embedding_service = EmbeddingService()
-        self.embedding_model_manager = EmbeddingModelManager()
+
         
     async def retrieve(
         self,
@@ -50,19 +49,16 @@ class TableModeSemanticRetriever(SemanticRetriever):
             RetrievalResult: 검색 결과
         """
         try:
-            # MMR이 결과가 좀 이상하다.
-            # filter가 제대로 동작하는지 확인이 필요함.
-
             # 내일하자..
             # MMR로 하는게 맞나.
             # 재귀적으로 Similarity Search 하는게 맞나.
 
             #filter {'document_ids': ['08c0b3c7-4173-4834-a296-095ea6b594c8', 'bb591d2a-362e-4317-b834-e77e99ec03b3']}
             logger.info(f"table 시멘틱 검색 target : {filters}")
-            vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type())
+            #vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type())
             doc_ids = filters.get("document_ids") if filters else None
             doc_count = len(doc_ids) if doc_ids else 0
-            search_results = vs_manager.search_mmr(
+            search_results = self.vs_manager.search_mmr(
                 query=query,
                 top_k=top_k,
                 fetch_k=top_k*2,
@@ -111,7 +107,7 @@ class TableModeSemanticRetriever(SemanticRetriever):
                 doc_count = len(missed_doc_ids)
                 missed_filters = {"document_ids": list(missed_doc_ids)}
                 logger.warning(f"누락된 문서 재검색 필터 : {missed_filters}")
-                additional_results = vs_manager.search_mmr(
+                additional_results = self.vs_manager.search_mmr(
                     query=query,
                     filters=missed_filters,
                     top_k=doc_count*2,
@@ -132,7 +128,6 @@ class TableModeSemanticRetriever(SemanticRetriever):
             # 쿼리 분석 정보 추가
             query_analysis = {
                 "type": "semantic_mmr",
-                "model": self.config.embedding_model,
                 "min_score": self.config.min_score,
                 "total_found": len(search_results),
                 "returned": len(documents)

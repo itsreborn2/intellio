@@ -38,11 +38,12 @@ class VectorStoreManager:
                     cls._instance = super(VectorStoreManager, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, embedding_model_type: EmbeddingModelType = None):
+    def __init__(self, embedding_model_type: EmbeddingModelType = None, namespace: str = None):
         """
         VectorStoreManager 초기화
         Args:
             embedding_model_type: 임베딩 모델 타입
+            namespace: Pinecone 네임스페이스. 기본값은 None
         """
         if self._initialized:
             return
@@ -55,6 +56,7 @@ class VectorStoreManager:
                 raise ValueError("첫 초기화 시에는 embedding_model_type이 필요합니다.")
             
             self.embedding_model_type = embedding_model_type
+            self.namespace = namespace
             #self.embedding_model_manager = None
             self.embedding_model_config = None
             self.pinecone_client = None
@@ -167,7 +169,8 @@ class VectorStoreManager:
         results = self.vector_store.similarity_search_by_vector_with_score(
             embedding=embedding,
             k=top_k,
-            filter=filters
+            filter=filters,
+            namespace=self.namespace
         )
         return results
 
@@ -261,7 +264,7 @@ class VectorStoreManager:
             
             # 벡터 저장
             logger.info(f"벡터 {len(_vectors)}개 저장 중")
-            await self.index.upsert(vectors=_vectors)
+            await self.index.upsert(vectors=_vectors, namespace=self.namespace)
             logger.info(f"벡터 {len(_vectors)}개 저장 완료")
             return True
 
@@ -300,9 +303,6 @@ class VectorStoreManager:
         
     async def delete_documents_by_embedding_id_async(self, embed_ids: List[str]) -> bool:
         """벡터 스토어에서 문서 삭제"""
-        # >>> index.delete(ids=['id1', 'id2'], namespace='my_namespace')
-        # >>> index.delete(delete_all=True, namespace='my_namespace')
-        # >>> index.delete(filter={'key': 'value'}, namespace='my_namespace') # 메타데이터 기준으로 삭제
         try:
             result = await asyncio.to_thread(self.index.delete, ids=embed_ids)
             # 반환값이 빈 딕셔너리인지 확인하여 삭제 성공 여부를 판단
@@ -314,7 +314,6 @@ class VectorStoreManager:
                 return False
         except Exception as e:
             logger.error(f"문서 삭제 중 오류 발생[Async]: {str(e)}")
-
             return False
 
     async def update_documents(self, documents: List[Dict]) -> bool:

@@ -1,10 +1,8 @@
 from typing import List
-from pydantic_settings import BaseSettings
 import os
 from loguru import logger
 from functools import lru_cache
 from common.core.config import CommonSettings
-
 
 def detect_file_encoding(file_path):
     """파일의 인코딩을 자동으로 감지"""

@@ -352,32 +352,6 @@ class EmbeddingService:
             logger.error(f"청크 범위 조회 실패: {str(e)}")
             return []
 
-    async def get_document_chunks(self, doc_id: str) -> List[Dict[str, Any]]:
-        """특정 문서의 모든 청크를 가져옵니다."""
-        try:
-            # 문서 ID로 필터링하여 모든 청크 검색
-            results = self.pinecone_index.query(
-                vector=[0] * 1536,  # 더미 벡터
-                top_k=10000,  # 충분히 큰 값
-                include_metadata=True,
-                filter={"document_id": doc_id}
-            )
-            
-            # 결과 형식화
-            chunks = []
-            for match in results.matches:
-                chunk = {
-                    "id": match.id,
-                    "content": match.metadata.get("text", ""),
-                    "metadata": match.metadata
-                }
-                chunks.append(chunk)
-                
-            return chunks
-            
-        except Exception as e:
-            logger.error(f"문서 청크 조회 실패 (문서 ID: {doc_id}): {str(e)}")
-            return []
 
     async def delete_embeddings(self, embedding_ids: List[str]) -> None:
         """임베딩 삭제"""
