@@ -129,19 +129,9 @@ class VectorStoreManager:
         # 3. 검색 결과를 반환
         ####################################
         # 사용자 쿼리 임베딩
-        embeddings = self.embedding_model_provider.create_embeddings([query])
-            
-        # 임베딩 결과 검증
-        if not embeddings or len(embeddings) == 0:
-            logger.error("임베딩 생성 결과가 비어있음")
-            raise ValueError("임베딩 생성 실패")
-            
-        embedding = embeddings[0]
-        
-        # 임베딩 벡터 검증
-        if not isinstance(embedding, list) or len(embedding) != self.embedding_model_config.dimension:
-            logger.error(f"잘못된 임베딩 형식 또는 차원: {len(embedding) if isinstance(embedding, list) else type(embedding)}")
-            raise ValueError("잘못된 임베딩 형식")
+
+        embedding = self.create_embeddings_single_query(query)
+
         # results = self.vector_store.similarity_search_by_vector_with_score(embedding=embedding, k=top_k, filter=filters)
         # #[(Document, score), (Document, score), ...]
         # filters 형식 변환
@@ -157,7 +147,7 @@ class VectorStoreManager:
         )
         return results
 
-    async def search_async(self, query: str, top_k: int, filters: Optional[Dict] = None) -> List[Dict]:
+    async def search_async(self, query: str, top_k: int, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
         """벡터 스토어에서 검색 수행"""
         await self.ensure_initialized()
         logger.info(f"벡터 스토어 검색 시작 : {query}")
@@ -168,6 +158,65 @@ class VectorStoreManager:
         # 3. 검색 결과를 반환
         ####################################
         # 사용자 쿼리 임베딩
+        embedding = await self.create_embeddings_single_query_async(query)
+
+        # filters 형식 변환
+        if filters and 'document_ids' in filters:
+            filters = {"document_id": {"$in": filters['document_ids']}}
+      
+        results = self.vector_store.similarity_search_by_vector_with_score(
+            embedding=embedding,
+            k=top_k,
+            filter=filters
+        )
+        return results
+
+    def search_mmr(self, query: str, top_k: int, fetch_k:int, lambda_mult:float, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
+        """벡터 스토어에서 검색 수행"""
+        logger.info(f"벡터 스토어 검색 시작[MMR] : {query}")
+
+        ####################################
+        # 1. 사용자 쿼리를 임베딩
+        # 2. 임베딩 결과를 벡터 스토어에 검색
+        # 3. 검색 결과를 반환
+        ####################################
+        # 사용자 쿼리 임베딩
+        embedding = self.create_embeddings_single_query(query)
+
+        if filters and 'document_ids' in filters:
+            filters = {"document_id": {"$in": filters['document_ids']}}
+
+        doc_list: List[LangchainDocument] = self.vector_store.max_marginal_relevance_search_by_vector(
+                embedding, 
+                k=top_k,  # 문서 수 
+                fetch_k=fetch_k,  # 초기 청크 
+                lambda_mult=lambda_mult,  # 다양성 조절
+                filter=filters
+            )
+        results = [(doc, 0.0) for doc in doc_list]
+        return results
+    
+
+    def create_embeddings_single_query(self, query: str) -> List[float]:
+        """문자열을 임베딩"""
+        embeddings = self.embedding_model_provider.create_embeddings([query])
+            
+        # 임베딩 결과 검증
+        if not embeddings or len(embeddings) == 0:
+            logger.error("임베딩 생성 결과가 비어있음")
+            raise ValueError("임베딩 생성 실패")
+            
+        embedding = embeddings[0]
+        
+        # 임베딩 벡터 검증
+        if not isinstance(embedding, list) or len(embedding) != self.embedding_model_config.dimension:
+            logger.error(f"잘못된 임베딩 형식 또는 차원: {len(embedding) if isinstance(embedding, list) else type(embedding)}")
+            raise ValueError("잘못된 임베딩 형식")
+        
+        return embedding
+    
+    async def create_embeddings_single_query_async(self, query: str) -> List[float]:
+        """문자열을 임베딩"""
         embeddings = await self.embedding_model_provider.create_embeddings_async([query])
             
         # 임베딩 결과 검증
@@ -181,17 +230,8 @@ class VectorStoreManager:
         if not isinstance(embedding, list) or len(embedding) != self.embedding_model_config.dimension:
             logger.error(f"잘못된 임베딩 형식 또는 차원: {len(embedding) if isinstance(embedding, list) else type(embedding)}")
             raise ValueError("잘못된 임베딩 형식")
-
-        # filters 형식 변환
-        if filters and 'document_ids' in filters:
-            filters = {"document_id": {"$in": filters['document_ids']}}
-      
-        results = self.vector_store.similarity_search_by_vector_with_score(
-            embedding=embedding,
-            k=top_k,
-            filter=filters
-        )
-        return results
+        
+        return embedding
 
     def store_vectors(self, _vectors: List[Dict]) -> bool:
         """벡터를 Pinecone에 저장"""

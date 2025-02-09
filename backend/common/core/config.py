@@ -79,6 +79,10 @@ class CommonSettings(BaseSettings):
     GOOGLE_LOCATION_VERTEXAI: str = os.getenv("GOOGLE_LOCATION_VERTEXAI", "")
     GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI", "")
 
+    # GCP Vertex AI 설정
+    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "")
+    GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-central1")
+
     def get_google_cloud_credentials(self) -> str:
         """Google Cloud 인증 정보를 파일에서 읽어옴"""
         try:
@@ -167,7 +171,7 @@ class CommonSettings(BaseSettings):
     CHUNK_SIZE:int
     CHUNK_OVERLAP:int
     # 임베딩 설정. 아직 안씀
-    
+    KAKAO_EMBEDDING_MODEL_PATH:str = "common/external/kf-deberta"
 
     model_config = {
         "env_file": ".env",

@@ -470,7 +470,7 @@ class KakaoEmbeddingProvider(EmbeddingProvider):
     """카카오 임베딩 모델 제공자"""
     def __init__(self, model_name: str, max_tokens: int = 512):
         super().__init__(model_name, max_tokens)
-        self.tokenizer = AutoTokenizer.from_pretrained("app/kf-deberta")
+        self.tokenizer = AutoTokenizer.from_pretrained(settings.KAKAO_EMBEDDING_MODEL_PATH)
         self.model = None  # 실제 모델은 필요할 때 로드
     
     def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
@@ -496,7 +496,7 @@ class KakaoEmbeddingProvider(EmbeddingProvider):
         try:
             if self.model is None:
                 from transformers import AutoModel
-                self.model = AutoModel.from_pretrained("app/kf-deberta")
+                self.model = AutoModel.from_pretrained(settings.KAKAO_EMBEDDING_MODEL_PATH)
                 
             batches = self.validate_and_split_texts(texts)
             logger.info(f"카카오 임베딩 생성 시작: {len(batches)} 배치")

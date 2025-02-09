@@ -149,10 +149,13 @@ async def query_rag(
 async def chat_search(
     request: ChatRequest,
     db: AsyncSession = Depends(get_db_async),
-    session: Session = Depends(get_current_session)
+    session: Session = Depends(get_current_session),
+    
 ):
     """채팅 모드 검색 및 질의응답"""
     try:
+        
+        
         async def generate_stream():
             buffer = ""
             
@@ -160,7 +163,6 @@ async def chat_search(
                 nonlocal buffer
                 #logger.info(f"Handling token: {token}")
                 print(f"{token}", end="", flush=True)
-
                 
                 return f"data: {token}\n\n"
 
@@ -168,6 +170,8 @@ async def chat_search(
                 # RAG 서비스 초기화
                 rag_service = RAGService(handle_token)
                 await rag_service.initialize(db)
+                rag_service.set_streaming_callback(handle_token)
+                
                 
                 logger.info(f"채팅 검색 요청 - 메시지: {request.message}, 문서 ID: {request.document_ids}")
                 
@@ -192,7 +196,7 @@ async def chat_search(
                 error_message = f"data: 죄송합니다. 응답 생성 중 오류가 발생했습니다: {str(e)}\n\n"
                 yield error_message
                 yield "data: [DONE]\n\n"
-
+            
         return StreamingResponse(
             generate_stream(),
             media_type="text/event-stream",
@@ -210,6 +214,8 @@ async def chat_search(
             status_code=500,
             detail=f"채팅 검색 중 오류 발생: {str(e)}"
         )
+
+
 
 @router.post("/verify-access")
 async def verify_access(

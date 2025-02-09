@@ -17,7 +17,7 @@ class SemanticRetrieverConfig(RetrieverConfig):
     """시맨틱 검색 설정"""
     embedding_model: str
     min_score: float = 0.6  # 최소 유사도 점수
-    search_multiplier: int = 3  # top_k에 곱할 배수
+    search_multiplier: int = 1  # top_k에 곱할 배수
 
 class SemanticRetriever(BaseRetriever):
     """시맨틱 검색 구현체"""
@@ -53,11 +53,13 @@ class SemanticRetriever(BaseRetriever):
             # 	    "text": chunk
             #   }
 
+
             # VectorStoreManager 사용
             vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type())
             search_results = vs_manager.search(
                 query=query,
-                top_k=_top_k * self.config.search_multiplier,  # 더 많은 결과를 가져와서 필터링
+                #top_k=_top_k * self.config.search_multiplier,  # 더 많은 결과를 가져와서 필터링
+                top_k = _top_k,
                 filters=filters
             )
 

@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.core.database import get_db_async
 from doceasy.models.table_history import TableHistory
 from doceasy.schemas.table_history import TableHistoryCreate, TableHistoryResponse
 
@@ -12,6 +13,7 @@ class TableHistoryService:
     def __init__(self, db: AsyncSession):
         self.db = db
         
+
     async def create(self, data: TableHistoryCreate) -> TableHistoryResponse:
         """테이블 히스토리 생성 또는 업데이트"""
         # 기존 레코드 조회

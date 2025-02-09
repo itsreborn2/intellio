@@ -8,15 +8,16 @@ project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
 
-from app.services.llm_models import LLMModels
+from common.services.llm_models import LLMModels
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
 import logging
 from dotenv import load_dotenv
 from google.oauth2 import service_account
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 from openai import OpenAI
-from app.core.config import settings
+from common.core.config import settings
 
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.messages import BaseMessage, ChatMessage, ai
@@ -25,8 +26,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleVectorStore
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 #from langchain_community.embeddings import VertexAIEmbeddings
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
-from langchain_teddynote.messages import stream_response
-from langchain_teddynote import logging as teddynote_logging
+
 from langsmith import Client
 from langchain_core.tracers import LangChainTracer
 from langchain_core.callbacks import CallbackManager
@@ -90,9 +90,10 @@ def test_kakao_embedding():
         import torch
         
         # 모델과 토크나이저 로드
-        model = AutoModel.from_pretrained("app/kf-deberta")
-        tokenizer = AutoTokenizer.from_pretrained("app/kf-deberta")
+        model = AutoModel.from_pretrained(settings.KAKAO_EMBEDDING_MODEL_PATH)
+        tokenizer = AutoTokenizer.from_pretrained(settings.KAKAO_EMBEDDING_MODEL_PATH)
         
+
         # 테스트할 텍스트
         texts = [
             "안녕하세요, 한국어 텍스트입니다.",
@@ -128,29 +129,38 @@ def test_kakao_embedding():
     except Exception as e:
         logger.error(f"KF-Deberta 임베딩 생성 중 오류 발생: {str(e)}")
         raise
-
-def test_openai_streaming():
-    API_KEY = settings.OPENAI_API_KEY
-    if not API_KEY:
-        raise ValueError("OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.")
+def test_kakao_gen():
+    from transformers import AutoModel, AutoTokenizer
+    import torch
     
-    client = OpenAI(api_key=API_KEY)
-
-    response = client.chat.completions.create(
-        model="gpt-4-turbo-preview",  # GPT-4 모델 사용
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": "DeepSeek 성능이 매우 좋아졌다고 최근 기사에 많이 나오네. 얼마나 좋아졌니?"},
-        ],
-        stream=True
-    )
-
-    full_response = ""
-    for chunk in response:
-        if chunk.choices[0].delta.content is not None:
-            content = chunk.choices[0].delta.content
-            full_response += content
-            print(content, end="", flush=True)
+    # 모델과 토크나이저 로드
+    model = AutoModel.from_pretrained(settings.KAKAO_EMBEDDING_MODEL_PATH)
+    tokenizer = AutoTokenizer.from_pretrained(settings.KAKAO_EMBEDDING_MODEL_PATH)
+        
+    # 메시지 내용 추출
+    text = "안녕"
+    
+    # 토큰화 및 모델 입력 준비
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    
+    # 모델 추론
+    with torch.no_grad():
+        model_output = model(**inputs)
+    
+    # 마지막 히든 스테이트 사용
+    last_hidden_state = model_output.last_hidden_state
+    
+    # 마지막 토큰의 임베딩을 사용하여 응답 생성
+    last_token_embedding = last_hidden_state[0, -1, :]
+    
+    # 임베딩을 문자열로 변환
+    response = f"{last_token_embedding[:5].tolist()}"
+    print(response)
+def test_kakao_llm():
+    llm = LLMModels()
+    response = llm.generate("안녕하세요", "반갑게 인사해줘")
+    print(response)
+    
 def test_openai_embedding():
     API_KEY = settings.OPENAI_API_KEY
     if not API_KEY:
@@ -258,8 +268,11 @@ if __name__ == "__main__":
     #print(os.getcwd())
     #test_vertex_embedding()
     #test_kakao_embedding() 
+    test_kakao_llm()
+    
+    #test_kakao_gen()
     #test_openai()
     #test_func()
     #test_langchain_google_embedding()
-    asyncio.run(test_langsmith2())
+    #asyncio.run(test_langsmith2())
 

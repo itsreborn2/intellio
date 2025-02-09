@@ -61,4 +61,4 @@ credentials/*.json
 *.pem
 *.key
 service-account.json
-app/kf-deberta/pytorch_model.bin
+common/external/kf-deberta/pytorch_model.bin

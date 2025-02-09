@@ -9,6 +9,8 @@ import asyncio
 import time
 import json
 from loguru import logger
+from common.core.database import get_db_async
+from common.services.retrievers.tablemode_semantic import TableModeSemanticRetriever
 from common.services.embedding import EmbeddingService
 from doceasy.services.prompts import ChatPrompt, TablePrompt, TableHeaderPrompt
 
@@ -19,13 +21,12 @@ from doceasy.services.table_history import TableHistoryService
 from collections import defaultdict
 from sqlalchemy import select
 from common.utils.util import measure_time_async
-from doceasy.workers.rag import analyze_mode_task
+from doceasy.workers.rag import analyze_table_mode_task
 from celery import group
 
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import RetrievalResult
 
-from langchain_core.documents import Document as LangchainDocument
 # logging 설정
 
 
@@ -45,17 +46,19 @@ class RAGService:
     def __init__(self, streaming_callback: Optional[Callable[[str], None]] = None):
         """RAG 서비스 초기화"""
         self.embedding_service = EmbeddingService()
-        self._streaming_callback = streaming_callback
+        
         if streaming_callback:
             logger.warning(f"RAG Init with callback")
             self.chat_prompt = ChatPrompt(streaming_callback=streaming_callback)
         else:
             logger.warning(f"RAG Init without callback")
             self.chat_prompt = ChatPrompt()
+        self._streaming_callback = streaming_callback
+        
         self.table_header_prompt = TableHeaderPrompt()
         self.table_prompt = TablePrompt()  # 테이블 분석을 위한 프롬프트 추가
         self.db = None
-        self._streaming_callback = None
+        
         self._should_stop = False  # 생성 중지 플래그 추가
         # 동시 처리할 최대 문서 수 (rate limit 고려)
         self.max_concurrent = 5
@@ -192,6 +195,14 @@ class RAGService:
     async def initialize(self, db, streaming_callback: Optional[Callable[[str], None]] = None):
         """DB 세션 초기화"""
         self.db = db
+    async def set_streaming_callback(self, streaming_callback: Optional[Callable[[str], None]] = None):
+        """스트리밍 콜백 설정"""
+        if self._streaming_callback is None:
+            logger.warning(f"RAG set_streaming_callback")
+            self._streaming_callback = streaming_callback
+            self.chat_prompt.LLM.set_streaming_callback(streaming_callback=streaming_callback)
+        else:
+            logger.warning(f"RAG set_streaming_callback already set")
 
     async def verify_document_access(self, document_id: str) -> bool:
         """문서 접근 권한 확인
@@ -414,14 +425,14 @@ class RAGService:
         try:
             # 모드별로 청크가 왜 달라야하는지는 모름. 일단 보존.
             # 모드별 청크 수 설정. 
-            if query_type == "table":
-                #search_top_k = top_k * 5  # 테이블 모드: 5배
-                search_multiplier = 5
-                logger.info("테이블 모드: 청크 수 5배 증가")
-            else:  # chat 모드
-                #search_top_k = top_k * 3  # 챗 모드: 3배
-                search_multiplier = 3
-                logger.info("챗 모드: 청크 수 3배 증가")
+            # if query_type == "table":
+            #     #search_top_k = top_k * 5  # 테이블 모드: 5배
+            #     search_multiplier = 5
+            #     logger.info("테이블 모드: 청크 수 5배 증가")
+            # else:  # chat 모드
+            #     #search_top_k = top_k * 3  # 챗 모드: 3배
+            #     search_multiplier = 3
+            #     logger.info("챗 모드: 청크 수 3배 증가")
                 
             
             # 문서 검색
@@ -434,22 +445,33 @@ class RAGService:
             # Retriever
             # 현재는 시멘틱. 
             # 추후 다른 형태의 retriever를 쓰던지, 하이브리드 하던지 여기서 처리하면 됨.
-            semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
-                embedding_model=self.embedding_service.current_model_config.name,
-                min_score=0.6, # 최소 유사도 0.6 고정
-                search_multiplier=search_multiplier
-            ))
-
-            logger.info(f"검색할 청크 수: {top_k * search_multiplier}")
             
-            #logger.info(f"semantic_retriever 전")
+
+            logger.info(f"검색할 문서별 청크 수: {top_k * 1}")
+            
             filtersMetadata = {"document_ids": document_ids} if document_ids else None
-            all_chunks:RetrievalResult = await semantic_retriever.retrieve(
-                query=normalized_query, 
-                top_k=top_k,
-                filters=filtersMetadata
-            )
-            #logger.info(f"semantic_retriever 후")
+            
+            if query_type == "table":
+                tablemode_retriever = TableModeSemanticRetriever(config=SemanticRetrieverConfig(
+                                                                embedding_model=self.embedding_service.current_model_config.name,
+                                                                min_score=0.6, # 최소 유사도 0.6 고정
+                                                                ))
+                all_chunks:RetrievalResult = await tablemode_retriever.retrieve(
+                    query=normalized_query, 
+                    top_k=top_k,
+                    filters=filtersMetadata
+                )
+            else:
+                semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
+                                                        embedding_model=self.embedding_service.current_model_config.name,
+                                                        min_score=0.6, # 최소 유사도 0.6 고정
+                                                        ))
+                
+                all_chunks:RetrievalResult = await semantic_retriever.retrieve(
+                    query=normalized_query, 
+                    top_k=top_k,
+                    filters=filtersMetadata
+                )
 
             # 상위 3개의 문서 텍스트 출력
             for idx, doc in enumerate(all_chunks.documents[:3], start=1):
@@ -496,7 +518,8 @@ class RAGService:
             
             #########################################################
             # 관련 청크 검색
-            rr:RetrievalResult = await self.process_retrival(query=query, top_k=5, document_ids=document_ids, query_type="table")
+            doc_count = len(document_ids)
+            rr:RetrievalResult = await self.process_retrival(query=query, top_k=doc_count*2, document_ids=document_ids, query_type="table")
             logger.warning(f"청크 추출 완료 : {len(rr.documents)} 개")
 
             if not rr.documents:
@@ -561,7 +584,7 @@ class RAGService:
                 }
                 
                 # task 생성
-                task = analyze_mode_task.s(
+                task = analyze_table_mode_task.s(
                     chunk_content=data["content"],
                     query=query,
                     keywords=keywords,
@@ -618,7 +641,8 @@ class RAGService:
             # 히스토리 저장 (기존 코드와 동일)
             if user_id and project_id:
                 try:
-                    history_service = TableHistoryService(self.db)
+                    logger.warning(f"히스토리 저장 시작 : {project_id}, {doc_id}")
+                    history_service = TableHistoryService(db=self.db)
                     await history_service.create_many([
                         TableHistoryCreate(
                             project_id=str(project_id),
@@ -637,7 +661,7 @@ class RAGService:
             logger.exception(f"테이블 모드 처리 실패: {str(e)}")
             raise
 
-    async def _handle_chat_mode(self, query: str, top_k: int = 5, document_ids: List[UUID] = None) -> Dict[str, Any]:
+    async def _handle_chat_mode(self, query: str, document_ids: List[UUID] = None) -> Dict[str, Any]:
         """채팅 모드 처리
         
         Args:
@@ -655,7 +679,8 @@ class RAGService:
         try:
             # 관련 문서 검색 및 패턴 분석
             query_analysis = self._analyze_query(query)
-            rr: RetrievalResult = await self.process_retrival(query=query, top_k=top_k, document_ids=document_ids, query_type="chat")
+            k = len(document_ids) * 2
+            rr: RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="chat")
             logger.info(f"관련 청크 검색 완료 - 총 {len(rr)}개 청크 발견")
 
             if not rr:
@@ -742,7 +767,6 @@ class RAGService:
         self,
         query: str,
         mode: str = "chat",
-        top_k: int = 5,
         document_ids: List[str] = None,
         **kwargs
     ):
@@ -754,7 +778,8 @@ class RAGService:
 
             ###############################################
             # 관련 청크 검색   
-            rr:RetrievalResult = await self.process_retrival(query=query, top_k=top_k, document_ids=document_ids, query_type="chat")
+            k = len(document_ids) * 2
+            rr:RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="chat")
             #logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks.documents)}개 청크 발견")
 
             if not rr.documents:
