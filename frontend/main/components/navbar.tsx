@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Github } from "lucide-react"
+import { Send } from "lucide-react"
 
 export default function Navbar() {
   return (
@@ -11,26 +11,23 @@ export default function Navbar() {
         </Link>
         <nav className="flex flex-1 items-center space-x-6 text-sm font-medium">
           <Link href="/solutions" className="transition-colors hover:text-primary">
-            Solutions
+            솔루션
           </Link>
           <Link href="/industries" className="transition-colors hover:text-primary">
-            Industries
+            서비스
           </Link>
           <Link href="/about" className="transition-colors hover:text-primary">
             About Us
           </Link>
         </nav>
         <div className="flex items-center space-x-4">
-          <Link href="https://github.com/amanesoft" target="_blank" rel="noreferrer">
+          <Link href="https://t.me/maddingStock" target="_blank" rel="noreferrer">
             <Button variant="ghost" size="icon">
-              <Github className="h-4 w-4" />
-              <span className="sr-only">GitHub</span>
+              <Send className="h-4 w-4" />
+              <span className="sr-only">Telegram</span>
             </Button>
           </Link>
-          <Button variant="ghost" size="sm">
-            Contact
-          </Button>
-          <Button size="sm">Get a Demo</Button>
+          <Button size="sm">업무 자동화 문의</Button>
         </div>
       </div>
     </header>
