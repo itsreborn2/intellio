@@ -264,7 +264,7 @@ def test_get_gemini_models():
     # 프로젝트 이름을 입력합니다.
     from google.ai import generativelanguage_v1beta
     import google.generativeai as genai
-    genai.configure(api_key='AIzaSyAzObCgwSMLpD-K9sddI2vwWER9QahR1PU') # YOUR_API_KEY를 실제 API 키로 변경
+    genai.configure(api_key=settings.GEMINI_API_KEY) # YOUR_API_KEY를 실제 API 키로 변경
 
     # 사용 가능한 모델 목록 조회
     try:
@@ -278,7 +278,7 @@ def test_func():
     # 프로젝트 이름을 입력합니다.
     from google.ai import generativelanguage_v1beta
     import google.generativeai as genai
-    genai.configure(api_key='AIzaSyAzObCgwSMLpD-K9sddI2vwWER9QahR1PU') # YOUR_API_KEY를 실제 API 키로 변경
+    genai.configure(api_key=settings.GEMINI_API_KEY) # YOUR_API_KEY를 실제 API 키로 변경
 
     # 사용 가능한 모델 목록 조회
     try:
