@@ -125,9 +125,42 @@ class LLMModels:
                         callbacks=callbacks,
                     )
         elif model_name == "gemini":
+            # 모델 이름: models/gemini-2.0-flash-exp
+            # 표시 이름: Gemini 2.0 Flash Experimental
+            # ---
+            # 모델 이름: models/gemini-2.0-flash
+            # 표시 이름: Gemini 2.0 Flash
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-001
+            # 표시 이름: Gemini 2.0 Flash 001
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-lite-preview
+            # 표시 이름: Gemini 2.0 Flash-Lite Preview
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-lite-preview-02-05
+            # 표시 이름: Gemini 2.0 Flash-Lite Preview 02-05
+            # ---
+            # 모델 이름: models/gemini-2.0-pro-exp
+            # 표시 이름: Gemini 2.0 Pro Experimental
+            # ---
+            # 모델 이름: models/gemini-2.0-pro-exp-02-05
+            # 표시 이름: Gemini 2.0 Pro Experimental 02-05
+            # ---
+            # 모델 이름: models/gemini-exp-1206
+            # 표시 이름: Gemini Experimental 1206
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-thinking-exp-01-21
+            # 표시 이름: Gemini 2.0 Flash Thinking Experimental 01-21
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-thinking-exp
+            # 표시 이름: Gemini 2.0 Flash Thinking Experimental 01-21
+            # ---
+            # 모델 이름: models/gemini-2.0-flash-thinking-exp-1219
+            # 표시 이름: Gemini 2.0 Flash Thinking Experimental            
             callbacks = [callback_handler] if callback_handler else None
             return ChatGoogleGenerativeAI(
-                        model="models/gemini-2.0-flash-001",
+                        #model="models/gemini-2.0-flash-001",
+                        model="models/gemini-2.0-pro-exp-02-05",
                         #model="models/gemini-2.0-pro-exp-02-05", # 추론모델 시간 오래걸림.
                         google_api_key=api_key,
                         temperature=kwargs.get("temperature", 0.2),

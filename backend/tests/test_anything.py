@@ -260,19 +260,44 @@ async def test_langsmith2():
             print(f"오류 발생: {str(e)}")
             raise
 
+def test_get_gemini_models():
+    # 프로젝트 이름을 입력합니다.
+    from google.ai import generativelanguage_v1beta
+    import google.generativeai as genai
+    genai.configure(api_key='AIzaSyAzObCgwSMLpD-K9sddI2vwWER9QahR1PU') # YOUR_API_KEY를 실제 API 키로 변경
+
+    # 사용 가능한 모델 목록 조회
+    try:
+        for model in genai.list_models():
+            print(f"모델 이름: {model.name}")
+            print(f"표시 이름: {model.display_name}")
+            print("---")
+    except Exception as e:
+        print(f"오류 발생: {e}")
 def test_func():
     # 프로젝트 이름을 입력합니다.
-    teddynote_logging.langsmith(settings.LANGCHAIN_PROJECT)
+    from google.ai import generativelanguage_v1beta
+    import google.generativeai as genai
+    genai.configure(api_key='AIzaSyAzObCgwSMLpD-K9sddI2vwWER9QahR1PU') # YOUR_API_KEY를 실제 API 키로 변경
+
+    # 사용 가능한 모델 목록 조회
+    try:
+        for model in genai.list_models():
+            print(f"모델 이름: {model.name}")
+            print(f"표시 이름: {model.display_name}")
+            print("---")
+    except Exception as e:
+        print(f"오류 발생: {e}")
 
 if __name__ == "__main__":
     #print(os.getcwd())
     #test_vertex_embedding()
     #test_kakao_embedding() 
-    test_kakao_llm()
+    #test_kakao_llm()
     
     #test_kakao_gen()
     #test_openai()
-    #test_func()
+    test_func()
     #test_langchain_google_embedding()
     #asyncio.run(test_langsmith2())
 
