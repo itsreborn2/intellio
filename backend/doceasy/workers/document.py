@@ -8,23 +8,18 @@ import asyncio
 import json
 from uuid import UUID
 from typing import List, Optional
-import logging
-
 
 from common.core.database import SessionLocal, get_db_async, AsyncSessionLocal
 from common.core.redis import redis_client
 from common.services.embedding import EmbeddingService
+from common.services.textsplitter import TextSplitter
+from common.services.vector_store_manager import VectorStoreManager
 
 from doceasy.core.celery_app import celery
 from doceasy.models.document import Document
-#from doceasy.services.chunker import RAGOptimizedChunker
 from doceasy.services.document import DocumentService
+from doceasy.core.config import settings_doceasy
 
-
-
-from common.services.textsplitter import TextSplitter
-from common.services.vector_store_manager import VectorStoreManager
-from common.services.embedding_models import EmbeddingModelType
 from celery.signals import worker_ready
 import os
 from loguru import logger
@@ -568,7 +563,8 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
             })
         
         # 벡터 저장 (동기)
-        vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type())
+        vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(), 
+                                        namespace=settings_doceasy.PINECONE_NAMESPACE_DOCEASY)
         vs_manager.store_vectors(vectors)
             
         # 모든 청크가 처리되었는지 확인

@@ -105,22 +105,7 @@ class EmbeddingService:
             logger.error(f"임베딩 생성 중 오류 발생: {str(e)}")
             raise
     
-    def store_vectors(self, _vectors: List[Dict]) -> bool:
-        """벡터를 Pinecone에 저장"""
-        try:
-            if not _vectors:
-                logger.warning("저장할 벡터가 없습니다")
-                return False
 
-            # 벡터 저장
-            logger.info(f"벡터 {len(_vectors)}개 저장 중")
-            self.pinecone_index.upsert(vectors=_vectors)
-            logger.info(f"벡터 {len(_vectors)}개 저장 완료")
-            return True
-
-        except Exception as e:
-            logger.error(f"벡터 저장 실패: {str(e)}")
-            return False
     
     async def get_single_embedding_async(self, query: str) -> List[float]:
         """단일 텍스트에 대한 임베딩을 생성하고 검증"""
@@ -312,67 +297,6 @@ class EmbeddingService:
         unique_chunks = {chunk["id"]: chunk for chunk in context_chunks}
         return list(unique_chunks.values())
         
-    async def _get_document_chunks_by_range(
-        self,
-        doc_id: str,
-        start_idx: int,
-        end_idx: int
-    ) -> List[Dict[str, Any]]:
-        """문서의 특정 범위 청크 조회"""
-        try:
-            # 범위 검증
-            if start_idx >= end_idx:
-                return []
-                
-            # Pinecone 쿼리
-            results = self.pinecone_index.query(
-                vector=[0.0] * 1536,  # 더미 벡터
-                top_k=max(1, end_idx - start_idx),  # 최소 1 보장
-                include_metadata=True,
-                filter={
-                    "document_id": doc_id,
-                    "chunk_index": {"$gte": start_idx, "$lt": end_idx}
-                }
-            )
-            
-            chunks = []
-            for match in results.matches:
-                chunks.append({
-                    "id": match.id,
-                    "score": 0.0,  # 문맥 청크는 점수 0으로 설정
-                    "content": match.metadata.get("text", ""),
-                    "metadata": match.metadata
-                })
-            
-            # 청크 인덱스로 정렬
-            chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
-            return chunks
-            
-        except Exception as e:
-            logger.error(f"청크 범위 조회 실패: {str(e)}")
-            return []
-
-
-    async def delete_embeddings(self, embedding_ids: List[str]) -> None:
-        """임베딩 삭제"""
-        try:
-            if not embedding_ids:
-                return
-                
-            # Pinecone에서 임베딩 삭제
-            self.pinecone_index.delete(ids=embedding_ids)
-            logger.info(f"임베딩 삭제 완료: {len(embedding_ids)}개")
-            
-        except Exception as e:
-            logger.error(f"임베딩 삭제 실패: {str(e)}")
-
-    async def clear_index(self) -> None:
-        """인덱스의 모든 벡터 삭제"""
-        try:
-            self.pinecone_index.delete(delete_all=True)
-            logger.info("Pinecone 인덱스 초기화 완료")
-        except Exception as e:
-            logger.error(f"인덱스 초기화 중 오류 발생: {str(e)}")
 
     def get_provider(self) -> EmbeddingProvider:
         return self.provider

@@ -384,6 +384,7 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
                 for batch in batches:
                     batch_embeddings = self._embed_batch(batch, embeddings_task_type)
                     all_embeddings.extend(batch_embeddings)
+                logger.info(f"생성 완료: {len(batches)} 배치 -> 임베딩 {len(all_embeddings)} 개")
 
             return all_embeddings
 

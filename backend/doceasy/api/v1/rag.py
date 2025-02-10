@@ -157,13 +157,15 @@ async def chat_search(
         
         
         async def generate_stream():
-            buffer = ""
+
             
+            # AI 모델에 등록하는 콜백 핸들러.
+            # AI 모델에 도달하기 전에 예외처리 리턴되는 케이스는 handle_token을 수행하지 않음.
             def handle_token(token: str):
-                nonlocal buffer
+
                 #logger.info(f"Handling token: {token}")
                 print(f"{token}", end="", flush=True)
-                
+                #logger.warning(f"handle_token : {token}")
                 return f"data: {token}\n\n"
 
             try:
@@ -182,12 +184,9 @@ async def chat_search(
                     document_ids=request.document_ids
                 ):
                     if token is not None:  # None이 아닐 때만 yield
+                        # 여기는 handle_token에서 yield 될때, 예외처리 구간에서 도달.
                         yield token
-                
-                # 버퍼에 남은 내용이 있다면 마지막으로 전송
-                if buffer:
-                    yield f"data: {buffer}\n\n"
-                
+
                 # 스트리밍 종료 신호
                 yield "data: [DONE]\n\n"
                 

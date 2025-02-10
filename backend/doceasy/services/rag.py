@@ -631,11 +631,11 @@ class RAGService:
                 
             except TimeoutError:
                 logger.error("태스크 그룹 실행 시간 초과")
-                columns = [TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="timeout", content="분석 시간이 초과되었습니다.")]                )]
+                columns = [TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="empty", content="분석 시간이 초과되었습니다.")]                )]
             except Exception as e:
                 logger.error(f"태스크 그룹 실행 중 오류: {str(e)}")
                 logger.error(f"title: {title}")
-                columns = [TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="error", content=f"분석 중 오류가 발생했습니다: {str(e)}")]
+                columns = [TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="empty", content=f"분석 중 오류가 발생했습니다: {str(e)}")]
                 )]
             
             end_time = time.time()
@@ -696,8 +696,8 @@ class RAGService:
 
             # 문서 컨텍스트 구성
             doc_contexts = []
-            for chunk in rr:
-                metadata = chunk.get("metadata", {})
+            for doc in rr:
+                metadata = doc.metadata
                 doc_contexts.append(
                     f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
                     f"페이지: {metadata.get('page_number', 'N/A')}\n" # pinecone의 metadata에는 page_number가 없음.
@@ -783,7 +783,7 @@ class RAGService:
 
             ###############################################
             # 관련 청크 검색   
-            k = len(document_ids) * 5 # 문서당 5개. 이 옵션이 문서별로 5개를 뽑아주진 않음.
+            k = len(document_ids) * 5  # 문서당 5개. 이 옵션이 문서별로 5개를 뽑아주진 않음.
             # 그러나 적어도 전체 문서 * 5개 정도는 기본적으로 뽑아서 데이터를 추출하도록 처리
             # k 값에 대한 고민이 필요함
             # 짧은 문서는 k=5로 충분. 그러나 매우 긴 문서는? k=5로는 턱없이 부족할텐데.
@@ -792,45 +792,49 @@ class RAGService:
             rr:RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="chat")
 
             #logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks.documents)}개 청크 발견")
-
-            if not rr.documents:
-                yield "관련 문서를 찾을 수 없습니다."
+            doc_cnt = len(rr.documents)
+            if not rr.documents or doc_cnt == 0:
+                logger.warning("관련 내용을 찾을 수 없습니다.")
+                yield "관련 내용을 찾을 수 없습니다."
                 return
             if document_ids is None or len(document_ids) == 0:
-                logger.warning("[query_stream] 선택된 문서가 없습니다.")
+                logger.warning("선택된 문서가 없습니다.")
                 yield "선택된 문서가 없습니다."
-                return
 
-            # 문서 컨텍스트 구성
-            doc_contexts = []
-            for doc in rr.documents:
-                metadata = doc.metadata
-                doc_contexts.append(
-                    f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
-                    f"페이지: {metadata.get('page_number', 'N/A')}\n" # pinecone의 metadata에는 page_number가 없음.
-                    #f"내용: {metadata.get('text', '')}"
-                    f"내용: {doc.page_content}"  # LangchainDocument의 page_content 사용
-                )
+            if doc_cnt > 0:
+                # 문서 컨텍스트 구성
+                doc_contexts = []
+                for doc in rr.documents:
+                    if not doc.page_content or doc.page_content.strip() == "":
+                        continue
+                    metadata = doc.metadata
+                    doc_contexts.append(
+                        f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
+                        f"페이지: {metadata.get('page_number', 'N/A')}\n"
+                        f"내용: {doc.page_content}"
+                    )
 
-            # 생성형AI에게 수집한 context를 바탕으로 query를 질문
-            # 프롬프트 생성 및 응답
-            async for token in self.chat_prompt.analyze_streaming(
-                                    content='\n\n'.join(doc_contexts),
-                                    user_query=query,
-                                    keywords={
-                                        "keywords": self._extract_keywords('\n'.join(doc_contexts)),
-                                        "type": "extracted",
-                                        "source": "document_content"
-                                    },
-                                    query_analysis=query_analysis
-                                ):
-                if self._should_stop:  # 중지 플래그 확인
-                    break
-                yield token
+                # 생성형AI에게 수집한 context를 바탕으로 query를 질문
+                # 프롬프트 생성 및 응답
+            
+                async for token in self.chat_prompt.analyze_streaming(
+                                        content='\n\n'.join(doc_contexts),
+                                        user_query=query,
+                                        keywords={
+                                            "keywords": self._extract_keywords('\n\n'.join(doc_contexts)),
+                                            "type": "extracted",
+                                            "source": "document_content"
+                                        },
+                                        query_analysis=query_analysis
+                                    ):
+                    if self._should_stop:  # 중지 플래그 확인
+                        break
+                    yield token
 
         except Exception as e:
             logger.exception(f"스트리밍 쿼리 처리 중 오류 발생: {str(e)}")
             raise
+
 
     async def get_document_status(self, document_id: str) -> Dict[str, Any]:
         """문서의 상태 조회

@@ -3,7 +3,7 @@ from celery.schedules import crontab
 from kombu import Queue, Exchange
 from celery.signals import task_success, task_failure
 import logging
-from app.core.config import settings
+from common.core.config import settings
 
 logger = logging.getLogger(__name__)
 

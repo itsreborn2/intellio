@@ -153,6 +153,7 @@ class ChatPrompt(BasePrompt):
             # 쿼리 분석 수행
             analysis_types = self.query_analyzer.analyze(user_query)
             
+
             # 분석 결과를 query_analysis에 추가
             query_analysis["analysis_types"] = [at.value for at in analysis_types]
            
