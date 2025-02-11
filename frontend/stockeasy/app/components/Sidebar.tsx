@@ -15,9 +15,6 @@ const Sidebar: React.FC = () => {
         <button className="sidebar-button">
           <Home className="icon" />
         </button>
-        <button className="sidebar-button logo-button">
-          <LayoutDashboard className="icon logo-icon" /> {/* LayoutDashboard 아이콘 로고 */}
-        </button>
         <button className="sidebar-button">
           <BarChart className="icon" />
         </button>
