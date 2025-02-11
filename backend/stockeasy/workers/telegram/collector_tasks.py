@@ -4,11 +4,12 @@ import logging
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
-from app.core.celery_app import celery
-from app.services.telegram.collector import CollectorService
-from app.services.telegram.embedding import TelegramEmbeddingService
-from app.core.database import SessionLocal
-from app.models.telegram_message import TelegramMessage
+from common.core.database import get_db_async
+
+from stockeasy.core.celery_app import celery
+from stockeasy.services.telegram.collector import CollectorService
+from stockeasy.services.telegram.embedding import TelegramEmbeddingService
+from stockeasy.models.telegram_message import TelegramMessage
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class CollectorTask(Task):
     @property
     def db(self) -> Session:
         if self._db is None:
-            self._db = SessionLocal()
+            self._db = get_db_async()
         return self._db
 
     @property

@@ -28,8 +28,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from datetime import datetime
-
-Base = declarative_base()
+from common.models.base import Base
 
 class TelegramMessage(Base):
     """텔레그램 메시지 모델

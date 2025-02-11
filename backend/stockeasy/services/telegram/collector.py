@@ -20,7 +20,7 @@ import io
 
 from common.core.config import settings
 from stockeasy.models.telegram_message import TelegramMessage
-#from stockeasy.services.gcs import GCSService
+from common.services.storage import GoogleCloudStorageService
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -43,7 +43,11 @@ class CollectorService:
         self.client = None
         self.last_collection = {}  # 채널별 마지막 수집 시간 저장
         try:
-            self.gcs_service = GCSService()  # GCS 서비스 초기화
+            self.storage_service = GoogleCloudStorageService(
+                project_id=settings.GOOGLE_CLOUD_PROJECT,
+                bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET,
+                credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS
+            )
             logger.info("GCS 서비스 초기화 성공")
         except Exception as e:
             logger.error(f"GCS 서비스 초기화 실패: {str(e)}")
@@ -59,19 +63,19 @@ class CollectorService:
                     settings.TELEGRAM_SESSION_NAME,
                     settings.TELEGRAM_API_ID,
                     settings.TELEGRAM_API_HASH,
-                    system_version="4.16.30-vxCUSTOM"
+                    #system_version="4.16.30-vxCUSTOM"
                 )
-                await self.client.start(phone=settings.TELEGRAM_PHONE)
+                await self.client.start()
                 logger.info("텔레그램 클라이언트 초기화 성공")
             except Exception as e:
                 logger.error(f"텔레그램 클라이언트 초기화 실패: {str(e)}")
                 raise
 
     async def _ensure_client_started(self):
-        """클라이언트가 시작되지 않았다면 시작하고 로그인합니다."""
+        """클라이언트가 시작되지 않았다면 시작합니다."""
         if not self.client.is_connected():
             logger.info("텔레그램 클라이언트 시작")
-            await self.client.start(phone=settings.TELEGRAM_PHONE)
+            await self.client.start()
             logger.info("텔레그램 클라이언트 시작 성공")
 
     async def _process_message(self, message: Message, channel: Channel) -> Optional[Dict[str, Any]]:
@@ -120,11 +124,12 @@ class CollectorService:
             sender_name = None
             if message.sender:
                 sender_id = str(message.sender.id)
-                sender_name = message.sender.first_name
-                if message.sender.last_name:
-                    sender_name += f" {message.sender.last_name}"
-                if not sender_name and hasattr(message.sender, 'title'):
+                if hasattr(message.sender, 'title'):  # 채널이나 그룹인 경우
                     sender_name = message.sender.title
+                else:  # 일반 사용자인 경우
+                    sender_name = message.sender.first_name
+                    if hasattr(message.sender, 'last_name') and message.sender.last_name:
+                        sender_name += f" {message.sender.last_name}"
 
             # 문서 정보 추출 및 GCS 업로드
             has_document = False
@@ -142,31 +147,37 @@ class CollectorService:
                     document_size = document.size
                     
                     logger.info(f"문서 다운로드 시작: {document_name}")
-                    # 문서 다운로드 및 GCS 업로드
+                    # 문서 다운로드
                     file_data = io.BytesIO()
                     await message.download_media(file=file_data)
                     file_data.seek(0)  # 파일 포인터를 처음으로 이동
                     
-                    # GCS 경로 생성 (예: telegram/YYYY-MM-DD/file.txt)
+                    # 로컬 저장 경로 생성
                     date_folder = message.date.strftime("%Y-%m-%d")
-                    gcs_path = f"{settings.GCS_TELEGRAM_FOLDER}/{date_folder}/{document_name}"
+                    local_dir = f"telegram_files/{date_folder}"
+                    os.makedirs(local_dir, exist_ok=True)
+                    local_path = f"{local_dir}/{document_name}"
                     
-                    # GCS에 업로드
-                    document_gcs_path = self.gcs_service.upload_file(
-                        file_obj=file_data,
-                        destination_path=gcs_path,
-                        content_type=document_mime_type
-                    )
-                    logger.info(f"문서 GCS 업로드 성공: {gcs_path}")
+                    # 로컬에 파일 저장
+                    with open(local_path, 'wb') as f:
+                        f.write(file_data.getvalue())
+                    logger.info(f"문서 로컬 저장 성공: {local_path}")
+                    
+                    document_gcs_path = local_path
+                    logger.info(f"문서 저장 경로: {local_path}")
                     
                 except Exception as e:
                     logger.error(f"문서 처리 중 오류 발생 (message_id: {message.id}): {str(e)}")
-                    # 문서 처리 실패 시에도 메시지는 저장하도록 함
                     has_document = False
                     document_name = None
                     document_gcs_path = None
                     document_mime_type = None
                     document_size = None
+
+            # timezone 처리
+            created_at = message.date.replace(tzinfo=None)  # timezone 제거
+            collected_at = datetime.now()  # timezone 없이 현재 시간
+            updated_at = datetime.now(timezone.utc)  # updated_at만 UTC 타임존 유지
             
             # Dict 객체 생성
             return {
@@ -177,8 +188,10 @@ class CollectorService:
                 "sender_id": sender_id,
                 "sender_name": sender_name,
                 "message_text": message_text,
-                "created_at": message.date.replace(tzinfo=timezone.utc),
-                "collected_at": datetime.now(timezone.utc),
+                "created_at": created_at,
+                "collected_at": collected_at,
+                "updated_at": updated_at,
+                "is_embedded": False,
                 "has_media": has_media,
                 "has_document": has_document,
                 "document_name": document_name,
@@ -232,20 +245,20 @@ class CollectorService:
                     continue
             
             # 데이터베이스에 메시지 저장
-            for msg in messages:
-                try:
+            try:
+                for msg in messages:
                     # 중복 체크를 위한 upsert 수행
                     stmt = insert(TelegramMessage).values(**msg)
                     stmt = stmt.on_conflict_do_nothing(
                         index_elements=['message_id', 'channel_id']
                     )
-                    self.db.execute(stmt)
-                except Exception as e:
-                    logger.error(f"메시지 저장 중 오류 발생: {str(e)}")
-                    continue
-            
-            # 변경사항 커밋
-            self.db.commit()
+                    await self.db.execute(stmt)
+                # 변경사항 커밋
+                await self.db.commit()
+            except Exception as e:
+                logger.error(f"메시지 일괄 저장 중 오류 발생: {str(e)}")
+                await self.db.rollback()
+                raise
             
             # 마지막 수집 시간 업데이트
             self.last_collection[channel_id] = now

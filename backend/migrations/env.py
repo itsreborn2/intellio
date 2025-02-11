@@ -24,6 +24,7 @@ from doceasy.models.document import Document
 from common.models.user import User
 from doceasy.models.project import Project
 from doceasy.models.category import Category
+from stockeasy.models.telegram_message import TelegramMessage
 
 
 # this is the Alembic Config object, which provides

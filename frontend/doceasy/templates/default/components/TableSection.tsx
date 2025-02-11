@@ -158,71 +158,6 @@ const isSignificantContextChange = (currentSentence: string, previousSentence: s
   );
 };
 
-const CellContent = ({ content, isDocument = false }: { content: string, isDocument?: boolean }) => {
-  const formattedContent = formatContent(content);
-  
-  // 문서 제목인 경우 기존 렌더링 유지
-  if (isDocument) {
-    return <DocumentTitle fileName={formattedContent} />;
-  }
-
-  // 카드 크기 계산 로직 유지
-  const getCardSize = (content: string) => {
-    if (!content) return { width: 300, height: 150 };
-    
-    const lines = content.split('\n').filter(line => line.trim());
-    const maxLineLength = Math.max(...lines.map(line => line.length));
-    const lineCount = lines.length;
-    
-    // 기본 사이즈 계산
-    let width = Math.min(Math.max(500, maxLineLength * 8), 1000);  // 최소 500px, 최대 1000px
-    let height = Math.min(Math.max(200, lineCount * 24 + 40), 800); // 최소 200px, 최대 800px
-    
-    return { width, height };
-  };
-  
-  const cardSize = getCardSize(formattedContent);
-  
-  return (
-    <HoverCard>
-      <HoverCardTrigger asChild>
-        <div className="cursor-help">
-          <div className="line-clamp-3 text-sm">
-            <ReactMarkdown 
-              className="prose max-w-none
-                [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
-                [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
-                [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
-                [&>li]:text-gray-600 [&>li]:leading-relaxed"
-            >
-              {formattedContent}
-            </ReactMarkdown>
-          </div>
-        </div>
-      </HoverCardTrigger>
-      <HoverCardContent
-        side="right"
-        className="w-[var(--card-width)] max-h-[var(--card-height)] overflow-y-auto"
-        style={{
-          '--card-width': `${cardSize.width}px`,
-          '--card-height': `${cardSize.height}px`,
-        } as React.CSSProperties}
-      >
-        <div className="space-y-1">
-          <ReactMarkdown 
-            className="prose max-w-none
-              [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
-              [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
-              [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
-              [&>li]:text-gray-600 [&>li]:leading-relaxed"
-          >
-            {formattedContent}
-          </ReactMarkdown>
-        </div>
-      </HoverCardContent>
-    </HoverCard>
-  );
-};
 
 export const TableSection = () => {
   const { state, dispatch } = useApp()
@@ -327,30 +262,6 @@ export const TableSection = () => {
 
   const handleDragEnd = () => {
     setDraggedColumn(null)
-  }
-
-  const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>, column: string) => {
-    const tableHead = e.currentTarget.parentElement
-    if (!tableHead) return;  // 조기 반환으로 null 체크
-    
-    const table = tableHead.parentElement
-    const columnWidth = tableHead.style.width
-    const startX = e.clientX
-    const startWidth = parseInt(columnWidth)
-
-    const mouseMoveHandler = (e: MouseEvent) => {
-      const newWidth = startWidth + (e.clientX - startX)
-      tableHead.style.width = `${newWidth}px`
-    }
-
-    const mouseUpHandler = () => {
-      document.removeEventListener('mousemove', mouseMoveHandler)
-      document.removeEventListener('mouseup', mouseUpHandler)
-      setColumnWidths(prev => ({ ...prev, [column]: parseInt(tableHead.style.width) }))
-    }
-
-    document.addEventListener('mousemove', mouseMoveHandler)
-    document.addEventListener('mouseup', mouseUpHandler)
   }
 
   const handleDeleteColumn = (column: string) => {

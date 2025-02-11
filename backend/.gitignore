@@ -62,3 +62,6 @@ credentials/*.json
 *.key
 service-account.json
 common/external/kf-deberta/pytorch_model.bin
+
+telegram_files/
+telegram_collector.session

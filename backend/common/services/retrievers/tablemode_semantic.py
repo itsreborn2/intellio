@@ -5,9 +5,7 @@ from .base import BaseRetriever, RetrieverConfig
 from .models import Document, RetrievalResult
 
 from common.services.vector_store_manager import VectorStoreManager
-from common.services.embedding import EmbeddingService
 from common.core.config import settings
-from common.services.embedding_models import EmbeddingModelManager
 from .semantic import SemanticRetriever, SemanticRetrieverConfig
 
 import pinecone

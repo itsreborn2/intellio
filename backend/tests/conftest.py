@@ -4,8 +4,7 @@ import os
 from typing import AsyncGenerator, Generator
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
-from app.main import app
-from app.workers.document import process_document_text
+from main import app
 
 @pytest.fixture(scope="session")
 def event_loop() -> Generator:

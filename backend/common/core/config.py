@@ -152,6 +152,10 @@ class CommonSettings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
+    # Telegram
+    TELEGRAM_SESSION_NAME:str='telegram_collector'
+    TELEGRAM_API_ID:str
+    TELEGRAM_API_HASH:str
     
     # LangSmith
     LANGCHAIN_TRACING_V2:str = os.getenv("LANGCHAIN_TRACING_V2", "true")

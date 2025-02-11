@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from app.core.celery_app import celery
-from app.core.database import SessionLocal
-from app.models.telegram_message import TelegramMessage
-from app.services.telegram.embedding import TelegramEmbeddingService
+from common.core.database import SessionLocal
+
+from stockeasy.core.celery_app import celery
+from stockeasy.models.telegram_message import TelegramMessage
+from stockeasy.services.telegram.embedding import TelegramEmbeddingService
 
 logger = logging.getLogger(__name__)
 

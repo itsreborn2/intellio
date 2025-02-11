@@ -619,7 +619,7 @@ class RAGService:
                             result_content = "분석 결과가 없습니다."
 
                         result_content = rr
-                    except Exception as e:
+                    except Exception as e: 
                         logger.error(f"결과 처리 중 오류: {str(e)}")
                         result_content = f"분석 중 오류가 발생했습니다: {str(e)}"
                     

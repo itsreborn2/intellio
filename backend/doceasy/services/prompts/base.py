@@ -16,63 +16,6 @@ from langchain_core.messages import ai
 
 logger = logging.getLogger(__name__)
 
-# 안씀.
-class GeminiAPI:
-    """Gemini API 싱글톤"""
-    _instance = None
-    _llm_chain = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    def initialize(self, api_key: str, **kwargs):
-        """API 초기화"""
-        if self._llm_chain is None:
-            generation_config = kwargs.get('generation_config', {
-                "temperature": 0.3,
-                "top_p": 0.8,
-                "top_k": 40,
-                "max_output_tokens": 2048,
-            })
-            
-            safety_settings = kwargs.get('safety_settings', [
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-            ])
-            
-            logger.info("Gemini API 초기화")
-            genai.configure(api_key=api_key)
-            self._llm_chain = genai.GenerativeModel(
-                model_name=kwargs.get('model_name', "models/gemini-2.0-flash-exp"),
-                generation_config=genai.GenerationConfig(**generation_config),
-                safety_settings=safety_settings
-            )
-            logger.info("Gemini API 초기화 완료")
-    
-    def generate_content(self, prompt: str) -> Optional[GenerateContentResponse]:
-        """동기 컨텐츠 생성"""
-        if self._llm_chain is None:
-            self.initialize(settings_doceasy.GEMINI_API_KEY)
-            
-        logger.info(f"Gemini API[Sync] 호출 - 프롬프트: {prompt[:100]}...")
-        response = self._llm_chain.generate_content(prompt)
-        logger.info("Gemini API 호출 완료")
-        return response
-
-    async def generate_content_async(self, prompt: str) -> Optional[GenerateContentResponse]:
-        """비동기 컨텐츠 생성"""
-        if self._llm_chain is None:
-            self.initialize(settings_doceasy.GEMINI_API_KEY)
-            
-        logger.info(f"Gemini API[Async] 호출 - 프롬프트: {prompt[:100]}...")
-        response = await self._llm_chain.generate_content_async(prompt)
-        logger.info("Gemini API 호출 완료")
-        return response
-    
 class BasePrompt:
     prompt_mode = None
     """기본 프롬프트 클래스"""
@@ -88,7 +31,8 @@ class BasePrompt:
             cache_expire: 캐시 만료 시간 (초)
             streaming_callback: 스트리밍 응답을 처리할 콜백 함수
         """
-        #self.gemini_api = GeminiAPI()  # 싱글톤 인스턴스
+        # 구조가 매우 이상하다.
+        # 프롬프트 클래스가 왜 LLM Models를 가지고 있지?
         self.LLM = LLMModels(streaming_callback=streaming_callback)  # 싱글톤 인스턴스
        
         # 캐시 초기화

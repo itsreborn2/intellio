@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 import numpy as np
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 import logging
 import re
@@ -29,6 +29,25 @@ class TelegramMessageMetadata:
     has_document: bool          # 문서 첨부 여부
     document_name: Optional[str] # 문서 이름 (있는 경우)
     document_gcs_path: Optional[str] # GCS 경로 (있는 경우)
+    namespace: str              # 네임스페이스
+
+    @classmethod
+    def from_telegram_message(cls, message: TelegramMessage, namespace: str) -> 'TelegramMessageMetadata':
+        """TelegramMessage로부터 메타데이터 객체를 생성합니다."""
+        return cls(
+            message_id=message.message_id,
+            channel_id=message.channel_id,
+            channel_title=message.channel_title,
+            message_type=message.message_type,
+            sender_id=message.sender_id,
+            sender_name=message.sender_name,
+            created_at=message.created_at,
+            has_media=message.has_media,
+            has_document=message.has_document,
+            document_name=message.document_name if message.has_document else None,
+            document_gcs_path=message.document_gcs_path if message.has_document else None,
+            namespace=namespace
+        )
 
 class TelegramEmbeddingService(CommonEmbeddingService):
     """텔레그램 메시지 전용 임베딩 서비스"""
@@ -54,16 +73,11 @@ class TelegramEmbeddingService(CommonEmbeddingService):
         Returns:
             dict: 메타데이터 딕셔너리
         """
-        return {
-            'message_id': str(message.message_id),
-            'channel_id': message.channel_id,
-            'channel_title': message.channel_title,
-            'created_at': message.created_at.isoformat(),
-            'has_document': message.has_document,
-            'document_name': message.document_name if message.has_document else None,
-            'document_gcs_path': message.document_gcs_path if message.has_document else None,
-            'namespace': self.namespace
-        }
+        metadata = TelegramMessageMetadata.from_telegram_message(message, self.namespace)
+        metadata_dict = asdict(metadata)
+        metadata_dict['message_id'] = str(metadata_dict['message_id'])  # message_id를 문자열로 변환
+        metadata_dict['created_at'] = metadata.created_at.isoformat()  # datetime을 ISO 형식 문자열로 변환
+        return metadata_dict
         
     def _prepare_text_for_embedding(self, message: TelegramMessage) -> Optional[str]:
         """임베딩을 위한 텍스트를 준비합니다.
@@ -221,113 +235,4 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             
         except Exception as e:
             logger.error(f"배치 임베딩 중 오류 발생: {str(e)}")
-            return False
-
-    async def search_messages(
-        self,
-        query: str,
-        top_k: int = 5,
-        min_score: float = 0.5,
-        channel_ids: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
-        """쿼리와 관련된 텔레그램 메시지를 검색합니다.
-        
-        Args:
-            query (str): 검색 쿼리
-            top_k (int): 검색할 메시지 수
-            min_score (float): 최소 유사도 점수
-            channel_ids (Optional[List[str]]): 검색할 채널 ID 목록
-            
-        Returns:
-            List[Dict[str, Any]]: 검색된 메시지 목록
-        """
-        try:
-            # 필터 설정
-            filters = {
-                "namespace": self.namespace
-            }
-            if channel_ids:
-                filters["channel_id"] = {"$in": channel_ids}
-
-            # 검색 실행
-            results = await self.vector_store.search_async(
-                query=query,
-                top_k=top_k,
-                filters=filters
-            )
-
-            # 결과 형식화
-            messages = []
-            for doc, score in results:
-                if score < min_score:
-                    continue
-                    
-                message = {
-                    "text": doc.page_content,
-                    "score": score,
-                    "metadata": doc.metadata
-                }
-                messages.append(message)
-
-            return messages
-
-        except Exception as e:
-            logger.error(f"메시지 검색 중 오류 발생: {str(e)}")
-            return []
-
-    async def delete_channel_messages(
-        self, 
-        channel_id: str,
-        before_date: Optional[datetime] = None
-    ) -> bool:
-        """특정 채널의 메시지를 삭제합니다.
-        
-        Args:
-            channel_id (str): 삭제할 채널 ID
-            before_date (Optional[datetime]): 이 날짜 이전의 메시지만 삭제. None이면 모든 메시지 삭제.
-            
-        Returns:
-            bool: 성공 여부
-        """
-        try:
-            # 채널 메시지 검색을 위한 필터 설정
-            filters = {
-                "namespace": self.namespace,
-                "channel_id": channel_id
-            }
-            
-            # 날짜 필터 추가
-            if before_date:
-                filters["created_at"] = {"$lt": before_date.isoformat()}
-            
-            # 검색 실행 (임시 쿼리와 큰 top_k 값 사용)
-            results = await self.vector_store.search_async(
-                query="",  # 임시 쿼리
-                top_k=10000,  # 충분히 큰 값
-                filters=filters
-            )
-            
-            if not results:
-                logger.info(f"삭제할 메시지가 없습니다 (channel_id: {channel_id})")
-                return True
-                
-            # 메시지 ID 추출
-            message_ids = [doc.metadata.get("message_id") for doc, _ in results if doc.metadata.get("message_id")]
-            
-            if not message_ids:
-                logger.warning(f"유효한 메시지 ID가 없습니다 (channel_id: {channel_id})")
-                return True
-                
-            # 벡터 삭제
-            success = await self.vector_store.delete_documents_by_embedding_id_async(message_ids)
-            
-            if success:
-                logger.info(f"채널 메시지 삭제 완료: {len(message_ids)}개 (channel_id: {channel_id})")
-            else:
-                logger.error(f"채널 메시지 삭제 실패 (channel_id: {channel_id})")
-                
-            return success
-            
-        except Exception as e:
-            logger.error(f"채널 메시지 삭제 중 오류 발생: {str(e)}")
             return False
