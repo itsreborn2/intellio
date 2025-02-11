@@ -2,7 +2,10 @@ import React from 'react';
 import {
   Home,
   BarChart,
-  MessageSquare,
+  ChartColumn,
+  FileStack,
+  FileText,
+  User,
   Users,
   Settings,
   LayoutDashboard // 로고 대신 LayoutDashboard 아이콘 사용 (V와 유사)
@@ -16,13 +19,13 @@ const Sidebar: React.FC = () => {
           <Home className="icon" />
         </button>
         <button className="sidebar-button">
-          <BarChart className="icon" />
+          <ChartColumn className="icon" />
         </button>
         <button className="sidebar-button">
-          <MessageSquare className="icon" />
+          <FileStack className="icon" />
         </button>
         <button className="sidebar-button">
-          <Users className="icon" />
+          <User className="icon" />
         </button>
         <button className="sidebar-button">
           <Settings className="icon" />
