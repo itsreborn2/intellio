@@ -19,6 +19,21 @@
   padding: 20px 0;
 }
 
+@media (max-width: 768px) { /* Mobile styles */
+  .sidebar {
+    position: static; /* Change to static for mobile */
+    width: 100%; /* Make sidebar full width on mobile */
+    max-width: 768px; /* Limit max width for mobile sidebar */
+    margin: 0 auto 1rem; /* Center sidebar and add margin below */
+    padding: 1rem 0; /* Adjust padding for mobile */
+    background-color: #f0f0f0; /* Lighter background for mobile sidebar */
+  }
+
+  .main-content {
+    margin-left: 0; /* Remove left margin on mobile */
+  }
+}
+
 .main-content {
   display: flex;
   flex-direction: column;
@@ -35,8 +50,8 @@
 
 .top-section {
   display: flex;
+  flex-direction: row; /* Change back to row layout */
   height: 60vh;
-  gap: 0.5rem;
   width: 100%;
   margin-bottom: 0.5rem;
   padding: 0;
@@ -51,10 +66,29 @@
 }
 
 .telegram-summary-area {
-  width: 48%;
-  padding: 10px; /* Reduced padding */
+  width: 48%; /* Reset width to 48% */
+  padding: 10px;
   background-color: #f2f2f2; /* Very light gray background for Telegram summary area */
   margin-right: 3px;
+  display: flex;
+  flex-direction: column; /* Added to allow vertical stacking */
+  height: auto; /* Changed height to auto */
+  flex: none; /* Remove flex: 1 */
+}
+
+
+.telegram-ticker {
+  background-color: #ffffff; /* White background */
+  border: 1px solid #d4d4d4; /* Even lighter gray border */
+  border-radius: 0.4rem; /* Slightly more rounded corners */
+  padding: 0.54rem 0.9rem; /* Adjusted padding - slightly reduced vertical padding */
+  font-size: 0.9rem;
+  color: #333; /* Darker font color for better readability */
+  width: 40%; /* Reduced width to 40% */
+  height: 2.475rem; /* Slightly taller input box */
+  overflow: hidden; /* Hide text overflow */
+  white-space: nowrap; /* Prevent text from wrapping */
+  margin-bottom: 0.5rem; /* Reduced margin-bottom */
 }
 
 .bottom-section {
@@ -65,8 +99,6 @@
   margin-bottom: 0.3rem;
   gap: 0.5rem;
   margin-right: 5px;
-
-
 }
 
 .bottom-area {

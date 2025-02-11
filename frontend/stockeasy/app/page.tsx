@@ -9,7 +9,7 @@ import BottomRightArea2 from './components/BottomRightArea2';
 
 export default function StockEasyLandingPage() {
   return (
-    <div className="stockeasy-landing-page">
+    <div className="stockeasy-landing-page flex-col">
       <Sidebar />
       <main className="main-content">
         <section className="top-section">

@@ -13,7 +13,7 @@ import {
 
 const Sidebar: React.FC = () => {
   return (
-    <aside className="sidebar">
+    <aside className="sidebar max-w-md mx-auto py-2">
       <div className="sidebar-buttons">
         <button className="sidebar-button">
           <Home className="icon" />
