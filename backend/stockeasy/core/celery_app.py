@@ -3,16 +3,19 @@ from celery.schedules import crontab
 from kombu import Queue, Exchange
 from celery.signals import task_success, task_failure
 import logging
-from common.core.config import settings
+from stockeasy.core.config import stockeasy_settings
 
 logger = logging.getLogger(__name__)
 
 # Celery 앱 초기화
 celery = Celery(
-    "stockeasy",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.workers.telegram.collector_tasks", "app.workers.telegram.embedding_tasks"]
+    "app",
+    broker=stockeasy_settings.REDIS_URL,
+    backend=stockeasy_settings.REDIS_URL,
+    include=[
+        "stockeasy.workers.telegram.collector_tasks",
+        "stockeasy.workers.telegram.embedding_tasks"
+    ]
 )
 
 @task_success.connect
@@ -31,16 +34,25 @@ def handle_task_failure(sender=None, exception=None, **kwargs):
 celery.autodiscover_tasks()
 
 # Exchange 정의
-telegram_exchange = Exchange('telegram', type='direct')
+telegram_exchange = Exchange('telegram-processing', type='direct')
+embedding_exchange = Exchange('embedding-processing', type='direct')
 
 # 큐 정의
 celery.conf.task_queues = [
-    Queue('telegram', telegram_exchange, routing_key='telegram'),
+    Queue('telegram-processing', telegram_exchange, routing_key='telegram-processing'),
+    Queue('embedding-processing', embedding_exchange, routing_key='embedding-processing'),
 ]
 
 # 라우팅 설정
 celery.conf.task_routes = {
-    "app.workers.telegram.*": {"queue": "telegram", "routing_key": "telegram"},
+    "stockeasy.workers.telegram.collector_tasks.*": {
+        "queue": "telegram-processing",
+        "routing_key": "telegram-processing"
+    },
+    "stockeasy.workers.telegram.embedding_tasks.*": {
+        "queue": "embedding-processing",
+        "routing_key": "embedding-processing"
+    }
 }
 
 # Celery 설정
@@ -67,11 +79,12 @@ celery.conf.update(
     enable_utc=True,
     task_track_started=True,
     task_time_limit=300,  # 5분
-    task_soft_time_limit=240,  # 4분
+    task_soft_time_limit=300,  # 5분
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     
     # 결과 설정
+    result_backend='redis://localhost:6379/0',
     result_expires=300,  # 5분
     
     # 로깅 설정
@@ -83,14 +96,14 @@ celery.conf.update(
 celery.conf.beat_schedule = {
     'collect-telegram-messages': {
         'task': 'app.workers.telegram.collector_tasks.collect_messages',
-        'schedule': crontab(minute='*/5', hour='7-19'),  # 07:00~19:00 5분마다
+        'schedule': crontab(minute='*/2'),  # 5분마다 실행
     },
-    'collect-telegram-messages-night': {
-        'task': 'app.workers.telegram.collector_tasks.collect_messages',
-        'schedule': crontab(minute='0', hour='20-23,0-6'),  # 20:00~06:00 1시간마다
+    'process-new-messages': {
+        'task': 'app.workers.telegram.embedding_tasks.process_new_messages',
+        'schedule': crontab(minute='*/2'),  # 10분마다 실행
     },
-    'cleanup-telegram-messages': {
+    'cleanup-daily-messages': {
         'task': 'app.workers.telegram.collector_tasks.cleanup_daily_messages',
-        'schedule': crontab(minute=59, hour=23),  # 매일 23:59
+        'schedule': crontab(hour=23, minute=59),  # 매일 23:59에 실행
     }
 }

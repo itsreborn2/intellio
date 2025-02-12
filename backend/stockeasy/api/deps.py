@@ -9,16 +9,16 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from common.core.database import get_db
-from stockeasy.services.telegram.rag import RAGService  # 지연 임포트
+from stockeasy.services.telegram.rag import TelegramRAGService  # 지연 임포트
 from stockeasy.services.telegram.collector import CollectorService  # 지연 임포트
 
 
-async def get_rag_service() -> Any:
+async def get_telegram_rag_service() -> Any:
     """RAG 서비스 의존성
     
     텔레그램 메시지 검색과 요약을 위한 RAG 서비스를 제공합니다.
     """
-    return RAGService()
+    return TelegramRAGService()
 
 def get_collector_service(
     db: Session = Depends(get_db)

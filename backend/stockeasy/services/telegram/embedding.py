@@ -22,6 +22,7 @@ class TelegramMessageMetadata:
     channel_title: str           # 채널 이름
     message_id: int              # 메시지 ID
     message_type: str            # 메시지 타입 (text, photo, video 등)
+    text: str                    # 메시지 텍스트
     sender_id: Optional[str]     # 발신자 ID (있는 경우)
     sender_name: Optional[str]   # 발신자 이름 (있는 경우)
     created_at: datetime         # 메시지 생성 시간
@@ -39,6 +40,7 @@ class TelegramMessageMetadata:
             channel_id=message.channel_id,
             channel_title=message.channel_title,
             message_type=message.message_type,
+            text=message.message_text,
             sender_id=message.sender_id,
             sender_name=message.sender_name,
             created_at=message.created_at,
@@ -52,16 +54,16 @@ class TelegramMessageMetadata:
 class TelegramEmbeddingService(CommonEmbeddingService):
     """텔레그램 메시지 전용 임베딩 서비스"""
 
-    def __init__(self, namespace: str = "telegram"):
+    def __init__(self):
         """
         Args:
             namespace (str): Pinecone 네임스페이스. 기본값은 "telegram"
         """
         super().__init__()
-        self.namespace = namespace
+        self.namespace = settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM
         self.vector_store = VectorStoreManager(
             EmbeddingModelType.GOOGLE_MULTI_LANG,
-            namespace=namespace
+            namespace=self.namespace
         )
 
     def _create_telegram_metadata(self, message: TelegramMessage) -> dict:
@@ -75,8 +77,18 @@ class TelegramEmbeddingService(CommonEmbeddingService):
         """
         metadata = TelegramMessageMetadata.from_telegram_message(message, self.namespace)
         metadata_dict = asdict(metadata)
-        metadata_dict['message_id'] = str(metadata_dict['message_id'])  # message_id를 문자열로 변환
-        metadata_dict['created_at'] = metadata.created_at.isoformat()  # datetime을 ISO 형식 문자열로 변환
+        
+        # 모든 값을 직렬화 가능한 형식으로 변환
+        for key, value in metadata_dict.items():
+            if value is None:
+                metadata_dict[key] = ""  # None을 빈 문자열로 변환
+            elif isinstance(value, bool):
+                metadata_dict[key] = str(value).lower()  # bool을 문자열로 변환
+            elif isinstance(value, (int, float)):
+                metadata_dict[key] = str(value)  # 숫자를 문자열로 변환
+            elif isinstance(value, datetime):
+                metadata_dict[key] = value.isoformat()  # datetime을 ISO 형식 문자열로 변환
+        
         return metadata_dict
         
     def _prepare_text_for_embedding(self, message: TelegramMessage) -> Optional[str]:
@@ -104,7 +116,66 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             
         return text.strip()
 
-    async def embed_telegram_message(self, message: TelegramMessage) -> bool:
+    def _create_vector_id(self, message: TelegramMessage) -> str:
+        """메시지의 고유 ID를 생성합니다.
+        
+        채널 ID와 메시지 ID를 조합하여 고유한 벡터 ID를 생성합니다.
+        
+        Args:
+            message (TelegramMessage): 텔레그램 메시지
+            
+        Returns:
+            str: 고유한 벡터 ID (format: {channel_id}_{message_id})
+        """
+        return f"{message.channel_id}_{message.message_id}"
+
+    def _validate_vector(self, vector: Dict) -> bool:
+        """벡터 데이터의 유효성을 검사합니다.
+        
+        Args:
+            vector (Dict): 검사할 벡터 데이터
+            
+        Returns:
+            bool: 유효성 검사 통과 여부
+        """
+        try:
+            # 필수 필드 확인
+            if not all(key in vector for key in ["id", "values", "metadata"]):
+                logger.error("벡터 데이터에 필수 필드가 없습니다")
+                return False
+            
+            # id 검사
+            if not isinstance(vector["id"], str):
+                logger.error(f"id가 문자열이 아닙니다: {type(vector['id'])}")
+                return False
+            
+            # values 검사
+            if not isinstance(vector["values"], list):
+                logger.error(f"values가 리스트가 아닙니다: {type(vector['values'])}")
+                return False
+            
+            if not vector["values"] or not all(isinstance(x, (int, float)) for x in vector["values"]):
+                logger.error("values가 비어있거나 숫자가 아닌 값이 포함되어 있습니다")
+                return False
+            
+            # metadata 검사
+            if not isinstance(vector["metadata"], dict):
+                logger.error(f"metadata가 딕셔너리가 아닙니다: {type(vector['metadata'])}")
+                return False
+            
+            # metadata 값 검사
+            for key, value in vector["metadata"].items():
+                if not isinstance(value, str):
+                    logger.error(f"metadata의 값이 문자열이 아닙니다: {key}={type(value)}")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"벡터 데이터 검증 중 오류 발생: {str(e)}")
+            return False
+
+    def embed_telegram_message(self, message: TelegramMessage) -> bool:
         """단일 텔레그램 메시지를 임베딩 처리합니다.
 
         Args:
@@ -123,19 +194,35 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                 return False
             
             # 임베딩 생성
-            embeddings = await self.create_embeddings_batch([text])
+            embeddings = self.create_single_embedding(text)
             if not embeddings:
                 logger.error(f"임베딩 생성 실패: message_id={message.message_id}")
                 return False
                 
+            # numpy 배열로 변환하고 float32로 타입 변환
+            embedding_vector = np.array(embeddings, dtype=np.float32).tolist()
+                
             # 벡터 저장
             vector = {
-                "id": str(message.message_id),
-                "values": embeddings[0],
+                "id": self._create_vector_id(message),
+                "values": embedding_vector,
                 "metadata": metadata
             }
             
-            success = await self.vector_store.store_vectors_async([vector])
+            # 벡터 데이터 유효성 검사
+            if not self._validate_vector(vector):
+                logger.error("벡터 데이터가 유효하지 않습니다")
+                return False
+            
+            # 벡터 데이터 형식 로깅
+            logger.info(f"벡터 데이터 형식 확인:")
+            logger.info(f"- id type: {type(vector['id'])}")
+            logger.info(f"- values type: {type(vector['values'])}")
+            logger.info(f"- values[0] type: {type(vector['values'][0])}")
+            logger.info(f"- metadata type: {type(vector['metadata'])}")
+            logger.info(f"- values length: {len(vector['values'])}")
+            
+            success = self.vector_store.store_vectors([vector])
             
             if success:
                 logger.info(f"메시지 임베딩 완료: message_id={message.message_id}")
@@ -148,7 +235,7 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             logger.error(f"메시지 임베딩 중 오류 발생: {str(e)}")
             return False
 
-    async def embed_telegram_messages_batch(self, messages: List[TelegramMessage]) -> bool:
+    def embed_telegram_messages_batch(self, messages: List[TelegramMessage]) -> bool:
         """텔레그램 메시지 배치를 임베딩 처리합니다.
 
         Args:
@@ -158,6 +245,7 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             bool: 전체 성공 여부
         """
         try:
+            logger.info(f"배치 임베딩 시작: {len(messages)}개 메시지")
             # 메시지 전처리 및 유효성 검사
             valid_messages = []
             for msg in messages:
@@ -168,7 +256,8 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             if not valid_messages:
                 logger.warning("유효한 메시지가 없습니다")
                 return True  # 실패가 아닌 것으로 처리
-                
+            
+            logger.info(f"유효한 메시지 수: {len(valid_messages)}개")
             # 텍스트 길이에 따라 배치 구성
             batches = []
             current_batch = []
@@ -179,7 +268,7 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                 estimated_tokens = len(text.split()) * 1.5
                 
                 # 현재 배치에 추가할 수 있는지 확인
-                if current_batch_tokens + estimated_tokens > 2000 or len(current_batch) >= self.batch_size:
+                if len(current_batch) >= self.batch_size:
                     batches.append(current_batch)
                     current_batch = []
                     current_batch_tokens = 0
@@ -200,7 +289,7 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                     texts = [text for _, text in batch]
                     
                     # 임베딩 생성
-                    embeddings = await self.create_embeddings_batch(texts)
+                    embeddings = self.create_embeddings_batch_sync(texts)
                     
                     if not embeddings:
                         logger.error(f"배치 임베딩 생성 실패 (배치 {batch_idx + 1})")
@@ -210,22 +299,46 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                         logger.error(f"임베딩 결과 수 불일치 - 예상: {len(batch)}, 실제: {len(embeddings)}")
                         continue
                     
+                    # numpy 배열로 변환하고 float32로 타입 변환
+                    embedding_vectors = [np.array(emb, dtype=np.float32).tolist() for emb in embeddings]
+                    
                     # 벡터 저장
                     vectors = [
                         {
-                            "id": str(msg.message_id),
+                            "id": self._create_vector_id(msg),
                             "values": emb,
                             "metadata": meta
                         }
-                        for (msg, _), emb, meta in zip(batch, embeddings, metadatas)
+                        for (msg, _), emb, meta in zip(batch, embedding_vectors, metadatas)
                     ]
                     
-                    success = await self.vector_store.store_vectors_async(vectors)
+                    # 벡터 데이터 유효성 검사
+                    valid_vectors = []
+                    for vector in vectors:
+                        if self._validate_vector(vector):
+                            valid_vectors.append(vector)
+                        else:
+                            logger.error(f"유효하지 않은 벡터 데이터 발견: id={vector['id']}")
+                    
+                    if not valid_vectors:
+                        logger.error("유효한 벡터가 없습니다")
+                        continue
+                    
+                    # 첫 번째 벡터의 데이터 형식 로깅
+                    if valid_vectors:
+                        logger.info(f"배치의 첫 번째 벡터 데이터 형식 확인:")
+                        logger.info(f"- id type: {type(valid_vectors[0]['id'])}")
+                        logger.info(f"- values type: {type(valid_vectors[0]['values'])}")
+                        logger.info(f"- values[0] type: {type(valid_vectors[0]['values'][0])}")
+                        logger.info(f"- metadata type: {type(valid_vectors[0]['metadata'])}")
+                        logger.info(f"- values length: {len(valid_vectors[0]['values'])}")
+                    
+                    success = self.vector_store.store_vectors(valid_vectors)
                     if not success:
                         logger.error(f"배치 벡터 저장 실패 (배치 {batch_idx + 1})")
                         continue
                         
-                    logger.info(f"배치 {batch_idx + 1} 임베딩 완료: {len(batch)}개 메시지")
+                    logger.info(f"배치 {batch_idx + 1} 임베딩 완료: {len(valid_vectors)}개 메시지")
                     
                 except Exception as e:
                     logger.error(f"배치 {batch_idx + 1} 처리 중 오류: {str(e)}")

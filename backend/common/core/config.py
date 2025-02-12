@@ -1,4 +1,5 @@
 import os
+import json
 from typing import Any, Dict, Optional, List
 from pydantic_settings import BaseSettings
 from pydantic import validator
@@ -143,7 +144,8 @@ class CommonSettings(BaseSettings):
     PINECONE_INDEX_NAME: str = "intellio-embeddings"
     PINECONE_NAMESPACE_DOCEASY:str
     PINECONE_NAMESPACE_STOCKEASY:str
-    
+    PINECONE_NAMESPACE_STOCKEASY_TELEGRAM:str
+
     # Admin Test
     ADMIN_TEST_USER_ID: str = "admin_test"
     ADMIN_TEST_API_KEY: str = "test_key_123"
@@ -153,10 +155,12 @@ class CommonSettings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
     # Telegram
-    TELEGRAM_SESSION_NAME:str='telegram_collector'
-    TELEGRAM_API_ID:str
-    TELEGRAM_API_HASH:str
-    
+    TELEGRAM_SESSION_NAME: str = 'telegram_collector'
+    TELEGRAM_API_ID: str
+    TELEGRAM_API_HASH: str
+    #TELEGRAM_CHANNEL_IDS: List[Dict[str, str]] = []
+
+
     # LangSmith
     LANGCHAIN_TRACING_V2:str = os.getenv("LANGCHAIN_TRACING_V2", "true")
     LANGCHAIN_ENDPOINT:str = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")

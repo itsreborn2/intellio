@@ -63,5 +63,14 @@ credentials/*.json
 service-account.json
 common/external/kf-deberta/pytorch_model.bin
 
+#doceasy
+
+# stockeasy
 telegram_files/
-telegram_collector.session
+telegram_collector.session*
+stockeasy/telegram_channels.json
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid

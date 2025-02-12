@@ -1,7 +1,17 @@
 from pydantic import Extra
 from common.core.config import CommonSettings
 import os
+from functools import lru_cache
 
+def detect_file_encoding(file_path):
+    """파일의 인코딩을 자동으로 감지"""
+    import chardet
+    
+    with open(file_path, 'rb') as file:
+        raw = file.read()
+        result = chardet.detect(raw)
+        return result['encoding']
+    
 class StockeasySettings(CommonSettings):
     # 기본 설정
     PROJECT_NAME: str = "StockEasy Telegram Service"
@@ -10,9 +20,9 @@ class StockeasySettings(CommonSettings):
     # Telegram 설정
     TELEGRAM_API_ID: str
     TELEGRAM_API_HASH: str
-    TELEGRAM_PHONE: str
-    TELEGRAM_CHANNEL_IDS: str = "channel1"  # 기본값 설정
-    TELEGRAM_SESSION_NAME: str = "stockeasy_telegram_session"  # 텔레그램 세션 파일 이름
+    #TELEGRAM_PHONE: str
+    #TELEGRAM_CHANNEL_IDS: str = "channel1"  # 기본값 설정
+    TELEGRAM_SESSION_NAME: str
 
     @property
     def telegram_channel_list(self) -> list[str]:
@@ -27,9 +37,29 @@ class StockeasySettings(CommonSettings):
     def CELERY_RESULT_BACKEND(self) -> str:
         return self.REDIS_URL + "/0"
 
-    class Config:
-        env_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.env"))
-        case_sensitive = True
-        extra = Extra.ignore  # 추가 환경변수 무시
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "env_file_encoding": "utf-8"
+    }
 
-stockeasy_settings = StockeasySettings()
+    def __init__(self, **kwargs):
+        env_file = self.model_config.get("env_file", ".env")
+        if os.path.exists(env_file):
+            encoding = detect_file_encoding(env_file)
+            self.model_config["env_file_encoding"] = encoding
+            #logger.info(f"Load Complete env_file : {env_file}, [ProcessID: {os.getpid()}]")
+        else:
+            logger.error(f"환경 변수 파일을 찾을 수 없습니다: {env_file}")
+        super().__init__(**kwargs)
+
+      
+
+# 설정 인스턴스 생성
+
+@lru_cache()
+def get_settings() -> StockeasySettings:
+    """싱글톤 패턴으로 Settings 인스턴스를 반환"""
+    return StockeasySettings()
+
+stockeasy_settings = get_settings()

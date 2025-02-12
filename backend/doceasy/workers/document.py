@@ -111,7 +111,7 @@ def create_chunk_embedding(doc_id: str, chunk_text: str, chunk_index: int):
     try:
         embedding_service = EmbeddingService()
         #embedding = embedding_service.create_embedding(chunk_text)
-        embedding = embedding_service.get_single_embedding(chunk_text)
+        embedding = embedding_service.create_single_embedding(chunk_text)
         
         # 청크 ID 생성
         chunk_id = f"{doc_id}_chunk_{chunk_index}"

@@ -9,7 +9,7 @@
 
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
-from stockeasy.services.telegram.rag import RAGService
+from stockeasy.services.telegram.rag import TelegramRAGService
 from stockeasy.services.telegram.collector import CollectorService
 from stockeasy.api import deps
 from pydantic import BaseModel
@@ -60,7 +60,7 @@ class CollectResponse(BaseModel):
 @telegram_router.post("/summarize", response_model=SummarizeResponse)
 async def summarize_messages(
     request: SummarizeRequest,
-    rag_service: RAGService = Depends(deps.get_rag_service)
+    rag_service: TelegramRAGService = Depends(deps.get_telegram_rag_service)
 ) -> SummarizeResponse:
     """텔레그램 메시지를 검색하고 요약하는 엔드포인트
     
@@ -104,28 +104,3 @@ async def summarize_messages(
         related_messages=messages
     )
 
-@telegram_router.post("/collect", response_model=CollectResponse)
-async def collect_channel_messages(
-    request: CollectRequest,
-    collector: CollectorService = Depends(deps.get_collector_service)
-) -> CollectResponse:
-    """텔레그램 채널에서 메시지를 수집하는 엔드포인트
-    
-    Args:
-        request (CollectRequest): 수집 요청 정보
-        collector (CollectorService): 메시지 수집 서비스
-        
-    Returns:
-        CollectResponse: 수집된 메시지 목록
-    """
-    try:
-        messages = await collector.collect_channel_messages(request.channel_id, request.limit)
-        return CollectResponse(
-            messages=messages,
-            count=len(messages)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"메시지 수집 중 오류 발생: {str(e)}"
-        )

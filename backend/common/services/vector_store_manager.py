@@ -253,7 +253,7 @@ class VectorStoreManager:
             return True
 
         except Exception as e:
-            logger.error(f"벡터 저장 실패: {str(e)}")
+            logger.error(f"[{self.namespace}] 벡터 저장 실패: {str(e)}", exc_info=True)
             return False
 
     async def store_vectors_async(self, _vectors: List[Dict]) -> bool:
@@ -271,7 +271,7 @@ class VectorStoreManager:
             return True
 
         except Exception as e:
-            logger.error(f"벡터 저장 실패: {str(e)}")
+            logger.error(f"[{self.namespace}] 벡터 저장 실패: {str(e)}", exc_info=True)
             return False
 
     async def add_documents(self, documents: List[Dict]) -> bool:
@@ -328,4 +328,48 @@ class VectorStoreManager:
             return True
         except Exception as e:
             logger.error(f"문서 업데이트 중 오류 발생: {str(e)}")
+            return False 
+
+    def delete_namespace(self) -> bool:
+        """현재 네임스페이스의 모든 데이터를 삭제합니다."""
+        try:
+            if not self.namespace:
+                logger.warning("네임스페이스가 지정되지 않았습니다.")
+                return False
+            
+            logger.info(f"[{self.namespace}] 네임스페이스 전체 삭제 시작")
+            result = self.index.delete(delete_all=True, namespace=self.namespace)
+            
+            # 반환값이 빈 딕셔너리인지 확인하여 삭제 성공 여부를 판단
+            if isinstance(result, dict) and result == {}:
+                logger.info(f"[{self.namespace}] 네임스페이스 전체 삭제 완료")
+                return True
+            else:
+                logger.error(f"[{self.namespace}] 삭제 결과 값이 유효하지 않음: {result}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"[{self.namespace}] 네임스페이스 삭제 중 오류 발생: {str(e)}")
+            return False
+            
+    async def delete_namespace_async(self) -> bool:
+        """현재 네임스페이스의 모든 데이터를 비동기적으로 삭제합니다."""
+        try:
+            if not self.namespace:
+                logger.warning("네임스페이스가 지정되지 않았습니다.")
+                return False
+            
+            logger.info(f"[{self.namespace}] 네임스페이스 전체 삭제 시작 (Async)")
+            result = await asyncio.to_thread(self.index.delete, delete_all=True, namespace=self.namespace)
+            
+            # 반환값이 빈 딕셔너리인지 확인하여 삭제 성공 여부를 판단
+            if isinstance(result, dict) and result == {}:
+                logger.info(f"[{self.namespace}] 네임스페이스 전체 삭제 완료 (Async)")
+                return True
+            else:
+                logger.error(f"[{self.namespace}] 삭제 결과 값이 유효하지 않음 (Async): {result}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"[{self.namespace}] 네임스페이스 삭제 중 오류 발생 (Async): {str(e)}")
             return False 

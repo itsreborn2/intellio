@@ -17,14 +17,17 @@ import logging
 import asyncio
 import os
 import io
+import json
+from pathlib import Path
+from loguru import logger
+from sqlalchemy import select
 
 from common.core.config import settings
 from stockeasy.models.telegram_message import TelegramMessage
 from common.services.storage import GoogleCloudStorageService
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
 
 class CollectorService:
     """텔레그램 메시지 수집 서비스
@@ -34,6 +37,34 @@ class CollectorService:
     중복 메시지는 자동으로 처리됩니다.
     """
     
+    # 허용할 문서 파일 MIME 타입 정의
+    ALLOWED_DOCUMENT_MIME_TYPES = {
+        # PDF
+        'application/pdf',
+        
+        # Microsoft Office
+        'application/msword',  # doc
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  # docx
+        'application/vnd.ms-excel',  # xls
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',  # xlsx
+        'application/vnd.ms-powerpoint',  # ppt
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',  # pptx
+        
+        # OpenDocument
+        'application/vnd.oasis.opendocument.text',  # odt
+        'application/vnd.oasis.opendocument.spreadsheet',  # ods
+        'application/vnd.oasis.opendocument.presentation',  # odp
+        
+        # Text
+        'text/plain',
+        'text/csv',
+        'text/markdown',
+        
+        # RTF
+        'application/rtf',
+
+    }
+    
     def __init__(self, db: Session):
         """
         Args:
@@ -41,7 +72,9 @@ class CollectorService:
         """
         self.db = db
         self.client = None
+        
         self.last_collection = {}  # 채널별 마지막 수집 시간 저장
+        self._load_channel_config()
         try:
             self.storage_service = GoogleCloudStorageService(
                 project_id=settings.GOOGLE_CLOUD_PROJECT,
@@ -54,10 +87,42 @@ class CollectorService:
             raise
         logger.info("CollectorService 초기화 완료")
 
+    def _load_channel_config(self):
+        """텔레그램 채널 설정을 JSON 파일에서 로드"""
+        try:
+            json_path = Path(__file__).parent.parent.parent / 'telegram_channels.json'
+            logger.info(f"_load_channel_config: {json_path}")
+            if json_path.exists():
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    # JSON 데이터를 파싱
+                    data = json.loads(content)
+                    channel_data = data.get('channels', [])  # channels 키에서 리스트 가져오기
+                    
+                    # 채널 정보를 리스트로 변환
+                    channels = [
+                        {
+                            "name": channel["name"],
+                            "channel_id": channel["channel_id"],
+                            "user_name": channel["user_name"]  # channel_name 또는 user_name 사용
+                        }
+                        for channel in channel_data
+                        if "channel_id" in channel  # channel_id가 있는 경우만 포함
+                    ]
+                    
+                    # 설정에 저장
+                    settings.TELEGRAM_CHANNEL_IDS = channels
+                    logger.info(f"Loaded {len(channels)} telegram channels from config file")
+            else:
+                logger.warning(f"Channel config file not found: {json_path}")
+        except Exception as e:
+            logger.error(f"Failed to load channel config: {str(e)}")
+            # 기본 설정 유지
+
     async def _init_client(self):
         """텔레그램 클라이언트 초기화"""
         if self.client is None:
-            logger.info("텔레그램 클라이언트 초기화 시작")
+            logger.info(f"텔레그램 클라이언트 초기화 시작 : {settings.TELEGRAM_SESSION_NAME}, {settings.TELEGRAM_API_ID}, {settings.TELEGRAM_API_HASH}")
             try:
                 self.client = TelegramClient(
                     settings.TELEGRAM_SESSION_NAME,
@@ -91,10 +156,17 @@ class CollectorService:
         try:
             # 메시지 디버깅을 위한 상세 로깅
             logger.info(f"메시지 ID {message.id} 처리 시작")
-            logger.info(f"message.text: {message.text!r}")
-            logger.info(f"message.message: {message.message!r}")
-            logger.info(f"message.raw_text: {message.raw_text!r}")
-            logger.info(f"message.media: {message.media!r}")
+            if message.text is not None:
+                if len(message.text) > 50:
+                    tt = message.text[:50]
+                else:
+                    tt = message.text
+                if len(tt) > 0:
+                    logger.info(f"message.text: {tt}")
+            #logger.info(f"message.text: {message.text!r}")
+            #logger.info(f"message.message: {message.message!r}")
+            #logger.info(f"message.raw_text: {message.raw_text!r}")
+            #logger.info(f"message.media: {message.media!r}")
             
             # 메시지 텍스트 추출
             message_text = ""
@@ -106,7 +178,7 @@ class CollectorService:
                 message_text = message.raw_text
             
             if not message_text.strip():
-                logger.warning(f"메시지 ID {message.id}의 텍스트가 비어있습니다")
+                #logger.warning(f"메시지 ID {message.id}의 텍스트가 비어있습니다")
                 if message.media:
                     message_text = f"(미디어 메시지: {type(message.media).__name__})"
                 else:
@@ -139,11 +211,31 @@ class CollectorService:
             document_size = None
             
             if message.document:
+                document = message.document
+                document_mime_type = document.mime_type
+                
+                # MIME 타입이 허용된 문서 타입인지 확인
+                if document_mime_type not in self.ALLOWED_DOCUMENT_MIME_TYPES:
+                    #logger.debug(f"허용되지 않은 문서 타입입니다: {document_mime_type}")
+                    return None
+                
                 try:
                     has_document = True
-                    document = message.document
-                    document_name = document.attributes[-1].file_name
-                    document_mime_type = document.mime_type
+                    
+                    # 문서 속성 안전하게 추출
+                    document_name = None
+                    if document.attributes:
+                        for attr in document.attributes:
+                            if hasattr(attr, 'file_name') and attr.file_name:
+                                document_name = attr.file_name
+                                break
+                    
+                    if not document_name:
+                        # 파일명이 없는 경우 mime_type과 timestamp로 생성
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        ext = document.mime_type.split('/')[-1] if document.mime_type else 'bin'
+                        document_name = f"document_{timestamp}.{ext}"
+                    
                     document_size = document.size
                     
                     logger.info(f"문서 다운로드 시작: {document_name}")
@@ -201,26 +293,49 @@ class CollectorService:
             }
             
         except Exception as e:
-            logger.error(f"메시지 처리 중 오류 발생: {str(e)}")
+            logger.error(f"메시지 처리 중 오류 발생: {str(e)}", exc_info=True)
             return None
             
-    async def collect_channel_messages(self, channel_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    async def collect_channel_messages(self, channel_info: Dict[str, Any], limit: int = 100) -> List[Dict[str, Any]]:
         """특정 채널의 메시지를 수집합니다.
         
         Args:
-            channel_id (str): 수집할 채널 ID
+            channel_info (Dict[str, Any]): 수집할 채널 정보
             limit (int, optional): 수집할 최대 메시지 수. Defaults to 100.
             
         Returns:
             List[Dict[str, Any]]: 수집된 메시지 목록
         """
         try:
-            logger.info(f"채널 {channel_id}에서 메시지 수집 시작")
-            await self._init_client()
+            # 
+            limit = 50
+            channel_name = channel_info['name']
+            channel_id = channel_info['channel_id']
+            channel_user_name = channel_info['user_name']
+
+            logger.info(f"채널 '{channel_name}'({channel_id}) : 메시지 수집 시작")
+
             
-            # 채널 정보 가져오기
-            channel = await self.client.get_entity(channel_id)
-            logger.info(f"채널 정보 가져오기 성공: {channel.title}")
+
+            # username이 있으면 먼저 시도
+            if channel_user_name and '@' not in channel_user_name:
+                channel_user_name = f'@{channel_user_name}'
+                
+            try:
+                logger.info(f"username으로 채널 검색 시도: {channel_user_name}")
+                channel = await self.client.get_entity(channel_user_name)
+            except ValueError:
+                # username으로 실패하면 채널 ID로 시도
+                logger.info(f"채널 ID로 검색 시도: {channel_id}")
+                # 채널 ID 처리 (음수로 변환)
+                numeric_channel_id = int(channel_id)
+                if numeric_channel_id > 0:
+                    numeric_channel_id = -numeric_channel_id
+                
+                from telethon.tl.types import PeerChannel
+                channel = await self.client.get_entity(PeerChannel(numeric_channel_id))
+                
+            #logger.info(f"채널 정보 가져오기 성공: {channel.title} (ID: {channel.id})")
             
             # 현재 시간 (UTC)
             now = datetime.now(timezone.utc)
@@ -230,45 +345,69 @@ class CollectorService:
             
             # 메시지 수집
             messages = []
+            existing_msg_list = []
             async for message in self.client.iter_messages(channel, limit=limit):
                 try:
                     # 메시지 시간이 마지막 수집 시간보다 이전이면 중단
                     if last_collection_time and message.date <= last_collection_time:
+                        logger.info(f"마지막 수집 시간({last_collection_time})보다 이전 메시지입니다. 수집을 중단합니다.")
                         break
                         
+                    # DB에 이미 존재하는 메시지인지 확인 (SQLAlchemy 2.0 스타일)
+                    stmt = select(TelegramMessage).where(
+                        TelegramMessage.message_id == message.id,
+                        TelegramMessage.channel_id == str(channel.id)
+                    )
+                    existing_message = self.db.execute(stmt).scalar_one_or_none()
+                    
+                    if existing_message:
+                        existing_msg_list.append(message.id)
+                        #logger.info(f"메시지 ID {message.id}는 이미 DB에 존재합니다. 건너뜁니다.")
+                        continue
+
                     # 메시지 처리
                     processed_message = await self._process_message(message, channel)
                     if processed_message:
                         messages.append(processed_message)
                 except Exception as e:
-                    logger.error(f"메시지 처리 중 오류 발생: {str(e)}")
+                    logger.error(f"메시지 처리 중 오류 발생: {str(e)}", exc_info=True)
                     continue
-            
+
+            # 수집된 메시지 ID 범위 로깅
+            # if existing_msg_list:
+            #     logger.debug(f"메시지 ID [ {existing_msg_list[-1]} - {existing_msg_list[0]} ]는 이미 DB에 존재합니다.")
+
             # 데이터베이스에 메시지 저장
             try:
+                # 트랜잭션 시작
                 for msg in messages:
                     # 중복 체크를 위한 upsert 수행
                     stmt = insert(TelegramMessage).values(**msg)
                     stmt = stmt.on_conflict_do_nothing(
                         index_elements=['message_id', 'channel_id']
                     )
-                    await self.db.execute(stmt)
+                    self.db.execute(stmt)
+                
                 # 변경사항 커밋
-                await self.db.commit()
+                self.db.commit()
+                
+                # 마지막 수집 시간 업데이트
+                self.last_collection[channel_id] = now
+                
+                logger.info(f"채널 '{channel_name}' : 총 {len(messages)}개의 메시지 저장")
+                return messages
+                
             except Exception as e:
-                logger.error(f"메시지 일괄 저장 중 오류 발생: {str(e)}")
-                await self.db.rollback()
+                logger.error(f"메시지 일괄 저장 중 오류 발생: {str(e)}", exc_info=True)
+                self.db.rollback()  # 오류 발생시 롤백
                 raise
-            
-            # 마지막 수집 시간 업데이트
-            self.last_collection[channel_id] = now
-            
-            logger.info(f"총 {len(messages)}개의 메시지 수집 및 저장 완료")
-            return messages
-            
+                
         except Exception as e:
-            logger.error(f"메시지 수집 중 오류 발생: {str(e)}")
+            logger.exception(f"메시지 수집 중 오류 발생: {str(e)}", exc_info=True)
             raise
+        finally:
+            pass
+
 
     async def collect_all_channels(self) -> List[Dict[str, Any]]:
         """모든 설정된 채널에서 메시지를 수집합니다.
@@ -276,15 +415,26 @@ class CollectorService:
         Returns:
             List[Dict[str, Any]]: 수집된 전체 메시지 목록
         """
-        all_messages = []
-        
-        for channel_id in settings.TELEGRAM_CHANNEL_IDS:
-            messages = await self.collect_channel_messages(channel_id)
-            all_messages.extend(messages)
+        try:
+
+            await self._init_client() # 텔레 클라이언트 여기서 초기화.
+            all_messages = []
             
-        return all_messages
-        
-    async def close(self):
+            for channel_info in settings.TELEGRAM_CHANNEL_IDS:
+                try:
+                    messages = await self.collect_channel_messages(channel_info)
+                    all_messages.extend(messages)
+                except Exception as e:
+                    logger.error(f"채널 메시지 수집 중 오류 발생: {str(e)}", exc_info=True)
+                    continue
+                
+            return all_messages
+        finally:
+            # 클라이언트 연결 종료 보장
+            await self.db_close()
+            
+
+    async def db_close(self):
         """클라이언트 연결을 종료합니다."""
         if self.client.is_connected():
             logger.info("텔레그램 클라이언트 연결 종료")

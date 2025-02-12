@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class EmbeddingService:
     def __init__(self):
-        self.batch_size = 20  # 임베딩 처리의 안정성을 위해 배치 크기 축소 (50 -> 20)
+        self.batch_size = 100  # 임베딩 처리의 안정성을 위해 배치 크기 축소 (50 -> 20)
         self.model_manager = EmbeddingModelManager()
         #self.current_model = self.model_manager.get_default_model() # 기본 모델은 openai
         #self.current_model = self.model_manager.get_model(EmbeddingModelType.OPENAI_ADA_002) # 구글 다국어 모델
@@ -107,7 +107,7 @@ class EmbeddingService:
     
 
     
-    async def get_single_embedding_async(self, query: str) -> List[float]:
+    async def create_single_embedding_async(self, query: str) -> List[float]:
         """단일 텍스트에 대한 임베딩을 생성하고 검증"""
         try:
             if not query or not query.strip():
@@ -132,7 +132,7 @@ class EmbeddingService:
         except Exception as e:
                 logger.error(f"단일 임베딩 생성 실패: {str(e)}")
                 raise
-    def get_single_embedding(self, query: str) -> List[float]:
+    def create_single_embedding(self, query: str) -> List[float]:
         """단일 텍스트에 대한 임베딩을 생성하고 검증 (동기 버전)"""
         try:
             if not query or not query.strip():
@@ -191,7 +191,7 @@ class EmbeddingService:
             logger.info(f"유사 문서 검색 시작 - 쿼리: {query}")
             
             # 쿼리 임베딩 생성. 프롬프트 조절하는 과정은 없네.
-            query_embedding = await self.get_single_embedding_async(query)
+            query_embedding = await self.create_single_embedding_async(query)
             if not query_embedding:
                 logger.error("쿼리 임베딩 생성 실패")
                 return []

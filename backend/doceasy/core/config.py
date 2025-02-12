@@ -67,6 +67,3 @@ def get_settings() -> SettingsDoceasy:
     return SettingsDoceasy()
 
 settings_doceasy = get_settings()
-
-from loguru import logger
-#logger.info(f"TEXT_SPLITTER: {settings_doceasy.TEXT_SPLITTER}, CHUNK_SIZE: {settings_doceasy.CHUNK_SIZE}, CHUNK_OVERLAP: {settings_doceasy.CHUNK_OVERLAP}")

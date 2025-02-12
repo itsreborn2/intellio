@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from uuid import UUID
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 from .document import DocumentResponse  # 문서 응답 스키마 import
 
 class ProjectBase(BaseModel):
@@ -29,34 +29,36 @@ class ProjectInDB(ProjectBase):
     session_id: Optional[str] = Field(None, description="세션 ID")
     user_id: Optional[UUID] = Field(None, description="사용자 ID")
 
-    class Config:
-        from_attributes = True
-        json_encoders = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
             datetime: lambda v: v.isoformat(),
             UUID: lambda v: str(v)
         }
+    )
 
 class ProjectSimpleResponse(ProjectInDB):
     """프로젝트 응답 모델"""
-    class Config:
-        from_attributes = True
-        json_encoders = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
             datetime: lambda v: v.isoformat(),
             UUID: lambda v: str(v)
         }
-
+    )
 
 class ProjectListResponse(BaseModel):
     """프로젝트 목록 응답 모델"""
     total: int = Field(..., description="전체 프로젝트 수")
     items: List[ProjectSimpleResponse] = Field(default_factory=list, description="프로젝트 목록")
 
-    class Config:
-        from_attributes = True
-        json_encoders = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
             datetime: lambda v: v.isoformat(),
             UUID: lambda v: str(v)
         }
+    )
 
 class RecentProjectsResponse(BaseModel):
     """최근 프로젝트 목록 응답 모델"""
@@ -64,9 +66,10 @@ class RecentProjectsResponse(BaseModel):
     last_7_days: List[ProjectSimpleResponse] = Field(default_factory=list, description="7일 이내 생성된 프로젝트 목록")
     last_30_days: List[ProjectSimpleResponse] = Field(default_factory=list, description="30일 이내 생성된 프로젝트 목록")
 
-    class Config:
-        from_attributes = True
-        json_encoders = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
             datetime: lambda v: v.isoformat(),
             UUID: lambda v: str(v)
         }
+    )

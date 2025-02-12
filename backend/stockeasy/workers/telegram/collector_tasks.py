@@ -2,16 +2,16 @@ import asyncio
 from celery import Task
 import logging
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
-from common.core.database import get_db_async
+from common.core.database import get_db, SessionLocal
 
 from stockeasy.core.celery_app import celery
 from stockeasy.services.telegram.collector import CollectorService
 from stockeasy.services.telegram.embedding import TelegramEmbeddingService
 from stockeasy.models.telegram_message import TelegramMessage
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 class CollectorTask(Task):
     """텔레그램 메시지 수집 태스크
@@ -20,11 +20,20 @@ class CollectorTask(Task):
     """
     _db = None
     _embedding_service = None
+    _last_execution_time = datetime.min
 
     @property
     def db(self) -> Session:
+        """데이터베이스 세션을 반환합니다."""
         if self._db is None:
-            self._db = get_db_async()
+            # 세션 생성
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+            from common.core.config import settings
+            
+            #engine = create_engine(settings.DATABASE_URL)
+            #SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            self._db = SessionLocal()
         return self._db
 
     @property
@@ -44,52 +53,23 @@ class CollectorTask(Task):
             self._db.close()
             self._db = None
 
-@celery.task(
-    base=CollectorTask,
-    bind=True,
-    name="app.workers.telegram.collector_tasks.embed_messages",
-    queue="telegram-processing",
-)
-def embed_messages(self, message_ids: list[int]) -> bool:
-    """수집된 텔레그램 메시지를 임베딩하는 태스크
-    
-    Args:
-        message_ids (list[int]): 임베딩할 메시지 ID 리스트
+    def should_execute(self) -> bool:
+        now = datetime.now()
+        current_hour = now.hour
         
-    Returns:
-        bool: 임베딩 성공 여부
-    """
-    try:
-        # DB에서 메시지 조회
-        messages = self.db.query(TelegramMessage).filter(
-            TelegramMessage.message_id.in_(message_ids)
-        ).all()
+        # 현재 시간과 마지막 실행 시간의 차이를 계산
+        time_diff = now - self._last_execution_time
         
-        if not messages:
-            logger.warning(f"임베딩할 메시지가 없습니다: {message_ids}")
-            return False
-            
-        # 비동기 임베딩 처리를 동기적으로 실행
-        loop = asyncio.get_event_loop()
-        success = loop.run_until_complete(
-            self.embedding_service.embed_telegram_messages_batch(messages)
-        )
-        
-        if success:
-            # 임베딩 상태 업데이트
-            for message in messages:
-                message.is_embedded = True
-            
-            # 변경사항 저장
-            self.db.commit()
-            logger.info(f"메시지 {len(messages)}개 임베딩 완료")
+        if current_hour >= 17 or current_hour < 7:
+            # 17시 ~ 7시: 20분마다 실행
+            should_run = time_diff.total_seconds() >= 20 * 60  # 20분
         else:
-            logger.error(f"메시지 임베딩 실패: {message_ids}")
-            
-        return success
+            # 7시 ~ 17시: 5분마다 실행
+            should_run = time_diff.total_seconds() >= 5 * 60  # 5분
         
-    except Exception as e:
-        logger.error(f"임베딩 처리 중 오류 발생: {str(e)}")
+        if should_run:
+            self._last_execution_time = now
+            return True
         return False
 
 @celery.task(
@@ -98,7 +78,7 @@ def embed_messages(self, message_ids: list[int]) -> bool:
     name="app.workers.telegram.collector_tasks.collect_messages",
     queue="telegram-processing",
     rate_limit="60/m",  # 분당 최대 60개 작업
-    max_retries=3,
+    #max_retries=3,
     soft_time_limit=60,  # 1분 제한
 )
 def collect_messages(self):
@@ -108,27 +88,35 @@ def collect_messages(self):
         int: 수집된 총 메시지 수
     """
     try:
+        bStart = False
+        if self.should_execute():
+            bStart = True
+
+        if not bStart:
+            return 0
+
+        logger.warning('='*100)
+        logger.warning(f"[Telegram Collector] collect_messages 실행")
+
         collector = CollectorService(self.db)
         
-        # 비동기 수집 실행
-        loop = asyncio.get_event_loop()
-        messages = loop.run_until_complete(collector.collect_all_channels())
+        # 새로운 이벤트 루프 생성 및 설정
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
-        if messages:
-            # 수집된 메시지 ID 리스트
-            message_ids = [msg['message_id'] for msg in messages]
+        try:
+            messages = loop.run_until_complete(collector.collect_all_channels())
             
-            # 임베딩 태스크 체이닝 (동기적으로 실행)
-            embed_messages.delay(message_ids)
-            
-            logger.info(f"총 {len(messages)}개의 메시지 수집 완료 및 임베딩 태스크 시작")
-            return len(messages)
-        else:
-            logger.info("수집된 새 메시지가 없습니다")
+            if messages:
+                logger.info(f"총 {len(messages)}개의 메시지 수집 완료")
+                return len(messages)
             return 0
             
+        finally:
+            loop.close()
+            
     except Exception as e:
-        logger.error(f"메시지 수집 중 오류 발생: {str(e)}")
+        logger.exception(f"메시지 수집 중 오류 발생: {str(e)}", exc_info=True)
         raise
 
 @celery.task(
@@ -141,11 +129,11 @@ def cleanup_daily_messages(self) -> int:
     """텔레그램 메시지 정리 태스크
     
     1. PostgreSQL DB: 당일 수집된 메시지를 삭제합니다. (매일 23:59 실행)
-    2. 벡터 저장소: 90일이 지난 메시지를 삭제합니다.
+    2. 벡터 저장소: 365일이 지난 메시지를 삭제합니다.
     
     이미 임베딩된 메시지는 벡터 저장소에 저장되어 있으므로, 
     PostgreSQL에서는 더 이상 보관할 필요가 없습니다.
-    벡터 저장소의 메시지는 90일간 보관 후 삭제됩니다.
+    벡터 저장소의 메시지는 365일간 보관 후 삭제됩니다.
     
     Returns:
         int: 삭제된 메시지 수
@@ -156,8 +144,8 @@ def cleanup_daily_messages(self) -> int:
             hour=0, minute=0, second=0, microsecond=0
         )
         
-        # 90일 이전 날짜 계산 (벡터 저장소)
-        ninety_days_ago = today_midnight - timezone.timedelta(days=90)
+        # 365일 이전 날짜 계산 (벡터 저장소)
+        ninety_days_ago = today_midnight - timezone.timedelta(days=365)
         
         # 삭제할 메시지 조회
         messages = self.db.query(TelegramMessage).filter(

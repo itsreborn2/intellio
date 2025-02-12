@@ -74,7 +74,7 @@ def async_retry(
     return decorator
 
 
-class RAGService:
+class TelegramRAGService:
     """텔레그램 메시지 RAG 서비스"""
 
     def __init__(self):

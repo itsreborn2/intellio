@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch, AsyncMock
 
-from stockeasy.services.telegram.rag import RAGService
+from stockeasy.services.telegram.rag import TelegramRAGService
 from common.services.retrievers.models import Document, RetrievalResult
 
 # 테스트 데이터
@@ -29,7 +29,7 @@ TEST_MESSAGES = [
 @pytest.fixture
 def rag_service():
     """RAG 서비스 fixture"""
-    return RAGService()
+    return TelegramRAGService()
 
 @pytest.fixture
 def mock_retrieval_result():

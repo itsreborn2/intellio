@@ -8,6 +8,7 @@ project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
 
+
 from common.services.llm_models import LLMModels
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
@@ -33,6 +34,11 @@ from langchain_core.callbacks import CallbackManager
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.globals import set_debug
+
+from rich import print as rprint
+from rich.panel import Panel
+from rich.console import Console
+from rich.table import Table
 
 # 환경 변수 로드
 load_dotenv()
@@ -275,20 +281,52 @@ def test_get_gemini_models():
     except Exception as e:
         print(f"오류 발생: {e}")
 def test_func():
-    # 프로젝트 이름을 입력합니다.
-    from google.ai import generativelanguage_v1beta
-    import google.generativeai as genai
-    genai.configure(api_key=settings.GEMINI_API_KEY) # YOUR_API_KEY를 실제 API 키로 변경
+    
+    console = Console()
+    
+    # vector_store = VectorStoreManager(
+    #         EmbeddingModelType.GOOGLE_MULTI_LANG,
+    #         namespace=settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM
+    #     )
+    
+    # results = vector_store.search("DeepSeek에 관한 동향은?", 5)
+    
+    # for idx, (doc, score) in enumerate(results, 1):
+    #     # 메타데이터 테이블 생성
+    #     metadata_table = Table(title="메타데이터", show_header=True, header_style="bold magenta")
+    #     metadata_table.add_column("키", style="cyan")
+    #     metadata_table.add_column("값", style="green")
+        
+    #     for key, value in doc.metadata.items():
+    #         metadata_table.add_row(str(key), str(value))
+        
+    #     # 문서 내용과 유사도 점수를 패널로 표시
+    #     content_panel = Panel(
+    #         f"{doc.page_content}\n\n[bold red]유사도 점수:[/bold red] {score:.4f}",
+    #         title=f"검색 결과 #{idx}",
+    #         border_style="blue"
+    #     )
+        
+    #     # 출력
+    #     console.print(metadata_table)
+    #     console.print(content_panel)
+    #     console.print("\n" + "="*100 + "\n")  # 구분선
 
-    # 사용 가능한 모델 목록 조회
-    try:
-        for model in genai.list_models():
-            print(f"모델 이름: {model.name}")
-            print(f"표시 이름: {model.display_name}")
-            print("---")
-    except Exception as e:
-        print(f"오류 발생: {e}")
+    
+    
+    
+    
+    
+async def test_func_aync():
+    from common.services.vector_store_manager import VectorStoreManager
+    from common.services.embedding_models import EmbeddingModelType
+    from stockeasy.services.telegram.rag import TelegramRAGService
 
+    rag_service = TelegramRAGService()
+    messages = await rag_service.search_messages("로봇주들 급락이 심한데, 왜 이래?", 5)
+    summary = await rag_service.summarize(messages)
+    print(summary)
+    
 if __name__ == "__main__":
     #print(os.getcwd())
     #test_vertex_embedding()
@@ -297,7 +335,8 @@ if __name__ == "__main__":
     
     #test_kakao_gen()
     #test_openai()
-    test_func()
+    #test_func()
     #test_langchain_google_embedding()
     #asyncio.run(test_langsmith2())
+    asyncio.run(test_func_aync())
 
