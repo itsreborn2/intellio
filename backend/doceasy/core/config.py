@@ -67,3 +67,13 @@ def get_settings() -> SettingsDoceasy:
     return SettingsDoceasy()
 
 settings_doceasy = get_settings()
+
+logger.info(f"SettingsDoceasy")
+logger.info(f"ENV: {settings_doceasy.ENV}")
+logger.info(f"REDIS_HOST: {settings_doceasy.REDIS_HOST}")
+logger.info(f"REDIS_PORT: {settings_doceasy.REDIS_PORT}")
+logger.info(f"REDIS_URL: {settings_doceasy.REDIS_URL}")
+logger.info(f"CELERY_BROKER_URL: {settings_doceasy.CELERY_BROKER_URL}")
+logger.info(f"CELERY_RESULT_BACKEND: {settings_doceasy.CELERY_RESULT_BACKEND}")
+logger.info(f"TIKA_HOST: {settings_doceasy.TIKA_HOST}")
+logger.info(f"TIKA_SERVER_ENDPOINT: {settings_doceasy.TIKA_SERVER_ENDPOINT}")

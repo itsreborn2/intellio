@@ -1,19 +1,33 @@
+import os
 from celery import Celery
 from celery.schedules import crontab
 from kombu import Queue, Exchange
 from celery.signals import task_success, task_failure
 import logging
-from doceasy.core.config import settings_doceasy
 
 logger = logging.getLogger(__name__)
+
+# Redis 연결 설정
+redis_host = os.getenv("REDIS_HOST", "redis")
+redis_port = os.getenv("REDIS_PORT", "6379")
+redis_url = f"redis://{redis_host}:{redis_port}/0"
+
+# 환경 변수 로깅
+logger.info("=== Celery Environment Variables ===")
+logger.info(f"REDIS_HOST: {redis_host}")
+logger.info(f"REDIS_PORT: {redis_port}")
+logger.info(f"REDIS_URL: {redis_url}")
+logger.info("================================")
 
 # Celery 앱 초기화
 celery = Celery(
     "app",
-    broker=settings_doceasy.REDIS_URL,
-    backend=settings_doceasy.REDIS_URL,
+    broker=redis_url,
+    backend=redis_url,
     include=["doceasy.workers.document", "doceasy.workers.project", "doceasy.workers.rag"]
 )
+
+logger.info(f"Using Redis URL: {redis_url}")
 
 @task_success.connect
 def handle_task_success(sender=None, **kwargs):
@@ -50,7 +64,7 @@ celery.conf.task_routes = {
 }
 
 # Celery 설정
-celery.conf.broker_connection_retry_on_startup = True  # 시작 시 브로커 연결 재시도 활성화
+celery.conf.broker_connection_retry_on_startup = True
 celery.conf.update(
     # 브로커 설정
     broker_transport_options={
@@ -78,7 +92,7 @@ celery.conf.update(
     task_reject_on_worker_lost=True,
     
     # 결과 설정
-    result_backend='redis://localhost:6379/0',
+    result_backend=redis_url,
     result_expires=300,  # 5분
     
     # 로깅 설정

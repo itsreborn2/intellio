@@ -7,13 +7,28 @@ from stockeasy.api.v1 import stockeasy_router         # 스탁이지 서비스 �
 from dotenv import load_dotenv
 import logging
 from loguru import logger
-# 이 파일은 백엔드 API의 진입점입니다.
+from datetime import datetime
+import pytz
 
-# uvicorn을 사용하여 FastAPI 앱을 실행합니다.
-# 환경변수를 가장 먼저 로드
+# 서울 타임존 설정
+seoul_tz = pytz.timezone('Asia/Seoul')
+
+class SeoulFormatter(logging.Formatter):
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, seoul_tz)
+        if datefmt:
+            return dt.strftime(datefmt)
+        else:
+            return dt.isoformat()
+
+# 로깅 설정
+logging.basicConfig(level=logging.DEBUG)
+
+# 핸들러에 포맷터 설정
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(SeoulFormatter())
 
 logger.info(f"시작 : {settings.API_V1_STR}")
-
 
 # API 라우터 등록
 app.include_router(api_router_common, prefix=settings.API_V1_STR) # Common api router 등록

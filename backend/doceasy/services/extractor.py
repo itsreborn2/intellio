@@ -19,8 +19,7 @@ class DocumentExtractor:
         self.vision_client = None
         self.processor_name = f"projects/{settings_doceasy.GOOGLE_CLOUD_PROJECT}/locations/us/processors/{settings_doceasy.GOOGLE_DOCUMENT_AI_PROCESSOR_ID}"
         # Tika 서버 설정
-        os.environ['TIKA_SERVER_ENDPOINT'] = "http://localhost:9998"
-        os.environ['TIKA_CLIENT_ONLY'] = "True"
+        
 
     def _init_document_ai(self):
         """Document AI 클라이언트 초기화 (필요할 때만)"""

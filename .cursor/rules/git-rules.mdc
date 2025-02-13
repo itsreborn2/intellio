@@ -1,0 +1,12 @@
+---
+description: git
+globs: 
+---
+
+## Version Control and Workflow
+- 한글로 작성한다.
+- **Branch Naming**: `feature/`, `bugfix/`, `hotfix/`, `refactor/`, `docs/`.
+- **Commit Messages**: Use `type(scope): description` format. Common types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
+
+
+

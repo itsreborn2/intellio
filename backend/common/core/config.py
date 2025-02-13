@@ -58,10 +58,18 @@ class CommonSettings(BaseSettings):
     GEMINI_LOCATION: str = os.getenv("GEMINI_LOCATION", "us-central1")  # Gemini API 기본 리전
     
     # Redis 설정
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_URL: str = "redis://localhost:6379"
-    REDIS_CACHE_EXPIRE: int = 3600  # 1시간
+    # REDIS_HOST: str = "localhost" if ENV == "development" else "redis"
+    # REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    # REDIS_URL: str = os.getenv("REDIS_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
+    # REDIS_CACHE_EXPIRE: int = int(os.getenv("REDIS_CACHE_EXPIRE", "3600"))  # 1시간
+    # CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
+    # CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
+    REDIS_HOST: str 
+    REDIS_PORT: int 
+    REDIS_URL: str
+    REDIS_CACHE_EXPIRE: int = int(os.getenv("REDIS_CACHE_EXPIRE", "3600"))  # 1시간
+    CELERY_BROKER_URL: str 
+    CELERY_RESULT_BACKEND: str 
     
     # PGAdmin - from .env
     PGADMIN_EMAIL: str
@@ -82,6 +90,11 @@ class CommonSettings(BaseSettings):
     # GCP Vertex AI 설정
     GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "")
     GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-central1")
+
+    # Tika 설정
+    TIKA_HOST: str
+    TIKA_SERVER_ENDPOINT: str
+    TIKA_CLIENT_ONLY: bool
 
     def get_google_cloud_credentials(self) -> str:
         """Google Cloud 인증 정보를 파일에서 읽어옴"""
@@ -206,3 +219,12 @@ def get_settings() -> CommonSettings:
     return CommonSettings()
 
 settings = get_settings()
+logger.info(f"commonsetting")
+logger.info(f"ENV: {settings.ENV}")
+logger.info(f"REDIS_HOST: {settings.REDIS_HOST}")
+logger.info(f"REDIS_PORT: {settings.REDIS_PORT}")
+logger.info(f"REDIS_URL: {settings.REDIS_URL}")
+logger.info(f"CELERY_BROKER_URL: {settings.CELERY_BROKER_URL}")
+logger.info(f"CELERY_RESULT_BACKEND: {settings.CELERY_RESULT_BACKEND}")
+logger.info(f"TIKA_HOST: {settings.TIKA_HOST}")
+logger.info(f"TIKA_SERVER_ENDPOINT: {settings.TIKA_SERVER_ENDPOINT}")

@@ -77,7 +77,7 @@ class EmbeddingTask(Task):
 @celery.task(
     bind=True,
     base=EmbeddingTask,
-    name="app.workers.telegram.embedding_tasks.process_new_messages",
+    name="stockeasy.workers.telegram.embedding_tasks.process_new_messages",
     queue="embedding-processing",
     max_retries=3,
     soft_time_limit=60,  # 1분 제한

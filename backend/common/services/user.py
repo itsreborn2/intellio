@@ -175,7 +175,7 @@ class UserService:
             await self.db.commit()
             await self.db.refresh(session)
             
-            logger.info(f'[get_active_session] 유효한 세션 반환: {session}')
+            #logger.info(f'[get_active_session] 유효한 세션 반환: {session}')
             return session
             
         except Exception as e:

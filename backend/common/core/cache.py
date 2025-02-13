@@ -8,7 +8,7 @@ from common.core.config import settings
 
 class RedisCache:
     """동기 Redis 캐시 매니저"""
-    def __init__(self, redis_url: str = "redis://localhost:6379", expire_time: int = 3600):
+    def __init__(self, redis_url: str, expire_time: int = 3600):
         """Redis 캐시 매니저 초기화
         
         Args:
@@ -71,7 +71,7 @@ class RedisCache:
 
 class AsyncRedisCache:
     """비동기 Redis 캐시 매니저"""
-    def __init__(self, redis_url: str = "redis://localhost:6379", expire_time: int = 3600):
+    def __init__(self, redis_url: str , expire_time: int = 3600):
         """Redis 캐시 매니저 초기화
         
         Args:

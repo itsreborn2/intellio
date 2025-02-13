@@ -32,6 +32,7 @@ class RedisClient:
     DOCUMENT_PROGRESS_PREFIX = "doc_progress:"
     
     def __init__(self):
+        logger.info(f"[RedisClient] Redis URL: {settings.REDIS_URL}")
         self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
         
     def _make_key(self, prefix: str, key: str) -> str:

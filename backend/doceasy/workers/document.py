@@ -10,7 +10,7 @@ from uuid import UUID
 from typing import List, Optional
 
 from common.core.database import SessionLocal, get_db_async, AsyncSessionLocal
-from common.core.redis import redis_client
+from common.core.redis import RedisClient
 from common.services.embedding import EmbeddingService
 from common.services.textsplitter import TextSplitter
 from common.services.vector_store_manager import VectorStoreManager
@@ -40,6 +40,9 @@ def init_worker(sender=None, **kwargs):
     try:
         load_dotenv(override=True)
         logger.info(f"Document Worker 초기화 [ProcessID: {os.getpid()}]")
+        global redis_client_for_document
+        redis_client_for_document = RedisClient()
+
     except Exception as e:
         logger.error(f"Worker 초기화 중 오류 발생: {str(e)}")
         raise
@@ -68,7 +71,7 @@ async def update_document_status_async(session, document_id: str, doc_status: st
             status_data['error_message'] = error
             
         key = f"doc_status:{document_id}"
-        redis_client.set_key(key, status_data)
+        redis_client_for_document.set_key(key, status_data)
             
     except Exception as e:
         logger.error(f"Error updating document status: {str(e)}")
@@ -98,7 +101,7 @@ def update_document_status(document_id: str, doc_status: str, metadata: dict = N
             status_data['error_message'] = error
             
         key = f"doc_status:{document_id}"
-        redis_client.set_key(key, status_data)
+        redis_client_for_document.set_key(key, status_data)
             
     except Exception as e:
         logger.error(f"상태 업데이트 실패: {str(e)}")
@@ -250,12 +253,12 @@ def process_document_task(self, document_id: str):
             
             # Redis에서 처리 상태 확인
             key = f"doc_processing:{document_id}"
-            if redis_client.get_key(key):
+            if redis_client_for_document.get_key(key):
                 logger.info(f"문서 {document_id}는 이미 처리 중입니다.")
                 return {"status": "ALREADY_PROCESSING"}
                 
             # 처리 시작 표시
-            redis_client.set_key(key, "1", ex=3600)  # 1시간 후 만료
+            redis_client_for_document.set_key(key, "1", ex=3600)  # 1시간 후 만료
             
             # 문서 상태를 PROCESSING으로 업데이트
             await update_document_status_async(None, document_id, DOCUMENT_STATUS_PROCESSING)
@@ -369,7 +372,7 @@ def process_document_task(self, document_id: str):
             raise
         finally:
             # 처리 완료 표시 제거
-            redis_client.delete_key(key)
+            redis_client_for_document.delete_key(key)
 
     # 비동기 함수 실행
     loop = asyncio.get_event_loop()
@@ -387,12 +390,12 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
     try:
         # Redis에서 배치 처리 상태 확인
         key = f"chunk_batch:{document_id}:{batch_start_idx}"
-        if redis_client.get_key(key):
+        if redis_client_for_document.get_key(key):
             logger.info(f"배치 {batch_start_idx}는 이미 처리 중입니다.")
             return {"status": "ALREADY_PROCESSING"}
             
         # 처리 시작 표시
-        redis_client.set_key(key, "1", expire=1800)  # 30분 후 만료
+        redis_client_for_document.set_key(key, "1", expire=1800)  # 30분 후 만료
         embedding_service = EmbeddingService()
         
         bApplyAsync = True
@@ -430,18 +433,18 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
             if doc:
                 # 문서의 총 청크 수 먼저 확인 및 설정
                 total_key = f"total_chunks:{document_id}"
-                total_chunks = redis_client.get_key(total_key)
+                total_chunks = redis_client_for_document.get_key(total_key)
                 if not total_chunks:
                     if doc.extracted_text:
                         all_chunks = split_text(doc.extracted_text)
                         total_chunks = len(all_chunks)
-                        redis_client.set_key(total_key, str(total_chunks))
+                        redis_client_for_document.set_key(total_key, str(total_chunks))
                 else:
                     total_chunks = int(total_chunks)
 
                 # Redis에서 현재까지 처리된 총 청크 수 확인 및 업데이트
                 processed_key = f"processed_chunks:{document_id}"
-                current_processed = redis_client.incr(processed_key, len(chunks))  # 원자적 증가
+                current_processed = redis_client_for_document.incr(processed_key, len(chunks))  # 원자적 증가
 
                 # 생성된 청크 ID 저장
                 chunk_ids = [v["id"] for v in vectors]
@@ -505,7 +508,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
         raise
     finally:
         # 처리 완료 표시 제거
-        redis_client.delete_key(key)
+        redis_client_for_document.delete_key(key)
         # if bApplyAsync:
             #     loop.close()
 

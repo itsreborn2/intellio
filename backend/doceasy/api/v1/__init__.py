@@ -18,17 +18,8 @@ logger.info("프로젝트 라우터 등록 완료")
 api_router_doceasy.include_router(rag.router)
 logger.info("RAG 라우터 등록 완료")
 
-# api_router.include_router(session.router, tags=["sessions"]) #prefix가 없다. 나중에 추가하는게 유지보수에 좋다.
-# logger.info("세션 라우터 등록 완료")
-
-# api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
-# logger.info("인증 라우터 등록 완료")
-
 api_router_doceasy.include_router(category.router, prefix="/categories", tags=["categories"])
 logger.info("카테고리 라우터 등록 완료")
-
-# api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
-# logger.info("관리자 라우터 등록 완료")
 
 api_router_doceasy.include_router(table_history.router)
 logger.info("테이블 히스토리 라우터 등록 완료")

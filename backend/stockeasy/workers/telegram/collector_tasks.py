@@ -75,7 +75,7 @@ class CollectorTask(Task):
 @celery.task(
     base=CollectorTask,
     bind=True,
-    name="app.workers.telegram.collector_tasks.collect_messages",
+    name="stockeasy.workers.telegram.collector_tasks.collect_messages",
     queue="telegram-processing",
     rate_limit="60/m",  # 분당 최대 60개 작업
     #max_retries=3,
@@ -122,7 +122,7 @@ def collect_messages(self):
 @celery.task(
     base=CollectorTask,
     bind=True,
-    name="app.workers.telegram.collector_tasks.cleanup_daily_messages",
+    name="stockeasy.workers.telegram.collector_tasks.cleanup_daily_messages",
     queue="telegram-processing"
 )
 def cleanup_daily_messages(self) -> int:

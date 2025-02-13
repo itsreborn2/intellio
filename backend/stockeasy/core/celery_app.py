@@ -95,15 +95,15 @@ celery.conf.update(
 # 스케줄러 설정
 celery.conf.beat_schedule = {
     'collect-telegram-messages': {
-        'task': 'app.workers.telegram.collector_tasks.collect_messages',
-        'schedule': crontab(minute='*/2'),  # 5분마다 실행
+        'task': 'stockeasy.workers.telegram.collector_tasks.collect_messages',
+        'schedule': crontab(minute='*/2'),  # 2분마다 실행
     },
     'process-new-messages': {
-        'task': 'app.workers.telegram.embedding_tasks.process_new_messages',
-        'schedule': crontab(minute='*/2'),  # 10분마다 실행
+        'task': 'stockeasy.workers.telegram.embedding_tasks.process_new_messages',
+        'schedule': crontab(minute='*/2'),  # 2분마다 실행
     },
     'cleanup-daily-messages': {
-        'task': 'app.workers.telegram.collector_tasks.cleanup_daily_messages',
+        'task': 'stockeasy.workers.telegram.collector_tasks.cleanup_daily_messages',
         'schedule': crontab(hour=23, minute=59),  # 매일 23:59에 실행
     }
 }

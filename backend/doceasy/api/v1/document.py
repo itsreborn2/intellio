@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, B
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 from common.models.user import Session
-from sse_starlette.sse import EventSourceResponse
+from sse_starlette import EventSourceResponse
 import json
 
 from common.core.database import get_db_async

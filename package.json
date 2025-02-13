@@ -84,5 +84,25 @@
     "ts-node": "^10.9.2",
     "turbo": "^2.4.0",
     "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.6.7"
+  },
+  "turbo": {
+    "pipeline": {
+      "build": {
+        "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+        "dependsOn": ["^build"]
+      },
+      "dev": {
+        "cache": false,
+        "persistent": true
+      },
+      "lint": {},
+      "test": {
+        "dependsOn": ["build"]
+      }
+    }
   }
 }
