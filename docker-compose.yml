@@ -39,15 +39,21 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    profiles:
+      - prod
+      - dev
+
   pgadmin:
     image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    env_file:
+      - .env
     ports:
       - "5055:80"
     networks:
       - app-network
+    profiles:
+      - prod
+      - dev
 
   redis:
     image: redis:latest
@@ -56,14 +62,22 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    env_file:
+      - .env
     networks:
       - app-network
+    profiles:
+      - prod
+      - dev
+
 
   tika:
     image: apache/tika:latest
     ports:
       - "9998:9998"
     restart: unless-stopped
+    env_file:
+      - .env
     networks:
       - app-network
     healthcheck:
@@ -71,6 +85,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    profiles:
+      - prod
+      - dev
 
 
   fastapi:
@@ -80,23 +97,25 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/backend  # 개발 환경에서만 사용
-    environment:
-      - ENV=${ENV:-development}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}      
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - POSTGRES_PORT=${POSTGRES_PORT}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - TIKA_HOST=${TIKA_HOST:-tika}
-      - TIKA_SERVER_ENDPOINT=${TIKA_SERVER_ENDPOINT:-http://${TIKA_HOST}:9998}
-      - PYTHONDONTWRITEBYTECODE=1
-      - PYTHONUNBUFFERED=1
+      - ./backend:/backend  # 개발 환경에서만 사용\
+    env_file:
+      - .env
+    # environment:
+    #   - ENV=${ENV:-development}
+    #   - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    #   - REDIS_HOST=${REDIS_HOST:-redis}
+    #   - REDIS_PORT=${REDIS_PORT:-6379}
+    #   - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+    #   - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}      
+    #   - POSTGRES_HOST=${POSTGRES_HOST}
+    #   - POSTGRES_PORT=${POSTGRES_PORT}
+    #   - POSTGRES_DB=${POSTGRES_DB}
+    #   - POSTGRES_USER=${POSTGRES_USER}
+    #   - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    #   - TIKA_HOST=${TIKA_HOST:-tika}
+    #   - TIKA_SERVER_ENDPOINT=${TIKA_SERVER_ENDPOINT:-http://${TIKA_HOST}:9998}
+    #   - PYTHONDONTWRITEBYTECODE=1
+    #   - PYTHONUNBUFFERED=1
     depends_on:
       - redis
       - postgres
@@ -122,20 +141,8 @@ services:
       dockerfile: Dockerfile.doceasy.celery
     volumes:
       - ./backend:/backend
-    environment:
-      - ENV=${ENV:-development}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}      
-      # - POSTGRES_HOST=${POSTGRES_HOST}
-      # - POSTGRES_PORT=${POSTGRES_PORT}
-      # - POSTGRES_DB=${POSTGRES_DB}
-      # - POSTGRES_USER=${POSTGRES_USER}
-      # - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      # - TIKA_HOST=${TIKA_HOST:-tika}
-      # - TIKA_SERVER_ENDPOINT=${TIKA_SERVER_ENDPOINT:-http://${TIKA_HOST}:9998}
+    env_file:
+      - .env
     depends_on:
       - redis
       - postgres
@@ -156,9 +163,8 @@ services:
 
   flower:
     image: mher/flower
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - FLOWER_BASIC_AUTH=${FLOWER_USER}:${FLOWER_PASSWORD}
+    env_file:
+      - .env
     ports:
       - "5555:5555"
     depends_on:
@@ -177,19 +183,8 @@ services:
       dockerfile: Dockerfile.stockeasy.celery
     volumes:
       - ./backend:/backend
-    environment:
-      - ENV=${ENV:-development}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}      
-      # - POSTGRES_HOST=${POSTGRES_HOST}
-      # - POSTGRES_PORT=${POSTGRES_PORT}
-      # - POSTGRES_DB=${POSTGRES_DB}
-      # - POSTGRES_USER=${POSTGRES_USER}
-      # - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      #- TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    env_file:
+      - .env
     depends_on:
       - redis
       - postgres

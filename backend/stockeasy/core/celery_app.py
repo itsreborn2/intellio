@@ -32,6 +32,8 @@ def handle_task_failure(sender=None, exception=None, **kwargs):
 
 # 태스크 자동 발견
 celery.autodiscover_tasks()
+celery.conf.enable_utc = False  # UTC 비활성화
+celery.conf.timezone = "Asia/Seoul"  # 서울 시간으로 설정
 
 # Exchange 정의
 telegram_exchange = Exchange('telegram-processing', type='direct')

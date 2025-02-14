@@ -9,6 +9,10 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# 타임존 설정
+# TZ 환경변수가 자동 반영되지 않으면, 아래 코드 다시 활성화
+#RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 # Python 패키지 설치
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -19,4 +23,8 @@ COPY backend/ .
 # 환경변수 설정
 ENV PYTHONPATH=/backend
 
-CMD ["celery", "-A", "stockeasy.core.celery_app", "worker", "-n", "stockeasy@%h", "--loglevel=INFO", "-Q", "telegram-processing,embedding-processing", "--pool=threads", "--concurrency=2", "--events", "--beat"] 
+# 시작 스크립트 복사 및 권한 설정
+COPY backend/scripts/start-celery-stockeasy.sh /start-celery-stockeasy.sh
+RUN chmod +x /start-celery-stockeasy.sh
+
+CMD ["/start-celery-stockeasy.sh"] 
