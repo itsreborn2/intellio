@@ -24,7 +24,6 @@ COPY backend/ .
 ENV PYTHONPATH=/backend
 
 # 시작 스크립트 복사 및 권한 설정
-COPY backend/scripts/start-celery-stockeasy.sh /start-celery-stockeasy.sh
-RUN chmod +x /start-celery-stockeasy.sh
+RUN chmod +x ./start-celery-stockeasy.sh
 
-CMD ["/start-celery-stockeasy.sh"] 
+CMD ["./start-celery-stockeasy.sh"] 

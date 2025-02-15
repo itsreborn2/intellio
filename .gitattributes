@@ -1,0 +1,9 @@
+# 쉘 스크립트 파일은 항상 LF로 처리
+*.sh text eol=lf
+*.bash text eol=lf
+*.mdc text eol=lf
+
+# 도커 관련 파일도 LF로 처리
+Dockerfile* text eol=lf
+*.dockerfile text eol=lf
+

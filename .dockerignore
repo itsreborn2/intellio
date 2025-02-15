@@ -32,5 +32,3 @@ venv/
 
 # telegram
 telegram_files/
-telegram_collector.session
-

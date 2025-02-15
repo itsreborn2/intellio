@@ -119,7 +119,7 @@ class CollectorService:
             logger.error(f"Failed to load channel config: {str(e)}")
             # 기본 설정 유지
 
-    async def _init_client(self):
+    async def _init_client(self) -> bool:
         """텔레그램 클라이언트 초기화"""
         if self.client is None:
             logger.info(f"텔레그램 클라이언트 초기화 시작 : {settings.TELEGRAM_SESSION_NAME}, {settings.TELEGRAM_API_ID}, {settings.TELEGRAM_API_HASH}")
@@ -131,10 +131,17 @@ class CollectorService:
                     #system_version="4.16.30-vxCUSTOM"
                 )
                 await self.client.start()
+
+                if not await self.client.is_user_authorized():
+                    logger.warning(f"[Telegram Collector] 인증되지 않았습니다. 로컬에서 인증 후 telegram_collector.session 파일 생성 후 빌드가 필요합니다.")
+                    return False
                 logger.info("텔레그램 클라이언트 초기화 성공")
+                return True
             except Exception as e:
                 logger.error(f"텔레그램 클라이언트 초기화 실패: {str(e)}")
                 raise
+        
+        return True
 
     async def _ensure_client_started(self):
         """클라이언트가 시작되지 않았다면 시작합니다."""
@@ -142,6 +149,8 @@ class CollectorService:
             logger.info("텔레그램 클라이언트 시작")
             await self.client.start()
             logger.info("텔레그램 클라이언트 시작 성공")
+    def user_authorized(self):
+        return self.client.is_user_authorized()
 
     async def _process_message(self, message: Message, channel: Channel) -> Optional[Dict[str, Any]]:
         """단일 메시지를 처리하여 Dict 객체로 변환합니다.
@@ -417,7 +426,10 @@ class CollectorService:
         """
         try:
 
-            await self._init_client() # 텔레 클라이언트 여기서 초기화.
+            b = await self._init_client() # 텔레 클라이언트 여기서 초기화.
+            if not b:
+                return []
+
             all_messages = []
             
             for channel_info in settings.TELEGRAM_CHANNEL_IDS:

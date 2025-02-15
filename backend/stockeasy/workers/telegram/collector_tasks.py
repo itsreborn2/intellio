@@ -99,6 +99,7 @@ def collect_messages(self):
         logger.warning(f"[Telegram Collector] collect_messages 실행")
 
         collector = CollectorService(self.db)
+                 
         
         # 새로운 이벤트 루프 생성 및 설정
         loop = asyncio.new_event_loop()

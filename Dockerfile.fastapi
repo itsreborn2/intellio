@@ -33,9 +33,7 @@ ENV PYTHONPATH=/backend
 # Expose port
 EXPOSE 8000
 
-# Create a shell script to run migrations and start the application
-COPY backend/scripts/start.sh /start.sh
-RUN chmod +x /start.sh
+RUN chmod +x ./start-fastapi.sh
 
 # Command to run the application
-CMD ["/start.sh"] 
+CMD ["./start-fastapi.sh"] 
