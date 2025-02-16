@@ -2,7 +2,7 @@
 chcp 949
 setlocal enabledelayedexpansion
 
-echo 포트 3000, 3010, 3020을 검사하고 있습니다...
+echo 포트 3000, 3010, 3020을 검사하고 있습니다....
 
 :: 검사할 포트 목록
 set "ports=3000 3010 3020"
