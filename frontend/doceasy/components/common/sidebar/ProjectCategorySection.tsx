@@ -22,7 +22,7 @@ import * as api from '@/services/api'  // 최상단에 추가
 import { IRecentProjectsResponse, IProject, Category, ProjectDetail, TableResponse,  } from '@/types/index'
 import { getRecentProjects, } from '@/services/api'
 import { useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 
 import { useApp } from '@/contexts/AppContext'
 import { cn } from '@/lib/utils'
@@ -40,7 +40,8 @@ interface ProjectCategorySectionProps {
   setCategoryProjects: React.Dispatch<React.SetStateAction<{ [key: string]: IProject[] }>>
 }
 
-export function ProjectCategorySection({
+// 프로젝트 카테고리 섹션 컨텐츠 컴포넌트
+function ProjectCategorySectionContent({
   expandedSections,
   toggleSection,
   categories,
@@ -835,5 +836,18 @@ export function ProjectCategorySection({
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// 프로젝트 카테고리 섹션 컴포넌트
+export function ProjectCategorySection(props: ProjectCategorySectionProps) {
+  return (
+    <Suspense fallback={<div className="space-y-2 animate-pulse">
+      <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+    </div>}>
+      <ProjectCategorySectionContent {...props} />
+    </Suspense>
   )
 }

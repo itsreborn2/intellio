@@ -38,6 +38,8 @@ globs:
 - Implement a responsive design that takes into account a PC or mobile first approach.
 
 # 요구사항
- - npm install을 수행한 폴더는 루트 디렉토리
- - 패키지 설치는 프로젝트 루트에서 수행한다.
+- 기존 변수의 이름을 바꾸지 않는다.
+- 자동 코드 최적화는 수행하지 않는다.
+- npm install을 수행한 폴더는 루트 디렉토리
+- 패키지 설치는 프로젝트 루트에서 수행한다.
 - 공용 컴포넌트 적극 사용 : frontend\common\components\ui -> alias 적용 intellio-common

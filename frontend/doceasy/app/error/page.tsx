@@ -1,9 +1,11 @@
 'use client'
 
+import { Suspense } from 'react'
 import { Button } from "intellio-common/components/ui/button"
 import { useRouter } from "next/navigation"
 
-export default function ErrorPage() {
+// 에러 컨텐츠 컴포넌트
+function ErrorContent() {
   const router = useRouter()
 
   return (
@@ -29,5 +31,14 @@ export default function ErrorPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Page 컴포넌트
+export default function ErrorPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ErrorContent />
+    </Suspense>
   )
 } 

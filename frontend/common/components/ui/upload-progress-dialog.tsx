@@ -1,7 +1,14 @@
 "use client"
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./dialog"
-import { Progress } from "intellio-common/components/ui/progress"
+import { Suspense } from 'react'
+import { Progress } from './progress'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from './dialog'
 
 export interface IUploadProgressDialog {
   isOpen: boolean
@@ -11,7 +18,8 @@ export interface IUploadProgressDialog {
   totalFiles: number
 }
 
-export function UploadProgressDialog({
+// 컨텐츠 컴포넌트
+function UploadProgressDialogContent({
   isOpen,
   progress,
   currentFile,
@@ -35,5 +43,19 @@ export function UploadProgressDialog({
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// 메인 컴포넌트
+export function UploadProgressDialog(props: IUploadProgressDialog) {
+  return (
+    <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="animate-pulse bg-background p-6 rounded-lg shadow-lg">
+        <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
+        <div className="h-4 bg-gray-200 rounded w-full"></div>
+      </div>
+    </div>}>
+      <UploadProgressDialogContent {...props} />
+    </Suspense>
   )
 } 

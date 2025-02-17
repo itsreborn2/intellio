@@ -140,6 +140,8 @@ class VectorStoreManager:
         if filters and 'document_ids' in filters:
             filters = {"document_id": {"$in": filters['document_ids']}}
 
+        logger.info(f"[{self.namespace}] {filters}")
+
         # k: Number of Documents to return. Defaults to 4.
         # filter: Dictionary of argument(s) to filter on metadata
         results = self.vector_store.similarity_search_by_vector_with_score(
