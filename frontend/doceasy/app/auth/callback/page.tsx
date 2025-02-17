@@ -1,12 +1,13 @@
 // OAuth 콜백 처리 페이지
 'use client';
 
+import { Suspense } from 'react';
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { IOAuthResponse } from '@/types/auth';
 
-export default function OAuthCallbackPage() {
+// 콜백 처리 컴포넌트
+function CallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { login } = useAuth();
@@ -58,5 +59,14 @@ export default function OAuthCallbackPage() {
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
             </div>
         </div>
+    );
+}
+
+// Page 컴포넌트
+export default function OAuthCallbackPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <CallbackContent />
+        </Suspense>
     );
 }

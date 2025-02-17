@@ -3,7 +3,7 @@ import type { Config } from "tailwindcss";
 import commonConfig from '../common/tailwind.config';
 
 const config: Config = {
-  darkMode: ["class"],
+  darkMode: "class",
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -12,7 +12,7 @@ const config: Config = {
     "../common/components/**/*.{js,ts,jsx,tsx,mdx}",  // common 컴포넌트 포함
   ],
   // common의 설정을 presets로 사용
-  presets: [commonConfig],
+  presets: [commonConfig as Partial<Config>],
   theme: {
     extend: {
       // 프로젝트 특정 추가 설정이 필요한 경우 여기에 작성

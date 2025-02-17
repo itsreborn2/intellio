@@ -203,6 +203,34 @@ services:
       - prod
       - dev
 
+  # AI 삭제금지
+  # 개발 버전에서는 Docker에 탑재 보류
+  # frontend-doceasy:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.frontend.doceasy
+  #   ports:
+  #     - "3010:3010"
+  #   env_file:
+  #     - frontend/.env
+  #   depends_on:
+  #     - fastapi
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '1'
+  #         memory: 2G
+  #       reservations:
+  #         cpus: '0.5'
+  #         memory: 512M
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+  #   profiles: ["donotstart"] 
+  #  # profiles:
+  #  #   - prod
+  #  #   - dev
+
 networks:
   app-network:
     driver: bridge

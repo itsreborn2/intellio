@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, Suspense } from "react"
 import { Settings, User, X } from "lucide-react"
 import { Button } from "intellio-common/components/ui/button"
 import { Input } from "intellio-common/components/ui/input"
@@ -24,7 +24,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Popover, PopoverContent, PopoverTrigger } from "intellio-common/components/ui/popover"
 import { useRouter } from "next/navigation"
 
-export const Header = ({ className }: { className?: string }) => {
+// 헤더 컨텐츠 컴포넌트
+function HeaderContent({ className }: { className?: string }) {
   const router = useRouter()
   const { state, dispatch } = useApp()
   const auth = useAuth()
@@ -211,5 +212,14 @@ export const Header = ({ className }: { className?: string }) => {
         </Dialog>
       </div>
     </header>
+  )
+}
+
+// 헤더 컴포넌트
+export const Header = ({ className }: { className?: string }) => {
+  return (
+    <Suspense fallback={<div className="h-[56px] bg-background border-b"></div>}>
+      <HeaderContent className={className} />
+    </Suspense>
   )
 }

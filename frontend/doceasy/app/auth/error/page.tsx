@@ -1,10 +1,12 @@
 // OAuth 에러 페이지
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function OAuthErrorPage() {
+// 에러 컨텐츠 컴포넌트
+function ErrorContent() {
     const searchParams = useSearchParams();
     const errorMessage = searchParams.get('message') || '알 수 없는 오류가 발생했습니다.';
 
@@ -21,5 +23,14 @@ export default function OAuthErrorPage() {
                 </Link>
             </div>
         </div>
+    );
+}
+
+// Page 컴포넌트
+export default function OAuthErrorPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <ErrorContent />
+        </Suspense>
     );
 }

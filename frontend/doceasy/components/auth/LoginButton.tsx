@@ -1,11 +1,7 @@
 //"use client"
 
-import { useState, useRef, useEffect } from "react"
-import { Settings, User } from "lucide-react"
+import { useState} from "react"
 import { Button } from "intellio-common/components/ui/button"
-import { Input } from "intellio-common/components/ui/input"
-import { useApp } from "@/contexts/AppContext"
-import * as api from "@/services/api"
 
 // frontend/components/auth/LoginButton.tsx
 interface ILoginButtonProps {

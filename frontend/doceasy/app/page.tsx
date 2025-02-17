@@ -1,14 +1,16 @@
 "use client"
 
+import { Suspense } from 'react'
 import { useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { DefaultTemplate } from '@/templates/default'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/hooks/useAuth'
-import { IOAuthResponse, IOAuthUser } from '@/types/auth'
+import { IOAuthUser } from '@/types/auth'
 import * as actionTypes from '@/types/actions'
 
-export default function Home() {
+// 메인 컴포넌트
+function HomeContent() {
   const searchParams = useSearchParams()
   const { dispatch } = useApp()
   const { login } = useAuth()
@@ -75,5 +77,14 @@ export default function Home() {
     <>
       {getTemplate()}
     </>
+  )
+}
+
+// Page 컴포넌트
+export default function Home() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   )
 }

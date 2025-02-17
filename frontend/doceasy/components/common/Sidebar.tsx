@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 
 import { useRouter } from 'next/navigation'
 
@@ -47,7 +47,8 @@ import { getRecentProjects, } from '@/services/api'
 import { IRecentProjectsResponse, IProject, IMessage, ProjectDetail, Category, SidebarProps, Template } from '@/types/index'
 
 
-export const Sidebar = ({ className }: SidebarProps) => {
+// 사이드바 컨텐츠 컴포넌트
+function SidebarContent({ className }: SidebarProps) {
   const router = useRouter()
   const { state, dispatch } = useApp()
   const [categories, setCategories] = useState<Category[]>([]);
@@ -402,5 +403,14 @@ export const Sidebar = ({ className }: SidebarProps) => {
         </div>
       </div>
     </DragDropContext>
+  )
+}
+
+// 사이드바 컴포넌트
+export const Sidebar = ({ className }: SidebarProps) => {
+  return (
+    <Suspense fallback={<div className="w-[250px] bg-background border-r"></div>}>
+      <SidebarContent className={className} />
+    </Suspense>
   )
 }

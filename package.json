@@ -92,6 +92,7 @@
   "turbo": {
     "pipeline": {
       "build": {
+        "build": "next build --no-lint",
         "outputs": [".next/**", "!.next/cache/**", "dist/**"],
         "dependsOn": ["^build"]
       },

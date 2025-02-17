@@ -1,5 +1,6 @@
 'use client';
-import { useMemo, useState, forwardRef, useEffect, useImperativeHandle } from 'react';
+import { Suspense } from 'react';
+import { useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import {
   MaterialReactTable,
   useMaterialReactTable,
@@ -28,7 +29,8 @@ export interface ITableUtils {
   getColumnCount: () => number;
 }
 
-const Example = forwardRef<ITableUtils>((props, ref) => {
+// 테이블 컴포넌트를 별도로 분리
+const TableComponent = forwardRef<ITableUtils>((props, ref) => {
   const [initAllData, doInitAllData] = useState(false);
   const [countCol, setCountCol] = useState(0);
   const [countRow, setCountRow] = useState(0);
@@ -236,24 +238,12 @@ const Example = forwardRef<ITableUtils>((props, ref) => {
     },
   });
 
-  // 테이블 초기화 핸들러
-  const handleClearTable = () => {
-    console.log("테이블 초기화")
-    table.setRowSelection({});
-    table.resetColumnFilters();
-    table.resetColumnVisibility();
-    // table.resetRowPinning();
-    // table.resetRowSelection();
-    // table.resetState();
-    
-  };
-
   // 테이블 유틸리티 함수들
   const tableUtils: ITableUtils = {
     addRow: () => setCountRow(prev => prev + 1),
     addColumn: () => setCountCol(prev => prev + 1),
     removeRow: (email) => {
-      const newData = tableData.filter(row => row.email !== email);
+      //const newData = tableData.filter(row => row.email !== email);
       setCountRow(prev => Math.max(0, prev - 1));
     },
     removeColumn: (columnId) => {
@@ -291,4 +281,11 @@ const Example = forwardRef<ITableUtils>((props, ref) => {
   );
 });
 
-export default Example;
+// Page 컴포넌트
+export default function TestPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <TableComponent />
+    </Suspense>
+  );
+}
