@@ -1,0 +1,114 @@
+You are an expert in TypeScript, Node.js, Next.js App Router, React, Shadcn UI, Radix UI, Tailwind, Python
+
+You use Python 3.11.9
+- framework: pydantic, fastapi, sqlalchemy2.0 
+- ORM Query는 sqlalchemy 2.0 버전을 사용한다.
+
+
+Key Principles
+- Write concise, technical TypeScript code with accurate examples.
+- Use functional and declarative programming patterns; avoid classes.
+- Prefer iteration and modularization over code duplication.
+- Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError).
+- Structure files: exported component, subcomponents, helpers, static content, types.
+- 백엔드에서 새로운 기능을 생성할때는 Langchain을 사용은 최우선 고려하여 구현한다.
+
+Naming Conventions
+- Use lowercase with dashes for directories (e.g., components/auth-wizard).
+- Favor named exports for components.
+
+
+TypeScript Usage
+- Use TypeScript for all code; prefer interfaces over types.
+- Avoid enums; use maps instead.
+- Use functional components with TypeScript interfaces.
+
+
+Performance Optimization
+- Minimize 'use client', 'useEffect', and 'setState'; favor React Server Components (RSC).
+- Wrap client components in Suspense with fallback.
+- Use dynamic loading for non-critical components.
+- Optimize images: use WebP format, include size data, implement lazy loading.
+
+
+Key Conventions
+- Use 'nuqs' for URL search parameter state management.
+- Optimize Web Vitals (LCP, CLS, FID).
+- Favor server components and Next.js SSR.
+- Use only for Web API access in small components.
+- Avoid for data fetching or state management.
+
+Follow Next.js docs for Data Fetching, Rendering, and Routing.
+
+## JavaScript/TypeScript Standards
+
+- Use TypeScript everywhere. Prefer `interface` for public-facing contracts.
+- The interface starts with I.
+- Use `function` keyword for defining components and pure functions (avoid arrow functions for components).
+- Omit semicolons for a cleaner look.
+- Maintain a logical file order:
+  1. Exported component
+  2. Subcomponents
+  3. Helpers/internal utilities
+  4. Static content/constants
+  5. Types and interfaces at the bottom
+- Write concise conditionals:
+  - Avoid unnecessary braces in single-line conditionals.
+  - Use early returns to handle edge cases and errors upfront..
+
+## Error Handling, Validation, and Services
+
+- Handle errors at the start of functions with guard clauses and early returns.
+- Keep the “happy path” visible at the bottom of the function.
+- Avoid `else` statements by using if-return patterns to reduce nesting.
+- Use Zod for schema validation and form validation.
+- Use `react-hook-form` with `useActionState` to manage form state and submission flows.
+- In `services/` directories, always throw user-friendly errors that can be caught upstream and displayed to the user.
+- Implement proper error logging and user-friendly messages.
+- Employ error boundaries (`error.tsx`, `global-error.tsx`) for unexpected errors.
+- Use `next-safe-action` for secure and type-safe server actions.
+
+
+- Handle rate limiting, quota, and model availability gracefully.
+- Implement fallback logic if AI models are unavailable.
+- Sanitize user inputs before sending them to the AI.
+- Store API keys and sensitive information in environment variables.
+- Provide clear, user-friendly error messages in case of AI service failures.
+
+
+## React/Next.js Component Development
+
+- **Functional Components**: Use function declarations and TypeScript interfaces for props.
+- **Minimal Props & Composition**: Keep components small, focused, and composed of reusable subcomponents.
+- **Server Components First**: Prefer React Server Components and SSR data fetching to minimize client overhead.
+- **Client Components**: Only use `use client` for components that require browser APIs or local user interaction.
+- **Static Content & Types**: Place static text, constants, and types at the end of each file.
+- **Dynamic Loading**: Dynamically import non-critical components to improve initial load times.
+- **Optimize Images**: Use WebP format, appropriate sizing, and lazy loading for images.
+
+
+## Testing and Quality Assurance
+
+- **Unit Tests**: Write unit tests for utilities, hooks, and business logic.
+- **Integration Tests**: Test complex components, pages, and features in isolation.
+- **End-to-End Tests**: Validate critical flows (login, checkout) end-to-end.
+- **Local DB Testing**: Use Supabase local development for realistic database tests.
+- **Coverage**: Maintain a minimum test coverage threshold for PR merges.
+
+# 프로젝트 폴더 구조
+ - docs\PROJECT_STRUCTURE.md 파일을 참조하여 프로젝트 폴더 구조를 이해하고 작업을 진행하세요.
+
+## other rules
+- frontend/types/index.ts 파일은 모든 타입을 모아놓은 파일이다.
+- frontend에서 사용하는 모든 interface는 frontend/types/index.ts에 정의한다.
+
+
+
+## FrontEnd Rules(반드시 지켜야할 조건)
+
+ - turborepo를 사용한다.
+ - Shadcn UI,  Tailwind css를 적극적으로 사용해.
+
+ - frontend/doceasy는 next.config.mjs 를 사용한다.
+ - 기존 코드의 수정은 반드시 최소한으로 한다.
+ 

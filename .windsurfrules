@@ -1,0 +1,75 @@
+You are an expert in TypeScript, Node.js, Next.js App Router, React, Shadcn UI, Radix UI, Tailwind, Python
+
+You use Python 3.11.9
+- framework: pydantic, fastapi, sqlalchemy2.0 
+- ORM Query는 sqlalchemy 2.0 버전을 사용한다.
+
+
+Key Principles
+- Write concise, technical TypeScript code with accurate examples.
+- Use functional and declarative programming patterns; avoid classes.
+- Prefer iteration and modularization over code duplication.
+- Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError).
+- Structure files: exported component, subcomponents, helpers, static content, types.
+- 백엔드에서 새로운 기능을 생성할때는 Langchain을 사용은 최우선 고려하여 구현한다.
+
+
+Naming Conventions
+- Use lowercase with dashes for directories (e.g., components/auth-wizard).
+- Favor named exports for components.
+
+TypeScript Usage
+- Use TypeScript for all code; prefer interfaces over types.
+- Avoid enums; use maps instead.
+- Use functional components with TypeScript interfaces.
+
+
+Syntax and Formatting
+- Use the "function" keyword for pure functions.
+- Avoid unnecessary curly braces in conditionals; use concise syntax for simple statements.
+- Use declarative JSX.
+
+
+UI and Styling
+- Use Shadcn UI, Radix, and Tailwind for components and styling.
+- Implement a responsive design that takes into account a PC or tablet-first approach.
+
+
+Performance Optimization
+- Minimize 'use client', 'useEffect', and 'setState'; favor React Server Components (RSC).
+- Wrap client components in Suspense with fallback.
+- Use dynamic loading for non-critical components.
+- Optimize images: use WebP format, include size data, implement lazy loading.
+
+
+Key Conventions
+- Use 'nuqs' for URL search parameter state management.
+- Optimize Web Vitals (LCP, CLS, FID).
+- Favor server components and Next.js SSR.
+- Use only for Web API access in small components.
+- Avoid for data fetching or state management.
+
+Follow Next.js docs for Data Fetching, Rendering, and Routing.
+
+## Next.js: Route Handler 우선 사용
+
+# 프로젝트 폴더 구조
+ - docs\PROJECT_STRUCTURE.md 파일을 참조하여 프로젝트 폴더 구조를 이해하고 작업을 진행하세요.
+
+## other rules
+- frontend/types/index.ts 파일은 모든 타입을 모아놓은 파일이다.
+- frontend에서 사용하는 모든 interface는 frontend/types/index.ts에 정의한다.
+- 주석문을 마음대로 삭제하지 말것.
+- 주석문은 최대한 자세하게 작성하고 코드 변경시 주석도 함께 변경할것.
+- 함수의 리턴값은 사용자가 명시적으로 요청하지 않는 이상 변경하지 말것. 필요하다면 사용자에게 질문할 것.
+
+## FrontEnd Rules(반드시 지켜야할 조건)
+ - npm install을 수행한 폴더는 루트 디렉토리
+ - 패키지 설치는 프로젝트 루트에서 수행한다.
+ - turborepo를 사용한다.
+ - Shadcn UI,  Tailwind css를 적극적으로 사용해.
+ - 공용 컴포넌트 적극 사용 : frontend\common\components\ui -> alias 적용 intellio-common
+ - frontend/doceasy는 next.config.mjs 를 사용한다.
+ - 사용자의 명시적인 요청이 없다면, 엔드포인트를 변경하지 않는다.
+ - 기존 코드의 수정은 반드시 최소한으로 한다.
+ 

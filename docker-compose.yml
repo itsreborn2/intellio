@@ -1,0 +1,213 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # 성능 및 안정성 관련 설정
+      POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS:-100}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      # 한글 인코딩 설정
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      # 타임존 설정
+      TZ: Asia/Seoul
+      # 로깅 설정
+      POSTGRES_LOGGING_COLLECTOR: "on"
+      POSTGRES_LOG_DIRECTORY: "pg_log"
+      POSTGRES_LOG_FILENAME: "postgresql-%Y-%m-%d_%H%M%S.log"
+      POSTGRES_LOG_STATEMENT: "ddl"
+      POSTGRES_LOG_CONNECTIONS: "on"
+      POSTGRES_LOG_DISCONNECTIONS: "on"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_logs:/var/lib/postgresql/data/pg_log
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intellio_user -d intellio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - prod
+      - dev
+
+  pgadmin:
+    image: dpage/pgadmin4
+    env_file:
+      - .env
+    ports:
+      - "5055:80"
+    networks:
+      - app-network
+    profiles:
+      - prod
+      - dev
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - app-network
+    profiles:
+      - prod
+      - dev
+
+
+  tika:
+    image: apache/tika:latest
+    ports:
+      - "9998:9998"
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://0.0.0.0:9998/tika"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - prod
+      - dev
+
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile.fastapi
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/backend  # 개발 환경에서만 사용\
+    env_file:
+      - .env
+    # environment:
+    #   - ENV=${ENV:-development}
+    #   - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    #   - REDIS_HOST=${REDIS_HOST:-redis}
+    #   - REDIS_PORT=${REDIS_PORT:-6379}
+    #   - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+    #   - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}      
+    #   - POSTGRES_HOST=${POSTGRES_HOST}
+    #   - POSTGRES_PORT=${POSTGRES_PORT}
+    #   - POSTGRES_DB=${POSTGRES_DB}
+    #   - POSTGRES_USER=${POSTGRES_USER}
+    #   - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    #   - TIKA_HOST=${TIKA_HOST:-tika}
+    #   - TIKA_SERVER_ENDPOINT=${TIKA_SERVER_ENDPOINT:-http://${TIKA_HOST}:9998}
+    #   - PYTHONDONTWRITEBYTECODE=1
+    #   - PYTHONUNBUFFERED=1
+    depends_on:
+      - redis
+      - postgres
+      - tika
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - prod
+      - dev
+
+  celery-doceasy:
+    build:
+      context: .
+      dockerfile: Dockerfile.doceasy.celery
+    volumes:
+      - ./backend:/backend
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+    deploy:
+      resources:
+        limits:
+          cpus: '6'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 2G
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - prod
+      - dev
+
+  flower:
+    image: mher/flower
+    env_file:
+      - .env
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery-doceasy
+      - celery-stockeasy
+    networks:
+      - app-network
+    profiles:
+      - prod
+      - dev
+
+  celery-stockeasy:
+    build:
+      context: .
+      dockerfile: Dockerfile.stockeasy.celery
+    volumes:
+      - ./backend:/backend
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - prod
+      - dev
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:
+  postgres_logs:

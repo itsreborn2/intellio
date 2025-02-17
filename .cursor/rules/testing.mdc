@@ -1,0 +1,18 @@
+---
+description: 
+globs: 
+---
+---
+description: testing
+globs: 
+---
+# virtual environment
+- base directory : backend\
+- 가상환경 폴더 : backend\venv\
+
+# basic
+- 가상환경을 반드시 사용한다.
+- COT(Chain of Thought)에 근거하여 답변해
+- 테스트 하려는 클래스, 함수의 파라미터는 정확하게 입력한다.
+- 테스트 하려는 클래스, 함수가 동기/비동기 환경에서 동작하는지 여부에 따라 정확하게 작성한다.
+- **Testing Before PR**: Always test changes locally before submitting PRs.

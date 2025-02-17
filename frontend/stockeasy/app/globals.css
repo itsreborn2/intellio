@@ -1,0 +1,165 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Stockeasy 랜딩 페이지 레이아웃 스타일 */
+.stockeasy-landing-page {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 60px;
+  background-color: #e8e8e8;
+  padding: 20px 0;
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-left: 60px;
+  flex: 1;
+}
+
+.main-content > section {
+  margin-bottom: 0.3rem;
+  width: 100%;
+  padding: 5px; /* Reduced padding */
+}
+
+.top-section {
+  display: flex;
+  height: 60vh;
+  gap: 0.5rem;
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0;
+}
+
+.top-section > *:first-child {
+  width: 60%;
+}
+
+.top-section > *:last-child {
+  width: 40%;
+}
+
+.telegram-summary-area {
+  width: 48%;
+  padding: 10px; /* Reduced padding */
+  background-color: #f2f2f2; /* Very light gray background for Telegram summary area */
+  margin-right: 3px;
+}
+
+.bottom-section {
+  display: grid;
+  grid-template-columns: 3.5fr 3.5fr 1.5fr 1.5fr; /* 비율 조정 */
+  height: 40vh;
+  width: 100%;
+  margin-bottom: 0.3rem;
+  gap: 0.5rem;
+  margin-right: 5px;
+
+
+}
+
+.bottom-area {
+  padding: 5px; /* Reduced padding */
+  background-color: #f2f2f2; /* Very light gray background for bottom sections */
+}
+
+/* AI Chat Area Input Styles - More sophisticated styling */
+.ai-chat-area .stock-selector select,
+.ai-chat-area .chat-input input {
+  background-color: #ffffff; /* White background */
+  border: 1px solid #d4d4d4; /* Even lighter gray border */
+  border-radius: 0.4rem; /* Slightly more rounded corners */
+  padding: 0.54rem 0.9rem; /* Adjusted padding - slightly reduced vertical padding */
+  font-size: 0.9rem;
+  color: #333; /* Darker font color for better readability */
+  width: 100%;
+  margin-bottom: 0.675rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08); /* Subtle shadow for depth */
+  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Smooth transition for focus effect */
+}
+
+/* Focus styles - gray border and shadow */
+.ai-chat-area .stock-selector select:focus,
+.ai-chat-area .chat-input input:focus {
+  outline: none;
+  border-color: #a0a0a0; /* Gray border on focus */
+  box-shadow: 0 0 0 3px rgba(160, 160, 160, 0.25); /* Gray outline on focus */
+}
+
+.ai-chat-area .chat-input input {
+  height: 2.475rem; /* Slightly taller input box */
+}
+
+.ai-chat-area .stock-selector select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' class='bi bi-chevron-down' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 0.63rem; /* Smaller icon size */
+}
+
+/* Placeholder style - for select (using option) and input */
+.ai-chat-area .stock-selector select option:first-child {
+  color: #999; /* Placeholder text color - lighter gray */
+}
+
+.ai-chat-area .chat-input input::placeholder {
+  color: #999; /* Placeholder text color - lighter gray */
+}
+
+.sidebar-button {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.75rem;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.sidebar-button.logo-button:hover {
+  background-color: transparent;
+}
+
+.sidebar-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.logo-icon {
+  width: 2rem;
+  height: 2rem;
+  color: #555;
+}
+
+.top-section-no-padding {
+  padding: 0;
+}
+
+.bottom-section-no-padding {
+  padding: 0;
+}
