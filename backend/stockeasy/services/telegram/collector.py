@@ -9,7 +9,7 @@
 
 from telethon import TelegramClient
 from telethon.tl.types import Channel, Message, Document
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 from typing import List, Optional, Dict, Any
@@ -276,9 +276,9 @@ class CollectorService:
                     document_size = None
 
             # timezone 처리
-            created_at = message.date.replace(tzinfo=None)  # timezone 제거
-            collected_at = datetime.now()  # timezone 없이 현재 시간
-            updated_at = datetime.now(timezone.utc)  # updated_at만 UTC 타임존 유지
+            seoul_tz = timezone(timedelta(hours=9), 'Asia/Seoul')
+            message_created_at = message.date.astimezone(seoul_tz)  # 텔레그램 메세지 생성시간
+            collected_at = datetime.now()  # 수집 시간
             
             # Dict 객체 생성
             return {
@@ -289,9 +289,8 @@ class CollectorService:
                 "sender_id": sender_id,
                 "sender_name": sender_name,
                 "message_text": message_text,
-                "created_at": created_at,
+                "message_created_at": message_created_at,
                 "collected_at": collected_at,
-                "updated_at": updated_at,
                 "is_embedded": False,
                 "has_media": has_media,
                 "has_document": has_document,
@@ -347,7 +346,7 @@ class CollectorService:
             #logger.info(f"채널 정보 가져오기 성공: {channel.title} (ID: {channel.id})")
             
             # 현재 시간 (UTC)
-            now = datetime.now(timezone.utc)
+            now = datetime.now()
             
             # 마지막 수집 시간 가져오기
             last_collection_time = self.last_collection.get(channel_id)

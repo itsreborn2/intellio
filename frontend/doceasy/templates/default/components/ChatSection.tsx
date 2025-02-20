@@ -204,7 +204,7 @@ export const ChatSection = () => {
             type: actionTypes.ADD_CHAT_MESSAGE,
             payload: {
               role: 'assistant',
-              content: '새로운 컬럼이 추가되었습니다.'
+              content: `**${result.columns[0].header.name}** 컬럼이 추가되었습니다. 테이블을 확인해주세요.`
             }
           })
         }

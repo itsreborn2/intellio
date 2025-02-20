@@ -52,7 +52,7 @@ async def get_recent_projects(
 ):
     """최근 프로젝트 목록 조회"""
     try:
-        logger.debug(f"최근 프로젝트 조회 시작 - Session: {session}")
+        logger.warning(f"최근 프로젝트 조회 시작 - Session: {session}")
         
         # 세션이 없거나 user_id가 없는 경우 빈 결과 반환
         if not session or not session.user_id:

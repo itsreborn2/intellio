@@ -17,10 +17,11 @@ from common.models.user import Session
 from common.core.deps import get_current_session, get_embedding_service, get_vector_manager
 from common.core.database import  get_db_async
 from uuid import UUID
-import logging
+#import logging
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger(__name__)
+#logger = logging.getLogger(__name__)
+from loguru import logger
 
 router = APIRouter()
 

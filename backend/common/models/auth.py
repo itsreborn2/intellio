@@ -19,8 +19,6 @@ class OAuth2Account(Base):
     access_token: Mapped[str] = mapped_column(String(2000))  # OAuth 토큰은 길 수 있음
     expires_at: Mapped[datetime] = mapped_column()
     refresh_token: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     user = relationship("User", back_populates="oauth_accounts", lazy="joined")

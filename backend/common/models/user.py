@@ -1,11 +1,10 @@
-from sqlalchemy import String, Boolean, ForeignKey, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from datetime import datetime, timedelta
+from sqlalchemy import String, Boolean, ForeignKey, func, event, DateTime, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+from datetime import datetime, timedelta, timezone
 from uuid import  UUID
 from typing import Optional, List
 from common.models.base import Base
 from common.core.config import settings
-
 
 class User(Base):
     """사용자 모델"""
@@ -17,13 +16,11 @@ class User(Base):
     hashed_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # OAuth 사용자는 비밀번호가 없을 수 있음
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
-    oauth_provider: Mapped[str] = mapped_column(String(20))  # google, naver, kakao
-    oauth_provider_id: Mapped[str] = mapped_column(String(100))
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    oauth_provider: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # google, naver, kakao
+    oauth_provider_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # Relationships
-    sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship("Session", back_populates="user", foreign_keys="[Session.user_id]", cascade="all, delete-orphan")
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -36,13 +33,15 @@ class Session(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_email: Mapped[str] = mapped_column(ForeignKey("users.email", ondelete="CASCADE"), nullable=False)
     is_anonymous: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    last_accessed_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
-
+    last_accessed_at: Mapped[datetime] = mapped_column(
+                                                    DateTime(timezone=True),
+                                                    server_default=text("TIMEZONE('Asia/Seoul', CURRENT_TIMESTAMP)"),
+                                                    nullable=False
+                                                )
     # Relationships
-    user = relationship("User", back_populates="sessions", lazy="joined")
+    user = relationship("User", back_populates="sessions", foreign_keys=[user_id], lazy="joined")
 
     @property
     def is_expired(self) -> bool:
@@ -54,8 +53,10 @@ class Session(Base):
         if not self.last_accessed_at:
             return True
         
+        # timezone-aware한 현재 시간 생성
+        current_time = datetime.now(timezone.utc)
         expiry_time = self.last_accessed_at + timedelta(days=settings.SESSION_EXPIRY_DAYS)
-        return datetime.utcnow() > expiry_time
+        return current_time > expiry_time
 
     @property
     def is_authenticated(self) -> bool:
@@ -64,7 +65,7 @@ class Session(Base):
 
     def touch(self) -> None:
         """세션 접근 시간 갱신"""
-        self.last_accessed_at = datetime.utcnow()
+        self.last_accessed_at = datetime.now(timezone.utc)
 
     def __repr__(self) -> str:
         return f"<Session(id={self.id}, user_id={self.user_id})>"

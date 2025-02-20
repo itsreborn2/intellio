@@ -176,11 +176,15 @@ class TelegramRAGService:
         Returns:
             float: 0~1 사이의 가중치 값
         """
-        # created_at이 naive datetime인 경우 UTC로 가정
+        seoul_tz = timezone(timedelta(hours=9), 'Asia/Seoul')
+        
+        # created_at이 naive datetime인 경우 UTC로 가정하고 서울 시간으로 변환
         if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
+            created_at = created_at.replace(tzinfo=timezone.utc).astimezone(seoul_tz)
+        else:
+            created_at = created_at.astimezone(seoul_tz)
             
-        now = datetime.now(timezone.utc)
+        now = datetime.now()
         time_diff = now - created_at
         
         # 24시간 이내: 0.8 ~ 1.0
@@ -265,10 +269,10 @@ class TelegramRAGService:
             
             for doc in retrieval_result.documents:
                 message = doc.page_content
-                created_at = datetime.fromisoformat(doc.metadata["created_at"])
+                message_created_at = datetime.fromisoformat(doc.metadata["message_created_at"])
                     
                 importance = self._calculate_message_importance(message)
-                time_weight = self._calculate_time_weight(created_at)
+                time_weight = self._calculate_time_weight(message_created_at)
                 similarity_weight = doc.score if doc.score is not None else 0.5
                 
                 # 최종 점수 계산 (유사도 50%, 중요도 30%, 시간 20%)
@@ -277,7 +281,7 @@ class TelegramRAGService:
                 if self._is_duplicate(message, seen_messages):
                     continue
                     
-                formatted_time = created_at.strftime("%Y-%m-%d %H:%M")
+                formatted_time = message_created_at.strftime("%Y-%m-%d %H:%M")
                 formatted_message = f"[{formatted_time}] {message}"
                 processed_messages.append((formatted_message, final_score))
                 seen_messages.append(message)

@@ -1,5 +1,5 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
-const API_ENDPOINT = `${API_BASE_URL}/api/v1`
+const API_ENDPOINT = `${API_BASE_URL}/v1`
 
 import * as Types from '@/types/index';
 import { format, parseISO } from 'date-fns';
@@ -723,9 +723,26 @@ export const checkAuth = async (): Promise<IOAuthLoginResponse> => {
 
 // 로그아웃
 export const logout = async (): Promise<void> => {
-  await apiFetch(`${API_ENDPOINT}/auth/logout`, {
-    method: 'POST',
-  });
+  try {
+    const response = await apiFetch(`${API_ENDPOINT}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',  // 쿠키를 포함하여 요청
+    });
+    console.log('[Logout] 상태:', { 
+      response: response.status, 
+      cookiesBefore: document.cookie 
+    });
+    
+    // 클라이언트 쿠키 삭제 - 도메인 지정
+    document.cookie = 'session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.intellio.kr;';
+    document.cookie = 'user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.intellio.kr;';
+    document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.intellio.kr;';
+    
+    console.log('[Logout] 완료:', { cookiesAfter: document.cookie });
+  } catch (error) {
+    console.error('[Logout] 실패:', error);
+    throw error;
+  }
 };
 
 export async function getTableHistory(projectId: string) {

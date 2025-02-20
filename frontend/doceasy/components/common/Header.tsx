@@ -28,8 +28,7 @@ import { useRouter } from "next/navigation"
 function HeaderContent({ className }: { className?: string }) {
   const router = useRouter()
   const { state, dispatch } = useApp()
-  const auth = useAuth()
-  const { isAuthenticated, name, email, logout } = auth
+  const { user, isAuthenticated, logout } = useAuth()
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)  // Dialog 상태 추가
@@ -99,22 +98,19 @@ function HeaderContent({ className }: { className?: string }) {
   }
 
   const handleLogout = async () => {
-    await logout()
+    await logout();
     // AppContext 상태 초기화
-    dispatch({ type: actionTypes.SET_INITIAL_STATE })
-    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: '' })
+    dispatch({ type: actionTypes.SET_INITIAL_STATE });
+    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: '' });
+    console.log('[Header] 로그아웃 및 상태 초기화 완료');
   }
 
   useEffect(() => {
-    //setEditingTitle(state.projectTitle || 'Untitled Project')
     console.log('[Header1] Auth State Updated:', {
-      isAuthenticated: auth.isAuthenticated,
-      name: auth.name,
-      email: auth.email,
-      token: auth.token,
-      provider: auth.provider
+      isAuthenticated,
+      user,
     })
-  }, [auth])
+  }, [isAuthenticated, user])
 
   useEffect(() => {
     console.log("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -147,9 +143,9 @@ function HeaderContent({ className }: { className?: string }) {
       </div>
       <div className="flex items-center gap-2">
         {/* 사용자 메뉴 */}
-        {isAuthenticated ? (
+        {isAuthenticated && user ? (
           <>
-            <span className="text-sm text-gray-600">{email}</span>
+            <span className="text-sm text-gray-600">{user.email}</span>
             <DropdownMenu>
               <DropdownMenuTrigger>
                 <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">

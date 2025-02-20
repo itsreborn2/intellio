@@ -102,17 +102,17 @@ class ProjectService:
             - last_30_days: 지난 30일간 생성/수정된 프로젝트
         """
         logger.info(f"get_recent - UserID: {session.user_id}")
-        # KST (UTC+9) 시간대 설정
-        kst = timezone(timedelta(hours=9))
-        now = datetime.now(kst)
+
+        # 서버 자체의 시간대아 asia라 변환할 필요없음.
+        now = datetime.now()
         today_start = datetime(now.year, now.month, now.day, tzinfo=kst)
         last_7_days_start = today_start - timedelta(days=7)
         last_30_days_start = today_start - timedelta(days=30)
 
         # UTC로 변환
-        today_start_utc = today_start.astimezone(timezone.utc)
-        last_7_days_start_utc = last_7_days_start.astimezone(timezone.utc)
-        last_30_days_start_utc = last_30_days_start.astimezone(timezone.utc)
+        # today_start_utc = today_start.astimezone(timezone.utc)
+        # last_7_days_start_utc = last_7_days_start.astimezone(timezone.utc)
+        # last_30_days_start_utc = last_30_days_start.astimezone(timezone.utc)
 
         # 기본 쿼리 생성
         base_query = select(Project)
