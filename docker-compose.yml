@@ -39,9 +39,6 @@ services:
     restart: unless-stopped
     networks:
       - app-network
-    profiles:
-      - prod
-      - dev
 
   pgadmin:
     image: dpage/pgadmin4
@@ -51,9 +48,6 @@ services:
       - "5055:80"
     networks:
       - app-network
-    profiles:
-      - prod
-      - dev
 
   redis:
     image: redis:latest
@@ -66,9 +60,6 @@ services:
       - .env
     networks:
       - app-network
-    profiles:
-      - prod
-      - dev
 
 
   tika:
@@ -85,9 +76,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-    profiles:
-      - prod
-      - dev
 
 
   fastapi:
@@ -100,22 +88,6 @@ services:
       - ./backend:/backend  # 개발 환경에서만 사용\
     env_file:
       - .env
-    # environment:
-    #   - ENV=${ENV:-development}
-    #   - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-    #   - REDIS_HOST=${REDIS_HOST:-redis}
-    #   - REDIS_PORT=${REDIS_PORT:-6379}
-    #   - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-    #   - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}      
-    #   - POSTGRES_HOST=${POSTGRES_HOST}
-    #   - POSTGRES_PORT=${POSTGRES_PORT}
-    #   - POSTGRES_DB=${POSTGRES_DB}
-    #   - POSTGRES_USER=${POSTGRES_USER}
-    #   - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    #   - TIKA_HOST=${TIKA_HOST:-tika}
-    #   - TIKA_SERVER_ENDPOINT=${TIKA_SERVER_ENDPOINT:-http://${TIKA_HOST}:9998}
-    #   - PYTHONDONTWRITEBYTECODE=1
-    #   - PYTHONUNBUFFERED=1
     depends_on:
       - redis
       - postgres
@@ -123,17 +95,14 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: '1'
           memory: 4G
         reservations:
-          cpus: '1'
+          cpus: '0.2'
           memory: 1G
     restart: unless-stopped
     networks:
       - app-network
-    profiles:
-      - prod
-      - dev
 
   celery-doceasy:
     build:
@@ -149,17 +118,14 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '6'
-          memory: 8G
+          cpus: '1'
+          memory: 4G
         reservations:
-          cpus: '2'
-          memory: 2G
+          cpus: '0.2'
+          memory: 1G
     restart: unless-stopped
     networks:
       - app-network
-    profiles:
-      - prod
-      - dev
 
   flower:
     image: mher/flower
@@ -173,9 +139,6 @@ services:
       - celery-stockeasy
     networks:
       - app-network
-    profiles:
-      - prod
-      - dev
 
   celery-stockeasy:
     build:
@@ -191,45 +154,56 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: '1'
           memory: 4G
         reservations:
-          cpus: '1'
-          memory: 1G
+          cpus: '0.2'
+          memory: 200M
     restart: unless-stopped
     networks:
       - app-network
-    profiles:
-      - prod
-      - dev
 
   # AI 삭제금지
   # 개발 버전에서는 Docker에 탑재 보류
-  # frontend-doceasy:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.frontend.doceasy
-  #   ports:
-  #     - "3010:3010"
-  #   env_file:
-  #     - frontend/.env
-  #   depends_on:
-  #     - fastapi
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '1'
-  #         memory: 2G
-  #       reservations:
-  #         cpus: '0.5'
-  #         memory: 512M
-  #   restart: unless-stopped
-  #   networks:
-  #     - app-network
-  #   profiles: ["donotstart"] 
-  #  # profiles:
-  #  #   - prod
-  #  #   - dev
+  frontend-doceasy:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.doceasy
+    ports:
+      - "3010:3010"
+    env_file:
+      - frontend/doceasy/.env.production
+    depends_on:
+      - fastapi
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+    networks:
+      - app-network
+   # profiles: ["donotstart"] 
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./frontend/main/.next:/home/intellio_korea/intellio_prod/frontend/main/.next:ro
+    depends_on:
+      - fastapi
+    networks:
+      - app-network
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 networks:
   app-network:

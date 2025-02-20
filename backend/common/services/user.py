@@ -108,11 +108,12 @@ class UserService:
         user = User(
             id=uuid4(),
             email=user_data["email"],
+            hashed_password=None,
+            is_active=True,
+            is_superuser=False,
             name=user_data["name"],
             oauth_provider=user_data["oauth_provider"],
-            oauth_provider_id=user_data["oauth_provider_id"],
-            is_active=True,
-            is_superuser=False
+            oauth_provider_id=user_data["oauth_provider_id"]
         )
 
         self.db.add(user)
@@ -128,6 +129,7 @@ class UserService:
         db_session = Session(
             id=session_id,
             user_id=session_in.user_id,
+            user_email=session_in.user_email,
             is_anonymous=session_in.is_anonymous
         )
         self.db.add(db_session)
@@ -143,13 +145,10 @@ class UserService:
             select(Session)
             .where(Session.id == session_id)
         )
-        # 실제 SQL 쿼리와 파라미터를 함께 출력
-        #compiled_query = query.compile(compile_kwargs={"literal_binds": True})
-        #logger.info(f'[get_session] SQL query with params: {compiled_query}')
         
         result = await self.db.execute(query)
         session = result.scalar_one_or_none()
-        #logger.info(f'[get_session] found session: {session}')
+
         if session:
             logger.info(f'[get_session] associated user: {session.user}')
         return session
@@ -162,7 +161,7 @@ class UserService:
             #logger.info(f'[get_active_session] 세션 조회 결과: {session}')
             
             if not session:
-                logger.info(f'[get_active_session] 세션이 없음')
+                # 세션이 없다면, 여기서 세션 테이블을 조회해서 1일 이내의 세션 데이터가 있는지 추가조회
                 return None
                 
             if session.is_expired:  

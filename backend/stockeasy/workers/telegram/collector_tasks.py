@@ -141,7 +141,7 @@ def cleanup_daily_messages(self) -> int:
     """
     try:
         # 오늘 자정 이전의 메시지만 삭제 (PostgreSQL)
-        today_midnight = datetime.now(timezone.utc).replace(
+        today_midnight = datetime.now().replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         
@@ -167,7 +167,7 @@ def cleanup_daily_messages(self) -> int:
                 # 90일 이전 메시지만 필터링
                 old_messages = [
                     msg for msg in channel_msgs 
-                    if msg.created_at < ninety_days_ago
+                    if msg.message_created_at < ninety_days_ago
                 ]
                 
                 if old_messages:

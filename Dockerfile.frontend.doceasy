@@ -38,11 +38,8 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/frontend/common ./frontend/common
 
-# Create public directory if it doesn't exist
-RUN mkdir -p ./frontend/doceasy/public
-
 # Copy environment variables
-COPY frontend/.env ./frontend/
+COPY frontend/doceasy/.env ./frontend/doceasy/
 
 EXPOSE 3010
 

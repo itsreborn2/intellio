@@ -1,26 +1,23 @@
 {
-  "$schema": "https://turborepo.org/schema.json",
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["NODE_ENV"],
   "tasks": {
-    "dev": {
-      "cache": false,
-      "persistent": true,
-      "dependsOn": [
-        "^dev"
-      ]
+    "build": {
+      "env": ["NODE_OPTIONS"],
+      "outputs": [".next/**", "!.next/cache/**"],
+      "dependsOn": ["^build"]
     },
-    "backend:dev": {
+    "lint": {},
+    "dev": {
       "cache": false,
       "persistent": true
     },
-    "build": {
+    "start": {
+      "cache": false,
+      "persistent": true,
       "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        "dist/**"
+        "build"
       ]
-    },
-    "lint": {},
-    "test": {}
+    }
   }
 }

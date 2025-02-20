@@ -25,7 +25,7 @@ class TelegramMessageMetadata:
     text: str                    # 메시지 텍스트
     sender_id: Optional[str]     # 발신자 ID (있는 경우)
     sender_name: Optional[str]   # 발신자 이름 (있는 경우)
-    created_at: datetime         # 메시지 생성 시간
+    message_created_at: datetime         # 메시지 생성 시간
     has_media: bool             # 미디어 첨부 여부
     has_document: bool          # 문서 첨부 여부
     document_name: Optional[str] # 문서 이름 (있는 경우)
@@ -43,7 +43,7 @@ class TelegramMessageMetadata:
             text=message.message_text,
             sender_id=message.sender_id,
             sender_name=message.sender_name,
-            created_at=message.created_at,
+            message_created_at=message.message_created_at,
             has_media=message.has_media,
             has_document=message.has_document,
             document_name=message.document_name if message.has_document else None,

@@ -12,7 +12,8 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "start": "turbo run start"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -44,6 +45,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "common-ui": "file:frontend/common",
+    "critters": "^0.0.23",
     "date-fns": "^4.1.0",
     "dotenv-flow": "^4.1.0",
     "echarts": "^5.6.0",
@@ -93,8 +95,14 @@
     "pipeline": {
       "build": {
         "build": "next build --no-lint",
-        "outputs": [".next/**", "!.next/cache/**", "dist/**"],
-        "dependsOn": ["^build"]
+        "outputs": [
+          ".next/**",
+          "!.next/cache/**",
+          "dist/**"
+        ],
+        "dependsOn": [
+          "^build"
+        ]
       },
       "dev": {
         "cache": false,
@@ -102,7 +110,9 @@
       },
       "lint": {},
       "test": {
-        "dependsOn": ["build"]
+        "dependsOn": [
+          "build"
+        ]
       }
     }
   }

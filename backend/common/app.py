@@ -42,13 +42,18 @@ app.add_middleware(
         "http://127.0.0.1:3010",
         "http://localhost:3020",  # 개발 환경
         "http://127.0.0.1:3020",
-        "http://localhost:8000",  # Google OAuth callback
-        "http://127.0.0.1:8000",
-        settings.DOCEASY_URL,    # 프로덕션 환경 (settings에서 설정)
+        "https://intellio.kr",     # 추가
+        "https://www.intellio.kr", # 추가
+        "https://doceasy.intellio.kr",  # 추가
+        "https://stockeasy.intellio.kr", # 추가
+        settings.DOCEASY_URL,
+        settings.INTELLIO_URL,
+        settings.STOCKEASY_URL
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Set-Cookie", "Authorization", "X-Requested-With"],
+    expose_headers=["Set-Cookie"],
 )
 
 
@@ -178,7 +183,7 @@ logging_config = {
         
         "uvicorn": {
             "handlers": ["console", "file"],
-            "level": "WARNING",
+            "level": "INFO",
             "propagate": False
         }
     },

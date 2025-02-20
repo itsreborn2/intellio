@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID as PyUUID
 
-from sqlalchemy import DateTime, MetaData, UUID as SQLUUID
+from sqlalchemy import DateTime, MetaData, UUID as SQLUUID, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -31,14 +31,16 @@ class Base(DeclarativeBase):
     # Timestamp mixin
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        nullable=False
+        server_default=text("TIMEZONE('Asia/Seoul', CURRENT_TIMESTAMP)"),
+        nullable=False,
+        comment="생성 시간 (Asia/Seoul)"
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-        nullable=False
+        server_default=text("TIMEZONE('Asia/Seoul', CURRENT_TIMESTAMP)"),
+        onupdate=text("TIMEZONE('Asia/Seoul', CURRENT_TIMESTAMP)"),
+        nullable=False,
+        comment="수정 시간 (Asia/Seoul)"
     )
 
     def dict(self) -> dict[str, Any]:

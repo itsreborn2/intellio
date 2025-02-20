@@ -13,7 +13,7 @@ import * as actionTypes from '@/types/actions'
 function HomeContent() {
   const searchParams = useSearchParams()
   const { dispatch } = useApp()
-  const { login } = useAuth()
+  const { login, setToken } = useAuth()
   const templateType = searchParams.get('template') || 'default'
 
   // 초기 데이터 로드
@@ -23,33 +23,24 @@ function HomeContent() {
         // 쿠키에서 사용자 정보와 토큰 가져오기
         const cookies = document.cookie.split(';').reduce((acc, cookie) => {
           const [key, value] = cookie.trim().split('=');
-          try {
-            acc[key] = JSON.parse(decodeURIComponent(value));
-          } catch {
-            acc[key] = decodeURIComponent(value);
-          }
+          if (!value) return acc;
+          
+          acc[key] = decodeURIComponent(value);
           return acc;
         }, {} as Record<string, any>);
 
         // 사용자 정보와 토큰이 있으면 로그인 상태 복원
         if (cookies.user && cookies.token) {
           try {
-            // | 를 콤마로 변환
-            let cleanedStr = cookies.user.replace(/\|/g, ',');
-            // 맨 앞뒤 따옴표 제거
-            cleanedStr = cleanedStr.replace(/^"|"$/g, '');
+            const userData: IOAuthUser = JSON.parse(cookies.user);
+            console.log('[Page] 파싱된 사용자 데이터:', userData);
             
-            // JSON 파싱 및 결과 확인
-            const userData: IOAuthUser = JSON.parse(cleanedStr);
-            console.log('userData :', userData);
-            
-            // IOAuthResponse 형식에 맞게 데이터 구성
-            login({
-              user: userData,
-              token: cookies.token
-            });
+            // 토큰 설정
+            setToken(cookies.token);
+            // 사용자 정보로 로그인
+            login(userData);
           } catch (error) {
-            console.error('Failed to parse user data:', error);
+            console.error('[Page] 사용자 데이터 파싱 실패:', error);
           }
         }
 
@@ -61,7 +52,7 @@ function HomeContent() {
     }
 
     initializeApp()
-  }, [dispatch, login])
+  }, [dispatch, login, setToken])
 
   // 템플릿 타입에 따라 적절한 템플릿 렌더링
   const getTemplate = () => {
