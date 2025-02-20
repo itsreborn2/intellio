@@ -9,5 +9,5 @@ globs:
 
 # Your rule content
 - Use Pydantic V2 style
-- You can @ files here
-- You can use markdown but dont have to
+- ORM Query는 sqlalchemy 2.0
+

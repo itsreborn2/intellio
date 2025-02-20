@@ -16,11 +16,39 @@ const nextConfig = {
   // React의 Strict Mode 활성화 - 개발 시 잠재적인 문제를 감지하고 더 나은 개발 경험을 제공
   reactStrictMode: true,
 
+  // 도메인 설정
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://intellio.kr/api',
+    NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL || 'https://intellio.kr',
+  },
+
+  // CORS 및 도메인 설정
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: 'https://intellio.kr' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,DELETE,OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+        ],
+      },
+    ];
+  },
+
+  swcMinify: true,
+  poweredByHeader: false,
+  compress: true,
+
   experimental: {
     externalDir: true,  // 외부 디렉토리의 컴포넌트 사용 허용
+    optimizeCss: true,
+    // 메모리 사용량을 줄이기 위한 설정
+    workerThreads: false,
+    cpus: 1
   },
   
-  webpack: (config, { isServer }) => {
+  webpack: (config, { dev, isServer }) => {
     // webpack 경고 메시지 숨기기
     config.infrastructureLogging = {
       level: 'error',
@@ -31,6 +59,18 @@ const nextConfig = {
       ...config.snapshot,
       managedPaths: [/^(.+?[\\/]node_modules[\\/](?!@next[\\/]))/],
     };
+
+    // 프로덕션 빌드 최적화
+    if (!dev && !isServer) {
+      Object.assign(config.optimization.splitChunks.cacheGroups, {
+        commons: {
+          name: 'commons',
+          chunks: 'all',
+          minChunks: 2,
+          reuseExistingChunk: true,
+        },
+      });
+    }
     return config;
   },
 };

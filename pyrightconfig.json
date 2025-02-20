@@ -1,0 +1,10 @@
+{
+    "python.languageServer": "Pylance",
+    "python.analysis.extraPaths": [
+      "./src",
+      "./backend"
+    ],
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.diagnosticMode": "workspace",
+    "python.analysis.autoImportCompletions": true
+  }

@@ -1,6 +1,6 @@
 from datetime import datetime
 from uuid import UUID
-from sqlalchemy import String, Integer, Text, ForeignKey
+from sqlalchemy import String, Integer, Text, ForeignKey, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from common.models.base import Base
@@ -21,8 +21,6 @@ class Document(Base):
     error_message: Mapped[str | None] = mapped_column(String(1000))
     extracted_text: Mapped[str | None] = mapped_column(Text)
     embedding_ids: Mapped[str | None] = mapped_column(String)  # JSON string of list
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     project = relationship("Project", back_populates="documents")
@@ -41,8 +39,6 @@ class DocumentChunk(Base):
     content: Mapped[str] = mapped_column(Text)
     embedding: Mapped[str | None] = mapped_column(String)
     chunk_metadata: Mapped[str | None] = mapped_column(String)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     document = relationship("Document", back_populates="chunks")

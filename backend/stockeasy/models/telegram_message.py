@@ -24,9 +24,8 @@
 #    - 수집 상태 모니터링
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Index
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
+from sqlalchemy import String, Integer, Text, Boolean, Index, DateTime
+from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 from common.models.base import Base
 
@@ -42,7 +41,7 @@ class TelegramMessage(Base):
         sender_id (str): 발신자 ID
         sender_name (str): 발신자 이름
         message_text (str): 메시지 내용
-        created_at (datetime): 메시지 작성 시간
+        message_created_at (datetime): 텔레그램 메시지 작성 시간
         collected_at (datetime): 수집된 시간
         is_embedded (bool): 임베딩 완료 여부
         has_media (bool): 미디어 첨부 여부
@@ -54,25 +53,25 @@ class TelegramMessage(Base):
     """
     __tablename__ = 'telegram_messages'
 
-    id = Column(Integer, primary_key=True, index=True)
-    message_id = Column(Integer, index=True, nullable=False)
-    channel_id = Column(String, index=True, nullable=False)
-    channel_title = Column(String, nullable=False)
-    message_type = Column(String, nullable=False, default='text')
-    sender_id = Column(String, nullable=True)
-    sender_name = Column(String, nullable=True)
-    message_text = Column(Text, nullable=False)
-    created_at = Column(DateTime, nullable=False)
-    collected_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    is_embedded = Column(Boolean, default=False, nullable=False)
-    has_media = Column(Boolean, default=False, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    message_id: Mapped[int] = mapped_column(index=True)
+    channel_id: Mapped[str] = mapped_column(String, index=True)
+    channel_title: Mapped[str] = mapped_column(String)
+    message_type: Mapped[str] = mapped_column(String, default='text')
+    sender_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    sender_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    message_text: Mapped[str] = mapped_column(Text)
+    message_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # 텔레그램 메시지 생성 시간
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    is_embedded: Mapped[bool] = mapped_column(default=False)
+    has_media: Mapped[bool] = mapped_column(default=False)
     
     # 문서 관련 필드
-    has_document = Column(Boolean, default=False, nullable=False)
-    document_name = Column(String, nullable=True)
-    document_gcs_path = Column(String, nullable=True)  # GCS에 저장된 파일 경로
-    document_mime_type = Column(String, nullable=True)  # 파일의 MIME 타입
-    document_size = Column(Integer, nullable=True)      # 파일 크기 (바이트)
+    has_document: Mapped[bool] = mapped_column(default=False)
+    document_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    document_gcs_path: Mapped[str | None] = mapped_column(String, nullable=True)  # GCS에 저장된 파일 경로
+    document_mime_type: Mapped[str | None] = mapped_column(String, nullable=True)  # 파일의 MIME 타입
+    document_size: Mapped[int | None] = mapped_column(Integer, nullable=True)      # 파일 크기 (바이트)
 
     __table_args__ = (
         # 메시지 ID와 채널 ID의 조합으로 유니크 제약

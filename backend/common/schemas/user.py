@@ -42,6 +42,7 @@ class SessionBase(BaseSchema):
     """세션 기본 스키마"""
     is_anonymous: bool = False
     user_id: Optional[UUID]
+    user_email: Optional[EmailStr] = None
 
 # class SessionBase(SessionBase):
 #     """세션 생성 스키마"""

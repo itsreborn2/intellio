@@ -1,0 +1,19 @@
+---
+description: build
+globs: 
+---
+
+## Build rules
+## backend
+
+# build
+docker-compose -f docker-compose.base.yml -f docker-compose.dev.yml build [packagename]
+docker-compose -f docker-compose.base.yml -f docker-compose.prod.yml build [packagename]
+
+# up
+docker-compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d [packagename]
+
+
+# restart
+docker-compose -f docker-compose.base.yml -f docker-compose.dev.yml restart [packagename]
+docker-compose -f docker-compose.base.yml -f docker-compose.prod.yml restart [packagename]

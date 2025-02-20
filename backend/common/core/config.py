@@ -30,7 +30,7 @@ class CommonSettings(BaseSettings):
     STOCKEASY_URL: str
     
     # 쿠키 설정
-    COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", "localhost")
+    COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", ".intellio.kr" if os.getenv("ENV") == "production" else None)
     COOKIE_SECURE: bool = ENV == "production"  # production에서만 True
 
     # 데이터베이스
@@ -228,3 +228,8 @@ logger.info(f"CELERY_BROKER_URL: {settings.CELERY_BROKER_URL}")
 logger.info(f"CELERY_RESULT_BACKEND: {settings.CELERY_RESULT_BACKEND}")
 logger.info(f"TIKA_HOST: {settings.TIKA_HOST}")
 logger.info(f"TIKA_SERVER_ENDPOINT: {settings.TIKA_SERVER_ENDPOINT}")
+logger.info(f"FASTAPI_URL: {settings.FASTAPI_URL}")
+logger.info(f"INTELLIO_URL: {settings.INTELLIO_URL}")
+logger.info(f"DOCEASY_URL: {settings.DOCEASY_URL}")
+
+

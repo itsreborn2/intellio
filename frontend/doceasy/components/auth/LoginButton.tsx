@@ -27,8 +27,8 @@ export const LoginButton: React.FC<ILoginButtonProps> = ({ provider }) => {
     try {
       setIsLoading(true);
       // 백엔드 URL을 직접 사용 (Next.js 리다이렉트 우회)
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      window.location.href = `${backendUrl}/api/v1/auth/${provider}/login`;
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      window.location.href = `${backendUrl}/v1/auth/${provider}/login`;
     } catch (error) {
       console.error('Login error:', error);
     }

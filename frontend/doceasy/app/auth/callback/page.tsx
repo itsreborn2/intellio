@@ -1,72 +1,110 @@
 // OAuth 콜백 처리 페이지
 'use client';
 
-import { Suspense } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
+import { LoadingSpinner } from '@/components/ui/loading';
 
-// 콜백 처리 컴포넌트
-function CallbackContent() {
+// 콜백 처리 로직을 별도의 컴포넌트로 분리
+function CallbackHandler() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { login } = useAuth();
+    const { setUser, setToken } = useAuth();
+    const isProcessing = useRef(false);
 
     useEffect(() => {
-        const handleOAuthCallback = async () => {
+        if (!searchParams) return;
+
+        const handleCallback = async () => {
+            if (isProcessing.current) return;
+            isProcessing.current = true;
+
             try {
-                // response data : user(id,email,provider,name), token
-                const code = searchParams.get('code');
-                const state = searchParams.get('state');
-                
-                // OAuth 콜백 처리 요청
-                const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/naver/callback?code=${code}&state=${state}`,
-                    {
-                        method: 'GET',
-                        credentials: 'include',
+                const success = searchParams.get('success');
+                const token = searchParams.get('token');
+                const userParam = searchParams.get('user');
+                const error = searchParams.get('error');
+                console.log('[Callback] 상태:', { success, token, userParam, error });
+                if (success === 'true' && token && userParam) {
+                    try {
+                        const decodedUserStr = decodeURIComponent(userParam);
+                        console.log('[Callback] 디코딩된 사용자 데이터:', decodedUserStr);
+                        
+                        try {
+                            const userData = JSON.parse(decodedUserStr);
+                            console.log('[Callback] 파싱된 사용자 데이터:', userData);
+
+                            setToken(token);
+                            setUser(userData);
+
+                            toast.success('로그인이 완료되었습니다.');
+                            router.push('/');
+                            router.refresh();
+                        } catch (jsonError) {
+                            console.error('[Callback] JSON 파싱 오류:', {
+                                error: jsonError,
+                                receivedData: decodedUserStr
+                            });
+                            toast.error('사용자 데이터 처리 중 오류가 발생했습니다.');
+                        }
+                    } catch (decodeError) {
+                        console.error('[Callback] URL 디코딩 오류:', {
+                            error: decodeError,
+                            rawUserParam: userParam
+                        });
+                        toast.error('사용자 데이터 디코딩 중 오류가 발생했습니다.');
                     }
-                );
-
-                if (!response.ok) {
-                    throw new Error('OAuth callback failed');
+                } else if (success === 'false' && error) {
+                    const errorMessage = decodeURIComponent(error);
+                    console.error('[Callback] 로그인 실패:', {
+                        success,
+                        error: errorMessage,
+                        provider: searchParams.get('provider')
+                    });
+                    toast.error(`로그인 실패: ${errorMessage}`);
+                } else {
+                    console.error('[Callback] 잘못된 응답:', {
+                        success,
+                        token: token ? '존재' : '없음',
+                        userParam: userParam ? '존재' : '없음',
+                        error
+                    });
+                    toast.error('잘못된 접근입니다.');
                 }
-
-                const result = await response.json();
-                
-                if (!result.success) {
-                    throw new Error(result.message || 'OAuth callback failed');
-                }
-
-                // 로그인 처리
-                await login(result.data);
-
-                // 홈페이지로 리다이렉트
-                router.push('/');
             } catch (error) {
-                console.error('OAuth callback error:', error);
-                router.push('/auth/error?message=' + encodeURIComponent('Failed to process OAuth callback'));
+                console.error('Callback 처리 중 오류:', error);
+                toast.error('로그인 처리 중 오류가 발생했습니다.');
+                //router.push('/auth/login');
+            } finally {
+                isProcessing.current = false;
             }
         };
 
-        handleOAuthCallback();
-    }, [router, searchParams, login]);
+        handleCallback();
+    }, [searchParams, router, setUser, setToken]);
 
     return (
-        <div className="flex min-h-screen items-center justify-center">
-            <div className="text-center">
-                <h1 className="text-2xl font-bold mb-4">로그인 처리 중...</h1>
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-            </div>
+        <div className="text-center">
+            <LoadingSpinner size="lg" />
+            <p className="mt-4 text-muted-foreground">로그인 처리 중...</p>
         </div>
     );
 }
 
-// Page 컴포넌트
-export default function OAuthCallbackPage() {
+// 메인 페이지 컴포넌트
+export default function AuthCallback() {
     return (
-        <Suspense fallback={<div>Loading...</div>}>
-            <CallbackContent />
-        </Suspense>
+        <div className="flex min-h-screen items-center justify-center">
+            <Suspense fallback={
+                <div className="text-center">
+                    <LoadingSpinner size="lg" />
+                    <p className="mt-4 text-muted-foreground">로딩 중...</p>
+                </div>
+            }>
+                <CallbackHandler />
+            </Suspense>
+        </div>
     );
 }

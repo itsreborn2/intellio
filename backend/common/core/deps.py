@@ -13,11 +13,11 @@ from common.services.vector_store_manager import VectorStoreManager
 from common.models.user import Session
 from common.schemas.user import SessionBase
 from common.core.exceptions import AuthenticationRedirectException
-import logging
+#import logging
+from loguru import logger
 from common.core.config import settings
 
-logger = logging.getLogger(__name__)
-
+#logger = logging.getLogger(__name__)
 
 async def get_current_session(
     session_id: Optional[str] = Cookie(None),
@@ -37,7 +37,7 @@ async def get_current_session(
                 return session
         logger.warning('세션이 없거나 만료됨')
         #status_code = status.HTTP_401_UNAUTHORIZED
-        raise AuthenticationRedirectException(f'{settings.INTELLIO_URL}/error')
+        raise AuthenticationRedirectException(f'{settings.DOCEASY_URL}/error')
 
     except AuthenticationRedirectException:
         raise

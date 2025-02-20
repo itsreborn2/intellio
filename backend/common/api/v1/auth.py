@@ -51,6 +51,7 @@ async def login(
     # 세션 생성
     session_create = SessionBase(
         user_id=user.id,
+        user_email=user.email,
         is_anonymous=False
     )
     session = await user_service.create_session(session_create)
@@ -63,9 +64,8 @@ async def login(
         httponly=True,
         secure=settings.COOKIE_SECURE,  # production에서만 True
         samesite="lax",
-
         path="/",  # 모든 경로에서 접근 가능
-        domain=settings.COOKIE_DOMAIN  # 환경별 도메인 설정
+        domain=settings.COOKIE_DOMAIN if settings.ENV == "production" else None  # production에서만 도메인 설정
     )
     
     return UserResponse(
@@ -86,7 +86,7 @@ async def logout(
             success=True,
             message="이미 로그아웃 되었습니다."
         )
-    
+    logger.info(f"logout - session_id: {session_id}")
     user_service = UserService(db)
     # 세션 삭제
     await user_service.delete_session(session_id)
@@ -95,7 +95,27 @@ async def logout(
     response.delete_cookie(
         key="session_id",
         path="/",
-        domain=settings.COOKIE_DOMAIN
+        domain=".intellio.kr" if settings.ENV == "production" else None,
+        secure=True,
+        samesite="lax"
+    )
+    
+    # token 쿠키 제거
+    response.delete_cookie(
+        key="token",
+        path="/",
+        domain=".intellio.kr" if settings.ENV == "production" else None,
+        secure=True,
+        samesite="lax"
+    )
+    
+    # user 쿠키 제거
+    response.delete_cookie(
+        key="user",
+        path="/",
+        domain=".intellio.kr" if settings.ENV == "production" else None,
+        secure=True,
+        samesite="lax"
     )
     
     return SessionResponse(
@@ -118,7 +138,8 @@ async def oauth_callback(
     code: str,
     response: Response,
     db: AsyncSession = Depends(get_db_async),
-    state: Optional[str] = None
+    state: Optional[str] = None,
+    redirect_uri: Optional[str] = None
 ):
     """OAuth 콜백 처리"""
     oauth_service = OAuthService()
@@ -136,7 +157,7 @@ async def oauth_callback(
                 raise HTTPException(status_code=400, detail="access_token이 응답에 포함되어 있지 않습니다.")
             user_info = await oauth_service.get_google_user(token_info["access_token"])
         elif provider == "naver":
-            token_info = await oauth_service.get_naver_token(code)
+            token_info = await oauth_service.get_naver_token(code, state)
             logger.info(f"Naver token info: {token_info}")
             user_info = await oauth_service.get_naver_user(token_info["access_token"])
             logger.info(f"Naver user info: {user_info}")
@@ -168,7 +189,8 @@ async def oauth_callback(
         # 세션 생성
         session_create = SessionBase(
             user_id=user.id,
-            is_anonymous=False  # OAuth 로그인 사용자는 익명이 아님
+            user_email=user.email,
+            is_anonymous=False
         )
         session = await user_service.create_session(session_create)
         logger.info(f"Created new session: {session.id} for user: {user.email}")
@@ -181,63 +203,70 @@ async def oauth_callback(
         })
         logger.info(f"Created token : {token}")
 
-        # 세션 ID를 쿠키로 설정
-        # 로그인 후 무조건 settings.FRONTEND_URL로 redirect 하는데. 도메인이 3군데. 
-        # 아마 각 서비스에서 직접 로그인을 할 경우도 있을테니, redirect 하는 지점을 적절하게 조절해야겠네.
-        response = RedirectResponse(url=f"{settings.DOCEASY_URL}/")
-        response.set_cookie(
-            key="session_id",
-            value=session.id,
-            max_age=30 * 24 * 60 * 60,  # 30일
-            httponly=True,
-            secure=settings.COOKIE_SECURE,  # production에서만 True
-            samesite="lax",
-            path="/",  # 모든 경로에서 접근 가능
-            domain=settings.COOKIE_DOMAIN  # 환경별 도메인 설정
-        )
-        
-        # JWT 토큰도 쿠키로 설정
-        response.set_cookie(
-            key="token",
-            value=token,
-            max_age=30 * 24 * 60 * 60,  # 30일
-            httponly=False,  # JavaScript에서 접근 가능하도록
-            secure=settings.COOKIE_SECURE,
-            samesite="lax",
-            path="/",
-            domain=settings.COOKIE_DOMAIN
-        )
-
-        # 사용자 정보도 쿠키로 설정
+        # 사용자 정보
         user_data = {
             "id": str(user.id),
             "email": user.email,
             "name": user.name,
             "provider": provider
         }
+
         # URL 인코딩을 사용하여 한글 문자를 안전하게 처리
         encoded_user_data = urllib.parse.quote(
-            json.dumps(user_data, ensure_ascii=False).replace(',', '|')
+            json.dumps(user_data, ensure_ascii=False)  # 순수 JSON 문자열 인코딩
         )
+
+        # 리다이렉트 URL 결정
+        redirect_to = redirect_uri or f"{settings.DOCEASY_URL}/auth/callback"
+        redirect_to = f"{redirect_to}?success=true&token={token}&user={encoded_user_data}"
+        
+        response = RedirectResponse(url=redirect_to)
+        
+        # 세션 ID 쿠키 설정
+        response.set_cookie(
+            key="session_id",
+            value=session.id,
+            max_age=30 * 24 * 60 * 60,  # 30일
+            httponly=True,
+            secure=True,  # HTTPS 필수
+            samesite="lax",
+            path="/",
+            domain=".intellio.kr" if settings.ENV == "production" else None
+        )
+        
+        # JWT 토큰 쿠키 설정
+        response.set_cookie(
+            key="token",
+            value=token,
+            max_age=30 * 24 * 60 * 60,
+            httponly=False,  # JavaScript에서 접근 가능하도록
+            secure=True,  # HTTPS 필수
+            samesite="lax",
+            path="/",
+            domain=".intellio.kr" if settings.ENV == "production" else None
+        )
+
+        # 사용자 정보 쿠키 설정
         response.set_cookie(
             key="user",
             value=encoded_user_data,
             max_age=30 * 24 * 60 * 60,
             httponly=False,  # JavaScript에서 접근 가능하도록
-            secure=settings.COOKIE_SECURE,
+            secure=True,  # HTTPS 필수
             samesite="lax",
             path="/",
-            domain=settings.COOKIE_DOMAIN
+            domain=".intellio.kr" if settings.ENV == "production" else None
         )
 
         return response
         
     except Exception as e:
         logger.error(f"OAuth callback error: {str(e)}", exc_info=True)
-        # 에러 발생 시 에러 페이지로 리다이렉트
         error_message = urllib.parse.quote(str(e))
-        #return RedirectResponse(url=f"{settings.DOCEASY_URL}/auth/error?message={error_message}")
-        raise AuthenticationRedirectException(f'{settings.INTELLIO_URL}/error')
+        # 에러 발생 시는 프론트로 에러 메시지 화면 리다이렉트
+        #redirect_to = f"{settings.INTELLIO_URL}/auth/callback?success=false&error={error_message}"
+        redirect_to = f"{settings.DOCEASY_URL}/auth/callback?success=false&error={error_message}"
+        return RedirectResponse(url=redirect_to)
 
 @router.get("/me", response_model=OAuthLoginResponse)
 async def get_current_user(
