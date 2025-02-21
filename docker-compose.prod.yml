@@ -2,8 +2,19 @@ version: '3.8'
 
 services:
   fastapi:
+    env_file:
+      - .env.production
+      - backend/.env.production
     environment:
       - ENV=production
 
-volumes:
-  frontend-doceasy-static:
+  celery-doceasy:
+    env_file:
+      - .env.production
+      - backend/.env.production
+
+  celery-stockeasy:
+    env_file:
+      - .env.production
+      - backend/.env.production
+

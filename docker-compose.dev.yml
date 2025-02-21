@@ -1,18 +1,31 @@
 version: '3.8'
 
 services:
-  # nginx:
-  #   ports:
-  #     - "8080:80"  # 개발환경은 8080 포트 사용
-  #   volumes:
-  #     - ./nginx/intellio.dev.conf:/etc/nginx/conf.d/default.conf
-  #   environment:
-  #     - NODE_ENV=development
 
-  # frontend-doceasy:
-  #   environment:
-  #     - NODE_ENV=development
 
   fastapi:
+    volumes:
+      - ./backend:/backend
+    env_file:
+      - .env.development
+      - backend/.env.development
+
     environment:
       - ENV=development
+
+  celery-doceasy:
+    volumes:
+      - ./backend:/backend
+    env_file:
+      - .env.development
+      - backend/.env.development  
+
+
+  celery-stockeasy:
+    volumes:
+      - ./backend:/backend
+    env_file:
+      - .env.development
+      - backend/.env.development
+
+
