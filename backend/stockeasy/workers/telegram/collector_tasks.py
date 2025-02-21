@@ -146,7 +146,7 @@ def cleanup_daily_messages(self) -> int:
         )
         
         # 365일 이전 날짜 계산 (벡터 저장소)
-        ninety_days_ago = today_midnight - timezone.timedelta(days=365)
+        ninety_days_ago = today_midnight - timedelta(days=365)
         
         # 삭제할 메시지 조회
         messages = self.db.query(TelegramMessage).filter(

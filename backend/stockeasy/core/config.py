@@ -1,7 +1,11 @@
+from typing import ClassVar
 from pydantic import Extra
 from common.core.config import CommonSettings
 import os
 from functools import lru_cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 def detect_file_encoding(file_path):
     """파일의 인코딩을 자동으로 감지"""
@@ -37,14 +41,19 @@ class StockeasySettings(CommonSettings):
     def CELERY_RESULT_BACKEND(self) -> str:
         return self.REDIS_URL + "/0"
 
+     # 환경 변수 파일 설정
+    _env: ClassVar[str] = os.getenv("ENV")
+    env_file: ClassVar[str] = ".env.development" if _env == "development" else ".env.production"
+
     model_config = {
-        "env_file": ".env",
+        "env_file": env_file,
         "case_sensitive": True,
-        "env_file_encoding": "utf-8"
+        "env_file_encoding": "utf-8",
+        "extra": "allow"  # 추가 필드 허용
     }
 
     def __init__(self, **kwargs):
-        env_file = self.model_config.get("env_file", ".env")
+        env_file = self.model_config["env_file"]
         if os.path.exists(env_file):
             encoding = detect_file_encoding(env_file)
             self.model_config["env_file_encoding"] = encoding

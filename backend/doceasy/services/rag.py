@@ -437,7 +437,7 @@ class RAGService:
                 
             
             # 문서 검색
-            # all_chunks = await self.embedding_service.search_similar(
+            #all_chunks = await self.embedding_service.search_similar(
             #     query=normalized_query,
             #     document_ids=doc_ids_str if doc_ids_str else None,
             #     top_k=search_top_k

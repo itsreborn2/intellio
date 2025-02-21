@@ -1,4 +1,4 @@
-from typing import List
+from typing import ClassVar, List
 import os
 from loguru import logger
 from functools import lru_cache
@@ -39,16 +39,20 @@ class SettingsDoceasy(CommonSettings):
     CHUNK_SIZE:int
     CHUNK_OVERLAP:int
     # 임베딩 설정. 아직 안씀
-    
+
+     # 환경 변수 파일 설정
+    _env: ClassVar[str] = os.getenv("ENV")
+    env_file: ClassVar[str] = ".env.development" if _env == "development" else ".env.production"
 
     model_config = {
-        "env_file": ".env",
+        "env_file": env_file,
         "case_sensitive": True,
-        "env_file_encoding": "utf-8"
+        "env_file_encoding": "utf-8",
+        "extra": "allow"  # 추가 필드 허용
     }
 
     def __init__(self, **kwargs):
-        env_file = self.model_config.get("env_file", ".env")
+        env_file = self.model_config["env_file"]
         if os.path.exists(env_file):
             encoding = detect_file_encoding(env_file)
             self.model_config["env_file_encoding"] = encoding

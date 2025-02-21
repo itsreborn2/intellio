@@ -1,12 +1,11 @@
 import Link from 'next/link';
 import { Button } from "@/common/components/ui/button" // Button 컴포넌트 import
 
-//const doceasyUrl = process.env.NEXT_PUBLIC_ENV === 'production' ? 'https://doceasy.intellio.kr' : 'http://localhost:3010'
-//const stockeasyUrl = process.env.NEXT_PUBLIC_ENV === 'production' ? 'https://stockeasy.intellio.kr' : 'http://localhost:3020'
-const doceasyUrl = 'https://doceasy.intellio.kr'
-const stockeasyUrl = 'https://stockeasy.intellio.kr'
+const doceasyUrl = process.env.NEXT_PUBLIC_DOCEASY_URL
+const stockeasyUrl = process.env.NEXT_PUBLIC_STOCKEASY_URL
 console.log('process.env.NEXT_PUBLIC_ENV : ', process.env.NEXT_PUBLIC_ENV)
-console.log('doceasy : ', doceasyUrl, 'stockeasy : ', stockeasyUrl)
+console.log('process.env.NEXT_PUBLIC_USE_SERVER_FRONTEND : ', process.env.NEXT_PUBLIC_USE_SERVER_FRONTEND)
+console.log('doceasy : ', doceasyUrl, ', stockeasy : ', stockeasyUrl)
 export default function Hero() {
   return (
     <section className="container relative flex min-h-[calc(100vh-3.5rem)] max-w-screen-2xl flex-col items-center justify-center space-y-8 py-24 text-center md:py-32">
