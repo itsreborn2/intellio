@@ -38,7 +38,7 @@ class VectorStoreManager:
                     cls._instance = super(VectorStoreManager, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, embedding_model_type: EmbeddingModelType = None, namespace: str = None):
+    def __init__(self, embedding_model_type: EmbeddingModelType = None, namespace: str = None, project_name:str = None):
         """
         VectorStoreManager 초기화
         Args:
@@ -54,10 +54,10 @@ class VectorStoreManager:
             
             if not self._initialized and embedding_model_type is None:
                 raise ValueError("첫 초기화 시에는 embedding_model_type이 필요합니다.")
-            
+            self.project_name = project_name
             self.embedding_model_type = embedding_model_type
             self.namespace = namespace
-            #self.embedding_model_manager = None
+            
             self.embedding_model_config = None
             self.pinecone_client = None
             self.index = None
@@ -73,9 +73,12 @@ class VectorStoreManager:
             self.embedding_obj, self.embedding_obj_async = self.embedding_model_provider.get_embeddings_obj()
             self.embedding_model_config = embedding_service.current_model_config
 
+            _api_key = settings.PINECONE_API_KEY_DOCEASY
+            if self.project_name == "stockeasy":
+                _api_key = settings.PINECONE_API_KEY_STOCKEASY
             # Pinecone 초기화 (새로운 방식)
             self.pinecone_client = PineconeClient(
-                api_key=settings.PINECONE_API_KEY,
+                api_key=_api_key,
                 environment=settings.PINECONE_ENVIRONMENT
             )
 
@@ -87,6 +90,8 @@ class VectorStoreManager:
                     self.pinecone_client.create_index(
                         name=self.embedding_model_config.name,
                         dimension=self.embedding_model_config.dimension,
+                        #metric="euclidean" 이미지, 오디오등에 적합.
+                        #metric="dotproduct", 계산이 빠름, 크기가 중요한 경유.
                         metric="cosine",
                         spec=PodSpec(
                             environment=settings.PINECONE_ENVIRONMENT,

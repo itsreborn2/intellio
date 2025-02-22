@@ -38,16 +38,9 @@ async def get_pinecone_data(
 ):
     """특정 namespace의 Pinecone DB 데이터를 반환합니다."""
     try:
-        # VectorStoreManager 초기화
-        embedding_service = EmbeddingService()
-        vector_store = VectorStoreManager(embedding_model_type=embedding_service.get_model_type())
         
-        # 초기화 확인
-        if not vector_store.index:
-            raise HTTPException(
-                status_code=500,
-                detail="Pinecone 인덱스 초기화 실패"
-            )
+        
+        
             
         # namespace 유효성 검사
         valid_namespaces = {
@@ -67,6 +60,20 @@ async def get_pinecone_data(
         
         logger.info(f"Pinecone 데이터 조회 시작 - namespace: {actual_namespace}")
         
+        real_project_name = "stockeasy"
+        if namespace == "doceasy":  
+            real_project_name = "doceasy"
+        # VectorStoreManager 초기화
+        embedding_service = EmbeddingService()
+        vector_store = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(),
+                                         project_name=real_project_name)
+        
+        # 초기화 확인
+        if not vector_store.index:
+            raise HTTPException(
+                status_code=500,
+                detail="Pinecone 인덱스 초기화 실패"
+            )
             
         # 전체 데이터 조회 (모델 차원에 맞는 벡터 사용)
         response = vector_store.index.query(

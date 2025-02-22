@@ -1,21 +1,21 @@
 """카테고리 관련 API 라우터"""
 
-from fastapi import APIRouter, Depends, Response, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from common.services.embedding import EmbeddingService
 from common.services.vector_store_manager import VectorStoreManager
 from doceasy.models.document import Document
-from doceasy.services.document import DocumentService
 from doceasy.schemas.category import CategoryResponse, CategoryCreate, AddProjectToCategory
 from doceasy.schemas.project import ProjectSimpleResponse
 from doceasy.models.category import Category
 from doceasy.models.project import Project
 from doceasy.models.table_history import TableHistory
 from common.models.user import Session
-from common.core.deps import get_current_session, get_embedding_service, get_vector_manager
+from common.core.deps import get_current_session, get_embedding_service
 from common.core.database import  get_db_async
+from common.core.config import settings
 from uuid import UUID
 #import logging
 from fastapi.responses import JSONResponse
@@ -330,7 +330,7 @@ async def delete_project(
     project_id: str,
     db: AsyncSession = Depends(get_db_async),
     current_user: Session = Depends(get_current_session),
-    vs:VectorStoreManager = Depends(get_vector_manager)
+    embedding_service: EmbeddingService = Depends(get_embedding_service)
 ):
     """
     프로젝트와 관련된 모든 데이터를 삭제합니다.
@@ -380,7 +380,9 @@ async def delete_project(
         
         logger.info(f"삭제할 문서 : {len(ids)}개, 임베딩 ID : {len(remove_list)}개")
 
-        #vs.delete_documents_by_embedding_id(remove_list)
+        vs:VectorStoreManager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(),
+                                                    project_name="doceasy",
+                                                    namespace=settings.PINECONE_NAMESPACE_DOCEASY)
         await vs.delete_documents_by_embedding_id_async(remove_list)
 
         # 프로젝트와 연관된 모든 데이터 삭제

@@ -253,7 +253,8 @@ class TelegramRAGService:
             dynamic_threshold = self._calculate_dynamic_threshold(query)
             
             vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type(),
-                                          namespace=settings.PINECONE_NAMESPACE_STOCKEASY)
+                                            project_name="stockeasy",
+                                            namespace=settings.PINECONE_NAMESPACE_STOCKEASY)
 
             semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
                                                         min_score=dynamic_threshold,

@@ -62,8 +62,9 @@ class TelegramEmbeddingService(CommonEmbeddingService):
         super().__init__()
         self.namespace = settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM
         self.vector_store = VectorStoreManager(
-            EmbeddingModelType.GOOGLE_MULTI_LANG,
-            namespace=self.namespace
+            EmbeddingModelType.GOOGLE_MULTI_LANG,   
+            project_name="stockeasy",
+            namespace=self.namespace,
         )
 
     def _create_telegram_metadata(self, message: TelegramMessage) -> dict:

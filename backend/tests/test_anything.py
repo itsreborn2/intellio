@@ -7,8 +7,6 @@ from pathlib import Path
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
-
-
 from common.services.llm_models import LLMModels
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
@@ -49,6 +47,77 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+async def test_google_storage_service():
+    from common.services.storage import GoogleCloudStorageService
+    storage = GoogleCloudStorageService(
+        project_id=settings.GOOGLE_CLOUD_PROJECT,
+        bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET,
+        credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS
+    )
+    #await storage.upload_file("test2.txt", "Hello, World!2222222")
+    ss = await storage.get_download_url("AMD AI 컨퍼런스_2023.12.06.docx")
+    print(ss)
+    #storage.upload_file("test3.txt", "Hello, World!3333333")
+
+def test_google_storage():
+    # 인증 설정
+    from google.cloud import storage
+    from google.oauth2 import service_account
+    credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI", "")
+    credentials = service_account.Credentials.from_service_account_file(credentials_path)
+
+    # 스토리지 클라이언트 초기화
+    storage_client = storage.Client(credentials=credentials)
+    buckets = list(storage_client.list_buckets())
+    print("Storage Buckets:", [bucket.name for bucket in buckets])
+    # 버킷 접근
+    print(f"bucket: {settings.GOOGLE_CLOUD_STORAGE_BUCKET}")
+    bucket = storage_client.bucket(settings.GOOGLE_CLOUD_STORAGE_BUCKET)
+    # # 테스트 파일 업로드
+    # blob = bucket.blob('test.txt')
+    # blob.upload_from_string('Hello, World!')
+
+    # 기존 파이 업로그
+    # file_path = 'D:/Work/닥이지_테스트문서/화장품_3QPre_견조한_업황,_실적은_기대치_부합_예상.pdf'# 파일명만 추출 (경로 제외)
+    # file_name = os.path.basename(file_path)
+    
+    # # 스토리지에 업로드 (documents 폴더 아래에 저장)
+    # blob = bucket.blob(f'doc/{file_name}')
+    # blob.upload_from_filename(file_path)
+    
+    # print(f"파일 업로드 완료: {file_name}")
+    blobs = bucket.list_blobs()
+    print("\n=== 전체 파일 목록 ===")
+    for blob in blobs:
+        print(f"- {blob.name} (크기: {blob.size} bytes)")
+
+
+    #2. 특정 폴더 내 파일 리스트
+    prefix = "doc/"  # 폴더 경로
+    delimiter = "/"        # 폴더 구분자
+    blobs = bucket.list_blobs(prefix=prefix, delimiter=delimiter)
+    
+    print(f"\n=== {prefix} 폴더 내 파일 목록 ===")
+    for blob in blobs:
+        print(f"- {blob.name}")
+    
+    # 3. 폴더 목록 (prefix로 시작하는 하위 폴더들)
+    print(f"\n=== {prefix} 하위 폴더 목록 ===")
+    for prefix in blobs.prefixes:
+        print(f"- {prefix}")
+
+    blobs = bucket.list_blobs()
+    print("\n=== 상세 파일 정보 ===")
+    for blob in blobs:
+        print(f"""
+파일명: {blob.name}
+크기: {blob.size:,} bytes
+생성일: {blob.time_created}
+수정일: {blob.updated}
+Content Type: {blob.content_type}
+다운로드 URL: {blob.public_url if blob.public_url else '비공개'}
+-------------------""")
+
 def test_vertex_embedding():
     # Vertex AI 초기화
     project_id = os.getenv("GOOGLE_PROJECT_ID_VERTEXAI")
@@ -56,6 +125,9 @@ def test_vertex_embedding():
     credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI", "")
     if not project_id:
         raise ValueError("GOOGLE_PROJECT_ID_VERTEXAI 환경 변수가 설정되지 않았습니다.")
+    print(f'project_id: {project_id}')
+    print(f'location: {location}')
+    print(f'credentials_path: {credentials_path}')
     # 서비스 계정 키 JSON 파일로부터 credentials 객체 생성
     credentials = service_account.Credentials.from_service_account_file(credentials_path)
     
@@ -280,37 +352,17 @@ def test_get_gemini_models():
             print("---")
     except Exception as e:
         print(f"오류 발생: {e}")
+def test_gemini_generate():
+    llm = LLMModels()
+    print(f'settings.GEMINI_API_KEY: {settings.GEMINI_API_KEY}')
+    response = llm.generate("안녕하세요", "반갑게 인사해줘")
+    
+    print(response.content)
 def test_func():
     
     console = Console()
     
-    # vector_store = VectorStoreManager(
-    #         EmbeddingModelType.GOOGLE_MULTI_LANG,
-    #         namespace=settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM
-    #     )
     
-    # results = vector_store.search("DeepSeek에 관한 동향은?", 5)
-    
-    # for idx, (doc, score) in enumerate(results, 1):
-    #     # 메타데이터 테이블 생성
-    #     metadata_table = Table(title="메타데이터", show_header=True, header_style="bold magenta")
-    #     metadata_table.add_column("키", style="cyan")
-    #     metadata_table.add_column("값", style="green")
-        
-    #     for key, value in doc.metadata.items():
-    #         metadata_table.add_row(str(key), str(value))
-        
-    #     # 문서 내용과 유사도 점수를 패널로 표시
-    #     content_panel = Panel(
-    #         f"{doc.page_content}\n\n[bold red]유사도 점수:[/bold red] {score:.4f}",
-    #         title=f"검색 결과 #{idx}",
-    #         border_style="blue"
-    #     )
-        
-    #     # 출력
-    #     console.print(metadata_table)
-    #     console.print(content_panel)
-    #     console.print("\n" + "="*100 + "\n")  # 구분선
 
     
     
@@ -329,6 +381,9 @@ async def test_func_aync():
     
 if __name__ == "__main__":
     #print(os.getcwd())
+    #test_google_storage()
+    #asyncio.run(test_google_storage_service())
+    test_gemini_generate()
     #test_vertex_embedding()
     #test_kakao_embedding() 
     #test_kakao_llm()
@@ -338,5 +393,5 @@ if __name__ == "__main__":
     #test_func()
     #test_langchain_google_embedding()
     #asyncio.run(test_langsmith2())
-    asyncio.run(test_func_aync())
+    #asyncio.run(test_func_aync())
 

@@ -4,17 +4,17 @@ services:
   fastapi:
     env_file:
       - .env.production
-      - backend/.env.production
+      #- backend/.env.production
     environment:
       - ENV=production
 
   celery-doceasy:
     env_file:
       - .env.production
-      - backend/.env.production
+      #- backend/.env.production
 
   celery-stockeasy:
     env_file:
       - .env.production
-      - backend/.env.production
+      #- backend/.env.production
 

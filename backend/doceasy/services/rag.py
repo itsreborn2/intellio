@@ -453,6 +453,7 @@ class RAGService:
             filtersMetadata = {"document_ids": document_ids} if document_ids else None
             
             vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type(),
+                                            project_name="doceasy",
                                             namespace=settings.PINECONE_NAMESPACE_DOCEASY)
 
             if query_type == "table":

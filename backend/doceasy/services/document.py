@@ -4,9 +4,7 @@ from fastapi import UploadFile, BackgroundTasks, HTTPException
 import logging
 import json
 import re
-from datetime import datetime
 
-from common.services.vector_store_manager import VectorStoreManager
 from common.core.redis import redis_client
 from common.services.storage import GoogleCloudStorageService
 

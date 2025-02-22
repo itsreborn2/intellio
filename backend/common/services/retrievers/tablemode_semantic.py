@@ -1,7 +1,6 @@
 from typing import List, Dict, Optional, Tuple
 import logging
 from loguru import logger
-from .base import BaseRetriever, RetrieverConfig
 from .models import Document, RetrievalResult
 
 from common.services.vector_store_manager import VectorStoreManager

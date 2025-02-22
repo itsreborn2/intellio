@@ -8,7 +8,7 @@ services:
       - ./backend:/backend
     env_file:
       - .env.development
-      - backend/.env.development
+      #- backend/.env.development
 
     environment:
       - ENV=development
@@ -18,7 +18,7 @@ services:
       - ./backend:/backend
     env_file:
       - .env.development
-      - backend/.env.development  
+      #- backend/.env.development  
 
 
   celery-stockeasy:
@@ -26,6 +26,6 @@ services:
       - ./backend:/backend
     env_file:
       - .env.development
-      - backend/.env.development
+      #- backend/.env.development
 
 

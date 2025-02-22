@@ -86,7 +86,7 @@ celery.conf.update(
     task_reject_on_worker_lost=True,
     
     # 결과 설정
-    result_backend='redis://localhost:6379/0',
+    result_backend=stockeasy_settings.CELERY_RESULT_BACKEND,
     result_expires=300,  # 5분
     
     # 로깅 설정

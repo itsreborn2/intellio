@@ -424,6 +424,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
         
         # 벡터 저장 (동기)
         vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(), 
+                                        project_name="doceasy",
                                         namespace=settings_doceasy.PINECONE_NAMESPACE_DOCEASY)
         vs_manager.store_vectors(vectors)
             

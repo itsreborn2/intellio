@@ -70,20 +70,15 @@ class CommonSettings(BaseSettings):
     PGADMIN_PASSWORD: str
     
     # Google Cloud Storage - from .env
-    GOOGLE_CLOUD_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "intellio-document")
-    GOOGLE_APPLICATION_CREDENTIALS: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-    GOOGLE_DOCUMENT_AI_PROCESSOR_ID: str = os.getenv("GOOGLE_DOCUMENT_AI_PROCESSOR_ID", "")
-    GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "")
-    GOOGLE_CLOUD_STORAGE_BUCKET: str = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET", "")
+    GOOGLE_CLOUD_PROJECT: str
+    GOOGLE_APPLICATION_CREDENTIALS: str
+    GOOGLE_DOCUMENT_AI_PROCESSOR_ID: str
+    GOOGLE_CLOUD_STORAGE_BUCKET: str
 
     # Google Cloud for Vertex AI
-    GOOGLE_PROJECT_ID_VERTEXAI: str = os.getenv("GOOGLE_PROJECT_ID_VERTEXAI", "")
-    GOOGLE_LOCATION_VERTEXAI: str = os.getenv("GOOGLE_LOCATION_VERTEXAI", "")
-    GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI", "")
-
-    # GCP Vertex AI 설정
-    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "")
-    GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-central1")
+    GOOGLE_PROJECT_ID_VERTEXAI: str
+    GOOGLE_LOCATION_VERTEXAI: str
+    GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI: str
 
     # Tika 설정
     TIKA_HOST: str
@@ -120,9 +115,9 @@ class CommonSettings(BaseSettings):
     MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024  # 16MB
 
     # Pinecone Settings
-    PINECONE_API_KEY: str
+    PINECONE_API_KEY_DOCEASY:str
+    PINECONE_API_KEY_STOCKEASY:str
     PINECONE_ENVIRONMENT: str = "us-east-1"
-    PINECONE_INDEX_NAME: str = "intellio-embeddings"
     PINECONE_NAMESPACE_DOCEASY:str
     PINECONE_NAMESPACE_STOCKEASY:str
     PINECONE_NAMESPACE_STOCKEASY_TELEGRAM:str

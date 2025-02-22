@@ -69,9 +69,3 @@ async def get_user_service(
 async def get_embedding_service() -> EmbeddingService:
     return EmbeddingService()
 
-# vector store manager 의존성
-async def get_vector_manager(
-    embedding_service: EmbeddingService = Depends(get_embedding_service)
-) -> VectorStoreManager:
-    ss = VectorStoreManager(embedding_model_type=embedding_service.get_model_type())
-    return ss
