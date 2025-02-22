@@ -186,7 +186,7 @@ services:
     restart: unless-stopped
     networks:
       - app-network
-   # profiles: ["donotstart"] 
+   # profiles: ["donotstart"]   
 
   nginx:
     image: nginx:latest
