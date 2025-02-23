@@ -2,7 +2,7 @@
 
 # Wait for database to be ready (optional but recommended)
 echo "Waiting for database to be ready..."
-sleep 10
+sleep 5
 
 # Run database migrations
 echo "Running database migrations..."

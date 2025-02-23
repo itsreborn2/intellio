@@ -27,10 +27,6 @@ class TextSplitter:
     """
     
     def __init__(self, splitter_type:Optional[str]=None, chunk_size:Optional[int]=None, chunk_overlap:Optional[int]=None):
-        #load_dotenv()
-        # 환경변수 강제 재로드, 개발모드에서만 사용. 나중에는 풀어야함. 
-        # text splitter 호출할때마다 IO가 발생해서 느려짐
-        #load_dotenv(override=True)
         
         # 환경변수에서 기본값 로드
         default_splitter = settings.TEXT_SPLITTER

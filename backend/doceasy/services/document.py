@@ -14,7 +14,7 @@ from doceasy.services.extractor import DocumentExtractor
 
 from doceasy.core.celery_app import celery
 from sqlalchemy import select
-from doceasy.core.config import settings_doceasy
+from common.core.config import settings
 
 # 문서 상태 상수 정의
 DOCUMENT_STATUS_REGISTERED = 'REGISTERED'
@@ -43,9 +43,9 @@ class DocumentService:
             'application/vnd.hancom.hwp'  # 또 다른 HWP MIME 타입
         ]
         self.storage = GoogleCloudStorageService(
-            project_id=settings_doceasy.GOOGLE_CLOUD_PROJECT,
-            bucket_name=settings_doceasy.GOOGLE_CLOUD_STORAGE_BUCKET,
-            credentials_path=settings_doceasy.GOOGLE_APPLICATION_CREDENTIALS
+            project_id=settings.GOOGLE_CLOUD_PROJECT,
+            bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET,
+            credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS
         )
         self.extractor = DocumentExtractor()
 

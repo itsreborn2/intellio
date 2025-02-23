@@ -1,6 +1,10 @@
 version: '3.8'
 
 services:
+  postgres:
+    env_file:
+      - .env.production
+      
   fastapi:
     env_file:
       - .env.production

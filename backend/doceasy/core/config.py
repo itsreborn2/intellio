@@ -53,6 +53,7 @@ class SettingsDoceasy(CommonSettings):
 
     def __init__(self, **kwargs):
         env_file = self.model_config["env_file"]
+        logger.info(f"[Doceasy] env_file: {env_file}")
         if os.path.exists(env_file):
             encoding = detect_file_encoding(env_file)
             self.model_config["env_file_encoding"] = encoding
@@ -84,3 +85,9 @@ logger.info(f"TIKA_SERVER_ENDPOINT: {settings_doceasy.TIKA_SERVER_ENDPOINT}")
 logger.info(f"FASTAPI_URL: {settings_doceasy.FASTAPI_URL}")
 logger.info(f"INTELLIO_URL: {settings_doceasy.INTELLIO_URL}")
 logger.info(f"DOCEASY_URL: {settings_doceasy.DOCEASY_URL}")
+
+
+logger.info(f"POSTGRES_SERVER: {settings_doceasy.POSTGRES_SERVER}")
+logger.info(f"POSTGRES_USER: {settings_doceasy.POSTGRES_USER}")
+logger.info(f"POSTGRES_DB: {settings_doceasy.POSTGRES_DB}")
+logger.info(f"POSTGRES_HOST: {settings_doceasy.POSTGRES_HOST}")

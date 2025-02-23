@@ -1,7 +1,7 @@
 from typing import List
 from uuid import UUID
 from celery import group, shared_task
-from dotenv import load_dotenv
+
 from sqlalchemy.orm import Session
 from datetime import datetime
 import asyncio
@@ -9,6 +9,7 @@ import json
 from uuid import UUID
 from typing import List, Optional
 
+from common.app import LoadEnvGlobal
 from common.core.database import SessionLocal, get_db_async, AsyncSessionLocal
 from common.core.redis import RedisClient
 from common.services.embedding import EmbeddingService
@@ -18,7 +19,7 @@ from common.services.vector_store_manager import VectorStoreManager
 from doceasy.core.celery_app import celery
 from doceasy.models.document import Document
 from doceasy.services.document import DocumentService
-from doceasy.core.config import settings_doceasy
+from common.core.config import settings
 
 from celery.signals import worker_ready
 import os
@@ -38,7 +39,7 @@ DOCUMENT_STATUS_DELETED = 'DELETED'
 def init_worker(sender=None, **kwargs):
     """Document worker 초기화 시 실행되는 함수"""
     try:
-        load_dotenv(override=True)
+        LoadEnvGlobal()
         logger.info(f"Document Worker 초기화 [ProcessID: {os.getpid()}]")
         global redis_client_for_document
         redis_client_for_document = RedisClient()
@@ -425,7 +426,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
         # 벡터 저장 (동기)
         vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(), 
                                         project_name="doceasy",
-                                        namespace=settings_doceasy.PINECONE_NAMESPACE_DOCEASY)
+                                        namespace=settings.PINECONE_NAMESPACE_DOCEASY)
         vs_manager.store_vectors(vectors)
             
         # 모든 청크가 처리되었는지 확인

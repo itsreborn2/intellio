@@ -1,6 +1,6 @@
 import asyncio
 from celery import shared_task
-from dotenv import load_dotenv
+from common.app import LoadEnvGlobal
 from doceasy.core.celery_app import celery
 from loguru import logger
 import json
@@ -13,7 +13,7 @@ import threading
 @worker_ready.connect
 def init_worker(**kwargs):
     """Celery worker 초기화 시 실행되는 함수"""
-    load_dotenv(override=True)
+    LoadEnvGlobal()
     logger.info(f"RAG Worker 초기화 [ProcessID: {os.getpid()}]")
     gemini_api = LLMModels() 
     #gemini_api.initialize(settings.GEMINI_API_KEY)

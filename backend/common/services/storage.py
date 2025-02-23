@@ -7,7 +7,7 @@ from functools import partial
 from google.cloud import storage
 from google.oauth2 import service_account
 
-from doceasy.core.config import settings_doceasy
+from common.core.config import settings
 
 logger = logging.getLogger(__name__)
 

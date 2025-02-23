@@ -5,7 +5,7 @@ import logging
 from openai import AsyncOpenAI
 import google.generativeai as genai
 from google.generativeai.types import GenerateContentResponse
-from doceasy.core.config import settings_doceasy
+from common.core.config import settings
 from common.core.cache import AsyncRedisCache, RedisCache
 import json
 from loguru import logger
@@ -37,12 +37,12 @@ class BasePrompt:
        
         # 캐시 초기화
         self.async_cache = AsyncRedisCache(
-            redis_url=redis_url or settings_doceasy.REDIS_URL,
-            expire_time=cache_expire or settings_doceasy.REDIS_CACHE_EXPIRE
+            redis_url=redis_url or settings.REDIS_URL,
+            expire_time=cache_expire or settings.REDIS_CACHE_EXPIRE
         )
         self.sync_cache = RedisCache(
-            redis_url=redis_url or settings_doceasy.REDIS_URL,
-            expire_time=cache_expire or settings_doceasy.REDIS_CACHE_EXPIRE
+            redis_url=redis_url or settings.REDIS_URL,
+            expire_time=cache_expire or settings.REDIS_CACHE_EXPIRE
         )
 
     async def process_prompt_async(self, user_query: str, prompt_context:str) -> str:
