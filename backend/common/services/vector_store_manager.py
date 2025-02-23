@@ -10,6 +10,8 @@ from threading import Lock
 import asyncio
 from functools import wraps
 from common.services.embedding import EmbeddingService
+from numpy.linalg import norm
+import numpy as np
 #from langchain_teddynote.community.pinecone import upsert_documents, upsert_documents_parallel
 
 logger = logging.getLogger(__name__)
@@ -86,13 +88,11 @@ class VectorStoreManager:
             if self.embedding_model_config.name not in self.pinecone_client.list_indexes().names():
                 logger.error(f"Pinecone 인덱스 {self.embedding_model_config.name} 없음. 생성 중...")
                 try:
-                    # 인덱스 생성
+                    # 인덱스 생성 - 메트릭을 dotproduct로 변경
                     self.pinecone_client.create_index(
                         name=self.embedding_model_config.name,
                         dimension=self.embedding_model_config.dimension,
-                        #metric="euclidean" 이미지, 오디오등에 적합.
-                        #metric="dotproduct", 계산이 빠름, 크기가 중요한 경유.
-                        metric="cosine",
+                        metric="dotproduct",  # cosine에서 dotproduct로 변경
                         spec=PodSpec(
                             environment=settings.PINECONE_ENVIRONMENT,
                             pod_type="p1"
@@ -247,16 +247,26 @@ class VectorStoreManager:
 
     def store_vectors(self, _vectors: List[Dict]) -> bool:
         """벡터를 Pinecone에 저장"""
-
         try:
             if not _vectors:
                 logger.warning("저장할 벡터가 없습니다")
                 return False
             
-            # 벡터 저장
-            logger.info(f"[{self.namespace}] 벡터 {len(_vectors)}개 저장 중")
-            self.index.upsert(vectors=_vectors, namespace=self.namespace)
-            logger.info(f"[{self.namespace}] 벡터 {len(_vectors)}개 저장 완료")
+            # 벡터 정규화 수행
+            normalized_vectors = []
+            for vector in _vectors:
+                values = vector.get("values", [])
+                if values:
+                    # L2 정규화 수행
+                    values_array = np.array(values)
+                    normalized_values = values_array / norm(values_array)
+                    vector["values"] = normalized_values.tolist()
+                normalized_vectors.append(vector)
+            
+            # 정규화된 벡터 저장
+            logger.info(f"[{self.namespace}] 벡터 {len(normalized_vectors)}개 저장 중")
+            self.index.upsert(vectors=normalized_vectors, namespace=self.namespace)
+            logger.info(f"[{self.namespace}] 벡터 {len(normalized_vectors)}개 저장 완료")
             return True
 
         except Exception as e:
@@ -271,10 +281,21 @@ class VectorStoreManager:
                 logger.warning("저장할 벡터가 없습니다")
                 return False
             
-            # 벡터 저장
-            logger.info(f"[{self.namespace}] 벡터 {len(_vectors)}개 저장 중")
-            await self.index.upsert(vectors=_vectors, namespace=self.namespace)
-            logger.info(f"[{self.namespace}] 벡터 {len(_vectors)}개 저장 완료")
+            # 벡터 정규화 수행
+            normalized_vectors = []
+            for vector in _vectors:
+                values = vector.get("values", [])
+                if values:
+                    # L2 정규화 수행
+                    values_array = np.array(values)
+                    normalized_values = values_array / norm(values_array)
+                    vector["values"] = normalized_values.tolist()
+                normalized_vectors.append(vector)
+            
+            # 정규화된 벡터 저장
+            logger.info(f"[{self.namespace}] 벡터 {len(normalized_vectors)}개 저장 중")
+            await self.index.upsert(vectors=normalized_vectors, namespace=self.namespace)
+            logger.info(f"[{self.namespace}] 벡터 {len(normalized_vectors)}개 저장 완료")
             return True
 
         except Exception as e:
