@@ -277,6 +277,11 @@ function ProjectCategorySectionContent({
         });
         return newCategoryProjects;
       });
+
+      // 현재 프로젝트가 삭제된 프로젝트인 경우 앱의 상태를 초기화
+      if (state.currentProjectId === projectId) {
+        dispatch({ type: 'SET_INITIAL_STATE' });
+      }
     } catch (error) {
       console.error('프로젝트 삭제 실패:', error);
     }
