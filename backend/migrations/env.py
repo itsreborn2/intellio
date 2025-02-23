@@ -9,7 +9,11 @@ from alembic import context
 from dotenv import load_dotenv
 
 # .env 파일의 절대 경로
-dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+if os.getenv('ENV') == 'development':
+    dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env.development")
+else:
+    dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env.production")
+print(f"dotenv_path : {dotenv_path}")
 load_dotenv(dotenv_path, override=True)
 print(f"DATABASE_URL[After] : {os.getenv('DATABASE_URL')}")
 print(f"POSTGRES_HOST : {os.getenv('POSTGRES_HOST')}")
