@@ -328,8 +328,12 @@ class LLMModels:
         
         try:
             async with self._stream_lock:  # 스트림 세션 동기화
-                #prompt_template = ChatPromptTemplate.from_template("{prompt}")
-                system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
+                
+                content = prompt_context.replace('{', '{{').replace('}', '}}')
+                # 개행 문자 정규화
+                sanitized_prompt_context = content.replace('\r\n', '\n').replace('\r', '\n')
+
+                system_message_prompt = SystemMessagePromptTemplate.from_template(sanitized_prompt_context)
                 # User 메시지 템플릿
                 user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
 
@@ -337,7 +341,7 @@ class LLMModels:
                 prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
 
                 # 메시지 생성
-                formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
+                formatted_messages = prompt_template.format_messages(context=sanitized_prompt_context, question=user_query)
                 
                 # 스트리밍 시작
                 stream = self._llm_streaming.astream(formatted_messages)
