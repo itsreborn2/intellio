@@ -1,14 +1,16 @@
+from datetime import datetime
 from uuid import UUID, uuid4
-from typing import List, Optional
+from typing import Dict, List, Optional, Any
 from fastapi import UploadFile, BackgroundTasks, HTTPException
 import logging
 import json
 import re
 
+from common.models.user import Session
 from common.core.redis import redis_client
 from common.services.storage import GoogleCloudStorageService
 
-from doceasy.models.document import Document
+from doceasy.models.document import Document, DocumentChunk
 from doceasy.models.project import Project
 from doceasy.services.extractor import DocumentExtractor
 
@@ -87,7 +89,7 @@ class DocumentService:
             생성된 Document 객체 목록
         """
        
-        
+        #예전에 쓰던 업로드 방식.
         if not files:
             raise HTTPException(status_code=400, detail="No files provided")
             
@@ -481,4 +483,175 @@ class DocumentService:
             await self.db.rollback()
             raise
 
+    
+
+class DocumentDatabaseManager:
+    """문서 관련 데이터베이스 작업을 관리하는 클래스"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_document(self, document_id: UUID) -> Optional[Document]:
+        """문서 조회"""
+        return self.db.query(Document).filter(Document.id == document_id).first()
+
+    def update_document_status(self, document_id: UUID, status: str, error_message: Optional[str] = None) -> None:
+        """문서 상태 업데이트"""
+        doc = self.get_document(document_id)
+        if doc:
+            doc.status = status
+            if error_message:
+                doc.error_message = error_message
+            doc.updated_at = datetime.now()
+            self.db.commit()
+
+    def delete_document_chunks(self, document_id: UUID) -> None:
+        """문서의 모든 청크 삭제"""
+        self.db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()
+        self.db.commit()
+
+    def create_document_chunks(self, document_id: UUID, chunks: List[str], filename: str) -> List[DocumentChunk]:
+        """문서 청크 생성 및 저장"""
+        chunk_objects = []
+        for idx, chunk_content in enumerate(chunks):
+            chunk = DocumentChunk(
+                document_id=document_id,
+                chunk_index=idx,
+                chunk_content=chunk_content,
+                chunk_metadata=json.dumps({
+                    "index": idx,
+                    "document_name": filename,
+                    "chunk_size": len(chunk_content)
+                    #나중에 청크가 문서의 원본 몇페이지에 있는건지 기록할 필요가 있음.
+                })
+            )
+            self.db.add(chunk)
+            chunk_objects.append(chunk)
+        
+        self.db.commit()
+        return chunk_objects
+
+    def get_document_chunks(self, document_id: UUID) -> List[DocumentChunk]:
+        """문서의 모든 청크 조회"""
+        return self.db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).all()
+
+    def update_document_embedding_ids(self, document_id: UUID, chunk_ids: List[str]) -> None:
+        """문서의 임베딩 ID 업데이트"""
+        doc = self.get_document(document_id)
+        if doc:
+            try:
+                if not doc.embedding_ids:
+                    doc.embedding_ids = json.dumps(chunk_ids)
+                else:
+                    existing_ids = json.loads(doc.embedding_ids)
+                    existing_ids.extend(chunk_ids)
+                    doc.embedding_ids = json.dumps(existing_ids)
+                self.db.commit()
+            except Exception as e:
+                logger.error(f"임베딩 ID 업데이트 중 오류 발생: {str(e)}")
+                raise
+
+    def get_documents_by_project(self, project_id: UUID) -> List[Document]:
+        """프로젝트의 모든 문서 조회"""
+        return self.db.query(Document).filter(Document.project_id == project_id).all()
+
+    def get_document_with_chunks(self, document_id: UUID) -> Optional[Dict[str, Any]]:
+        """문서와 관련 청크 정보를 함께 조회"""
+        doc = self.get_document(document_id)
+        if not doc:
+            return None
+
+        chunks = self.get_document_chunks(document_id)
+        return {
+            "document": doc,
+            "chunks": chunks,
+            "total_chunks": len(chunks)
+        } 
+    
+    
+class AsyncDocumentDatabaseManager:
+    """문서 관련 데이터베이스 작업을 관리하는 클래스 (비동기 버전)"""
+
+    def __init__(self, db):
+        self.db = db
+
+    async def get_document(self, document_id: UUID) -> Optional[Document]:
+        """문서 조회"""
+        result = await self.db.execute(select(Document).filter(Document.id == document_id))
+        return result.scalar_one_or_none()
+
+    async def update_document_status(self, document_id: UUID, status: str, error_message: Optional[str] = None) -> None:
+        """문서 상태 업데이트"""
+        doc = await self.get_document(document_id)
+        if doc:
+            doc.status = status
+            if error_message:
+                doc.error_message = error_message
+            doc.updated_at = datetime.now()
+            await self.db.commit()
+
+    async def delete_document_chunks(self, document_id: UUID) -> None:
+        """문서의 모든 청크 삭제"""
+        await self.db.execute(select(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete())
+        await self.db.commit()
+
+    async def create_document_chunks(self, document_id: UUID, chunks: List[str], filename: str) -> List[DocumentChunk]:
+        """문서 청크 생성 및 저장"""
+        chunk_objects = []
+        for idx, chunk_content in enumerate(chunks):
+            chunk = DocumentChunk(
+                document_id=document_id,
+                chunk_index=idx,
+                chunk_content=chunk_content,
+                chunk_metadata=json.dumps({
+                    "index": idx,
+                    "document_name": filename,
+                    "chunk_size": len(chunk_content)
+                })
+            )
+            self.db.add(chunk)
+            chunk_objects.append(chunk)
+        
+        await self.db.commit()
+        return chunk_objects
+
+    async def get_document_chunks(self, document_id: UUID) -> List[DocumentChunk]:
+        """문서의 모든 청크 조회"""
+        result = await self.db.execute(select(DocumentChunk).filter(DocumentChunk.document_id == document_id))
+        return result.scalars().all()
+
+    async def update_document_embedding_ids(self, document_id: UUID, chunk_ids: List[str]) -> None:
+        """문서의 임베딩 ID 업데이트"""
+        doc = await self.get_document(document_id)
+        if doc:
+            try:
+                if not doc.embedding_ids:
+                    doc.embedding_ids = json.dumps(chunk_ids)
+                else:
+                    existing_ids = json.loads(doc.embedding_ids)
+                    existing_ids.extend(chunk_ids)
+                    doc.embedding_ids = json.dumps(existing_ids)
+                await self.db.commit()
+            except Exception as e:
+                logger.error(f"임베딩 ID 업데이트 중 오류 발생: {str(e)}")
+                raise
+
+    async def get_documents_by_project(self, project_id: UUID) -> List[Document]:
+        """프로젝트의 모든 문서 조회"""
+        result = await self.db.execute(select(Document).filter(Document.project_id == project_id))
+        return result.scalars().all()
+
+    async def get_document_with_chunks(self, document_id: UUID) -> Optional[Dict[str, Any]]:
+        """문서와 관련 청크 정보를 함께 조회"""
+        doc = await self.get_document(document_id)
+        if not doc:
+            return None
+
+        chunks = await self.get_document_chunks(document_id)
+        return {
+            "document": doc,
+            "chunks": chunks,
+            "total_chunks": len(chunks)
+        } 
+    
     

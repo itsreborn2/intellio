@@ -168,7 +168,7 @@ class CommonSettings(BaseSettings):
     CHUNK_SIZE:int
     CHUNK_OVERLAP:int
     # 임베딩 설정. 아직 안씀
-    KAKAO_EMBEDDING_MODEL_PATH:str = "common/external/kf-deberta"
+    KAKAO_EMBEDDING_MODEL_PATH:str = "/backend/common/external/kf-deberta"
 
     # 환경 변수 파일 설정
     _env: ClassVar[str] = os.getenv("ENV")

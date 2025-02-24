@@ -464,7 +464,25 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
             #return [embedding.values for embedding in embeddings]
             return embeddings
         except google.api_core.exceptions.GoogleAPIError as e:
-            logger.error(f"Google 임베딩 API 오류: {str(e)} | 배치 크기: {len(batch)}")
+            
+            # str(e)가  429 Quota 문자열을 포함하고 있다면 아래 코드 수행
+            try:
+                if "429 Quota" in str(e):
+                    logger.error("429 Quota 오류 발생. 리전 us-central1로 변경")
+                    credentials_path = settings.GOOGLE_APPLICATION_CREDENTIALS_VERTEXAI
+                    credentials = service_account.Credentials.from_service_account_file(credentials_path)
+                    
+                    self.model = VertexAIEmbeddings(
+                                            model=self.model_name,
+                                            location='us-central1',
+                                            credentials=credentials)
+                    
+                    embeddings = self.model.embed(batch, embeddings_task_type=embeddings_task_type)
+                    return embeddings
+            except google.api_core.exceptions.GoogleAPIError as e:
+                logger.error(f"Google 임베딩 API 리전 변경 후 오류 {str(e)} | 배치 크기: {len(batch)}")
+                raise
+            logger.error(f"Google 임베딩 API 오류1: {str(e)} | 배치 크기: {len(batch)}")
             raise
 
 class KakaoEmbeddingProvider(EmbeddingProvider):

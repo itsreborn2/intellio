@@ -27,6 +27,7 @@ from celery import group
 
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import RetrievalResult
+from common.services.retrievers.hybrid import HybridRetriever, HybridRetrieverConfig, ContextualBM25Config
 
 # logging 설정
 
@@ -293,7 +294,6 @@ class RAGService:
     #                 query=query,
     #                 document_ids=[doc_id],
     #                 top_k=min(self.max_chunks_per_doc - 1, self.chunk_multiplier * top_k)
-    #             )
     #             if first_chunk:
     #                 # 첫 번째 청크를 앞에 추가 (증권사 정보가 주로 여기에 있음)
     #                 return [first_chunk] + (chunks or [])
@@ -466,7 +466,7 @@ class RAGService:
                     filters=filtersMetadata
                 )
             else:
-                # Chat Mode
+                #Chat Mode
                 semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
                                                         min_score=0.6, # 최소 유사도 0.6 고정
                                                         ), vs_manager=vs_manager)
@@ -476,6 +476,27 @@ class RAGService:
                     top_k=top_k,
                     filters=filtersMetadata
                 )
+                # # Chat Mode - 하이브리드 검색 사용
+                # hybrid_config = HybridRetrieverConfig(
+                #     semantic_config=SemanticRetrieverConfig(min_score=0.6),
+                #     contextual_bm25_config=ContextualBM25Config(
+                #         min_score=0.3,
+                #         bm25_weight=0.6,
+                #         context_weight=0.4,
+                #         context_window_size=3
+                #     ),
+                #     semantic_weight=0.6,
+                #     contextual_bm25_weight=0.4
+                # )
+                
+                # hybrid_retriever = HybridRetriever(config=hybrid_config, vs_manager=vs_manager)
+                # hybrid_retriever.contextual_bm25_retriever.db = self.db  # db 세션 전달
+                
+                # all_chunks = await hybrid_retriever.retrieve(
+                #     query=normalized_query, 
+                #     top_k=top_k,
+                #     filters=filtersMetadata
+                # )
 
             # 상위 3개의 문서 텍스트 출력
             for idx, doc in enumerate(all_chunks.documents[:3], start=1):

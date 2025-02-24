@@ -55,7 +55,8 @@ class TextSplitter:
         if self.splitter_type == "recursive":
             self.splitter = RecursiveCharacterTextSplitter(
                 chunk_size=self.chunk_size,
-                chunk_overlap=self.chunk_overlap
+                chunk_overlap=self.chunk_overlap,
+                separators=["\n\n", "\n", ".", "。", "!", "?", "！", "？", " ", ""]
             )
         elif self.splitter_type == "character":
             self.splitter = CharacterTextSplitter(

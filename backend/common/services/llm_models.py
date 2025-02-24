@@ -125,7 +125,7 @@ class LLMModels:
                         callbacks=callbacks,
                     )
         elif model_name == "gemini":
-            # 모델 이름: models/gemini-2.0-flash-exp
+            # 모델 이름: models/gemini-2.0-flash-exp # 분당 5회 제한. 실험모델이라 증량 ㅈ불가. 쓰면 안됨.
             # 표시 이름: Gemini 2.0 Flash Experimental
             # ---
             # 모델 이름: models/gemini-2.0-flash
@@ -160,8 +160,7 @@ class LLMModels:
             callbacks = [callback_handler] if callback_handler else None
             return ChatGoogleGenerativeAI(
                         #model="models/gemini-2.0-flash-001",
-                        model="models/gemini-2.0-pro-exp-02-05",
-                        #model="models/gemini-2.0-pro-exp-02-05", # 추론모델 시간 오래걸림.
+                        model="models/gemini-2.0-flash", # 실험모델은 분당 횟수 제한이 심함 분당 2~5회. 사용불가한 수준
                         google_api_key=api_key,
                         temperature=kwargs.get("temperature", 0.2),
                         max_output_tokens=kwargs.get("max_output_tokens", 2048),
