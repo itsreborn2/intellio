@@ -131,6 +131,9 @@ services:
     image: mher/flower
     env_file:
       - .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     ports:
       - "5555:5555"
     depends_on:
