@@ -28,6 +28,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     else \
         echo "Installing without cache for production" && \
         pip install --no-cache-dir -r requirements.txt ; \
+    fi
 
 # Copy backend code
 COPY backend/ .
