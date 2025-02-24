@@ -37,6 +37,11 @@ export function useFileUpload(): UseFileUploadReturn {
     options: UseFileUploadOptions = {}
   ) => {
     try {
+      // 파일 MIME 타입 로깅
+      files.forEach(file => {
+        console.log(`파일명: ${file.name}, MIME 타입: ${file.type}`);
+      });
+      
       let projectId = existingProjectId
 
       if (!projectId) {

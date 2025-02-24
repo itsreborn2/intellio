@@ -7,11 +7,12 @@ from pathlib import Path
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
+from common.app import LoadEnvGlobal
 from common.services.llm_models import LLMModels
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
 import logging
-from dotenv import load_dotenv
+
 from google.oauth2 import service_account
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
@@ -39,8 +40,7 @@ from rich.console import Console
 from rich.table import Table
 
 # 환경 변수 로드
-load_dotenv()
-
+LoadEnvGlobal()
 
 
 # 로깅 설정

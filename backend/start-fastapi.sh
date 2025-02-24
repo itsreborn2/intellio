@@ -2,7 +2,7 @@
 
 # Wait for database to be ready (optional but recommended)
 echo "Waiting for database to be ready..."
-sleep 10
+sleep 5
 
 # Run database migrations
 echo "Running database migrations..."
@@ -13,14 +13,4 @@ export PYTHONPATH=/backend
 
 # Start the FastAPI application
 echo "Starting FastAPI application..."
-exec uvicorn main:app \
-    --host 0.0.0.0 \
-    --port 8000 \
-    --reload \
-    --reload-dir /backend \
-    --log-level debug \
-    --reload-include "*.py" \
-    --reload-include "*.json" \
-    --reload-include "*.yaml" \
-    --reload-include "*.env" \
-    --workers 1
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-level debug 

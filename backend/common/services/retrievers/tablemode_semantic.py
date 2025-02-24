@@ -46,13 +46,42 @@ class TableModeSemanticRetriever(SemanticRetriever):
             RetrievalResult: 검색 결과
         """
         try:
-            # 내일하자..
-            # MMR로 하는게 맞나.
-            # 재귀적으로 Similarity Search 하는게 맞나.
+            async def _recursive_search(remaining_doc_ids: set, found_docs: List[Document], max_retries: int = 3) -> List[Document]:
+                """재귀적으로 누락된 문서를 검색하는 내부 함수"""
+                if not remaining_doc_ids or max_retries <= 0:
+                    return found_docs
+                
+                doc_count = len(remaining_doc_ids)
+                missed_filters = {"document_ids": list(remaining_doc_ids)}
+                logger.warning(f"누락된 문서 재검색 필터 (남은 시도: {max_retries}): {missed_filters}")
+                
+                additional_results = self.vs_manager.search_mmr(
+                    query=query,
+                    filters=missed_filters,
+                    top_k=doc_count*2,
+                    fetch_k=doc_count*4,
+                    lambda_mult=0.2
+                )
+                
+                newly_found_doc_ids = set()
+                for doc, score in additional_results:
+                    doc_id = doc.metadata.get('document_id', None)
+                    if doc_id:
+                        newly_found_doc_ids.add(doc_id)
+                    
+                    new_doc = Document(
+                        page_content=doc.page_content,
+                        metadata=doc.metadata.copy(),
+                        score=score
+                    )
+                    found_docs.append(new_doc)
+                
+                still_missing = remaining_doc_ids - newly_found_doc_ids
+                if still_missing:
+                    return await _recursive_search(still_missing, found_docs, max_retries - 1)
+                return found_docs
 
-            #filter {'document_ids': ['08c0b3c7-4173-4834-a296-095ea6b594c8', 'bb591d2a-362e-4317-b834-e77e99ec03b3']}
             logger.info(f"table 시멘틱 검색 target : {filters}")
-            #vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type())
             doc_ids = filters.get("document_ids") if filters else None
             doc_count = len(doc_ids) if doc_ids else 0
             search_results = self.vs_manager.search_mmr(
@@ -84,43 +113,18 @@ class TableModeSemanticRetriever(SemanticRetriever):
                 doc_id = doc.metadata.get('document_id', None)
                 if doc_id:
                     found_doc_ids.add(doc_id)
-                # 기존 Document 객체의 속성을 복사하여 새로운 Document 생성
+                
                 new_doc = Document(
                     page_content=doc.page_content,
-                    metadata=doc.metadata.copy(),  # metadata는 깊은 복사
-                    score=score  # score 추가
+                    metadata=doc.metadata.copy(),
+                    score=score
                 )
-                
                 documents.append(new_doc)
 
-            ########################################
-            # 누락된 문서에 대하여 재검색
-            # 다양성을 최대치로 줘도 빠지는 문서가 생긴다.
-            ########################################
-
+            # 누락된 문서 재귀적 검색
             missed_doc_ids = set(doc_ids) - found_doc_ids
             if missed_doc_ids:
-                # 누락된 문서들에 대해 추가 검색 수행
-                doc_count = len(missed_doc_ids)
-                missed_filters = {"document_ids": list(missed_doc_ids)}
-                logger.warning(f"누락된 문서 재검색 필터 : {missed_filters}")
-                additional_results = self.vs_manager.search_mmr(
-                    query=query,
-                    filters=missed_filters,
-                    top_k=doc_count*2,
-                    fetch_k=doc_count*4,
-                    lambda_mult=0.3
-                )
-                
-                # 추가 검색 결과를 documents에 추가
-                for doc, score in additional_results:
-                    new_doc = Document(
-                        page_content=doc.page_content,
-                        metadata=doc.metadata.copy(),
-                        score=score
-                    )
-                    documents.append(new_doc)
-            
+                documents = await _recursive_search(missed_doc_ids, documents)
 
             # 쿼리 분석 정보 추가
             query_analysis = {

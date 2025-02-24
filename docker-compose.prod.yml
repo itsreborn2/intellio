@@ -1,20 +1,30 @@
 version: '3.8'
 
 services:
+  postgres:
+    env_file:
+      - .env.production
+      
   fastapi:
     env_file:
       - .env.production
       #- backend/.env.production
     environment:
       - ENV=production
+    volumes:
+      - ./backend:/backend
 
   celery-doceasy:
     env_file:
       - .env.production
       #- backend/.env.production
+    volumes:
+      - ./backend:/backend
 
   celery-stockeasy:
     env_file:
       - .env.production
       #- backend/.env.production
+    volumes:
+      - ./backend:/backend
 

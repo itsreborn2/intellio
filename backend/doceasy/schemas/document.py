@@ -71,24 +71,24 @@ class DocumentListResponse(BaseSchema):
     """문서 목록 응답 스키마"""
     items: List[DocumentResponse] = Field(..., description="문서 목록")
 
-class DocumentChunkBase(BaseSchema):
-    """문서 청크 기본 스키마"""
-    content: str = Field(..., description="청크 내용")
-    metadata: Optional[str] = Field(None, description="청크 메타데이터")
+# class DocumentChunkBase(BaseSchema):
+#     """문서 청크 기본 스키마"""
+#     content: str = Field(..., description="청크 내용")
+#     metadata: Optional[str] = Field(None, description="청크 메타데이터")
 
-class DocumentChunkCreate(DocumentChunkBase):
-    """문서 청크 생성 스키마"""
-    document_id: UUID = Field(..., description="문서 ID")
+# class DocumentChunkCreate(DocumentChunkBase):
+#     """문서 청크 생성 스키마"""
+#     document_id: UUID = Field(..., description="문서 ID")
 
-class DocumentChunkInDB(DocumentChunkBase, TimestampSchema):
-    """데이터베이스의 문서 청크 스키마"""
-    id: UUID = Field(..., description="청크 ID")
-    document_id: UUID = Field(..., description="문서 ID")
-    embedding: Optional[str] = Field(None, description="임베딩 데이터")
+# class DocumentChunkInDB(DocumentChunkBase, TimestampSchema):
+#     """데이터베이스의 문서 청크 스키마"""
+#     id: UUID = Field(..., description="청크 ID")
+#     document_id: UUID = Field(..., description="문서 ID")
+#     embedding: Optional[str] = Field(None, description="임베딩 데이터")
 
-class DocumentChunkResponse(DocumentChunkInDB):
-    """문서 청크 응답 스키마"""
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+# class DocumentChunkResponse(DocumentChunkInDB):
+#     """문서 청크 응답 스키마"""
+#     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 class DocumentUploadResponse(BaseSchema):
     """문서 업로드 응답"""

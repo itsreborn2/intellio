@@ -7,10 +7,6 @@ services:
     env_file:
       - .env
     environment:
-      # POSTGRES_DB: ${POSTGRES_DB}
-      # POSTGRES_USER: ${POSTGRES_USER}
-      # POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      # POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS:-100}
       PGDATA: /var/lib/postgresql/data/pgdata
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
@@ -45,10 +41,12 @@ services:
     image: apache/tika:latest
     ports:
       - "9998:9998"
+    environment:
+      - JAVA_OPTS=-Xmx1g
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9998/tika"]
+      test: ["CMD", "wget", "--spider", "http://localhost:9998/tika"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -59,6 +57,7 @@ services:
       dockerfile: Dockerfile.fastapi
     ports:
       - "8000:8000"
+
     depends_on:
       - postgres
       - redis
@@ -89,6 +88,9 @@ services:
     image: mher/flower
     env_file:
       - .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     ports:
       - "5555:5555"
     depends_on:

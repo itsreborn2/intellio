@@ -30,7 +30,7 @@ logger.remove()  # 기본 핸들러 제거
 logger.add(
     sys.stdout,
     format=Formatter().format,
-    level="DEBUG" if settings.DEBUG else "INFO",
+    level="DEBUG",# "INFO",
     colorize=True,
 )
 

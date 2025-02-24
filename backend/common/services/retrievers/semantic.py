@@ -48,7 +48,6 @@ class SemanticRetriever(BaseRetriever):
 
 
             # VectorStoreManager 사용
-            #vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type())
             search_results = self.vs_manager.search(
                 query=query,
                 #top_k=_top_k * self.config.search_multiplier,  # 더 많은 결과를 가져와서 필터링

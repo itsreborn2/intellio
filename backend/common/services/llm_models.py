@@ -125,7 +125,7 @@ class LLMModels:
                         callbacks=callbacks,
                     )
         elif model_name == "gemini":
-            # 모델 이름: models/gemini-2.0-flash-exp
+            # 모델 이름: models/gemini-2.0-flash-exp # 분당 5회 제한. 실험모델이라 증량 ㅈ불가. 쓰면 안됨.
             # 표시 이름: Gemini 2.0 Flash Experimental
             # ---
             # 모델 이름: models/gemini-2.0-flash
@@ -160,8 +160,7 @@ class LLMModels:
             callbacks = [callback_handler] if callback_handler else None
             return ChatGoogleGenerativeAI(
                         #model="models/gemini-2.0-flash-001",
-                        model="models/gemini-2.0-pro-exp-02-05",
-                        #model="models/gemini-2.0-pro-exp-02-05", # 추론모델 시간 오래걸림.
+                        model="models/gemini-2.0-flash", # 실험모델은 분당 횟수 제한이 심함 분당 2~5회. 사용불가한 수준
                         google_api_key=api_key,
                         temperature=kwargs.get("temperature", 0.2),
                         max_output_tokens=kwargs.get("max_output_tokens", 2048),
@@ -328,8 +327,12 @@ class LLMModels:
         
         try:
             async with self._stream_lock:  # 스트림 세션 동기화
-                #prompt_template = ChatPromptTemplate.from_template("{prompt}")
-                system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
+                
+                content = prompt_context.replace('{', '{{').replace('}', '}}')
+                # 개행 문자 정규화
+                sanitized_prompt_context = content.replace('\r\n', '\n').replace('\r', '\n')
+
+                system_message_prompt = SystemMessagePromptTemplate.from_template(sanitized_prompt_context)
                 # User 메시지 템플릿
                 user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
 
@@ -337,7 +340,7 @@ class LLMModels:
                 prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
 
                 # 메시지 생성
-                formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
+                formatted_messages = prompt_template.format_messages(context=sanitized_prompt_context, question=user_query)
                 
                 # 스트리밍 시작
                 stream = self._llm_streaming.astream(formatted_messages)

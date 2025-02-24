@@ -4,7 +4,6 @@ from common.api.v1 import api_router_common
 from common.core.config import settings
 from doceasy.api.v1 import api_router_doceasy         # 닥이지 서비스 라우터 가져오기
 from stockeasy.api.v1 import stockeasy_router         # 스탁이지 서비스 라우터 가져오기
-from dotenv import load_dotenv
 import logging
 from loguru import logger
 from datetime import datetime

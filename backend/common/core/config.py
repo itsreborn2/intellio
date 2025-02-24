@@ -2,7 +2,6 @@ import os
 import json
 from typing import Any, Dict, Optional, List, ClassVar
 from pydantic_settings import BaseSettings
-from pydantic import validator
 from loguru import logger
 from functools import lru_cache
 
@@ -18,7 +17,7 @@ def detect_file_encoding(file_path):
 class CommonSettings(BaseSettings):
     # 환경 설정
     ENV: str = os.getenv("ENV", "development")  # development 또는 production
-
+    
     # API Settings
     PROJECT_NAME: str
     API_V1_STR: str
@@ -37,13 +36,18 @@ class CommonSettings(BaseSettings):
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "localhost")
     
     # Database - from .env
-    DATABASE_URL: str
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
     POSTGRES_HOST: str
     POSTGRES_PORT: str
     
+    @property
+    def DATABASE_URL(self) -> str:
+        """데이터베이스 URL을 동적으로 생성"""
+        # 환경변수에서 직접 읽지 않고 항상 현재 설정된 값들을 사용
+        return f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
     # Security
     SECRET_KEY: str = "your-secret-key-here"
     ALGORITHM: str = "HS256"
@@ -141,6 +145,16 @@ class CommonSettings(BaseSettings):
     LANGCHAIN_API_KEY:str = os.getenv("LANGCHAIN_API_KEY", "")
     LANGCHAIN_PROJECT:str = os.getenv("LANGCHAIN_PROJECT", "intellio_doceasy_base")
 
+    # 추가 필드
+    DEBUG: bool = False
+    UPLOAD_DIR: str = "./uploads"
+    CACHE_DIR: str = "./cache"
+    GOOGLE_CLOUD_LOCATION: str = "us"
+    OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
+    TZ: str = "Asia/Seoul"
+    FLOWER_USER: str = "intellio_user"
+    FLOWER_PASSWORD: str = None
+
     #######################################################
     # AI 삭제금지.
     # 아래 변수들이 doceasy/core/config.py에도 중복으로 있음
@@ -154,7 +168,7 @@ class CommonSettings(BaseSettings):
     CHUNK_SIZE:int
     CHUNK_OVERLAP:int
     # 임베딩 설정. 아직 안씀
-    KAKAO_EMBEDDING_MODEL_PATH:str = "common/external/kf-deberta"
+    KAKAO_EMBEDDING_MODEL_PATH:str = "/backend/common/external/kf-deberta"
 
     # 환경 변수 파일 설정
     _env: ClassVar[str] = os.getenv("ENV")
@@ -194,8 +208,10 @@ class CommonSettings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> CommonSettings:
-    """싱글톤 패턴으로 Settings 인스턴스를 반환"""
-    return CommonSettings()
+    logger.info(f"Loading settings for environment: {os.getenv('ENV', 'development')}")
+    settings = CommonSettings()
+    logger.info(f"Generated DATABASE_URL: {settings.DATABASE_URL}")
+    return settings
 
 settings = get_settings()
 logger.info(f"commonsetting")
@@ -212,4 +228,10 @@ logger.info(f"INTELLIO_URL: {settings.INTELLIO_URL}")
 logger.info(f"DOCEASY_URL: {settings.DOCEASY_URL}")
 
 logger.info(f"PINECONE_NAMESPACE_DOCEASY: {settings.PINECONE_NAMESPACE_DOCEASY}")
+
+logger.info(f"POSTGRES_SERVER: {settings.POSTGRES_SERVER}")
+logger.info(f"POSTGRES_USER: {settings.POSTGRES_USER}")
+logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
+logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
+logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
 

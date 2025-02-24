@@ -55,6 +55,7 @@ cover/
 .env.development.local
 .env.test.local
 .env.production.local
+*env.zip
 
 # Credentials
 credentials/*.json

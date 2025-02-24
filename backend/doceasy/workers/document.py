@@ -1,7 +1,7 @@
 from typing import List
 from uuid import UUID
 from celery import group, shared_task
-from dotenv import load_dotenv
+
 from sqlalchemy.orm import Session
 from datetime import datetime
 import asyncio
@@ -9,6 +9,7 @@ import json
 from uuid import UUID
 from typing import List, Optional
 
+from common.app import LoadEnvGlobal
 from common.core.database import SessionLocal, get_db_async, AsyncSessionLocal
 from common.core.redis import RedisClient
 from common.services.embedding import EmbeddingService
@@ -16,13 +17,14 @@ from common.services.textsplitter import TextSplitter
 from common.services.vector_store_manager import VectorStoreManager
 
 from doceasy.core.celery_app import celery
-from doceasy.models.document import Document
+from doceasy.models.document import Document, DocumentChunk
 from doceasy.services.document import DocumentService
-from doceasy.core.config import settings_doceasy
+from common.core.config import settings
 
 from celery.signals import worker_ready
 import os
 from loguru import logger
+from doceasy.services.document import DocumentDatabaseManager
 
 # 문서 상태 상수
 DOCUMENT_STATUS_REGISTERED = 'REGISTERED'
@@ -38,7 +40,7 @@ DOCUMENT_STATUS_DELETED = 'DELETED'
 def init_worker(sender=None, **kwargs):
     """Document worker 초기화 시 실행되는 함수"""
     try:
-        load_dotenv(override=True)
+        LoadEnvGlobal()
         logger.info(f"Document Worker 초기화 [ProcessID: {os.getpid()}]")
         global redis_client_for_document
         redis_client_for_document = RedisClient()
@@ -173,8 +175,11 @@ def process_document_chucking(self, document_id: str):
     """
     try:
         with SessionLocal() as db:
+            # DB 매니저 초기화
+            db_manager = DocumentDatabaseManager(db)
+            
             # 문서 가져오기
-            doc = db.query(Document).filter(Document.id == UUID(document_id)).first()
+            doc = db_manager.get_document(UUID(document_id))
             if not doc:
                 raise ValueError(f"문서를 찾을 수 없습니다: {document_id}")
 
@@ -191,16 +196,15 @@ def process_document_chucking(self, document_id: str):
                 raise ValueError(f"추출된 텍스트가 없습니다: {document_id}")
 
             # 청크 생성
-            #text_splitter = TextSplitter(splitter_type="recursive", chunk_size=1500, chunk_overlap=300) # 입력하지 않으면 .env값 사용
             text_splitter = TextSplitter() 
-            #text_splitter = TextSplitter(splitter_type="semantic_llama") 
-            
             chunks = text_splitter.split_text(extracted_text)
 
-            # 기존 코드
-            #chunks = split_text(extracted_text, chunk_size=1500)
-            # if not chunks:
-            #     raise ValueError(f"문서를 청크로 분할할 수 없습니다: {document_id}")
+            # 청크를 PostgreSQL에 저장
+            #logger.info(f"청크 삭제 시작: {document_id}")
+            db_manager.delete_document_chunks(UUID(document_id))
+            
+            db_manager.create_document_chunks(UUID(document_id), chunks, doc.filename)
+            logger.info(f"청크 DB 저장[{len(chunks)}개]: {document_id}")
 
             # 청크를 배치로 나누어 처리
             batch_size = 50  # OpenAI API의 토큰 제한을 고려한 배치 크기
@@ -214,7 +218,7 @@ def process_document_chucking(self, document_id: str):
                 batch = chunks[i:i + batch_size]
                 task = make_embedding_data_batch.delay(document_id, batch, i)
                 chunk_tasks.append(task.id)
-            
+
             # 상태 업데이트
             update_document_status(
                 document_id=document_id,
@@ -225,14 +229,12 @@ def process_document_chucking(self, document_id: str):
                 }
             )
             
-            #현재 코드에서는 send_task()를 사용하고 있어서 실제로는 이 리턴값을 직접적으로 사용하지는 않음.
-            # Celery Task 결과값으로 반환되어, 모니터링 시스템에서 확인은 가능.
             return {
                 "status": "PROCESSING",
                 "total_chunks": total_chunks,
                 "task_ids": chunk_tasks
             }
-            
+
     except Exception as e:
         logger.error(f"문서 처리 실패 ({document_id}): {str(e)}", exc_info=True)
         update_document_status(
@@ -425,7 +427,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
         # 벡터 저장 (동기)
         vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(), 
                                         project_name="doceasy",
-                                        namespace=settings_doceasy.PINECONE_NAMESPACE_DOCEASY)
+                                        namespace=settings.PINECONE_NAMESPACE_DOCEASY)
         vs_manager.store_vectors(vectors)
             
         # 모든 청크가 처리되었는지 확인

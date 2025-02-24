@@ -10,8 +10,20 @@ from logging.config import dictConfig
 from contextlib import asynccontextmanager
 import os
 from common.core.exceptions import AuthenticationRedirectException
-# 환경변수를 가장 먼저 로드
-load_dotenv(override=True)
+from loguru import logger
+
+def LoadEnvGlobal():
+    # ENV에 따른 환경변수 파일 로드
+    env = os.getenv("ENV", "development")
+    env_file = f".env.{env}"
+
+    logger.info(f"[LoadEnvGlobal] Loading environment : {env_file}")
+    if os.path.exists(env_file):
+        load_dotenv(env_file, override=True)
+    else:
+        logger.warning(f"Environment file {env_file} not found!")
+
+LoadEnvGlobal()
 
 
 @asynccontextmanager

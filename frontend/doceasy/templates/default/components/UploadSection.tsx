@@ -13,6 +13,37 @@ import { UploadProgressDialog } from "intellio-common/components/ui/upload-progr
 import { IUploadProgressData } from "@/types"
 import { useFileUpload } from "@/hooks/useFileUpload"
 
+// MIME 타입 매핑 객체를 accept와 동일한 형태로 수정
+const ACCEPTED_FILE_TYPES: Record<string, readonly string[]> = {
+  'application/pdf': ['.pdf'],
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'text/plain': ['.txt'],
+  'application/x-hwp': ['.hwp'],
+  'application/x-hwpx': ['.hwpx'],
+  'application/vnd.ms-excel': ['.xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/png': ['.png'],
+  'image/gif': ['.gif'],
+  'image/tiff': ['.tiff']
+} as const;
+
+type AcceptedMimeTypes = keyof typeof ACCEPTED_FILE_TYPES;
+
+// 확장자로 MIME 타입을 찾는 함수
+function getMimeTypeFromExtension(extension: string): AcceptedMimeTypes | undefined {
+  const entry = Object.entries(ACCEPTED_FILE_TYPES).find(([_, extensions]) => 
+    extensions.includes(extension)
+  );
+  return entry ? (entry[0] as AcceptedMimeTypes) : undefined;
+}
+
+// 파일 확장자 추출 함수는 유지
+function getFileExtension(filename: string): string {
+  return filename.toLowerCase().match(/\.[^.]*$/)?.[0] || '';
+}
+
 // 문서 상태 타입 정의
 interface DocumentStatus {
   document_id: string
@@ -133,25 +164,44 @@ export const UploadSection = () => {
   )
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    await handleFileUpload(acceptedFiles)
+    // 파일 MIME 타입 처리 및 로깅
+    const processedFiles = acceptedFiles.map(file => {
+      let mimeType = file.type;
+      const ext = getFileExtension(file.name);
+      
+      // 1. MIME 타입이 허용된 타입 목록에 있는지 확인
+      const isAcceptedMimeType = Object.keys(ACCEPTED_FILE_TYPES).includes(mimeType);
+      
+      // 2. MIME 타입이 없거나 허용되지 않은 타입인 경우 확장자 기반으로 매핑
+      if (!mimeType || !isAcceptedMimeType || mimeType === 'application/octet-stream') {
+        const mappedType = getMimeTypeFromExtension(ext);
+        if (mappedType) {
+          mimeType = mappedType;
+        } else {
+          console.warn(`지원하지 않는 파일 형식입니다: ${file.name} (${file.type})`);
+        }
+      }
+
+      console.log('파일 상세 정보:', {
+        name: file.name,
+        originalType: file.type,
+        mappedType: mimeType,
+        size: file.size,
+        lastModified: new Date(file.lastModified).toISOString(),
+        extension: ext,
+        isAcceptedMimeType
+      });
+
+      // 새로운 File 객체 생성하여 MIME 타입 적용
+      return new File([file], file.name, { type: mimeType });
+    });
+    
+    await handleFileUpload(processedFiles);
   }, [handleFileUpload])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'application/msword': ['.doc'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'text/plain': ['.txt'],
-      'application/x-hwp': ['.hwp'],
-      'application/x-hwpx': ['.hwpx'],
-      'application/vnd.ms-excel': ['.xls'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'image/jpeg': ['.jpg', '.jpeg'],
-      'image/png': ['.png'],
-      'image/gif': ['.gif'],
-      'image/tiff': ['.tiff']
-    }
+    accept: ACCEPTED_FILE_TYPES
   })
 
   return (

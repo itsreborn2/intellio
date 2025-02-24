@@ -19,4 +19,8 @@ COPY backend/ .
 # 환경변수 설정
 ENV PYTHONPATH=/backend
 
-CMD ["celery", "-A", "doceasy.core.celery_app", "worker", "-n", "doceasy@%h", "--loglevel=INFO", "-Q", "document-processing,main-queue,rag-processing", "--pool=threads", "--concurrency=1", "--events"] 
+
+# Add entrypoint script
+RUN chmod +x ./start-celery-doceasy.sh
+
+CMD ["./start-celery-doceasy.sh"] 

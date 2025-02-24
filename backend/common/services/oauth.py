@@ -116,7 +116,7 @@ class OAuthService:
             
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'curl/7.88.1'
+                #'User-Agent': 'curl/7.88.1'
             }
             logger.info(f"Naver token request headers: {headers}")
             
