@@ -143,7 +143,7 @@ class OAuthService:
                 raise e
             logger.error(f"네이버 토큰 획득 중 상세 오류: {str(e)}", exc_info=True)
             raise HTTPException(status_code=400, detail=f"네이버 토큰 획득 중 오류: {str(e)}")
-
+    
     @staticmethod
     async def get_naver_user(access_token: str) -> Dict:
         """네이버 사용자 정보 획득"""
