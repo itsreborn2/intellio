@@ -883,8 +883,8 @@ class RAGService:
                     "is_accessible": False
                 }
 
-            # 접근 가능 여부 확인
-            is_accessible = document.status in ['COMPLETED', 'PARTIAL'] and document.embedding_ids
+            # 접근 가능 여부 확인 - bool 타입으로 반환
+            is_accessible = document.status in ['COMPLETED', 'PARTIAL'] and bool(document.embedding_ids)
 
             return {
                 "document_id": document_id,

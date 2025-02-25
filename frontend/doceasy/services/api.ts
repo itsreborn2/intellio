@@ -5,7 +5,7 @@ import * as Types from '@/types/index';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 //import { IDocument, ITableData, IMessage, ITemplate, IProjectItem, IDocumentUploadResponse } from '@/types';  
-import {  ProjectListResponse, IRecentProjectsResponse, ProjectDetail, IUploadProgressCallback, IDocumentUploadResponse, DocumentStatus, Category, ProjectCategory, IProject } from '@/types/index';
+import {  ProjectListResponse, IRecentProjectsResponse, ProjectDetail, IUploadProgressCallback, IDocumentUploadResponse, DocumentStatus, Category, ProjectCategory, IProject, DocumentStatusResponse } from '@/types/index';
 import { defaultFetchOptions, IApiProject, IApiRecentProjectsResponse } from '@/types/index';
 import { IChatRequest, IChatResponse, TableResponse, IDocument, IMessage } from '@/types';
 
@@ -879,5 +879,26 @@ export async function getChatHistory(projectId: string): Promise<IMessage[]> {
     throw new Error('대화 기록 조회 실패');
   }
   return response.json();
+}
+
+
+export async function getDocumentUploadStatus(documentIds: string[]): Promise<DocumentStatusResponse[]> {
+  console.log('getDocumentUploadStatus', documentIds)
+  const response = await apiFetch(`${API_ENDPOINT}/rag/document-status`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      document_ids: documentIds,
+    }),
+  })
+  
+  if (!response.ok) {
+    throw new Error('문서 상태 조회 실패')
+  }
+  
+  const statuses: DocumentStatusResponse[] = await response.json()
+  return statuses
 }
 

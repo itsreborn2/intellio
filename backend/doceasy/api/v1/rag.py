@@ -93,6 +93,17 @@ async def table_search(
 
         logger.info(f"테이블 검색 요청 - 쿼리: {request.query}, 문서 ID: {request.document_ids}, Mode: {request.mode}")
         
+        # 사용자 메시지 저장
+        user_message = ChatHistory(
+            id=str(uuid4()),
+            project_id=request.project_id,
+            role="user",
+            content=request.query
+        )
+        db.add(user_message)
+        await db.commit()
+        logger.info(f"사용자 메시지 저장 완료 - ID: {user_message.id}, 내용: {request.query}")
+
         # 문서 접근 권한 확인
         # if request.document_ids:
         #     for doc_id in request.document_ids:
@@ -110,6 +121,20 @@ async def table_search(
             project_id=request.project_id
         )
         logger.info(f"테이블 검색 완료 : {response}")
+
+        #`**${result.columns[0].header.name}** 컬럼이 추가되었습니다. 테이블을 확인해주세요.
+        # 스트리밍 완료 후 메시지 저장
+        assistant_message_id = str(uuid4())
+        assistant_message = ChatHistory(
+            id=assistant_message_id,
+            project_id=request.project_id,
+            role="assistant",
+            content=f'**{response.columns[0].header.name}** 컬럼이 추가되었습니다. 테이블을 확인해주세요.'
+        )
+        db.add(assistant_message)
+        await db.commit()
+        logger.info(f"AI 응답 저장 완료 - ID: {assistant_message_id}")
+
         return response
 
         

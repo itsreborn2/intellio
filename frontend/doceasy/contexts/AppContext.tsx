@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react'
-import { DocumentStatus, IProject, UpdateChatMessagePayload } from '@/types'
+import { DocumentStatus, IDocumentStatus, IProject, UpdateChatMessagePayload } from '@/types'
 import * as api from '@/services/api'
 import { IMessage, TableResponse, TableColumn,IDocument, IRecentProjectsResponse } from '@/types'
 import * as actionTypes from '@/types/actions'
@@ -57,7 +57,7 @@ type Action =
   | { type: typeof actionTypes.SELECT_DOCUMENTS; payload: string[] }
   | { type: typeof actionTypes.ADD_COLUMN; payload: string }
   | { type: typeof actionTypes.DELETE_COLUMN; payload: string }
-  | { type: typeof actionTypes.UPDATE_DOCUMENT_STATUS; payload: { id: string; status: DocumentStatus } }
+  | { type: typeof actionTypes.UPDATE_DOCUMENT_STATUS; payload: { id: string; status: IDocumentStatus } }
   | { type: typeof actionTypes.UPDATE_TABLE_COLUMNS; payload: any[] }
   | { type: typeof actionTypes.UPDATE_COLUMN_INFO; payload: { oldName: string; newName: string; prompt: string; originalPrompt: string } }
   | { type: typeof actionTypes.ADD_ANALYSIS_COLUMN; payload: { columnName: string; prompt: string; originalPrompt: string } }
@@ -432,18 +432,16 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case actionTypes.UPDATE_DOCUMENT_STATUS:
-      // 주석 삭제 금지
-      // return {
-      //   ...state,
-      //   documents: {
-      //     ...state.documents,
-      //     [action.payload.id]: {
-      //       ...state.documents[action.payload.id],
-      //       status: action.payload.status
-      //     }
-      //   }
-      // }
-      return state;
+      return {
+        ...state,
+        documents: {
+          ...state.documents,
+          [action.payload.id]: {
+            ...state.documents[action.payload.id],
+            status: action.payload.status as IDocumentStatus
+          }
+        }
+      }
 
     case actionTypes.ADD_ANALYSIS_COLUMN:
       return state;

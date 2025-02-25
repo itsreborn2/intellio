@@ -11,17 +11,14 @@ import {
 import { useApp } from "@/contexts/AppContext"
 import { useAuth } from "@/hooks/useAuth"
 
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "intellio-common/components/ui/hover-card"
-
 import * as actionTypes from '@/types/actions'
 import DocumentTable, { ITableUtils } from "./DocumentTable"
-import ReactMarkdown from 'react-markdown'
+
 import { useFileUpload } from "@/hooks/useFileUpload"
 import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
+import {  DocumentStatus, IDocumentStatus } from "@/types"
+import { DocumentStatusResponse } from '@/types/index';
+import { getDocumentUploadStatus } from "@/services/api"
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
   <div className="bg-muted/90 w-fit px-2 py-1 rounded">
@@ -159,7 +156,6 @@ const isSignificantContextChange = (currentSentence: string, previousSentence: s
   );
 };
 
-
 export const TableSection = () => {
   const { state, dispatch } = useApp()
   const { isAuthenticated } = useAuth()
@@ -204,6 +200,46 @@ export const TableSection = () => {
       }
     }
   }, [state.analysis.tableData]);
+
+  // 문서 상태 조회 함수
+  const fetchDocumentStatuses = async (documentIds: string[]) => {
+    try {
+      const statuses: DocumentStatusResponse[] = await getDocumentUploadStatus(documentIds)
+      
+      // 상태 업데이트
+      statuses.forEach((status) => {
+        dispatch({
+          type: actionTypes.UPDATE_DOCUMENT_STATUS,
+          payload: {
+            id: status.document_id,
+            status: status.status as IDocumentStatus
+          }
+        })
+      })
+      
+    } catch (error) {
+      console.error('문서 상태 조회 중 오류:', error)
+    }
+  }
+
+  // 주기적으로 문서 상태 업데이트
+  useEffect(() => {
+    
+    const documents = Object.values(state.documents)
+    //console.log('문서 상태 업데이트1 :', documents)
+    const processingDocIds = documents
+      .filter(doc => doc.status === 'PROCESSING' || doc.status === 'PARTIAL' || doc.status === 'UPLOADING' || doc.status === 'UPLOADED')
+      .map(doc => doc.id)
+      
+    if (processingDocIds.length > 0) {
+      //console.log('문서 상태 업데이트2 :', processingDocIds)
+      const interval = setInterval(() => {
+        fetchDocumentStatuses(processingDocIds)
+      }, 5000) // 5초마다 업데이트
+      
+      return () => clearInterval(interval)
+    }
+  }, [state.documents])
 
   const handleAddDocuments = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
