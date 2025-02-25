@@ -1,5 +1,6 @@
 from typing import Dict, Optional
 import httpx
+import requests
 from fastapi import HTTPException
 from common.core.config import settings
 from loguru import logger
@@ -108,6 +109,7 @@ class OAuthService:
                 'grant_type': 'authorization_code',
                 'client_id': settings.NAVER_OAUTH_CLIENT_ID,
                 'client_secret': settings.NAVER_OAUTH_CLIENT_SECRET,
+                'redirect_uri': settings.NAVER_OAUTH_REDIRECT_URI,
                 'code': code,
                 'state': state  #settings.NAVER_OAUTH_STATE
             }
@@ -117,71 +119,25 @@ class OAuthService:
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 #'User-Agent': 'curl/7.88.1'
+                'X-Naver-Client-Id':settings.NAVER_OAUTH_CLIENT_ID,
+                'X-Naver-Client-Secret': settings.NAVER_OAUTH_CLIENT_SECRET
             }
             logger.info(f"Naver token request headers: {headers}")
+            url = f"https://nid.naver.com/oauth2.0/token?grant_type=authorization_code&client_id={settings.NAVER_OAUTH_CLIENT_ID}&client_secret={settings.NAVER_OAUTH_CLIENT_SECRET}&redirect_uri={settings.NAVER_OAUTH_REDIRECT_URI}&code={code}&state={state}"
             
-            ssl_context = ssl.create_default_context()
-            async with httpx.AsyncClient(verify=ssl_context) as client:
-                try:
-                    response = await client.post(
-                        'https://nid.naver.com/oauth2.0/token',
-                        data=data,
-                        headers=headers
-                    )
-                    logger.info(f"Naver token response status: {response.status_code}")
-                    logger.info(f"Naver token response headers: {dict(response.headers)}")
-                    response_text = response.text
-                    logger.info(f"Naver token response body: {response_text}")
-                    
-                    if response.status_code != 200:
-                        error_msg = f"네이버 서버 응답 오류: Status {response.status_code}"
-                        try:
-                            error_data = response.json()
-                            logger.error(f"네이버 에러 응답: {error_data}")
-                            if 'error_description' in error_data:
-                                error_msg = f"{error_msg}, Error: {error_data['error_description']}"
-                            elif 'error' in error_data:
-                                error_msg = f"{error_msg}, Error: {error_data['error']}"
-                        except:
-                            logger.error(f"네이버 에러 응답 (raw): {response_text}")
-                            error_msg = f"{error_msg}, Body: {response_text}"
-                        logger.error(f"Naver token error: {error_msg}")
-                        raise HTTPException(
-                            status_code=400,
-                            detail=error_msg
-                        )
-                    
-                    try:
-                        token_data = response.json()
-                    except Exception as json_error:
-                        logger.error(f"JSON 파싱 오류: {str(json_error)}, Response text: {response_text}")
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"네이버 응답 파싱 오류: {str(json_error)}"
-                        )
-                    
-                    if 'error' in token_data:
-                        error_msg = token_data.get('error_description', token_data['error'])
-                        logger.error(f"Naver token error in response: {error_msg}")
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"네이버 토큰 획득 실패: {error_msg}"
-                        )
-                    
-                    if 'access_token' not in token_data:
-                        logger.error(f"No access_token in response: {token_data}")
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"네이버 토큰 응답에 access_token이 없습니다: {token_data}"
-                        )
-                        
-                    return token_data
-                except httpx.RequestError as e:
-                    logger.error(f"네이버 토큰 요청 실패: {str(e)}", exc_info=True)
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"네이버 토큰 요청 실패: {str(e)}"
-                    )
+            
+            try:
+                response = requests.get(url, headers=headers)
+                logger.info(f"Naver token response status: {response.status_code}")
+                logger.info(f"Naver token response headers: {dict(response.headers)}")
+                response_text = response.text
+                logger.info(f"Naver token response body: {response_text}")            
+                token_data = response.json()
+                return token_data
+            except Exception as e:
+                logger.error(f"Naver token request fail : {str(e)}", exc_info=True)
+                raise HTTPException(status_code=400, detail=str(e))
+            
         except Exception as e:
             if isinstance(e, HTTPException):
                 raise e

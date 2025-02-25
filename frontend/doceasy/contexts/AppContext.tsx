@@ -65,6 +65,7 @@ type Action =
   | { type: typeof actionTypes.SET_LAST_AUTOSAVED; payload: Date }
   | { type: typeof actionTypes.SET_DOCUMENT_LIST; payload: { [key: string]: IDocument } }
   | { type: typeof actionTypes.UPDATE_CHAT_MESSAGE; payload:UpdateChatMessagePayload }
+  | { type: typeof actionTypes.SET_MESSAGES; payload: IMessage[] }
 
 const initialState: AppState = {
   sessionId: null,
@@ -126,16 +127,18 @@ const appReducer = (state: AppState, action: Action): AppState => {
           currentProject: action.payload
         }
       }
-      // 다른 프로젝트로 변경하는 경우에만 초기화
+      
+      // 다른 프로젝트로 변경하는 경우 상태 초기화
       return {
         ...state,
         currentProjectId: action.payload.id,
         currentProject: action.payload,
         documents: {},
+        messages: [], // 메시지는 useEffect에서 로드됨
         analysis: {
           ...initialState.analysis
         }
-      }
+      };
 
     case actionTypes.SET_PROJECT_TITLE:
       console.log(`SET_PROJECT_TITLE: ${action.payload}`)
@@ -549,6 +552,11 @@ const appReducer = (state: AppState, action: Action): AppState => {
         )
       }
     
+    case actionTypes.SET_MESSAGES:
+      return {
+        ...state,
+        messages: action.payload
+      };
 
     default:
       newState = state;
@@ -558,7 +566,28 @@ const appReducer = (state: AppState, action: Action): AppState => {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, initialState);
+  const [state, dispatch] = useReducer(appReducer, initialState)
+
+  // 프로젝트 변경 감지 및 대화 기록 로드
+  useEffect(() => {
+    if (state.currentProjectId) {
+      api.getChatHistory(state.currentProjectId)
+        .then(chatHistory => {
+          dispatch({
+            type: actionTypes.SET_MESSAGES,
+            payload: chatHistory
+          });
+        })
+        .catch(error => {
+          console.error('대화 기록 로드 실패:', error);
+          dispatch({
+            type: actionTypes.SET_MESSAGES,
+            payload: []
+          });
+        });
+    }
+  }, [state.currentProjectId]);
+
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 디바운스된 저장 함수

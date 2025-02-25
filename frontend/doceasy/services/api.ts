@@ -1,5 +1,5 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
-const API_ENDPOINT = `${API_BASE_URL}/v1`
+export const API_ENDPOINT = `${API_BASE_URL}/v1`
 
 import * as Types from '@/types/index';
 import { format, parseISO } from 'date-fns';
@@ -7,7 +7,7 @@ import { ko } from 'date-fns/locale';
 //import { IDocument, ITableData, IMessage, ITemplate, IProjectItem, IDocumentUploadResponse } from '@/types';  
 import {  ProjectListResponse, IRecentProjectsResponse, ProjectDetail, IUploadProgressCallback, IDocumentUploadResponse, DocumentStatus, Category, ProjectCategory, IProject } from '@/types/index';
 import { defaultFetchOptions, IApiProject, IApiRecentProjectsResponse } from '@/types/index';
-import { IChatRequest, IChatResponse, TableResponse, IDocument } from '@/types';
+import { IChatRequest, IChatResponse, TableResponse, IDocument, IMessage } from '@/types';
 
 // // 문서 업로드 응답 인터페이스
 // export interface IDocumentUploadResponse {
@@ -871,5 +871,13 @@ export async function stopChatMessageGeneration(
   if (!response.ok) {
     throw new Error('메시지 생성 중지 요청 실패')
   }
+}
+
+export async function getChatHistory(projectId: string): Promise<IMessage[]> {
+  const response = await apiFetch(`${API_ENDPOINT}/rag/chat/history/${projectId}`);
+  if (!response.ok) {
+    throw new Error('대화 기록 조회 실패');
+  }
+  return response.json();
 }
 

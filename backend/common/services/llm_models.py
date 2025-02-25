@@ -84,14 +84,14 @@ class LLMModels:
             if self._streaming_callback:
                 callback_handler = StreamingCallbackHandler(self._streaming_callback)
             
-                self._llm_streaming = self.get_llm(
-                    model_info["model"], 
-                    model_info["api_key"], 
-                    streaming=True, 
-                    callback_handler=callback_handler,
-                    **kwargs
-                )
-                logger.warn(f"LLMModels : {model_info['model']} Streaming")
+            self._llm_streaming = self.get_llm(
+                model_info["model"], 
+                model_info["api_key"], 
+                streaming=True, 
+                callback_handler=callback_handler,
+                **kwargs
+            )
+            logger.warn(f"LLMModels : {model_info['model']} Streaming")
             logger.warn(f"LLMModels : {model_info['model']} API 초기화")
     def set_streaming_callback(self, streaming_callback: Optional[Callable[[str], None]] = None):
         """스트리밍 콜백 설정"""
