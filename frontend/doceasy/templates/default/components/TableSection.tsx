@@ -9,6 +9,7 @@ import {
 
 } from "lucide-react"
 import { useApp } from "@/contexts/AppContext"
+import { useAuth } from "@/hooks/useAuth"
 
 import {
   HoverCard,
@@ -161,6 +162,7 @@ const isSignificantContextChange = (currentSentence: string, previousSentence: s
 
 export const TableSection = () => {
   const { state, dispatch } = useApp()
+  const { isAuthenticated } = useAuth()
   const [selectedRows, setSelectedRows] = useState<number[]>([])
   const [selectedCells, setSelectedCells] = useState<{ row: number; col: string }[]>([])
   const [selectionMode, setSelectionMode] = useState<'row' | 'cell'>('row')
@@ -332,15 +334,17 @@ export const TableSection = () => {
       <UploadProgressDialog {...uploadProgress} />
       <div className="sticky top-0 z-10 bg-background border-b">
         <div className="flex items-center justify-between p-2 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 px-2 text-xs"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Plus className="h-3 w-3 mr-0.5" />
-            문서 추가
-          </Button>
+          {isAuthenticated && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2 text-xs"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Plus className="h-3 w-3 mr-0.5" />
+              문서 추가
+            </Button>
+          )}
           <input
             type="file"
             ref={fileInputRef}

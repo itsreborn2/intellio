@@ -781,7 +781,7 @@ function ProjectCategorySectionContent({
           </>
         ) : (
           <div className="text-center text-gray-500 py-2">
-            로그인 후 프로젝트 목록을 볼 수 있습니다.
+            
           </div>
         )}
       </div>

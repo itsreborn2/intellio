@@ -47,7 +47,12 @@ export function useFileUpload(): UseFileUploadReturn {
       if (!projectId) {
         // 새 프로젝트 생성이 필요한 경우
         dispatch({ type: actionTypes.SET_INITIAL_STATE })
-        const projectName = files[0]?.name.replace(/\.[^/.]+$/, '') || 'Untitled Project'
+        
+        // 프로젝트 이름 설정 - 여러 파일인 경우 '첫번째파일 외 N개' 형식으로
+        const projectName = files.length > 1
+          ? `${files[0].name.replace(/\.[^/.]+$/, '')} 외 ${files.length - 1}개`
+          : files[0].name.replace(/\.[^/.]+$/, '')
+
         const project = await createProject(projectName, 'Created for document upload')
         projectId = project.id
         
