@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Send, Square } from 'lucide-react'
-import { Avatar, AvatarImage, AvatarFallback } from 'intellio-common/components/ui/avatar'
 import { Button } from 'intellio-common/components/ui/button'
 import { Input } from 'intellio-common/components/ui/input'
 import { useApp } from '@/contexts/AppContext'
-import { searchTable, sendChatMessage, sendChatMessage_streaming, stopChatMessageGeneration } from '@/services/api'
+import { searchTable, sendChatMessage, sendChatMessage_streaming, stopChatMessageGeneration, API_ENDPOINT } from '@/services/api'
 import { IMessage, IChatResponse, TableResponse } from '@/types/index'
 import * as actionTypes from '@/types/actions'
 import ReactMarkdown from 'react-markdown'
@@ -63,47 +62,27 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
 });
 
 class StreamingMarkdownHandler {
+  processChunk(data: string, dispatch: any, tempMessageId: string): void {
+    if (!data || data === '[DONE]') return;
 
-  processChunk(chunk: string, dispatch: any, tempMessageId: string): void {
-    // data: [DONE] 체크
-    
-    if (chunk.endsWith('[DONE]\n\n')) {
+    // 줄바꿈 문자 처리
+    const processedData = data
+          .replace(/\r\n/g, '\n')  // CRLF를 LF로 변환
+          .replace(/\r/g, '\n')    // CR을 LF로 변환
+          .replace(/\\n/g, '\n');  // 이스케이프된 \n을 실제 개행문자로 변환
 
-      // 앞뒤 공백을 포함한 data: [DONE] 제거
-      const cleanedChunk = chunk.replace('data: [DONE]\n\n', '');
-      if (cleanedChunk)
-        // 일반 텍스트 처리
-        dispatch({
-          type: actionTypes.UPDATE_CHAT_MESSAGE,
-          payload: {
-            id: tempMessageId,
-            content: (prevContent: string) => prevContent + cleanedChunk
-          }
-        });
-      return;
-    }
-
-    // 앞뒤 공백을 포함한 data: 프리픽스 제거
-    const cleanedChunk = chunk.replace(/^\s*data:\s*/, '');
-    if (!cleanedChunk) return;
-
-    // [DONE] 문자열이 포함된 경우 제거 (끝의 공백만 제거)
-    const finalChunk = cleanedChunk.replace(/\[DONE\]$/, '');
-    if (!finalChunk) return;
-
-    console.log(finalChunk)
-    // 일반 텍스트 처리
+    //console.log('processedData :', processedData)
     dispatch({
       type: actionTypes.UPDATE_CHAT_MESSAGE,
       payload: {
         id: tempMessageId,
-        content: (prevContent: string) => prevContent + finalChunk
+        content: (prevContent: string) => prevContent + processedData
       }
     });
   }
 
   reset(): void {
-
+    // 필요한 경우 상태 초기화
   }
 }
 
@@ -229,52 +208,84 @@ export const ChatSection = () => {
       const tempMessageId = generateMessageId();
 
       try {
-        
-
-        // 초기 빈 메시지 추가
-        dispatch({
-          type: actionTypes.ADD_CHAT_MESSAGE,
-          payload: {
-            id: tempMessageId,
-            role: 'assistant',
-            content: '',
-            timestamp: new Date().toISOString()
-          }
-        });
         const docIds = Object.values(state.documents).map(doc => doc.id)
         console.log('doc ids : ', docIds)
-        const response = await sendChatMessage_streaming(
-          state.currentProjectId!,
-          //state.analysis.selectedDocumentIds,
-          docIds,
-          currentInput
-        );
-    
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-    
-        if (!reader) throw new Error('No reader available');
-        setStreamingMessageId(tempMessageId);
-    
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) {
-            setStreamingMessageId(null);
-            setIsGenerating(false)
-            break;
+        
+        try {
+          // 초기 빈 메시지 추가
+          dispatch({
+            type: actionTypes.ADD_CHAT_MESSAGE,
+            payload: {
+              id: tempMessageId,
+              role: 'assistant',
+              content: '',
+              timestamp: new Date().toISOString()
+            }
+          });
+
+          setStreamingMessageId(tempMessageId);
+
+          const response = await sendChatMessage_streaming(
+            state.currentProjectId!,
+            docIds,
+            currentInput
+          );
+
+          if (!response.ok) {
+            throw new Error('채팅 요청 실패');
           }
-          
-          const chunk = decoder.decode(value);
-          console.log('chunk : ', chunk)
-          if (chunk === 'data: [DONE]' || chunk === '[DONE]') {
-            setStreamingMessageId(null);
-            setIsGenerating(false)
-            break;
+
+          const reader = response.body?.getReader();
+          if (!reader) throw new Error('Reader not available');
+
+          const decoder = new TextDecoder();
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) {
+              setStreamingMessageId(null);
+              setIsGenerating(false);
+              break;
+            }
+
+            const chunk = decoder.decode(value);
+            //console.log('chunk :', chunk)
+            //const content = chunk.substring(chunk.indexOf('data:') + 5);
+            const content = chunk.substring(16).slice(0, -4);
+            
+            //const lines = content.split('\r\n');
+            const lines = content.split('data: ').slice(1);
+            console.log('lines :', lines)
+
+            for (const line of lines) {
+
+              if (line.trim() === '[DONE]') {
+                setStreamingMessageId(null);
+                setIsGenerating(false);
+                break;
+              }
+              streamingHandler.processChunk(line, dispatch, tempMessageId);
+
+            }
           }
-    
-          streamingHandler.processChunk(chunk, dispatch, tempMessageId);
+
+        } catch (error) {
+          setStreamingMessageId(null);
+          setIsGenerating(false);
+          console.error('채팅 중 오류:', error);
+          dispatch({
+            type: actionTypes.ADD_CHAT_MESSAGE,
+            payload: {
+              role: 'assistant',
+              content: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.'
+            }
+          });
+        } finally {
+          streamingHandler.reset();
+          dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false });
+          setStreamingMessageId(null);
+          setIsGenerating(false);
         }
-    
       } catch (error) {
         setStreamingMessageId(null);
         setIsGenerating(false)
@@ -286,11 +297,6 @@ export const ChatSection = () => {
             content: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.'
           }
         });
-      } finally {
-        streamingHandler.reset();
-        dispatch({ type: actionTypes.SET_IS_ANALYZING, payload: false });
-        setStreamingMessageId(null);
-        setIsGenerating(false)
       }
     }
   }, [input, state.analysis.mode, state.currentProjectId, state.analysis.selectedDocumentIds, dispatch, generateMessageId]);
