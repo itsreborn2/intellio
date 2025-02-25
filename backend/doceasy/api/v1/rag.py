@@ -3,10 +3,12 @@
 from typing import List, Dict, Any, Optional, Union, AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel, Field
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from common.core.database import get_db_async
 from common.models.user import Session
@@ -18,6 +20,7 @@ from doceasy.api import deps
 from doceasy.schemas.table_response import TableResponse, TableHeader
 from doceasy.schemas.document import DocumentQueryRequest
 from doceasy.schemas.rag import RAGQuery, RAGResponse
+from doceasy.models.chat import ChatHistory
 
 
 
@@ -150,32 +153,34 @@ async def chat_search(
     request: ChatRequest,
     db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(get_current_session),
-    
 ):
     """채팅 모드 검색 및 질의응답"""
     try:
-        
-        
+        # 사용자 메시지 저장
+        user_message = ChatHistory(
+            id=str(uuid4()),
+            project_id=request.project_id,
+            role="user",
+            content=request.message
+        )
+        db.add(user_message)
+        await db.commit()
+        logger.info(f"사용자 메시지 저장 완료 - ID: {user_message.id}, 내용: {request.message}")
+
         async def generate_stream():
-
-            
-            # AI 모델에 등록하는 콜백 핸들러.
-            # AI 모델에 도달하기 전에 예외처리 리턴되는 케이스는 handle_token을 수행하지 않음.
-            def handle_token(token: str):
-
-                #logger.info(f"Handling token: {token}")
-                print(f"{token}", end="", flush=True)
-                #logger.warning(f"handle_token : {token}")
-                return f"data: {token}\n\n"
+            # AI 응답을 위한 ID 미리 생성
+            assistant_message_id = str(uuid4())
+            full_response = ""
 
             try:
                 # RAG 서비스 초기화
-                rag_service = RAGService(handle_token)
+                rag_service = RAGService()
                 await rag_service.initialize(db)
-                rag_service.set_streaming_callback(handle_token)
-                
                 
                 logger.info(f"채팅 검색 요청 - 메시지: {request.message}, 문서 ID: {request.document_ids}")
+                
+                # 토큰 버퍼 초기화
+                token_buffer = ""
                 
                 # 스트리밍 응답 처리
                 async for token in rag_service.query_stream(
@@ -183,26 +188,55 @@ async def chat_search(
                     mode="chat",
                     document_ids=request.document_ids
                 ):
-                    if token is not None:  # None이 아닐 때만 yield
-                        # 여기는 handle_token에서 yield 될때, 예외처리 구간에서 도달.
-                        yield token
+                    if token is not None:
+                        full_response += token
+                        token_buffer += token
+                        
+                        # 버퍼가 5글자 이상이면 전송
+                        if len(token_buffer) >= 5:
+                            yield {
+                                "event": "message",
+                                "data": token_buffer
+                            }
+                            print(f"{token_buffer}", end="", flush=True)
+                            token_buffer = ""  # 버퍼 초기화
 
-                # 스트리밍 종료 신호
-                yield "data: [DONE]\n\n"
-                
+                # 남은 버퍼가 있다면 전송
+                if token_buffer:
+                    yield {
+                        "event": "message",
+                        "data": token_buffer
+                    }
+
+                # 스트리밍 완료 후 메시지 저장
+                assistant_message = ChatHistory(
+                    id=assistant_message_id,
+                    project_id=request.project_id,
+                    role="assistant",
+                    content=full_response
+                )
+                db.add(assistant_message)
+                await db.commit()
+                logger.info(f"AI 응답 저장 완료 - ID: {assistant_message_id}")
+
+                # 완료 이벤트 전송
+                yield {
+                    "event": "done",
+                    "data": "[DONE]"
+                }
+
             except Exception as e:
-                logger.error(f"스트리밍 생성 중 오류 발생: {str(e)}")
-                error_message = f"data: 죄송합니다. 응답 생성 중 오류가 발생했습니다: {str(e)}\n\n"
-                yield error_message
-                yield "data: [DONE]\n\n"
+                logger.error(f"스트리밍 응답 생성 중 오류 발생: {str(e)}")
+                yield {
+                    "event": "error",
+                    "data": str(e)
+                }
             
-        return StreamingResponse(
+        return EventSourceResponse(
             generate_stream(),
-            media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-                "Content-Encoding": "none",
                 "X-Accel-Buffering": "no"  # Nginx 프록시 버퍼링 비활성화
             }
         )
@@ -214,7 +248,37 @@ async def chat_search(
             detail=f"채팅 검색 중 오류 발생: {str(e)}"
         )
 
-
+@router.get("/chat/history/{project_id}")
+async def get_chat_history(
+    project_id: str,
+    db: AsyncSession = Depends(get_db_async),
+    session: Session = Depends(get_current_session)
+) -> List[Dict[str, Any]]:
+    """프로젝트별 대화 기록 조회"""
+    try:
+        logger.info(f"대화 기록 조회 - 프로젝트 ID: {project_id}")
+        query = select(ChatHistory).where(
+            ChatHistory.project_id == project_id
+        ).order_by(ChatHistory.created_at)
+        
+        result = await db.execute(query)
+        messages = result.scalars().all()
+        logger.info(f"대화 기록 조회 완료 - 총 {len(messages)}개의 메시지")
+        return [
+            {
+                "id": msg.id,
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": msg.created_at.isoformat()
+            }
+            for msg in messages
+        ]
+    except Exception as e:
+        logger.error(f"대화 기록 조회 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"대화 기록 조회 중 오류 발생: {str(e)}"
+        )
 
 @router.post("/verify-access")
 async def verify_access(

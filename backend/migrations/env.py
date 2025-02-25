@@ -27,6 +27,7 @@ print(f"ROOT : {os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}")
 # Import all models here
 from common.models.base import Base
 from doceasy.models.table_history import TableHistory
+from doceasy.models.chat import ChatHistory
 from doceasy.models.document import Document
 from common.models.user import User
 from doceasy.models.project import Project
