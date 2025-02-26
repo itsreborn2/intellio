@@ -49,10 +49,10 @@ class ProjectService:
         
         if project_row:
             project = project_row[0] # result.first()는 튜플을 반환하므로 인덱싱 필요
-            # 프로젝트 조회 시 마지막 접근 시간 갱신
-            project.updated_at = datetime.utcnow()
-            await self.db.commit()
-            logger.debug(f"프로젝트 {project_id} 마지막 접근 시간 갱신: {project.updated_at}")
+            # 단순 조회 시에는 마지막 접근 시간을 갱신하지 않음
+            # project.updated_at = datetime.now()
+            # await self.db.commit()
+            # logger.debug(f"프로젝트 {project_id} 마지막 접근 시간 갱신: {project.updated_at}")
             return project
         else:
             logger.warning("프로젝트를 찾을 수 없습니다.")
@@ -177,7 +177,7 @@ class ProjectService:
             - last_30_days: 최근 30일간 열람/수정한 프로젝트
         """
         # 현재 시간 기준으로 날짜 범위 계산 (UTC 기준)
-        now = datetime.utcnow()
+        now = datetime.now()
         today_start = datetime(now.year, now.month, now.day)
         last_7_days_start = today_start - timedelta(days=7)
         last_30_days_start = today_start - timedelta(days=30)
@@ -252,7 +252,7 @@ class ProjectService:
         """30일 동안 수정되지 않은 임시 프로젝트 정리 작업"""
         try:
             # 30일 전 날짜 계산
-            expiration_date = datetime.utcnow() - timedelta(days=30)
+            expiration_date = datetime.now() - timedelta(days=30)
             
             # 만료된 임시 프로젝트 조회 (마지막 수정일 기준)
             query = select(Project).where(

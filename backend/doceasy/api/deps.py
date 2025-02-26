@@ -6,6 +6,7 @@ from common.core.database import get_db_async
 
 from doceasy.services.document import DocumentService
 from doceasy.services.rag import RAGService 
+from doceasy.services.project import ProjectService
 
 def get_document_service(db: AsyncSession = Depends(get_db_async)) -> DocumentService:
     """문서 서비스 의존성"""
@@ -21,3 +22,7 @@ async def get_rag_service(db: AsyncSession = Depends(get_db_async)) -> Any:
     service = RAGService()
     await service.initialize(db)
     return service
+
+async def get_project_service(db: AsyncSession = Depends(get_db_async)) -> Any:
+    """프로젝트 서비스 의존성"""
+    return ProjectService(db)

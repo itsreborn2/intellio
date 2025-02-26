@@ -6,6 +6,7 @@ import logging
 from common.models.user import Session
 from sse_starlette import EventSourceResponse
 import json
+from datetime import datetime
 
 from common.core.database import get_db_async
 from common.core.deps import get_current_session
@@ -32,6 +33,7 @@ async def upload_documents(
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(get_current_session),
+    project_service: ProjectService = Depends(deps.get_project_service)
 ) -> EventSourceResponse:
     """문서 업로드 API - 지정된 프로젝트에 문서 업로드
     SSE(Server-Sent Events)를 사용하여 실시간으로 업로드 진행상황을 클라이언트에 전송
@@ -44,6 +46,13 @@ async def upload_documents(
         
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
+
+    # 프로젝트의 updated_at 갱신
+    project = await project_service.get(project_id, session.user_id)
+    if project:
+        project.updated_at = datetime.now()
+        await db.commit()
+        logger.debug(f"프로젝트 {project_id} 마지막 수정 시간 갱신: {project.updated_at}")
 
     # 파일 내용을 미리 읽어서 메모리에 저장
     file_contents = []

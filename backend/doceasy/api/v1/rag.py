@@ -2,15 +2,16 @@
 
 import json
 from typing import List, Dict, Any, Optional, Union, AsyncGenerator
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sse_starlette.sse import EventSourceResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import logging
 from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import traceback
+from datetime import datetime
 
 from common.core.database import get_db_async
 from common.models.user import Session
@@ -18,12 +19,11 @@ from common.core.deps import get_current_session
 
 from doceasy.services.rag import RAGService
 from doceasy.api import deps
-from doceasy.schemas.table_response import TableResponse, TableHeader
-from doceasy.schemas.document import DocumentQueryRequest
-from doceasy.schemas.rag import RAGQuery, RAGResponse
+from doceasy.schemas.table_response import TableResponse
+from doceasy.schemas.rag import RAGQuery
 from doceasy.models.chat import ChatHistory
+from doceasy.services.project import ProjectService
 
-from celery.result import AsyncResult
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # 디버그 로깅 활성화
@@ -87,13 +87,22 @@ async def table_search(
     request: TableQueryRequest,
     session: Session = Depends(get_current_session),
     rag_service: RAGService = Depends(deps.get_rag_service),
-    db: AsyncSession = Depends(get_db_async)
+    db: AsyncSession = Depends(get_db_async),
+    project_service: ProjectService = Depends(deps.get_project_service)
 ) -> TableResponse:
     """테이블 모드 검색 및 질의응답"""
     try:
 
         logger.info(f"테이블 검색 요청 - 쿼리: {request.query}, 문서 ID: {request.document_ids}, Mode: {request.mode}")
         
+        # 프로젝트의 updated_at 갱신
+        if request.project_id:
+            project_id = UUID(request.project_id)
+            project = await project_service.get(project_id, session.user_id)
+            if project:
+                project.updated_at = datetime.now()
+                logger.debug(f"프로젝트 {project_id} 마지막 수정 시간 갱신: {project.updated_at}")
+
         # 사용자 메시지 저장
         user_message = ChatHistory(
             id=str(uuid4()),
@@ -150,13 +159,24 @@ async def table_search(
 async def table_search_stream(
     request: TableQueryRequest,
     session: Session = Depends(get_current_session),
+    db: AsyncSession = Depends(get_db_async),
     rag_service: RAGService = Depends(deps.get_rag_service),
-    db: AsyncSession = Depends(get_db_async)
+    project_service: ProjectService = Depends(deps.get_project_service)
 ) -> EventSourceResponse:
     """테이블 모드 검색 및 질의응답 (스트리밍 방식)"""
     try:
         logger.info(f"테이블 검색 스트리밍 요청 - 쿼리: {request.query}, 문서 ID: {request.document_ids}, Mode: {request.mode}")
         
+        # 프로젝트의 updated_at 갱신
+        if request.project_id:
+            project_id = UUID(request.project_id)
+            project = await project_service.get(project_id, session.user_id)
+            if project:
+                project.updated_at = datetime.now()
+                await db.commit()
+                logger.debug(f"프로젝트 {project_id} 마지막 수정 시간 갱신: {project.updated_at}")
+
+
         # 사용자 메시지 저장
         user_message = ChatHistory(
             id=str(uuid4()),
@@ -167,7 +187,8 @@ async def table_search_stream(
         db.add(user_message)
         await db.commit()
         logger.info(f"사용자 메시지 저장 완료 - ID: {user_message.id}, 내용: {request.query}")
-
+        
+        
         # SSE 스트리밍 제너레이터 함수
         async def generate():
             try:
@@ -271,9 +292,18 @@ async def chat_search(
     request: ChatRequest,
     db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(get_current_session),
+    project_service: ProjectService = Depends(deps.get_project_service)
 ):
     """채팅 모드 검색 및 질의응답"""
     try:
+                
+        # 프로젝트의 updated_at 갱신
+        project_id = UUID(request.project_id)
+        project = await project_service.get(project_id, session.user_id)
+        if project:
+            project.updated_at = datetime.now()
+            logger.debug(f"프로젝트 {project_id} 마지막 수정 시간 갱신: {project.updated_at}")
+
         # 사용자 메시지 저장
         user_message = ChatHistory(
             id=str(uuid4()),
