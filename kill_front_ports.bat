@@ -1,32 +1,44 @@
 @echo off
-chcp 949
+chcp 65001 > nul
 setlocal enabledelayedexpansion
+echo Killing frontend processes on ports 3000, 3010, 3020...
 
-echo ��Ʈ 3000, 3010, 3020�� �˻��ϰ� �ֽ��ϴ�.
-
-:: �˻��� ��Ʈ ���
-set "ports=3000 3010 3020"
-
-:: �� ��Ʈ�� ���� ���μ��� �˻� �� ����
-for %%p in (%ports%) do (
-    echo.
-    echo === ��Ʈ %%p �˻��� ===
-    for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%%p ^| findstr LISTENING') do (
-        set pid=%%a
-        
-        if not "!pid!"=="" (
-            echo ��Ʈ %%p�� ����ϴ� ���μ��� PID: !pid!
-            taskkill /F /PID !pid!
-            if !errorlevel! equ 0 (
-                echo ���μ����� ���������� ����Ǿ����ϴ�.
-            ) else (
-                echo ���μ��� ���� ����. ������ ������ �ʿ��� �� �ֽ��ϴ�.
-            )
-        ) else (
-            echo ��Ʈ %%p�� ����ϴ� ���μ����� ã�� �� �����ϴ�.
-        )
+REM Kill processes on port 3000
+echo Checking for processes on port 3000...
+FOR /F "tokens=5" %%P IN ('netstat -ano ^| find ":3000" ^| find "LISTENING"') DO (
+    echo Killing process with PID: %%P on port 3000...
+    taskkill /F /PID %%P >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo Successfully terminated process on port 3000
+    ) else (
+        echo No process found on port 3000 or failed to terminate
     )
 )
 
-pause
+REM Kill processes on port 3010
+echo Checking for processes on port 3010...
+FOR /F "tokens=5" %%P IN ('netstat -ano ^| find ":3010" ^| find "LISTENING"') DO (
+    echo Killing process with PID: %%P on port 3010...
+    taskkill /F /PID %%P >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo Successfully terminated process on port 3010
+    ) else (
+        echo No process found on port 3010 or failed to terminate
+    )
+)
+
+REM Kill processes on port 3020
+echo Checking for processes on port 3020...
+FOR /F "tokens=5" %%P IN ('netstat -ano ^| find ":3020" ^| find "LISTENING"') DO (
+    echo Killing process with PID: %%P on port 3020...
+    taskkill /F /PID %%P >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo Successfully terminated process on port 3020
+    ) else (
+        echo No process found on port 3020 or failed to terminate
+    )
+)
+
+echo All tasks completed.
 endlocal
+pause 

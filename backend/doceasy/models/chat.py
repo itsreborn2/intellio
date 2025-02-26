@@ -9,6 +9,6 @@ class ChatHistory(Base):
     __tablename__ = "chat_history"
     
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    project_id: Mapped[PyUUID] = mapped_column(UUID, ForeignKey("projects.id"), nullable=False)
+    project_id: Mapped[PyUUID] = mapped_column(UUID, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False) 

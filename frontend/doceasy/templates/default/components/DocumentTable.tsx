@@ -127,10 +127,9 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         // 여기는 헤더값을 비교하고 있으면 안넣는데, 백엔드 응답에 따라 동일한 헤더값이 올수도 있다.
         // 그런 경우 헤더값+숫자의 형태로 또 다른 헤더를 넣어줘야한다.
         // 헤더값을 받는 함수를 따로 만들어서 처리해야할듯.
-        console.log(`[DocumentTable] ${doc.filename} : `);
-        console.log(`[DocumentTable] col`, cell);
+        console.debug(`[DocumentTable] ${doc.filename} : col : `, cell);
         if (!baseColumns.some(col => col.accessorKey === cell.header)) {
-          console.log(`[DocumentTable] col 변경 : ` , cell)
+          console.debug(`[DocumentTable] col 변경 : ` , cell)
           addedColumnsCount++;
           baseColumns.push({
             accessorKey: cell.header,

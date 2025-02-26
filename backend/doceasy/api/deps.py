@@ -21,10 +21,3 @@ async def get_rag_service(db: AsyncSession = Depends(get_db_async)) -> Any:
     service = RAGService()
     await service.initialize(db)
     return service
-
-# # Type annotations for dependency injection
-# CurrentUser = Annotated[User, Depends(get_current_user)]
-# AsyncDB = Annotated[AsyncSession, Depends(get_async_db)]
-# DocumentService = Annotated[DocumentService, Depends(get_document_service)]
-# SessionService = Annotated[SessionService, Depends(get_session_service)]
-# RAGService = Annotated[Any, Depends(get_rag_service)]  # Any 타입 사용

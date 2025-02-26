@@ -687,6 +687,256 @@ class RAGService:
             logger.exception(f"테이블 모드 처리 실패: {str(e)}")
             raise
 
+    async def handle_table_mode_stream(self, query: str, document_ids: List[str] = None, user_id: str = None, project_id: str = None):
+        """테이블 모드 처리 (스트리밍 방식)"""
+        try:
+            logger.warning("테이블 모드 스트리밍 처리 시작")
+            # 테이블 헤더 생성
+            title = await self.table_header_prompt.generate_title(query)
+            logger.warning(f"테이블 헤더 생성 완료 : {title}")
+            
+            # 헤더 정보 이벤트 전송
+            yield {
+                "event": "header",
+                "data": {
+                    "header_name": title,
+                    "prompt": query
+                }
+            }
+            
+            # 쿼리 분석
+            query_analysis = self._analyze_query(query)
+            
+            # 관련 청크 검색
+            k = len(document_ids) * 5  # 문서당 5개
+            # yield {
+            #     "event": "progress",
+            #     "data": {
+            #         "message": "문서에서 관련 정보를 검색 중입니다...",
+            #         "progress": 10
+            #     }
+            # }
+            
+            rr: RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="table")
+            logger.warning(f"청크 추출 완료 : {len(rr.documents)} 개")
+            
+            if not rr.documents:
+                # 문서를 찾을 수 없는 경우
+                yield {
+                    "event": "cell_result",
+                    "data": {
+                        "doc_id": "empty",
+                        "content": "관련 문서를 찾을 수 없습니다.",
+                        "is_error": True
+                    }
+                }
+                yield {
+                    "event": "completed",
+                    "data": {
+                        "header_name": title,
+                        "message": "분석이 완료되었습니다."
+                    }
+                }
+                return
+            
+            # 진행 상황 업데이트
+            yield {
+                "event": "progress",
+                "data": {
+                    "message": "문서별 정보를 분석 중입니다...",
+                    "progress": 30
+                }
+            }
+            
+            # 문서별로 청크 그룹화 및 키워드 추출
+            docs_data = {}
+            for doc in rr.documents:
+                doc_id = doc.metadata.get("document_id")
+                if not doc_id:
+                    continue
+                
+                chunk_text = doc.page_content
+                if not chunk_text:
+                    continue
+                
+                if doc_id not in docs_data:
+                    docs_data[doc_id] = {
+                        "content": chunk_text,
+                        "keywords": {}
+                    }
+                else:
+                    docs_data[doc_id]["content"] += "\n" + chunk_text
+                
+                # 키워드 빈도수 업데이트
+                chunk_keywords = self._extract_keywords(chunk_text)
+                for keyword in chunk_keywords:
+                    if keyword in docs_data[doc_id]["keywords"]:
+                        docs_data[doc_id]["keywords"][keyword] += 1
+                    else:
+                        docs_data[doc_id]["keywords"][keyword] = 1
+            
+            # 각 문서에 대해 처리 중 상태 전송
+            doc_ids = list(docs_data.keys())
+            for doc_id in doc_ids:
+                yield {
+                    "event": "cell_processing",
+                    "data": {
+                        "doc_id": doc_id,
+                        "message": "분석 진행 중..."
+                    }
+                }
+            
+            # 진행 상황 업데이트
+            yield {
+                "event": "progress",
+                "data": {
+                    "message": "문서 내용을 분석하여 결과를 생성 중입니다...",
+                    "progress": 50
+                }
+            }
+            
+            # 각 문서별로 테이블 분석을 위한 태스크 준비
+            tasks = []
+            for doc_id, data in docs_data.items():
+                # 빈도수 기반으로 상위 키워드 선택
+                sorted_keywords = sorted(
+                    data["keywords"].items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )[:10]
+                
+                keywords = {
+                    "keywords": [
+                        {
+                            "text": kw[0],
+                            "frequency": kw[1]
+                        } for kw in sorted_keywords
+                    ],
+                    "type": "extracted",
+                    "source": "document_content"
+                }
+                
+                # 태스크 생성
+                task = analyze_table_mode_task.s(
+                    chunk_content=data["content"],
+                    query=query,
+                    keywords=keywords,
+                    query_analysis=query_analysis
+                )
+                tasks.append((doc_id, task))
+            
+            # 진행 상황 업데이트
+            yield {
+                "event": "progress",
+                "data": {
+                    "message": "각 문서별로 분석을 시작합니다...",
+                    "progress": 60
+                }
+            }
+            
+            # 각 문서별로 결과를 개별적으로 처리하여 완료된 즉시 클라이언트에 전송
+            total_docs = len(tasks)
+            completed_docs = 0
+            
+            for doc_id, task in tasks:
+                try:
+                    # 각 문서별로 개별적으로 태스크 실행
+                    task_result = task.apply_async()
+                    result = task_result.get(timeout=30)  # 최대 30초 대기
+                    
+                    if not result:
+                        result_content = "분석 결과가 없습니다."
+                    else:
+                        result_content = result
+                    
+                    # 진행률 업데이트
+                    completed_docs += 1
+                    progress_percent = 60 + int((completed_docs / total_docs) * 30)
+                    
+                    # 진행 상황 업데이트
+                    yield {
+                        "event": "progress",
+                        "data": {
+                            "message": f"문서 분석 진행 중... ({completed_docs}/{total_docs})",
+                            "progress": progress_percent
+                        }
+                    }
+                    
+                    # 결과 전송
+                    yield {
+                        "event": "cell_result",
+                        "data": {
+                            "doc_id": doc_id,
+                            "content": result_content,
+                            "is_error": False
+                        }
+                    }
+                    
+                    # 히스토리 저장
+                    if user_id and project_id:
+                        try:
+                            history_service = TableHistoryService(db=self.db)
+                            await history_service.create(
+                                TableHistoryCreate(
+                                    project_id=str(project_id),
+                                    document_id=str(doc_id),
+                                    user_id=str(user_id),
+                                    prompt=query,
+                                    title=title,
+                                    result=str(result_content)
+                                )
+                            )
+                        except Exception as e:
+                            logger.exception(f"히스토리 저장 실패 (개별 문서): {str(e)}")
+                    
+                except TimeoutError:
+                    logger.error(f"문서 ID: {doc_id} 분석 시간 초과")
+                    yield {
+                        "event": "cell_result",
+                        "data": {
+                            "doc_id": doc_id,
+                            "content": "분석 시간이 초과되었습니다.",
+                            "is_error": True
+                        }
+                    }
+                except Exception as e:
+                    logger.error(f"문서 ID: {doc_id} 분석 중 오류: {str(e)}")
+                    yield {
+                        "event": "cell_result",
+                        "data": {
+                            "doc_id": doc_id,
+                            "content": f"분석 중 오류가 발생했습니다: {str(e)}",
+                            "is_error": True
+                        }
+                    }
+            
+            # 완료 이벤트 전송
+            yield {
+                "event": "progress",
+                "data": {
+                    "message": "분석이 완료되었습니다",
+                    "progress": 100
+                }
+            }
+            
+            yield {
+                "event": "completed",
+                "data": {
+                    "header_name": title,
+                    "message": "모든 문서 분석이 완료되었습니다."
+                }
+            }
+            
+        except Exception as e:
+            logger.exception(f"테이블 모드 스트리밍 처리 실패: {str(e)}")
+            # 오류 이벤트 전송
+            yield {
+                "event": "error",
+                "data": {
+                    "message": f"분석 처리 중 오류가 발생했습니다: {str(e)}"
+                }
+            }
+
     async def _handle_chat_mode(self, query: str, document_ids: List[UUID] = None) -> Dict[str, Any]:
         """채팅 모드 처리
         
