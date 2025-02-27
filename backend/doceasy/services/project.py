@@ -117,7 +117,10 @@ class ProjectService:
         # 기본 쿼리 생성
         base_query = select(Project)
         if session and session.user_id:
-            base_query = base_query.where(Project.user_id == session.user_id)
+            base_query = base_query.where(
+                Project.user_id == session.user_id,
+                Project.category_id == None  # 카테고리에 속하지 않은 프로젝트만 조회
+            )
         else:
             return {
                 "today": [],
@@ -182,8 +185,11 @@ class ProjectService:
         last_7_days_start = today_start - timedelta(days=7)
         last_30_days_start = today_start - timedelta(days=30)
 
-        # 기본 쿼리 생성 - 특정 사용자의 프로젝트만 조회
-        base_query = select(Project).where(Project.user_id == user_id)
+        # 기본 쿼리 생성 - 특정 사용자의 프로젝트만 조회하고, 카테고리에 속하지 않은 프로젝트만 조회
+        base_query = select(Project).where(
+            Project.user_id == user_id,
+            Project.category_id == None  # 카테고리에 속하지 않은 프로젝트만 조회
+        )
 
         # 오늘 열람/수정한 프로젝트
         today_query = base_query.where(

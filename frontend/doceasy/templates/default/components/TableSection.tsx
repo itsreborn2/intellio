@@ -2,22 +2,14 @@
 
 import React, { useRef, useState, useEffect } from "react"
 import { Button } from "intellio-common/components/ui/button"
-
-import { 
-
-  Plus, 
-
-} from "lucide-react"
+import { Plus } from "lucide-react"
 import { useApp } from "@/contexts/AppContext"
 import { useAuth } from "@/hooks/useAuth"
-
 import * as actionTypes from '@/types/actions'
 import DocumentTable, { ITableUtils } from "./DocumentTable"
-
 import { useFileUpload } from "@/hooks/useFileUpload"
 import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
-import {  DocumentStatus, IDocumentStatus } from "@/types"
-import { DocumentStatusResponse } from '@/types/index';
+import { IDocument, DocumentStatus, IDocumentStatus, DocumentStatusResponse } from "@/types"
 import { getDocumentUploadStatus } from "@/services/api"
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
@@ -156,6 +148,48 @@ const isSignificantContextChange = (currentSentence: string, previousSentence: s
   );
 };
 
+// 문서 분석 진행 상태 컴포넌트
+const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => {
+  const processingDocs = documents.filter(doc => 
+    doc.status === 'PROCESSING' || doc.status === 'PARTIAL' || doc.status === 'UPLOADING' || doc.status === 'UPLOADED'
+  );
+  const completedDocs = documents.filter(doc => doc.status === 'COMPLETED');
+  
+  if (processingDocs.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-24 right-8 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 z-50 max-w-xs">
+      <div className="flex flex-col space-y-2">
+        <h4 className="font-semibold text-sm">문서 분석 진행 중</h4>
+        
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs">
+            <span>진행 중:</span>
+            <span className="font-medium">{processingDocs.length}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span>완료:</span> 
+            <span className="font-medium">{completedDocs.length}</span>
+          </div>
+          
+          {/* 프로그레스 바 */}
+          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+            <div 
+              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+              style={{ 
+                width: `${processingDocs.length + completedDocs.length === 0 
+                  ? 5 // 아직 문서 처리 전에는 5%로 표시
+                  : Math.floor((completedDocs.length / 
+                     (processingDocs.length + completedDocs.length)) * 100)}%` 
+              }}
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const TableSection = () => {
   const { state, dispatch } = useApp()
   const { isAuthenticated } = useAuth()
@@ -235,7 +269,7 @@ export const TableSection = () => {
       //console.log('문서 상태 업데이트2 :', processingDocIds)
       const interval = setInterval(() => {
         fetchDocumentStatuses(processingDocIds)
-      }, 5000) // 5초마다 업데이트
+      }, 2500) // 5초마다 업데이트
       
       return () => clearInterval(interval)
     }
@@ -393,6 +427,7 @@ export const TableSection = () => {
       <div className="flex-1 overflow-auto">  
         <DocumentTable ref={tableRef} />
       </div>
+      <DocumentAnalysisProgress documents={Object.values(state.documents)} />
     </div>
     
   )

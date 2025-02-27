@@ -80,8 +80,8 @@ function ProjectCategorySectionContent({
       // api 서비스를 사용하도록 수정
       const newCategory = await api.createCategory(newCategoryName.trim());
       
-      // 성공 시 상태 업데이트
-      setCategories(prev => [...prev, newCategory]);
+      // 성공 시 상태 업데이트 - projects_count 추가
+      setCategories(prev => [...prev, { ...newCategory, projects_count: 0 }]);
       setNewCategoryName('');
       setIsAddingCategory(false);
       setCategoryError('');

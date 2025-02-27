@@ -300,13 +300,21 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         },
       }
     },
-    muiTableBodyRowProps: {
-      hover: false,
-      sx: {
-        '&:hover': {
-          backgroundColor: 'transparent',
-        },
-      },
+    muiTableBodyRowProps: ({ row }) => {
+      const document = row?.original as IDocument;
+      const isCompleted = document?.status === 'COMPLETED';
+      
+      return {
+        hover: false,
+        sx: {
+          opacity: isCompleted ? 1 : 0.5,
+          pointerEvents: isCompleted ? 'auto' : 'none',
+          backgroundColor: isCompleted ? 'transparent' : '#f5f5f5',
+          '&:hover': {
+            backgroundColor: isCompleted ? 'transparent' : '#f5f5f5',
+          },
+        }
+      };
     },
     layoutMode: 'grid', //모든 칼럼은 남은 공간을 채우는 형태
   });

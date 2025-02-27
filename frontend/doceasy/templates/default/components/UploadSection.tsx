@@ -5,10 +5,52 @@ import { Upload, FileText, Loader2, AlertCircle, CheckCircle2, Clock } from 'luc
 import { useDropzone } from 'react-dropzone'
 import { useApp } from '@/contexts/AppContext'
 import { Button } from 'intellio-common/components/ui/button'
-import { IUploadProgressData } from "@/types"
+import { IDocument, IUploadProgressData, IDocumentStatus } from "@/types"
 import { useFileUpload } from "@/hooks/useFileUpload"
 import { DocumentStatusBadge } from '@/components/DocumentStatusBadge'
 import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
+
+// 문서 분석 진행 상태 컴포넌트
+const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => {
+  const processingDocs = documents.filter(doc => 
+    doc.status === 'PROCESSING' || doc.status === 'PARTIAL' || doc.status === 'UPLOADING' || doc.status === 'UPLOADED'
+  );
+  const completedDocs = documents.filter(doc => doc.status === 'COMPLETED');
+  
+  if (processingDocs.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-24 right-8 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 z-50 max-w-xs">
+      <div className="flex flex-col space-y-2">
+        <h4 className="font-semibold text-sm">문서 분석 진행 중</h4>
+        
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs">
+            <span>진행 중:</span>
+            <span className="font-medium">{processingDocs.length}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span>완료:</span> 
+            <span className="font-medium">{completedDocs.length}</span>
+          </div>
+          
+          {/* 프로그레스 바 */}
+          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+            <div 
+              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+              style={{ 
+                width: `${processingDocs.length + completedDocs.length === 0 
+                  ? 5 // 아직 문서 처리 전에는 5%로 표시
+                  : Math.floor((completedDocs.length / 
+                     (processingDocs.length + completedDocs.length)) * 100)}%` 
+              }}
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // MIME 타입 매핑 객체를 accept와 동일한 형태로 수정
 const ACCEPTED_FILE_TYPES: Record<string, readonly string[]> = {
@@ -161,6 +203,7 @@ export const UploadSection = () => {
           </div>
         </div>
       </div>
+      <DocumentAnalysisProgress documents={Object.values(state.documents)} />
     </>
   )
 }

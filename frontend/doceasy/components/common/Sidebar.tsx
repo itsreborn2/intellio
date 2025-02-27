@@ -98,6 +98,7 @@ function SidebarContent({ className }: SidebarProps) {
           const projectsPromises = categoriesData.map(async (category) => {
             try {
               const projects = await api.getCategoryProjects(category.id)
+              category.projects_count = projects.length
               return { categoryId: category.id, projects }
             } catch (error) {
               console.error(`카테고리 ${category.id}의 프로젝트 로드 실패:`, error)
@@ -106,8 +107,10 @@ function SidebarContent({ className }: SidebarProps) {
           })
 
           const projectsResults = await Promise.all(projectsPromises)
-          const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
-            acc[categoryId] = projects
+          const newCategoryProjects = projectsResults.reduce((acc, result) => {
+            if (result && result.categoryId) {
+              acc[result.categoryId] = result.projects
+            }
             return acc
           }, {} as { [key: string]: IProject[] })
 
@@ -194,52 +197,45 @@ function SidebarContent({ className }: SidebarProps) {
         await api.addProjectToCategory(draggableId, categoryId);
         //console.log('프로젝트가 영구 폴더로 이동됨:', updatedProject);
 
-        // 카테고리(영구폴더)에 프로젝트 추가 (UI 업데이트)
-        setCategoryProjects(prev => ({
-          ...prev,
-          [categoryId]: [...(prev[categoryId] || []), {
-            id: movedProject.id,
-            name: movedProject.name,
-            is_temporary: false,
-            retention_period: 'PERMANENT',
-            created_at: movedProject.created_at,
-            updated_at: movedProject.updated_at
-          }]
-        }));
-
-        // UI 업데이트를 위해 카테고리 목록 및 프로젝트 다시 로드
-        // 2. 카테고리 목록 로드
-        const categoriesData = await api.getCategories()
-        setCategories(categoriesData)
-
-        // 3. 각 카테고리의 프로젝트 로드
-        const projectsPromises = categoriesData.map(async (category) => {
-          try {
-            const projects = await api.getCategoryProjects(category.id)
-            return { categoryId: category.id, projects }
-          } catch (error) {
-            console.error(`카테고리 ${category.id}의 프로젝트 로드 실패:`, error)
-            return { categoryId: category.id, projects: [] }
-          }
-        })
-
-        const projectsResults = await Promise.all(projectsPromises)
-        const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
-          acc[categoryId] = projects
-          return acc
-        }, {} as { [key: string]: IProject[] })
-
-        dispatch({
-          type: 'UPDATE_CATEGORY_PROJECTS',
-          payload: newCategoryProjects
-        })
-
-        // 최근 프로젝트 목록도 새로고침
-        const recentProjectsResponse = await api.getRecentProjects();
-        dispatch({ 
-          type: 'UPDATE_RECENT_PROJECTS', 
-          payload: recentProjectsResponse
-        });
+        // UI 업데이트를 위해 해당 카테고리의 프로젝트만 다시 로드
+        try {
+          // 해당 카테고리의 프로젝트만 다시 로드
+          const projects = await api.getCategoryProjects(categoryId);
+          
+          // 카테고리 목록에서 해당 카테고리 찾아서 프로젝트 수 업데이트
+          setCategories(prev => 
+            prev.map(category => 
+              category.id === categoryId 
+                ? { ...category, projects_count: projects.length } 
+                : category
+            )
+          );
+          
+          // 카테고리 프로젝트 상태 업데이트
+          setCategoryProjects(prev => ({
+            ...prev,
+            [categoryId]: projects
+          }));
+          
+          // 카테고리 프로젝트 상태를 전역 상태에 반영
+          dispatch({
+            type: 'UPDATE_CATEGORY_PROJECTS',
+            payload: {
+              ...state.categoryProjects,
+              [categoryId]: projects
+            }
+          });
+          
+          // 최근 프로젝트 목록도 새로고침
+          const recentProjectsResponse = await api.getRecentProjects();
+          dispatch({ 
+            type: 'UPDATE_RECENT_PROJECTS', 
+            payload: recentProjectsResponse
+          });
+          
+        } catch (error) {
+          console.error(`카테고리 ${categoryId}의 프로젝트 로드 실패:`, error);
+        }
 
       } catch (error) {
         console.error('프로젝트 이동 실패:', error);

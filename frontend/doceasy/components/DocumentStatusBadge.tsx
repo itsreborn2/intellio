@@ -7,12 +7,7 @@ interface DocumentStatusBadgeProps {
 export function DocumentStatusBadge({ status }: DocumentStatusBadgeProps) {
   switch (status) {
     case 'COMPLETED':
-      return (
-        <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
-          <CheckCircle2 className="w-3 h-3 mr-1" />
-          완료
-        </span>
-      )
+      return null
     case 'PROCESSING':
     case 'PARTIAL':
       return (
