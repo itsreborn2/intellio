@@ -6,6 +6,7 @@ export interface Category {
   name: string;
   parent_id?: string;
   created_at: string;
+  projects_count: number;
 }
 
 export interface ProjectCategory {

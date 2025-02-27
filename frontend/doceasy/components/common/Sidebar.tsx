@@ -6,34 +6,13 @@ import { useRouter } from 'next/navigation'
 
 import { useApp } from '@/contexts/AppContext'
 import * as api from '@/services/api'
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
-import { cn } from "@/lib/utils"
+import { DragDropContext,   DropResult } from '@hello-pangea/dnd'
 import {
-  Folder,
-  History,
-  ChevronDown,
-  ChevronRight,
-  FileText,
-  Zap,
-  Plus,
-  AlertTriangle,
-  Trash2,
-  AlertCircle,
-  FileType,
   PenSquare,
   ScrollText
 } from "lucide-react"
 import { Button } from "intellio-common/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from "intellio-common/components/ui/dialog"
-import { Input } from "intellio-common/components/ui/input"
-import { Popover, PopoverTrigger, PopoverContent } from "intellio-common/components/ui/popover"
+
 import {
   Tooltip,
   TooltipContent,
@@ -43,7 +22,6 @@ import {
 import { ProjectCategorySection } from './sidebar/ProjectCategorySection'
 import { TemplateSection } from './sidebar/TemplateSection'
 import { useAuth } from '@/hooks/useAuth';
-import { getRecentProjects, } from '@/services/api'
 import { IRecentProjectsResponse, IProject, IMessage, ProjectDetail, Category, SidebarProps, Template } from '@/types/index'
 
 
@@ -154,20 +132,38 @@ function SidebarContent({ className }: SidebarProps) {
     }
   }, [dispatch])
 
-  useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        if (!isAuthenticated) {  
-          return;
-        }
-        const data = await api.getCategories();
-        setCategories(data);
-      } catch (error) {
-        console.error('카테고리 로드 실패:', error);
-      }
-    };
-    loadCategories();
-  }, []);
+  // useEffect(() => {
+  //   const loadCategories = async () => {
+  //     try {
+  //       if (!isAuthenticated) {  
+  //         return;
+  //       }
+  //       console.debug('[Sidebar] 카테고리 목록 로드')
+  //       const data = await api.getCategories();
+  //       setCategories(data);
+  //     } catch (error) {
+  //       console.error('카테고리 로드 실패:', error);
+  //     }
+  //   };
+  //   loadCategories();
+  // }, []);
+  
+  // 카테고리 목록이 로드되면 모든 카테고리를 확장 상태로 설정
+  // useEffect(() => {
+  //   if (categories.length > 0) {
+  //     const categoryIds = categories.map(category => `category-${category.id}`);
+  //     setExpandedSections(prev => {
+  //       const newExpandedSections = [...prev];
+  //       categoryIds.forEach(id => {
+  //         if (!newExpandedSections.includes(id)) {
+  //           newExpandedSections.push(id);
+  //         }
+  //       });
+  //       return newExpandedSections;
+  //     });
+  //     console.log('모든 카테고리 폴더를 확장 상태로 설정:', categoryIds);
+  //   }
+  // }, [categories]);
 
   const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
@@ -191,20 +187,14 @@ function SidebarContent({ className }: SidebarProps) {
 
         const categoryId = destination.droppableId.replace('category-', '');
 
-        // 프로젝트를 영구 프로젝트로 변경
-        await api.updateProjectToPermanent(draggableId, categoryId);
-
+        // 프로젝트를 영구 프로젝트로 변경하고 카테고리에 추가
+        // updateProjectToPermanent 함수는 이미 프로젝트를 영구적으로 변경하고 카테고리에 추가하는 작업을 수행함
+        //const updatedProject = await api.updateProjectToPermanent(draggableId, categoryId);
         // 백엔드로 카테고리(영구폴더) 변경 요청
         await api.addProjectToCategory(draggableId, categoryId);
+        //console.log('프로젝트가 영구 폴더로 이동됨:', updatedProject);
 
-        // // 최근 프로젝트 목록에서 제거
-        // const updatedRecentProjects = {
-        //   today: (state.recentProjects.today || []).filter(p => p.id !== draggableId),
-        //   yesterday: (state.recentProjects.yesterday || []).filter(p => p.id !== draggableId),
-        //   four_days_ago: (state.recentProjects.four_days_ago || []).filter(p => p.id !== draggableId)
-        // };
-
-        // 카테고리(영구폴더)에 프로젝트 추가
+        // 카테고리(영구폴더)에 프로젝트 추가 (UI 업데이트)
         setCategoryProjects(prev => ({
           ...prev,
           [categoryId]: [...(prev[categoryId] || []), {
@@ -217,9 +207,7 @@ function SidebarContent({ className }: SidebarProps) {
           }]
         }));
 
-        // UI 업데이트. 최근 프로젝트 영역은 굳이 업데이트할 필요가 없고
-        // 프로젝트 폴더만 업데이트해주면 되겠는걸?
-        // 근데 이렇게 비효율적으로 매번 읽어야하나..
+        // UI 업데이트를 위해 카테고리 목록 및 프로젝트 다시 로드
         // 2. 카테고리 목록 로드
         const categoriesData = await api.getCategories()
         setCategories(categoriesData)
@@ -236,7 +224,6 @@ function SidebarContent({ className }: SidebarProps) {
         })
 
         const projectsResults = await Promise.all(projectsPromises)
-        //const a:Project = 
         const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
           acc[categoryId] = projects
           return acc
@@ -246,6 +233,13 @@ function SidebarContent({ className }: SidebarProps) {
           type: 'UPDATE_CATEGORY_PROJECTS',
           payload: newCategoryProjects
         })
+
+        // 최근 프로젝트 목록도 새로고침
+        const recentProjectsResponse = await api.getRecentProjects();
+        dispatch({ 
+          type: 'UPDATE_RECENT_PROJECTS', 
+          payload: recentProjectsResponse
+        });
 
       } catch (error) {
         console.error('프로젝트 이동 실패:', error);
@@ -291,7 +285,6 @@ function SidebarContent({ className }: SidebarProps) {
     }
   }
 
-  
   const toggleSection = (section: string) => {
     setExpandedSections(prev =>
       prev.includes(section)
