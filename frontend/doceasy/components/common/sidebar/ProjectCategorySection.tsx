@@ -80,8 +80,8 @@ function ProjectCategorySectionContent({
       // api 서비스를 사용하도록 수정
       const newCategory = await api.createCategory(newCategoryName.trim());
       
-      // 성공 시 상태 업데이트
-      setCategories(prev => [...prev, newCategory]);
+      // 성공 시 상태 업데이트 - projects_count 추가
+      setCategories(prev => [...prev, { ...newCategory, projects_count: 0 }]);
       setNewCategoryName('');
       setIsAddingCategory(false);
       setCategoryError('');
@@ -143,7 +143,7 @@ function ProjectCategorySectionContent({
         const categoriesData = await api.getCategories()
         setCategories(categoriesData)
 
-        console.log('카테고리의 프로젝트 로드')
+        console.log('[loadCategoriesAndProjects] 카테고리의 프로젝트 로드')
         // 2. 각 카테고리의 프로젝트 로드
         const projectsPromises = categoriesData.map(async (category) => {
           try {
@@ -151,6 +151,8 @@ function ProjectCategorySectionContent({
             console.log(` - ${category.name} 폴더(${categoriesData.length}) `);
             const projects = await api.getCategoryProjects(category.id)
             //console.log('카테고리의 프로젝트들:', projects); // 전체 배열 확인
+            category.projects_count = projects.length
+            console.log(` 개수 : ${projects.length}개`)
             projects.forEach((project: IProject) => {
               console.log(`   - 영구프로젝트 : ID:${project.id}, title:${project.name}, temp:${project.is_temporary}`);
             });
@@ -286,95 +288,6 @@ function ProjectCategorySectionContent({
       console.error('프로젝트 삭제 실패:', error);
     }
   };
-
-  // 드래그 종료 핸들러
-  const handleDragEnd = async (result: any) => {
-    // 상위 컴포넌트의 onDragEnd 호출
-    onDragEnd(result);
-
-    if (!result.destination) return;
-
-    const sourceId = result.draggableId;
-    const destinationId = result.destination.droppableId;
-
-    // 카테고리(영구)로 드롭된 경우
-    if (destinationId.startsWith('category-')) {
-      const categoryId = destinationId.replace('category-', '');
-      try {
-        // 이동된 프로젝트 찾기
-        const movedProject = [...(state.recentProjects.today || []), 
-                            ...(state.recentProjects.last_7_days || []),
-                            ...(state.recentProjects.last_30_days || [])]
-                            .find(p => p.id === sourceId);
-
-        if (!movedProject) {
-          console.error('이동할 프로젝트를 찾을 수 없습니다.');
-          return;
-        }
-
-        // 프로젝트를 영구 프로젝트로 변경
-        await api.updateProjectToPermanent(sourceId, categoryId);
-
-        // 백엔드로 카테고리(영구폴더) 변경 요청
-        await api.addProjectToCategory(sourceId, categoryId);
-
-        // 상태 업데이트를 위한 새 프로젝트 객체 생성
-        const updatedProject = {
-          ...movedProject,
-          is_temporary: false,
-          retention_period: 'PERMANENT',
-        };
-
-        // 로컬 상태 업데이트
-        setCategoryProjects(prev => ({
-          ...prev,
-          [categoryId]: [...(prev[categoryId] || []), updatedProject]
-        }));
-
-        // 최근 프로젝트 목록에서 제거
-        dispatch({
-          type: 'UPDATE_RECENT_PROJECTS',
-          payload: {
-            today: (state.recentProjects.today || []).filter(p => p.id !== sourceId),
-            last_7_days: (state.recentProjects.last_7_days || []).filter(p => p.id !== sourceId),
-            last_30_days: (state.recentProjects.last_30_days || []).filter(p => p.id !== sourceId)
-          }
-        });
-
-        // 서버에서 최신 데이터 다시 가져오기
-        const [recentProjects, categoriesData] = await Promise.all([
-          api.getRecentProjects(),
-          api.getCategories()
-        ]);
-
-        // 최근 프로젝트 업데이트
-        dispatch({ type: 'UPDATE_RECENT_PROJECTS', payload: recentProjects });
-
-        // 카테고리 프로젝트 목록 새로고침
-        const projectsPromises = categoriesData.map(async (category) => {
-          try {
-            const projects = await api.getCategoryProjects(category.id);
-            return { categoryId: category.id, projects };
-          } catch (error) {
-            console.error(`카테고리 ${category.id}의 프로젝트 로드 실패:`, error);
-            return { categoryId: category.id, projects: [] };
-          }
-        });
-
-        const projectsResults = await Promise.all(projectsPromises);
-        const newCategoryProjects = projectsResults.reduce((acc, { categoryId, projects }) => {
-          acc[categoryId] = projects;
-          return acc;
-        }, {} as { [key: string]: IProject[] });
-
-        // 카테고리 프로젝트 상태 업데이트
-        setCategoryProjects(newCategoryProjects);
-
-      } catch (error) {
-        console.error('프로젝트 이동 실패:', error);
-      }
-    }
-  }
 
   const truncateTitle = (title: string, maxLength: number = 20) => {
     if (!title) return '(제목 없음)';
@@ -654,7 +567,7 @@ function ProjectCategorySectionContent({
                         }}
                       >
                         <div 
-                          className="mr-1" 
+                          className="mr-1 relative group/folder" 
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleSection(`category-${category.id}`);
@@ -662,14 +575,22 @@ function ProjectCategorySectionContent({
                         >
                           {expandedSections.includes(`category-${category.id}`) ? (
                             <FolderOpen className={cn(
-                              "h-4 w-4",
+                              "h-4 w-4 transform transition-all duration-200",
                               snapshot.isDraggingOver && "text-gray-600"
                             )} />
                           ) : (
-                            <Folder className={cn(
-                              "h-4 w-4",
-                              snapshot.isDraggingOver && "text-gray-600"
-                            )} />
+                            <>
+                              <Folder className={cn(
+                                "h-4 w-4 transform transition-all duration-200",
+                                snapshot.isDraggingOver && "text-gray-600",
+                                "group-hover/folder:opacity-0 group-hover/folder:scale-90"
+                              )} />
+                              <FolderOpen className={cn(
+                                "h-4 w-4 absolute top-0 left-0 opacity-0 transform scale-110 transition-all duration-200",
+                                snapshot.isDraggingOver && "text-gray-600",
+                                "group-hover/folder:opacity-100 group-hover/folder:scale-100"
+                              )} />
+                            </>
                           )}
                         </div>
                         {editingCategoryId === category.id ? (
@@ -689,7 +610,7 @@ function ProjectCategorySectionContent({
                             onClick={(e) => e.stopPropagation()}
                           />
                         ) : (
-                          <span className="flex-1 text-left truncate">{category.name}</span>
+                          <span className="flex-1 text-left truncate">{category.name}({category.projects_count})</span>
                         )}
                       </Button>
                       <Button
@@ -719,7 +640,10 @@ function ProjectCategorySectionContent({
                   variant="ghost"
                   className="w-full justify-start text-sm h-8 pl-4 text-gray-500 hover:text-gray-900"
                 >
-                  <Plus className="h-4 w-4 mr-0.5" />
+                  <div className="relative group/folder mr-0.5">
+                    <Plus className="h-4 w-4 absolute top-0 left-0 opacity-100 group-hover/folder:opacity-0 transform transition-all duration-200 group-hover/folder:scale-90" />
+                    <Folder className="h-4 w-4 opacity-0 group-hover/folder:opacity-100 transform scale-110 transition-all duration-200 group-hover/folder:scale-100" />
+                  </div>
                   <span className="flex-1 text-left">새 폴더</span>
                 </Button>
               </PopoverTrigger>
@@ -781,7 +705,7 @@ function ProjectCategorySectionContent({
           </>
         ) : (
           <div className="text-center text-gray-500 py-2">
-            로그인 후 프로젝트 목록을 볼 수 있습니다.
+            
           </div>
         )}
       </div>

@@ -2,25 +2,15 @@
 
 import React, { useRef, useState, useEffect } from "react"
 import { Button } from "intellio-common/components/ui/button"
-
-import { 
-
-  Plus, 
-
-} from "lucide-react"
+import { Plus } from "lucide-react"
 import { useApp } from "@/contexts/AppContext"
-
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "intellio-common/components/ui/hover-card"
-
+import { useAuth } from "@/hooks/useAuth"
 import * as actionTypes from '@/types/actions'
 import DocumentTable, { ITableUtils } from "./DocumentTable"
-import ReactMarkdown from 'react-markdown'
 import { useFileUpload } from "@/hooks/useFileUpload"
 import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
+import { IDocument, DocumentStatus, IDocumentStatus, DocumentStatusResponse } from "@/types"
+import { getDocumentUploadStatus } from "@/services/api"
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
   <div className="bg-muted/90 w-fit px-2 py-1 rounded">
@@ -158,9 +148,51 @@ const isSignificantContextChange = (currentSentence: string, previousSentence: s
   );
 };
 
+// 문서 분석 진행 상태 컴포넌트
+const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => {
+  const processingDocs = documents.filter(doc => 
+    doc.status === 'PROCESSING' || doc.status === 'PARTIAL' || doc.status === 'UPLOADING' || doc.status === 'UPLOADED'
+  );
+  const completedDocs = documents.filter(doc => doc.status === 'COMPLETED');
+  
+  if (processingDocs.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-24 right-8 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 z-50 max-w-xs">
+      <div className="flex flex-col space-y-2">
+        <h4 className="font-semibold text-sm">문서 분석 진행 중</h4>
+        
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs">
+            <span>진행 중:</span>
+            <span className="font-medium">{processingDocs.length}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span>완료:</span> 
+            <span className="font-medium">{completedDocs.length}</span>
+          </div>
+          
+          {/* 프로그레스 바 */}
+          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+            <div 
+              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+              style={{ 
+                width: `${processingDocs.length + completedDocs.length === 0 
+                  ? 5 // 아직 문서 처리 전에는 5%로 표시
+                  : Math.floor((completedDocs.length / 
+                     (processingDocs.length + completedDocs.length)) * 100)}%` 
+              }}
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const TableSection = () => {
   const { state, dispatch } = useApp()
+  const { isAuthenticated } = useAuth()
   const [selectedRows, setSelectedRows] = useState<number[]>([])
   const [selectedCells, setSelectedCells] = useState<{ row: number; col: string }[]>([])
   const [selectionMode, setSelectionMode] = useState<'row' | 'cell'>('row')
@@ -202,6 +234,46 @@ export const TableSection = () => {
       }
     }
   }, [state.analysis.tableData]);
+
+  // 문서 상태 조회 함수
+  const fetchDocumentStatuses = async (documentIds: string[]) => {
+    try {
+      const statuses: DocumentStatusResponse[] = await getDocumentUploadStatus(documentIds)
+      
+      // 상태 업데이트
+      statuses.forEach((status) => {
+        dispatch({
+          type: actionTypes.UPDATE_DOCUMENT_STATUS,
+          payload: {
+            id: status.document_id,
+            status: status.status as IDocumentStatus
+          }
+        })
+      })
+      
+    } catch (error) {
+      console.error('문서 상태 조회 중 오류:', error)
+    }
+  }
+
+  // 주기적으로 문서 상태 업데이트
+  useEffect(() => {
+    
+    const documents = Object.values(state.documents)
+    //console.log('문서 상태 업데이트1 :', documents)
+    const processingDocIds = documents
+      .filter(doc => doc.status === 'PROCESSING' || doc.status === 'PARTIAL' || doc.status === 'UPLOADING' || doc.status === 'UPLOADED')
+      .map(doc => doc.id)
+      
+    if (processingDocIds.length > 0) {
+      //console.log('문서 상태 업데이트2 :', processingDocIds)
+      const interval = setInterval(() => {
+        fetchDocumentStatuses(processingDocIds)
+      }, 2500) // 5초마다 업데이트
+      
+      return () => clearInterval(interval)
+    }
+  }, [state.documents])
 
   const handleAddDocuments = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
@@ -332,15 +404,17 @@ export const TableSection = () => {
       <UploadProgressDialog {...uploadProgress} />
       <div className="sticky top-0 z-10 bg-background border-b">
         <div className="flex items-center justify-between p-2 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 px-2 text-xs"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Plus className="h-3 w-3 mr-0.5" />
-            문서 추가
-          </Button>
+          {isAuthenticated && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2 text-xs"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Plus className="h-3 w-3 mr-0.5" />
+              문서 추가
+            </Button>
+          )}
           <input
             type="file"
             ref={fileInputRef}
@@ -353,6 +427,7 @@ export const TableSection = () => {
       <div className="flex-1 overflow-auto">  
         <DocumentTable ref={tableRef} />
       </div>
+      <DocumentAnalysisProgress documents={Object.values(state.documents)} />
     </div>
     
   )

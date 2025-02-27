@@ -51,7 +51,7 @@ def upgrade() -> None:
         
         if not session:
             # 현재 시간을 모든 타임스탬프에 사용
-            now = datetime.utcnow()
+            now = datetime.now()
             # 세션 생성
             conn.execute(
                 sa.text('''

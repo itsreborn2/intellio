@@ -77,7 +77,7 @@ class GoogleCloudStorageService:
             partial(
                 blob.generate_signed_url,
                 version="v4",
-                expiration=datetime.utcnow() + timedelta(seconds=expires_in),
+                expiration=datetime.now() + timedelta(seconds=expires_in),
                 method="GET"
             )
         )

@@ -1,17 +1,56 @@
 "use client"
 
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState } from 'react'
 import { Upload, FileText, Loader2, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { useApp } from '@/contexts/AppContext'
 import { Button } from 'intellio-common/components/ui/button'
-import { createProject } from '@/services/api'
-import { uploadDocument } from '@/services/api'
-import { IDocument, IDocumentStatus, IDocumentUploadResponse, ITableData, TableResponse } from '@/types'
-import * as actionTypes from '@/types/actions'
-import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
-import { IUploadProgressData } from "@/types"
+import { IDocument, IUploadProgressData, IDocumentStatus } from "@/types"
 import { useFileUpload } from "@/hooks/useFileUpload"
+import { DocumentStatusBadge } from '@/components/DocumentStatusBadge'
+import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
+
+// 문서 분석 진행 상태 컴포넌트
+const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => {
+  const processingDocs = documents.filter(doc => 
+    doc.status === 'PROCESSING' || doc.status === 'PARTIAL' || doc.status === 'UPLOADING' || doc.status === 'UPLOADED'
+  );
+  const completedDocs = documents.filter(doc => doc.status === 'COMPLETED');
+  
+  if (processingDocs.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-24 right-8 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 z-50 max-w-xs">
+      <div className="flex flex-col space-y-2">
+        <h4 className="font-semibold text-sm">문서 분석 진행 중</h4>
+        
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs">
+            <span>진행 중:</span>
+            <span className="font-medium">{processingDocs.length}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span>완료:</span> 
+            <span className="font-medium">{completedDocs.length}</span>
+          </div>
+          
+          {/* 프로그레스 바 */}
+          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+            <div 
+              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+              style={{ 
+                width: `${processingDocs.length + completedDocs.length === 0 
+                  ? 5 // 아직 문서 처리 전에는 5%로 표시
+                  : Math.floor((completedDocs.length / 
+                     (processingDocs.length + completedDocs.length)) * 100)}%` 
+              }}
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // MIME 타입 매핑 객체를 accept와 동일한 형태로 수정
 const ACCEPTED_FILE_TYPES: Record<string, readonly string[]> = {
@@ -44,108 +83,14 @@ function getFileExtension(filename: string): string {
   return filename.toLowerCase().match(/\.[^.]*$/)?.[0] || '';
 }
 
-// 문서 상태 타입 정의
-interface DocumentStatus {
-  document_id: string
-  status: string
-  error_message?: string
-  is_accessible: boolean
-}
-
-// 문서 상태 표시 컴포넌트
-const DocumentStatusBadge = ({ status }: { status: string }) => {
-  switch (status) {
-    case 'COMPLETED':
-      return (
-        <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
-          <CheckCircle2 className="w-3 h-3 mr-1" />
-          완료
-        </span>
-      )
-    case 'PROCESSING':
-    case 'PARTIAL':
-      return (
-        <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-full">
-          <Clock className="w-3 h-3 mr-1" />
-          처리중
-        </span>
-      )
-    case 'ERROR':
-      return (
-        <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full">
-          <AlertCircle className="w-3 h-3 mr-1" />
-          오류
-        </span>
-      )
-    default:
-      return (
-        <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full">
-          <Clock className="w-3 h-3 mr-1" />
-          대기중
-        </span>
-      )
-  }
-}
-
-// 테이블 행 데이터 인터페이스 정의
-interface ITableRowData {
-  id: string
-  Document: string
-  Date: string
-  "Document Type": string
-  status: IDocumentStatus
-}
-
 export const UploadSection = () => {
   const { state, dispatch } = useApp()
-  //const { currentProject } = state
   const [uploadStatus, setUploadStatus] = useState({
     total: 0,
     error: 0,
     failedFiles: [] as string[]
   })
-  const [documentStatuses, setDocumentStatuses] = useState<DocumentStatus[]>([])
   const { uploadProgress, handleFileUpload } = useFileUpload()
-
-  // 문서 상태 조회 함수
-  const fetchDocumentStatuses = async (documentIds: string[]) => {
-    try {
-      const response = await fetch('/api/v1/rag/document-status', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          document_ids: documentIds,
-        }),
-      })
-      
-      if (!response.ok) {
-        throw new Error('문서 상태 조회 실패')
-      }
-      
-      const statuses = await response.json()
-      setDocumentStatuses(statuses)
-      
-    } catch (error) {
-      console.error('문서 상태 조회 중 오류:', error)
-    }
-  }
-
-  // 주기적으로 문서 상태 업데이트
-  useEffect(() => {
-    const documentIds = documentStatuses
-      .filter(status => status.status === 'PROCESSING' || status.status === 'PARTIAL')
-      .map(status => status.document_id)
-      
-    if (documentIds.length > 0) {
-      const interval = setInterval(() => {
-        fetchDocumentStatuses(documentIds)
-      }, 5000) // 5초마다 업데이트
-      
-      return () => clearInterval(interval)
-    }
-  }, [documentStatuses])
 
   const updateUploadStatus = useCallback(
     (
@@ -158,8 +103,6 @@ export const UploadSection = () => {
         error,
         failedFiles
       })
-
-      
     }, [dispatch]
   )
 
@@ -257,31 +200,10 @@ export const UploadSection = () => {
                 </div>
               </div>
             )}
-            
-            {/* 문서 처리 상태 표시 */}
-            {documentStatuses.length > 0 && (
-              <div className="mt-4">
-                <h3 className="text-sm font-medium mb-2">문서 처리 상태</h3>
-                <div className="space-y-2">
-                  {documentStatuses.map((status) => (
-                    <div
-                      key={status.document_id}
-                      className="flex items-center justify-between p-2 bg-white rounded-lg shadow-sm"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <DocumentStatusBadge status={status.status} />
-                        <span className="text-sm text-gray-600">
-                          {status.error_message || (status.is_accessible ? '분석 가능' : '처리 중...')}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
+      <DocumentAnalysisProgress documents={Object.values(state.documents)} />
     </>
   )
 }

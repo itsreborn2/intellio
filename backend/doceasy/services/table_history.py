@@ -1,7 +1,8 @@
 from typing import List
 from uuid import UUID, uuid4
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from common.core.database import get_db_async
 from doceasy.models.table_history import TableHistory
@@ -103,6 +104,40 @@ class TableHistoryService:
         result = await self.db.execute(stmt)
         histories = result.scalars().all()
         return [TableHistoryResponse.model_validate(history) for history in histories]
+
+    async def get_grouped_by_project(self, project_id: str) -> List[dict]:
+        """프로젝트별 테이블 히스토리를 그룹화하여 조회"""
+        
+        # TableHistory 모델의 별칭 생성
+        th = aliased(TableHistory)
+        
+        # 그룹화 쿼리 구성
+        stmt = (
+            select(
+                th.title,
+                th.prompt,
+                func.json_agg(
+                    func.json_build_object(
+                        'doc_id', th.document_id,
+                        'content', th.result
+                    )
+                ).label('cells')
+            )
+            .where(th.project_id == project_id)
+            .group_by(th.title, th.prompt)
+            .order_by(th.title, th.prompt)
+        )
+        
+        result = await self.db.execute(stmt)
+        grouped_data = result.all()
+        
+        return [
+            {
+                'header': {'name': row.title, 'prompt': row.prompt},
+                'cells': row.cells
+            }
+            for row in grouped_data
+        ]
         
     async def get_by_document(self, document_id: UUID) -> List[TableHistoryResponse]:
         """문서별 테이블 히스토리 조회"""

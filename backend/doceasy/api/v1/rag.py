@@ -1,27 +1,28 @@
 """RAG 검색 API 라우터"""
 
+import json
 from typing import List, Dict, Any, Optional, Union, AsyncGenerator
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sse_starlette.sse import EventSourceResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import logging
 from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import traceback
+from datetime import datetime
 
 from common.core.database import get_db_async
 from common.models.user import Session
 from common.core.deps import get_current_session
 
-
 from doceasy.services.rag import RAGService
 from doceasy.api import deps
-from doceasy.schemas.table_response import TableResponse, TableHeader
-from doceasy.schemas.document import DocumentQueryRequest
-from doceasy.schemas.rag import RAGQuery, RAGResponse
+from doceasy.schemas.table_response import TableResponse
+from doceasy.schemas.rag import RAGQuery
 from doceasy.models.chat import ChatHistory
-
+from doceasy.services.project import ProjectService
 
 
 logger = logging.getLogger(__name__)
@@ -86,13 +87,33 @@ async def table_search(
     request: TableQueryRequest,
     session: Session = Depends(get_current_session),
     rag_service: RAGService = Depends(deps.get_rag_service),
-    db: AsyncSession = Depends(get_db_async)
+    db: AsyncSession = Depends(get_db_async),
+    project_service: ProjectService = Depends(deps.get_project_service)
 ) -> TableResponse:
     """테이블 모드 검색 및 질의응답"""
     try:
 
         logger.info(f"테이블 검색 요청 - 쿼리: {request.query}, 문서 ID: {request.document_ids}, Mode: {request.mode}")
         
+        # 프로젝트의 updated_at 갱신
+        if request.project_id:
+            project_id = UUID(request.project_id)
+            project = await project_service.get(project_id, session.user_id)
+            if project:
+                project.updated_at = datetime.now()
+                logger.debug(f"프로젝트 {project_id} 마지막 수정 시간 갱신: {project.updated_at}")
+
+        # 사용자 메시지 저장
+        user_message = ChatHistory(
+            id=str(uuid4()),
+            project_id=request.project_id,
+            role="user",
+            content=request.query
+        )
+        db.add(user_message)
+        await db.commit()
+        logger.info(f"사용자 메시지 저장 완료 - ID: {user_message.id}, 내용: {request.query}")
+
         # 문서 접근 권한 확인
         # if request.document_ids:
         #     for doc_id in request.document_ids:
@@ -110,6 +131,20 @@ async def table_search(
             project_id=request.project_id
         )
         logger.info(f"테이블 검색 완료 : {response}")
+
+        #`**${result.columns[0].header.name}** 컬럼이 추가되었습니다. 테이블을 확인해주세요.
+        # 스트리밍 완료 후 메시지 저장
+        assistant_message_id = str(uuid4())
+        assistant_message = ChatHistory(
+            id=assistant_message_id,
+            project_id=request.project_id,
+            role="assistant",
+            content=f'**{response.columns[0].header.name}** 컬럼이 추가되었습니다. 테이블을 확인해주세요.'
+        )
+        db.add(assistant_message)
+        await db.commit()
+        logger.info(f"AI 응답 저장 완료 - ID: {assistant_message_id}")
+
         return response
 
         
@@ -118,6 +153,110 @@ async def table_search(
         raise HTTPException(
             status_code=500,
             detail=f"테이블 검색 처리 중 오류 발생: {str(e)}"
+        )
+
+@router.post("/table/search/stream")
+async def table_search_stream(
+    request: TableQueryRequest,
+    session: Session = Depends(get_current_session),
+    db: AsyncSession = Depends(get_db_async),
+    rag_service: RAGService = Depends(deps.get_rag_service),
+    project_service: ProjectService = Depends(deps.get_project_service)
+) -> EventSourceResponse:
+    """테이블 모드 검색 및 질의응답 (스트리밍 방식)"""
+    try:
+        logger.info(f"테이블 검색 스트리밍 요청 - 쿼리: {request.query}, 문서 ID: {request.document_ids}, Mode: {request.mode}")
+        
+        # 프로젝트의 updated_at 갱신
+        if request.project_id:
+            project_id = UUID(request.project_id)
+            project = await project_service.get(project_id, session.user_id)
+            if project:
+                project.updated_at = datetime.now()
+                await db.commit()
+                logger.debug(f"프로젝트 {project_id} 마지막 수정 시간 갱신: {project.updated_at}")
+
+
+        # 사용자 메시지 저장
+        user_message = ChatHistory(
+            id=str(uuid4()),
+            project_id=request.project_id,
+            role="user",
+            content=request.query
+        )
+        db.add(user_message)
+        await db.commit()
+        logger.info(f"사용자 메시지 저장 완료 - ID: {user_message.id}, 내용: {request.query}")
+        
+        
+        # SSE 스트리밍 제너레이터 함수
+        async def generate():
+            try:
+                # 스트리밍 방식으로 테이블 모드 처리
+                async for event in rag_service.handle_table_mode_stream(
+                    query=request.query,
+                    document_ids=request.document_ids,
+                    user_id=session.user_id,
+                    project_id=request.project_id
+                ):
+                    # 이벤트 타입과 데이터 추출
+                    event_type = event.get("event", "message")
+                    event_data = event.get("data", {})
+                    
+                    # 완료 이벤트인 경우 메시지 저장
+                    if event_type == "completed":
+                        # 컬럼 이름 가져오기 (헤더 이벤트에서 전송된 데이터)
+                        column_name = event_data.get("header_name", "새로운 컬럼")
+                        
+                        # 응답 메시지 저장
+                        assistant_message = ChatHistory(
+                            id=str(uuid4()),
+                            project_id=request.project_id,
+                            role="assistant",
+                            content=f'**{column_name}** 컬럼이 추가되었습니다. 테이블을 확인해주세요.'
+                        )
+                        db.add(assistant_message)
+                        await db.commit()
+                    
+                    # SSE 이벤트 전송(json 형식으로 전송)
+                    final_data = {
+                        "event": event_type,
+                        "data": event_data
+                    }
+                    ss = json.dumps(final_data, ensure_ascii=False)
+                    logger.info("----------------------------------")
+                    logger.info(ss)
+                    yield ss
+                    
+                    # 필요한 경우 진행 상황 로깅
+                    if event_type != "progress":
+                        logger.info(f"테이블 검색 이벤트 전송: {event_type}")
+                    
+            except Exception as e:
+                logger.error(f"스트리밍 처리 중 오류: {str(e)}")
+                # 오류 이벤트 전송
+                yield {
+                    "event": "error",
+                    "data": {"message": f"처리 중 오류가 발생했습니다: {str(e)}"}
+                }
+                raise
+
+        # EventSourceResponse 반환
+        return EventSourceResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Encoding": "none",
+            }
+        )
+        
+    except Exception as e:
+        logger.exception(f"테이블 스트리밍 검색 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"테이블 스트리밍 검색 처리 중 오류 발생: {str(e)}"
         )
 
 @router.post("", response_model=Union[Dict[str, Any], TableResponse])
@@ -153,9 +292,18 @@ async def chat_search(
     request: ChatRequest,
     db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(get_current_session),
+    project_service: ProjectService = Depends(deps.get_project_service)
 ):
     """채팅 모드 검색 및 질의응답"""
     try:
+                
+        # 프로젝트의 updated_at 갱신
+        project_id = UUID(request.project_id)
+        project = await project_service.get(project_id, session.user_id)
+        if project:
+            project.updated_at = datetime.now()
+            logger.debug(f"프로젝트 {project_id} 마지막 수정 시간 갱신: {project.updated_at}")
+
         # 사용자 메시지 저장
         user_message = ChatHistory(
             id=str(uuid4()),

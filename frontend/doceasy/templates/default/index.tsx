@@ -8,17 +8,26 @@ import { useState } from 'react'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import { Button } from "intellio-common/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "intellio-common/components/ui/tooltip"
+import { useAuth } from "@/hooks/useAuth"
 
 export const DefaultTemplate = () => {
   const { state } = useApp()
+  const { isAuthenticated } = useAuth()
   const [expandedSection, setExpandedSection] = useState<'none' | 'chat' | 'table'>('none')
 
   const renderContent = () => {
     switch (state.currentView) {
       case 'upload':
-        return (
+        return isAuthenticated ? (
           <div className="w-full h-full flex items-center justify-center bg-background">
             <UploadSection />
+          </div>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-background">
+            <div className="text-center">
+              <h2 className="text-2xl font-semibold mb-4">로그인이 필요합니다</h2>
+              <p className="text-muted-foreground">문서를 업로드하려면 먼저 로그인해주세요.</p>
+            </div>
           </div>
         )
       

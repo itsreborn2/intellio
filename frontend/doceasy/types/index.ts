@@ -6,6 +6,7 @@ export interface Category {
   name: string;
   parent_id?: string;
   created_at: string;
+  projects_count: number;
 }
 
 export interface ProjectCategory {
@@ -53,7 +54,7 @@ export interface ProjectListResponse {
 }
 
 // 문서 상태 타입
-export type IDocumentStatus = 'UPLOADING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'ERROR'
+export type IDocumentStatus = 'UPLOADING' | 'UPLOADED' | 'PROCESSING' | 'PARTIAL' | 'COMPLETED' | 'FAILED' | 'ERROR'
 
 // 메시지 인터페이스
 export interface IMessage {
@@ -143,7 +144,15 @@ export interface IDocument {
   updated_at?: string
 }
 
-// 문서 상태 인터페이스
+// 문서 업로드 후 분석 상태 응답 타입 정의
+export interface DocumentStatusResponse {
+  document_id: string
+  status: IDocumentStatus
+  error_message?: string
+  is_accessible: boolean
+}
+
+// 업로드가 완료된 문서 상태 인터페이스
 export interface DocumentStatus {
   id: string
   filename: string

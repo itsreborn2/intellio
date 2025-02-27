@@ -5,7 +5,7 @@ import * as Types from '@/types/index';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 //import { IDocument, ITableData, IMessage, ITemplate, IProjectItem, IDocumentUploadResponse } from '@/types';  
-import {  ProjectListResponse, IRecentProjectsResponse, ProjectDetail, IUploadProgressCallback, IDocumentUploadResponse, DocumentStatus, Category, ProjectCategory, IProject } from '@/types/index';
+import {  ProjectListResponse, IRecentProjectsResponse, ProjectDetail, IUploadProgressCallback, IDocumentUploadResponse, DocumentStatus, Category, ProjectCategory, IProject, DocumentStatusResponse } from '@/types/index';
 import { defaultFetchOptions, IApiProject, IApiRecentProjectsResponse } from '@/types/index';
 import { IChatRequest, IChatResponse, TableResponse, IDocument, IMessage } from '@/types';
 
@@ -338,6 +338,249 @@ export const searchTable = async (projectId: string, documentIds: string[], quer
   }
 };
 
+export const searchTableStream = async (
+  projectId: string, 
+  documentIds: string[], 
+  query: string,
+  callbacks?: {
+    onStart?: () => void;
+    onProgress?: (data: any) => void;
+    onHeader?: (data: any) => void;
+    onCell?: (data: any) => void;
+    onCompleted?: (data: any) => void;
+    onError?: (error: Error) => void;
+  }
+): Promise<void> => {
+  try {
+    console.log('테이블 검색 스트리밍 요청:', { query, documentIds, mode: 'table' });
+    
+    callbacks?.onStart?.();
+    
+    const response = await apiFetch(`${API_ENDPOINT}/rag/table/search/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+      },
+      body: JSON.stringify({
+        project_id: projectId,
+        document_ids: documentIds,
+        query,
+        mode: 'table'
+      }),
+      credentials: 'include'
+    });
+
+    // 응답 헤더 로깅
+    console.log('테이블 스트리밍 응답 헤더:');
+    const headers: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      console.log(`${key}: ${value}`);
+      headers[key] = value;
+    });
+
+    // 콘텐츠 타입 확인
+    const contentType = response.headers.get('content-type');
+    console.log('응답 콘텐츠 타입:', contentType);
+    
+    if (!contentType || !contentType.includes('text/event-stream')) {
+      console.warn('경고: 응답이 SSE 형식이 아닐 수 있음. 콘텐츠 타입:', contentType);
+    }
+
+    if (!response.ok) {
+      const errorData = await response.text().catch(() => 'Unknown error');
+      throw new Error(`테이블 검색 실패: ${errorData}`);
+    }
+
+    if (!response.body) {
+      throw new Error('응답 본문이 없습니다');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) {
+        // 남은 데이터 처리
+        if (buffer.trim()) {
+          processData(buffer);
+        }
+        break;
+      }
+      
+      // 새 데이터를 버퍼에 추가
+      buffer += decoder.decode(value, { stream: true });
+      
+      // 줄바꿈을 기준으로 데이터 처리
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // 마지막 라인은 불완전할 수 있으므로 버퍼에 유지
+      
+      for (const line of lines) {
+        if (line.trim()) {
+          processData(line);
+        }
+      }
+    }
+
+    function processData(line: string) {
+      try {
+        // 표준 SSE 이벤트 형식 처리 (event: xxx, data: xxx 형태)
+        if (line.startsWith('event:')) {
+          // 이벤트 라인 발견, 다음 데이터 라인을 기다립니다.
+          console.debug('SSE 이벤트 타입 발견:', line.substring(6).trim());
+          return;
+        }
+        
+        // data: 라인 처리
+        if (line.startsWith('data:')) {
+          let jsonStr = line.substring(5).trim();
+          console.debug('SSE 데이터 원본:', jsonStr);
+          
+          // 간단한 문자열 패턴이면 바로 처리
+          if (jsonStr === '[DONE]') {
+            return;
+          }
+          
+          try {
+            // 1. 기본 전처리: Python -> JavaScript 형식 변환
+            jsonStr = jsonStr
+              // 속성명의 작은따옴표를 큰따옴표로 변환
+              .replace(/'([^']+)':/g, '"$1":')
+              // Python 불리언 값 처리 (True -> true, False -> false)
+              .replace(/:\s*True(\s*[,}]|$)/g, ': true$1')
+              .replace(/:\s*False(\s*[,}]|$)/g, ': false$1');
+            
+            console.debug('전처리된 JSON 문자열:', jsonStr);
+            
+            // 2. JSON 파싱 시도
+            let eventData;
+            try {
+              eventData = JSON.parse(jsonStr);
+              console.debug('JSON 파싱 성공:', eventData);
+            } catch (jsonError) {
+              const errorMessage = jsonError instanceof Error ? jsonError.message : String(jsonError);
+              console.warn('JSON 파싱 실패:', errorMessage);
+              
+              // 추가 정제 시도: 이스케이프 처리
+              try {
+                const cleanedStr = jsonStr
+                  .replace(/[\n\r\t]/g, match => {
+                    if (match === '\n') return '\\n';
+                    if (match === '\r') return '\\r';
+                    if (match === '\t') return '\\t';
+                    return match;
+                  });
+                
+                eventData = JSON.parse(cleanedStr);
+                console.debug('정제 후 JSON 파싱 성공:', eventData);
+              } catch (error) {
+                console.error('JSON 파싱 최종 실패:', error);
+                return;
+              }
+            }
+            
+            // 3. 이벤트 타입 결정 및 처리
+            // 명시적 이벤트 타입이 있는 경우
+            if (eventData.event) {
+              handleEvent(eventData.event, eventData.data || eventData);
+              return;
+            }
+            
+            // 이벤트 타입이 없는 경우 데이터 구조로 판단
+            const eventType = determineEventType(eventData);
+            handleEvent(eventType, eventData);
+            
+          } catch (sseError) {
+            console.error('SSE 데이터 처리 실패:', sseError);
+          }
+          return;
+        }
+      } catch (e) {
+        console.error('데이터 처리 중 오류:', e);
+      }
+    }
+    
+    // 이벤트 타입 결정 함수
+    function determineEventType(data: any): string {
+      // 백엔드 이벤트 구조에 맞춰 타입 결정
+      if (data.header_name) return 'header';
+      if (data.doc_id && data.content) return 'cell_result';
+      if (data.doc_id) return 'cell_processing';
+      if (data.message && typeof data.progress === 'number') return 'progress';
+      if (data.is_completed || data.completed) return 'completed';
+      return 'unknown';
+    }
+
+    function handleEvent(eventType: string, eventData: any) {
+      console.log(`이벤트 처리: ${eventType}`, eventData);
+      
+      switch (eventType) {
+        case 'header':
+          callbacks?.onHeader?.(eventData);
+          break;
+          
+        case 'cell_processing':
+        case 'cell_result':
+          callbacks?.onCell?.({
+            event: eventType,
+            ...(eventData.doc_id ? eventData : { doc_id: eventData.data?.doc_id })
+          });
+          break;
+          
+        case 'progress':
+          callbacks?.onProgress?.(eventData);
+          break;
+          
+        case 'error':
+          // 오류 메시지 처리 (다양한 형식 지원)
+          const errorMessage = 
+            typeof eventData === 'string' ? eventData :
+            eventData.message ? eventData.message :
+            eventData.error ? eventData.error :
+            eventData.detail ? eventData.detail :
+            '테이블 분석 중 오류 발생';
+          
+          callbacks?.onError?.(new Error(errorMessage));
+          break;
+          
+        case 'completed':
+          callbacks?.onCompleted?.(eventData);
+          break;
+          
+        case 'unknown':
+        default:
+          console.warn('알 수 없는 이벤트 타입:', eventType, eventData);
+          // 데이터 구조에 따라 적절한 콜백 호출
+          if (eventData.header_name) {
+            callbacks?.onHeader?.(eventData);
+          } else if (eventData.doc_id && eventData.content) {
+            callbacks?.onCell?.({
+              event: 'cell_result',
+              ...eventData
+            });
+          } else if (eventData.doc_id) {
+            callbacks?.onCell?.({
+              event: 'cell_processing',
+              ...eventData
+            });
+          } else if (eventData.message) {
+            callbacks?.onProgress?.(eventData);
+          } else if (eventData.is_completed || eventData.completed) {
+            callbacks?.onCompleted?.(eventData);
+          }
+          break;
+      }
+    }
+  } catch (error) {
+    console.error('테이블 검색 중 오류:', error);
+    callbacks?.onError?.(error instanceof Error ? error : new Error(String(error)));
+    throw error;
+  }
+};
+
 export async function sendChatMessage(
   projectId: string,
   documentIds: string[],
@@ -390,27 +633,7 @@ export async function sendChatMessage(
   }
 }
 
-// data:Any, return역시 Any, 추후 문제발생 가능성.
-export const autosaveProject = async (
-  projectId: string, 
-  data: any
-): Promise<any> => {
-  return null;
-  // const response = await apiFetch(`${API_ENDPOINT}/projects/${projectId}/autosave`, {
-  //   method: 'PUT',
-  //   credentials: 'include',
-  //   headers: {
-  //     'Content-Type': 'application/json',
-  //   },
-  //   body: JSON.stringify(data),
-  // });
 
-  // if (!response.ok) {
-  //   throw new Error('Failed to autosave project')
-  // }
-
-  // return response.json()
-};
 
 // 세션 관련 API 함수들
 export const checkSession = async (): Promise<{
@@ -879,5 +1102,26 @@ export async function getChatHistory(projectId: string): Promise<IMessage[]> {
     throw new Error('대화 기록 조회 실패');
   }
   return response.json();
+}
+
+
+export async function getDocumentUploadStatus(documentIds: string[]): Promise<DocumentStatusResponse[]> {
+  console.log('getDocumentUploadStatus', documentIds)
+  const response = await apiFetch(`${API_ENDPOINT}/rag/document-status`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      document_ids: documentIds,
+    }),
+  })
+  
+  if (!response.ok) {
+    throw new Error('문서 상태 조회 실패')
+  }
+  
+  const statuses: DocumentStatusResponse[] = await response.json()
+  return statuses
 }
 

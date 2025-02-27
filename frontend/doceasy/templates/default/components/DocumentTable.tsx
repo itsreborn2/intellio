@@ -4,12 +4,14 @@ import {
   MaterialReactTable,
   useMaterialReactTable,
   type MRT_ColumnDef,
+  type MRT_Row,
 } from 'material-react-table';
 import { useApp } from "@/contexts/AppContext"
 import { Button } from "intellio-common/components/ui/button";
 import { IDocument,  IDocumentStatus } from '@/types';  
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { DocumentStatusBadge } from '@/components/DocumentStatusBadge';
 
 // 테이블 조작을 위한 유틸리티 함수들
 export interface ITableUtils {
@@ -91,8 +93,27 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     // 여기는 column가 추가되어야할때 호출됨. Table모드에서 프롬프트 입력 시.
     const baseColumns: MRT_ColumnDef<IDocument>[] = [
       {
-        accessorKey: 'filename',
-        header: 'Document',
+        id: "filename",
+        accessorKey: "filename",
+        header: "Document",
+        Cell: ({ row }: { row: MRT_Row<IDocument> }) => {
+          const document = row.original;
+          const status = document.status;
+          
+          // 상태에 따른 파일명 색상 설정
+          const filenameColorClass = status === 'ERROR' 
+            ? 'text-red-500' 
+            : (status === 'PROCESSING' || status === 'PARTIAL' || status === 'UPLOADING' || status === 'UPLOADED') 
+              ? 'text-gray-400' 
+              : 'text-foreground';
+
+          return (
+            <div className="flex items-center gap-2">
+              <span className={filenameColorClass}>{document.filename}</span>
+              <DocumentStatusBadge status={status} />
+            </div>
+          );
+        },
       },
     ];
     
@@ -106,10 +127,9 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         // 여기는 헤더값을 비교하고 있으면 안넣는데, 백엔드 응답에 따라 동일한 헤더값이 올수도 있다.
         // 그런 경우 헤더값+숫자의 형태로 또 다른 헤더를 넣어줘야한다.
         // 헤더값을 받는 함수를 따로 만들어서 처리해야할듯.
-        console.log(`[DocumentTable] ${doc.filename} : `);
-        console.log(`[DocumentTable] col`, cell);
+        console.debug(`[DocumentTable] ${doc.filename} : col : `, cell);
         if (!baseColumns.some(col => col.accessorKey === cell.header)) {
-          console.log(`[DocumentTable] col 변경 : ` , cell)
+          console.debug(`[DocumentTable] col 변경 : ` , cell)
           addedColumnsCount++;
           baseColumns.push({
             accessorKey: cell.header,
@@ -280,13 +300,21 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         },
       }
     },
-    muiTableBodyRowProps: {
-      hover: false,
-      sx: {
-        '&:hover': {
-          backgroundColor: 'transparent',
-        },
-      },
+    muiTableBodyRowProps: ({ row }) => {
+      const document = row?.original as IDocument;
+      const isCompleted = document?.status === 'COMPLETED';
+      
+      return {
+        hover: false,
+        sx: {
+          opacity: isCompleted ? 1 : 0.5,
+          pointerEvents: isCompleted ? 'auto' : 'none',
+          backgroundColor: isCompleted ? 'transparent' : '#f5f5f5',
+          '&:hover': {
+            backgroundColor: isCompleted ? 'transparent' : '#f5f5f5',
+          },
+        }
+      };
     },
     layoutMode: 'grid', //모든 칼럼은 남은 공간을 채우는 형태
   });

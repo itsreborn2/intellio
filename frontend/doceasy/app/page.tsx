@@ -33,7 +33,7 @@ function HomeContent() {
         if (cookies.user && cookies.token) {
           try {
             const userData: IOAuthUser = JSON.parse(cookies.user);
-            console.log('[Page] 파싱된 사용자 데이터:', userData);
+            //onsole.log('[Page] 파싱된 사용자 데이터:', userData);
             
             // 토큰 설정
             setToken(cookies.token);

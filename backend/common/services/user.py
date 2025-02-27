@@ -212,7 +212,7 @@ class UserService:
 
     async def cleanup_expired_sessions(self) -> int:
         """만료된 세션 정리"""
-        expiry_date = datetime.utcnow() - timedelta(days=settings.SESSION_EXPIRY_DAYS)
+        expiry_date = datetime.now() - timedelta(days=settings.SESSION_EXPIRY_DAYS)
         logger.info(f'[cleanup_expired_sessions] Cleaning up sessions older than: {expiry_date}')
         result = await self.db.execute(
             select(Session).where(Session.last_accessed_at < expiry_date)

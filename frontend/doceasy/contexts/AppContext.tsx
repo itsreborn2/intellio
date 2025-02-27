@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react'
-import { DocumentStatus, IProject, UpdateChatMessagePayload } from '@/types'
+import { DocumentStatus, IDocumentStatus, IProject, UpdateChatMessagePayload } from '@/types'
 import * as api from '@/services/api'
 import { IMessage, TableResponse, TableColumn,IDocument, IRecentProjectsResponse } from '@/types'
 import * as actionTypes from '@/types/actions'
@@ -55,9 +55,8 @@ type Action =
 
   // 아직 사용하지 않는 action
   | { type: typeof actionTypes.SELECT_DOCUMENTS; payload: string[] }
-  | { type: typeof actionTypes.ADD_COLUMN; payload: string }
   | { type: typeof actionTypes.DELETE_COLUMN; payload: string }
-  | { type: typeof actionTypes.UPDATE_DOCUMENT_STATUS; payload: { id: string; status: DocumentStatus } }
+  | { type: typeof actionTypes.UPDATE_DOCUMENT_STATUS; payload: { id: string; status: IDocumentStatus } }
   | { type: typeof actionTypes.UPDATE_TABLE_COLUMNS; payload: any[] }
   | { type: typeof actionTypes.UPDATE_COLUMN_INFO; payload: { oldName: string; newName: string; prompt: string; originalPrompt: string } }
   | { type: typeof actionTypes.ADD_ANALYSIS_COLUMN; payload: { columnName: string; prompt: string; originalPrompt: string } }
@@ -66,6 +65,7 @@ type Action =
   | { type: typeof actionTypes.SET_DOCUMENT_LIST; payload: { [key: string]: IDocument } }
   | { type: typeof actionTypes.UPDATE_CHAT_MESSAGE; payload:UpdateChatMessagePayload }
   | { type: typeof actionTypes.SET_MESSAGES; payload: IMessage[] }
+  | { type: typeof actionTypes.UPDATE_DOCUMENT_COLUMN; payload: { documentId: string; headerName: string; content: string } }
 
 const initialState: AppState = {
   sessionId: null,
@@ -250,27 +250,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    case actionTypes.ADD_COLUMN:    
-    // 아직 쓰는데가 없네.
-      // 기존 테이블 데이터 유지하면서 새 컬럼 추가       
-      const updatedColumnData = state.analysis.tableData.columns.map(row => ({
-        ...row,
-        [action.payload]: row[action.payload] || row[action.payload] === '' ? row[action.payload] : '내용을 불러오는 중...'
-      }))
-
-      // Document 컬럼 다음에 새 컬럼 추가
-      const currentColumns = [...state.analysis.columns]
-      const documentIndex = currentColumns.indexOf('Document')
-      currentColumns.splice(documentIndex + 1, 0, action.payload)
-
-      return {
-        ...state,
-        analysis: {
-          ...state.analysis,
-          columns: currentColumns,  // 수정된 컬럼 순서 적용
-          tableData: { columns: updatedColumnData }
-        }
-      }
+    
 
     case actionTypes.DELETE_COLUMN:
       return {
@@ -282,52 +262,71 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case actionTypes.UPDATE_TABLE_DATA:
-      console.log('[UPDATE_TABLE_DATA] 시작 ----------------');
-      console.log('1. 현재 상태:', {
-        currentColumns: state.analysis.tableData?.columns || [],
-        documents: state.documents,
-        currentProjectId: state.currentProjectId
-      });
 
-      console.log('2. 받은 payload:', action.payload);
+      const bLog = true;
 
       let initialTableColumns = state.analysis.tableData?.columns || [];
-      console.log('3. 초기 테이블 컬럼:', initialTableColumns);
-
-      // Document 칼럼이 없으면 추가
-      // if (!initialTableColumns.some(col => col.header.name === 'Document')) {
-      //   console.log('4. Document 컬럼 없음 - 새로 추가');
-      //   const documentColumn = {
-      //     header: {
-      //       name: 'Document',
-      //       prompt: '문서 이름을 표시합니다'
-      //     },
-      //     cells: Object.values(state.documents)
-      //       .filter(doc => doc.project_id === state.currentProjectId)
-      //       .map(doc => ({
-      //         doc_id: doc.id,
-      //         content: doc.filename
-      //       }))
-      //   };
-      //   console.log('4-1. 생성된 Document 컬럼:', documentColumn);
-      //   initialTableColumns = [documentColumn];
-      // }
-
       // 새로운 칼럼 데이터가 있으면 병합
-      let finalColumns = initialTableColumns;
-      const updatedDocuments = { ...state.documents };
-      if (action.payload?.columns?.length > 0) {
-        //console.log('5. 새로운 컬럼 데이터 병합 시작');
-        //const newColumns = action.payload.columns.filter(col => col.header.name !== 'Document');
-        const newColumns = action.payload.columns;
-        console.log('5-1. Document 컬럼 제외된 새 컬럼:', newColumns);
-        
-        // documents 복사본 생성
-        
+      let finalColumns = [...initialTableColumns]; // 배열을 복제하여 참조 문제 방지
 
+      if (bLog) {
+        console.debug('[UPDATE_TABLE_DATA] 시작 ----------------');
+        console.debug('1. 현재 상태:', {
+          currentColumns: state.analysis.tableData?.columns || [],
+          documents: state.documents,
+          currentProjectId: state.currentProjectId
+        });
+
+        console.debug('2. 받은 payload:', action.payload);
+        console.debug('3. 초기 테이블 컬럼:', initialTableColumns);
+        console.debug('4. 초기화된 finalColumns:', finalColumns);
+      }
+      
+      const updatedDocuments = { ...state.documents };
+      
+      if (action.payload?.columns?.length > 0) {
+        // 스트림 결과는 1개씩 도달, 테이블 히스토리는 전체 문서가 한방에
+        const colLen = action.payload.columns.length; 
+        const newColumns = action.payload.columns;
+        if (bLog) {
+          console.debug(`5-0. 새로운 컬럼 데이터 병합 시작 - 컬럼 개수: ${colLen}`);
+          console.debug('5-1. 새 컬럼:', newColumns);
+        }
+        
         // 각 컬럼을 순회하면서 해당하는 문서의 added_col_context 업데이트
         newColumns.forEach((column: TableColumn) => {
-          // 각 셀을 순회하면서 해당하는 문서 찾기
+          if (bLog) console.debug(`5-1-1. 컬럼:`, column);
+          
+          // 문서 목록을 순회하면서, 각 문서에 대해 해당 컬럼 추가
+          Object.values(updatedDocuments).forEach(document => {
+            // 문서에 added_col_context가 없으면 초기화
+            if (!document.added_col_context) {
+              document.added_col_context = [];
+            }
+            
+            // 해당 문서에 대한 셀 데이터 찾기
+            const cell = column.cells.find(cell => cell.doc_id === document.id);
+            
+            // 헤더와 일치하는 기존 컨텍스트 찾기
+            const existingContextIndex = document.added_col_context.findIndex(
+              ctx => ctx.header === column.header.name
+            );
+            
+            if (existingContextIndex !== -1) {
+              // 기존 컨텍스트가 있으면 값 업데이트
+              document.added_col_context[existingContextIndex].value = cell ? cell.content : '분석 중...';
+            } else {
+              // 헤더만 존재하고, cell이 없으면 여기를 온다.
+              // 이런 경우는 사용자 입력에 대한 헤더만 추가된 케이스.
+              document.added_col_context.push({
+                docId: document.id,
+                header: column.header.name,
+                value: cell ? cell.content : '분석 중...'
+              });
+            }
+          });
+          
+          // 기존 셀 처리 로직. TableHis
           column.cells.forEach(cell => {
             const document = updatedDocuments[cell.doc_id];
             if (document) {
@@ -335,29 +334,62 @@ const appReducer = (state: AppState, action: Action): AppState => {
               if (!document.added_col_context) {
                 document.added_col_context = [];
               }
-　　           // 새로운 cell 데이터 추가
-              document.added_col_context.push({
-                docId: cell.doc_id,
-                header: column.header.name,
-                value: cell.content
-              });
+              // 새로운 cell 데이터 추가 (이미 위에서 처리했을 수 있음)
+              const existingContext = document.added_col_context.find(
+                ctx => ctx.header === column.header.name
+              );
+              
+              if (!existingContext) {
+                if (bLog) console.debug(`[UPDATE_TABLE_DATA] 새로운 cell 데이터 추가: ${cell.doc_id}, ${column.header.name}, ${cell.content}`);
+                document.added_col_context.push({
+                  docId: cell.doc_id,
+                  header: column.header.name,
+                  value: cell.content
+                });
+              }
+            }
+            else
+            {
+              if (bLog) console.debug(`[UPDATE_TABLE_DATA] 기존 문서 없음: ${cell.doc_id}`);
             }
           });
         });
 
-        // finalColumns = [...initialTableColumns, ...newColumns];
-        // console.log('5-2. 최종 병합된 컬럼:', finalColumns);
-        // 여기에 요청한 데이터를 넣어줘.
-
-        console.log('5-2. 최종 병합된 컬럼:', finalColumns);
-        console.log('5-3. 업데이트된 documents:', updatedDocuments);
-
+        
+        // 새 컬럼들을 순회하며 처리
+        newColumns.forEach(newColumn => {
+          // 같은 헤더 이름을 가진 컬럼 인덱스 찾기
+          const existingColumnIndex = finalColumns.findIndex(
+            col => col.header.name === newColumn.header.name
+          );
+          
+          if (existingColumnIndex !== -1) {
+            // 같은 이름의 컬럼이 있으면 대체
+            if (bLog){
+              console.debug(`5-2. 기존 컬럼 [${newColumn.header.name}] 대체 : prompt=${newColumn.header.prompt}`);
+              console.debug(`5-2-1. 기존 컬럼:`, finalColumns[existingColumnIndex]);
+              console.debug(`5-2-2. 새 컬럼:`, newColumn);
+            }
+            finalColumns[existingColumnIndex] = newColumn;
+          } else {
+            // 같은 이름의 컬럼이 없으면 추가
+            if (bLog) console.debug(`5-2. 새 컬럼 [${newColumn.header.name}] 추가`);
+            finalColumns.push(newColumn);
+          }
+        });
+        
+        if (bLog){
+          console.debug('5-3. 최종 병합된 컬럼:', finalColumns);
+          console.debug('5-4. 업데이트된 documents:', updatedDocuments);
+        }
       }
 
-      console.log('6. 최종 업데이트될 상태:', {
-        columns: finalColumns
-      });
-      console.log('[UPDATE_TABLE_DATA] 종료 ----------------');
+      if (bLog){
+        console.debug('6. 최종 업데이트될 상태:', {
+          columns: finalColumns
+        });
+        console.debug('[UPDATE_TABLE_DATA] 종료 ----------------');
+      }
 
       return {
         ...state,
@@ -432,18 +464,16 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case actionTypes.UPDATE_DOCUMENT_STATUS:
-      // 주석 삭제 금지
-      // return {
-      //   ...state,
-      //   documents: {
-      //     ...state.documents,
-      //     [action.payload.id]: {
-      //       ...state.documents[action.payload.id],
-      //       status: action.payload.status
-      //     }
-      //   }
-      // }
-      return state;
+      return {
+        ...state,
+        documents: {
+          ...state.documents,
+          [action.payload.id]: {
+            ...state.documents[action.payload.id],
+            status: action.payload.status as IDocumentStatus
+          }
+        }
+      }
 
     case actionTypes.ADD_ANALYSIS_COLUMN:
       return state;
@@ -538,25 +568,60 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case actionTypes.UPDATE_CHAT_MESSAGE:
+      const { id, content } = action.payload
       return {
         ...state,
         messages: state.messages.map(message => 
-          message.id === action.payload.id
-            ? {
-                ...message,
-                content: typeof action.payload.content === 'function'
-                  ? action.payload.content(message.content)
-                  : action.payload.content
-              }
+          message.id === id 
+            ? { 
+                ...message, 
+                content: typeof content === 'function' 
+                  ? content(message.content) 
+                  : content 
+              } 
             : message
         )
       }
-    
     case actionTypes.SET_MESSAGES:
       return {
         ...state,
         messages: action.payload
       };
+
+    case actionTypes.UPDATE_DOCUMENT_COLUMN:
+      const { documentId: docId, headerName: colName, content: cellValue } = action.payload
+      const docsWithUpdatedColumn = { ...state.documents }
+      
+      // 해당 문서 찾기
+      const docToUpdate = docsWithUpdatedColumn[docId]
+      if (docToUpdate) {
+        // added_col_context가 없으면 초기화
+        if (!docToUpdate.added_col_context) {
+          docToUpdate.added_col_context = []
+        }
+        
+        // 같은 헤더의 기존 컨텍스트 찾기
+        const existingContextIndex = docToUpdate.added_col_context.findIndex(
+          ctx => ctx.header === colName
+        )
+        
+        if (existingContextIndex !== -1) {
+          // 기존 컨텍스트 업데이트
+          docToUpdate.added_col_context[existingContextIndex].value = cellValue
+        } else {
+          // 새 컨텍스트 추가
+          docToUpdate.added_col_context.push({
+            docId: docId,
+            header: colName,
+            value: cellValue
+          })
+        }
+      }
+      
+      return {
+        ...state,
+        documents: docsWithUpdatedColumn
+      }
 
     default:
       newState = state;

@@ -59,13 +59,13 @@ async def update_document_status_async(session, document_id: str, doc_status: st
             doc.status = doc_status
             if error:
                 doc.error_message = error
-            doc.updated_at = datetime.utcnow()
+            doc.updated_at = datetime.now()
             await session.commit()
 
         # Update Redis
         status_data = {
             'status': doc_status,
-            'updated_at': datetime.utcnow().isoformat()
+            'updated_at': datetime.now().isoformat()
         }
         if metadata:
             status_data['metadata'] = metadata
@@ -89,13 +89,13 @@ def update_document_status(document_id: str, doc_status: str, metadata: dict = N
                 doc.status = doc_status
                 if error:
                     doc.error_message = error
-                doc.updated_at = datetime.utcnow()
+                doc.updated_at = datetime.now()
                 db.commit()
 
         # Redis 업데이트
         status_data = {
             'status': doc_status,
-            'updated_at': datetime.utcnow().isoformat()
+            'updated_at': datetime.now().isoformat()
         }
         if metadata:
             status_data['metadata'] = metadata
@@ -466,7 +466,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
                 if total_chunks > 0 and current_processed >= total_chunks:  # 모든 청크가 처리되었을 때
                     logger.info(f"문서 {document_id} 처리 완료: {current_processed}/{total_chunks} 청크")
                     doc.status = DOCUMENT_STATUS_COMPLETED
-                    doc.updated_at = datetime.utcnow()
+                    doc.updated_at = datetime.now()
                     db.commit()
                     
                     update_document_status(
@@ -482,7 +482,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
                 else:
                     logger.info(f"문서 {document_id} 처리 중: {current_processed}/{total_chunks} 청크")
                     doc.status = DOCUMENT_STATUS_PARTIAL
-                    doc.updated_at = datetime.utcnow()
+                    doc.updated_at = datetime.now()
                     db.commit()
                     
                     update_document_status(
