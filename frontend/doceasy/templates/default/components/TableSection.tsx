@@ -399,22 +399,25 @@ export const TableSection = () => {
       // 여기에 컨텍스트 메뉴 로직 추가
     }
   }
+
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">  
+    <div className="h-full flex-1 overflow-hidden flex flex-col">
       <UploadProgressDialog {...uploadProgress} />
-      <div className="sticky top-0 z-10 bg-background border-b">
+      <div className="flex-shrink-0 bg-background border-b">
         <div className="flex items-center justify-between p-2 gap-2">
-          {isAuthenticated && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2 text-xs"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Plus className="h-3 w-3 mr-0.5" />
-              문서 추가
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {isAuthenticated && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 text-xs transition-all duration-300 ease-in-out"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Plus className="h-3 w-3 mr-0.5" />
+                문서 추가
+              </Button>
+            )}
+          </div>
           <input
             type="file"
             ref={fileInputRef}
@@ -424,11 +427,12 @@ export const TableSection = () => {
           />
         </div>
       </div>
-      <div className="flex-1 overflow-auto">  
-        <DocumentTable ref={tableRef} />
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full overflow-auto">
+          <DocumentTable ref={tableRef} />
+        </div>
       </div>
       <DocumentAnalysisProgress documents={Object.values(state.documents)} />
     </div>
-    
   )
 }

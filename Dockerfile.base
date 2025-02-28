@@ -1,0 +1,36 @@
+FROM python:3.11.9-slim
+
+WORKDIR /backend
+
+# 시스템 의존성 설치
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    software-properties-common \
+    git \
+    libpq-dev \
+    python3-dev \
+    pkg-config \
+    libcairo2-dev \
+    libgirepository1.0-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 타임존 설정
+ENV TZ=Asia/Seoul
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Python 의존성 설치
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir wheel setuptools && \
+    pip install --no-cache-dir -r requirements.txt
+
+# 백엔드 코드 복사
+COPY backend/ .
+
+# 환경변수 설정
+ENV PYTHONPATH=/backend
+
+# 실행 권한 부여
+RUN chmod +x ./start-*.sh 

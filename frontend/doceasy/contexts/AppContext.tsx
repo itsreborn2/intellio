@@ -582,6 +582,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
             : message
         )
       }
+
     case actionTypes.SET_MESSAGES:
       return {
         ...state,

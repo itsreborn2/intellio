@@ -1,4 +1,3 @@
-
 services:
   postgres:
     image: postgres:15
@@ -51,32 +50,26 @@ services:
       retries: 3
 
   fastapi:
-    build:
-      context: .
-      dockerfile: Dockerfile.fastapi
     ports:
       - "8000:8000"
-
     depends_on:
       - postgres
       - redis
+      - tika
+    restart: unless-stopped
     networks:
       - app-network
 
+
   celery-doceasy:
-    build:
-      context: .
-      dockerfile: Dockerfile.celery.doceasy
     depends_on:
       - redis
       - postgres
+    restart: unless-stopped
     networks:
       - app-network
 
   celery-stockeasy:
-    build:
-      context: .
-      dockerfile: Dockerfile.celery.stockeasy
     depends_on:
       - redis
       - postgres

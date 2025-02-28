@@ -77,7 +77,6 @@ services:
       timeout: 5s
       retries: 3
 
-
   fastapi:
     build:
       context: .
@@ -85,7 +84,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/backend  # 개발 환경에서만 사용\
+      - ./backend:/backend  # 개발 환경에서만 사용
     env_file:
       - .env
     depends_on:
@@ -107,7 +106,7 @@ services:
   celery-doceasy:
     build:
       context: .
-      dockerfile: Dockerfile.doceasy.celery
+      dockerfile: Dockerfile.celery.doceasy
     volumes:
       - ./backend:/backend
     env_file:
@@ -146,7 +145,7 @@ services:
   celery-stockeasy:
     build:
       context: .
-      dockerfile: Dockerfile.stockeasy.celery
+      dockerfile: Dockerfile.celery.stockeasy
     volumes:
       - ./backend:/backend
     env_file:
@@ -161,7 +160,7 @@ services:
           memory: 4G
         reservations:
           cpus: '0.2'
-          memory: 200M
+          memory: 1G
     restart: unless-stopped
     networks:
       - app-network
