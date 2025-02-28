@@ -450,6 +450,33 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       })
     });
 
+    baseColumns[0] = {
+      ...baseColumns[0],
+      size: 300, // 고정 크기 대신 상대적 크기 사용
+      grow: false, // 남은 공간을 차지하지 않도록 설정
+      minSize: 120, // 최소 크기 축소 (150 -> 120)
+      maxSize: 250, // 최대 크기 유지
+      muiTableHeadCellProps: {
+        sx: {
+          // 모바일에서 더 작은 크기로 조정
+          '@media (max-width: 640px)': {
+            minWidth: '100px',
+            maxWidth: '150px',
+          }
+        }
+      },
+      muiTableBodyCellProps: {
+        sx: {
+          // 모바일에서 더 작은 크기로 조정
+          '@media (max-width: 640px)': {
+            minWidth: '100px',
+            padding: '0.25rem',
+            fontSize: '0.7rem'
+          }
+        }
+      }
+    };
+
     // Document 컬럼의 크기를 조절 (추가된 컬럼이 있을 때만)
     if (addedColumnsCount > 0) {
       baseColumns[0] = {
@@ -599,7 +626,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         position: 'sticky',
         top: 0,
         zIndex: 10,
-        backgroundColor: '#f8fafc'
+        backgroundColor: '#f80000 !important'
       }
     },
     muiTableBodyProps: {
@@ -673,7 +700,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           position: 'sticky',
           top: 0,
           zIndex: 2,
-          backgroundColor: '#f8fafc',
+          backgroundColor: '#f80000 !important',
           boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'  // 헤더에 미세한 그림자 추가
         },
         // 헤더 셀 직접 스타일링
@@ -693,7 +720,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     muiTableHeadCellProps: {
       sx: {
         padding: '0px 10px',  // 상하 패딩 제거, 좌우 패딩 유지
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#f80000 !important',
         borderRight: '1px solid #e2e8f0',
         borderBottom: '2px solid #e2e8f0',
         fontWeight: 600,
@@ -705,7 +732,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         justifyContent: 'flex-start',
         height: '36px',
         '&:hover': {
-          backgroundColor: '#f1f5f9'
+          backgroundColor: '#ff3333 !important'
         },
         // 모바일 환경에서 헤더 셀 조정
         '@media (max-width: 640px)': {
@@ -793,7 +820,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           }
         },
         '&:hover': {
-          backgroundColor: '#f8fafc',
+          backgroundColor: 'f80000',
           cursor: 'pointer',
         },
         // Document 칼럼 셀 내부 요소가 셀 너비를 초과하지 않도록 설정
@@ -831,11 +858,27 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     <div className="w-full h-full overflow-hidden">
       <style jsx global>{`
         /* 헤더 셀 스타일 직접 조정 */
+        .MuiTableHead-root {
+          background-color:rgb(219, 227, 228) !important;
+        }
+        
         .MuiTableHead-root .MuiTableCell-root {
+          background-color: rgb(219, 227, 228) !important;
           display: flex !important;
           align-items: center !important;
           height: 36px !important;
           padding: 0 10px !important;
+          border-right: 2px solid #e2e8f0 !important;
+        }
+        
+        /* 마지막 헤더 셀은 오른쪽 테두리 제외 */
+        .MuiTableHead-root .MuiTableCell-root:last-child {
+          border-right: none !important;
+        }
+        
+        /* 헤더 셀 호버 상태 */
+        .MuiTableHead-root .MuiTableCell-root:hover {
+          background-color: rgb(200, 226, 228) !important;
         }
         
         /* 모바일 환경에서 헤더 셀 조정 */
@@ -847,11 +890,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           }
         }
         
-        /* 체크박스 셀은 패딩 제거 */
-        .MuiTableHead-root .MuiTableCell-root.mrt-row-select-head-cell,
-        .MuiTableBody-root .MuiTableCell-root.mrt-row-select-cell {
-          padding: 0 !important;
-        }
+        
         
         /* 헤더 셀 내부 컴포넌트 스타일 조정 */
         .MuiTableHead-root .MuiTableCell-root > div {
@@ -1162,6 +1201,16 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         /* 모든 스크롤바 이동 버튼 제거 */
         *::-webkit-scrollbar-button {
           display: none !important;
+        }
+        
+        /* 테이블 본문 셀의 우측 테두리 강화 */
+        .MuiTableBody-root .MuiTableCell-root {
+          border-right: 1px solid #e2e8f0 !important;
+        }
+        
+        /* 마지막 칼럼은 오른쪽 테두리 제외 */
+        .MuiTableBody-root .MuiTableCell-root:last-child {
+          border-right: none !important;
         }
       `}</style>
       <MaterialReactTable table={table} />
