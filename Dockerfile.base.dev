@@ -1,0 +1,51 @@
+# 빌드 스테이지
+FROM python:3.11.9-slim AS builder
+
+WORKDIR /build
+
+# 필수 빌드 도구만 설치
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    python3-dev \
+    pkg-config \
+    libcairo2-dev \
+    libgirepository1.0-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 가상환경 생성 및 패키지 설치
+RUN python -m venv /venv
+ENV PATH="/venv/bin:$PATH"
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir wheel setuptools && \
+    pip install --no-cache-dir -r requirements.txt
+
+# 최종 스테이지
+FROM python:3.11.9-slim
+
+WORKDIR /backend
+
+# 런타임에 필요한 시스템 패키지만 설치
+RUN apt-get update && apt-get install -y \
+    libpq5 \
+    libcairo2 \
+    libgirepository-1.0-1 \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 타임존 설정
+ENV TZ=Asia/Seoul
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 빌드 스테이지에서 가상환경 복사
+COPY --from=builder /venv /venv
+ENV PATH="/venv/bin:$PATH"
+
+# 환경변수 설정
+ENV PYTHONPATH=/backend
+ENV ENV=development
+
+# 개발 환경에서는 코드를 복사하지 않고 볼륨 마운트 사용 

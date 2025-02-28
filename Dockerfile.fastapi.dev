@@ -1,0 +1,12 @@
+FROM intellio-base-dev:latest
+
+# 실행 권한 부여 (볼륨 마운트된 스크립트에 권한 부여)
+RUN mkdir -p /tmp/scripts
+COPY backend/start-fastapi.sh /tmp/scripts/
+RUN chmod +x /tmp/scripts/start-fastapi.sh
+
+# Expose port
+EXPOSE 8000
+
+# Command to run the application
+CMD ["sh", "-c", "chmod +x ./start-fastapi.sh && ./start-fastapi.sh"] 

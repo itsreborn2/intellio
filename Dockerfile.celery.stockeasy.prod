@@ -1,0 +1,4 @@
+FROM intellio-base-prod:latest
+
+# Command to run the application
+CMD ["./start-celery-stockeasy.sh"] 

@@ -1,0 +1,7 @@
+FROM intellio-base-prod:latest
+
+# Expose port
+EXPOSE 8000
+
+# Command to run the application
+CMD ["./start-fastapi.sh"] 

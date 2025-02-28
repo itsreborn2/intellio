@@ -4,27 +4,34 @@ services:
   postgres:
     env_file:
       - .env.production
-      
+  base-image-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.base.prod
+    image: intellio-base-prod:latest
+    profiles: ["build"]
+
   fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile.fastapi.prod
     env_file:
       - .env.production
-      #- backend/.env.production
     environment:
       - ENV=production
-    volumes:
-      - ./backend:/backend
+    
 
   celery-doceasy:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery.doceasy.prod
     env_file:
       - .env.production
-      #- backend/.env.production
-    volumes:
-      - ./backend:/backend
 
   celery-stockeasy:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery.stockeasy.prod
     env_file:
       - .env.production
-      #- backend/.env.production
-    volumes:
-      - ./backend:/backend
 
