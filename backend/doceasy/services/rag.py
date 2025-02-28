@@ -1081,8 +1081,8 @@ class RAGService:
                         continue
                     metadata = doc.metadata
                     doc_contexts.append(
-                        f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
-                        f"페이지: {metadata.get('page_number', 'N/A')}\n"
+                        #f"문서 ID: {metadata.get('document_id', 'N/A')}\n"
+                        #f"페이지: {metadata.get('page_number', 'N/A')}\n"
                         f"내용: {doc.page_content}"
                     )
 

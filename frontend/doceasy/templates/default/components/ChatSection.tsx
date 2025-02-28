@@ -43,11 +43,13 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
             skipHtml={true}
             unwrapDisallowed={true}
             className="prose max-w-none markdown
-                [&>h3]:text-xl [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-6 [&>h3]:mb-2
-                [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-3
-                [&>ul]:mt-0 [&>ul]:mb-3 [&>ul]:pl-4
-                [&>li]:text-gray-600 [&>li]:leading-relaxed
-                [&>p:only-child]:m-0"
+                [&>h3]:text-base [&>h3]:font-semibold [&>h3]:text-gray-700 [&>h3]:mt-4 [&>h3]:mb-2
+                [&>p]:text-gray-600 [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-2 [&>p]:text-xs
+                [&>ul]:mt-0 [&>ul]:mb-2 [&>ul]:pl-4
+                [&>li]:text-gray-600 [&>li]:leading-relaxed [&>li]:text-xs
+                [&>p:only-child]:m-0
+                [&>code]:text-xs [&>pre]:text-xs
+                [&>table]:text-xs [&>table>thead>tr>th]:text-xs [&>table>tbody>tr>td]:text-xs"
             components={{
               text: ({node, ...props}) => <>{props.children}</>
             }}
