@@ -17,16 +17,10 @@ import {
 // 컨텐츠 컴포넌트
 function SidebarContent() {
   return (
-    <div className="w-[250px] border-r bg-gray-200 flex flex-col h-full">
-      <div className="p-4 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold tracking-tight">StockEasy</h2>
-        </div>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-2">
-          <div className="space-y-6 w-full">
+    <div className="w-[59px] border-r bg-gray-200 flex flex-col h-full">
+      <div className="min-h-0 overflow-y-auto">
+        <div className="pt-6">
+          <div className="space-y-6 w-full flex flex-col items-center">
             <button className="sidebar-button">
               <Home className="icon" />
             </button>
@@ -52,7 +46,7 @@ function SidebarContent() {
 // 메인 컴포넌트
 export default function Sidebar() {
   return (
-    <Suspense fallback={<div className="w-[250px] bg-background border-r animate-pulse">
+    <Suspense fallback={<div className="w-[59px] bg-background border-r animate-pulse">
       <div className="p-4">
         <div className="h-6 bg-gray-200 rounded w-3/4"></div>
       </div>

@@ -6,14 +6,14 @@ import { Suspense } from 'react'
 function AIChatAreaContent() {
   return (
     <div className="ai-chat-area">
-      <div className="input-area" style={{ display: 'flex', alignItems: 'center' }}>
-        <div className="stock-selector" style={{ width: '13%' }}> {/* Fixed width reduced by another 20% */}
+      <div className="input-area" style={{ display: 'flex', alignItems: 'center', marginTop: '4px' }}> {/* 위에 4px 여백으로 통일 */}
+        <div className="stock-selector" style={{ width: '13%', marginRight: '4px' }}> {/* 우측에 4px 여백으로 통일 */}
           <select defaultValue="">
             <option value="" disabled>종목 선택</option> {/* Placeholder option */}
           </select>
         </div>
-        <div className="chat-input" style={{ flex: 1 }}> {/* chat-input takes remaining space */}
-          <input type="text" placeholder="메세지를 입력하세요" />
+        <div className="chat-input" style={{ flex: 1, marginRight: '4px' }}> {/* 우측에 4px 여백으로 통일 */}
+          <input type="text" placeholder="메세지를 입력하세요" style={{ width: 'calc(100% - 4px)' }} /> {/* 계산값도 4px로 통일 */}
         </div>
       </div>
       {/* AI 채팅 영역 */}
