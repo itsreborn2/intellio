@@ -108,7 +108,7 @@ function AIChatAreaContent() {
         setError(null); // 요청 시작 시 오류 상태 초기화
         
         // 구글 드라이브 파일 ID
-        const fileId = '1idVB5kIo0d6dChvOyWE7OvWr-eZ1cbpB';
+        const fileId = '1idVB5kIo0d6dChvOyWE7OvWr-eZ1cbpB'; // 원래 종목 리스트 파일 ID로 복원
         
         // API 라우트를 통해 구글 드라이브에서 종목 리스트 가져오기
         const response = await fetch('/api/stocks', {
@@ -400,13 +400,13 @@ function AIChatAreaContent() {
     setShowStockSuggestions(false);
     setSearchTerm(''); // 검색어 초기화
     
+    // 종목 선택 시 입력 필드에서 포커스 제거
+    if (inputRef.current) {
+      inputRef.current.blur();
+    }
+    
     // 최근 조회 종목에 추가
     updateRecentStocks(stock);
-    
-    // 종목 선택 후 입력 필드에 포커스 유지
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
   };
 
   // 최근 조회 종목 업데이트

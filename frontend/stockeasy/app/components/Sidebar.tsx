@@ -33,7 +33,7 @@ function SidebarContent() {
 
   // 스탁이지 메인 페이지로 이동하는 함수
   const goToStockEasyMainPage = () => {
-    window.location.href = 'https://stockeasy.intellio.kr/';
+    window.location.href = 'http://localhost:3020';
   };
 
   // RS순위 페이지로 이동하는 함수
@@ -43,7 +43,7 @@ function SidebarContent() {
 
   // DocEasy로 이동하는 함수
   const goToDocEasy = () => {
-    window.location.href = 'https://doceasy.intellio.kr/';
+    window.location.href = 'http://localhost:3010';
   };
 
   // 버튼 위치에 따라 툴팁 위치 계산
