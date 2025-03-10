@@ -108,7 +108,7 @@ function AIChatAreaContent() {
         setError(null); // 요청 시작 시 오류 상태 초기화
         
         // 구글 드라이브 파일 ID
-        const fileId = '1idVB5kIo0d6dChvOyWE7OvWr-eZ1cbpB';
+        const fileId = '1idVB5kIo0d6dChvOyWE7OvWr-eZ1cbpB'; // 원래 종목 리스트 파일 ID로 복원
         
         // API 라우트를 통해 구글 드라이브에서 종목 리스트 가져오기
         const response = await fetch('/api/stocks', {
@@ -392,6 +392,18 @@ function AIChatAreaContent() {
     setShowStockSuggestions(true);
     // 초기 검색 결과는 전체 목록의 첫 5개
     setFilteredStocks(stockOptions.slice(0, 5));
+    
+    // 검색 입력 필드에 하이라이트 효과 추가
+    if (searchInputRef.current) {
+      // 0.1초 후에 검색 입력 필드에 포커스 및 하이라이트 효과 적용
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.style.backgroundColor = '#ffffcc'; // 노란색 배경으로 하이라이트
+          searchInputRef.current.style.border = '2px solid #ffd700'; // 테두리 강조
+        }
+      }, 100);
+    }
   };
 
   // 종목 선택 처리
@@ -400,13 +412,13 @@ function AIChatAreaContent() {
     setShowStockSuggestions(false);
     setSearchTerm(''); // 검색어 초기화
     
+    // 종목 선택 시 입력 필드에서 포커스 제거
+    if (inputRef.current) {
+      inputRef.current.blur();
+    }
+    
     // 최근 조회 종목에 추가
     updateRecentStocks(stock);
-    
-    // 종목 선택 후 입력 필드에 포커스 유지
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
   };
 
   // 최근 조회 종목 업데이트
@@ -466,9 +478,21 @@ function AIChatAreaContent() {
   };
 
   // 검색 입력 필드 클릭 시 전체 선택
-  const handleSearchInputClick = () => {
+  const handleSearchInputClick = (e: React.MouseEvent<HTMLInputElement>) => {
+    e.stopPropagation(); // 이벤트 버블링 방지
+    // 클릭 시 하이라이트 효과 유지
     if (searchInputRef.current) {
-      searchInputRef.current.select();
+      searchInputRef.current.style.backgroundColor = '#ffffcc';
+      searchInputRef.current.style.border = '2px solid #ffd700';
+    }
+  };
+
+  // 검색 입력 필드 포커스 아웃 처리 함수 추가
+  const handleSearchInputBlur = () => {
+    // 포커스 아웃 시 하이라이트 효과 제거
+    if (searchInputRef.current) {
+      searchInputRef.current.style.backgroundColor = 'white';
+      searchInputRef.current.style.border = '1px solid #ddd';
     }
   };
 
@@ -629,13 +653,15 @@ function AIChatAreaContent() {
                   onChange={handleSearchInputChange}
                   onKeyDown={handleSearchInputKeyDown} // 엔터키 이벤트 처리 추가
                   onClick={handleSearchInputClick} // 클릭 이벤트 처리 추가
+                  onBlur={handleSearchInputBlur} // 포커스 아웃 이벤트 처리 추가
                   style={{
                     width: '100%',
                     padding: '6px 8px',
                     border: '1px solid #ddd',
                     borderRadius: '4px',
                     fontSize: '0.81rem',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    transition: 'background-color 0.3s, border 0.3s' // 부드러운 전환 효과 추가
                   }}
                 />
                 {searchTerm && (
@@ -856,7 +882,7 @@ function AIChatAreaContent() {
                 backgroundColor: message.role === 'user' ? '#e1f5fe' : '#ffffff',
                 padding: '10px 14px',
                 borderRadius: '12px',
-                maxWidth: '80%',
+                maxWidth: '95%', // 너비를 95%로 확장
                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
                 position: 'relative'
               }}>
@@ -875,8 +901,11 @@ function AIChatAreaContent() {
                   overflow: message.role === 'user' ? 'hidden' : 'visible',
                   textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
                   wordBreak: 'break-word',
-                  fontSize: '0.75rem',
-                  lineHeight: '1.5'
+                  fontSize: message.role === 'user' ? '0.75rem' : '0.85rem', // AI 응답 폰트 크기 증가
+                  lineHeight: '1.6', // 줄 간격 증가
+                  width: '100%', // 너비를 100%로 설정
+                  padding: message.role === 'user' ? '0' : '4px 2px', // AI 응답에 패딩 추가
+                  letterSpacing: message.role === 'user' ? 'normal' : '0.01em' // AI 응답 글자 간격 조정
                 }}>
                   {message.content}
                 </div>

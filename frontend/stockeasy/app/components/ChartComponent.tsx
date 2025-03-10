@@ -573,8 +573,11 @@ const ChartComponent: React.FC<ChartProps> = ({
           },
         });
         
+        // 시장 구분에 따라 색상 설정
+        const marketColor = marketType === 'KOSPI' ? '#2962FF' : '#00C853'; // KOSPI는 파란색, KOSDAQ은 녹색
+        
         const marketIndexSeries = chart.addSeries(LineSeries, {
-          color: '#2962FF', // 파란색 계열
+          color: marketColor, // 시장 구분에 따른 색상 적용
           lineWidth: 2,
           crosshairMarkerVisible: true,
           lastValueVisible: true,
@@ -591,7 +594,7 @@ const ChartComponent: React.FC<ChartProps> = ({
         chart.priceScale('market-index').applyOptions({
           visible: true,
           borderVisible: true,
-          borderColor: '#2962FF',
+          borderColor: marketColor, // 시장 구분에 따른 색상 적용
           scaleMargins: {
             top: 0.1,
             bottom: showVolume ? 0.2 : 0,
@@ -643,11 +646,11 @@ const ChartComponent: React.FC<ChartProps> = ({
 
   return (
     <div className="chart-container">
-      {title && <h3 className="text-lg font-medium mb-2">{title}</h3>}
+      {/* title 표시 부분 제거 - 중복 표시 문제 해결 */}
       {/* 종목명과 시장 구분을 함께 표시 */}
       <div className="flex items-center justify-between mb-2">
         {stockName && (
-          <h4 className="text-base font-semibold text-blue-700">{stockName}</h4>
+          <h4 className="text-base font-semibold text-black">{stockName}</h4>
         )}
         {marketType && (
           <span className={`text-xs font-medium px-2 py-1 rounded ${marketType === 'KOSPI' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>

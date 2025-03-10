@@ -3,7 +3,7 @@
  * 
  * KOSDAQ 또는 KOSPI 시장 지수 데이터를 가져와서 반환합니다.
  * - KOSDAQ: https://docs.google.com/spreadsheets/d/12be5QzfkFDJn76-mVsDCqU6bhHFanTMG
- * - KOSPI: https://docs.google.com/spreadsheets/d/1zP4tuQpmt_N3lzz9ucpCtLhwuNU0ESO2
+ * - KOSPI: https://docs.google.com/spreadsheets/d/1pwd2ps_WE7Qs_f8-TODMxxvpDfLUJDUR
  */
 import { NextRequest, NextResponse } from 'next/server';
 import Papa from 'papaparse';
@@ -13,8 +13,8 @@ import axios from 'axios';
  * 시장 지수 파일 ID 맵핑
  */
 const MARKET_INDEX_FILE_IDS = {
-  'KOSDAQ': '12be5QzfkFDJn76-mVsDCqU6bhHFanTMG',
-  'KOSPI': '1zP4tuQpmt_N3lzz9ucpCtLhwuNU0ESO2'
+  'KOSDAQ': '1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg', // 새로운 KOSDAQ 파일 ID로 업데이트
+  'KOSPI': '1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c' // 새로운 KOSPI 파일 ID로 업데이트
 };
 
 /**

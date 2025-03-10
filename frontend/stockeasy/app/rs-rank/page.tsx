@@ -105,81 +105,33 @@ export default function RSRankPage() {
   // 차트 데이터 관련 상태 - 20개의 차트를 위한 상태 배열로 변경
   const [chartDataArray, setChartDataArray] = useState<CandleData[][]>(Array(20).fill([]));
   const [chartLoadingArray, setChartLoadingArray] = useState<boolean[]>(Array(20).fill(true));
-  const [chartErrorArray, setChartErrorArray] = useState<(string | null)[]>(Array(20).fill(null));
+  const [chartErrorArray, setChartErrorArray] = useState<string[]>(Array(20).fill('')); 
   const [chartMarketTypes, setChartMarketTypes] = useState<string[]>(Array(20).fill('KOSDAQ'));
   // 종목명을 저장할 상태 추가
   const [chartStockNames, setChartStockNames] = useState<string[]>(Array(20).fill(''));
-  
+
   // Google Drive 파일 ID 배열 - 제공된 파일 ID로 설정
   const fileIds = [
-    '1khjZ7KX3j_yScqgf4oMz7EXQ3Zju_cRl',  // 1.csv
-    '1fgNGUYQQXAqIgQpc5LBWjA_sWoBm6K1S',  // 2.csv
-    '1HH2eyoRZMXdPq06YM4hLyK3-e-ZahB5u',  // 3.csv
-    '1nC07_o4lxRcsTOjCk2mrE_UNqk7r7osW',  // 4.csv
-    '1ftmmdLaa-yX14nBnIHW6Zpa_YZbB4GLY',  // 5.csv
-    '1TgrC7SX9-0ZgoBPLsHO6j4haKGdOMWoR',  // 6.csv
-    '1FlzFoUcxIrRK00BumnfTGYuXrCqlr9rR',  // 7.csv
-    '1ZNqPVMVsujBiIOqXFjR1rhwOmt4NwfL8',  // 8.csv
-    '1NM0NLwbNPRLXZbqwlG0GpoD7uFv9clgN',  // 9.csv
-    '19T0zjfEPtPzeHrCYuflpI9gY3HGLv1HW',  // 10.csv
-    '18WDY_GEIo_Mso-Hv79NQnM8C56nbDwyh',  // 11.csv
-    '1Rh7Q9f6e0BHy5z2fRnOh1eKlNP3NpKGi',  // 12.csv
-    '1-8n-X3YWXd2lzaWRgLFLZBKnhm5OPmiz',  // 13.csv
-    '1eOns3yxAQZ1Vli3BZi0K0jTOfFAsoxr2',  // 14.csv
-    '1ogL_Svn0O1jYGomOY4kYR350cUgq5IZ-',  // 15.csv
-    '1L0eegnbJe0yaQ3Q3a9xaptxoYWSjDqOa',  // 16.csv
-    '1lr_FlQdgU1wnNsZkli3yjJMXxTKzlpAQ',  // 17.csv
-    '1ZqvLHqAOjvscitY7V0kNwukCwPzrIunQ',  // 18.csv
-    '1_pHQLr2xJ02dX3Xkwmt1imX7dRGQTk6c',  // 19.csv
-    '1pCkeo0vuE4O-1aHW_3Z3nttmpF4BSMRf'   // 20.csv
-  ];
-  
-  // 파일 ID에 대응하는 기본 종목명 매핑
-  const defaultStockNames = [
-    '삼성전자',    // 1.csv에 대응
-    'SK하이닉스',  // 2.csv에 대응
-    'NAVER',      // 3.csv에 대응
-    'LG에너지솔루션', // 4.csv에 대응
-    '카카오',     // 5.csv에 대응
-    '현대차',     // 6.csv에 대응
-    'LG화학',     // 7.csv에 대응
-    '삼성바이오로직스', // 8.csv에 대응
-    'SK이노베이션', // 9.csv에 대응
-    '삼성SDI',    // 10.csv에 대응
-    'LG전자',     // 11.csv에 대응
-    '기아',       // 12.csv에 대응
-    '셀트리온',    // 13.csv에 대응
-    'POSCO홀딩스', // 14.csv에 대응
-    '카카오뱅크',  // 15.csv에 대응
-    'KB금융',     // 16.csv에 대응
-    '신한지주',    // 17.csv에 대응
-    '하나금융지주', // 18.csv에 대응
-    '삼성물산',    // 19.csv에 대응
-    '현대모비스'   // 20.csv에 대응
-  ];
-  
-  // 파일 ID에 대응하는 기본 시장 구분 매핑
-  const defaultMarketTypes = [
-    'KOSPI',   // 삼성전자는 KOSPI
-    'KOSPI',   // SK하이닉스는 KOSPI
-    'KOSDAQ',  // NAVER는 KOSDAQ
-    'KOSPI',   // LG에너지솔루션은 KOSPI
-    'KOSPI',   // 카카오는 KOSPI
-    'KOSPI',   // 현대차는 KOSPI
-    'KOSPI',   // LG화학은 KOSPI
-    'KOSPI',   // 삼성바이오로직스는 KOSPI
-    'KOSPI',   // SK이노베이션은 KOSPI
-    'KOSPI',   // 삼성SDI는 KOSPI
-    'KOSPI',   // LG전자는 KOSPI
-    'KOSPI',   // 기아는 KOSPI
-    'KOSPI',   // 셀트리온은 KOSPI
-    'KOSPI',   // POSCO홀딩스는 KOSPI
-    'KOSPI',   // 카카오뱅크는 KOSPI
-    'KOSPI',   // KB금융은 KOSPI
-    'KOSPI',   // 신한지주는 KOSPI
-    'KOSPI',   // 하나금융지주는 KOSPI
-    'KOSPI',   // 삼성물산은 KOSPI
-    'KOSPI'    // 현대모비스는 KOSPI
+    '1T2Z88ntuzd2R3cT5oy8Ic3JA09tqFAOf',  // 1.csv
+    '1MHUyRPe378V1J2qmSx1sUfMzkMokJv_4',  // 2.csv
+    '1WDrfq_8W9HwYdaDcfI7DgpTwdmNxL3Fk',  // 3.csv
+    '1wjdXsZtImLFizEl30WeqZkkv4TiaDHqG',  // 4.csv
+    '1zEfWp0b0-8WZILvbmKtyh_zYJg5cl0PW',  // 5.csv
+    '1CJEyUAoew_QLer37NfiqLwGdMGeiMNEJ',  // 6.csv
+    '12n6X15dKl1VjMZMk9AHObYIyat1UNrSE',  // 7.csv
+    '1i-bg0pUF8rbMxEkHs1TObOQJXrjbwLcO',  // 8.csv
+    '1apwIsOcpqH4R5336nAMsOr_vDG6BBClG',  // 9.csv
+    '1st-nzJ2wo3FPtb6SwK8glQcXyJqGx7-k',  // 10.csv
+    '1ATorXqqRdjAhKmGINH-AJxOgO7ptLjPm',  // 11.csv
+    '1JcTJmbiWGIihVzCppiRxbnppE5GLjCTW',  // 12.csv
+    '11hGioHutm5YZBAGUeMzpXDTw4FV0wdmD',  // 13.csv
+    '1BxdTOwr97lhxl8YMECl84QLBe09h6wwk',  // 14.csv
+    '1W0MuG-PGv_jGSJ44w3hmTFgAoQ0NPgOS',  // 15.csv
+    '1178693ZjYkqgP-ieSPhmQ8qCxgbsPG0q',  // 16.csv
+    '15CQZTBbinqf0f6rCir2D01bC_VC0aTtG',  // 17.csv
+    '1ENe8LRQ_9kQvoOTF_wIL-dT9jXoqJ0Cd',  // 18.csv
+    '1IzNpZmIMG-Yk2Z20W2C9TjEWlcdSwWW0',  // 19.csv
+    '1f2K3mrwuaZUfDX4Mkl89pmG33DbFiL8G'   // 20.csv
   ];
   
   useEffect(() => {
@@ -191,10 +143,14 @@ export default function RSRankPage() {
         // 캐시된 데이터 확인
         const cachedDataJSON = localStorage.getItem('stockEasyData');
         const cachedTimestamp = localStorage.getItem('stockEasyTimestamp');
-        const currentDate = new Date().toISOString().split('T')[0]; // 현재 날짜 (YYYY-MM-DD 형식)
+        const currentTime = new Date().getTime();
         
-        // 캐시 유효성 확인 (오늘 날짜의 데이터인지)
-        const isCacheValid = cachedDataJSON && cachedTimestamp === currentDate;
+        // 캐시 유효 시간 (24시간 = 86400000 밀리초)
+        const CACHE_TTL = 24 * 60 * 60 * 1000; // 24시간
+        
+        // 캐시 유효성 확인 (24시간 이내에 캐시된 데이터인지)
+        const isCacheValid = cachedDataJSON !== null && cachedTimestamp !== null && 
+                          (currentTime - Number(cachedTimestamp)) < CACHE_TTL;
         
         // 캐시가 유효하면 캐시된 데이터 사용
         if (isCacheValid) {
@@ -207,8 +163,8 @@ export default function RSRankPage() {
         }
         
         console.log('캐시가 없거나 만료됨. Google Drive에서 데이터 가져오는 중...');
-        // Google Drive 파일 ID
-        const fileId = '1UYJVdMZFXarsxs0jy16fEGfRqY9Fs8YD'; // 업데이트된 파일 ID 사용
+        // Google Drive 파일 ID (RS 랭크 데이터)
+        const fileId = '1UYJVdMZFXarsxs0jy16fEGfRqY9Fs8YD'; // 원래 RS 랭크 데이터 파일 ID로 복원
         
         // API를 통해 Google Drive 파일 가져오기
         const response = await fetch('/api/stocks', {
@@ -230,12 +186,12 @@ export default function RSRankPage() {
         console.log(`파싱 완료: ${parsedData.rows.length}개 데이터 로드됨`);
         console.log('파싱된 헤더:', parsedData.headers);
         
-        // 데이터 필터링 및 처리 - 시가총액 천억 이상만 저장
+        // 데이터 필터링 및 처리 - 시가총액 2천억 이상만 저장
         const filteredData = parsedData.rows.filter((row: any) => {
           // 시가총액 필드가 있는 경우에만 필터링 적용
           if ('시가총액' in row) {
             const marketCap = Number(row['시가총액'] || 0);
-            return marketCap >= 100000000000; // 천억 이상 필터링
+            return marketCap >= 200000000000; // 2천억 이상 필터링
           }
           return true; // 시가총액 필드가 없는 경우 모든 데이터 포함
         });
@@ -246,9 +202,10 @@ export default function RSRankPage() {
           errors: parsedData.errors,
         };
         
-        // localStorage에 데이터 저장
+        // localStorage에 데이터 저장 - 타임스탬프는 현재 시간(밀리초)으로 저장
         localStorage.setItem('stockEasyData', JSON.stringify(processedData));
-        localStorage.setItem('stockEasyTimestamp', currentDate);
+        localStorage.setItem('stockEasyTimestamp', String(currentTime));
+        localStorage.setItem('stockEasyLastUpdate', String(currentTime));
         
         setCsvData(processedData);
         setLoading(false);
@@ -273,10 +230,14 @@ export default function RSRankPage() {
         // 캐시된 데이터 확인
         const cachedDataJSON = localStorage.getItem('stockEasyHighData');
         const cachedTimestamp = localStorage.getItem('stockEasyHighTimestamp');
-        const currentDate = new Date().toISOString().split('T')[0]; // 현재 날짜 (YYYY-MM-DD 형식)
+        const currentTime = new Date().getTime();
         
-        // 캐시 유효성 확인 (오늘 날짜의 데이터인지)
-        const isCacheValid = cachedDataJSON && cachedTimestamp === currentDate;
+        // 캐시 유효 시간 (24시간 = 86400000 밀리초)
+        const CACHE_TTL = 24 * 60 * 60 * 1000; // 24시간
+        
+        // 캐시 유효성 확인 (24시간 이내에 캐시된 데이터인지)
+        const isCacheValid = cachedDataJSON !== null && cachedTimestamp !== null && 
+                          (currentTime - Number(cachedTimestamp)) < CACHE_TTL;
         
         // 캐시가 유효하면 캐시된 데이터 사용
         if (isCacheValid) {
@@ -290,7 +251,7 @@ export default function RSRankPage() {
         
         console.log('캐시가 없거나 만료됨. Google Drive에서 52주 신고가 데이터 가져오는 중...');
         // Google Drive 파일 ID (52주 신고가 데이터)
-        const fileId = '1mbee4O9_NoNpfIAExI4viN8qcN8BtTXz';
+        const fileId = '1mbee4O9_NoNpfIAExI4viN8qcN8BtTXz'; // 원래 52주 신고가 데이터 파일 ID로 복원
         
         // API를 통해 Google Drive 파일 가져오기
         const response = await fetch('/api/stocks', {
@@ -306,14 +267,33 @@ export default function RSRankPage() {
         }
         
         const csvText = await response.text();
+        
+        // CSV 파싱 및 데이터 처리
         const parsedData = parseCSV(csvText);
         
-        // 데이터 캐시에 저장
-        localStorage.setItem('stockEasyHighData', JSON.stringify(parsedData));
-        localStorage.setItem('stockEasyHighTimestamp', currentDate);
+        // 데이터 필터링 및 처리 - 시가총액 2천억 이상만 저장
+        const filteredData = parsedData.rows.filter((row: any) => {
+          // 시가총액 필드가 있는 경우에만 필터링 적용
+          if ('시가총액' in row) {
+            const marketCap = Number(row['시가총액'] || 0);
+            return marketCap >= 200000000000; // 2천억 이상 필터링
+          }
+          return true; // 시가총액 필드가 없는 경우 모든 데이터 포함
+        });
         
-        setHighData(parsedData);
-        console.log(`Google Drive에서 ${parsedData.rows.length}개 52주 신고가 데이터 로드 완료`);
+        const processedData = {
+          headers: parsedData.headers,
+          rows: filteredData,
+          errors: parsedData.errors,
+        };
+        
+        // 데이터 캐시에 저장
+        localStorage.setItem('stockEasyHighData', JSON.stringify(processedData));
+        localStorage.setItem('stockEasyHighTimestamp', String(currentTime));
+        localStorage.setItem('stockEasyHighLastUpdate', String(currentTime));
+        
+        setHighData(processedData);
+        console.log(`Google Drive에서 ${processedData.rows.length}개 52주 신고가 데이터 로드 완료`);
       } catch (err) {
         console.error('52주 신고가 데이터 가져오기 오류:', err);
         setHighDataError(`데이터를 불러오는데 실패했습니다: ${err instanceof Error ? err.message : '알 수 없는 오류'}`);
@@ -326,24 +306,27 @@ export default function RSRankPage() {
   }, []);
 
   // 차트 데이터 로드 함수
-  useEffect(() => {
-    const loadAllChartData = async () => {
-      // 모든 차트 로딩 상태 초기화
-      setChartLoadingArray(Array(20).fill(true));
-      setChartErrorArray(Array(20).fill(null));
+  const loadAllChartData = async () => {
+    try {
+      console.log('차트 데이터 로드 시작');
       
-      // 캐시 확인
-      const currentDate = new Date().toISOString().split('T')[0]; // 현재 날짜 (YYYY-MM-DD 형식)
+      // 캐시된 데이터 확인
       const cachedChartDataJSON = localStorage.getItem('stockEasyChartData');
-      const cachedChartTimestamp = localStorage.getItem('stockEasyChartTimestamp');
       const cachedChartStockNames = localStorage.getItem('stockEasyChartStockNames');
       const cachedChartMarketTypes = localStorage.getItem('stockEasyChartMarketTypes');
+      const cachedChartTimestamp = localStorage.getItem('stockEasyChartTimestamp');
+      const currentDate = new Date().toISOString().split('T')[0]; // 현재 날짜 (YYYY-MM-DD 형식)
+      const currentTime = new Date().getTime();
       
-      // 캐시가 유효한지 확인 (오늘 날짜의 데이터인 경우)
-      const isCacheValid = cachedChartDataJSON && 
-                          cachedChartTimestamp === currentDate && 
-                          cachedChartStockNames && 
-                          cachedChartMarketTypes;
+      // 캐시 유효 시간 (24시간 = 86400000 밀리초)
+      const CACHE_TTL = 24 * 60 * 60 * 1000; // 24시간
+      
+      // 캐시 유효성 확인 (24시간 이내에 캐시된 데이터인지)
+      const isCacheValid = cachedChartDataJSON !== null && 
+                           cachedChartTimestamp !== null && 
+                           cachedChartStockNames !== null && 
+                           cachedChartMarketTypes !== null && 
+                           parseInt(cachedChartTimestamp) >= currentTime - CACHE_TTL;
       
       if (isCacheValid) {
         try {
@@ -383,21 +366,21 @@ export default function RSRankPage() {
       
       // 차트 데이터, 종목명, 시장 구분을 저장할 배열
       const newChartDataArray: CandleData[][] = Array(20).fill(null).map(() => []);
-      const newStockNames: string[] = Array(20).fill('').map((_, i) => defaultStockNames[i] || '');
-      const newMarketTypes: string[] = [...defaultMarketTypes];
+      const newStockNames: string[] = Array(20).fill('').map((_, i) => '');
+      const newMarketTypes: string[] = Array(20).fill('');
       
       // 로딩 상태 배열 복사
       const newChartLoadingArray = [...chartLoadingArray];
       const newChartErrorArray = [...chartErrorArray];
       
+      // 시장 구분 데이터를 미리 로드하기 위한 맵 생성
+      const marketTypeMap: Record<string, string> = {};
+      
       // 병렬 로드를 위한 Promise 배열
-      const loadPromises = fileIds.map((fileId, index) => {
+      const loadPromises = fileIds.map((fileId: string, index: number) => {
         return (async () => {
           try {
-            // 디버깅: 파일 ID 확인
-            console.log(`차트 ${index + 1} 데이터 로드 시작 (파일 ID: ${fileId}, 종목명: ${defaultStockNames[index]})`);
-            
-            // 서버 측 API를 통해 CSV 데이터 가져오기
+            // 종목명 설정 - CSV 데이터에서 추출
             const response = await fetch('/api/chart-data', {
               method: 'POST',
               headers: {
@@ -417,227 +400,139 @@ export default function RSRankPage() {
             
             console.log(`차트 ${index + 1} 데이터 로드 완료: ${csvText.length}자`);
             
-            try {
-              // CSV 파싱
-              const results = Papa.parse(csvText, {
-                header: true,
-                skipEmptyLines: true,
-                dynamicTyping: false,
-              });
-              
-              console.log(`차트 ${index + 1} 데이터 파싱 완료: ${results.data.length}개 행`);
-              
-              // 필드 매핑 및 데이터 변환
-              // 차트 데이터 타입 정의
-              
-              let formattedData: CandleData[] = [];
-              
-              try {
-                formattedData = (results.data as any[]).map((row: any, rowIndex: number) => {
-                  try {
-                    // 필드 매핑 (다양한 필드명 지원)
-                    const dateField = row['날짜'] || row['Date'] || row['date'] || row['일자'] || '';
-                    const openField = row['시가'] || row['Open'] || row['open'] || '';
-                    const highField = row['고가'] || row['High'] || row['high'] || '';
-                    const lowField = row['저가'] || row['Low'] || row['low'] || '';
-                    const closeField = row['종가'] || row['Close'] || row['close'] || '';
-                    const volumeField = row['거래량'] || row['Volume'] || row['volume'] || '';
-                    
-                    // 날짜 형식 변환 (다양한 형식 지원)
-                    let formattedDate = '';
-                    
-                    if (dateField) {
-                      if (/^\d{8}$/.test(dateField)) {
-                        // YYYYMMDD 형식
-                        const year = dateField.substring(0, 4);
-                        const month = dateField.substring(4, 6);
-                        const day = dateField.substring(6, 8);
-                        formattedDate = `${year}-${month}-${day}`;
-                      } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateField)) {
-                        // YYYY-MM-DD 형식
-                        formattedDate = dateField;
-                      } else if (/^\d{4}\/\d{2}\/\d{2}$/.test(dateField)) {
-                        // YYYY/MM/DD 형식
-                        formattedDate = dateField.replace(/\//g, '-');
-                      } else {
-                        // 기타 형식 - 기본값 설정
-                        console.warn(`차트 ${index + 1}: 지원되지 않는 날짜 형식: ${dateField}`);
-                        formattedDate = `2023-01-${(rowIndex % 28) + 1}`;
-                      }
-                    } else {
-                      console.warn(`차트 ${index + 1}: 날짜 필드 없음, 기본값 사용`);
-                      formattedDate = `2023-01-${(rowIndex % 28) + 1}`;
-                    }
-                    
-                    // 숫자 값 파싱 함수
-                    const parseNumericValue = (value: any): number => {
-                      if (value === undefined || value === null || value === '') {
-                        return 0;
-                      }
-                      
-                      if (typeof value === 'number') {
-                        return isNaN(value) ? 0 : value;
-                      }
-                      
-                      if (typeof value === 'string') {
-                        const cleaned = value.replace(/,/g, '').replace(/[^0-9.-]/g, '');
-                        const parsed = parseFloat(cleaned);
-                        return isNaN(parsed) ? 0 : parsed;
-                      }
-                      return 0;
-                    };
-                    
-                    let open = parseNumericValue(openField);
-                    let high = parseNumericValue(highField);
-                    let low = parseNumericValue(lowField);
-                    let close = parseNumericValue(closeField);
-                    let volume = parseNumericValue(volumeField);
-                    
-                    // 0 또는 음수 데이터 보정
-                    if (open <= 0 && close > 0) open = close;
-                    if (close <= 0 && open > 0) close = open;
-                    
-                    // 모든 가격이 0 또는 음수일 경우 기본값 설정
-                    if (open <= 0 && close <= 0) {
-                      open = close = 100;
-                    }
-                    
-                    // 고가/저가 보정
-                    high = Math.max(high, open, close);
-                    if (high <= 0) high = Math.max(open, close) * 1.05; // 5% 높게 설정
-                    
-                    low = Math.min(low > 0 ? low : Number.MAX_VALUE, open, close);
-                    if (low <= 0) low = Math.min(open, close) * 0.95; // 5% 낮게 설정
-                    
-                    return {
-                      time: formattedDate,
-                      open,
-                      high,
-                      low,
-                      close,
-                      volume: volume < 0 ? 0 : volume
-                    };
-                  } catch (rowError) {
-                    console.error(`차트 ${index + 1}: 행 데이터 변환 오류:`, rowError);
-                    return {
-                      time: `2023-01-${(rowIndex % 28) + 1}`,
-                      open: 100,
-                      high: 110,
-                      low: 90,
-                      close: 105,
-                      volume: 1000
-                    };
-                  }
-                });
-                
-                // 날짜 기준 정렬 (최신 데이터가 먼저 오도록)
-                formattedData.sort((a, b) => {
-                  return new Date(b.time).getTime() - new Date(a.time).getTime();
-                });
-                
-                // 최대 100개 데이터 포인트로 제한 (성능 향상)
-                if (formattedData.length > 100) {
-                  formattedData = formattedData.slice(0, 100);
-                }
-                
-                // 결과 저장 - 중요: newChartDataArray에 데이터 저장
-                newChartDataArray[index] = formattedData;
-                newStockNames[index] = defaultStockNames[index];
-                newMarketTypes[index] = defaultMarketTypes[index];
-                
-                // 개별 차트 로딩 상태 업데이트
-                newChartLoadingArray[index] = false;
-                
-                // 상태 업데이트 (개별 차트 완료 시마다)
-                setChartDataArray(prev => {
-                  const updated = [...prev];
-                  updated[index] = formattedData;
-                  return updated;
-                });
-                
-                setChartLoadingArray(prev => {
-                  const updated = [...prev];
-                  updated[index] = false;
-                  return updated;
-                });
-                
-                console.log(`차트 ${index + 1} 데이터 처리 완료: ${formattedData.length}개 데이터 포인트`);
-                
-              } catch (formatError) {
-                console.error(`차트 ${index + 1}: 데이터 형식 변환 오류:`, formatError);
-                throw formatError;
-              }
-              
-            } catch (parseError) {
-              console.error(`차트 ${index + 1}: CSV 파싱 오류:`, parseError);
-              throw parseError;
+            // CSV 파싱 최적화 - 한 번의 파싱으로 모든 필요한 정보 추출
+            const { chartData, stockName, marketType } = parseCSVOptimized(csvText, index);
+            
+            // 추출한 데이터 저장
+            newChartDataArray[index] = chartData;
+            newStockNames[index] = stockName;
+            newMarketTypes[index] = marketType;
+            
+            // 시장 구분 맵에 저장
+            if (stockName) {
+              marketTypeMap[stockName] = marketType;
             }
             
-          } catch (error) {
-            console.error(`차트 ${index + 1} 데이터 로드 오류:`, error);
-            
-            // 오류 상태 업데이트
-            newChartErrorArray[index] = error instanceof Error ? error.message : '알 수 없는 오류';
+            // 로딩 상태 업데이트
             newChartLoadingArray[index] = false;
             
-            // 상태 업데이트 (오류 발생 시)
-            setChartErrorArray(prev => {
-              const updated = [...prev];
-              updated[index] = error instanceof Error ? error.message : '알 수 없는 오류';
-              return updated;
-            });
-            
-            setChartLoadingArray(prev => {
-              const updated = [...prev];
-              updated[index] = false;
-              return updated;
-            });
+            console.log(`차트 ${index + 1} 데이터 처리 완료: ${chartData.length}개 데이터 포인트`);
+          } catch (error) {
+            console.error(`차트 ${index + 1} 데이터 로드 오류:`, error);
+            newChartErrorArray[index] = error instanceof Error ? error.message : String(error);
+            newChartLoadingArray[index] = false;
           }
         })();
       });
       
-      // 모든 Promise 병렬 실행 (최대 5개씩 동시에 처리)
-      const batchSize = 5;
-      for (let i = 0; i < loadPromises.length; i += batchSize) {
-        const batch = loadPromises.slice(i, i + batchSize);
-        await Promise.all(batch);
-      }
+      // 모든 Promise 완료 대기
+      await Promise.all(loadPromises);
       
-      // 디버깅: 캐시 저장 전 데이터 확인
-      console.log('캐시 저장 전 데이터 확인:');
-      console.log(`newChartDataArray 길이: ${newChartDataArray.length}`);
-      console.log(`유효한 차트 데이터 개수: ${newChartDataArray.filter(arr => arr && arr.length > 0).length}`);
+      // 상태 업데이트
+      setChartDataArray(newChartDataArray);
+      setChartStockNames(newStockNames);
+      setChartMarketTypes(newMarketTypes);
+      setChartLoadingArray(newChartLoadingArray);
+      setChartErrorArray(newChartErrorArray);
       
-      // 모든 차트 데이터 로드 완료 후 캐시에 저장
-      try {
-        // 캐시 저장 전에 데이터 유효성 확인
-        const validChartData = newChartDataArray.every(data => Array.isArray(data));
-        const validStockNames = newStockNames.every(name => typeof name === 'string');
-        const validMarketTypes = newMarketTypes.every(type => typeof type === 'string');
-        
-        if (validChartData && validStockNames && validMarketTypes) {
-          // 데이터가 비어있는지 추가 확인
-          const hasData = newChartDataArray.some(data => data.length > 0);
-          
-          if (hasData) {
-            localStorage.setItem('stockEasyChartData', JSON.stringify(newChartDataArray));
-            localStorage.setItem('stockEasyChartStockNames', JSON.stringify(newStockNames));
-            localStorage.setItem('stockEasyChartMarketTypes', JSON.stringify(newMarketTypes));
-            localStorage.setItem('stockEasyChartTimestamp', currentDate);
-            console.log('차트 데이터 캐시 저장 완료');
-          } else {
-            console.error('차트 데이터가 비어 있어 캐시 저장을 건너뜁니다.');
-          }
-        } else {
-          console.error('차트 데이터 유효성 검사 실패, 캐시 저장 건너뜀');
-        }
-      } catch (cacheError) {
-        console.error('차트 데이터 캐시 저장 오류:', cacheError);
-      }
-    };
+      // 시장 구분 데이터 캐싱
+      localStorage.setItem('stockEasyMarketTypeMap', JSON.stringify(marketTypeMap));
+      
+      // 차트 데이터 캐싱
+      localStorage.setItem('stockEasyChartData', JSON.stringify(newChartDataArray));
+      localStorage.setItem('stockEasyChartStockNames', JSON.stringify(newStockNames));
+      localStorage.setItem('stockEasyChartMarketTypes', JSON.stringify(newMarketTypes));
+      localStorage.setItem('stockEasyChartTimestamp', currentTime.toString());
+      
+      console.log('모든 차트 데이터 로드 및 캐싱 완료');
+    } catch (error) {
+      console.error('차트 데이터 로드 중 오류 발생:', error);
+    }
+  };
+  
+  // 차트 데이터 로드 함수 호출을 위한 useEffect 추가
+  useEffect(() => {
+    // 모든 차트 로딩 상태 초기화
+    setChartLoadingArray(Array(20).fill(true));
+    setChartErrorArray(Array(20).fill('')); 
     
     loadAllChartData();
   }, []);
+
+  // CSV 파싱 최적화 함수 - 한 번의 파싱으로 모든 필요한 정보 추출
+  const parseCSVOptimized = (csvText: string, index: number): { chartData: CandleData[], stockName: string, marketType: string } => {
+    try {
+      // 헤더 행 추출을 위한 첫 번째 파싱
+      const firstLineEnd = csvText.indexOf('\n');
+      if (firstLineEnd === -1) {
+        console.error(`차트 ${index + 1} CSV 형식 오류: 줄바꿈 문자를 찾을 수 없습니다.`);
+        return { chartData: [], stockName: `종목 ${index + 1}`, marketType: 'KOSPI' };
+      }
+      
+      const headerLine = csvText.substring(0, firstLineEnd);
+      const headers = headerLine.split(',').map(h => h.trim());
+      
+      // 필요한 컬럼 인덱스 찾기
+      const stockNameIndex = headers.findIndex(h => h === '종목명');
+      const marketTypeIndex = headers.findIndex(h => h === '시장구분');
+      const dateIndex = headers.findIndex(h => h === '일자');
+      const openIndex = headers.findIndex(h => h === '시가');
+      const highIndex = headers.findIndex(h => h === '고가');
+      const lowIndex = headers.findIndex(h => h === '저가');
+      const closeIndex = headers.findIndex(h => h === '종가');
+      const volumeIndex = headers.findIndex(h => h === '거래량');
+      
+      // 전체 데이터 파싱
+      const results = Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: true,
+      });
+      
+      // 종목명과 시장구분 추출
+      let stockName = `종목 ${index + 1}`;
+      let marketType = 'KOSPI';
+      
+      if (results.data.length > 0) {
+        const firstRow = results.data[0] as any;
+        
+        if (stockNameIndex !== -1 && firstRow[headers[stockNameIndex]]) {
+          stockName = firstRow[headers[stockNameIndex]].toString();
+        }
+        
+        if (marketTypeIndex !== -1 && firstRow[headers[marketTypeIndex]]) {
+          marketType = firstRow[headers[marketTypeIndex]].toString();
+        }
+      }
+      
+      // 차트 데이터 변환
+      const chartData: CandleData[] = results.data
+        .filter(row => row && typeof row === 'object')
+        .map((row: any) => {
+          const dateKey = headers[dateIndex];
+          const openKey = headers[openIndex];
+          const highKey = headers[highIndex];
+          const lowKey = headers[lowIndex];
+          const closeKey = headers[closeIndex];
+          const volumeKey = headers[volumeIndex];
+          
+          return {
+            time: row[dateKey]?.toString() || '',
+            open: parseFloat(row[openKey]) || 0,
+            high: parseFloat(row[highKey]) || 0,
+            low: parseFloat(row[lowKey]) || 0,
+            close: parseFloat(row[closeKey]) || 0,
+            volume: parseFloat(row[volumeKey]) || 0,
+          };
+        })
+        .filter(item => item.time && !isNaN(item.open) && !isNaN(item.high) && !isNaN(item.low) && !isNaN(item.close));
+      
+      return { chartData, stockName, marketType };
+    } catch (error) {
+      console.error(`차트 ${index + 1} 데이터 파싱 오류:`, error);
+      return { chartData: [], stockName: `종목 ${index + 1}`, marketType: 'KOSPI' };
+    }
+  };
 
   // 데이터 정렬 함수
   const sortData = (data: any[], key: string, direction: SortDirection) => {
@@ -708,23 +603,47 @@ export default function RSRankPage() {
     return marketCapInBillions.toLocaleString('ko-KR') + '억';
   };
 
-  // 페이지네이션을 위한 현재 페이지 데이터 계산
-  const getCurrentPageData = useMemo(() => {
-    if (!csvData) return [];
+  // 현재 페이지에 표시할 데이터 계산
+  const currentPageData = useMemo(() => {
+    if (!csvData || !csvData.rows) {
+      return [];
+    }
+    
+    // 시가총액 2천억 이상 필터링 적용
+    const filteredByMarketCap = csvData.rows.filter((row: any) => {
+      const marketCap = Number(row['시가총액'] || 0);
+      const isAboveThreshold = marketCap >= 200000000000; // 2천억 이상
+      
+      // 디버깅을 위한 로그 추가
+      if (!isAboveThreshold && marketCap > 0) {
+        console.log(`필터링: 시가총액 2천억 미만 종목 제외 - ${row['종목명']} (${marketCap.toLocaleString('ko-KR')}원)`);
+      }
+      
+      return isAboveThreshold;
+    });
+    
+    console.log(`원본 데이터: ${csvData.rows.length}개, 시가총액 2천억 이상 필터링 후: ${filteredByMarketCap.length}개`);
     
     // 정렬된 데이터 가져오기
     const sortedData = sortDirection 
-      ? sortData(csvData.rows, sortKey, sortDirection)
-      : csvData.rows;
+      ? sortData(filteredByMarketCap, sortKey, sortDirection)
+      : filteredByMarketCap;
     
     const startIndex = (currentPage - 1) * 20;
     return sortedData.slice(startIndex, startIndex + 20);
   }, [csvData, currentPage, sortKey, sortDirection]);
 
-  // 총 페이지 수 계산
+  // 총 페이지 수 계산 - 필터링된 데이터 기준으로 계산
   const totalPages = useMemo(() => {
-    if (!csvData) return 0;
-    return Math.ceil(csvData.rows.length / 20);
+    if (!csvData || !csvData.rows) return 0;
+    
+    // 시가총액 2천억 이상 필터링 적용
+    const filteredCount = csvData.rows.filter((row: any) => {
+      const marketCap = Number(row['시가총액'] || 0);
+      return marketCap >= 200000000000; // 2천억 이상
+    }).length;
+    
+    return Math.ceil(filteredCount / 20);
   }, [csvData]);
 
   // 페이지 변경 핸들러
@@ -799,8 +718,15 @@ export default function RSRankPage() {
       };
     });
     
-    // 거래대금이 0인 항목 제외
-    const filteredData = mappedData.filter((item) => item['거래대금'] !== '0');
+    // 거래대금이 0인 항목 제외 및 시가총액 2천억 이상인 종목만 필터링
+    const filteredData = mappedData.filter((item) => {
+      // 거래대금이 0인 항목 제외
+      if (item['거래대금'] === '0') return false;
+      
+      // 시가총액 필터링 - 2천억 이상만 포함
+      const marketCap = Number(item['시가총액'] || 0);
+      return marketCap >= 200000000000; // 2천억 이상 필터링
+    });
     
     // RS 값 기준으로 내림차순 정렬 (RS 값이 높은 순)
     return filteredData.sort((a, b) => {
@@ -813,6 +739,33 @@ export default function RSRankPage() {
     });
   }, [highData.rows, csvData.rows]);
 
+  // 페이지 로드 시 스크롤 위치를 최상단으로 설정하는 useEffect 추가
+  useEffect(() => {
+    // 페이지 로드 시 스크롤 위치를 최상단(0, 0)으로 설정
+    window.scrollTo(0, 0);
+    
+    // 스크롤 이벤트 리스너 추가 - 페이지 로드 직후 스크롤이 발생하는 것을 방지
+    const preventInitialScroll = () => {
+      window.scrollTo(0, 0);
+    };
+    
+    // 여러 이벤트에 리스너 등록
+    window.addEventListener('load', preventInitialScroll);
+    window.addEventListener('DOMContentLoaded', preventInitialScroll);
+    
+    // 100ms 후에도 한 번 더 스크롤 위치 조정 (비동기 로딩 콘텐츠 대응)
+    const timeoutId = setTimeout(() => {
+      window.scrollTo(0, 0);
+    }, 100);
+    
+    // 클린업 함수
+    return () => {
+      window.removeEventListener('load', preventInitialScroll);
+      window.removeEventListener('DOMContentLoaded', preventInitialScroll);
+      clearTimeout(timeoutId);
+    };
+  }, []);
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* 사이드바 */}
@@ -821,13 +774,13 @@ export default function RSRankPage() {
       </Suspense>
       
       {/* 메인 콘텐츠 - 왼쪽 여백을 추가하여 고정된 사이드바와 겹치지 않도록 함 */}
-      <div className="flex-1 p-3 overflow-y-auto ml-[59px] flex flex-col">
+      <div className="flex-1 p-3 ml-[59px] flex flex-col">
         {/* 상단 헤더 - 브랜드 표시 */}
         <div className="flex justify-between items-center mb-1">
           <div className="flex items-center">
             <h1 className="text-lg font-bold">StockEasy</h1>
-            <span className="ml-1 text-xs text-gray-600">(주)인텔리오</span>
           </div>
+          <div className="text-xs text-gray-600">(주)인텔리오</div>
         </div>
         
         {/* 상단 여백 추가 - 여백 조정 */}
@@ -885,7 +838,7 @@ export default function RSRankPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {getCurrentPageData.map((row, rowIndex) => (
+                        {currentPageData.map((row, rowIndex) => (
                           <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                             {csvData.headers.map((header, colIndex) => (
                               <td 
@@ -1044,6 +997,7 @@ export default function RSRankPage() {
                           showVolume={true}
                           marketType={chartMarketTypes[index]}
                           stockName={chartStockNames[index]}
+                          title={`${chartStockNames[index]} (${chartMarketTypes[index]})`}
                         />
                       ) : (
                         <div className="h-80 flex items-center justify-center border border-dashed border-gray-300 rounded-md">
