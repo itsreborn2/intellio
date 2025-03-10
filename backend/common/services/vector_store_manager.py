@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Tuple
 from langchain_community.vectorstores import Pinecone as PineconeLangchain
 from langchain_core.documents import Document as LangchainDocument
-from pinecone import Pinecone as PineconeClient, PodSpec
+from pinecone import Pinecone as PineconeClient, PodSpec, ServerlessSpec
 import pinecone
 from common.core.config import settings
 from common.services.embedding_models import EmbeddingModelType
@@ -59,7 +59,7 @@ class VectorStoreManager:
     def _sync_initialize(self):
         """동기 초기화 메서드"""
         try:
-            embedding_service = EmbeddingService()
+            embedding_service = EmbeddingService(self.embedding_model_type)
             self.embedding_model_provider = embedding_service.provider
             self.embedding_obj, self.embedding_obj_async = self.embedding_model_provider.get_embeddings_obj()
             self.embedding_model_config = embedding_service.current_model_config
@@ -75,18 +75,40 @@ class VectorStoreManager:
 
             # 인덱스 존재 여부 확인
             if self.embedding_model_config.name not in self.pinecone_client.list_indexes().names():
-                logger.error(f"Pinecone 인덱스 {self.embedding_model_config.name} 없음. 생성 중...")
+                
                 try:
                     # 인덱스 생성 - 메트릭을 dotproduct로 변경
-                    self.pinecone_client.create_index(
-                        name=self.embedding_model_config.name,
-                        dimension=self.embedding_model_config.dimension,
-                        metric="dotproduct",  # cosine에서 dotproduct로 변경
-                        spec=PodSpec(
-                            environment=settings.PINECONE_ENVIRONMENT,
-                            pod_type="p1"
+                    # api key로 이미 인덱스, 프로젝트가 고정되었음
+
+                    # stockeasy는 pod spec으로.
+                    # stockeasy는 개발모드에서도 prod 인덱스를 검색해야할수도 있는데.
+                    # env따라 접근을 달리하는 방법은 잠깐 고민을 해보자.
+                    # env.dev, env.prod의 stockeasy 인덱스 값을 prod껄로 고정해놔야겠다
+                    # 자료 수집은 서버에서 prod로..
+                    # 개발 환경에서는 stockeasy db에 writing하지 않도록 해야겠네.
+
+                    if self.project_name == "stockeasy":
+                        logger.error(f"Pinecone 인덱스 {self.embedding_model_config.name} 없음. 생성 중...(PodSpec)")
+                        self.pinecone_client.create_index(
+                            name=self.embedding_model_config.name,
+                            dimension=self.embedding_model_config.dimension,
+                            metric="dotproduct",  # cosine에서 dotproduct로 변경
+                            spec=PodSpec(
+                                environment=settings.PINECONE_ENVIRONMENT,
+                                pod_type="p1"
+                            )
                         )
-                    )
+                    else:
+                        logger.error(f"Pinecone 인덱스 {self.embedding_model_config.name} 없음. 생성 중...(ServerlessSpec)")
+                        self.pinecone_client.create_index(
+                            name=self.embedding_model_config.name,
+                            dimension=self.embedding_model_config.dimension,
+                            metric="dotproduct",  # cosine에서 dotproduct로 변경
+                            spec=ServerlessSpec(
+                                cloud="aws",
+                                region="us-west-2"
+                            )
+                        )
                 except Exception as e:
                     logger.error(f"Pinecone 인덱스 생성 실패: {str(e)}")
                     raise
@@ -260,6 +282,10 @@ class VectorStoreManager:
                 logger.warning("저장할 벡터가 없습니다")
                 return False
             
+            if self.project_name == "stockeasy" and settings.ENV == "dev":
+                logger.warning("Stockeasy 프로젝트는 개발 환경에서는 데이터 저장을 하지 않습니다.")
+                return False
+
             # 벡터 정규화 수행
             normalized_vectors = []
             for vector in _vectors:

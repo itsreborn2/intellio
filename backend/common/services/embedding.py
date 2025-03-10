@@ -15,12 +15,12 @@ from langchain_core.embeddings import Embeddings
 logger = logging.getLogger(__name__)
 
 class EmbeddingService:
-    def __init__(self):
+    def __init__(self, model_type: EmbeddingModelType = EmbeddingModelType.OPENAI_3_LARGE):
         self.batch_size = 100  # 임베딩 처리의 안정성을 위해 배치 크기 축소 (50 -> 20)
         self.model_manager = EmbeddingModelManager()
         #self.current_model = self.model_manager.get_default_model() # 기본 모델은 openai
-        #self.current_model = self.model_manager.get_model(EmbeddingModelType.OPENAI_ADA_002) # 구글 다국어 모델
-        self.current_model_config = self.model_manager.get_model_config(EmbeddingModelType.GOOGLE_MULTI_LANG) # 구글 다국어 모델
+        #self.current_model = self.model_manager.get_model(EmbeddingModelType.OPENAI_ADA_002) # 구글 다국어 모델\
+        self.current_model_config = self.model_manager.get_model_config(model_type) # 구글 다국어 모델
         #self.current_model = self.model_manager.get_model(EmbeddingModelType.KAKAO_EMBEDDING) # 구글 다국어 모델
         
         # 현재 모델에 맞는 제공자 생성
