@@ -30,10 +30,9 @@ class TelegramMessageMetadata:
     has_document: bool          # 문서 첨부 여부
     document_name: Optional[str] # 문서 이름 (있는 경우)
     document_gcs_path: Optional[str] # GCS 경로 (있는 경우)
-    namespace: str              # 네임스페이스
 
     @classmethod
-    def from_telegram_message(cls, message: TelegramMessage, namespace: str) -> 'TelegramMessageMetadata':
+    def from_telegram_message(cls, message: TelegramMessage) -> 'TelegramMessageMetadata':
         """TelegramMessage로부터 메타데이터 객체를 생성합니다."""
         return cls(
             message_id=message.message_id,
@@ -48,7 +47,6 @@ class TelegramMessageMetadata:
             has_document=message.has_document,
             document_name=message.document_name if message.has_document else None,
             document_gcs_path=message.document_gcs_path if message.has_document else None,
-            namespace=namespace
         )
 
 class TelegramEmbeddingService(CommonEmbeddingService):
@@ -76,7 +74,7 @@ class TelegramEmbeddingService(CommonEmbeddingService):
         Returns:
             dict: 메타데이터 딕셔너리
         """
-        metadata = TelegramMessageMetadata.from_telegram_message(message, self.namespace)
+        metadata = TelegramMessageMetadata.from_telegram_message(message)
         metadata_dict = asdict(metadata)
         
         # 모든 값을 직렬화 가능한 형식으로 변환

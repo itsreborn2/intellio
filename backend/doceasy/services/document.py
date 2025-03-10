@@ -46,7 +46,7 @@ class DocumentService:
         ]
         self.storage = GoogleCloudStorageService(
             project_id=settings.GOOGLE_CLOUD_PROJECT,
-            bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET,
+            bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET_DOCEASY,
             credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS
         )
         self.extractor = DocumentExtractor()

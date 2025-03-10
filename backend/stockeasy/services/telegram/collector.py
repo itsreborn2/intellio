@@ -62,9 +62,8 @@ class CollectorService:
         
         # RTF
         'application/rtf',
-
     }
-    
+
     def __init__(self, db: Session):
         """
         Args:
@@ -72,13 +71,12 @@ class CollectorService:
         """
         self.db = db
         self.client = None
-        
         self.last_collection = {}  # 채널별 마지막 수집 시간 저장
-        self._load_channel_config()
+        
         try:
             self.storage_service = GoogleCloudStorageService(
                 project_id=settings.GOOGLE_CLOUD_PROJECT,
-                bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET,
+                bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET_STOCKEASY,
                 credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS
             )
             logger.info("GCS 서비스 초기화 성공")
@@ -86,38 +84,53 @@ class CollectorService:
             logger.error(f"GCS 서비스 초기화 실패: {str(e)}")
             raise
         logger.info("CollectorService 초기화 완료")
+        self._load_channel_config()  # 채널 설정 로드
 
     def _load_channel_config(self):
         """텔레그램 채널 설정을 JSON 파일에서 로드"""
         try:
             json_path = Path(__file__).parent.parent.parent / 'telegram_channels.json'
             logger.info(f"_load_channel_config: {json_path}")
-            if json_path.exists():
+            if not json_path.exists():
+                logger.error(f"Channel config file not found: {json_path}")
+                settings.TELEGRAM_CHANNEL_IDS = []
+                return
+
+            try:
                 with open(json_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                    # JSON 데이터를 파싱
                     data = json.loads(content)
-                    channel_data = data.get('channels', [])  # channels 키에서 리스트 가져오기
+                    channel_data = data.get('channels', [])
                     
-                    # 채널 정보를 리스트로 변환
                     channels = [
                         {
                             "name": channel["name"],
                             "channel_id": channel["channel_id"],
-                            "user_name": channel["user_name"]  # channel_name 또는 user_name 사용
+                            "channel_name": channel.get("channel_name") or channel.get("user_name", ""),
+                            "public": channel["public"]
                         }
                         for channel in channel_data
-                        if "channel_id" in channel  # channel_id가 있는 경우만 포함
+                        if "channel_id" in channel
                     ]
                     
-                    # 설정에 저장
-                    settings.TELEGRAM_CHANNEL_IDS = channels
-                    logger.info(f"Loaded {len(channels)} telegram channels from config file")
-            else:
-                logger.warning(f"Channel config file not found: {json_path}")
+                    # 설정에 저장하기 전에 유효성 검사
+                    if not channels:
+                        logger.warning("No valid channels found in config file")
+                    
+                    # 기존 설정과 비교하여 변경사항이 있을 때만 업데이트
+                    if settings.TELEGRAM_CHANNEL_IDS != channels:
+                        settings.TELEGRAM_CHANNEL_IDS = channels
+                        logger.info(f"Updated {len(channels)} telegram channels from config file")
+                        
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse channel config JSON: {str(e)}")
+                settings.TELEGRAM_CHANNEL_IDS = []
+            except Exception as e:
+                logger.error(f"Failed to load channel config: {str(e)}")
+                settings.TELEGRAM_CHANNEL_IDS = []
         except Exception as e:
-            logger.error(f"Failed to load channel config: {str(e)}")
-            # 기본 설정 유지
+            logger.error(f"Error in _load_channel_config: {str(e)}")
+            settings.TELEGRAM_CHANNEL_IDS = []
 
     async def _init_client(self) -> bool:
         """텔레그램 클라이언트 초기화"""
@@ -152,7 +165,7 @@ class CollectorService:
     def user_authorized(self):
         return self.client.is_user_authorized()
 
-    async def _process_message(self, message: Message, channel: Channel) -> Optional[Dict[str, Any]]:
+    async def _process_message(self, message: Message, channel: Channel, channel_public: bool) -> Optional[Dict[str, Any]]:
         """단일 메시지를 처리하여 Dict 객체로 변환합니다.
         
         Args:
@@ -254,18 +267,27 @@ class CollectorService:
                     file_data.seek(0)  # 파일 포인터를 처음으로 이동
                     
                     # 로컬 저장 경로 생성
-                    date_folder = message.date.strftime("%Y-%m-%d")
-                    local_dir = f"telegram_files/{date_folder}"
-                    os.makedirs(local_dir, exist_ok=True)
-                    local_path = f"{local_dir}/{document_name}"
-                    
-                    # 로컬에 파일 저장
-                    with open(local_path, 'wb') as f:
-                        f.write(file_data.getvalue())
-                    logger.info(f"문서 로컬 저장 성공: {local_path}")
-                    
-                    document_gcs_path = local_path
-                    logger.info(f"문서 저장 경로: {local_path}")
+                    use_gcs = True
+                    if use_gcs:
+                        dev_folder = "dev/" if settings.ENV == "development" else ""
+                        public_folder = "공식/" if channel_public else "비공식/"
+                        target_path = f"Stockeasy/collected_auto/탤래그램/{dev_folder}{public_folder}{datetime.now().strftime('%Y-%m-%d')}/"
+                        
+                        target_full_path = target_path + document_name
+
+                        document_gcs_path = await self.storage_service.upload_from_BytesIO(target_full_path, file_data)
+                        logger.info(f"문서 GCS 저장 성공: {document_gcs_path}")
+                    else:
+                        date_folder = message.date.strftime("%Y-%m-%d")
+                        local_dir = f"telegram_files/{date_folder}"
+                        os.makedirs(local_dir, exist_ok=True)
+                        local_path = f"{local_dir}/{document_name}"
+                        document_gcs_path = local_path
+                        
+                        # 로컬에 파일 저장
+                        with open(local_path, 'wb') as f:
+                            f.write(file_data.getvalue())
+                        logger.info(f"문서 로컬 저장 성공: {local_path}")
                     
                 except Exception as e:
                     logger.error(f"문서 처리 중 오류 발생 (message_id: {message.id}): {str(e)}")
@@ -315,23 +337,22 @@ class CollectorService:
             List[Dict[str, Any]]: 수집된 메시지 목록
         """
         try:
-            # 
-            limit = 50
+            
+            limit = 70
             channel_name = channel_info['name']
             channel_id = channel_info['channel_id']
-            channel_user_name = channel_info['user_name']
+            channel_username = channel_info['channel_name']
+            channel_public = channel_info['public']
 
             logger.info(f"채널 '{channel_name}'({channel_id}) : 메시지 수집 시작")
 
-            
-
             # username이 있으면 먼저 시도
-            if channel_user_name and '@' not in channel_user_name:
-                channel_user_name = f'@{channel_user_name}'
+            if channel_username and '@' not in channel_username:
+                channel_username = f'@{channel_username}'
                 
             try:
-                logger.info(f"username으로 채널 검색 시도: {channel_user_name}")
-                channel = await self.client.get_entity(channel_user_name)
+                logger.info(f"channel name으로 채널 검색 시도: {channel_username}")
+                channel = await self.client.get_entity(channel_username)
             except ValueError:
                 # username으로 실패하면 채널 ID로 시도
                 logger.info(f"채널 ID로 검색 시도: {channel_id}")
@@ -374,7 +395,7 @@ class CollectorService:
                         continue
 
                     # 메시지 처리
-                    processed_message = await self._process_message(message, channel)
+                    processed_message = await self._process_message(message, channel, channel_public)
                     if processed_message:
                         messages.append(processed_message)
                 except Exception as e:
@@ -424,6 +445,9 @@ class CollectorService:
             List[Dict[str, Any]]: 수집된 전체 메시지 목록
         """
         try:
+            # 매 실행마다 채널 설정을 새로 로드
+            self._load_channel_config()
+            logger.info("채널 설정 새로 로드 완료")
 
             b = await self._init_client() # 텔레 클라이언트 여기서 초기화.
             if not b:
@@ -440,9 +464,15 @@ class CollectorService:
                     continue
                 
             return all_messages
+        except Exception as e:
+            logger.error(f"전체 채널 수집 중 오류 발생: {str(e)}", exc_info=True)
+            return []
         finally:
             # 클라이언트 연결 종료 보장
-            await self.db_close()
+            try:
+                await self.db_close()
+            except Exception as e:
+                logger.error(f"클라이언트 연결 종료 중 오류 발생: {str(e)}", exc_info=True)
             
 
     async def db_close(self):

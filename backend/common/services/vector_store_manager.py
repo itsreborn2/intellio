@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Tuple
 from langchain_community.vectorstores import Pinecone as PineconeLangchain
 from langchain_core.documents import Document as LangchainDocument
-from pinecone import Pinecone as PineconeClient, PodSpec
+from pinecone import Pinecone as PineconeClient, PodSpec, ServerlessSpec
 import pinecone
 from common.core.config import settings
 from common.services.embedding_models import EmbeddingModelType
@@ -12,6 +12,7 @@ from functools import wraps
 from common.services.embedding import EmbeddingService
 from numpy.linalg import norm
 import numpy as np
+from datetime import datetime
 #from langchain_teddynote.community.pinecone import upsert_documents, upsert_documents_parallel
 
 logger = logging.getLogger(__name__)
@@ -27,18 +28,9 @@ def async_init(func):
     return wrapper
 
 class VectorStoreManager:
-    """벡터 스토어 관리 클래스 (싱글턴)"""
-    _instance = None
-    _lock = Lock()
+    """벡터 스토어 관리 클래스"""
     _initialized = False
     _initialization_error = None
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = super(VectorStoreManager, cls).__new__(cls)
-        return cls._instance
 
     def __init__(self, embedding_model_type: EmbeddingModelType = None, namespace: str = None, project_name:str = None):
         """
@@ -47,30 +39,27 @@ class VectorStoreManager:
             embedding_model_type: 임베딩 모델 타입
             namespace: Pinecone 네임스페이스. 기본값은 None
         """
-        if self._initialized:
-            return
+        if embedding_model_type is None:
+            raise ValueError("초기화 시에는 embedding_model_type이 필요합니다.")
+            
+        self.project_name = project_name
+        self.embedding_model_type = embedding_model_type
+        self.namespace = namespace
         
-        with self._lock:
-            if self._initialized:
-                return
-            
-            if not self._initialized and embedding_model_type is None:
-                raise ValueError("첫 초기화 시에는 embedding_model_type이 필요합니다.")
-            self.project_name = project_name
-            self.embedding_model_type = embedding_model_type
-            self.namespace = namespace
-            
-            self.embedding_model_config = None
-            self.pinecone_client = None
-            self.index = None
-            
-            # 동기적으로 초기화 실행
-            self._sync_initialize()
+        self.embedding_model_config = None
+        self.pinecone_client = None
+        self.index = None
+        self._lock = Lock()
+        self._initialized = False
+        self._initialized_future = None
+        
+        # 동기적으로 초기화 실행
+        self._sync_initialize()
 
     def _sync_initialize(self):
         """동기 초기화 메서드"""
         try:
-            embedding_service = EmbeddingService()
+            embedding_service = EmbeddingService(self.embedding_model_type)
             self.embedding_model_provider = embedding_service.provider
             self.embedding_obj, self.embedding_obj_async = self.embedding_model_provider.get_embeddings_obj()
             self.embedding_model_config = embedding_service.current_model_config
@@ -86,18 +75,40 @@ class VectorStoreManager:
 
             # 인덱스 존재 여부 확인
             if self.embedding_model_config.name not in self.pinecone_client.list_indexes().names():
-                logger.error(f"Pinecone 인덱스 {self.embedding_model_config.name} 없음. 생성 중...")
+                
                 try:
                     # 인덱스 생성 - 메트릭을 dotproduct로 변경
-                    self.pinecone_client.create_index(
-                        name=self.embedding_model_config.name,
-                        dimension=self.embedding_model_config.dimension,
-                        metric="dotproduct",  # cosine에서 dotproduct로 변경
-                        spec=PodSpec(
-                            environment=settings.PINECONE_ENVIRONMENT,
-                            pod_type="p1"
+                    # api key로 이미 인덱스, 프로젝트가 고정되었음
+
+                    # stockeasy는 pod spec으로.
+                    # stockeasy는 개발모드에서도 prod 인덱스를 검색해야할수도 있는데.
+                    # env따라 접근을 달리하는 방법은 잠깐 고민을 해보자.
+                    # env.dev, env.prod의 stockeasy 인덱스 값을 prod껄로 고정해놔야겠다
+                    # 자료 수집은 서버에서 prod로..
+                    # 개발 환경에서는 stockeasy db에 writing하지 않도록 해야겠네.
+
+                    if self.project_name == "stockeasy":
+                        logger.error(f"Pinecone 인덱스 {self.embedding_model_config.name} 없음. 생성 중...(PodSpec)")
+                        self.pinecone_client.create_index(
+                            name=self.embedding_model_config.name,
+                            dimension=self.embedding_model_config.dimension,
+                            metric="dotproduct",  # cosine에서 dotproduct로 변경
+                            spec=PodSpec(
+                                environment=settings.PINECONE_ENVIRONMENT,
+                                pod_type="p1"
+                            )
                         )
-                    )
+                    else:
+                        logger.error(f"Pinecone 인덱스 {self.embedding_model_config.name} 없음. 생성 중...(ServerlessSpec)")
+                        self.pinecone_client.create_index(
+                            name=self.embedding_model_config.name,
+                            dimension=self.embedding_model_config.dimension,
+                            metric="dotproduct",  # cosine에서 dotproduct로 변경
+                            spec=ServerlessSpec(
+                                cloud="aws",
+                                region="us-west-2"
+                            )
+                        )
                 except Exception as e:
                     logger.error(f"Pinecone 인덱스 생성 실패: {str(e)}")
                     raise
@@ -126,6 +137,25 @@ class VectorStoreManager:
             self._initialization_error = e
             raise e
 
+    async def _async_initialize(self, *args, **kwargs):
+        """비동기 초기화 메서드"""
+        try:
+            # 동기 초기화 메서드를 비동기적으로 실행
+            await asyncio.to_thread(self._sync_initialize)
+            self._initialized_future.set_result(True)
+        except Exception as e:
+            self._initialization_error = e
+            self._initialized_future.set_exception(e)
+
+    async def ensure_initialized(self):
+        """비동기 초기화가 완료되었는지 확인"""
+        if not self._initialized:
+            if not self._initialized_future:
+                self._initialized_future = asyncio.Future()
+                await self._async_initialize()
+            await self._initialized_future
+        return True
+
     def search(self, query: str, top_k: int, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
         """벡터 스토어에서 검색 수행"""
         logger.info(f"[{self.namespace}] 벡터 스토어 검색 시작 : {query}")
@@ -142,8 +172,8 @@ class VectorStoreManager:
         # results = self.vector_store.similarity_search_by_vector_with_score(embedding=embedding, k=top_k, filter=filters)
         # #[(Document, score), (Document, score), ...]
         # filters 형식 변환
-        if filters and 'document_ids' in filters:
-            filters = {"document_id": {"$in": filters['document_ids']}}
+        # if filters and 'document_ids' in filters:
+        #     filters = {"document_id": {"$in": filters['document_ids']}}
 
         logger.info(f"[{self.namespace}] {filters}")
 
@@ -171,8 +201,8 @@ class VectorStoreManager:
         embedding = await self.create_embeddings_single_query_async(query)
 
         # filters 형식 변환
-        if filters and 'document_ids' in filters:
-            filters = {"document_id": {"$in": filters['document_ids']}}
+        # if filters and 'document_ids' in filters:
+        #     filters = {"document_id": {"$in": filters['document_ids']}}
       
         results = self.vector_store.similarity_search_by_vector_with_score(
             namespace=self.namespace,
@@ -194,8 +224,8 @@ class VectorStoreManager:
         # 사용자 쿼리 임베딩
         embedding = self.create_embeddings_single_query(query)
 
-        if filters and 'document_ids' in filters:
-            filters = {"document_id": {"$in": filters['document_ids']}}
+        # if filters and 'document_ids' in filters:
+        #     filters = {"document_id": {"$in": filters['document_ids']}}
 
         doc_list: List[LangchainDocument] = self.vector_store.max_marginal_relevance_search_by_vector(
                 namespace=self.namespace,
@@ -252,6 +282,10 @@ class VectorStoreManager:
                 logger.warning("저장할 벡터가 없습니다")
                 return False
             
+            if self.project_name == "stockeasy" and settings.ENV == "dev":
+                logger.warning("Stockeasy 프로젝트는 개발 환경에서는 데이터 저장을 하지 않습니다.")
+                return False
+
             # 벡터 정규화 수행
             normalized_vectors = []
             for vector in _vectors:
@@ -261,6 +295,13 @@ class VectorStoreManager:
                     values_array = np.array(values)
                     normalized_values = values_array / norm(values_array)
                     vector["values"] = normalized_values.tolist()
+                    _meta = vector.get("metadata", {})
+                    if _meta:
+                        for key, value in _meta.items():
+                            # null 값 처리
+                            if value is None:
+                                _meta[key] = ""  # 빈 문자열로 변환
+                    vector["metadata"] = _meta
                 normalized_vectors.append(vector)
             
             # 정규화된 벡터 저장
@@ -270,37 +311,41 @@ class VectorStoreManager:
             return True
 
         except Exception as e:
-            logger.error(f"[{self.namespace}] 벡터 저장 실패: {str(e)}", exc_info=True)
-            return False
+            try:
+                import json
+                import copy
+                
+                # 로깅용 복사본 생성
+                vectors_for_logging = []
+                
+                # 리스트인 경우 각 항목 처리
+                if isinstance(normalized_vectors, list):
+                    for vector in normalized_vectors:
+                        vector_copy = copy.deepcopy(vector)
+                        # values 필드 제거
+                        if 'values' in vector_copy:
+                            del vector_copy['values']
+                        vectors_for_logging.append(vector_copy)
+                # 딕셔너리인 경우 직접 처리
+                elif isinstance(normalized_vectors, dict):
+                    vectors_for_logging = copy.deepcopy(normalized_vectors)
+                    if 'values' in vectors_for_logging:
+                        del vectors_for_logging['values']
+                
+                # 가독성 좋게 JSON 형식으로 출력
+                formatted_vectors = json.dumps(vectors_for_logging, ensure_ascii=False, indent=2)
+                logger.error(f"[{self.namespace}] normalized_vectors (values 제외): {formatted_vectors}")
+            except Exception as logging_error:
+                # 로깅 과정에서 오류 발생 시
+                logger.error(f"[{self.namespace}] 벡터 로깅 중 오류 발생: {str(logging_error)}")
+            
+            raise
 
     async def store_vectors_async(self, _vectors: List[Dict]) -> bool:
         """벡터를 Pinecone에 저장"""
         await self.ensure_initialized()
-        try:
-            if not _vectors:
-                logger.warning("저장할 벡터가 없습니다")
-                return False
-            
-            # 벡터 정규화 수행
-            normalized_vectors = []
-            for vector in _vectors:
-                values = vector.get("values", [])
-                if values:
-                    # L2 정규화 수행
-                    values_array = np.array(values)
-                    normalized_values = values_array / norm(values_array)
-                    vector["values"] = normalized_values.tolist()
-                normalized_vectors.append(vector)
-            
-            # 정규화된 벡터 저장
-            logger.info(f"[{self.namespace}] 벡터 {len(normalized_vectors)}개 저장 중")
-            await self.index.upsert(vectors=normalized_vectors, namespace=self.namespace)
-            logger.info(f"[{self.namespace}] 벡터 {len(normalized_vectors)}개 저장 완료")
-            return True
-
-        except Exception as e:
-            logger.error(f"[{self.namespace}] 벡터 저장 실패: {str(e)}", exc_info=True)
-            return False
+        #return await asyncio.to_thread(self.store_vectors, _vectors)
+        return self.store_vectors(_vectors)
 
     async def add_documents(self, documents: List[Dict]) -> bool:
         """문서를 벡터 스토어에 추가"""

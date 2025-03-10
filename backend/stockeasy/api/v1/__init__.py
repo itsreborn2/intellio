@@ -10,9 +10,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 # API v1 라우터
-stockeasy_router = APIRouter()
+api_router_stockeasy = APIRouter(prefix="/stockeasy", tags=["stockeasy"])
 
 # 텔레그램 라우터 등록
 logger.info("텔레그램 라우터 등록 시작")
-stockeasy_router.include_router(telegram_router)
+api_router_stockeasy.include_router(telegram_router)
 logger.info("텔레그램 라우터 등록 완료")

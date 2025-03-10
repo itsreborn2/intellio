@@ -424,17 +424,7 @@ class RAGService:
         logger.info(f"청크 검색 시작 - 쿼리: {normalized_query}, top_k: {top_k}")
         
         try:
-            # 모드별로 청크가 왜 달라야하는지는 모름. 일단 보존.
-            # 모드별 청크 수 설정. 
-            # if query_type == "table":
-            #     #search_top_k = top_k * 5  # 테이블 모드: 5배
-            #     search_multiplier = 5
-            #     logger.info("테이블 모드: 청크 수 5배 증가")
-            # else:  # chat 모드
-            #     #search_top_k = top_k * 3  # 챗 모드: 3배
-            #     search_multiplier = 3
-            #     logger.info("챗 모드: 청크 수 3배 증가")
-                
+              
             
             # 문서 검색
             #all_chunks = await self.embedding_service.search_similar(
@@ -442,15 +432,9 @@ class RAGService:
             #     document_ids=doc_ids_str if doc_ids_str else None,
             #     top_k=search_top_k
             # )
-
-            # Retriever
-            # 현재는 시멘틱. 
-            # 추후 다른 형태의 retriever를 쓰던지, 하이브리드 하던지 여기서 처리하면 됨.
-            
-
             logger.info(f"검색할 문서별 청크 수: {top_k * 1}")
             
-            filtersMetadata = {"document_ids": document_ids} if document_ids else None
+            filtersMetadata = { "document_id": {"$in": document_ids} } if document_ids else None
             
             vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type(),
                                             project_name="doceasy",
@@ -516,7 +500,7 @@ class RAGService:
         except Exception as e:
             
             error_msg = str(e)
-            logger.exception(f"청크 검색 중 오류 발생: {error_msg}")
+            logger.exception(f"청크 검색 중 오류 발생: {error_msg}", exc_info=True)
             
             # 상세한 오류 메시지
             if "insufficient_quota" in error_msg:

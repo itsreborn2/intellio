@@ -58,8 +58,8 @@ class CommonSettings(BaseSettings):
     # AI Model Settings - from .env
     OPENAI_API_KEY: str
     GEMINI_API_KEY: str
-    GEMINI_PROJECT: str = os.getenv("GEMINI_PROJECT", "your-project-id")
-    GEMINI_LOCATION: str = os.getenv("GEMINI_LOCATION", "us-central1")  # Gemini API 기본 리전
+    UPSTAGE_API_KEY:str
+
     
     # Redis 설정
     REDIS_HOST: str 
@@ -77,7 +77,9 @@ class CommonSettings(BaseSettings):
     GOOGLE_CLOUD_PROJECT: str
     GOOGLE_APPLICATION_CREDENTIALS: str
     GOOGLE_DOCUMENT_AI_PROCESSOR_ID: str
-    GOOGLE_CLOUD_STORAGE_BUCKET: str
+    GOOGLE_CLOUD_LOCATION: str
+    GOOGLE_CLOUD_STORAGE_BUCKET_DOCEASY: str
+    GOOGLE_CLOUD_STORAGE_BUCKET_STOCKEASY: str
 
     # Google Cloud for Vertex AI
     GOOGLE_PROJECT_ID_VERTEXAI: str
@@ -121,7 +123,7 @@ class CommonSettings(BaseSettings):
     # Pinecone Settings
     PINECONE_API_KEY_DOCEASY:str
     PINECONE_API_KEY_STOCKEASY:str
-    PINECONE_ENVIRONMENT: str = "us-east-1"
+    PINECONE_ENVIRONMENT: str
     PINECONE_NAMESPACE_DOCEASY:str
     PINECONE_NAMESPACE_STOCKEASY:str
     PINECONE_NAMESPACE_STOCKEASY_TELEGRAM:str
@@ -150,7 +152,7 @@ class CommonSettings(BaseSettings):
     UPLOAD_DIR: str = "./uploads"
     CACHE_DIR: str = "./cache"
     GOOGLE_CLOUD_LOCATION: str = "us"
-    OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
+    OPENAI_MODEL_NAME: str = "gpt-4o-mini"
     TZ: str = "Asia/Seoul"
     FLOWER_USER: str = "intellio_user"
     FLOWER_PASSWORD: str = None
@@ -168,7 +170,11 @@ class CommonSettings(BaseSettings):
     CHUNK_SIZE:int
     CHUNK_OVERLAP:int
     # 임베딩 설정. 아직 안씀
-    KAKAO_EMBEDDING_MODEL_PATH:str = "/backend/common/external/kf-deberta"
+    KAKAO_EMBEDDING_MODEL_PATH:str = "common/external/kf-deberta"
+
+
+    # STOCKEASY
+    TELEGRAM_CHANNEL_IDS: List[Dict[str, Any]] = []
 
     # 환경 변수 파일 설정
     _env: ClassVar[str] = os.getenv("ENV")
@@ -210,14 +216,14 @@ class CommonSettings(BaseSettings):
 def get_settings() -> CommonSettings:
     logger.info(f"Loading settings for environment: {os.getenv('ENV', 'development')}")
     settings = CommonSettings()
-    logger.info(f"Generated DATABASE_URL: {settings.DATABASE_URL}")
+    #logger.info(f"Generated DATABASE_URL: {settings.DATABASE_URL}")
     return settings
 
 settings = get_settings()
 logger.info(f"commonsetting")
 logger.info(f"ENV: {settings.ENV}")
 logger.info(f"REDIS_HOST: {settings.REDIS_HOST}")
-logger.info(f"REDIS_PORT: {settings.REDIS_PORT}")
+#logger.info(f"REDIS_PORT: {settings.REDIS_PORT}")
 logger.info(f"REDIS_URL: {settings.REDIS_URL}")
 logger.info(f"CELERY_BROKER_URL: {settings.CELERY_BROKER_URL}")
 logger.info(f"CELERY_RESULT_BACKEND: {settings.CELERY_RESULT_BACKEND}")
@@ -233,5 +239,5 @@ logger.info(f"POSTGRES_SERVER: {settings.POSTGRES_SERVER}")
 logger.info(f"POSTGRES_USER: {settings.POSTGRES_USER}")
 logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
 logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
-logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
+#logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
 

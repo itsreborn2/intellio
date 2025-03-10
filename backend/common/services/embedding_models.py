@@ -10,6 +10,7 @@ import numpy as np
 from common.core.config import settings
 import tiktoken
 from transformers import AutoTokenizer
+from tokenizers import Tokenizer
 import logging
 import nltk
 import google.api_core.exceptions
@@ -19,13 +20,20 @@ from google.oauth2 import service_account
 import re
 import torch
 
+
 logger = logging.getLogger(__name__)
 
 class EmbeddingModelType(str, Enum):
+    #OPENAI_ADA_002 = "text-embedding-ada-002"
+    #OPENAI_ADA_002 = "text-embedding-3-small"
     OPENAI_ADA_002 = "text-embedding-ada-002"
+    OPENAI_3_LARGE = "text-embedding-3-large"
     GOOGLE_MULTI_LANG = "text-multilingual-embedding-002"
-    GOOGLE_EN = "text-embedding-004"
+    GOOGLE_EN = "text-embedding-005"
     KAKAO_EMBEDDING = "kf-deberta"
+    UPSTAGE = "upstage-embedding-v1"
+    BGE_M3 = "dragonkue/bge-m3-ko"
+
 
 class EmbeddingModelConfig(BaseModel):
     name: str
@@ -39,9 +47,16 @@ class EmbeddingModelManager:
         self.models: Dict[str, EmbeddingModelConfig] = {
             EmbeddingModelType.OPENAI_ADA_002: EmbeddingModelConfig(
                 name=EmbeddingModelType.OPENAI_ADA_002,
-                dimension=1536,
+                dimension=3072 if EmbeddingModelType.OPENAI_ADA_002 == "text-embedding-3-large" else 1536,
                 provider_name=EmbeddingModelType.OPENAI_ADA_002,
                 description="OpenAI의 범용 임베딩 모델",
+                max_tokens=8191 #전체 입력 토큰만 봄.
+            ),
+            EmbeddingModelType.OPENAI_3_LARGE: EmbeddingModelConfig(
+                name=EmbeddingModelType.OPENAI_3_LARGE,
+                dimension=3072,
+                provider_name=EmbeddingModelType.OPENAI_3_LARGE,
+                description="OpenAI 임베딩 Large 3",
                 max_tokens=8191 #전체 입력 토큰만 봄.
             ),
             EmbeddingModelType.GOOGLE_MULTI_LANG : EmbeddingModelConfig(
@@ -65,6 +80,20 @@ class EmbeddingModelManager:
                 provider_name=EmbeddingModelType.KAKAO_EMBEDDING,
                 description="Kakao의 한국어 임베딩 모델",
                 max_tokens=512
+            ),
+            EmbeddingModelType.UPSTAGE: EmbeddingModelConfig(
+                name=EmbeddingModelType.UPSTAGE,
+                dimension=4096, # 수정필요
+                provider_name=EmbeddingModelType.UPSTAGE,
+                description="Upstage의 임베딩 모델",
+                max_tokens=4000
+            ),
+            EmbeddingModelType.BGE_M3: EmbeddingModelConfig(
+                name=EmbeddingModelType.BGE_M3,
+                dimension=1024,
+                provider_name=EmbeddingModelType.BGE_M3,
+                description="BGE-M3 임베딩 모델",
+                max_tokens=8190
             )
         }
         
@@ -138,6 +167,12 @@ class TokenCounter:
             logger.warning(f"토큰 카운팅 실패 (Google): {str(e)}")
             # 실패시 더 보수적으로 계산
             return len(text.split()) * 2
+    def count_tokens_upstage(text:str) -> int:
+        tokenizer = Tokenizer.from_pretrained("upstage/solar-pro-tokenizer")
+        enc = tokenizer.encode(text)
+        inv_vocab = {v: k for k, v in tokenizer.get_vocab().items()}
+        tokens = [inv_vocab[token_id] for token_id in enc.ids]
+        return len(tokens)
 
 class EmbeddingProvider(ABC):
     """임베딩 제공자의 추상 기본 클래스"""
@@ -225,7 +260,7 @@ class EmbeddingProvider(ABC):
         pass
 
     @abstractmethod
-    async def create_embeddings_async(self, texts: List[str]) -> List[List[float]]:
+    async def create_embeddings_async(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_DOCUMENT") -> List[List[float]]:
         """텍스트 리스트의 임베딩을 비동기로 생성"""
         pass
 
@@ -272,7 +307,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         except Exception as e:
             logger.error(f"OpenAI 임베딩 생성 실패: {str(e)}")
             raise
-    def create_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def create_embeddings(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
         try:
             batches = self.validate_and_split_texts(texts)
             logger.info(f"OpenAI 임베딩 생성 시작: {len(batches)} 배치")
@@ -291,7 +326,118 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         except Exception as e:
             logger.error(f"OpenAI 임베딩 생성 실패 (동기): {str(e)}")
             raise
+class UpstageEmbeddingProvider(EmbeddingProvider):
+    def __init__(self, model_name: str, max_tokens: int = 8191):
+        super().__init__(model_name, max_tokens)
+        self.async_client = AsyncOpenAI(api_key=settings.UPSTAGE_API_KEY, base_url="https://api.upstage.ai/v1/solar")
+        self.client = OpenAI(api_key=settings.UPSTAGE_API_KEY, base_url="https://api.upstage.ai/v1/solar")
+    # embedding-query : Solar-based Query Embedding model with a 4k context limit. This model is optimized for embedding user's question in information-seeking tasks such as retrieval & reranking.
+    # embedding-passage : Solar-based Passage Embedding model with a 4k context limit. This model is optimized for embedding documents or texts to be searched.
+    # Upstage's embedding API can process texts in batches.
+    # You can send a text array instead of a single text to API endpoint for batch processing. 
+    # In most cases, batch processing is faster and more efficient than processing items one by one. 
+    # One batch request can contain up to 100 texts, \
+    # and the total number of tokens in the array(tokens per each request) should be less than 204,800.
+    def count_tokens(self, text: str) -> int:
+        return TokenCounter.count_tokens_upstage(text)
+    
+    def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
+        """임베딩 객체 반환, [Sync, Async]"""
+        return self.client.embeddings, self.async_client.embeddings
+    
+    async def create_embeddings_async(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
+        try:
+            # 토큰 제한을 고려하여 텍스트 분할
+            batches = self.validate_and_split_texts(texts)
+            logger.info(f"Upstage 임베딩 생성 시작: {len(batches)} 배치")
+            model_name = "embedding-query" if embeddings_task_type == "RETRIEVAL_QUERY" else "embedding-passage"
+            all_embeddings = []
             
+            for batch in batches:
+                response = await self.async_client.embeddings.create(
+                    model=model_name,
+                    input=batch
+                )
+                batch_embeddings = [embedding.embedding for embedding in response.data]
+                all_embeddings.extend(batch_embeddings)
+            
+            return all_embeddings
+            
+        except Exception as e:
+            logger.error(f"Upstage 임베딩 생성 실패: {str(e)}")
+            raise
+    def create_embeddings(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
+        try:
+            batches = self.validate_and_split_texts(texts)
+            logger.info(f"Upstage 임베딩 생성 시작: {len(batches)} 배치")
+
+            model_name = "embedding-query" if embeddings_task_type == "RETRIEVAL_QUERY" else "embedding-passage"
+            all_embeddings = []
+            
+            for batch in batches:
+                response = self.client.embeddings.create(
+                    model=model_name,
+                    input=batch
+                )
+                batch_embeddings = [embedding.embedding for embedding in response.data]
+                all_embeddings.extend(batch_embeddings)
+            
+            return all_embeddings
+            
+        except Exception as e:
+            logger.error(f"Upstage 임베딩 생성 실패 (동기): {str(e)}")
+            raise
+class BGE_M3_EmbeddingProvider(EmbeddingProvider):
+    def __init__(self, model_name: str, max_tokens: int = 8191):
+        from sentence_transformers import SentenceTransformer
+        super().__init__(model_name, max_tokens)
+        self.model = SentenceTransformer(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        
+    def count_tokens(self, text: str) -> int:
+        try:
+            tokens = self.tokenizer.encode(text)
+            return len(tokens)
+        except Exception as e:
+            logger.warning(f"BGE_M3 토크나이저 토큰 카운팅 실패: {str(e)}")
+            # 실패시 문자 길이로 대략적 계산
+            return len(text.split()) * 2
+    
+    
+    
+    def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
+        """임베딩 객체 반환, [Sync, Async]"""
+        return self.model, self.model   
+        
+    def create_embeddings(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
+        try:
+            batches = self.validate_and_split_texts(texts)
+            logger.info(f"BGE-M3 임베딩 생성 시작: {len(batches)} 배치")
+            
+            all_embeddings = []
+            for batch in batches:
+                batch_embeddings = self.model.encode(batch).tolist()
+                all_embeddings.extend(batch_embeddings)
+            
+            return all_embeddings
+        except Exception as e:
+            logger.error(f"BGE-M3 임베딩 생성 실패 (동기): {str(e)}")
+            raise
+        
+    async def create_embeddings_async(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
+        try:
+            batches = self.validate_and_split_texts(texts)
+            logger.info(f"BGE-M3 임베딩 생성 시작 (비동기): {len(batches)} 배치")
+            
+            all_embeddings = []
+            for batch in batches:
+                batch_embeddings = await asyncio.to_thread(self.model.encode, batch)
+                all_embeddings.extend(batch_embeddings.tolist())
+            
+            return all_embeddings
+        except Exception as e:
+            logger.error(f"BGE-M3 임베딩 생성 실패 (비동기): {str(e)}")
+            raise
 
 class GoogleEmbeddingProvider(EmbeddingProvider):
     _instance = None
@@ -304,8 +450,9 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
     def __init__(self, model_name: str, max_tokens: int = 2048):
         if not self._is_initialized:
             super().__init__(model_name, max_tokens)
-            self._initialize_model(model_name, max_tokens)
+            
             self.__class__._is_initialized = True
+        self._initialize_model(model_name, max_tokens)
 
     def _initialize_model(self, model_name, max_tokens):
         """모델 초기화 로직"""
@@ -327,7 +474,7 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
                                     model=model_name,
                                     location=location,
                                     credentials=credentials)
-            logger.info("Google Embedding 모델 초기화 완료")
+            logger.info(f"Google Embedding 모델 초기화 완료 : {model_name}")
         except Exception as e:
             logger.error(f"Google Embedding 모델 초기화 실패: {str(e)}")
             raise
@@ -339,9 +486,9 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
     def count_tokens(self, text: str) -> int:
         return TokenCounter.count_tokens_google(text)    
     
-    async def create_embeddings_async(self, texts: List[str]) -> List[List[float]]:
+    async def create_embeddings_async(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_DOCUMENT") -> List[List[float]]:
         """Google Vertex AI는 현재 비동기를 직접 지원하지 않아 동기 메서드를 호출"""
-        return await asyncio.to_thread(self.create_embeddings, texts)
+        return await asyncio.to_thread(self.create_embeddings, texts, embeddings_task_type)
     
     def create_embeddings(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
         try:
@@ -506,11 +653,11 @@ class KakaoEmbeddingProvider(EmbeddingProvider):
             # 실패시 문자 길이로 대략적 계산
             return len(text.split()) * 2
             
-    async def create_embeddings_async(self, texts: List[str]) -> List[List[float]]:
+    async def create_embeddings_async(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
         """비동기 임베딩 생성 (동기 메서드를 비동기로 래핑)"""
-        return await asyncio.to_thread(self.create_embeddings, texts)
+        return await asyncio.to_thread(self.create_embeddings, texts, embeddings_task_type)
     
-    def create_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def create_embeddings(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
         """카카오 임베딩 생성"""
         try:
             if self.model is None:
@@ -551,11 +698,15 @@ class EmbeddingProviderFactory:
                 raise ValueError(f"지원하지 않는 제공자 타입: {provider_type}")
             
         # 이제 provider_type은 항상 EmbeddingModelType
-        if provider_type == EmbeddingModelType.OPENAI_ADA_002:
+        if provider_type == EmbeddingModelType.OPENAI_ADA_002 or provider_type == EmbeddingModelType.OPENAI_3_LARGE:
             return OpenAIEmbeddingProvider(model_name)
-        elif provider_type == EmbeddingModelType.GOOGLE_MULTI_LANG:
+        elif provider_type == EmbeddingModelType.GOOGLE_MULTI_LANG or provider_type == EmbeddingModelType.GOOGLE_EN:
             return GoogleEmbeddingProvider(model_name)
         elif provider_type == EmbeddingModelType.KAKAO_EMBEDDING:
             return KakaoEmbeddingProvider(model_name)
+        elif provider_type == EmbeddingModelType.UPSTAGE:
+            return UpstageEmbeddingProvider(model_name)
+        elif provider_type == EmbeddingModelType.BGE_M3:
+            return BGE_M3_EmbeddingProvider(model_name)
         else:
             raise ValueError(f"지원하지 않는 제공자 타입: {provider_type}")

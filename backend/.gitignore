@@ -76,3 +76,8 @@ stockeasy/telegram_channels.json
 celerybeat-schedule
 celerybeat-schedule.*
 celerybeat.pid
+
+# evaluation
+evaluation/datasets
+evaluation/results
+

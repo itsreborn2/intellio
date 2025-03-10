@@ -28,9 +28,6 @@ class StockeasySettings(CommonSettings):
     #TELEGRAM_CHANNEL_IDS: str = "channel1"  # 기본값 설정
     TELEGRAM_SESSION_NAME: str
 
-    @property
-    def telegram_channel_list(self) -> list[str]:
-        return self.TELEGRAM_CHANNEL_IDS.split(',') if self.TELEGRAM_CHANNEL_IDS else []
     
     # Celery 설정
     @property
