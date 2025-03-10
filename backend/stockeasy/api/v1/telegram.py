@@ -9,12 +9,13 @@
 
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
+from stockeasy.services.telegram.question_classifier import QuestionClassification, QuestionClassifierService
 from stockeasy.services.telegram.rag import TelegramRAGService
 from stockeasy.services.telegram.collector import CollectorService
 from stockeasy.api import deps
 from pydantic import BaseModel
 
-# FastAPI 라우터 설정
+# FastAPI 라우터 설정 ( /api/v1/stockeasy/telegram)
 telegram_router = APIRouter(prefix="/telegram", tags=["telegram"])
 
 class SummarizeRequest(BaseModel):
@@ -60,6 +61,7 @@ class CollectResponse(BaseModel):
 @telegram_router.post("/summarize", response_model=SummarizeResponse)
 async def summarize_messages(
     request: SummarizeRequest,
+    
     rag_service: TelegramRAGService = Depends(deps.get_telegram_rag_service)
 ) -> SummarizeResponse:
     """텔레그램 메시지를 검색하고 요약하는 엔드포인트
@@ -92,11 +94,14 @@ async def summarize_messages(
         }
         ```
     """
+    qc = QuestionClassifierService()
+    classification:QuestionClassification = qc.classify_question(request.query)
+        
     # 1. 벡터 DB에서 관련 메시지 검색
-    messages = await rag_service.search_messages(request.query, request.k)
+    messages = await rag_service.search_messages(request.query, classification)
     
     # 2. 검색된 메시지들을 요약
-    summary = await rag_service.summarize(messages)
+    summary = await rag_service.summarize(messages, classification)
     
     # 3. 응답 반환
     return SummarizeResponse(

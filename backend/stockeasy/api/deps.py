@@ -12,7 +12,6 @@ from common.core.database import get_db
 from stockeasy.services.telegram.rag import TelegramRAGService  # 지연 임포트
 from stockeasy.services.telegram.collector import CollectorService  # 지연 임포트
 
-
 async def get_telegram_rag_service() -> Any:
     """RAG 서비스 의존성
     

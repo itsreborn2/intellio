@@ -4,14 +4,14 @@
 벡터 DB를 사용하여 의미 기반 검색을 수행하고, LangChain을 사용하여 요약을 생성합니다.
 """
 
-from typing import List
+from typing import Any, Dict, List
 from loguru import logger
 from datetime import datetime, timezone, timedelta
 import re
-from functools import wraps
-import asyncio
-from typing import TypeVar, Callable, Any
+from zoneinfo import ZoneInfo
 
+from stockeasy.services.telegram.question_classifier import QuestionClassification
+from common.utils.util import async_retry
 from common.services.llm_models import LLMModels
 from common.services.retrievers.models import RetrievalResult
 from common.services.vector_store_manager import VectorStoreManager
@@ -19,59 +19,6 @@ from common.services.retrievers.semantic import SemanticRetriever, SemanticRetri
 from .embedding import TelegramEmbeddingService
 from common.core.config import settings
 from langchain_core.messages import AIMessage
-
-T = TypeVar('T')
-
-def async_retry(
-    retries: int = 3,
-    delay: float = 1.0,
-    backoff_factor: float = 2.0,
-    exceptions: tuple = (Exception,)
-) -> Callable:
-    """비동기 함수에 대한 재시도 데코레이터
-
-    Args:
-        retries (int): 최대 재시도 횟수
-        delay (float): 초기 대기 시간(초)
-        backoff_factor (float): 대기 시간 증가 계수
-        exceptions (tuple): 재시도할 예외 목록
-
-    Returns:
-        Callable: 데코레이터 함수
-    """
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            last_exception = None
-            wait_time = delay
-
-            for attempt in range(retries + 1):
-                try:
-                    return await func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt == retries:
-                        logger.error(
-                            f"함수 {func.__name__} 실행 실패 (최대 재시도 횟수 초과)\n"
-                            f"에러: {str(e)}\n"
-                            f"Args: {args}\n"
-                            f"Kwargs: {kwargs}",
-                            exc_info=True
-                        )
-                        raise
-                    
-                    logger.warning(
-                        f"함수 {func.__name__} 실행 실패 (시도 {attempt + 1}/{retries + 1})\n"
-                        f"에러: {str(e)}\n"
-                        f"대기 시간: {wait_time}초"
-                    )
-                    
-                    await asyncio.sleep(wait_time)
-                    wait_time *= backoff_factor
-            
-            raise last_exception
-        return wrapper
-    return decorator
 
 
 class TelegramRAGService:
@@ -96,22 +43,7 @@ class TelegramRAGService:
 4. 메시지 작성자의 주관적 의견과 객관적 사실을 구분하세요.
 5. 요약은 명확하고 간결하게 작성하되, 중요한 세부사항은 포함하세요.
 
-출력 형식:
-[시장 동향]
-- 핵심 가격 변동 및 거래량 정보
-- 주요 투자자별 매매 동향
-
-[주요 이벤트]
-- 실적/공시 관련 정보
-- 시장 영향을 미친 주요 뉴스
-
-[투자 시사점]
-- 주요 투자 의사결정 관련 정보
-- 향후 주시해야 할 포인트
-
-* 모든 수치 정보는 정확한 값과 함께 변동률(%)도 표시
-* 시간 정보는 반드시 포함
-* 검증되지 않은 정보는 '(미확인)' 표시"""
+"""
 
     def _calculate_message_importance(self, message: str) -> float:
         """메시지의 중요도를 계산합니다.
@@ -178,13 +110,12 @@ class TelegramRAGService:
         """
         seoul_tz = timezone(timedelta(hours=9), 'Asia/Seoul')
         
-        # created_at이 naive datetime인 경우 UTC로 가정하고 서울 시간으로 변환
+        # naive datetime인 경우 서버 로컬 시간(Asia/Seoul)으로 간주
         if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc).astimezone(seoul_tz)
-        else:
-            created_at = created_at.astimezone(seoul_tz)
+            created_at = created_at.replace(tzinfo=ZoneInfo("Asia/Seoul"))
             
-        now = datetime.now()
+        # now도 timezone 정보를 포함하도록 수정
+        now = datetime.now(seoul_tz)
         time_diff = now - created_at
         
         # 24시간 이내: 0.8 ~ 1.0
@@ -235,7 +166,7 @@ class TelegramRAGService:
         return min(max(base_threshold, 0.4), 0.9)  # 0.4 ~ 0.9 사이로 제한
 
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
-    async def search_messages(self, query: str, k: int = 5) -> List[str]:
+    async def search_messages(self, query: str, classification: QuestionClassification= None) -> List[str]:
         """쿼리와 관련된 텔레그램 메시지를 검색합니다.
         
         Args:
@@ -249,12 +180,30 @@ class TelegramRAGService:
             SearchError: 검색 중 오류 발생 시
         """
         try:
+            k = 5
+            match classification.답변수준:
+                case 0:
+                    k = 5
+                case 1:
+                    k = 15
+                case 2:
+                    k = 20
+                case _:
+                    k = 10
+            # 주제에 따라서 유사도 점수를 조절해야할듯
+
+            if classification.질문주제 == 0: #종목 기본정보. 정확하게.
+                dynamic_threshold = 0.7
+            elif classification.질문주제 == 1: #전망 관련. 좀 더 넓게.
+                dynamic_threshold = 0.5
+            else: #기타
+                dynamic_threshold = 0.3
             # 동적 임계값 계산
-            dynamic_threshold = self._calculate_dynamic_threshold(query)
+            #dynamic_threshold = self._calculate_dynamic_threshold(query)
             
             vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type(),
                                             project_name="stockeasy",
-                                            namespace=settings.PINECONE_NAMESPACE_STOCKEASY)
+                                            namespace=settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM)
 
             semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
                                                         min_score=dynamic_threshold,
@@ -295,12 +244,106 @@ class TelegramRAGService:
             logger.error(error_msg, exc_info=True)
             raise Exception(error_msg) from e
 
+    def MakeSummaryPrompt(self, classification: QuestionClassification) -> str:
+        """질문 분류 결과에 따라 적절한 요약 프롬프트를 생성합니다.
+        
+        Args:
+            classification (QuestionClassification): 질문 분류 결과
+            
+        Returns:
+            str: 생성된 요약 프롬프트
+        """
+        # 기본 프롬프트 템플릿
+        base_prompt = self.summary_prompt.rstrip()
+        
+        # 종목 정보가 있는 경우 추가
+        stock_info = ""
+        if classification.종목명 or classification.종목코드:
+            stock_name = classification.종목명 or "해당 종목"
+            stock_code = f"({classification.종목코드})" if classification.종목코드 else ""
+            stock_info = f"\n\n대상 종목: {stock_name} {stock_code}\n"
+        
+        # 주제에 따른 프롬프트 조정
+        topic_prompt = ""
+        if classification.질문주제 == 0:  # 종목기본정보
+            topic_prompt = f"""
+특히 {stock_name}에 관하여 다음 사항에 중점을 두고 요약해주세요:
+- {stock_name}에 관한 기본 정보
+- {stock_name} 이외의 다른 종목, 기타 정보는 반드시 제외
+- 최근 발표된 실적 및 재무제표 관련 정보
+- 주요 재무 지표(PER, PBR, ROE 등)에 대한 언급
+- 배당 정책 및 배당률 관련 정보"""
+        elif classification.질문주제 == 1:  # 전망
+            topic_prompt = f"""
+특히 {stock_name}에 관하여 다음 사항에 중점을 두고 요약해주세요:
+- {stock_name}의 미래 성장 가능성 및 시장 전망
+- 애널리스트들의 투자 의견 및 목표가
+- {stock_name} 속한 산업/섹터의 전망 및 경쟁 상황.
+- {stock_name} 속하지 않은 다른 섹터의 정보는 반드시 제외.
+- 최근 발표된 중장기 전략 및 사업 계획"""
+        else:  # 기타
+            topic_prompt = f"""
+특히 다음 사항에 중점을 두고 요약해주세요:
+- {stock_name}에 관한 주요 정보 및 이슈
+- 시장 전반적인 동향 및 해당 종목과의 관계
+- 투자자들의 주요 관심사 및 논의 주제"""
+            
+        
+        # 답변 수준에 따른 프롬프트 조정
+        answer_level_prompt = ""
+        if classification.답변수준 == 0:  # 간단한답변
+            answer_level_prompt = """
+요약은 간결하게 작성하고, 핵심 정보만 포함해주세요. 가능한 100자 이내로 요약해주세요."""
+        elif classification.답변수준 == 1:  # 긴설명요구
+            answer_level_prompt = """
+요약은 상세하게 작성하고, 배경 정보와 근거를 포함해주세요. 필요한 경우 섹션을 나누어 구조화된 형태로 작성해주세요."""
+        elif classification.답변수준 == 2:  # 종합적판단
+            answer_level_prompt = """
+요약은 다양한 관점과 변수를 고려하여 종합적으로 작성해주세요. 상반된 의견이 있다면 균형있게 다루고, 각 의견의 근거를 함께 제시해주세요."""
+        else:  # 웹검색
+            answer_level_prompt = """
+요약은 최신 정보를 중심으로 작성하고, 추가 정보 검색이 필요한 부분은 명시해주세요."""
+        
+        # 출력 형식 프롬프트 구성
+        output_format = "\n\n출력 형식:"
+        
+        if classification.답변수준 >= 0:
+            output_format += """
+[종목 분석]
+- 주요 종목별 가격 변동 및 이슈
+- 업종별 주요 동향
+"""
+        if classification.답변수준 >= 1:
+            output_format += """
+[시장 동향]
+- 핵심 가격 변동 및 거래량 정보
+- 주요 투자자별 매매 동향
+"""
+        if classification.답변수준 >= 2:
+            output_format += """
+[전문가 의견]
+- 주요 애널리스트 및 전문가 견해
+- 투자 전략 및 추천
+"""
+        if classification.질문주제 >= 2:  # 기타 정보
+            output_format += """
+[기타 정보]
+- 경제 지표 및 정책 관련 소식
+- 국제 시장 동향 및 영향
+- 금리, 비트코인 등 금융 시장 전반적인 동향"""
+        
+        # 최종 프롬프트 조합
+        final_prompt = base_prompt + stock_info + topic_prompt + answer_level_prompt + output_format
+        
+        return final_prompt
+
     @async_retry(retries=2, delay=2.0, exceptions=(Exception,))
-    async def summarize(self, messages: List[str]) -> str:
+    async def summarize(self, messages: List[str], classification: QuestionClassification) -> str:
         """메시지 목록을 요약합니다.
         
         Args:
             messages (List[str]): 요약할 메시지 목록
+            classification (QuestionClassification): 질문 분류 결과
             
         Returns:
             str: 요약된 내용
@@ -314,9 +357,13 @@ class TelegramRAGService:
             
             messages_text = "\n".join([f"- {msg}" for msg in messages])
             
+            # 질문 분류 결과에 따라 프롬프트 생성
+            prompt_context = self.MakeSummaryPrompt(classification)
+            
+            #print(prompt_context)
             response:AIMessage = await self.LLM.agenerate(
                 user_query=messages_text, 
-                prompt_context=self.summary_prompt
+                prompt_context=prompt_context
             )
 
             if not response or not response.content:
@@ -326,5 +373,66 @@ class TelegramRAGService:
             
         except Exception as e:
             error_msg = f"메시지 요약 중 오류 발생: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise Exception(error_msg) from e
+        
+    async def test_func(self) -> List[str]:
+        """has_document 메타데이터가 true인 메시지만 검색합니다.
+        
+        Returns:
+            List[str]: 검색된 메시지 목록
+            
+        Raises:
+            Exception: 검색 중 오류 발생 시
+        """
+        try:
+            vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type(),
+                                            project_name="stockeasy",
+                                            namespace=settings.PINECONE_NAMESPACE_STOCKEASY)
+
+            # 메타데이터 필터 설정 - document_gcs_path 필드가 존재하고 비어있지 않은 문서만 검색
+            metadata_filter = {
+                "document_gcs_path": {"$ne": ""}
+            }
+            
+            semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
+                                                        min_score=0.2,
+                                                        metadata_filter=metadata_filter
+                                                        ), vs_manager=vs_manager)
+                    
+            retrieval_result:RetrievalResult = await semantic_retriever.retrieve(
+                query="아무거나 뽑아봐", 
+                top_k=10,
+            )
+            
+            # 결과 처리
+            processed_messages = []
+            seen_messages = []  # 중복 검사를 위한 메시지 목록
+            
+            for doc in retrieval_result.documents:
+                message = doc.page_content
+                
+                # 메타데이터에서 document_gcs_path 확인 (이중 체크)
+                document_gcs_path = doc.metadata.get("document_gcs_path", "")
+                if not document_gcs_path:
+                    logger.warning("document_gcs_path가 비어있는 문서입니다.")
+                    continue
+
+                message_created_at = datetime.fromisoformat(doc.metadata["message_created_at"])
+                    
+                message_type = doc.metadata.get("message_type", "알 수 없음")
+                formatted_time = message_created_at.strftime("%Y-%m-%d %H:%M")
+                formatted_message = f"[{formatted_time}] 타입: {message_type}, 문서경로: {document_gcs_path}, 내용: {message}"
+                processed_messages.append((formatted_message, 0))
+                seen_messages.append(message)
+
+            
+            processed_messages.sort(key=lambda x: x[1], reverse=True)
+            # k 변수가 정의되지 않았으므로 10으로 고정
+            k = 10
+            return [msg for msg, _ in processed_messages[:k]]
+            
+        except Exception as e:
+            error_msg = f"document_gcs_path 메타데이터 필터링 검색 중 오류 발생: {str(e)}"
             logger.error(error_msg, exc_info=True)
             raise Exception(error_msg) from e

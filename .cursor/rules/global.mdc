@@ -1,8 +1,10 @@
 ---
 description: global rules
 globs: 
+alwaysApply: false
 ---
 # Your rule content
+- 에러는 근본 원인을 가장 우선시 고민할것. 차선으로 에러 시 예외처리 수행.
 - COT(Chain of Thought)에 근거하여 답변해
 - 주석문을 마음대로 삭제하지 말것.
 - 주석문은 최대한 자세하게 작성하고 코드 변경시 주석도 함께 변경할것.

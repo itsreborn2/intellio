@@ -22,7 +22,7 @@ class EmbeddingService:
         #self.current_model = self.model_manager.get_model(EmbeddingModelType.OPENAI_ADA_002) # 구글 다국어 모델
         self.current_model_config = self.model_manager.get_model_config(EmbeddingModelType.GOOGLE_MULTI_LANG) # 구글 다국어 모델
         #self.current_model = self.model_manager.get_model(EmbeddingModelType.KAKAO_EMBEDDING) # 구글 다국어 모델
-
+        
         # 현재 모델에 맞는 제공자 생성
         self.provider = EmbeddingProviderFactory.create_provider(
             self.current_model_config.provider_name,
@@ -30,7 +30,14 @@ class EmbeddingService:
         )
         
         #self.create_pinecone_index(self.current_model)
-
+    def change_model(self, model_type: EmbeddingModelType):
+        self.current_model_config = self.model_manager.get_model_config(model_type)
+        self.provider = EmbeddingProviderFactory.create_provider(
+            self.current_model_config.provider_name,
+            self.current_model_config.name
+        )
+        logger.info(f"모델 변경: {model_type}")
+        
     def get_model_type(self) -> EmbeddingModelType:
         return EmbeddingModelType(self.current_model_config.name)
         
@@ -114,7 +121,7 @@ class EmbeddingService:
                 logger.error("빈 쿼리 문자열")
                 raise ValueError("쿼리 문자열이 비어있습니다")
 
-            embeddings = await self.provider.create_embeddings_async([query.strip()])
+            embeddings = await self.provider.create_embeddings_async([query.strip()], embeddings_task_type="RETRIEVAL_QUERY")
             
             # 임베딩 결과 검증
             if not embeddings or len(embeddings) == 0:
@@ -138,8 +145,8 @@ class EmbeddingService:
             if not query or not query.strip():
                 logger.error("빈 쿼리 문자열")
                 raise ValueError("쿼리 문자열이 비어있습니다")
-
-            embeddings = self.provider.create_embeddings([query.strip()])
+            #  embeddings_task_type="RETRIEVAL_QUERY"
+            embeddings = self.provider.create_embeddings([query.strip()], embeddings_task_type="RETRIEVAL_QUERY")
             
             # 임베딩 결과 검증
             if not embeddings or len(embeddings) == 0:

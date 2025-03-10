@@ -612,6 +612,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       sx: {
         '& tr': {
           height: '36px',  // 헤더 행 높이 축소
+          backgroundColor: 'rgb(219, 227, 228) !important',
           '& th': {
             verticalAlign: 'middle',  // 헤더 셀 내용 수직 중앙 정렬
             lineHeight: '1',  // 라인 높이 조정
@@ -626,7 +627,6 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         position: 'sticky',
         top: 0,
         zIndex: 10,
-        backgroundColor: '#f80000 !important'
       }
     },
     muiTableBodyProps: {
@@ -709,6 +709,9 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           alignItems: 'center',
           height: '36px',
           padding: '0 10px',
+          hover: {
+            backgroundColor: 'rgb(0, 226, 228) !important',
+          },
           // 모바일 환경에서 헤더 셀 조정
           '@media (max-width: 640px)': {
             height: '30px',
@@ -854,8 +857,11 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
 
 
 
+  
   return (
+    // 전역 설정은 되도록이면 제거하는 방향으로 가야햔다. 지금은 급하니 일단 ..
     <div className="w-full h-full overflow-hidden">
+      
       <style jsx global>{`
         /* 헤더 셀 스타일 직접 조정 */
         .MuiTableHead-root {
@@ -863,7 +869,6 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         }
         
         .MuiTableHead-root .MuiTableCell-root {
-          background-color: rgb(219, 227, 228) !important;
           display: flex !important;
           align-items: center !important;
           height: 36px !important;

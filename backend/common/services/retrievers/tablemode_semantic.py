@@ -52,7 +52,10 @@ class TableModeSemanticRetriever(SemanticRetriever):
                     return found_docs
                 
                 doc_count = len(remaining_doc_ids)
-                missed_filters = {"document_ids": list(remaining_doc_ids)}
+                logger.warning(f"재검색 시도 - remaining_doc_ids: {remaining_doc_ids}")
+                missed_filters = {
+                    "document_id": {"$in": list(remaining_doc_ids)}
+                }
                 logger.warning(f"누락된 문서 재검색 필터 (남은 시도: {max_retries}): {missed_filters}")
                 
                 additional_results = self.vs_manager.search_mmr(
@@ -81,8 +84,11 @@ class TableModeSemanticRetriever(SemanticRetriever):
                     return await _recursive_search(still_missing, found_docs, max_retries - 1)
                 return found_docs
 
+            #doc easy의 테이블모드 한정 검색이네. 클래스 자체가 그런것.
+            # 메타데이터도 문서 아이디만 참고 가능.
             logger.info(f"table 시멘틱 검색 target : {filters}")
-            doc_ids = filters.get("document_ids") if filters else None
+            # document_id 리스트 추출
+            doc_ids = filters.get("document_id", {}).get("$in", []) if filters else []
             doc_count = len(doc_ids) if doc_ids else 0
             search_results = self.vs_manager.search_mmr(
                 query=query,
@@ -101,15 +107,12 @@ class TableModeSemanticRetriever(SemanticRetriever):
                 return RetrievalResult(documents=[])
             logger.info(f"입력문서 개수 : {doc_count}, 검색된 총 매치 수: {len(search_results)}")
             
-            # 상위 K개만 선택하고 Document 객체만 추출
-            actual_top_k = min(len(search_results), doc_count)
-            filtered_results = search_results[:actual_top_k]
-            
             # Document 객체에 score 정보를 포함시킴
             documents = []
-            # missed dic
             found_doc_ids = set()
-            for doc, score in filtered_results:
+            
+            # 모든 검색 결과를 처리하여 document_id를 수집
+            for doc, score in search_results:
                 doc_id = doc.metadata.get('document_id', None)
                 if doc_id:
                     found_doc_ids.add(doc_id)
@@ -121,9 +124,12 @@ class TableModeSemanticRetriever(SemanticRetriever):
                 )
                 documents.append(new_doc)
 
-            # 누락된 문서 재귀적 검색
+            # 누락된 문서 재귀적 검색 - 실제로 문서가 없는 경우에만 수행
             missed_doc_ids = set(doc_ids) - found_doc_ids
             if missed_doc_ids:
+                logger.warning(f"누락된 문서 ID 목록: {missed_doc_ids}")
+                logger.warning(f"원본 doc_ids: {doc_ids}")
+                logger.warning(f"찾은 doc_ids: {found_doc_ids}")
                 documents = await _recursive_search(missed_doc_ids, documents)
 
             # 쿼리 분석 정보 추가
