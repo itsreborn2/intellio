@@ -119,30 +119,35 @@ function SidebarContent() {
                 <FileStack className="icon" />
               </button>
             </div>
-            
-            {/* 사용자 버튼 */}
-            <div className="sidebar-button-container">
-              <button 
-                ref={buttonRefs.user}
-                className="sidebar-button" 
-                onMouseEnter={() => setHoveredButton('user')}
-                onMouseLeave={() => setHoveredButton(null)}
-              >
-                <User className="icon" />
-              </button>
-            </div>
-            
-            {/* 설정 버튼 */}
-            <div className="sidebar-button-container">
-              <button 
-                ref={buttonRefs.settings}
-                className="sidebar-button" 
-                onMouseEnter={() => setHoveredButton('settings')}
-                onMouseLeave={() => setHoveredButton(null)}
-              >
-                <Settings className="icon" />
-              </button>
-            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* 하단 영역 - 마이페이지와 설정 버튼을 맨 아래로 이동 */}
+      <div className="mt-auto pb-4">
+        <div className="w-full flex flex-col items-center">
+          {/* 사용자 버튼 */}
+          <div className="sidebar-button-container">
+            <button 
+              ref={buttonRefs.user}
+              className="sidebar-button" 
+              onMouseEnter={() => setHoveredButton('user')}
+              onMouseLeave={() => setHoveredButton(null)}
+            >
+              <User className="icon" />
+            </button>
+          </div>
+          
+          {/* 설정 버튼 */}
+          <div className="sidebar-button-container">
+            <button 
+              ref={buttonRefs.settings}
+              className="sidebar-button" 
+              onMouseEnter={() => setHoveredButton('settings')}
+              onMouseLeave={() => setHoveredButton(null)}
+            >
+              <Settings className="icon" />
+            </button>
           </div>
         </div>
       </div>

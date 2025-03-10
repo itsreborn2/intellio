@@ -392,6 +392,18 @@ function AIChatAreaContent() {
     setShowStockSuggestions(true);
     // 초기 검색 결과는 전체 목록의 첫 5개
     setFilteredStocks(stockOptions.slice(0, 5));
+    
+    // 검색 입력 필드에 하이라이트 효과 추가
+    if (searchInputRef.current) {
+      // 0.1초 후에 검색 입력 필드에 포커스 및 하이라이트 효과 적용
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.style.backgroundColor = '#ffffcc'; // 노란색 배경으로 하이라이트
+          searchInputRef.current.style.border = '2px solid #ffd700'; // 테두리 강조
+        }
+      }, 100);
+    }
   };
 
   // 종목 선택 처리
@@ -466,9 +478,21 @@ function AIChatAreaContent() {
   };
 
   // 검색 입력 필드 클릭 시 전체 선택
-  const handleSearchInputClick = () => {
+  const handleSearchInputClick = (e: React.MouseEvent<HTMLInputElement>) => {
+    e.stopPropagation(); // 이벤트 버블링 방지
+    // 클릭 시 하이라이트 효과 유지
     if (searchInputRef.current) {
-      searchInputRef.current.select();
+      searchInputRef.current.style.backgroundColor = '#ffffcc';
+      searchInputRef.current.style.border = '2px solid #ffd700';
+    }
+  };
+
+  // 검색 입력 필드 포커스 아웃 처리 함수 추가
+  const handleSearchInputBlur = () => {
+    // 포커스 아웃 시 하이라이트 효과 제거
+    if (searchInputRef.current) {
+      searchInputRef.current.style.backgroundColor = 'white';
+      searchInputRef.current.style.border = '1px solid #ddd';
     }
   };
 
@@ -629,13 +653,15 @@ function AIChatAreaContent() {
                   onChange={handleSearchInputChange}
                   onKeyDown={handleSearchInputKeyDown} // 엔터키 이벤트 처리 추가
                   onClick={handleSearchInputClick} // 클릭 이벤트 처리 추가
+                  onBlur={handleSearchInputBlur} // 포커스 아웃 이벤트 처리 추가
                   style={{
                     width: '100%',
                     padding: '6px 8px',
                     border: '1px solid #ddd',
                     borderRadius: '4px',
                     fontSize: '0.81rem',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    transition: 'background-color 0.3s, border 0.3s' // 부드러운 전환 효과 추가
                   }}
                 />
                 {searchTerm && (
