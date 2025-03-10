@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind 지시어 */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
 
 /* 폰트 설정 */
 :root {
@@ -12,6 +13,7 @@
   display: flex;
   flex-direction: row;
   height: 100vh;
+  padding-left: 63px; /* 사이드바 너비 + 여백 4px */
 }
 
 .sidebar {
@@ -23,13 +25,14 @@
   background: linear-gradient(to right, #e3e3e3, #e8e8e8); /* 미묘한 그라데이션 추가 */
   padding: 0; /* 패딩 제거 */
   box-shadow: inset -1px 0 3px rgba(0,0,0,0.03); /* 우측에 미묘한 그림자 추가 */
+  z-index: 100; /* 다른 요소 위에 표시되도록 z-index 추가 */
 }
 
 .main-content {
   display: flex;
   flex-direction: column;
-  width: 100%;
-  margin-left: 4px; /* 사이드바 너비보다 훨씬 작게 설정하여 간격 최소화 */
+  width: 100%; /* 전체 너비 사용 */
+  margin-left: 4px; /* 사이드바와의 여백 추가 */
   flex: 1;
   padding: 0;
 }
@@ -47,47 +50,77 @@
   width: 100%;
   margin-bottom: 4px; /* 여백을 4px로 통일 */
   padding: 0;
+  margin-top: 4px; /* 상단 여백 추가 */
 }
 
 .top-section > *:first-child {
-  width: 60%;
+  width: 60%; /* 50%에서 60%로 확장 - AIChatArea 영역 확장 */
   border-radius: 6px; /* 모서리 둥글게 */
   overflow: hidden; /* 자식 요소가 모서리를 넘어가지 않도록 */
+  margin-top: 0; /* 상단 여백 제거 - 상위 요소에서 이미 적용됨 */
+  margin-right: 4px; /* 우측 여백 추가 - 모든 섹션 사이 여백 통일 */
 }
 
 .top-section > *:last-child {
-  width: 40%;
-  margin-right: 4px; /* 우측 여백 추가 */
+  width: 40%; /* 50%에서 40%로 축소 - TelegramSummaryArea 영역 축소 */
+  margin-right: 0; /* 우측 여백 제거 */
+  margin-top: 0; /* 상단 여백 제거 - 상위 요소에서 이미 적용됨 */
+}
+
+.ai-chat-area, .telegram-summary-area {
+  margin-right: 4px; /* 여백을 4px로 통일 */
 }
 
 .telegram-summary-area {
   width: 48%;
   padding: 10px; /* Reduced padding */
   background: linear-gradient(to bottom, #f7f7f7, #f2f2f2); /* 그라데이션 추가 */
-  margin-right: 4px; /* 여백을 4px로 통일 */
-  margin-top: 4px; /* 상단 여백 추가 */
+  margin-top: 0; /* 상단 여백 제거 - 상위 요소에서 이미 적용됨 */
   border-radius: 6px; /* 모서리 둥글게 */
   box-shadow: 0 2px 4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6); /* 그림자 효과 추가 */
 }
 
 .bottom-section {
   display: grid;
-  grid-template-columns: 3.5fr 3.5fr 1.5fr 1.5fr; /* 비율 조정 */
+  grid-template-columns: 3.5fr 2.5fr 2fr 2fr; /* 비율 조정: BottomCenterArea 너비 축소 및 우측 영역 확장 */
   height: 40vh;
   width: 100%;
   margin-bottom: 4px; /* 여백을 4px로 통일 */
   gap: 4px; /* 여백을 4px로 통일 */
-  padding-right: 4px; /* 우측 여백 추가 */
+  margin-top: 4px; /* 상단 여백 추가 - 모든 섹션 사이 여백 통일 */
+  padding: 0; /* 패딩 제거 */
 }
 
 .bottom-area {
-  padding: 5px; /* Reduced padding */
+  padding: 10px; /* TelegramSummaryArea와 동일한 패딩으로 수정 */
   background: linear-gradient(to bottom, #f7f7f7, #f2f2f2); /* 그라데이션 추가 */
   border-radius: 6px; /* 모서리 둥글게 */
   box-shadow: 0 2px 4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6); /* 그림자 효과 추가 */
+  margin: 0; /* 여백 초기화 */
 }
 
-.bottom-right-area-2 {
+.bottom-left-area {
+  margin-right: 4px; /* 우측 여백 추가 */
+}
+
+.bottom-center-area {
+  margin-right: 4px; /* 우측 여백 추가 */
+}
+
+.bottom-right-area-1 {
+  margin-right: 4px; /* 우측 여백 추가 */
+}
+
+.ai-chat-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  box-sizing: border-box;
+  position: relative;
   margin-right: 4px; /* 우측 여백 추가 */
 }
 
@@ -253,6 +286,5 @@
   box-shadow: none !important;
 }
 
-.stock-select-container {
-  /* margin-top 속성 제거 */
-}
+/* 빈 규칙셋 제거 및 주석으로 대체 */
+/* .stock-select-container 클래스에 대한 스타일은 필요시 여기에 추가 */
