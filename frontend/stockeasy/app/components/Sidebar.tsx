@@ -37,7 +37,7 @@ function SidebarContent() {
   const goToHomePage = () => router.push('/');
   const goToRSRankPage = () => router.push('/rs-rank');
   const goToETFSectorPage = () => router.push('/etf-sector'); // ETF/섹터 페이지 이동 함수 추가
-  const goToDocEasy = () => window.open('https://doceasy.intellio.kr', '_blank');
+  const goToDocEasy = () => window.open('http://localhost:3010', '_blank');
 
   // 버튼 위치에 따라 툴팁 위치 계산
   useEffect(() => {

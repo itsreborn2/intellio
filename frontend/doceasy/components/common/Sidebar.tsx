@@ -9,7 +9,8 @@ import * as api from '@/services/api'
 import { DragDropContext,   DropResult } from '@hello-pangea/dnd'
 import {
   PenSquare,
-  ScrollText
+  ScrollText,
+  BarChart2
 } from "lucide-react"
 import { Button } from "intellio-common/components/ui/button"
 
@@ -389,6 +390,27 @@ function SidebarContent({ className }: SidebarProps) {
               />
             </div>
           </div>
+        </div>
+        
+        {/* StockEasy 바로가기 버튼 */}
+        <div className="p-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  className="w-full flex items-center justify-start gap-2 px-2 py-2 hover:bg-gray-50"
+                  onClick={() => window.open('http://localhost:3020', '_blank')}
+                >
+                  <BarChart2 className="h-4 w-4" />
+                  <span className="text-left flex-grow font-medium">StockEasy</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>StockEasy로 이동</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
     </DragDropContext>
