@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 폰트 설정 */
+:root {
+  font-family: 'Spoqa Han Sans Neo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
 /* Stockeasy 랜딩 페이지 레이아웃 스타일 */
 .stockeasy-landing-page {
   display: flex;
@@ -15,8 +20,9 @@
   left: 0;
   bottom: 0;
   width: 59px; /* Sidebar.tsx의 너비와 일치시킴 */
-  background-color: #e8e8e8;
+  background: linear-gradient(to right, #e3e3e3, #e8e8e8); /* 미묘한 그라데이션 추가 */
   padding: 0; /* 패딩 제거 */
+  box-shadow: inset -1px 0 3px rgba(0,0,0,0.03); /* 우측에 미묘한 그림자 추가 */
 }
 
 .main-content {
@@ -45,6 +51,8 @@
 
 .top-section > *:first-child {
   width: 60%;
+  border-radius: 6px; /* 모서리 둥글게 */
+  overflow: hidden; /* 자식 요소가 모서리를 넘어가지 않도록 */
 }
 
 .top-section > *:last-child {
@@ -55,9 +63,11 @@
 .telegram-summary-area {
   width: 48%;
   padding: 10px; /* Reduced padding */
-  background-color: #f2f2f2; /* Very light gray background for Telegram summary area */
+  background: linear-gradient(to bottom, #f7f7f7, #f2f2f2); /* 그라데이션 추가 */
   margin-right: 4px; /* 여백을 4px로 통일 */
   margin-top: 4px; /* 상단 여백 추가 */
+  border-radius: 6px; /* 모서리 둥글게 */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6); /* 그림자 효과 추가 */
 }
 
 .bottom-section {
@@ -72,7 +82,9 @@
 
 .bottom-area {
   padding: 5px; /* Reduced padding */
-  background-color: #f2f2f2; /* Very light gray background for bottom sections */
+  background: linear-gradient(to bottom, #f7f7f7, #f2f2f2); /* 그라데이션 추가 */
+  border-radius: 6px; /* 모서리 둥글게 */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6); /* 그림자 효과 추가 */
 }
 
 .bottom-right-area-2 {
@@ -128,26 +140,68 @@
   color: #999; /* Placeholder text color - lighter gray */
 }
 
-.sidebar-button {
-  background: none;
-  border: none;
-  color: #555;
-  font-size: 1.2rem;
-  cursor: pointer;
-  padding: 0.75rem;
-  border-radius: 50%;
+/* 사이드바 버튼 스타일 */
+.sidebar-button-container {
+  position: relative;
   display: flex;
-  justify-content: center;
   align-items: center;
-  transition: background-color 0.2s ease;
+  width: 100%;
+  justify-content: center;
+  margin: 6px 0;
+}
+
+.sidebar-button {
+  width: 40px; /* 44px에서 10% 줄임 */
+  height: 40px; /* 44px에서 10% 줄임 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px; /* 8px에서 10% 줄임 */
+  transition: background-color 0.2s;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  margin: 4px;
 }
 
 .sidebar-button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: #d1d5db;
 }
 
-.sidebar-button.logo-button:hover {
-  background-color: transparent;
+.sidebar-button .icon {
+  width: 22px; /* 24px에서 10% 줄임 */
+  height: 22px; /* 24px에서 10% 줄임 */
+  color: #4b5563;
+}
+
+.sidebar-button:hover .icon {
+  color: #1f2937;
+}
+
+/* 사이드바 툴팁 컨테이너 */
+.sidebar-tooltips-container {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* 사이드바 툴팁 스타일 */
+.sidebar-tooltip {
+  position: absolute;
+  left: 59px; /* 사이드바 너비와 일치시킴 */
+  font-size: 10px;
+  background-color: #f3f4f6;
+  color: #4b5563;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  z-index: 110;
+  pointer-events: none; /* 툴팁 위에 마우스가 올라가도 이벤트가 발생하지 않도록 함 */
 }
 
 .sidebar-buttons {
@@ -169,4 +223,36 @@
 
 .bottom-section-no-padding {
   padding: 0;
+}
+
+/* 채팅 입력 필드 스타일 */
+.chat-input-field {
+  transition: border-color 0.15s ease-in-out;
+}
+
+.chat-input-field:hover {
+  border-color: #aaa;
+}
+
+.chat-input-field:focus {
+  border-color: #2684FF;
+}
+
+/* react-select 커스텀 스타일 */
+.stock-select__control {
+  transition: border-color 0.15s ease-in-out !important;
+  border-radius: 4px !important;
+}
+
+.stock-select__control:hover {
+  border-color: #aaa !important;
+}
+
+.stock-select__control--is-focused {
+  border-color: #2684FF !important;
+  box-shadow: none !important;
+}
+
+.stock-select-container {
+  /* margin-top 속성 제거 */
 }

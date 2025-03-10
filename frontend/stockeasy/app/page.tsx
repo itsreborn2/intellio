@@ -16,11 +16,11 @@ export default function StockEasyLandingPage() {
           <AIChatArea />
           <TelegramSummaryArea />
         </section>
-        <section className="bottom-section bottom-section-no-padding">
-          <div className="bottom-area bottom-left-area">하단 좌측 영역 1</div>
-          <div className="bottom-area bottom-center-area">하단 중앙 영역 2</div>
-          <div className="bottom-area bottom-right-area-1">하단 우측 영역 3</div>
-          <div className="bottom-area bottom-right-area-2">하단 우측 영역 4</div>
+        <section className="bottom-section">
+          <BottomLeftArea />
+          <BottomCenterArea />
+          <BottomRightArea1 />
+          <BottomRightArea2 />
         </section>
       </main>
     </div>
