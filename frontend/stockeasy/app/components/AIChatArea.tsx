@@ -882,7 +882,7 @@ function AIChatAreaContent() {
                 backgroundColor: message.role === 'user' ? '#e1f5fe' : '#ffffff',
                 padding: '10px 14px',
                 borderRadius: '12px',
-                maxWidth: '80%',
+                maxWidth: '95%', // 너비를 95%로 확장
                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
                 position: 'relative'
               }}>
@@ -901,8 +901,11 @@ function AIChatAreaContent() {
                   overflow: message.role === 'user' ? 'hidden' : 'visible',
                   textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
                   wordBreak: 'break-word',
-                  fontSize: '0.75rem',
-                  lineHeight: '1.5'
+                  fontSize: message.role === 'user' ? '0.75rem' : '0.85rem', // AI 응답 폰트 크기 증가
+                  lineHeight: '1.6', // 줄 간격 증가
+                  width: '100%', // 너비를 100%로 설정
+                  padding: message.role === 'user' ? '0' : '4px 2px', // AI 응답에 패딩 추가
+                  letterSpacing: message.role === 'user' ? 'normal' : '0.01em' // AI 응답 글자 간격 조정
                 }}>
                   {message.content}
                 </div>

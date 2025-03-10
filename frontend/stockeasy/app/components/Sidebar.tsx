@@ -11,6 +11,7 @@ import {
   User,
   Users,
   Settings,
+  PieChart, // ETF/섹터 아이콘으로 PieChart 추가
   LayoutDashboard // 로고 대신 LayoutDashboard 아이콘 사용 (V와 유사)
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -26,25 +27,17 @@ function SidebarContent() {
   const buttonRefs = {
     home: useRef<HTMLButtonElement>(null),
     chart: useRef<HTMLButtonElement>(null),
+    etfSector: useRef<HTMLButtonElement>(null), // ETF/섹터 버튼 참조 추가
     doc: useRef<HTMLButtonElement>(null),
     user: useRef<HTMLButtonElement>(null),
     settings: useRef<HTMLButtonElement>(null)
   };
 
   // 스탁이지 메인 페이지로 이동하는 함수
-  const goToStockEasyMainPage = () => {
-    window.location.href = 'http://localhost:3020';
-  };
-
-  // RS순위 페이지로 이동하는 함수
-  const goToRSRankPage = () => {
-    router.push('/rs-rank');
-  };
-
-  // DocEasy로 이동하는 함수
-  const goToDocEasy = () => {
-    window.location.href = 'http://localhost:3010';
-  };
+  const goToHomePage = () => router.push('/');
+  const goToRSRankPage = () => router.push('/rs-rank');
+  const goToETFSectorPage = () => router.push('/etf-sector'); // ETF/섹터 페이지 이동 함수 추가
+  const goToDocEasy = () => window.open('https://doceasy.intellio.kr', '_blank');
 
   // 버튼 위치에 따라 툴팁 위치 계산
   useEffect(() => {
@@ -74,6 +67,7 @@ function SidebarContent() {
                 >
                   {hoveredButton === 'home' && '스탁이지'}
                   {hoveredButton === 'chart' && 'RS순위'}
+                  {hoveredButton === 'etfSector' && 'ETF/섹터'} {/* ETF/섹터 툴팁 추가 */}
                   {hoveredButton === 'doc' && '닥이지'}
                   {hoveredButton === 'user' && '마이페이지'}
                   {hoveredButton === 'settings' && '설정'}
@@ -86,7 +80,7 @@ function SidebarContent() {
               <button 
                 ref={buttonRefs.home}
                 className="sidebar-button" 
-                onClick={goToStockEasyMainPage} 
+                onClick={goToHomePage} 
                 onMouseEnter={() => setHoveredButton('home')}
                 onMouseLeave={() => setHoveredButton(null)}
               >
@@ -104,6 +98,19 @@ function SidebarContent() {
                 onMouseLeave={() => setHoveredButton(null)}
               >
                 <ChartColumn className="icon" />
+              </button>
+            </div>
+            
+            {/* ETF/섹터 버튼 추가 */}
+            <div className="sidebar-button-container">
+              <button 
+                ref={buttonRefs.etfSector}
+                className="sidebar-button" 
+                onClick={goToETFSectorPage} // ETF/섹터 페이지로 이동하는 함수 연결
+                onMouseEnter={() => setHoveredButton('etfSector')}
+                onMouseLeave={() => setHoveredButton(null)}
+              >
+                <PieChart className="icon" />
               </button>
             </div>
             
