@@ -15,6 +15,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_openai import ChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 
+from pydantic import BaseModel
 import torch
 from transformers import AutoModel, AutoTokenizer
 from google.oauth2 import service_account
@@ -116,7 +117,7 @@ class LLMModels:
         if model_name == "openai":
             callbacks = [callback_handler] if callback_handler else None
             return ChatOpenAI(
-                        model="gpt-4-0125-preview",
+                        model="gpt-4o-mini",
                         openai_api_key=api_key,
                         temperature=kwargs.get("temperature", 0.2),
                         max_tokens=kwargs.get("max_output_tokens", 2048),
@@ -245,14 +246,16 @@ class LLMModels:
     def generate(self, user_query: str, prompt_context: str) -> Optional[AIMessage]:
         """동기 컨텐츠 생성"""
         try:
-            logger.info(f"LANGCHAIN_TRACING_V2[Settings]: {settings.LANGCHAIN_TRACING_V2}")
+            #logger.info(f"LANGCHAIN_TRACING_V2[Settings]: {settings.LANGCHAIN_TRACING_V2}")
             import os
-            logger.info(f"LANGCHAIN_TRACING_V2[OS]: {os.getenv('LANGCHAIN_TRACING_V2')}")
+            #logger.info(f"LANGCHAIN_TRACING_V2[OS]: {os.getenv('LANGCHAIN_TRACING_V2')}")
             truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
             logger.info(f" {self._llm_type} full[Sync] 호출 - 프롬프트: {truncated[:100]}...")
             # 프롬프트 템플릿 설정
-            system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
-            user_message_prompt = HumanMessagePromptTemplate.from_template(user_query)
+            # {context}와 {question}은 템플릿 내의 변수 플레이스홀더
+            # format_messages() 메서드를 호출할 때 context=prompt_context, question=user_query와 같이 실제 값을 전달
+            system_message_prompt = SystemMessagePromptTemplate.from_template("{context}")
+            user_message_prompt = HumanMessagePromptTemplate.from_template("{question}")
             prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
             formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
 
@@ -260,7 +263,6 @@ class LLMModels:
             # API 호출 및 전체 응답 받기
             # 응답 타입(Google) : 'langchain_core.messages.ai.AIMessage'
             full_response = self._llm.invoke(formatted_messages)
-            
             logger.info(f"응답 타입: {type(full_response)}")
             # content='## 분석 결과 어쩌고 저쩌고..'
             # 응답 메세지 상세.
@@ -282,13 +284,143 @@ class LLMModels:
             logger.error(f"{self._llm_type} 호출 실패: {str(e)}")
             raise
         return full_response
+    def generate_with_structured_output(self, user_query: str, prompt_context: str, _struct: BaseModel) -> Any:
+        """
+        구조화된 출력을 생성하는 메서드
+        
+        Args:
+            user_query: 사용자 질의
+            prompt_context: 프롬프트 컨텍스트
+            _struct: BaseModel을 상속받은 Pydantic 모델 클래스
+            
+        Returns:
+            _struct 타입의 객체
+        """
+        try:
+            truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
+            logger.info(f" {self._llm_type} structured output[Sync] 호출 - 프롬프트: {truncated[:100]}...")
+            
+            # 모델 스키마 정보 추출
+            schema_info = _struct.model_json_schema()
+            schema_str = json.dumps(schema_info, ensure_ascii=False, indent=2)
+            #logger.info(f"요청 스키마: {schema_str}")
+            
+            # 프롬프트에 스키마 정보 추가
+            enhanced_context = f"{prompt_context}\n\n출력 형식 스키마:\n{schema_str}\n\n반드시 위 스키마에 맞는 형식으로 응답해주세요. 각 필드의 타입/Description을 정확히 지켜주세요. JSON 형식으로만 응답해주세요."
+            
+            # 프롬프트 템플릿 설정
+            system_message_prompt = SystemMessagePromptTemplate.from_template("{context}")
+            user_message_prompt = HumanMessagePromptTemplate.from_template("{question}")
+            prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
+            formatted_messages = prompt_template.format_messages(context=enhanced_context, question=user_query)
+            
+            
+            
+            # 방법 2: 직접 파싱 방식 (새로운 방식)
+            try:
+                # 일반 LLM 호출로 원본 응답 얻기
+                raw_response = self._llm.invoke(formatted_messages)
+                #logger.info(f"LLM 원본 응답: {raw_response.content}")
+                
+                # JSON 응답 추출 시도
+                try:
+                    # JSON 형식 응답 추출 (```json ... ``` 형식 처리)
+                    import re
+                    json_pattern = r'```(?:json)?\s*([\s\S]*?)```'
+                    json_match = re.search(json_pattern, raw_response.content)
+                    
+                    if json_match:
+                        json_str = json_match.group(1).strip()
+                    else:
+                        # 일반 텍스트에서 JSON 객체 찾기 시도
+                        json_str = raw_response.content.strip()
+                    
+                    # JSON 파싱
+                    parsed_data = json.loads(json_str)
+                    #logger.info(f"파싱된 JSON 데이터: {json.dumps(parsed_data, ensure_ascii=False, indent=2)}")
+                    
+                    # Pydantic 모델로 변환
+                    direct_structured_response = _struct(**parsed_data)
+                    #logger.info(f"직접 파싱 방식 응답: {direct_structured_response.model_dump()}")
+                    
+                    # 직접 파싱 방식 사용
+                    return direct_structured_response
+                    
+                except (json.JSONDecodeError, ValueError) as json_error:
+                    logger.warning(f"직접 JSON 파싱 실패, LangChain 구조화 출력으로 대체: {str(json_error)}")
+                    # 방법 1: LangChain의 구조화된 출력 사용 (기존 방식)
+                    structured_llm = self._llm.with_structured_output(_struct)
+                    # JSON 파싱 실패 시 LangChain 방식으로 폴백
+                    structured_response = structured_llm.invoke(formatted_messages)
+                    
+                    # 구조화된 응답 내용 로깅
+                    response_dict = structured_response.model_dump()
+                    logger.info(f"LangChain 구조화 응답 내용: {json.dumps(response_dict, ensure_ascii=False, indent=2)}")
+                    
+                    logger.info(f"구조화된 응답 타입: {type(structured_response)}")
+                    logger.info(f"{self._llm_type} 구조화된 API 호출 완료")
+                    return structured_response
+                    
+            except Exception as parsing_error:
+                # 파싱 오류 발생 시 재시도
+                logger.warning(f"구조화된 출력 파싱 오류, 재시도 중: {str(parsing_error)}")
+                
+                # 오류 정보를 포함한 프롬프트로 재시도
+                error_prompt = f"{enhanced_context}\n\n이전 응답에서 다음 오류가 발생했습니다: {str(parsing_error)}\n반드시 스키마에 맞는 형식으로 응답해주세요. JSON 형식으로만 응답해주세요."
+                retry_messages = prompt_template.format_messages(context=error_prompt, question=user_query)
+                
+                # 일반 LLM 호출로 원본 응답 확인 (재시도)
+                raw_retry_response = self._llm.invoke(retry_messages)
+                logger.info(f"재시도 LLM 원본 응답: {raw_retry_response.content}")
+                
+                # JSON 응답 추출 재시도
+                try:
+                    # JSON 형식 응답 추출 (```json ... ``` 형식 처리)
+                    import re
+                    json_pattern = r'```(?:json)?\s*([\s\S]*?)```'
+                    json_match = re.search(json_pattern, raw_retry_response.content)
+                    
+                    if json_match:
+                        json_str = json_match.group(1).strip()
+                    else:
+                        # 일반 텍스트에서 JSON 객체 찾기 시도
+                        json_str = raw_retry_response.content.strip()
+                    
+                    # JSON 파싱
+                    parsed_data = json.loads(json_str)
+                    logger.info(f"재시도 파싱된 JSON 데이터: {json.dumps(parsed_data, ensure_ascii=False, indent=2)}")
+                    
+                    # Pydantic 모델로 변환
+                    direct_structured_response = _struct(**parsed_data)
+                    logger.info(f"재시도 직접 파싱 방식 응답: {direct_structured_response.model_dump()}")
+                    
+                    # 직접 파싱 방식 사용
+                    return direct_structured_response
+                    
+                except (json.JSONDecodeError, ValueError) as json_error:
+                    logger.warning(f"재시도 직접 JSON 파싱 실패, LangChain 구조화 출력으로 대체: {str(json_error)}")
+                    # JSON 파싱 실패 시 LangChain 방식으로 폴백
+                    structured_response = structured_llm.invoke(retry_messages)
+                    
+                    # 재시도 후 구조화된 응답 내용 로깅
+                    retry_response_dict = structured_response.model_dump()
+                    logger.info(f"재시도 후 LangChain 구조화된 응답 내용: {json.dumps(retry_response_dict, ensure_ascii=False, indent=2)}")
+                    
+                    logger.info(f"재시도 후 구조화된 응답 타입: {type(structured_response)}")
+                    return structured_response
+                
+        except Exception as e:
+            logger.error(f"{self._llm_type} 구조화된 출력 생성 실패: {str(e)}")
+            raise
     
     def generate_stream(self, user_query: str, prompt_context: str):
         """동기 스트리밍 컨텐츠 생성"""
         truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
         logger.info(f"Gemini API stream[Sync] 호출 - 프롬프트: {truncated}")
-        system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
-        user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+        # system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
+        # user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+        system_message_prompt = SystemMessagePromptTemplate.from_template("{context}")
+        user_message_prompt = HumanMessagePromptTemplate.from_template("{question}")
         prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
         formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
         
@@ -303,8 +435,10 @@ class LLMModels:
         try:
             truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
             logger.info(f"{self._llm_type} API [Async] 호출 - 프롬프트: {truncated}")
-            system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
-            user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+            # system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
+            # user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+            system_message_prompt = SystemMessagePromptTemplate.from_template("{context}")
+            user_message_prompt = HumanMessagePromptTemplate.from_template("{question}")
             prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
             formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
 
@@ -322,7 +456,7 @@ class LLMModels:
         truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
         logger.info(f"{self._llm_type} API streaming[Async] 호출 - 프롬프트: {truncated}")
         self._should_stop = False
-        logger.info(f"LANGCHAIN_TRACING_V2: {settings.LANGCHAIN_TRACING_V2}")
+        #logger.info(f"LANGCHAIN_TRACING_V2: {settings.LANGCHAIN_TRACING_V2}")
         #logger.info(f"LANGCHAIN_PROJECT: {settings.LANGCHAIN_PROJECT}")
         
         try:
@@ -332,9 +466,12 @@ class LLMModels:
                 # 개행 문자 정규화
                 sanitized_prompt_context = content.replace('\r\n', '\n').replace('\r', '\n')
 
-                system_message_prompt = SystemMessagePromptTemplate.from_template(sanitized_prompt_context)
-                # User 메시지 템플릿
-                user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+                # system_message_prompt = SystemMessagePromptTemplate.from_template(sanitized_prompt_context)
+                # # User 메시지 템플릿
+                # user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+
+                system_message_prompt = SystemMessagePromptTemplate.from_template("{context}")
+                user_message_prompt = HumanMessagePromptTemplate.from_template("{question}")
 
                 # ChatPromptTemplate 구성
                 prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
