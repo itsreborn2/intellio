@@ -407,7 +407,7 @@ function SidebarContent({ className }: SidebarProps) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>StockEasy로 이동</p>
+                <p>스탁이지로 이동</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
