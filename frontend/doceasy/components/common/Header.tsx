@@ -181,8 +181,8 @@ function HeaderContent({ className }: { className?: string }) {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="flex flex-col space-y-2">
-                    <LoginButton provider="google" />
-                    <LoginButton provider="naver" />
+                    <LoginButton provider="google" redirectTo="doceasy" />
+                    <LoginButton provider="naver" redirectTo="doceasy" />
                   </div>
                 </div>
               </DialogContent>

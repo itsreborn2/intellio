@@ -1,12 +1,55 @@
+"use client"
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from "@/common/components/ui/button" // Button 컴포넌트 import
+import { useAuth, useAuthCheck } from "@/hooks/useAuth"
 
 const doceasyUrl = process.env.NEXT_PUBLIC_DOCEASY_URL
 const stockeasyUrl = process.env.NEXT_PUBLIC_STOCKEASY_URL
 console.log('process.env.NEXT_PUBLIC_ENV : ', process.env.NEXT_PUBLIC_ENV)
 console.log('process.env.NEXT_PUBLIC_USE_SERVER_FRONTEND : ', process.env.NEXT_PUBLIC_USE_SERVER_FRONTEND)
 console.log('doceasy : ', doceasyUrl, ', stockeasy : ', stockeasyUrl)
+
 export default function Hero() {
+  const router = useRouter()
+  const { isAuthenticated, setRedirectTo } = useAuth()
+  
+  // 쿠키 기반 인증 상태 확인
+  useAuthCheck();
+  
+  // 서비스 이동 시 로그인 상태 확인
+  const handleServiceNavigation = (service: 'doceasy' | 'stockeasy') => {
+    if (isAuthenticated) {
+      // 로그인 상태면 해당 서비스로 바로 이동 (토큰과 사용자 정보 포함)
+      const { token, user } = useAuth.getState();
+      const domain_url = process.env.NEXT_PUBLIC_ENV === 'production' ? 'https://' : 'http://';
+      let service_url
+      if( process.env.NEXT_PUBLIC_ENV === 'production')
+      {
+        service_url = `${service}.intellio.kr`;
+      }
+      else
+      {
+        if( service === 'doceasy') service_url = `localhost:3010`;
+        else if( service === 'stockeasy') service_url = `localhost:3020`;
+      }
+      if (token && user) {
+        // 사용자 정보 인코딩
+        const encodedUser = encodeURIComponent(JSON.stringify(user));
+        // 토큰을 URL 파라미터로 포함
+        window.location.href = `${domain_url}${service_url}/auto-login?token=${token}&user=${encodedUser}`;
+      } else {
+        // 토큰이 없으면 그냥 이동
+        window.location.href = `${domain_url}${service_url}`;
+      }
+    } else {
+      // 비로그인 상태면 로그인 페이지로 이동 후 리디렉션
+      setRedirectTo(service);
+      router.push(`/login?redirectTo=${service}`);
+    }
+  }
+  
   return (
     <section className="container relative flex min-h-[calc(100vh-3.5rem)] max-w-screen-2xl flex-col items-center justify-center space-y-8 py-24 text-center md:py-32">
       <div className="absolute inset-0 bg-radial-gradient from-primary to-accent opacity-10 blur-xl"></div>
@@ -21,22 +64,24 @@ export default function Hero() {
         </p>
       </div>
       <div className="relative flex gap-6">
-        <Link href={doceasyUrl}>
-          <span className="relative inline-block overflow-hidden rounded-full p-[1.5px]">
-            <span className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#393BB2_0%,#E2CBFF_50%,#393BB2_100%)]" />
-            <Button size="lg" className="relative rounded-full bg-background px-8 py-4 text-lg font-semibold leading-none tracking-tight inline-flex h-full w-full cursor-pointer items-center justify-center text-foreground hover:bg-accent/10 transition-colors">
-              DocEasy
-            </Button>
-          </span>
-        </Link>
-        <Link href={stockeasyUrl}>
-          <span className="relative inline-block overflow-hidden rounded-full p-[1.5px]">
-            <span className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]" />
-            <Button size="lg" className="relative rounded-full bg-background px-8 py-4 text-lg font-semibold leading-none tracking-tight inline-flex h-full w-full cursor-pointer items-center justify-center text-foreground hover:bg-accent/10 transition-colors">
-              StockEasy
-            </Button>
-          </span>
-        </Link>
+        <span 
+          onClick={() => handleServiceNavigation('doceasy')}
+          className="relative inline-block overflow-hidden rounded-full p-[1.5px] cursor-pointer"
+        >
+          <span className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#393BB2_0%,#E2CBFF_50%,#393BB2_100%)]" />
+          <Button size="lg" className="relative rounded-full bg-background px-8 py-4 text-lg font-semibold leading-none tracking-tight inline-flex h-full w-full cursor-pointer items-center justify-center text-foreground hover:bg-accent/10 transition-colors">
+            DocEasy
+          </Button>
+        </span>
+        <span 
+          onClick={() => handleServiceNavigation('stockeasy')}
+          className="relative inline-block overflow-hidden rounded-full p-[1.5px] cursor-pointer"
+        >
+          <span className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]" />
+          <Button size="lg" className="relative rounded-full bg-background px-8 py-4 text-lg font-semibold leading-none tracking-tight inline-flex h-full w-full cursor-pointer items-center justify-center text-foreground hover:bg-accent/10 transition-colors">
+            StockEasy
+          </Button>
+        </span>
       </div>
     </section>
   )
