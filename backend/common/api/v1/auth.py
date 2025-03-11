@@ -1,10 +1,12 @@
 from uuid import uuid4
 from typing import Optional
 import urllib.parse
-from fastapi import APIRouter, Depends, HTTPException, Response, Cookie, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie, status
+from httpx import request
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordBearer
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
+from common.core.redis import RedisClient
 from common.core.exceptions import AuthenticationRedirectException
 from common.core.database import get_db_async
 from common.models.user import Session
@@ -65,7 +67,7 @@ async def login(
         secure=settings.COOKIE_SECURE,  # production에서만 True
         samesite="lax",
         path="/",  # 모든 경로에서 접근 가능
-        domain=settings.COOKIE_DOMAIN if settings.ENV == "production" else None  # production에서만 도메인 설정
+        domain=".intellio.kr" if settings.ENV == "production" else "localhost"
     )
     
     return UserResponse(
@@ -124,10 +126,46 @@ async def logout(
     )
 
 @router.get("/{provider}/login")
-async def oauth_login(provider: str):
+async def oauth_login(provider: str, request: Request, redirectTo: Optional[str] = None):
     """소셜 로그인 시작점"""
+        # 요청 출처 확인
+    referer = request.headers.get('referer')
+    origin = request.headers.get('origin')
+    # 로그 출력
+    logger.info(f"Login request from referer: {referer}, origin: {origin}")
+    # Login request from referer: http://localhost:3000/
+    # Login request from referer: http://localhost:3010/
+    # INTELLIO_URL=https://www.intellio.kr
+    # DOCEASY_URL =https://doceasy.intellio.kr
+    # INTELLIO_URL=http://localhost:3000
+    # DOCEASY_URL =http://localhost:3010
+    redirect_domain = referer.split('/')[2]
+    redirect_to = redirect_domain
+    logger.info(f"referer domain_only: {redirect_domain}")
+
+    # 요청 보낸곳으로 되돌리기.
+    if redirect_domain in settings.INTELLIO_URL: # https://www.intellio.kr
+        redirect_to = f"{settings.INTELLIO_URL}"
+    elif redirect_domain in settings.DOCEASY_URL: # https://www.intellio.kr:
+        redirect_to = f"{settings.DOCEASY_URL}"
+    elif redirect_domain in settings.STOCKEASY_URL: # https://stockeasy.intellio.kr
+        redirect_to = f"{settings.STOCKEASY_URL}"
+    else:
+        raise HTTPException(status_code=400, detail="Your domain is not valid")
+    
+    # redirectTo가 명시적으로 있다면, 거기로 리다이렉트.
+    if redirectTo:
+        if redirectTo == "doceasy":  # url로 검색하면 안됨. localhost는 체크못함.
+            redirect_to = f"{settings.DOCEASY_URL}"
+        elif redirectTo == "stockeasy":
+            redirect_to = f"{settings.STOCKEASY_URL}"
+        elif redirectTo == "intellio" or redirectTo == "/":
+            redirect_to = f"{settings.INTELLIO_URL}"
+        else:
+            raise HTTPException(status_code=400, detail="Invalid redirectTo")
+
     oauth_service = OAuthService()
-    url = oauth_service.get_authorization_url(provider)
+    url = oauth_service.get_authorization_url(provider, state=redirect_to)
     logger.info(f"oauth_login : {url}")
     return RedirectResponse(url)
 
@@ -146,15 +184,36 @@ async def oauth_callback(
     user_service = UserService(db)
     
     try:
+        if state:
+            t = state.split("__")
+            if len(t) == 2:
+                redirect_url = t[0]
+                recv_token = t[1]
+            else:
+                raise HTTPException(status_code=400, detail="Invalid state")
         # 제공자별 토큰 및 사용자 정보 획득
+        logger.info(f"oauth_callback - provider: {provider}, code: {code}, state: {state}, redirect_uri: {redirect_url}")
+        # state: http://localhost:3000/::token_string, redirect_uri: None
+
+                
+        redis_client = RedisClient()
+        key = f"oauth_state:{state}"
+        
+        stored_state = redis_client.get_key(key)
+        logger.info(f"Auth REDIS get key: {key} - {stored_state}")
+        if not stored_state or stored_state != state:
+            logger.info(f"oauth_callback - stored_state: {stored_state}, state: {state}")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid OAuth state parameter"
+            )
+        redis_client.delete_key(f"oauth_state:{state}")
+
         if provider == "kakao":
             token_info = await oauth_service.get_kakao_token(code)
             user_info = await oauth_service.get_kakao_user(token_info["access_token"])
         elif provider == "google":
             token_info = await oauth_service.get_google_token(code)
-            if "access_token" not in token_info:
-                logger.error(f"OAuth callback error: access_token 미발견. token_info: {token_info}")
-                raise HTTPException(status_code=400, detail="access_token이 응답에 포함되어 있지 않습니다.")
             user_info = await oauth_service.get_google_user(token_info["access_token"])
         elif provider == "naver":
             token_info = await oauth_service.get_naver_token(code, state)
@@ -217,10 +276,17 @@ async def oauth_callback(
         )
 
         # 리다이렉트 URL 결정
-        redirect_to = redirect_uri or f"{settings.DOCEASY_URL}/auth/callback"
-        redirect_to = f"{redirect_to}?success=true&token={token}&user={encoded_user_data}"
+        if not redirect_url.startswith('http://')  and not redirect_url.startswith('https://'):
+            # 개발 환경에서는 http, 프로덕션에서는 https 사용
+            logger.info(f" ENV 체크 : {settings.ENV}")
+            scheme = "https://" if settings.ENV == "production" else "http://"
+            redirect_url = f"{scheme}{redirect_url}"
+
+        redirect_to = f"{redirect_url}/auth/callback?success=true&token={token}&user={encoded_user_data}"
+        logger.info(f"final - oauth_callback - redirect_to: {redirect_to}")
         
-        response = RedirectResponse(url=redirect_to)
+        # 먼저 응답 생성 (Response 객체 사용)
+        response = Response()
         
         # 세션 ID 쿠키 설정
         response.set_cookie(
@@ -228,10 +294,10 @@ async def oauth_callback(
             value=session.id,
             max_age=30 * 24 * 60 * 60,  # 30일
             httponly=True,
-            secure=True,  # HTTPS 필수
+            secure=settings.ENV == "production",  # 개발 환경에서는 False
             samesite="lax",
             path="/",
-            domain=".intellio.kr" if settings.ENV == "production" else None
+            domain=".intellio.kr" if settings.ENV == "production" else "localhost"
         )
         
         # JWT 토큰 쿠키 설정
@@ -240,10 +306,10 @@ async def oauth_callback(
             value=token,
             max_age=30 * 24 * 60 * 60,
             httponly=False,  # JavaScript에서 접근 가능하도록
-            secure=True,  # HTTPS 필수
+            secure=settings.ENV == "production",  # 개발 환경에서는 False
             samesite="lax",
             path="/",
-            domain=".intellio.kr" if settings.ENV == "production" else None
+            domain=".intellio.kr" if settings.ENV == "production" else "localhost"
         )
 
         # 사용자 정보 쿠키 설정
@@ -252,11 +318,15 @@ async def oauth_callback(
             value=encoded_user_data,
             max_age=30 * 24 * 60 * 60,
             httponly=False,  # JavaScript에서 접근 가능하도록
-            secure=True,  # HTTPS 필수
+            secure=settings.ENV == "production",  # 개발 환경에서는 False
             samesite="lax",
             path="/",
-            domain=".intellio.kr" if settings.ENV == "production" else None
+            domain=".intellio.kr" if settings.ENV == "production" else "localhost"
         )
+        
+        # 쿠키 설정 후 리다이렉션
+        response.headers["Location"] = redirect_to
+        response.status_code = status.HTTP_302_FOUND
 
         return response
         
@@ -264,7 +334,6 @@ async def oauth_callback(
         logger.error(f"OAuth callback error: {str(e)}", exc_info=True)
         error_message = urllib.parse.quote(str(e))
         # 에러 발생 시는 프론트로 에러 메시지 화면 리다이렉트
-        #redirect_to = f"{settings.INTELLIO_URL}/auth/callback?success=false&error={error_message}"
         redirect_to = f"{settings.DOCEASY_URL}/auth/callback?success=false&error={error_message}"
         return RedirectResponse(url=redirect_to)
 

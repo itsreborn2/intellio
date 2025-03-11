@@ -4,12 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3010",
-    "build": "NODE_OPTIONS='--max_old_space_size=8192' next build --no-lint",
+    "build": "cross-env NODE_OPTIONS=--max_old_space_size=8192 next build --no-lint",
     "start": "next start -p 3010",
     "lint": "next lint"
   },
   "dependencies": {
-    "intellio-common": "0.1.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@hello-pangea/dnd": "^17.0.0",
@@ -29,6 +28,7 @@
     "echarts": "^5.6.0",
     "echarts-for-react": "^3.0.2",
     "html-react-parser": "^5.2.2",
+    "intellio-common": "0.1.0",
     "lucide-react": "^0.460.0",
     "material-react-table": "^3.1.0",
     "mermaid": "^11.4.1",
@@ -53,6 +53,7 @@
     "@types/node": "^20.17.8",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "cross-env": "^7.0.3",
     "eslint": "^8",
     "eslint-config-next": "^15.1.4",
     "postcss": "^8",

@@ -2,6 +2,7 @@ from typing import Dict, Optional
 import httpx
 import requests
 from fastapi import HTTPException
+import urllib.parse
 from common.core.config import settings
 from loguru import logger
 import ssl
@@ -96,14 +97,7 @@ class OAuthService:
     async def get_naver_token(code: str, state: str) -> Dict:
         """네이버 액세스 토큰 획득"""
         try:
-            redis_client = RedisClient()
-            stored_state = redis_client.get_key(f"oauth_state:{state}")
-
-            if not stored_state or stored_state != state:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid Naver OAuth state parameter"
-                )
+            
         
             data = {
                 'grant_type': 'authorization_code',
@@ -177,23 +171,23 @@ class OAuthService:
             raise HTTPException(status_code=400, detail=f"네이버 사용자 정보 획득 중 오류: {str(e)}")
 
     @staticmethod
-    def get_authorization_url(provider: str) -> str:
+    def get_authorization_url(provider: str, state:str=None) -> str:
         #backend_url = settings.FASTAPI_URL
         """OAuth 인증 URL 생성"""
+        # 32바이트 랜덤 문자열 추가생성
+        state_add_token = state + "__" + secrets.token_hex(16)
+        # www.intellio.kr__token_string
+        
+        redis_client = RedisClient()
+        redis_client.set_key(f"oauth_state:{state_add_token}", state_add_token, expire=180)
+        logger.info(f"Auth REDIS set key :  'oauth_state:{state_add_token}'")
         if provider == "naver":
-            #state = settings.NAVER_OAUTH_STATE or "RANDOM"  # state 값 설정
-            # 32바이트 랜덤 문자열 생성
-            state = secrets.token_hex(16)
-            
-            # Redis에 state 저장 (3분 만료)
-            redis_client = RedisClient()
-            redis_client.set_key(f"oauth_state:{state}", state, expire=180)
             return (
                 f"https://nid.naver.com/oauth2.0/authorize"
                 f"?response_type=code"
                 f"&client_id={settings.NAVER_OAUTH_CLIENT_ID}"
                 f"&redirect_uri={settings.NAVER_OAUTH_REDIRECT_URI}"
-                f"&state={state}"
+                f"&state={state_add_token}"
                 f"&scope=name email"
             )
         elif provider == "google":
@@ -202,6 +196,7 @@ class OAuthService:
                 f"?response_type=code"
                 f"&client_id={settings.GOOGLE_OAUTH_CLIENT_ID}"
                 f"&redirect_uri={settings.GOOGLE_OAUTH_REDIRECT_URI}"
+                f"&state={state_add_token}"
                 f"&scope=openid email profile"
             )
         elif provider == "kakao":
@@ -210,6 +205,7 @@ class OAuthService:
                 f"?response_type=code"
                 f"&client_id={settings.KAKAO_OAUTH_CLIENT_ID}"
                 f"&redirect_uri={settings.KAKAO_OAUTH_REDIRECT_URI}"
+                f"&state={state_add_token}"
                 f"&scope=profile_nickname account_email"
             )
         else:

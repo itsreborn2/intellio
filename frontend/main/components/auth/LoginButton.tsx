@@ -1,24 +1,15 @@
-//"use client"
+"use client"
 
-import { useState} from "react"
-import { Button } from "intellio-common/components/ui/button"
+import { useState } from "react"
+import { Button } from "../ui/button"
 
-// frontend/components/auth/LoginButton.tsx
+// 로그인 버튼 prop 타입 정의
 interface ILoginButtonProps {
   provider: 'google' | 'naver' | 'kakao';
   redirectTo?: 'doceasy' | 'stockeasy' | string;
 }
 
-// OAuth 설정 정보 인터페이스 정의
-interface IOAuthConfig {
-  auth_uri: string;
-  client_id: string;
-  scope: string;
-  redirect_uri: string;
-}
-
-
-export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo = 'doceasy' }) => {
+export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo = '/' }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   // 로그인 처리 함수
@@ -27,11 +18,11 @@ export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo 
     
     try {
       setIsLoading(true);
-      // 백엔드 URL을 직접 사용 (Next.js 리다이렉트 우회)
+      // 백엔드 URL을 직접 사용
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
       window.location.href = `${backendUrl}/v1/auth/${provider}/login?redirectTo=${redirectTo}`;
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('로그인 오류:', error);
     }
   };
 
@@ -63,4 +54,4 @@ export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo 
       {isLoading ? '로그인 중...' : getButtonText()}
     </Button>
   );
-};
+}; 
