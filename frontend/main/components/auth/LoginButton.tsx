@@ -9,7 +9,7 @@ interface ILoginButtonProps {
   redirectTo?: 'doceasy' | 'stockeasy' | string;
 }
 
-export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo = 'doceasy' }) => {
+export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo = '/' }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   // 로그인 처리 함수

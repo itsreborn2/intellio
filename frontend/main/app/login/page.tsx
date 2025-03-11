@@ -56,11 +56,11 @@ function LoginContent() {
             <div className="flex flex-col space-y-2">
               <LoginButton 
                 provider="google" 
-                redirectTo={searchParams.get('redirectTo') || 'doceasy'}
+                redirectTo={searchParams.get('redirectTo') || '/'} 
               />
               <LoginButton 
                 provider="naver" 
-                redirectTo={searchParams.get('redirectTo') || 'doceasy'} 
+                redirectTo={searchParams.get('redirectTo') || '/'} 
               />
             </div>
           </div>

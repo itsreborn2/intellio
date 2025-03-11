@@ -104,7 +104,7 @@ export default function Navbar() {
     }
 
     return (
-      <Button size="sm" onClick={() => router.push('/login')}>
+      <Button size="sm" onClick={() => router.push('/login?redirectTo=/')}>
         로그인
       </Button>
     );

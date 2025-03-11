@@ -159,6 +159,8 @@ async def oauth_login(provider: str, request: Request, redirectTo: Optional[str]
             redirect_to = f"{settings.DOCEASY_URL}"
         elif redirectTo == "stockeasy":
             redirect_to = f"{settings.STOCKEASY_URL}"
+        elif redirectTo == "intellio" or redirectTo == "/":
+            redirect_to = f"{settings.INTELLIO_URL}"
         else:
             raise HTTPException(status_code=400, detail="Invalid redirectTo")
 
