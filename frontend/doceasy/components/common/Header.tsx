@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useRef, useEffect, Suspense } from "react"
-import { Settings, User, X } from "lucide-react"
+import { Settings, User, X, Loader2 } from "lucide-react"
 import { Button } from "intellio-common/components/ui/button"
 import { Input } from "intellio-common/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth, useAuthCheck } from "@/hooks/useAuth"
 import * as api from "@/services/api"
 import { IProject, ProjectDetail } from '@/types'
 import * as actionTypes from '@/types/actions'
@@ -32,7 +32,11 @@ function HeaderContent({ className }: { className?: string }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)  // Dialog 상태 추가
+  const [isAuthLoading, setIsAuthLoading] = useState(true) // 인증 상태 로딩 상태 추가
   const titleInputRef = useRef<HTMLInputElement>(null)
+  
+  // 쿠키 기반 인증 상태 확인
+  useAuthCheck();
 
   const handleTitleClick = () => {
     setEditingTitle(state.projectTitle || 'Untitled Project')
@@ -110,6 +114,8 @@ function HeaderContent({ className }: { className?: string }) {
       isAuthenticated,
       user,
     })
+    // 인증 상태가 확인되면 로딩 상태를 false로 설정
+    setIsAuthLoading(false)
   }, [isAuthenticated, user])
 
   useEffect(() => {
@@ -142,8 +148,12 @@ function HeaderContent({ className }: { className?: string }) {
         ) : null}
       </div>
       <div className="flex items-center gap-2">
-        {/* 사용자 메뉴 */}
-        {isAuthenticated && user ? (
+        {/* 인증 상태 로딩 중일 때 로딩 인디케이터 표시 */}
+        {isAuthLoading ? (
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </div>
+        ) : isAuthenticated && user ? (
           <>
             <span className="text-sm text-gray-600">{user.email}</span>
             <DropdownMenu>

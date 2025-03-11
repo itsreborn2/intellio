@@ -206,7 +206,10 @@ export const useAuthCheck = () => {
     
     useEffect(() => {
         // 항상 쿠키 확인 (로그인 상태와 관계없이)
-        checkAuthCookie();
+        // 페이지 로드 시 즉시 실행
+        setTimeout(() => {
+            checkAuthCookie();
+        }, 0);
         
         // 주기적으로 쿠키 확인 (선택 사항)
         const intervalId = setInterval(() => {

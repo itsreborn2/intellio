@@ -121,7 +121,7 @@ export default function AuthCallback() {
             <Suspense fallback={
                 <div className="text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                    <p className="mt-4 text-muted-foreground">로딩 중...</p>
+                    
                 </div>
             }>
                 <CallbackHandler />
