@@ -4,6 +4,8 @@ import { Suspense, useState, useEffect, useMemo, useRef } from 'react'
 import Select from 'react-select'
 import Papa from 'papaparse'
 import { MentionsInput, Mention } from 'react-mentions'
+import { sendChatMessage } from '@/services/api/chat'
+import { IChatResponse } from '@/types/api/chat'
 
 // 종목 타입 정의
 interface StockOption {
@@ -251,31 +253,19 @@ function AIChatAreaContent() {
     
     try {
       // 백엔드 API 호출
-      const response = await fetch('/api/aichatarea', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: inputMessage,
-          stockInfo: selectedStock ? {
-            stockName: selectedStock.stockName,
-            stockCode: selectedStock.stockCode
-          } : null
-        }),
-      });
+      const response:IChatResponse = await sendChatMessage(selectedStock?.stockCode || '', selectedStock?.stockName || '', inputMessage);
       
       if (!response.ok) {
-        throw new Error(`API 응답 오류: ${response.status}`);
+        throw new Error(`API 응답 오류: ${response.status_message}`);
       }
       
-      const responseData = await response.json();
+      const responseData = response.answer;
       
       // 응답 메시지 생성
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: responseData.content || '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다.',
+        role: 'assistant', 
+        content: responseData || '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다.',
         timestamp: Date.now()
       };
       

@@ -18,7 +18,7 @@ class StockeasyEmbeddingService(CommonEmbeddingService):
         super().__init__()
         self.namespace = settings.PINECONE_NAMESPACE_STOCKEASY
         self.vector_store = VectorStoreManager(
-            EmbeddingModelType.GOOGLE_MULTI_LANG,   
+            EmbeddingModelType.OPENAI_3_LARGE,   
             project_name="stockeasy",
             namespace=self.namespace,
         )

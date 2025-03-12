@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from common.core.database import get_db
 from stockeasy.services.telegram.rag import TelegramRAGService  # 지연 임포트
 from stockeasy.services.telegram.collector import CollectorService  # 지연 임포트
+from stockeasy.services.telegram.question_classifier import QuestionClassifierService
+from stockeasy.services.rag import StockeasyRAGService
 
 async def get_telegram_rag_service() -> Any:
     """RAG 서비스 의존성
@@ -27,3 +29,9 @@ def get_collector_service(
     텔레그램 채널에서 메시지를 수집하는 서비스를 제공합니다.
     """
     return CollectorService(db=db)
+
+def get_stockeasy_rag_service() -> StockeasyRAGService:
+    return StockeasyRAGService()
+
+def get_question_classifier() -> QuestionClassifierService:
+    return QuestionClassifierService() 

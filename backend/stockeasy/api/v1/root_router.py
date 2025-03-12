@@ -3,18 +3,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
-from backend.stockeasy.services.rag import StockeasyRAGService
+from stockeasy.services.rag import StockeasyRAGService
 from stockeasy.services.telegram.rag import TelegramRAGService
 from stockeasy.services.telegram.question_classifier import QuestionClassifierService
-from . import deps
-
+from stockeasy.api.deps import get_stockeasy_rag_service
 
 # FastAPI 라우터 설정 ( /api/v1/stockeasy/telegram)
-root_router = APIRouter(prefix="", tags=["root"])
+router = APIRouter(prefix="", tags=["root"])
+
 
 
 class UserQuestionRequest(BaseModel):
     question: str
+    stock_code:str
+    stock_name:str
 
 # 유저 질문의 응답용 모델
 class Source(BaseModel):
@@ -28,16 +30,17 @@ class UserQuestionResponse(BaseModel):
     answer: str
     sources: Optional[List[Source]] = None
 
-@root_router.post("/user_question", response_model=UserQuestionResponse)
+@router.post("/user_question", response_model=UserQuestionResponse)
 async def user_question(
     request: UserQuestionRequest,
-    rag_stockeasy: StockeasyRAGService = Depends(deps.get_stockeasy_rag_service),
+    rag_stockeasy: StockeasyRAGService = Depends(get_stockeasy_rag_service),
     
 ) -> UserQuestionResponse:
     try:
-        answer = await rag_stockeasy.user_question(request.question)
+        logger.info("==== 답변 생성 시작 ====")
+        answer = await rag_stockeasy.user_question(request.stock_code, request.stock_name, request.question)
         
-        logger.info(f"==== 답변 생성 결과 ====")
+        logger.info("==== 답변 생성 결과 ====")
         logger.info(f"답변: {answer}")
         # 4. 응답 반환
         return UserQuestionResponse(
@@ -45,6 +48,7 @@ async def user_question(
         )
         
     except Exception as e:
+        logger.error(f"질문 처리 중 오류가 발생했습니다: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"질문 처리 중 오류가 발생했습니다: {str(e)}"

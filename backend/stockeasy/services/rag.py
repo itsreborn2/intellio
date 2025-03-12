@@ -1,6 +1,5 @@
 from typing import List
 from loguru import logger
-from datetime import datetime, timezone, timedelta
 import re
 from functools import wraps
 import asyncio
@@ -11,12 +10,8 @@ from stockeasy.services.telegram.question_classifier import QuestionClassifierSe
 from common.utils.util import async_retry, dict_to_formatted_str
 from stockeasy.services.embedding import StockeasyEmbeddingService
 from common.services.llm_models import LLMModels
-from common.services.retrievers.models import RetrievalResult
-from common.services.vector_store_manager import VectorStoreManager
-from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.core.config import settings
 from langchain_core.messages import AIMessage
-
 from stockeasy.services.telegram.rag import TelegramRAGService
 
 class StockeasyRAGService:
@@ -30,43 +25,54 @@ class StockeasyRAGService:
         """
         self.embedding_service = StockeasyEmbeddingService()
         self.LLM = LLMModels()
+        logger.info("StockeasyRAGService 초기화 완료")
 
-    async def user_question(self, query: str) -> List[str]:
+    async def user_question(self, stock_code: str, stock_name: str, query: str) -> List[str]:
         """쿼리와 관련된 텔레그램 메시지를 검색합니다.
         
         Args:
             query (str): 검색할 쿼리
 
         """
-        # 1. 질문 분류
-        question_classifier = QuestionClassifierService()
-        classification = question_classifier.classify_question(query)
-        
-        logger.info(f"==== 질문 분류 결과 ====")
-        logger.info( dict_to_formatted_str(classification.to_dict_with_labels()) )
+        logger.info(f"StockeasyRAGService.user_question 호출 - 쿼리: {query}")
+        try:
+            # 1. 질문 분류
+            logger.info("질문 분류 시작")
+            question_classifier = QuestionClassifierService()
+            classification = question_classifier.classify_question(query, stock_code, stock_name)
+            
+            logger.info(f"==== 질문 분류 결과 ====")
+            logger.info(dict_to_formatted_str(classification.to_dict_with_labels()))
 
-        # 2. 분류 결과에 따른 DB 검색
-        # search_results = await rag_service.search_by_classification(
-        #     question=request.question,
-        #     classification=classification
-        # )
-        # 여러가지 RAG에 질의 후 종합답변 생성?
+            #2. 분류 결과에 따른 DB 검색
+            # search_results = await rag_service.search_by_classification(
+            #     question=request.question,
+            #     classification=classification
+            # )
+            #여러가지 RAG에 질의 후 종합답변 생성?
 
 
-        # 텔레그램 메시지 검색
-        telegram_rag = TelegramRAGService()
-        answer = await telegram_rag.search_messages(
-            query=query,
-            classification=classification
-        )
+            # 텔레그램 메시지 검색
+            logger.info("텔레그램 메시지 검색 시작")
+            telegram_rag = TelegramRAGService()
+            answer = await telegram_rag.search_messages(
+                query=query,
+                classification=classification
+            )
+            logger.info(f"텔레그램 메시지 검색 결과: {len(answer)}개 메시지 검색됨")
 
-        # 3. LLM에 질의하여 답변 생성
-        summary = await telegram_rag.summarize(
-            messages=answer,
-            classification=classification
-        )
+            # 3. LLM에 질의하여 답변 생성
+            logger.info("답변 생성 시작")
+            summary = await telegram_rag.summarize(
+                messages=answer,
+                classification=classification
+            )
+            logger.info(f"답변 생성 완료: {summary[:100]}...")
 
-        return summary
+            return summary
+        except Exception as e:
+            logger.error(f"user_question 처리 중 오류 발생: {str(e)}", exc_info=True)
+            raise
 
 
     

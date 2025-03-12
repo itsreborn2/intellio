@@ -14,7 +14,7 @@ services:
       context: .
       dockerfile: Dockerfile.fastapi.dev
     volumes:
-      - ./backend:/backend
+      - ./backend:/backend:rw,delegated
     env_file:
       - .env.development
     environment:

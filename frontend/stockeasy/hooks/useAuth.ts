@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import * as api from '../services/api';
+import * as api from '@/services/api';
 
 interface User {
     id: string;
@@ -39,6 +39,7 @@ export const useAuth = create<AuthState>()(
             logout: async () => {
                 try {
                     await api.logout();  // 서버에 로그아웃 요청 및 쿠키 삭제
+                    
                     set({
                         user: null,
                         token: null,
