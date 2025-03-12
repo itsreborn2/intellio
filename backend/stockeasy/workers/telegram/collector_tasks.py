@@ -140,6 +140,7 @@ def cleanup_daily_messages(self) -> int:
         int: 삭제된 메시지 수
     """
     try:
+        logger.info(f"cleanup_daily_messages 실행")
         # 오늘 자정 이전의 메시지만 삭제 (PostgreSQL)
         today_midnight = datetime.now().replace(
             hour=0, minute=0, second=0, microsecond=0
