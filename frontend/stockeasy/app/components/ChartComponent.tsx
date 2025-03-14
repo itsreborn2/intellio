@@ -20,6 +20,7 @@ import {
   LineData,
   TickMarkType
 } from 'lightweight-charts';
+import Papa from 'papaparse';
 
 // 캔들 데이터 인터페이스 정의
 interface CandleData {
@@ -84,7 +85,7 @@ const ChartComponent: React.FC<ChartProps> = ({
   // 시장 지수 데이터 가져오는 함수
   const fetchMarketIndexData = useCallback(async () => {
     if (!marketType) {
-      console.log('시장 구분 정보가 없어 시장 지수 데이터를 가져오지 않습니다.');
+      console.log('시장 구분이 없어 시장 지수 데이터를 가져오지 않습니다.');
       return;
     }
     
@@ -92,68 +93,66 @@ const ChartComponent: React.FC<ChartProps> = ({
       setIsLoadingMarketIndex(true);
       setMarketIndexError(null);
       
-      console.log(`시장 지수 데이터 가져오기: ${marketType}`);
+      // 시장 구분 정규화 (대소문자 구분 없이 처리)
+      const normalizedMarketType = marketType.toUpperCase();
+      console.log(`시장 지수 데이터 가져오기: ${normalizedMarketType} (원본: ${marketType})`);
       
-      // 시장 지수 API 호출
-      const response = await fetch('/api/market-index', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ marketType }),
-      });
+      // 시장 지수 로컬 캐시 파일 경로 설정
+      const marketIndexPath = normalizedMarketType === 'KOSPI' 
+        ? '/cache/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv'
+        : '/cache/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
+      
+      console.log(`시장 지수 파일 경로: ${marketIndexPath}`);
+      
+      // 로컬 캐시 파일에서 데이터 가져오기
+      const response = await fetch(marketIndexPath);
       
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`시장 지수 데이터 가져오기 실패: ${response.status} ${errorText}`);
-        setMarketIndexError(`API 응답 오류: ${response.status}`);
+        setMarketIndexError(`로컬 캐시 파일 로드 오류: ${response.status}`);
         setMarketIndexData([]);
         return;
       }
       
-      const result = await response.json();
-      console.log(`시장 지수 데이터 수신 성공: ${result.data?.length || 0}개 데이터 포인트`);
+      const csvText = await response.text();
       
-      // 경고 메시지 처리
-      if (result.warning) {
-        console.warn(`시장 지수 데이터 경고: ${result.warning}`);
-        setMarketIndexError(result.warning);
-      }
-      
-      if (!result.data || result.data.length === 0) {
-        console.warn(`시장 지수 데이터가 비어 있습니다: ${marketType}`);
-        setMarketIndexError(`${marketType} 시장 지수 데이터를 찾을 수 없습니다.`);
-        setMarketIndexData([]);
-        return;
-      }
-      
-      // 캔들 데이터와 시장 지수 데이터의 날짜 형식을 일치시키기 위한 처리
-      const formattedMarketData = result.data.map((item: { date: string; close: number }) => {
-        // 날짜 형식 처리 (YYYY-MM-DD, YYYY/MM/DD 등 다양한 형식 지원)
-        let timeValue: Time = item.date;
-        
-        // 날짜 형식 정규화 (하이픈과 슬래시 처리)
-        if (typeof item.date === 'string') {
-          // 슬래시를 하이픈으로 변환
-          timeValue = item.date.replace(/\//g, '-');
-        }
-        
-        return {
-          time: timeValue,
-          value: item.close
-        } as LineData<Time>;
+      // CSV 파싱
+      const parsedData = Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: true,
       });
       
-      if (formattedMarketData.length === 0) {
-        console.warn(`시장 지수 데이터 형식 변환 후 데이터가 비어 있습니다: ${marketType}`);
-        setMarketIndexError(`${marketType} 시장 지수 데이터 형식이 올바르지 않습니다.`);
-        setMarketIndexData([]);
-        return;
-      }
+      // 데이터 변환
+      const indexData = parsedData.data
+        .filter((row: any) => {
+          const isValid = row && row['날짜'] && row['시가'] && row['고가'] && row['저가'] && row['종가'];
+          return isValid;
+        })
+        .map((row: any) => {
+          // 날짜 형식 변환 (YYYYMMDD -> YYYY-MM-DD)
+          let timeStr = String(row['날짜'] || '');
+          let formattedTime = '';
+          
+          if (timeStr.length === 8) {
+            const year = timeStr.substring(0, 4);
+            const month = timeStr.substring(4, 6);
+            const day = timeStr.substring(6, 8);
+            formattedTime = `${year}-${month}-${day}`;
+          } else {
+            formattedTime = timeStr;
+          }
+          
+          return {
+            time: formattedTime,
+            value: parseFloat(row['종가'] || 0)
+          } as LineData<Time>;
+        });
       
-      setMarketIndexData(formattedMarketData);
+      console.log(`시장 지수 데이터 로드 완료: ${indexData.length}개 데이터 포인트`);
+      setMarketIndexData(indexData);
       setMarketIndexLoaded(true);
-      console.log(`시장 지수 데이터 형식 변환 완료. 첫번째 항목:`, formattedMarketData[0]);
     } catch (error) {
       console.error('시장 지수 데이터 가져오기 오류:', error);
       setMarketIndexError(error instanceof Error ? error.message : '알 수 없는 오류');
@@ -200,15 +199,36 @@ const ChartComponent: React.FC<ChartProps> = ({
     }
     
     console.log('차트 생성 시작...');
+    console.log(`ChartComponent에 전달된 데이터 타입: ${typeof data}, 배열 여부: ${Array.isArray(data)}`);
+    console.log(`전달된 데이터 길이: ${data ? data.length : '데이터 없음'}`);
     
     try {
       // 데이터 유효성 로깅
       console.log(`ChartComponent: 데이터 수신 완료 (${data.length}개 항목)`);
-      console.log('첫 번째 데이터 항목:', data[0]);
+      if (data.length > 0) {
+        console.log('첫 번째 데이터 항목:', JSON.stringify(data[0]));
+      } else {
+        console.error('ChartComponent: 데이터가 비어 있습니다.');
+        return; // 데이터가 없으면 차트 생성 중단
+      }
       
       // 캔들 데이터 필터링 및 정렬
-      const validData = data.filter((item: any) => item && (item.time !== undefined && item.time !== null));
+      const validData = data.filter((item: any) => 
+        item && 
+        item.time !== undefined && 
+        item.time !== null &&
+        !isNaN(item.open) && 
+        !isNaN(item.high) && 
+        !isNaN(item.low) && 
+        !isNaN(item.close)
+      );
+      
       console.log('유효한 데이터 개수:', validData.length);
+      
+      if (validData.length === 0) {
+        console.error('ChartComponent: 유효한 데이터가 없습니다.');
+        return; // 유효한 데이터가 없으면 차트 생성 중단
+      }
       
       const usedTimestamps = new Set<number>();
       let timestampOffset = 0;
@@ -216,99 +236,150 @@ const ChartComponent: React.FC<ChartProps> = ({
       
       const candleData = validData
         .map((item: any, index: number) => {
-          let timestamp: Time;
-          let originalTimestamp: number = 0;
-          
-          if (typeof item.time === 'string') {
-            if (/^\d{4}-\d{2}-\d{2}$/.test(item.time)) {
-              const [year, month, day] = item.time.split('-').map(Number);
-              if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                originalTimestamp = Math.floor(new Date(Date.UTC(year, month - 1, day)).getTime() / 1000);
-              } else {
-                console.error(`유효하지 않은 날짜 범위: ${item.time}`);
-                originalTimestamp = secondsInDay * index;
-              }
-            } 
-            else if (/^\d{4}\/\d{2}\/\d{2}$/.test(item.time)) {
-              const [year, month, day] = item.time.split('/').map(Number);
-              if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                originalTimestamp = Math.floor(new Date(Date.UTC(year, month - 1, day)).getTime() / 1000);
-              } else {
-                console.error(`유효하지 않은 날짜 범위: ${item.time}`);
-                originalTimestamp = secondsInDay * index;
-              }
+          try {
+            // 데이터 형식 로깅
+            console.log(`아이템 #${index} 처리 중 - 데이터 타입:`, typeof item);
+            if (typeof item === 'object' && item !== null) {
+              console.log(`아이템 #${index}의 속성들:`, Object.keys(item).join(', '));
             }
-            else if (/^\d{8}$/.test(item.time)) {
-              const year = parseInt(item.time.substring(0, 4));
-              const month = parseInt(item.time.substring(4, 6));
-              const day = parseInt(item.time.substring(6, 8));
-              if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                originalTimestamp = Math.floor(new Date(Date.UTC(year, month - 1, day)).getTime() / 1000);
-              } else {
-                console.error(`유효하지 않은 날짜 범위: ${item.time}`);
+            
+            // 시가, 고가, 저가, 종가 필드 추출
+            const openField = extractNumberField(item, ['open', 'Open', 'OPEN', '시가']);
+            const highField = extractNumberField(item, ['high', 'High', 'HIGH', '고가']);
+            const lowField = extractNumberField(item, ['low', 'Low', 'LOW', '저가']);
+            const closeField = extractNumberField(item, ['close', 'Close', 'CLOSE', '종가']);
+            
+            // 추출된 값 로깅
+            console.log(`아이템 #${index} 필드 추출 결과: open=${openField}, high=${highField}, low=${lowField}, close=${closeField}`);
+            
+            let timestamp: Time;
+            let originalTimestamp: number = 0;
+            
+            if (typeof item.time === 'string') {
+              // 하이픈 형식 날짜 (YYYY-MM-DD)
+              if (/^\d{4}-\d{2}-\d{2}$/.test(item.time)) {
+                try {
+                  const [year, month, day] = item.time.split('-').map(Number);
+                  console.log(`날짜 파싱 (하이픈): ${year}년 ${month}월 ${day}일`);
+                  
+                  if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                    originalTimestamp = Math.floor(new Date(Date.UTC(year, month - 1, day)).getTime() / 1000);
+                    console.log(`${item.time}의 타임스탬프 변환 결과: ${originalTimestamp}`);
+                  } else {
+                    console.error(`유효하지 않은 날짜 범위: ${item.time}`);
+                    originalTimestamp = secondsInDay * index;
+                  }
+                } catch (error) {
+                  console.error(`날짜 파싱 오류 (하이픈): ${item.time}`, error);
+                  originalTimestamp = secondsInDay * index;
+                }
+              } 
+              // 슬래시 형식 날짜 (YYYY/MM/DD)
+              else if (/^\d{4}\/\d{2}\/\d{2}$/.test(item.time)) {
+                try {
+                  const [year, month, day] = item.time.split('/').map(Number);
+                  console.log(`날짜 파싱 (슬래시): ${year}년 ${month}월 ${day}일`);
+                  
+                  if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                    originalTimestamp = Math.floor(new Date(Date.UTC(year, month - 1, day)).getTime() / 1000);
+                    console.log(`${item.time}의 타임스탬프 변환 결과: ${originalTimestamp}`);
+                  } else {
+                    console.error(`유효하지 않은 날짜 범위: ${item.time}`);
+                    originalTimestamp = secondsInDay * index;
+                  }
+                } catch (error) {
+                  console.error(`날짜 파싱 오류 (슬래시): ${item.time}`, error);
+                  originalTimestamp = secondsInDay * index;
+                }
+              }
+              // 숫자 8자리 형식 날짜 (YYYYMMDD)
+              else if (/^\d{8}$/.test(item.time)) {
+                try {
+                  const year = parseInt(item.time.substring(0, 4));
+                  const month = parseInt(item.time.substring(4, 6));
+                  const day = parseInt(item.time.substring(6, 8));
+                  console.log(`날짜 파싱 (8자리): ${year}년 ${month}월 ${day}일`);
+                  
+                  if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                    originalTimestamp = Math.floor(new Date(Date.UTC(year, month - 1, day)).getTime() / 1000);
+                    console.log(`${item.time}의 타임스탬프 변환 결과: ${originalTimestamp}`);
+                  } else {
+                    console.error(`유효하지 않은 날짜 범위: ${item.time}`);
+                    originalTimestamp = secondsInDay * index;
+                  }
+                } catch (error) {
+                  console.error(`날짜 파싱 오류 (8자리): ${item.time}`, error);
+                  originalTimestamp = secondsInDay * index;
+                }
+              }
+              else {
+                console.error(`지원하지 않는 날짜 형식: ${item.time}, 인덱스 기반 타임스탬프 생성`);
                 originalTimestamp = secondsInDay * index;
               }
-            }
-            else {
-              console.error(`지원하지 않는 날짜 형식: ${item.time}, 인덱스 기반 타임스탬프 생성`);
+            } else if (typeof item.time === 'number') {
+              // 숫자 형식 (타임스탬프)
+              originalTimestamp = item.time;
+              if (originalTimestamp <= 0) {
+                console.warn(`유효하지 않은 타임스탬프: ${originalTimestamp}, 인덱스 기반 타임스탬프로 대체`);
+                originalTimestamp = secondsInDay * index;
+              } else {
+                console.log(`숫자 타임스탬프 사용: ${originalTimestamp}`);
+              }
+            } else {
+              console.error(`지원하지 않는 날짜 타입: ${typeof item.time}, 인덱스 기반 타임스탬프 생성`);
               originalTimestamp = secondsInDay * index;
             }
-          } else if (typeof item.time === 'number') {
-            originalTimestamp = item.time;
+            
             if (originalTimestamp <= 0) {
-              console.warn(`유효하지 않은 타임스탬프: ${originalTimestamp}, 인덱스 기반 타임스탬프로 대체`);
-              originalTimestamp = secondsInDay * index;
+              originalTimestamp = secondsInDay * (index + 1); // 최소한 1일부터 시작
             }
-          } else {
-            console.error(`지원하지 않는 날짜 타입: ${typeof item.time}, 인덱스 기반 타임스탬프 생성`);
-            originalTimestamp = secondsInDay * index;
+            
+            if (usedTimestamps.has(originalTimestamp)) {
+              timestampOffset++;
+              timestamp = (originalTimestamp + timestampOffset) as Time;
+              console.warn(`중복된 타임스탬프 감지: ${originalTimestamp}, 조정된 타임스탬프: ${timestamp}`);
+            } else {
+              timestamp = originalTimestamp as Time;
+              usedTimestamps.add(originalTimestamp);
+            }
+            
+            if (Number(timestamp) <= 0) {
+              console.error(`유효하지 않은 타임스탬프(${timestamp})가 생성되었습니다. 기본값으로 대체합니다.`);
+              timestamp = (secondsInDay * (index + 1)) as Time;
+            }
+            
+            let open = typeof item.open === 'number' ? item.open : 0;
+            let high = typeof item.high === 'number' ? item.high : 0;
+            let low = typeof item.low === 'number' ? item.low : 0;
+            let close = typeof item.close === 'number' ? item.close : 0;
+            
+            if (isNaN(open)) open = 0;
+            if (isNaN(high)) high = 0;
+            if (isNaN(low)) low = 0;
+            if (isNaN(close)) close = 0;
+            
+            if (open <= 0) open = close > 0 ? close : 100;
+            if (close <= 0) close = open > 0 ? open : 100;
+            if (high <= 0) high = Math.max(open, close, 100);
+            if (low <= 0) low = Math.min(open > 0 ? open : 100, close > 0 ? close : 100);
+            
+            if (high < Math.max(open, close)) high = Math.max(open, close);
+            if (low > Math.min(open, close)) low = Math.min(open, close);
+            
+            return {
+              time: timestamp,
+              open: open,
+              high: high,
+              low: low,
+              close: close,
+            };
+          } catch (error) {
+            console.error(`캔들 데이터 생성 오류: ${error}`);
+            return null;
           }
-          
-          if (originalTimestamp <= 0) {
-            originalTimestamp = secondsInDay * (index + 1); // 최소한 1일부터 시작
-          }
-          
-          if (usedTimestamps.has(originalTimestamp)) {
-            timestampOffset++;
-            timestamp = (originalTimestamp + timestampOffset) as Time;
-            console.warn(`중복된 타임스탬프 감지: ${originalTimestamp}, 조정된 타임스탬프: ${timestamp}`);
-          } else {
-            timestamp = originalTimestamp as Time;
-            usedTimestamps.add(originalTimestamp);
-          }
-          
-          if (Number(timestamp) <= 0) {
-            console.error(`유효하지 않은 타임스탬프(${timestamp})가 생성되었습니다. 기본값으로 대체합니다.`);
-            timestamp = (secondsInDay * (index + 1)) as Time;
-          }
-          
-          let open = typeof item.open === 'number' ? item.open : 0;
-          let high = typeof item.high === 'number' ? item.high : 0;
-          let low = typeof item.low === 'number' ? item.low : 0;
-          let close = typeof item.close === 'number' ? item.close : 0;
-          
-          if (isNaN(open)) open = 0;
-          if (isNaN(high)) high = 0;
-          if (isNaN(low)) low = 0;
-          if (isNaN(close)) close = 0;
-          
-          if (open <= 0) open = close > 0 ? close : 100;
-          if (close <= 0) close = open > 0 ? open : 100;
-          if (high <= 0) high = Math.max(open, close, 100);
-          if (low <= 0) low = Math.min(open > 0 ? open : 100, close > 0 ? close : 100);
-          
-          if (high < Math.max(open, close)) high = Math.max(open, close);
-          if (low > Math.min(open, close)) low = Math.min(open, close);
-          
-          return {
-            time: timestamp,
-            open: open,
-            high: high,
-            low: low,
-            close: close,
-          };
         })
         .filter((item): item is CandlestickData<Time> => {
+          if (!item) return false; // null 체크 추가
           return item !== undefined && Number(item.time) > 0;
         })
         .sort((a: any, b: any) => {
@@ -644,21 +715,35 @@ const ChartComponent: React.FC<ChartProps> = ({
     return cleanupFunction;
   }, [data, height, showVolume, marketType, marketIndexData]);
 
+  // 숫자 필드 추출을 위한 헬퍼 함수
+  const extractNumberField = (item: any, fieldNames: string[]): number => {
+    if (!item) return 0;
+    
+    for (const fieldName of fieldNames) {
+      if (item[fieldName] !== undefined) {
+        const value = item[fieldName];
+        
+        if (typeof value === 'number') {
+          return value;
+        } else if (typeof value === 'string') {
+          try {
+            // 쉼표 및 기타 문자 제거 후 숫자 변환
+            const numValue = parseFloat(value.replace(/,/g, '').replace(/[^\d.-]/g, ''));
+            if (!isNaN(numValue)) {
+              return numValue;
+            }
+          } catch (error) {
+            console.warn(`${fieldName} 필드 변환 오류:`, error);
+          }
+        }
+      }
+    }
+    
+    return 0;
+  };
+
   return (
     <div className="chart-container">
-      {/* title 표시 부분 제거 - 중복 표시 문제 해결 */}
-      {/* 종목명과 시장 구분을 함께 표시 */}
-      <div className="flex items-center justify-between mb-2">
-        {stockName && (
-          <h4 className="text-base font-semibold text-black">{stockName}</h4>
-        )}
-        {marketType && (
-          <span className={`text-xs font-medium px-2 py-1 rounded ${marketType === 'KOSPI' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-            {marketType}
-          </span>
-        )}
-      </div>
-      {/* 시장 지수 관련 텍스트 제거 */}
       <div
         ref={chartContainerRef}
         style={{ 
