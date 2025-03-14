@@ -5,10 +5,17 @@ import Papa from 'papaparse';
 import axios from 'axios';
 
 // 캐시 디렉토리 설정
-const CACHE_DIR = path.join(process.cwd(), 'cache');
+const CACHE_DIR = path.join(process.cwd(), 'public', 'cache');
 const STOCK_CACHE_DIR = path.join(CACHE_DIR, 'stock-data');
 const CHART_CACHE_DIR = path.join(CACHE_DIR, 'chart-data');
 const MARKET_INDEX_CACHE_DIR = path.join(CACHE_DIR, 'market-index');
+
+// 마지막 업데이트 시간을 저장할 파일 경로
+const LAST_UPDATE_FILE = path.join(CACHE_DIR, 'last_update.json');
+
+// RS 업데이트 시간 설정 (17:50)
+const UPDATE_HOUR = 17;
+const UPDATE_MINUTE = 50;
 
 // 캐시 디렉토리 생성 함수
 function ensureCacheDirectories() {
@@ -44,12 +51,14 @@ function getCacheFilePath(fileId: string, dataType: string = 'stock'): string {
   
   switch (dataType) {
     case 'chart':
-      return path.join(CHART_CACHE_DIR, `chart_${normalizedKey}.csv`);
+      // 차트 데이터는 접두사 없이 파일 ID만 사용
+      return path.join(CHART_CACHE_DIR, `${normalizedKey}.csv`);
     case 'market-index':
       // 시장 지수 데이터의 경우 파일 ID 그대로 사용 (접두사 없음)
       return path.join(MARKET_INDEX_CACHE_DIR, `${normalizedKey}.csv`);
     case 'stock':
     default:
+      // 주식 데이터는 'stock_' 접두사 사용
       return path.join(STOCK_CACHE_DIR, `stock_${normalizedKey}.csv`);
   }
 }
@@ -303,7 +312,7 @@ async function handleChartData(fileId: string): Promise<string> {
   const cleanFileId = fileId.endsWith('.csv') ? fileId : `${fileId}.csv`;
   
   // 캐시 파일 경로
-  const cacheFilePath = path.join(process.cwd(), 'cache', 'chart-data', cleanFileId);
+  const cacheFilePath = path.join(process.cwd(), 'public', 'cache', 'chart-data', cleanFileId);
   
   try {
     // 캐시 파일 확인
@@ -313,7 +322,7 @@ async function handleChartData(fileId: string): Promise<string> {
     }
     
     // 캐시 디렉토리 내 모든 파일 확인 (디버깅용)
-    const cacheDir = path.join(process.cwd(), 'cache', 'chart-data');
+    const cacheDir = path.join(process.cwd(), 'public', 'cache', 'chart-data');
     if (fs.existsSync(cacheDir)) {
       console.log('캐시 디렉토리 내 파일 목록:');
       const files = fs.readdirSync(cacheDir);
@@ -338,16 +347,207 @@ async function handleChartData(fileId: string): Promise<string> {
 
 // 파일 ID 상수 정의
 const FILE_IDS = {
+  // 주식 데이터 (3개)
   STOCK_LIST: '1idVB5kIo0d6dChvOyWE7OvWr-eZ1cbpB',  // 종목 리스트
   RS_RANK: '1UYJVdMZFXarsxs0jy16fEGfRqY9Fs8YD',     // RS 순위
   WEEK_HIGH: '1mbee4O9_NoNpfIAExI4viN8qcN8BtTXz',   // 52주 신고가
+  
+  // 시장 지수 데이터 (2개)
   KOSDAQ: '1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg',      // 코스닥 지수
-  KOSPI: '1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c'        // 코스피 지수
+  KOSPI: '1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c',       // 코스피 지수
+  
+  // 차트 데이터 (20개)
+  CHART_1: '1aTorXQQrDJAhKmGiNH-AjXoGO7PTLjPm',     // 차트 데이터 1
+  CHART_2: '1178693zjykqgp-iesphmq8qcxgbspg0q',     // 차트 데이터 2
+  CHART_3: '11hgiohutm5yzbaguemzpxdtw4fv0wdmd',     // 차트 데이터 3
+  CHART_4: '12n6x15dkl1vjmzmk9ahobyiyat1unrse',     // 차트 데이터 4
+  CHART_5: '15cqztbbinqf0f6rcir2d01bc_vc0attg',     // 차트 데이터 5
+  CHART_6: '1apwisocpqh4r5336namsor_vdg6bbclg',     // 차트 데이터 6
+  CHART_7: '1bxdtowr97lhxl8ymecl84qlbe09h6wwk',     // 차트 데이터 7
+  CHART_8: '1cjeyuaoew_qler37nfiqlwgdmgeimnej',     // 차트 데이터 8
+  CHART_9: '1ene8lrq_9kqvootf_wil-dt9jxoqj0cd',     // 차트 데이터 9
+  CHART_10: '1f2k3mrwuazufdx4mkl89pmg33dbfil8g',    // 차트 데이터 10
+  CHART_11: '1i-bg0puf8rbmxekhs1toboqjxrjbwlco',    // 차트 데이터 11
+  CHART_12: '1iznpzmimg-yk2z20w2c9tjewlcdswww0',    // 차트 데이터 12
+  CHART_13: '1jctjmbiwgiihvzcppirxbnppe5gljctw',    // 차트 데이터 13
+  CHART_14: '1mhuyrpe378v1j2qmsx1sufmzkmokjv_4',    // 차트 데이터 14
+  CHART_15: '1st-nzj2wo3fptb6swk8glqcxyjqgx7-k',    // 차트 데이터 15
+  CHART_16: '1t2z88ntuzd2r3ct5oy8ic3ja09tqfaof',    // 차트 데이터 16
+  CHART_17: '1w0mug-pgv_jgsj44w3hmtfgaoq0npgos',    // 차트 데이터 17
+  CHART_18: '1wdrfq_8w9hwydadcfi7dgptwdmnxl3fk',    // 차트 데이터 18
+  CHART_19: '1wjdxsztimlfizel30weqzkkv4tiadhqg',    // 차트 데이터 19
+  CHART_20: '1zefwp0b0-8wzilvbmktyh_zyjg5cl0pw'     // 차트 데이터 20
 };
+
+// 파일 ID 그룹화 (데이터 타입별로 분류)
+const FILE_ID_GROUPS = {
+  STOCK: [FILE_IDS.STOCK_LIST, FILE_IDS.RS_RANK, FILE_IDS.WEEK_HIGH],
+  MARKET_INDEX: [FILE_IDS.KOSDAQ, FILE_IDS.KOSPI],
+  CHART: [
+    FILE_IDS.CHART_1, FILE_IDS.CHART_2, FILE_IDS.CHART_3, FILE_IDS.CHART_4, FILE_IDS.CHART_5,
+    FILE_IDS.CHART_6, FILE_IDS.CHART_7, FILE_IDS.CHART_8, FILE_IDS.CHART_9, FILE_IDS.CHART_10,
+    FILE_IDS.CHART_11, FILE_IDS.CHART_12, FILE_IDS.CHART_13, FILE_IDS.CHART_14, FILE_IDS.CHART_15,
+    FILE_IDS.CHART_16, FILE_IDS.CHART_17, FILE_IDS.CHART_18, FILE_IDS.CHART_19, FILE_IDS.CHART_20
+  ]
+};
+
+// 파일 ID로 데이터 타입 결정하는 함수
+function getDataTypeByFileId(fileId: string): string {
+  const normalizedId = normalizeCacheKey(fileId);
+  
+  if (FILE_ID_GROUPS.STOCK.some(id => normalizeCacheKey(id) === normalizedId)) {
+    return 'stock';
+  }
+  
+  if (FILE_ID_GROUPS.MARKET_INDEX.some(id => normalizeCacheKey(id) === normalizedId)) {
+    return 'market-index';
+  }
+  
+  if (FILE_ID_GROUPS.CHART.some(id => normalizeCacheKey(id) === normalizedId)) {
+    return 'chart';
+  }
+  
+  // 기본값은 'stock'으로 설정
+  return 'stock';
+}
+
+// 모든 CSV 파일 업데이트 함수
+async function updateAllCSVFiles() {
+  try {
+    console.log('모든 CSV 파일 업데이트 시작...');
+    
+    // 캐시 디렉토리 확인 및 생성
+    ensureCacheDirectories();
+    
+    // 모든 파일 ID 목록 생성
+    const allFileIds = [
+      ...FILE_ID_GROUPS.STOCK,
+      ...FILE_ID_GROUPS.MARKET_INDEX,
+      ...FILE_ID_GROUPS.CHART
+    ];
+    
+    for (const fileId of allFileIds) {
+      try {
+        // 빈 문자열은 건너뛰기
+        if (!fileId) {
+          continue;
+        }
+        
+        console.log(`파일 ID ${fileId} 업데이트 중...`);
+        
+        // 파일 ID에 따른 데이터 타입 결정
+        const dataType = getDataTypeByFileId(fileId);
+        
+        // Google Drive에서 파일 다운로드
+        const fileData = await downloadFileFromGoogleDrive(fileId);
+        
+        // 다운로드한 데이터 캐시에 저장
+        saveToCache(fileId, fileData, dataType);
+        
+        console.log(`파일 ID ${fileId} 업데이트 완료`);
+      } catch (error) {
+        console.error(`파일 ID ${fileId} 업데이트 중 오류 발생:`, error);
+        // 개별 파일 오류는 전체 프로세스를 중단하지 않음
+      }
+    }
+    
+    console.log('모든 CSV 파일 업데이트 완료');
+    saveLastUpdateTime();
+    return true;
+  } catch (error) {
+    console.error('CSV 파일 업데이트 중 오류 발생:', error);
+    return false;
+  }
+}
+
+// 마지막 업데이트 시간을 저장하는 함수
+function saveLastUpdateTime() {
+  try {
+    const updateInfo = {
+      lastUpdate: new Date().toISOString(),
+      timestamp: Date.now()
+    };
+    
+    fs.writeFileSync(LAST_UPDATE_FILE, JSON.stringify(updateInfo, null, 2));
+    console.log('마지막 업데이트 시간이 저장되었습니다.');
+  } catch (error) {
+    console.error('마지막 업데이트 시간 저장 중 오류 발생:', error);
+  }
+}
+
+// 마지막 업데이트 시간을 가져오는 함수
+function getLastUpdateTime(): string {
+  try {
+    if (fs.existsSync(LAST_UPDATE_FILE)) {
+      const data = fs.readFileSync(LAST_UPDATE_FILE, 'utf8');
+      const updateInfo = JSON.parse(data);
+      return updateInfo.lastUpdate;
+    }
+  } catch (error) {
+    console.error('마지막 업데이트 시간 조회 중 오류 발생:', error);
+  }
+  
+  return '업데이트 기록 없음';
+}
+
+// 업데이트가 필요한지 확인하는 함수
+function needUpdate(): boolean {
+  try {
+    // 1. 현재 날짜와 시간 가져오기
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentDay = now.getDay(); // 0: 일요일, 6: 토요일
+    
+    // 2. 오늘이 휴일인지 확인 (주말인 경우)
+    if (currentDay === 0 || currentDay === 6) {
+      console.log('주말에는 업데이트를 진행하지 않습니다.');
+      return false;
+    }
+    
+    // 3. 현재 시간이 업데이트 시간(17:50) 이전이면 업데이트하지 않음
+    if (currentHour < UPDATE_HOUR || (currentHour === UPDATE_HOUR && currentMinute < UPDATE_MINUTE)) {
+      console.log('아직 업데이트 시간이 되지 않았습니다.');
+      return false;
+    }
+    
+    // 4. 캐시 파일의 마지막 수정 시간 확인
+    const rsRankCachePath = getCacheFilePath(FILE_IDS.RS_RANK);
+    
+    if (fs.existsSync(rsRankCachePath)) {
+      const stats = fs.statSync(rsRankCachePath);
+      const lastModified = new Date(stats.mtime);
+      
+      // 오늘 날짜의 업데이트 시간 설정
+      const todayUpdateTime = new Date();
+      todayUpdateTime.setHours(UPDATE_HOUR, UPDATE_MINUTE, 0, 0);
+      
+      // 마지막 수정 시간이 오늘의 업데이트 시간 이후라면 이미 업데이트됨
+      if (lastModified.getTime() >= todayUpdateTime.getTime()) {
+        console.log('오늘 이미 업데이트되었습니다.');
+        return false;
+      }
+    }
+    
+    // 모든 조건을 통과하면 업데이트 필요
+    console.log('업데이트가 필요합니다.');
+    return true;
+  } catch (error) {
+    console.error('업데이트 필요 여부 확인 중 오류 발생:', error);
+    return false; // 오류 발생 시 안전하게 false 반환
+  }
+}
 
 // POST: 통합 API 엔드포인트
 export async function POST(request: NextRequest) {
   try {
+    // 업데이트 필요 여부 확인 및 업데이트 수행
+    if (needUpdate()) {
+      console.log('자동 업데이트 시작');
+      await updateAllCSVFiles();
+      console.log('자동 업데이트 완료');
+    }
+    
     const { symbol, fileId, dataType, marketType } = await request.json();
     
     // 1. 시장 지수 데이터 요청 처리
@@ -509,5 +709,51 @@ export async function POST(request: NextRequest) {
       { error: `데이터를 처리하는 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}` },
       { status: 500 }
     );
+  }
+}
+
+// GET: 데이터 업데이트 확인 및 수행
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const forceUpdate = searchParams.get('force') === 'true';
+    
+    if (forceUpdate) {
+      // 강제 업데이트 요청 시 시간 체크 없이 모든 파일 업데이트
+      console.log('강제 업데이트 요청이 들어왔습니다.');
+      await updateAllCSVFiles();
+      return NextResponse.json({ 
+        success: true, 
+        message: '모든 CSV 파일이 성공적으로 업데이트되었습니다.',
+        updatedAt: getLastUpdateTime()
+      });
+    }
+    
+    // 업데이트 필요 여부 확인
+    const shouldUpdate = await needUpdate();
+    
+    if (shouldUpdate) {
+      // 업데이트 필요 시 모든 파일 업데이트
+      await updateAllCSVFiles();
+      return NextResponse.json({ 
+        success: true, 
+        message: '모든 CSV 파일이 성공적으로 업데이트되었습니다.',
+        updatedAt: getLastUpdateTime()
+      });
+    } else {
+      // 업데이트 불필요 시 현재 상태 반환
+      return NextResponse.json({ 
+        success: true, 
+        message: '업데이트가 필요하지 않습니다.',
+        updatedAt: getLastUpdateTime()
+      });
+    }
+  } catch (error) {
+    console.error('GET 요청 처리 중 오류 발생:', error);
+    return NextResponse.json({ 
+      success: false, 
+      message: '업데이트 상태 확인 중 오류가 발생했습니다.',
+      error: (error as Error).message
+    }, { status: 500 });
   }
 }
