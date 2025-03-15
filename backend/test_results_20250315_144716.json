@@ -1,0 +1,22 @@
+{
+  "simple_query": {
+    "summary": "분석 중 오류가 발생했습니다.",
+    "classification": {},
+    "error": "주식 분석 중 오류 발생: 'NoneType' object has no attribute 'process_query'"
+  },
+  "complex_query": {
+    "summary": "분석 중 오류가 발생했습니다.",
+    "classification": {},
+    "error": "주식 분석 중 오류 발생: 'NoneType' object has no attribute 'process_query'"
+  },
+  "no_data_query": {
+    "summary": "분석 중 오류가 발생했습니다.",
+    "classification": {},
+    "error": "주식 분석 중 오류 발생: 'NoneType' object has no attribute 'process_query'"
+  },
+  "without_stock_info": {
+    "summary": "분석 중 오류가 발생했습니다.",
+    "classification": {},
+    "error": "주식 분석 중 오류 발생: 'NoneType' object has no attribute 'process_query'"
+  }
+}
