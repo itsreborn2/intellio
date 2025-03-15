@@ -4,8 +4,8 @@ import { Suspense, useState, useEffect, useMemo, useRef } from 'react'
 import Select from 'react-select'
 import Papa from 'papaparse'
 import { MentionsInput, Mention } from 'react-mentions'
-import { sendChatMessage } from '@/services/api/chat'
-import { IChatResponse } from '@/types/api/chat'
+// import { sendChatMessage } from '@/services/api/chat'
+// import { IChatResponse } from '@/types/api/chat'
 
 // 종목 타입 정의
 interface StockOption {
@@ -109,20 +109,11 @@ function AIChatAreaContent() {
         setIsLoading(true);
         setError(null); // 요청 시작 시 오류 상태 초기화
         
-        // 구글 드라이브 파일 ID
-        const fileId = '1idVB5kIo0d6dChvOyWE7OvWr-eZ1cbpB'; // 원래 종목 리스트 파일 ID로 복원
-        
-        // API 라우트를 통해 구글 드라이브에서 종목 리스트 가져오기
-        const response = await fetch('/api/stocks', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ fileId }),
-        });
+        // 로컬 CSV 파일 직접 가져오기
+        const response = await fetch('/cache/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv');
         
         if (!response.ok) {
-          throw new Error(`API 응답 오류: ${response.status}`);
+          throw new Error(`CSV 파일 로드 오류: ${response.status}`);
         }
         
         // CSV 파일 내용 가져오기
@@ -252,20 +243,23 @@ function AIChatAreaContent() {
     setIsProcessing(true);
     
     try {
-      // 백엔드 API 호출
-      const response:IChatResponse = await sendChatMessage(selectedStock?.stockCode || '', selectedStock?.stockName || '', inputMessage);
+      // 백엔드 API 호출 대신 로컬에서 처리
+      // 응답 지연 시뮬레이션 (1초)
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      if (!response.ok) {
-        throw new Error(`API 응답 오류: ${response.status_message}`);
+      // 선택된 종목에 따른 응답 메시지 생성
+      let responseContent = '';
+      if (selectedStock) {
+        responseContent = `${selectedStock.stockName}(${selectedStock.stockCode}) 종목에 대한 질문을 받았습니다. 현재 이 기능은 로컬에서만 동작하며 백엔드 연동이 필요합니다.`;
+      } else {
+        responseContent = '질문을 받았습니다. 현재 이 기능은 로컬에서만 동작하며 백엔드 연동이 필요합니다.';
       }
-      
-      const responseData = response.answer;
       
       // 응답 메시지 생성
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant', 
-        content: responseData || '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다.',
+        content: responseContent,
         timestamp: Date.now()
       };
       

@@ -102,6 +102,9 @@ export default function RSRankPage() {
   const [highDataLoading, setHighDataLoading] = useState<boolean>(true);
   const [highDataError, setHighDataError] = useState<string | null>(null);
   
+  // 52주 신고가 종목 가격 정보
+  const [stockPriceData, setStockPriceData] = useState<Record<string, { open: number, close: number }>>({});
+  
   // 차트 데이터 관련 상태 - 20개의 차트를 위한 상태 배열로 변경
   const [chartDataArray, setChartDataArray] = useState<CandleData[][]>(Array.from({length: 20}, () => []));
   const [chartLoadingArray, setChartLoadingArray] = useState<boolean[]>(Array.from({length: 20}, () => false));
@@ -109,6 +112,8 @@ export default function RSRankPage() {
   const [chartMarketTypes, setChartMarketTypes] = useState<string[]>(Array.from({length: 20}, () => '')); // 빈 문자열로 초기화
   // 종목명을 저장할 상태 추가
   const [chartStockNames, setChartStockNames] = useState<string[]>(Array.from({length: 20}, () => ''));
+  // RS 값을 저장할 상태 추가
+  const [chartRsValues, setChartRsValues] = useState<string[]>(Array.from({length: 20}, () => ''));
   const [kospiIndexData, setKospiIndexData] = useState<CandleData[]>([]);
   const [kosdaqIndexData, setKosdaqIndexData] = useState<CandleData[]>([]);
 
@@ -286,8 +291,61 @@ export default function RSRankPage() {
       }
     };
     
+    const loadStockPriceData = async () => {
+      try {
+        // 종목 가격 데이터 파일 경로
+        const stockPriceDataPath = '/cache/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+        
+        // 파일 로드
+        const response = await fetch(stockPriceDataPath);
+        
+        if (!response.ok) {
+          console.error(`종목 가격 데이터 파일 로드 실패: ${response.status} ${response.statusText}`);
+          return;
+        }
+        
+        // CSV 텍스트 가져오기
+        const csvText = await response.text();
+        
+        // CSV 파싱
+        const parsedData = parseCSV(csvText);
+        
+        if (!parsedData || !parsedData.rows || parsedData.rows.length === 0) {
+          console.log('종목 가격 데이터가 없습니다.');
+          return;
+        }
+        
+        // 종목코드를 키로 하는 시가/종가 정보 객체 생성
+        const priceDataMap: Record<string, { open: number, close: number }> = {};
+        
+        // 각 행을 순회하며 종목코드를 키로 하는 시가/종가 정보 추출
+        parsedData.rows.forEach((row: any) => {
+          if (row['종목코드'] && row['시가'] && row['종가']) {
+            const stockCode = String(row['종목코드']).trim();
+            const openPrice = parseFloat(String(row['시가']).replace(/,/g, ''));
+            const closePrice = parseFloat(String(row['종가']).replace(/,/g, ''));
+            
+            if (!isNaN(openPrice) && !isNaN(closePrice)) {
+              priceDataMap[stockCode] = {
+                open: openPrice,
+                close: closePrice
+              };
+            }
+          }
+        });
+        
+        // 상태 업데이트
+        setStockPriceData(priceDataMap);
+        console.log(`종목 가격 데이터 로드 완료: ${Object.keys(priceDataMap).length}개 종목`);
+        
+      } catch (error) {
+        console.error('종목 가격 데이터 로드 오류:', error);
+      }
+    };
+    
     loadData();
     loadHighData();
+    loadStockPriceData();
   }, []);
 
   // 차트 데이터 로드 함수
@@ -310,6 +368,15 @@ export default function RSRankPage() {
       const newMarketTypes: string[] = Array.from({length: 20}, () => ''); // 빈 문자열로 초기화
       const newChartLoadingArray: boolean[] = Array.from({length: 20}, () => true);
       const newChartErrorArray: string[] = Array.from({length: 20}, () => '');
+      const newRsValues: string[] = Array.from({length: 20}, () => '');
+      
+      // RS 값 설정 (종목 데이터에서 가져옴)
+      top20Stocks.forEach((stock, index) => {
+        if (index < 20) {
+          newRsValues[index] = stock.RS ? String(stock.RS) : '';
+          newStockNames[index] = stock.종목명 || '';
+        }
+      });
       
       // 차트 데이터 파일 경로 배열 (순서대로 매핑)
       const chartFilePaths = [
@@ -441,7 +508,7 @@ export default function RSRankPage() {
       // 각 차트 데이터 로드를 위한 Promise 생성
       for (let i = 0; i < loadLimit; i++) {
         // 임시로 종목 정보 저장 (나중에 CSV에서 가져온 정보로 덮어씌워짐)
-        newStockNames[i] = top20Stocks[i]['종목명'] || `종목 ${i+1}`;
+        // newStockNames[i] = top20Stocks[i]['종목명'] || `종목 ${i+1}`;
         // 종목코드로 차트 데이터 파일 경로 생성
         const stockCode = top20Stocks[i]['종목코드'] || '';
         console.log(`${i+1}번째 차트 데이터 요청 - 종목코드: ${stockCode}, 임시 종목명: ${newStockNames[i]}`);
@@ -577,6 +644,7 @@ export default function RSRankPage() {
       setChartDataArray(newChartDataArray);
       setChartStockNames(newStockNames);
       setChartMarketTypes(newMarketTypes);
+      setChartRsValues(newRsValues);
       setChartLoadingArray(newChartLoadingArray);
       setChartErrorArray(newChartErrorArray);
       
@@ -707,14 +775,42 @@ export default function RSRankPage() {
   };
 
   // 시가총액을 억 단위로 포맷팅하는 함수
-  const formatMarketCap = (value: number | string | undefined): string => {
-    if (value === undefined || value === null) return '0';
+  const formatMarketCap = (value: any): string => {
+    if (!value) return '0';
+    
+    // 숫자가 아니면 그대로 반환
+    if (isNaN(Number(value))) return String(value);
     
     // 숫자로 변환
-    const numValue = typeof value === 'string' ? Number(value) : value;
+    const valueStr = typeof value === 'number' ? String(value) : value;
+    let marketCapValue = Number(valueStr.replace(/[^0-9.]/g, ''));
     
-    // 소수점 제거하고 천 단위 쉼표 추가
-    return Math.floor(numValue).toLocaleString('ko-KR');
+    // 10억 이상인 경우 억 단위로 변환 (1,000,000,000 이상)
+    if (marketCapValue >= 100000000) {
+      marketCapValue = marketCapValue / 100000000; // 억 단위로 변환
+    }
+    
+    // 소수점 제거하고 천 단위 구분 쉼표(,) 추가
+    return Math.floor(marketCapValue).toLocaleString('ko-KR');
+  };
+
+  // 등락률 계산 함수 추가
+  const calculatePriceChange = (openPrice: number, closePrice: number): number => {
+    if (!openPrice || openPrice === 0) return 0;
+    return ((closePrice - openPrice) / openPrice) * 100;
+  };
+
+  // 등락률 포맷팅 함수
+  const formatPriceChange = (change: number): string => {
+    if (change === 0) return '0.00%';
+    return change > 0 ? `+${change.toFixed(2)}%` : `${change.toFixed(2)}%`;
+  };
+
+  // 등락률에 따른 색상 결정 함수
+  const getPriceChangeColor = (change: number): string => {
+    if (change >= 5) return 'text-red-500'; // 5% 이상 상승은 빨간색
+    if (change < 0) return 'text-blue-500'; // 하락은 파란색
+    return 'text-gray-900'; // 그 외는 검정색
   };
 
   // 현재 페이지에 표시할 데이터 계산
@@ -792,10 +888,14 @@ export default function RSRankPage() {
       
       // 숫자로 변환 후 억 단위로 나누고 소수점 없이 표시
       const valueStr = typeof value === 'number' ? String(value) : value;
-      const marketCapInBillions = Math.floor(Number(valueStr.replace(/,/g, '')) / 100000000);
+      const marketCapInBillions = Number(valueStr.replace(/[^0-9.]/g, ''));
       
       // 천 단위 구분 쉼표(,) 추가
-      return marketCapInBillions.toLocaleString('ko-KR');
+      if (marketCapInBillions >= 100000000) {
+        return Math.floor(marketCapInBillions / 100000000).toLocaleString('ko-KR');
+      } else {
+        return Math.floor(marketCapInBillions).toLocaleString('ko-KR');
+      }
     }
     
     // 종목코드가 아닌 숫자인 경우에만 천 단위 구분 쉼표(,) 추가
@@ -831,34 +931,46 @@ export default function RSRankPage() {
     
     // 52주 신고가 데이터 전체를 사용하고 매칭 정보 생성
     const mappedData = highData.rows.map((highRow: any) => {
-      // 종목명으로 RS 순위 데이터에서 매칭되는 항목 찾기
+      // 종목명으로 RS 데이터 매칭
       const matchingRSRow = csvData.rows.find((rsRow: any) => 
         rsRow['종목명'] && highRow['종목명'] && 
-        rsRow['종목명'].trim() === highRow['종목명'].trim()
-      );
+        String(rsRow['종목명']).trim() === String(highRow['종목명']).trim());
       
       console.log(`종목 "${highRow['종목명']}" 매칭 결과:`, matchingRSRow ? '매칭됨' : '매칭 안됨');
+      
+      // 종목 가격 정보에서 시가/종가 가져오기
+      let priceChange = 0;
+      const stockCode = highRow['종목코드'] ? String(highRow['종목코드']).trim() : '';
+      
+      if (stockCode && stockPriceData[stockCode]) {
+        const { open, close } = stockPriceData[stockCode];
+        priceChange = calculatePriceChange(open, close);
+      }
       
       // 매칭된 정보 합치기
       return {
         // 52주 신고가 데이터
-        '종목명': highRow['종목명'],
-        '종목코드': highRow['종목코드'],
+        ...highRow,
         
-        // RS 데이터 (숫자 형식으로 처리)
-        'RS': matchingRSRow && matchingRSRow['RS'] ? Number(matchingRSRow['RS']) : 0,
+        // RS 순위 데이터에서 가져온 정보
+        'RS': matchingRSRow ? matchingRSRow['RS'] : '-',
+        'RS_1M': matchingRSRow ? matchingRSRow['RS_1M'] : '-',
+        'RS_2M': matchingRSRow ? matchingRSRow['RS_2M'] : '-',
+        'RS_3M': matchingRSRow ? matchingRSRow['RS_3M'] : '-',
         
-        // 시가총액 (억 단위로 변환)
-        '시가총액(억)': matchingRSRow ? Math.floor(Number(String(matchingRSRow['시가총액']).replace(/,/g, '')) / 100000000) : 0,
+        // 시가총액 
+        '시가총액(억)': highRow['시가총액'] ? Number(String(highRow['시가총액']).replace(/[^0-9.]/g, '')) : 0,
         
-        // 거래대금 (억 단위로 변환)
+        // 거래대금 
         '거래대금(억)': highRow['거래대금'] ? Number(String(highRow['거래대금']).replace(/[^0-9.]/g, '')) : 0,
+        
+        // 등락률 추가
+        '등락률': priceChange,
         
         // 테마명 추가
         '테마명': matchingRSRow && matchingRSRow['테마명'] ? matchingRSRow['테마명'] : '-',
         
-        // 기타 정보
-        '업종': matchingRSRow ? matchingRSRow['업종'] : '-'
+        'MMT': matchingRSRow ? matchingRSRow['MMT'] : '-'
       };
     });
     
@@ -881,16 +993,32 @@ export default function RSRankPage() {
       // 숫자로 변환하여 내림차순 정렬 (큰 값이 먼저 오도록)
       return Number(b['RS'] || 0) - Number(a['RS'] || 0);
     });
-  }, [highData, csvData]);
+  }, [highData, csvData, stockPriceData]);
 
   // 차트 컴포넌트 렌더링
   const renderChartComponent = (index: number) => {
     if (chartLoadingArray[index]) {
       return (
-        <div className="h-80 flex items-center justify-center border border-dashed border-gray-300 rounded-md">
-          <div className="flex flex-col items-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-2"></div>
-            <span className="text-gray-500">차트 데이터 로딩 중...</span>
+        <div>
+          <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
+            <div className="flex items-center">
+              <span className="font-medium text-sm">{chartStockNames[index] || '로딩 중...'}</span>
+              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-300 text-gray-700`}>
+                {chartMarketTypes[index] || '...'}
+              </span>
+            </div>
+            {chartRsValues[index] && (
+              <div className="flex items-center">
+                <span className="text-xs text-gray-500 mr-1">RS</span>
+                <span className="font-medium text-sm text-blue-600">{chartRsValues[index]}</span>
+              </div>
+            )}
+          </div>
+          <div className="h-80 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-2"></div>
+              <span className="text-gray-500">차트 데이터 로딩 중...</span>
+            </div>
           </div>
         </div>
       );
@@ -898,16 +1026,50 @@ export default function RSRankPage() {
 
     if (chartErrorArray[index] && chartErrorArray[index].length > 0) {
       return (
-        <div className="h-80 flex items-center justify-center border border-dashed border-gray-300 rounded-md">
-          <span className="text-red-500">{chartErrorArray[index]}</span>
+        <div>
+          <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
+            <div className="flex items-center">
+              <span className="font-medium text-sm">{chartStockNames[index] || '오류'}</span>
+              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-800`}>
+                오류
+              </span>
+            </div>
+            {chartRsValues[index] && (
+              <div className="flex items-center">
+                <span className="text-xs text-gray-500 mr-1">RS</span>
+                <span className="font-medium text-sm text-blue-600">{chartRsValues[index]}</span>
+              </div>
+            )}
+          </div>
+          <div className="h-80 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
+            <span className="text-red-500">{chartErrorArray[index]}</span>
+          </div>
         </div>
       );
     }
 
     if (!chartDataArray[index] || chartDataArray[index].length === 0) {
       return (
-        <div className="h-80 flex items-center justify-center border border-dashed border-gray-300 rounded-md">
-          <span className="text-gray-400">표시할 차트 데이터가 없습니다.</span>
+        <div>
+          <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
+            <div className="flex items-center">
+              <span className="font-medium text-sm">{chartStockNames[index] || '데이터 없음'}</span>
+              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-300 text-gray-700`}>
+                {chartMarketTypes[index] || '...'}
+              </span>
+            </div>
+            {chartRsValues[index] && (
+              <div className="flex items-center">
+                <span className="text-xs text-gray-500 mr-1">RS</span>
+                <span className="font-medium text-sm text-blue-600">{chartRsValues[index]}</span>
+              </div>
+            )}
+          </div>
+          <div className="h-80 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
+            <div className="flex flex-col items-center">
+              <span className="text-gray-400">표시할 차트 데이터가 없습니다.</span>
+            </div>
+          </div>
         </div>
       );
     }
@@ -918,14 +1080,20 @@ export default function RSRankPage() {
     const bgColorClass = isKospi ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800';
 
     return (
-      <div className="h-80 border border-gray-200 rounded-md overflow-hidden">
-        <div className="bg-gray-100 px-3 py-1 border-b border-gray-200 flex justify-between items-center">
+      <div>
+        <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
           <div className="flex items-center">
             <span className="font-medium text-sm">{chartStockNames[index]}</span>
-            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${bgColorClass}`} data-component-name="RSRankPage">
+            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${bgColorClass}`}>
               {marketType}
             </span>
           </div>
+          {chartRsValues[index] && (
+            <div className="flex items-center">
+              <span className="text-xs text-gray-500 mr-1">RS</span>
+              <span className="font-medium text-sm text-blue-600">{chartRsValues[index]}</span>
+            </div>
+          )}
         </div>
         <ChartComponent 
           data={chartDataArray[index]} 
@@ -999,10 +1167,7 @@ export default function RSRankPage() {
                     <h2 className="text-lg font-semibold">RS순위</h2>
                     <span className="text-xs text-gray-600">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
                   </div>
-                  <div 
-                    className="overflow-x-auto"
-                    style={{ overflowX: 'hidden' }}
-                  >
+                  <div className="flex-1" style={{ overflowX: 'hidden' }}>
                     <table className="w-full bg-white border border-gray-200 table-fixed">
                       <thead>
                         <tr className="bg-gray-100">
@@ -1044,13 +1209,13 @@ export default function RSRankPage() {
                                 style={{ 
                                   width: header === '종목명' ? '100px' : 
                                           header === '테마명' ? '220px' :
-                                          header === '시가총액' ? '85px' :
+                                          header === '시가총액' ? '40px' :
                                           header === '종목코드' ? '60px' : 
                                           header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MMT' ? '45px' :
                                           header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '40px' :
                                           header === '업종' ? '220px' : '70px',
                                   fontSize: '0.875rem',
-                                  maxWidth: header === '테마명' ? '220px' : 'auto',
+                                  maxWidth: header === '테마명' ? '265px' : 'auto',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis'
@@ -1168,7 +1333,21 @@ export default function RSRankPage() {
                               </th>
                               <th 
                                 className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '85px', fontSize: '0.875rem' }}
+                                style={{ width: '70px', fontSize: '0.875rem' }}
+                                onClick={() => requestSort('등락률')}
+                              >
+                                <div className="flex items-center justify-center">
+                                  <span>등락률</span>
+                                  {sortKey === '등락률' && (
+                                    <span className="ml-1">
+                                      {sortDirection === 'asc' ? '▲' : '▼'}
+                                    </span>
+                                  )}
+                                </div>
+                              </th>
+                              <th 
+                                className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
+                                style={{ width: '75px', fontSize: '0.875rem' }}
                                 onClick={() => requestSort('시가총액(억)')}
                               >
                                 <div className="flex items-center justify-center">
@@ -1196,7 +1375,7 @@ export default function RSRankPage() {
                               </th>
                               <th 
                                 className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '120px', fontSize: '0.875rem' }}
+                                style={{ width: '130px', fontSize: '0.875rem' }}
                                 onClick={() => requestSort('테마명')}
                               >
                                 <div className="flex items-center justify-center">
@@ -1224,6 +1403,14 @@ export default function RSRankPage() {
                                   style={{ width: '45px', fontSize: '0.875rem' }}
                                 >
                                   {row['RS']}
+                                </td>
+                                <td 
+                                  className={`py-1.5 px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis ${getPriceChangeColor(row['등락률'])}`}
+                                  style={{ width: '75px', fontSize: '0.875rem' }}
+                                >
+                                  <div className="flex items-center justify-end">
+                                    {formatPriceChange(row['등락률'])}
+                                  </div>
                                 </td>
                                 <td 
                                   className="py-1.5 px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"

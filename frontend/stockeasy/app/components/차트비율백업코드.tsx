@@ -425,6 +425,8 @@ const ChartComponent: React.FC<ChartProps> = ({
             color: '#ffffff' 
           },
           textColor: '#333',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif',
+          fontSize: 10,
         },
         grid: {
           vertLines: {
@@ -439,11 +441,16 @@ const ChartComponent: React.FC<ChartProps> = ({
         },
         rightPriceScale: {
           borderColor: 'rgba(197, 203, 206, 0.8)',
+          minimumWidth: 40,
+          entireTextOnly: false
         },
         timeScale: {
           borderColor: 'rgba(197, 203, 206, 0.8)',
           timeVisible: true,
           secondsVisible: false,
+          rightBarStaysOnScroll: true,
+          rightOffset: 3,
+          barSpacing: 6,
           tickMarkFormatter: (time: Time, tickMarkType: any, locale: string) => {
             const date = new Date(Number(time) * 1000);
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
