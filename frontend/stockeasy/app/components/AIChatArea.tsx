@@ -487,9 +487,10 @@ function AIChatAreaContent() {
     height: '100%',
     width: '100%',
     maxWidth: '1200px',
-    padding: '0 0 0 0', // 모든 패딩 제거
+    padding: '10px',
     boxSizing: 'border-box',
-    position: 'relative'
+    position: 'relative',
+    overflow: 'hidden' // 오버플로우 숨김 추가
   };
 
   const inputAreaStyle: React.CSSProperties = {
@@ -824,23 +825,22 @@ function AIChatAreaContent() {
       
       {/* 메시지 표시 영역 */}
       <div 
-        className="messages-container"
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '10px',
-          marginBottom: '0', // 하단 여백 제거
-          border: '1px solid #eee',
-          borderRadius: '4px',
-          backgroundColor: '#ffffff', // 배경색을 흰색으로 변경
-          marginTop: '0', // 상단 여백 제거
-          width: '100%', // 너비 100%로 확장
-          height: 'calc(100% - 50px)', // 입력 영역을 제외한 전체 높이
-          boxSizing: 'border-box', // 패딩과 테두리를 너비에 포함
-          borderRight: '1px solid #eee', // 우측 테두리 추가
-          borderBottom: '1px solid #eee' // 하단 테두리 추가
-        }}
-      >
+              className="messages-container"
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                padding: '10px',
+                margin: '0',
+                border: '1px solid #eee',
+                borderRadius: '4px',
+                backgroundColor: '#ffffff',
+                width: '100%',
+                height: 'calc(100% - 60px)',
+                boxSizing: 'border-box',
+                position: 'relative'
+              }}
+            >
         {messages.length === 0 ? (
           <div style={{ 
             textAlign: 'center', 
