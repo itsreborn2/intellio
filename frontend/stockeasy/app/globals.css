@@ -13,7 +13,12 @@
   display: flex;
   flex-direction: row;
   height: 100vh;
-  padding-left: 63px; /* 사이드바 너비 + 여백 4px */
+  padding-left: 63px;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
 }
 
 .sidebar {
@@ -31,10 +36,12 @@
 .main-content {
   display: flex;
   flex-direction: column;
-  width: 100%; /* 전체 너비 사용 */
-  margin-left: 4px; /* 사이드바와의 여백 추가 */
+  width: 100%;
+  margin-left: 4px;
   flex: 1;
   padding: 0;
+  overflow: hidden;
+  height: 100vh;
 }
 
 .main-content > section {
@@ -46,11 +53,12 @@
 .top-section {
   display: flex;
   height: 60vh;
-  gap: 4px; /* 여백을 4px로 통일 */
+  gap: 4px;
   width: 100%;
-  margin-bottom: 4px; /* 여백을 4px로 통일 */
+  margin-bottom: 4px;
   padding: 0;
-  margin-top: 4px; /* 상단 여백 추가 */
+  margin-top: 4px;
+  overflow: hidden;
 }
 
 .top-section > *:first-child {
@@ -82,13 +90,14 @@
 
 .bottom-section {
   display: grid;
-  grid-template-columns: 3.5fr 2.5fr 2fr 2fr; /* 비율 조정: BottomCenterArea 너비 축소 및 우측 영역 확장 */
-  height: 40vh;
+  grid-template-columns: 3.5fr 2.5fr 2fr 2fr;
+  height: calc(40vh - 12px);
   width: 100%;
-  margin-bottom: 4px; /* 여백을 4px로 통일 */
-  gap: 4px; /* 여백을 4px로 통일 */
-  margin-top: 4px; /* 상단 여백 추가 - 모든 섹션 사이 여백 통일 */
-  padding: 0; /* 패딩 제거 */
+  margin-bottom: 4px;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 0;
+  overflow: hidden;
 }
 
 .bottom-area {
@@ -118,10 +127,10 @@
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 10px;
   box-sizing: border-box;
   position: relative;
-  margin-right: 4px; /* 우측 여백 추가 */
+  overflow: hidden;
 }
 
 /* AI Chat Area Input Styles - More sophisticated styling */
@@ -288,3 +297,17 @@
 
 /* 빈 규칙셋 제거 및 주석으로 대체 */
 /* .stock-select-container 클래스에 대한 스타일은 필요시 여기에 추가 */
+
+/* messages-container 스타일 추가 */
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: calc(100% - 60px);
+  padding: 10px;
+  margin: 0;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background-color: #ffffff;
+  box-sizing: border-box;
+}

@@ -31,21 +31,6 @@ class SemanticRetriever(BaseRetriever):
         try:
             # 기본값 설정
             _top_k = top_k or self.config.top_k
-            # AI 삭제금지.
-            # 검색 수행. 검색 결과는 점수 순으로 정렬되어 있음.
-            # search_similar() 리턴값
-            #  result = {
-            #     "id": match.id,
-            #     "score": match.score,
-            #     "metadata": match.metadata => 이건 pineonce의 metadata임.
-            # }
-            # pinecone의 metadata
-            #   "metadata": {
-            # 	    "document_id": document_id,
-            # 	    "chunk_index": batch_start_idx + i,
-            # 	    "text": chunk
-            #   }
-
 
             # VectorStoreManager 사용
             search_results = self.vs_manager.search(

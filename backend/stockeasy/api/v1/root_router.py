@@ -26,7 +26,11 @@ class Source(BaseModel):
     content_snippet: str = None
     relevance_score: float = None
 
-class UserQuestionResponse(BaseModel):
+class BaseResponse(BaseModel):
+    ok: bool
+    status_message: str
+
+class UserQuestionResponse(BaseResponse):
     answer: str
     sources: Optional[List[Source]] = None
 
@@ -44,6 +48,8 @@ async def user_question(
         logger.info(f"답변: {answer}")
         # 4. 응답 반환
         return UserQuestionResponse(
+            ok=True,
+            status_message="답변 생성 성공",
             answer=answer
         )
         

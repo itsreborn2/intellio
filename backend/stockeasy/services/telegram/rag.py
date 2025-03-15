@@ -39,10 +39,10 @@ class TelegramRAGService:
 
 1. 메시지의 시간 순서를 고려하여 사건의 흐름을 파악하세요.
 2. 중복되는 정보는 한 번만 포함하세요.
-3. 구체적인 수치나 통계는 정확히 인용하세요.
-4. 메시지 작성자의 주관적 의견과 객관적 사실을 구분하세요.
-5. 요약은 명확하고 간결하게 작성하되, 중요한 세부사항은 포함하세요.
-
+3. 질문과 관련 없는 메세지는 제외하세요.
+4. 구체적인 수치나 통계는 정확히 인용하세요.
+5. 메시지 작성자의 주관적 의견과 객관적 사실을 구분하세요.
+6. 요약은 명확하고 간결하게 작성하되, 중요한 세부사항은 포함하세요.
 """
 
     def _calculate_message_importance(self, message: str) -> float:
@@ -164,13 +164,30 @@ class TelegramRAGService:
             base_threshold += 0.05  # 수치 포함 시 더 엄격하게
             
         return min(max(base_threshold, 0.4), 0.9)  # 0.4 ~ 0.9 사이로 제한
-
+    def MakeUserPrompt(self, query: str, stock_code: str, stock_name: str, classification: QuestionClassification= None) -> str:
+        """질문 분류 결과에 따라 적절한 사용자 프롬프트를 생성합니다.
+        
+        Args:
+            query (str): 검색 쿼리
+            stock_code (str): 종목 코드
+        """
+        user_prompt = f"""
+종목코드: {stock_code}
+종목명: {stock_name}
+질문: {query}
+"""
+        return user_prompt
+        
+    
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
-    async def search_messages(self, query: str, classification: QuestionClassification= None) -> List[str]:
+    async def search_messages(self, query: str, stock_code: str, stock_name: str, classification: QuestionClassification= None) -> List[str]:
         """쿼리와 관련된 텔레그램 메시지를 검색합니다.
         
         Args:
             query (str): 검색 쿼리
+            stock_code (str): 종목 코드
+            stock_name (str): 종목 이름
+            classification (QuestionClassification): 질문 분류 결과
             k (int): 검색할 메시지 수
             
         Returns:
@@ -208,9 +225,9 @@ class TelegramRAGService:
             semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
                                                         min_score=dynamic_threshold,
                                                         ), vs_manager=vs_manager)
-                    
+        
             retrieval_result:RetrievalResult = await semantic_retriever.retrieve(
-                query=query, 
+                query= self.MakeUserPrompt(query, stock_code, stock_name, classification),
                 top_k=k * 2,
             )
             
@@ -255,6 +272,8 @@ class TelegramRAGService:
         """
         # 기본 프롬프트 템플릿
         base_prompt = self.summary_prompt.rstrip()
+        return base_prompt
+        # 아래 프롬프트는 나중에 보완할것.
         
         # 종목 정보가 있는 경우 추가
         stock_info = ""
@@ -338,7 +357,7 @@ class TelegramRAGService:
         return final_prompt
 
     @async_retry(retries=2, delay=2.0, exceptions=(Exception,))
-    async def summarize(self, messages: List[str], classification: QuestionClassification) -> str:
+    async def summarize(self, query:str, stock_code: str, stock_name: str, found_messages: List[str], classification: QuestionClassification) -> str:
         """메시지 목록을 요약합니다.
         
         Args:
@@ -352,11 +371,11 @@ class TelegramRAGService:
             SummarizeError: 요약 생성 중 오류 발생 시
         """
         try:
-            if not messages:
+            if not found_messages:
                 return "관련된 메시지를 찾을 수 없습니다."
             
-            messages_text = "\n".join([f"- {msg}" for msg in messages])
-            
+            messages_text = "\n".join([f"- {msg}" for msg in found_messages])
+            messages_text += "\n\n-------\n" + self.MakeUserPrompt(query, stock_code, stock_name, classification)
             # 질문 분류 결과에 따라 프롬프트 생성
             prompt_context = self.MakeSummaryPrompt(classification)
             
@@ -396,7 +415,7 @@ class TelegramRAGService:
             }
             
             semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
-                                                        min_score=0.2,
+                                                        min_score=0.22,
                                                         metadata_filter=metadata_filter
                                                         ), vs_manager=vs_manager)
                     
