@@ -33,11 +33,15 @@ function SidebarContent() {
     settings: useRef<HTMLButtonElement>(null)
   };
 
-  // 스탁이지 메인 페이지로 이동하는 함수
+  // 환경 변수를 사용하여 URL 설정
+  const stockEasyUrl = process.env.NEXT_PUBLIC_STOCKEASY_URL || 'https://stockeasy.intellio.kr';
+  const docEasyUrl = process.env.NEXT_PUBLIC_DOCEASY_URL || 'https://doceasy.intellio.kr';
+  
+  // 페이지 이동 함수
   const goToHomePage = () => router.push('/');
   const goToRSRankPage = () => router.push('/rs-rank');
   const goToETFSectorPage = () => router.push('/etf-sector'); // ETF/섹터 페이지 이동 함수 추가
-  const goToDocEasy = () => window.open('http://localhost:3010', '_blank');
+  const goToDocEasy = () => window.open(docEasyUrl, '_blank');
 
   // 버튼 위치에 따라 툴팁 위치 계산
   useEffect(() => {

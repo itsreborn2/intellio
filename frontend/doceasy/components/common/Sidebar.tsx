@@ -400,14 +400,18 @@ function SidebarContent({ className }: SidebarProps) {
                 <Button 
                   variant="ghost" 
                   className="w-full flex items-center justify-start gap-2 px-2 py-2 hover:bg-gray-50"
-                  onClick={() => window.open('http://localhost:3020', '_blank')}
+                  onClick={() => {
+                    // 환경 변수를 사용하여 StockEasy URL 설정
+                    const stockEasyUrl = process.env.NEXT_PUBLIC_STOCKEASY_URL || 'https://stockeasy.intellio.kr';
+                    window.open(stockEasyUrl, '_blank');
+                  }}
                 >
                   <BarChart2 className="h-4 w-4" />
                   <span className="text-left flex-grow font-medium">StockEasy</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>스탁이지로 이동</p>
+                <p>AI 주식정보 서비스</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
