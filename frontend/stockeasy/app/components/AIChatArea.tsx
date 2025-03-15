@@ -109,14 +109,20 @@ function AIChatAreaContent() {
         setIsLoading(true);
         setError(null); // 요청 시작 시 오류 상태 초기화
         
-        // 로컬 CSV 파일 경로
-        const csvFilePath = '/cache/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+        // 구글 드라이브 파일 ID
+        const fileId = '1idVB5kIo0d6dChvOyWE7OvWr-eZ1cbpB'; // 원래 종목 리스트 파일 ID로 복원
         
-        // 로컬 파일 직접 가져오기
-        const response = await fetch(csvFilePath);
+        // API 라우트를 통해 구글 드라이브에서 종목 리스트 가져오기
+        const response = await fetch('/api/stocks', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fileId }),
+        });
         
         if (!response.ok) {
-          throw new Error(`로컬 파일 로드 오류: ${response.status}`);
+          throw new Error(`API 응답 오류: ${response.status}`);
         }
         
         // CSV 파일 내용 가져오기
@@ -220,9 +226,7 @@ function AIChatAreaContent() {
     if (!inputMessage.trim() && !selectedStock) return;
     
     // 사용자 메시지 생성
-    const userMessageContent = selectedStock 
-      ? `${selectedStock.stockName}(${selectedStock.stockCode}) 종목에 대해 ${inputMessage}` 
-      : inputMessage;
+    const userMessageContent = inputMessage;
     
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -254,6 +258,7 @@ function AIChatAreaContent() {
       }
       
       const responseData = response.answer;
+      console.log('answer : ', responseData);
       
       // 응답 메시지 생성
       const assistantMessage: ChatMessage = {
@@ -323,52 +328,7 @@ function AIChatAreaContent() {
   useEffect(() => {
     if (!isMounted) return;
     
-    // 예시 메시지 추가 (개발용)
-    if (messages.length === 0) {
-      const initialMessages: ChatMessage[] = [
-        {
-          id: `user-${Date.now()-2000}`,
-          role: 'user',
-          content: '올해 실적 전망이 어떻게 돼?',
-          timestamp: Date.now()-2000,
-          stockInfo: {
-            stockName: '삼성전자',
-            stockCode: '005930'
-          }
-        },
-        {
-          id: `assistant-${Date.now()-1000}`,
-          role: 'assistant',
-          content: `삼성전자의 올해 실적 전망은 전반적으로 긍정적입니다. 주요 내용을 요약해 드리겠습니다:
-
-1. **메모리 반도체 부문 호조**
-   - HBM(High Bandwidth Memory) 수요 급증으로 메모리 가격 상승세가 유지될 전망
-   - AI 서버용 고부가가치 메모리 비중 확대로 ASP 상승 및 수익성 개선 기대
-   - 하반기 서버 및 모바일 시장 회복으로 메모리 부문 매출 성장 가속화
-
-2. **파운드리 사업 경쟁력 강화**
-   - 3나노 이하 첨단 공정 확대로 시장 점유율 상승 기대
-   - NVIDIA와의 협력 강화로 AI 반도체 시장 입지 확대
-
-3. **숫자로 보는 전망**
-   - 매출액: 전년 대비 약 12% 증가 예상
-   - 영업이익: 전년 대비 25~30% 성장 전망
-   - 특히 반도체 부문 영업이익률 15% 이상으로 회복 기대
-
-4. **위험 요소**
-   - 글로벌 경쟁 심화 및 기술 변화 가속화
-   - 무역 분쟁 및 보호무역주의 강화로 인한 불확실성
-   - 원자재 및 부품 가격 변동성에 따른 수익성 영향
-
-종합적으로 반도체 수요 증가와 AI 시장 확대에 따른 수혜가 예상되며, 특히 HBM 메모리와 파운드리 사업 확장이 실적 개선의 핵심 동력이 될 것으로 분석됩니다.
-
-더 구체적인 세부 사업 부문별 전망이 필요하시면 추가로 질문해 주세요.`,
-          timestamp: Date.now()-1000
-        }
-      ];
-      
-      setMessages(initialMessages);
-    }
+    
   }, [isMounted, messages.length]);
 
   // 입력 필드 포커스 시 종목 추천 목록 표시
@@ -825,22 +785,22 @@ function AIChatAreaContent() {
       
       {/* 메시지 표시 영역 */}
       <div 
-              className="messages-container"
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                padding: '10px',
-                margin: '0',
-                border: '1px solid #eee',
-                borderRadius: '4px',
-                backgroundColor: '#ffffff',
-                width: '100%',
-                height: 'calc(100% - 60px)',
-                boxSizing: 'border-box',
-                position: 'relative'
-              }}
-            >
+        className="messages-container"
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '10px',
+          margin: '0',
+          border: '1px solid #eee',
+          borderRadius: '4px',
+          backgroundColor: '#ffffff',
+          width: '100%',
+          height: 'calc(100% - 60px)',
+          boxSizing: 'border-box',
+          position: 'relative'
+        }}
+      >
         {messages.length === 0 ? (
           <div style={{ 
             textAlign: 'center', 
