@@ -98,25 +98,17 @@ function AIChatAreaContent() {
 
     const fetchStockList = async () => {
       try {
-        // 캐시가 유효한지 확인 (캐시된 데이터가 있고, 캐시 유효 시간이 지나지 않았는지)
-        const currentTime = Date.now();
-        if (cachedStockData.length > 0 && (currentTime - lastFetchTime) < CACHE_DURATION) {
-          console.log('캐시된 종목 데이터 사용:', cachedStockData.length);
-          setStockOptions(cachedStockData);
-          return;
-        }
-
         setIsLoading(true);
         setError(null); // 요청 시작 시 오류 상태 초기화
         
-        // 로컬 CSV 파일 경로
-        const csvFilePath = '/cache/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+        // 서버 캐시 CSV 파일 경로
+        const csvFilePath = '/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
         
-        // 로컬 파일 직접 가져오기
-        const response = await fetch(csvFilePath);
+        // 서버 캐시 파일 가져오기 (항상 최신 데이터 사용)
+        const response = await fetch(csvFilePath, { cache: 'no-store' });
         
         if (!response.ok) {
-          throw new Error(`로컬 파일 로드 오류: ${response.status}`);
+          throw new Error(`서버 캐시 파일 로드 오류: ${response.status}`);
         }
         
         // CSV 파일 내용 가져오기
@@ -155,18 +147,8 @@ function AIChatAreaContent() {
         if (stockData.length > 0) {
           console.log(`종목 데이터 ${stockData.length}개 로드 완료`);
           setStockOptions(stockData);
-          
-          // 캐시 업데이트
           setCachedStockData(stockData);
-          setLastFetchTime(currentTime);
-          
-          // 로컬 스토리지에도 캐싱 (페이지 새로고침 시에도 유지)
-          try {
-            localStorage.setItem('cachedStockData', JSON.stringify(stockData));
-            localStorage.setItem('lastFetchTime', currentTime.toString());
-          } catch (storageError) {
-            console.warn('로컬 스토리지 저장 실패:', storageError);
-          }
+          setLastFetchTime(Date.now());
         } else {
           const errorMsg = '유효한 종목 데이터를 받지 못했습니다.';
           console.error(errorMsg);
@@ -181,36 +163,6 @@ function AIChatAreaContent() {
         setIsLoading(false);
       }
     };
-
-    // 로컬 스토리지에서 캐시된 데이터 불러오기 시도
-    try {
-      const cachedDataStr = localStorage.getItem('cachedStockData');
-      const cachedTimeStr = localStorage.getItem('lastFetchTime');
-      
-      if (cachedDataStr && cachedTimeStr) {
-        const cachedData = JSON.parse(cachedDataStr);
-        const cachedTime = parseInt(cachedTimeStr, 10);
-        
-        if (Array.isArray(cachedData) && cachedData.length > 0) {
-          console.log('로컬 스토리지에서 캐시된 종목 데이터 불러옴:', cachedData.length);
-          setCachedStockData(cachedData);
-          setLastFetchTime(cachedTime);
-          
-          // 캐시가 유효한지 확인
-          const currentTime = Date.now();
-          if ((currentTime - cachedTime) < CACHE_DURATION) {
-            console.log('유효한 캐시 사용');
-            setStockOptions(cachedData);
-            setIsLoading(false);
-            return;
-          } else {
-            console.log('캐시 만료됨, 새로운 데이터 가져오기');
-          }
-        }
-      }
-    } catch (storageError) {
-      console.warn('로컬 스토리지 읽기 실패:', storageError);
-    }
 
     fetchStockList();
   }, [isMounted]); // 의존성 배열에서 cachedStockData와 lastFetchTime 제거
@@ -295,51 +247,25 @@ function AIChatAreaContent() {
   useEffect(() => {
     if (!isMounted) return;
     
-    try {
-      const savedMessages = localStorage.getItem('chatMessages');
-      if (savedMessages) {
-        const parsedMessages = JSON.parse(savedMessages);
-        if (Array.isArray(parsedMessages)) {
-          setMessages(parsedMessages);
-        }
-      }
-    } catch (error) {
-      console.warn('메시지 불러오기 실패:', error);
-    }
-  }, [isMounted]);
-  
-  // 메시지 저장
-  useEffect(() => {
-    if (!isMounted || messages.length === 0) return;
-    
-    try {
-      localStorage.setItem('chatMessages', JSON.stringify(messages));
-    } catch (error) {
-      console.warn('메시지 저장 실패:', error);
-    }
-  }, [messages, isMounted]);
-
-  // 컴포넌트가 마운트되었을 때 초기 메시지 설정
-  useEffect(() => {
-    if (!isMounted) return;
-    
-    // 예시 메시지 추가 (개발용)
-    if (messages.length === 0) {
-      const initialMessages: ChatMessage[] = [
-        {
-          id: `user-${Date.now()-2000}`,
-          role: 'user',
-          content: '올해 실적 전망이 어떻게 돼?',
-          timestamp: Date.now()-2000,
-          stockInfo: {
-            stockName: '삼성전자',
-            stockCode: '005930'
-          }
-        },
-        {
-          id: `assistant-${Date.now()-1000}`,
-          role: 'assistant',
-          content: `삼성전자의 올해 실적 전망은 전반적으로 긍정적입니다. 주요 내용을 요약해 드리겠습니다:
+    // 서버에서 메시지 데이터를 가져오는 함수
+    const fetchMessages = async () => {
+      try {
+        // 초기 메시지 설정 (개발용)
+        const initialMessages: ChatMessage[] = [
+          {
+            id: `user-${Date.now()-2000}`,
+            role: 'user',
+            content: '올해 실적 전망이 어떻게 돼?',
+            timestamp: Date.now()-2000,
+            stockInfo: {
+              stockName: '삼성전자',
+              stockCode: '005930'
+            }
+          },
+          {
+            id: `assistant-${Date.now()-1000}`,
+            role: 'assistant',
+            content: `삼성전자의 올해 실적 전망은 전반적으로 긍정적입니다. 주요 내용을 요약해 드리겠습니다:
 
 1. **메모리 반도체 부문 호조**
    - HBM(High Bandwidth Memory) 수요 급증으로 메모리 가격 상승세가 유지될 전망
@@ -363,12 +289,35 @@ function AIChatAreaContent() {
 종합적으로 반도체 수요 증가와 AI 시장 확대에 따른 수혜가 예상되며, 특히 HBM 메모리와 파운드리 사업 확장이 실적 개선의 핵심 동력이 될 것으로 분석됩니다.
 
 더 구체적인 세부 사업 부문별 전망이 필요하시면 추가로 질문해 주세요.`,
-          timestamp: Date.now()-1000
-        }
-      ];
-      
-      setMessages(initialMessages);
+            timestamp: Date.now()-1000
+          }
+        ];
+        
+        setMessages(initialMessages);
+      } catch (error) {
+        console.warn('메시지 불러오기 실패:', error);
+      }
+    };
+
+    fetchMessages();
+  }, [isMounted]);
+  
+  // 메시지 저장 - 서버 측 저장 방식으로 변경 (현재는 구현하지 않음)
+  useEffect(() => {
+    // 메시지 저장 로직은 서버 측 구현이 필요하므로 여기서는 생략
+    // 추후 API 엔드포인트를 통해 메시지를 서버에 저장하는 방식으로 변경 가능
+  }, [messages, isMounted]);
+
+  // 컴포넌트가 마운트되었을 때 초기 메시지 설정
+  useEffect(() => {
+    if (!isMounted) return;
+    
+    // 이미 메시지가 있으면 초기화하지 않음
+    if (messages.length > 0) {
+      return;
     }
+    
+    // 초기 메시지 설정 로직은 위의 fetchMessages 함수에서 처리
   }, [isMounted, messages.length]);
 
   // 입력 필드 포커스 시 종목 추천 목록 표시

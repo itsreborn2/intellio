@@ -1,23 +1,11 @@
-/**
- * Google Drive 파일 동기화 및 캐싱 유틸리티
- * 
- * 이 모듈은 Google Drive에서 파일을 다운로드하고 로컬 캐시에 저장하는 기능을 제공합니다.
- * 주요 기능:
- * - 구글 드라이브 파일 다운로드
- * - 캐시 관리 (저장 및 로드)
- * - 휴일 판단 로직
- * - 정해진 시간에 데이터 업데이트
- */
-
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 
-// 캐시 정보를 저장할 타입 정의
+// 캐시 정보
 interface CacheInfo {
-  fileId: string;
-  lastUpdated: string; // ISO 날짜 문자열
   cachePath: string;
+  lastUpdated: string;
   backupPath?: string;
 }
 
@@ -31,26 +19,25 @@ interface DriveFileInfo {
   fileId: string;
   folderPath: string;
   fileName: string;
-  updateSchedule: 'regular' | 'market'; // regular: 17:50에 한 번, market: 9시-16시 10분마다
+  updateSchedule: 'regular' | 'market' | 'afternoon'; // regular: 17:50에 한 번, market: 9시-16시 10분마다, afternoon: 16:30에 한 번
 }
 
 // 캐시 레지스트리 파일 경로
-const CACHE_REGISTRY_PATH = path.join(process.cwd(), 'public', 'cache', 'cache-registry.json');
+const CACHE_REGISTRY_PATH = path.join(process.cwd(), 'public', 'last_update.json');
 
 // ETF 관련 파일 정보
 const ETF_FILES: DriveFileInfo[] = [
   {
-    fileId: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA',
+    fileId: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA', // ETF 현재가 데이터 파일 ID
     folderPath: 'today_price_etf',
-    fileName: 'etf_current_prices.csv',
+    fileName: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA.csv', // 파일 ID를 파일명으로 사용
     updateSchedule: 'market'
   },
-  // 여기에 rs_etf 폴더의 파일들을 추가할 수 있습니다
   {
-    fileId: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0', // 폴더 ID
+    fileId: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0', // ETF 52주 신고가 데이터 파일 ID
     folderPath: 'rs_etf',
-    fileName: 'etf_high_prices.csv',
-    updateSchedule: 'regular'
+    fileName: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0.csv', // 파일 ID를 파일명으로 사용
+    updateSchedule: 'afternoon'  // 16:30에 업데이트
   }
 ];
 
@@ -67,6 +54,7 @@ function loadCacheRegistry(): CacheRegistry {
   } catch (error) {
     console.error('캐시 레지스트리 로드 실패:', error);
   }
+  
   return {};
 }
 
@@ -75,29 +63,24 @@ function loadCacheRegistry(): CacheRegistry {
  */
 function saveCacheRegistry(registry: CacheRegistry): void {
   try {
-    const dirPath = path.dirname(CACHE_REGISTRY_PATH);
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
+    const dir = path.dirname(CACHE_REGISTRY_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(CACHE_REGISTRY_PATH, JSON.stringify(registry, null, 2));
+    
+    fs.writeFileSync(CACHE_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
   } catch (error) {
     console.error('캐시 레지스트리 저장 실패:', error);
   }
 }
 
 /**
- * 현재 시간이 주식 시장 거래 시간인지 확인합니다.
- * 9:00 - 16:00 사이, 그리고 주말이 아닌 경우 true를 반환합니다.
+ * 현재 시장 거래 시간인지 확인합니다.
+ * 9시부터 16시까지를 시장 시간으로 간주합니다.
  */
 function isMarketHours(): boolean {
   const now = new Date();
   const hours = now.getHours();
-  const day = now.getDay();
-  
-  // 주말(토: 6, 일: 0) 체크
-  if (day === 0 || day === 6) {
-    return false;
-  }
   
   // 9시 ~ 16시 사이 체크
   return hours >= 9 && hours < 16;
@@ -105,27 +88,23 @@ function isMarketHours(): boolean {
 
 /**
  * 오늘이 휴일인지 확인합니다.
- * 코스피 거래대금이 0인 경우 휴일로 판단합니다.
+ * 일요일과 토요일은 휴일로 간주합니다.
  */
-async function isHoliday(): Promise<boolean> {
-  try {
-    // 코스피 거래대금 데이터를 가져오는 API 호출
-    // 실제 구현에서는 적절한 API 엔드포인트로 교체해야 합니다
-    const response = await axios.get('/api/market-status');
-    return response.data.kospiVolume === 0;
-  } catch (error) {
-    console.error('휴일 확인 실패:', error);
-    // 에러 발생 시 안전하게 휴일이 아니라고 가정
-    return false;
-  }
+function isHoliday(): boolean {
+  const now = new Date();
+  const day = now.getDay(); // 0: 일요일, 6: 토요일
+  
+  // 주말인 경우 휴일로 간주
+  return day === 0 || day === 6;
 }
 
 /**
  * 파일 업데이트가 필요한지 확인합니다.
  */
-function needsUpdate(cacheInfo: CacheInfo | undefined, updateSchedule: 'regular' | 'market'): boolean {
-  if (!cacheInfo) {
-    return true; // 캐시 정보가 없으면 업데이트 필요
+function needsUpdate(cacheInfo: CacheInfo | undefined, updateSchedule: 'regular' | 'market' | 'afternoon'): boolean {
+  // 캐시 정보가 없거나 파일이 존재하지 않으면 업데이트 필요
+  if (!cacheInfo || !fs.existsSync(cacheInfo.cachePath)) {
+    return true;
   }
   
   const now = new Date();
@@ -153,6 +132,15 @@ function needsUpdate(cacheInfo: CacheInfo | undefined, updateSchedule: 'regular'
     return (now.getTime() - lastUpdated.getTime()) >= 10 * 60 * 1000;
   }
   
+  // 오후에 업데이트하는 경우 (16:30)
+  if (updateSchedule === 'afternoon') {
+    const updateTime = new Date(today);
+    updateTime.setHours(16, 30, 0, 0);
+    
+    // 현재 시간이 16:30 이후이고, 마지막 업데이트가 16:30 이전이면 업데이트 필요
+    return now.getTime() >= updateTime.getTime() && lastUpdated.getTime() < updateTime.getTime();
+  }
+  
   return false;
 }
 
@@ -161,15 +149,34 @@ function needsUpdate(cacheInfo: CacheInfo | undefined, updateSchedule: 'regular'
  */
 async function downloadFromGoogleDrive(fileId: string, outputPath: string): Promise<boolean> {
   try {
-    // 구글 드라이브 다운로드 URL
-    const url = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    console.log(`구글 드라이브에서 파일 다운로드 시작 (ID: ${fileId})`);
+    
+    // 구글 드라이브 다운로드 URL (URL 형식 변경)
+    // 더 안정적인 다운로드를 위해 export=download 파라미터 추가
+    const url = `https://drive.google.com/uc?id=${fileId}&export=download&confirm=t`;
     
     // 파일 다운로드
     const response = await axios({
       method: 'get',
       url,
-      responseType: 'stream'
+      responseType: 'arraybuffer', // stream 대신 arraybuffer 사용 (더 안정적)
+      timeout: 60000, // 60초 타임아웃 설정 (더 긴 시간 제공)
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
     });
+    
+    // 응답 상태 코드 확인
+    if (response.status !== 200) {
+      console.error(`파일 다운로드 실패 (ID: ${fileId}): 상태 코드 ${response.status}`);
+      return false;
+    }
+    
+    // 응답 데이터 확인
+    if (!response.data || response.data.length === 0) {
+      console.error(`파일 다운로드 실패 (ID: ${fileId}): 빈 응답 데이터`);
+      return false;
+    }
     
     // 디렉토리가 없으면 생성
     const dir = path.dirname(outputPath);
@@ -177,16 +184,32 @@ async function downloadFromGoogleDrive(fileId: string, outputPath: string): Prom
       fs.mkdirSync(dir, { recursive: true });
     }
     
-    // 파일 저장
-    const writer = fs.createWriteStream(outputPath);
-    response.data.pipe(writer);
+    // 파일 저장 (stream 대신 writeFileSync 사용)
+    fs.writeFileSync(outputPath, Buffer.from(response.data));
     
-    return new Promise((resolve, reject) => {
-      writer.on('finish', () => resolve(true));
-      writer.on('error', reject);
-    });
+    // 파일이 제대로 저장되었는지 확인
+    if (fs.existsSync(outputPath)) {
+      const stats = fs.statSync(outputPath);
+      if (stats.size > 0) {
+        console.log(`파일 다운로드 완료 (ID: ${fileId}, 경로: ${outputPath}, 크기: ${stats.size} 바이트)`);
+        return true;
+      } else {
+        console.error(`파일 다운로드 실패 (ID: ${fileId}): 파일 크기가 0입니다.`);
+        return false;
+      }
+    } else {
+      console.error(`파일 다운로드 실패 (ID: ${fileId}): 파일이 저장되지 않았습니다.`);
+      return false;
+    }
   } catch (error) {
     console.error(`파일 다운로드 실패 (ID: ${fileId}):`, error);
+    
+    // 에러 세부 정보 로깅
+    if (axios.isAxiosError(error) && error.response) {
+      console.error(`응답 상태: ${error.response.status}`);
+      console.error(`응답 데이터:`, error.response.data);
+    }
+    
     return false;
   }
 }
@@ -201,14 +224,15 @@ function backupFile(sourcePath: string, backupPath: string): boolean {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
+      
       fs.copyFileSync(sourcePath, backupPath);
       return true;
     }
-    return false;
   } catch (error) {
     console.error(`파일 백업 실패 (${sourcePath} -> ${backupPath}):`, error);
-    return false;
   }
+  
+  return false;
 }
 
 /**
@@ -221,75 +245,128 @@ export async function syncFile(fileInfo: DriveFileInfo): Promise<string> {
   const cacheInfo = registry[fileInfo.fileId];
   
   // 캐시 파일 경로
-  const cachePath = path.join(process.cwd(), 'public', 'cache', fileInfo.folderPath, fileInfo.fileName);
-  const backupPath = path.join(process.cwd(), 'public', 'cache', fileInfo.folderPath, `${fileInfo.fileName}.backup`);
+  const cachePath = path.join(process.cwd(), 'public', fileInfo.folderPath, fileInfo.fileName);
+  const backupPath = path.join(process.cwd(), 'public', fileInfo.folderPath, `${fileInfo.fileName}.backup`);
   
-  // 휴일 체크
-  const holiday = await isHoliday();
-  if (holiday) {
+  // 파일 경로 로그 출력 (디버깅용)
+  console.log(`파일 경로: ${cachePath}`);
+  console.log(`백업 경로: ${backupPath}`);
+  
+  // 휴일 체크 (휴일에는 업데이트하지 않음)
+  if (isHoliday()) {
     console.log('오늘은 휴일입니다. 데이터 업데이트를 건너뜁니다.');
     
     // 캐시된 파일이 있으면 그것을 사용
-    if (cacheInfo && fs.existsSync(cacheInfo.cachePath)) {
-      return cacheInfo.cachePath;
+    if (fs.existsSync(cachePath)) {
+      const stats = fs.statSync(cachePath);
+      if (stats.size > 0) {
+        console.log(`기존 캐시 파일 사용 (${cachePath}, 크기: ${stats.size} 바이트)`);
+        return cachePath;
+      } else {
+        console.log(`캐시 파일이 비어 있습니다. 백업 파일 확인 중...`);
+      }
     }
     
     // 백업 파일이 있으면 그것을 사용
     if (cacheInfo?.backupPath && fs.existsSync(cacheInfo.backupPath)) {
-      return cacheInfo.backupPath;
+      const stats = fs.statSync(cacheInfo.backupPath);
+      if (stats.size > 0) {
+        console.log(`백업 파일 사용 (${cacheInfo.backupPath}, 크기: ${stats.size} 바이트)`);
+        return cacheInfo.backupPath;
+      } else {
+        console.log(`백업 파일이 비어 있습니다. 새로 다운로드 시도...`);
+      }
     }
     
-    // 둘 다 없으면 새로 다운로드
+    // 둘 다 없으면 새로 다운로드 (휴일이라도 파일이 없으면 다운로드)
   }
   
-  // 업데이트가 필요한지 확인
-  if (needsUpdate(cacheInfo, fileInfo.updateSchedule)) {
+  // 파일이 없거나 업데이트가 필요한 경우 다운로드
+  if (!fs.existsSync(cachePath) || fs.statSync(cachePath).size === 0 || needsUpdate(cacheInfo, fileInfo.updateSchedule)) {
     console.log(`파일 업데이트 필요 (ID: ${fileInfo.fileId})`);
     
     // 기존 파일 백업
-    if (fs.existsSync(cachePath)) {
+    if (fs.existsSync(cachePath) && fs.statSync(cachePath).size > 0) {
+      console.log(`기존 파일 백업 중... (${cachePath} -> ${backupPath})`);
       backupFile(cachePath, backupPath);
+    } else {
+      console.log(`백업할 파일이 없거나 비어 있습니다.`);
     }
     
-    // 파일 다운로드
+    // 구글 드라이브에서 다운로드
+    console.log(`구글 드라이브에서 다운로드 시도 중... (ID: ${fileInfo.fileId})`);
     const success = await downloadFromGoogleDrive(fileInfo.fileId, cachePath);
     
     if (success) {
-      // 캐시 정보 업데이트
-      registry[fileInfo.fileId] = {
-        fileId: fileInfo.fileId,
-        lastUpdated: new Date().toISOString(),
-        cachePath,
-        backupPath
-      };
-      saveCacheRegistry(registry);
-      return cachePath;
-    } else if (fs.existsSync(backupPath)) {
-      // 다운로드 실패 시 백업 파일 사용
-      console.log(`다운로드 실패, 백업 파일 사용 (ID: ${fileInfo.fileId})`);
-      return backupPath;
+      // 다운로드 후 파일 존재 여부 및 크기 확인
+      if (fs.existsSync(cachePath) && fs.statSync(cachePath).size > 0) {
+        console.log(`다운로드 성공 (${cachePath}, 크기: ${fs.statSync(cachePath).size} 바이트)`);
+        
+        // 캐시 정보 업데이트
+        registry[fileInfo.fileId] = {
+          cachePath,
+          lastUpdated: new Date().toISOString(),
+          backupPath
+        };
+        
+        saveCacheRegistry(registry);
+        return cachePath;
+      } else {
+        console.error(`다운로드 실패: 파일이 없거나 비어 있습니다.`);
+      }
+    } else {
+      console.error(`파일 다운로드 실패 (ID: ${fileInfo.fileId})`);
     }
-  } else if (cacheInfo && fs.existsSync(cacheInfo.cachePath)) {
-    // 업데이트가 필요 없고 캐시 파일이 있으면 그것을 사용
-    return cacheInfo.cachePath;
+    
+    // 다운로드 실패 시 백업 파일 확인
+    if (fs.existsSync(backupPath) && fs.statSync(backupPath).size > 0) {
+      console.log(`백업 파일 사용 (${backupPath}, 크기: ${fs.statSync(backupPath).size} 바이트)`);
+      return backupPath;
+    } else {
+      console.error(`백업 파일도 없거나 비어 있습니다.`);
+    }
+  } else {
+    // 업데이트가 필요 없는 경우 캐시 파일 사용
+    const stats = fs.statSync(cachePath);
+    console.log(`기존 캐시 파일 사용 (${cachePath}, 크기: ${stats.size} 바이트)`);
+    return cachePath;
   }
   
   // 모든 시도 실패 시 빈 문자열 반환
+  console.error(`모든 시도 실패. 빈 문자열 반환.`);
   return '';
 }
 
 /**
  * ETF 현재가 데이터 파일 경로를 가져옵니다.
+ * 파일이 없으면 자동으로 다운로드합니다.
  */
 export async function getETFCurrentPricesPath(): Promise<string> {
-  return await syncFile(ETF_FILES[0]);
+  const filePath = path.join(process.cwd(), 'public', ETF_FILES[0].folderPath, ETF_FILES[0].fileName);
+  
+  // 파일이 없으면 다운로드
+  if (!fs.existsSync(filePath)) {
+    console.log('ETF 현재가 데이터 파일이 없습니다. 다운로드를 시도합니다.');
+    return await syncFile(ETF_FILES[0]);
+  }
+  
+  return filePath;
 }
 
 /**
  * ETF 52주 신고가 데이터 파일 경로를 가져옵니다.
+ * 파일이 없으면 자동으로 다운로드합니다.
  */
 export async function getETFHighPricesPath(): Promise<string> {
-  return await syncFile(ETF_FILES[1]);
+  const filePath = path.join(process.cwd(), 'public', ETF_FILES[1].folderPath, ETF_FILES[1].fileName);
+  
+  // 파일이 없으면 다운로드
+  if (!fs.existsSync(filePath)) {
+    console.log('ETF 52주 신고가 데이터 파일이 없습니다. 다운로드를 시도합니다.');
+    return await syncFile(ETF_FILES[1]);
+  }
+  
+  return filePath;
 }
 
 /**

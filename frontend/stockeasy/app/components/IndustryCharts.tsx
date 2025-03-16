@@ -90,7 +90,7 @@ export default function IndustryCharts() {
     
     try {
       // 로컬 캐시 파일 경로 (실제 경로로 교체 필요)
-      const cacheFilePath = `/cache/stock-data/${fileId}.csv`;
+      const cacheFilePath = `/stock-data/${fileId}.csv`;
       
       // 로컬 캐시 파일 로드
       const response = await fetch(cacheFilePath);

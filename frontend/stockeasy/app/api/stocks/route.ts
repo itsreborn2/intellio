@@ -5,17 +5,56 @@ import Papa from 'papaparse';
 import axios from 'axios';
 
 // 캐시 디렉토리 설정
-const CACHE_DIR = path.join(process.cwd(), 'public', 'cache');
+const CACHE_DIR = path.join(process.cwd(), 'public');
 const STOCK_CACHE_DIR = path.join(CACHE_DIR, 'stock-data');
 const CHART_CACHE_DIR = path.join(CACHE_DIR, 'chart-data');
 const MARKET_INDEX_CACHE_DIR = path.join(CACHE_DIR, 'market-index');
+const ETF_CURRENT_CACHE_DIR = path.join(CACHE_DIR, 'today_price_etf');
+const ETF_HIGH_CACHE_DIR = path.join(CACHE_DIR, 'rs_etf');
 
-// 마지막 업데이트 시간을 저장할 파일 경로
-const LAST_UPDATE_FILE = path.join(CACHE_DIR, 'last_update.json');
+// 마지막 업데이트 시간 파일 경로
+const LAST_UPDATE_FILE_PATH = path.join(CACHE_DIR, 'last_update_time.json');
 
 // RS 업데이트 시간 설정 (17:50)
 const UPDATE_HOUR = 17;
 const UPDATE_MINUTE = 50;
+
+// 파일 정보 인터페이스 정의
+interface FileInfo {
+  fileId: string;
+  dataType: string;
+  fileName?: string;
+  updateSchedule: 'regular' | 'market' | 'afternoon'; // regular: 17:50에 한 번, market: 9시-16시 10분마다, afternoon: 16:30에 한 번
+}
+
+// 캐시 정보 인터페이스 정의
+interface CacheInfo {
+  fileId: string;
+  lastUpdated: string; // ISO 날짜 문자열
+  cachePath: string;
+  backupPath?: string;
+}
+
+// 캐시 레지스트리 인터페이스 정의
+interface CacheRegistry {
+  [fileId: string]: CacheInfo;
+}
+
+// ETF 관련 파일 정보
+const ETF_FILES: FileInfo[] = [
+  {
+    fileId: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA',
+    dataType: 'etf-current',
+    fileName: 'etf_current_prices.csv',
+    updateSchedule: 'market'
+  },
+  {
+    fileId: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0',
+    dataType: 'etf-high',
+    fileName: 'etf_high_prices.csv',
+    updateSchedule: 'afternoon'  // 16:30에 업데이트
+  }
+];
 
 // 캐시 디렉토리 생성 함수
 function ensureCacheDirectories() {
@@ -38,6 +77,16 @@ function ensureCacheDirectories() {
     fs.mkdirSync(MARKET_INDEX_CACHE_DIR, { recursive: true });
     console.log('시장 지수 캐시 디렉토리 생성됨:', MARKET_INDEX_CACHE_DIR);
   }
+  
+  if (!fs.existsSync(ETF_CURRENT_CACHE_DIR)) {
+    fs.mkdirSync(ETF_CURRENT_CACHE_DIR, { recursive: true });
+    console.log('ETF 현재가 캐시 디렉토리 생성됨:', ETF_CURRENT_CACHE_DIR);
+  }
+  
+  if (!fs.existsSync(ETF_HIGH_CACHE_DIR)) {
+    fs.mkdirSync(ETF_HIGH_CACHE_DIR, { recursive: true });
+    console.log('ETF 52주 신고가 캐시 디렉토리 생성됨:', ETF_HIGH_CACHE_DIR);
+  }
 }
 
 // 캐시 키 정규화 함수
@@ -46,7 +95,7 @@ function normalizeCacheKey(fileId: string): string {
 }
 
 // 캐시 파일 경로 생성 함수 (데이터 타입에 따라 다른 경로 반환)
-function getCacheFilePath(fileId: string, dataType: string = 'stock'): string {
+function getCacheFilePath(fileId: string, dataType: string = 'stock', fileName?: string): string {
   const normalizedKey = normalizeCacheKey(fileId);
   
   switch (dataType) {
@@ -56,11 +105,66 @@ function getCacheFilePath(fileId: string, dataType: string = 'stock'): string {
     case 'market-index':
       // 시장 지수 데이터의 경우 파일 ID 그대로 사용 (접두사 없음)
       return path.join(MARKET_INDEX_CACHE_DIR, `${normalizedKey}.csv`);
+    case 'etf-current':
+      // ETF 현재가 데이터
+      return path.join(ETF_CURRENT_CACHE_DIR, fileName || `${normalizedKey}.csv`);
+    case 'etf-high':
+      // ETF 52주 신고가 데이터
+      return path.join(ETF_HIGH_CACHE_DIR, fileName || `${normalizedKey}.csv`);
     case 'stock':
     default:
       // 주식 데이터는 'stock_' 접두사 사용
       return path.join(STOCK_CACHE_DIR, `stock_${normalizedKey}.csv`);
   }
+}
+
+/**
+ * 캐시 레지스트리를 로드합니다.
+ * 파일이 없으면 빈 객체를 반환합니다.
+ */
+function loadCacheRegistry(): CacheRegistry {
+  try {
+    if (fs.existsSync(LAST_UPDATE_FILE_PATH)) {
+      const data = fs.readFileSync(LAST_UPDATE_FILE_PATH, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('캐시 레지스트리 로드 실패:', error);
+  }
+  return {};
+}
+
+/**
+ * 캐시 레지스트리를 저장합니다.
+ */
+function saveCacheRegistry(registry: CacheRegistry): void {
+  try {
+    const dirPath = path.dirname(LAST_UPDATE_FILE_PATH);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+    fs.writeFileSync(LAST_UPDATE_FILE_PATH, JSON.stringify(registry, null, 2));
+  } catch (error) {
+    console.error('캐시 레지스트리 저장 실패:', error);
+  }
+}
+
+/**
+ * 현재 시간이 주식 시장 거래 시간인지 확인합니다.
+ * 9:00 - 16:00 사이, 그리고 주말이 아닌 경우 true를 반환합니다.
+ */
+function isMarketHours(): boolean {
+  const now = new Date();
+  const hours = now.getHours();
+  const day = now.getDay();
+  
+  // 주말(토: 6, 일: 0) 체크
+  if (day === 0 || day === 6) {
+    return false;
+  }
+  
+  // 9시 ~ 16시 사이 체크
+  return hours >= 9 && hours < 16;
 }
 
 // 캐시에서 데이터 가져오기
@@ -105,11 +209,56 @@ function getFromCache(fileId: string, dataType: string = 'stock'): string | null
   return null;
 }
 
+/**
+ * 파일 업데이트가 필요한지 확인합니다.
+ */
+function needsUpdate(cacheInfo: CacheInfo | undefined, updateSchedule: 'regular' | 'market' | 'afternoon'): boolean {
+  if (!cacheInfo) {
+    return true; // 캐시 정보가 없으면 업데이트 필요
+  }
+  
+  const now = new Date();
+  const lastUpdated = new Date(cacheInfo.lastUpdated);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const lastUpdateDay = new Date(lastUpdated.getFullYear(), lastUpdated.getMonth(), lastUpdated.getDate());
+  
+  // 날짜가 다르면 업데이트 필요
+  if (today.getTime() !== lastUpdateDay.getTime()) {
+    return true;
+  }
+  
+  // 정기 업데이트 (17:50)
+  if (updateSchedule === 'regular') {
+    const updateTime = new Date(today);
+    updateTime.setHours(17, 50, 0, 0);
+    
+    // 현재 시간이 17:50 이후이고, 마지막 업데이트가 17:50 이전이면 업데이트 필요
+    return now.getTime() >= updateTime.getTime() && lastUpdated.getTime() < updateTime.getTime();
+  }
+  
+  // 시장 시간 업데이트 (9:00-16:00, 10분마다)
+  if (updateSchedule === 'market' && isMarketHours()) {
+    // 마지막 업데이트 후 10분 이상 지났으면 업데이트 필요
+    return (now.getTime() - lastUpdated.getTime()) >= 10 * 60 * 1000;
+  }
+  
+  // 오후에 업데이트하는 경우 (16:30)
+  if (updateSchedule === 'afternoon') {
+    const updateTime = new Date(today);
+    updateTime.setHours(16, 30, 0, 0);
+    
+    // 현재 시간이 16:30 이후이고, 마지막 업데이트가 16:30 이전이면 업데이트 필요
+    return now.getTime() >= updateTime.getTime() && lastUpdated.getTime() < updateTime.getTime();
+  }
+  
+  return false;
+}
+
 // 캐시에 데이터 저장
-function saveToCache(fileId: string, data: string, dataType: string = 'stock'): void {
+function saveToCache(fileId: string, data: string, dataType: string = 'stock', fileName?: string): void {
   try {
     ensureCacheDirectories();
-    const filePath = getCacheFilePath(fileId, dataType);
+    const filePath = getCacheFilePath(fileId, dataType, fileName);
     
     // 기존 파일이 있는지 확인하고 덮어쓰기
     if (fs.existsSync(filePath)) {
@@ -122,6 +271,26 @@ function saveToCache(fileId: string, data: string, dataType: string = 'stock'): 
     console.log('데이터 캐시에 저장됨:', filePath);
   } catch (error) {
     console.error('캐시 파일 쓰기 오류:', error);
+  }
+}
+
+/**
+ * 파일을 백업합니다.
+ */
+function backupFile(sourcePath: string, backupPath: string): boolean {
+  try {
+    if (fs.existsSync(sourcePath)) {
+      const dir = path.dirname(backupPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.copyFileSync(sourcePath, backupPath);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error(`파일 백업 실패 (${sourcePath} -> ${backupPath}):`, error);
+    return false;
   }
 }
 
@@ -142,6 +311,62 @@ async function downloadFileFromGoogleDrive(fileId: string): Promise<string> {
     console.error('Google Drive 다운로드 오류:', error);
     throw error;
   }
+}
+
+/**
+ * 파일을 동기화합니다.
+ * 필요한 경우에만 구글 드라이브에서 다운로드합니다.
+ */
+async function syncFile(fileInfo: FileInfo): Promise<string> {
+  // 캐시 레지스트리 로드
+  const registry = loadCacheRegistry();
+  const cacheInfo = registry[fileInfo.fileId];
+  
+  // 캐시 파일 경로
+  const cachePath = getCacheFilePath(fileInfo.fileId, fileInfo.dataType, fileInfo.fileName);
+  const backupPath = `${cachePath}.backup`;
+  
+  // 업데이트가 필요한지 확인
+  if (needsUpdate(cacheInfo, fileInfo.updateSchedule)) {
+    console.log(`파일 업데이트 필요 (ID: ${fileInfo.fileId})`);
+    
+    // 기존 파일 백업
+    if (fs.existsSync(cachePath)) {
+      backupFile(cachePath, backupPath);
+    }
+    
+    try {
+      // 파일 다운로드
+      const data = await downloadFileFromGoogleDrive(fileInfo.fileId);
+      
+      // 캐시에 저장
+      fs.writeFileSync(cachePath, data, 'utf-8');
+      
+      // 캐시 정보 업데이트
+      registry[fileInfo.fileId] = {
+        fileId: fileInfo.fileId,
+        lastUpdated: new Date().toISOString(),
+        cachePath,
+        backupPath
+      };
+      saveCacheRegistry(registry);
+      return cachePath;
+    } catch (error) {
+      console.error(`파일 다운로드 실패 (ID: ${fileInfo.fileId}):`, error);
+      
+      // 다운로드 실패 시 백업 파일 사용
+      if (fs.existsSync(backupPath)) {
+        console.log(`다운로드 실패, 백업 파일 사용 (ID: ${fileInfo.fileId})`);
+        return backupPath;
+      }
+    }
+  } else if (cacheInfo && fs.existsSync(cacheInfo.cachePath)) {
+    // 업데이트가 필요 없고 캐시 파일이 있으면 그것을 사용
+    return cacheInfo.cachePath;
+  }
+  
+  // 모든 시도 실패 시 빈 문자열 반환
+  return '';
 }
 
 // CSV 파싱 함수
@@ -172,176 +397,44 @@ function parseCSVToChartData(csvText: string) {
   try {
     const results = Papa.parse(csvText, {
       header: true,
-      skipEmptyLines: true,
-      dynamicTyping: true // 숫자를 자동으로 변환
-    });
-    
-    if (results.errors && results.errors.length > 0) {
-      console.warn('CSV 파싱 경고:', results.errors);
-    }
-    
-    // 데이터 형식 변환
-    const chartData = results.data.map((row: any) => {
-      // CSV 열 이름에 따라 적절히 조정해야 합니다
-      return {
-        time: row.Date || row.date || row.time || '',
-        open: row.Open || row.open || 0,
-        high: row.High || row.high || 0,
-        low: row.Low || row.low || 0,
-        close: row.Close || row.close || 0,
-        volume: row.Volume || row.volume || 0
-      };
-    }).filter((item: any) => item.time && item.open && item.high && item.low && item.close);
-    
-    // 날짜 기준으로 정렬 (오래된 순)
-    chartData.sort((a: any, b: any) => {
-      return new Date(a.time).getTime() - new Date(b.time).getTime();
-    });
-    
-    return chartData;
-  } catch (error) {
-    console.error('차트 데이터 파싱 오류:', error);
-    throw error;
-  }
-}
-
-// 시장 지수 데이터 추출 함수
-function extractMarketIndexData(csvData: string): Array<{ date: string; close: number }> {
-  try {
-    // CSV 파싱
-    const parsedData = Papa.parse(csvData, { 
-      header: true,
       skipEmptyLines: true
     });
     
-    console.log(`[Market Index API] CSV 파싱 완료, 총 ${parsedData.data.length}개 행 처리`);
-    
-    if (parsedData.data.length === 0) {
-      console.error('[Market Index API] 파싱된 CSV 데이터가 비어 있습니다.');
-      return [];
+    if (results.errors && results.errors.length > 0) {
+      console.error('CSV 파싱 오류:', results.errors);
+      return {
+        labels: [],
+        datasets: []
+      };
     }
     
-    // 종가 데이터 추출
-    const closeData = parsedData.data
-      .map((row: any) => {
-        // 데이터 검증
-        if (!row || typeof row !== 'object') {
-          console.warn(`[Market Index API] 유효하지 않은 행 데이터:`, row);
-          return null;
-        }
-        
-        // 모든 키 로깅
-        const keys = Object.keys(row);
-        if (keys.length === 0) {
-          console.warn(`[Market Index API] 행에 키가 없습니다.`);
-          return null;
-        }
-        
-        // 날짜 필드 찾기
-        let dateField = '';
-        if ('날짜' in row) dateField = '날짜';
-        else if ('Date' in row) dateField = 'Date';
-        else if ('date' in row) dateField = 'date';
-        else if ('일자' in row) dateField = '일자';
-        else {
-          // 날짜 관련 키 찾기
-          dateField = keys.find(k => /날짜|date|일자/i.test(k)) || '';
-        }
-        
-        if (!dateField || !row[dateField]) {
-          console.warn(`[Market Index API] 날짜 필드를 찾을 수 없습니다. 사용 가능한 키:`, keys);
-          return null;
-        }
-        
-        const date = String(row[dateField]);
-        
-        // 종가 필드 찾기
-        let closeField = '';
-        if ('종가' in row) closeField = '종가';
-        else if ('Close' in row) closeField = 'Close';
-        else if ('close' in row) closeField = 'close';
-        else if ('CLOSE' in row) closeField = 'CLOSE';
-        else {
-          // 종가 관련 키 찾기
-          closeField = keys.find(k => /종가|close/i.test(k)) || '';
-        }
-        
-        if (!closeField || row[closeField] === undefined || row[closeField] === null) {
-          console.warn(`[Market Index API] 종가 필드를 찾을 수 없습니다. 사용 가능한 키:`, keys);
-          return null;
-        }
-        
-        // 종가 값 파싱
-        let close = row[closeField];
-        if (typeof close === 'string') {
-          close = parseFloat(close.replace(/,/g, ''));
-        } else if (typeof close !== 'number') {
-          console.warn(`[Market Index API] 종가 값이 숫자가 아닙니다:`, close);
-          return null;
-        }
-        
-        if (isNaN(close)) {
-          console.warn(`[Market Index API] 종가 값이 NaN입니다:`, row[closeField]);
-          return null;
-        }
-        
-        // 날짜 형식 변환 (YYYYMMDD -> YYYY-MM-DD)
-        let formattedDate = date;
-        if (date.length === 8 && !date.includes('-') && !date.includes('/')) {
-          formattedDate = `${date.substring(0, 4)}-${date.substring(4, 6)}-${date.substring(6, 8)}`;
-        }
-        
-        return { date: formattedDate, close };
-      })
-      .filter((item): item is { date: string; close: number } => item !== null);
+    // 날짜 컬럼 찾기 (보통 첫 번째 컬럼)
+    const headers = results.meta.fields || [];
+    const dateColumn = headers[0] || 'date';
     
-    console.log(`[Market Index API] 종가 데이터 추출 완료, 총 ${closeData.length}개 데이터 포인트 추출`);
+    // 데이터 변환
+    const labels = results.data.map((row: any) => row[dateColumn]);
+    const datasets = [];
     
-    return closeData;
+    // 날짜 외 다른 컬럼들을 데이터셋으로 변환
+    for (let i = 1; i < headers.length; i++) {
+      const header = headers[i];
+      datasets.push({
+        label: header,
+        data: results.data.map((row: any) => parseFloat(row[header]) || 0)
+      });
+    }
+    
+    return {
+      labels,
+      datasets
+    };
   } catch (error) {
-    console.error(`[Market Index API] 종가 데이터 추출 실패:`, error);
-    return []; // 오류 발생 시 빈 배열 반환
-  }
-}
-
-// 차트 데이터 처리 함수
-async function handleChartData(fileId: string): Promise<string> {
-  console.log(`차트 데이터 요청 처리 중: ${fileId}`);
-  
-  // 파일 ID에서 확장자가 있으면 제거 (클라이언트에서 이미 제거했을 수 있음)
-  const cleanFileId = fileId.endsWith('.csv') ? fileId : `${fileId}.csv`;
-  
-  // 캐시 파일 경로
-  const cacheFilePath = path.join(process.cwd(), 'public', 'cache', 'chart-data', cleanFileId);
-  
-  try {
-    // 캐시 파일 확인
-    if (fs.existsSync(cacheFilePath)) {
-      console.log(`캐시된 차트 데이터 사용: ${cacheFilePath}`);
-      return fs.readFileSync(cacheFilePath, 'utf-8');
-    }
-    
-    // 캐시 디렉토리 내 모든 파일 확인 (디버깅용)
-    const cacheDir = path.join(process.cwd(), 'public', 'cache', 'chart-data');
-    if (fs.existsSync(cacheDir)) {
-      console.log('캐시 디렉토리 내 파일 목록:');
-      const files = fs.readdirSync(cacheDir);
-      files.forEach(file => console.log(` - ${file}`));
-      
-      // 파일명 부분 일치 검색 시도
-      const matchingFile = files.find(file => file.includes(fileId));
-      if (matchingFile) {
-        console.log(`부분 일치하는 파일 발견: ${matchingFile}`);
-        const matchingFilePath = path.join(cacheDir, matchingFile);
-        return fs.readFileSync(matchingFilePath, 'utf-8');
-      }
-    }
-    
-    // 캐시 파일이 없는 경우 오류 반환
-    throw new Error(`차트 데이터 캐시 파일을 찾을 수 없습니다: ${fileId}`);
-  } catch (error) {
-    console.error(`차트 데이터 처리 오류:`, error);
-    throw error;
+    console.error('차트 데이터 파싱 오류:', error);
+    return {
+      labels: [],
+      datasets: []
+    };
   }
 }
 
@@ -349,66 +442,154 @@ async function handleChartData(fileId: string): Promise<string> {
 const FILE_IDS = {
   // 주식 데이터 (3개)
   STOCK_LIST: '1idVB5kIo0d6dChvOyWE7OvWr-eZ1cbpB',  // 종목 리스트
-  RS_RANK: '1UYJVdMZFXarsxs0jy16fEGfRqY9Fs8YD',     // RS 순위
-  WEEK_HIGH: '1mbee4O9_NoNpfIAExI4viN8qcN8BtTXz',   // 52주 신고가
+  RS_DATA: '1uYJvdMzfXaRsxS0jy16fEgfrQY9fS8yd',    // RS 데이터
+  RS_RANK: '1MbEe4o9_nONpFiAeXI4vIn8QCn8bTtXZ',    // RS 랭크
   
-  // 시장 지수 데이터 (2개)
-  KOSDAQ: '1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg',      // 코스닥 지수
-  KOSPI: '1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c',       // 코스피 지수
+  // 차트 데이터 (여러 개)
+  CHART_DATA: {
+    // 차트 데이터 파일 ID 목록
+    KOSPI: '1dzf65fz6elq6b5znvhuaftn10hqjbe_c',     // 코스피 지수
+    KOSDAQ: '1ks9qkdzmsxv-qenv6udzzidfwgykc1qg',    // 코스닥 지수
+    // 여기에 더 많은 차트 데이터 파일 ID를 추가할 수 있습니다
+  },
   
-  // 차트 데이터 (20개)
-  CHART_1: '1aTorXQQrDJAhKmGiNH-AjXoGO7PTLjPm',     // 차트 데이터 1
-  CHART_2: '1178693zjykqgp-iesphmq8qcxgbspg0q',     // 차트 데이터 2
-  CHART_3: '11hgiohutm5yzbaguemzpxdtw4fv0wdmd',     // 차트 데이터 3
-  CHART_4: '12n6x15dkl1vjmzmk9ahobyiyat1unrse',     // 차트 데이터 4
-  CHART_5: '15cqztbbinqf0f6rcir2d01bc_vc0attg',     // 차트 데이터 5
-  CHART_6: '1apwisocpqh4r5336namsor_vdg6bbclg',     // 차트 데이터 6
-  CHART_7: '1bxdtowr97lhxl8ymecl84qlbe09h6wwk',     // 차트 데이터 7
-  CHART_8: '1cjeyuaoew_qler37nfiqlwgdmgeimnej',     // 차트 데이터 8
-  CHART_9: '1ene8lrq_9kqvootf_wil-dt9jxoqj0cd',     // 차트 데이터 9
-  CHART_10: '1f2k3mrwuazufdx4mkl89pmg33dbfil8g',    // 차트 데이터 10
-  CHART_11: '1i-bg0puf8rbmxekhs1toboqjxrjbwlco',    // 차트 데이터 11
-  CHART_12: '1iznpzmimg-yk2z20w2c9tjewlcdswww0',    // 차트 데이터 12
-  CHART_13: '1jctjmbiwgiihvzcppirxbnppe5gljctw',    // 차트 데이터 13
-  CHART_14: '1mhuyrpe378v1j2qmsx1sufmzkmokjv_4',    // 차트 데이터 14
-  CHART_15: '1st-nzj2wo3fptb6swk8glqcxyjqgx7-k',    // 차트 데이터 15
-  CHART_16: '1t2z88ntuzd2r3ct5oy8ic3ja09tqfaof',    // 차트 데이터 16
-  CHART_17: '1w0mug-pgv_jgsj44w3hmtfgaoq0npgos',    // 차트 데이터 17
-  CHART_18: '1wdrfq_8w9hwydadcfi7dgptwdmnxl3fk',    // 차트 데이터 18
-  CHART_19: '1wjdxsztimlfizel30weqzkkv4tiadhqg',    // 차트 데이터 19
-  CHART_20: '1zefwp0b0-8wzilvbmktyh_zyjg5cl0pw'     // 차트 데이터 20
-};
-
-// 파일 ID 그룹화 (데이터 타입별로 분류)
-const FILE_ID_GROUPS = {
-  STOCK: [FILE_IDS.STOCK_LIST, FILE_IDS.RS_RANK, FILE_IDS.WEEK_HIGH],
-  MARKET_INDEX: [FILE_IDS.KOSDAQ, FILE_IDS.KOSPI],
-  CHART: [
-    FILE_IDS.CHART_1, FILE_IDS.CHART_2, FILE_IDS.CHART_3, FILE_IDS.CHART_4, FILE_IDS.CHART_5,
-    FILE_IDS.CHART_6, FILE_IDS.CHART_7, FILE_IDS.CHART_8, FILE_IDS.CHART_9, FILE_IDS.CHART_10,
-    FILE_IDS.CHART_11, FILE_IDS.CHART_12, FILE_IDS.CHART_13, FILE_IDS.CHART_14, FILE_IDS.CHART_15,
-    FILE_IDS.CHART_16, FILE_IDS.CHART_17, FILE_IDS.CHART_18, FILE_IDS.CHART_19, FILE_IDS.CHART_20
-  ]
+  // ETF 데이터 (2개)
+  ETF_CURRENT: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA', // ETF 현재가
+  ETF_HIGH: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0'     // ETF 52주 신고가
 };
 
 // 파일 ID로 데이터 타입 결정하는 함수
 function getDataTypeByFileId(fileId: string): string {
-  const normalizedId = normalizeCacheKey(fileId);
-  
-  if (FILE_ID_GROUPS.STOCK.some(id => normalizeCacheKey(id) === normalizedId)) {
+  // 주식 데이터
+  if (fileId === FILE_IDS.STOCK_LIST || fileId === FILE_IDS.RS_DATA || fileId === FILE_IDS.RS_RANK) {
     return 'stock';
   }
   
-  if (FILE_ID_GROUPS.MARKET_INDEX.some(id => normalizeCacheKey(id) === normalizedId)) {
+  // 차트 데이터
+  if (fileId === FILE_IDS.CHART_DATA.KOSPI || fileId === FILE_IDS.CHART_DATA.KOSDAQ) {
     return 'market-index';
   }
   
-  if (FILE_ID_GROUPS.CHART.some(id => normalizeCacheKey(id) === normalizedId)) {
+  // 다른 차트 데이터 (파일 ID가 chart_ 접두사로 시작하는 경우)
+  if (fileId.startsWith('chart_')) {
     return 'chart';
   }
   
-  // 기본값은 'stock'으로 설정
+  // ETF 데이터
+  if (fileId === FILE_IDS.ETF_CURRENT) {
+    return 'etf-current';
+  }
+  
+  if (fileId === FILE_IDS.ETF_HIGH) {
+    return 'etf-high';
+  }
+  
+  // 기본값은 'stock'
   return 'stock';
+}
+
+/**
+ * 마지막 업데이트 시간을 저장합니다.
+ */
+function saveLastUpdateTime(): void {
+  try {
+    const updateInfo = {
+      lastUpdate: new Date().toISOString()
+    };
+    
+    const dirPath = path.dirname(LAST_UPDATE_FILE_PATH);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+    
+    fs.writeFileSync(LAST_UPDATE_FILE_PATH, JSON.stringify(updateInfo, null, 2), 'utf-8');
+    console.log('마지막 업데이트 시간이 저장되었습니다.');
+  } catch (error) {
+    console.error('마지막 업데이트 시간 저장 실패:', error);
+  }
+}
+
+/**
+ * 마지막 업데이트 시간을 가져옵니다.
+ */
+function getLastUpdateTime(): string {
+  try {
+    if (fs.existsSync(LAST_UPDATE_FILE_PATH)) {
+      const data = fs.readFileSync(LAST_UPDATE_FILE_PATH, 'utf-8');
+      const updateInfo = JSON.parse(data);
+      return updateInfo.lastUpdate || '';
+    }
+  } catch (error) {
+    console.error('마지막 업데이트 시간 로드 실패:', error);
+  }
+  return '';
+}
+
+/**
+ * 전체 데이터 업데이트가 필요한지 확인합니다.
+ * 하루에 한 번 (17:50) 업데이트가 필요합니다.
+ */
+function needUpdate(): boolean {
+  try {
+    const lastUpdateStr = getLastUpdateTime();
+    if (!lastUpdateStr) {
+      return true; // 마지막 업데이트 정보가 없으면 업데이트 필요
+    }
+    
+    const now = new Date();
+    const lastUpdate = new Date(lastUpdateStr);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const lastUpdateDay = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
+    
+    // 날짜가 다르면 업데이트 필요
+    if (today.getTime() !== lastUpdateDay.getTime()) {
+      return true;
+    }
+    
+    // 정기 업데이트 시간 (17:50)
+    const updateTime = new Date(today);
+    updateTime.setHours(17, 50, 0, 0);
+    
+    // 현재 시간이 17:50 이후이고, 마지막 업데이트가 17:50 이전이면 업데이트 필요
+    return now.getTime() >= updateTime.getTime() && lastUpdate.getTime() < updateTime.getTime();
+  } catch (error) {
+    console.error('업데이트 필요 여부 확인 실패:', error);
+    return true; // 에러 발생 시 안전하게 업데이트 필요로 처리
+  }
+}
+
+/**
+ * ETF 현재가 데이터 파일 경로를 가져옵니다.
+ */
+async function getETFCurrentPricesPath(): Promise<string> {
+  const fileInfo: FileInfo = {
+    fileId: FILE_IDS.ETF_CURRENT,
+    dataType: 'etf-current',
+    fileName: 'etf_current_prices.csv',
+    updateSchedule: 'market'
+  };
+  return await syncFile(fileInfo);
+}
+
+/**
+ * ETF 52주 신고가 데이터 파일 경로를 가져옵니다.
+ */
+async function getETFHighPricesPath(): Promise<string> {
+  const fileInfo: FileInfo = {
+    fileId: FILE_IDS.ETF_HIGH,
+    dataType: 'etf-high',
+    fileName: 'etf_high_prices.csv',
+    updateSchedule: 'afternoon'
+  };
+  return await syncFile(fileInfo);
+}
+
+/**
+ * 모든 ETF 관련 파일을 동기화합니다.
+ */
+async function syncAllETFFiles(): Promise<void> {
+  await getETFCurrentPricesPath();
+  await getETFHighPricesPath();
 }
 
 // 모든 CSV 파일 업데이트 함수
@@ -416,343 +597,192 @@ async function updateAllCSVFiles() {
   try {
     console.log('모든 CSV 파일 업데이트 시작...');
     
-    // 캐시 디렉토리 확인 및 생성
-    ensureCacheDirectories();
-    
-    // 모든 파일 ID 목록 생성
-    const allFileIds = [
-      ...FILE_ID_GROUPS.STOCK,
-      ...FILE_ID_GROUPS.MARKET_INDEX,
-      ...FILE_ID_GROUPS.CHART
+    // 주식 데이터 파일 업데이트
+    const stockFiles = [
+      { fileId: FILE_IDS.STOCK_LIST, dataType: 'stock', updateSchedule: 'regular' },
+      { fileId: FILE_IDS.RS_DATA, dataType: 'stock', updateSchedule: 'regular' },
+      { fileId: FILE_IDS.RS_RANK, dataType: 'stock', updateSchedule: 'regular' }
     ];
     
-    for (const fileId of allFileIds) {
+    // 차트 데이터 파일 업데이트
+    const chartFiles = [
+      { fileId: FILE_IDS.CHART_DATA.KOSPI, dataType: 'market-index', updateSchedule: 'market' },
+      { fileId: FILE_IDS.CHART_DATA.KOSDAQ, dataType: 'market-index', updateSchedule: 'market' }
+    ];
+    
+    // 모든 파일 업데이트
+    const allFiles = [...stockFiles, ...chartFiles];
+    
+    for (const file of allFiles) {
       try {
-        // 빈 문자열은 건너뛰기
-        if (!fileId) {
-          continue;
-        }
-        
-        console.log(`파일 ID ${fileId} 업데이트 중...`);
-        
-        // 파일 ID에 따른 데이터 타입 결정
-        const dataType = getDataTypeByFileId(fileId);
-        
-        // Google Drive에서 파일 다운로드
-        const fileData = await downloadFileFromGoogleDrive(fileId);
-        
-        // 다운로드한 데이터 캐시에 저장
-        saveToCache(fileId, fileData, dataType);
-        
-        console.log(`파일 ID ${fileId} 업데이트 완료`);
+        await syncFile({
+          fileId: file.fileId,
+          dataType: file.dataType,
+          updateSchedule: file.updateSchedule as 'regular' | 'market' | 'afternoon'
+        });
       } catch (error) {
-        console.error(`파일 ID ${fileId} 업데이트 중 오류 발생:`, error);
-        // 개별 파일 오류는 전체 프로세스를 중단하지 않음
+        console.error(`파일 업데이트 실패 (ID: ${file.fileId}):`, error);
       }
     }
     
     console.log('모든 CSV 파일 업데이트 완료');
-    saveLastUpdateTime();
-    return true;
   } catch (error) {
     console.error('CSV 파일 업데이트 중 오류 발생:', error);
-    return false;
-  }
-}
-
-// 마지막 업데이트 시간을 저장하는 함수
-function saveLastUpdateTime() {
-  try {
-    const updateInfo = {
-      lastUpdate: new Date().toISOString(),
-      timestamp: Date.now()
-    };
-    
-    fs.writeFileSync(LAST_UPDATE_FILE, JSON.stringify(updateInfo, null, 2));
-    console.log('마지막 업데이트 시간이 저장되었습니다.');
-  } catch (error) {
-    console.error('마지막 업데이트 시간 저장 중 오류 발생:', error);
-  }
-}
-
-// 마지막 업데이트 시간을 가져오는 함수
-function getLastUpdateTime(): string {
-  try {
-    if (fs.existsSync(LAST_UPDATE_FILE)) {
-      const data = fs.readFileSync(LAST_UPDATE_FILE, 'utf8');
-      const updateInfo = JSON.parse(data);
-      return updateInfo.lastUpdate;
-    }
-  } catch (error) {
-    console.error('마지막 업데이트 시간 조회 중 오류 발생:', error);
-  }
-  
-  return '업데이트 기록 없음';
-}
-
-// 업데이트가 필요한지 확인하는 함수
-function needUpdate(): boolean {
-  try {
-    // 1. 현재 날짜와 시간 가져오기
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentDay = now.getDay(); // 0: 일요일, 6: 토요일
-    
-    // 2. 오늘이 휴일인지 확인 (주말인 경우)
-    if (currentDay === 0 || currentDay === 6) {
-      console.log('주말에는 업데이트를 진행하지 않습니다.');
-      return false;
-    }
-    
-    // 3. 현재 시간이 업데이트 시간(17:50) 이전이면 업데이트하지 않음
-    if (currentHour < UPDATE_HOUR || (currentHour === UPDATE_HOUR && currentMinute < UPDATE_MINUTE)) {
-      console.log('아직 업데이트 시간이 되지 않았습니다.');
-      return false;
-    }
-    
-    // 4. 캐시 파일의 마지막 수정 시간 확인
-    const rsRankCachePath = getCacheFilePath(FILE_IDS.RS_RANK);
-    
-    if (fs.existsSync(rsRankCachePath)) {
-      const stats = fs.statSync(rsRankCachePath);
-      const lastModified = new Date(stats.mtime);
-      
-      // 오늘 날짜의 업데이트 시간 설정
-      const todayUpdateTime = new Date();
-      todayUpdateTime.setHours(UPDATE_HOUR, UPDATE_MINUTE, 0, 0);
-      
-      // 마지막 수정 시간이 오늘의 업데이트 시간 이후라면 이미 업데이트됨
-      if (lastModified.getTime() >= todayUpdateTime.getTime()) {
-        console.log('오늘 이미 업데이트되었습니다.');
-        return false;
-      }
-    }
-    
-    // 모든 조건을 통과하면 업데이트 필요
-    console.log('업데이트가 필요합니다.');
-    return true;
-  } catch (error) {
-    console.error('업데이트 필요 여부 확인 중 오류 발생:', error);
-    return false; // 오류 발생 시 안전하게 false 반환
+    throw error;
   }
 }
 
 // POST: 통합 API 엔드포인트
 export async function POST(request: NextRequest) {
   try {
-    // 업데이트 필요 여부 확인 및 업데이트 수행
-    if (needUpdate()) {
-      console.log('자동 업데이트 시작');
-      await updateAllCSVFiles();
-      console.log('자동 업데이트 완료');
-    }
+    const body = await request.json();
+    const { action, fileId, dataType } = body;
     
-    const { symbol, fileId, dataType, marketType } = await request.json();
-    
-    // 1. 시장 지수 데이터 요청 처리
-    if (marketType) {
-      // 시장 구분에 해당하는 파일 ID 가져오기
-      let targetFileId = '';
-      if (marketType === 'KOSDAQ') {
-        targetFileId = FILE_IDS.KOSDAQ;
-      } else if (marketType === 'KOSPI') {
-        targetFileId = FILE_IDS.KOSPI;
-      } else {
-        return NextResponse.json(
-          { error: `유효하지 않은 시장 구분: ${marketType}. 'KOSDAQ' 또는 'KOSPI'만 지원합니다.` },
-          { status: 400 }
-        );
-      }
+    // 특정 파일 업데이트 요청
+    if (action === 'update-file' && fileId) {
+      const fileType = getDataTypeByFileId(fileId);
       
-      console.log(`[Market Index API] ${marketType} 시장 지수 데이터 요청 받음`);
+      // 파일 정보 생성
+      const fileInfo: FileInfo = {
+        fileId,
+        dataType: dataType || fileType,
+        updateSchedule: 'regular' // 기본값은 정기 업데이트
+      };
       
-      // 캐시 확인
-      const cachedData = getFromCache(targetFileId, 'market-index');
+      // 파일 동기화
+      const filePath = await syncFile(fileInfo);
       
-      // 캐시가 있는 경우
-      if (cachedData) {
-        console.log(`캐시된 시장 지수 데이터 반환: ${marketType}`);
-        
-        // 시장 지수 데이터 파싱 및 반환
-        const closeData = extractMarketIndexData(cachedData);
+      if (filePath && fs.existsSync(filePath)) {
         return NextResponse.json({
-          marketType,
-          data: closeData,
-          cached: true
+          success: true,
+          message: `파일이 업데이트되었습니다. (ID: ${fileId})`,
+          filePath
         });
+      } else {
+        return NextResponse.json({
+          success: false,
+          message: `파일 업데이트 실패 (ID: ${fileId})`
+        }, { status: 500 });
       }
-      
-      // 캐시가 없는 경우 오류 반환
-      console.log(`캐시된 시장 지수 데이터 없음: ${marketType}`);
-      return NextResponse.json(
-        { 
-          error: `시장 지수 데이터를 찾을 수 없습니다: ${marketType}`,
-          warning: `로컬 캐시 파일이 없습니다. 시장 지수 데이터는 로컬 캐시 파일에서만 제공됩니다.`
-        },
-        { status: 404 }
-      );
     }
     
-    // 2. 차트 데이터 요청 처리
-    if (dataType === 'chart') {
-      if (!fileId) {
-        return NextResponse.json({ error: '차트 데이터를 위한 파일 ID가 필요합니다.' }, { status: 400 });
-      }
+    // 차트 데이터 요청
+    if (action === 'get-chart-data' && fileId) {
+      const fileType = getDataTypeByFileId(fileId);
       
-      console.log(`차트 데이터 요청: 파일 ID ${fileId}`);
+      // 파일 정보 생성
+      const fileInfo: FileInfo = {
+        fileId,
+        dataType: dataType || fileType,
+        updateSchedule: 'market' // 차트 데이터는 시장 시간에 업데이트
+      };
       
-      // 캐시 확인
-      const cachedData = getFromCache(fileId, 'chart');
+      // 파일 동기화
+      const filePath = await syncFile(fileInfo);
       
-      // 캐시가 있는 경우
-      if (cachedData) {
-        console.log(`캐시된 차트 데이터 반환: ${fileId}`);
-        return new NextResponse(cachedData, {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/csv; charset=utf-8',
-          },
-        });
-      }
-      
-      // 캐시가 없는 경우 Google Drive에서 다운로드
-      console.log(`캐시된 차트 데이터 없음. Google Drive에서 다운로드 시도: ${fileId}`);
-      try {
-        const fileData = await downloadFileFromGoogleDrive(fileId);
+      if (filePath && fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf-8');
+        const chartData = parseCSVToChartData(data);
         
-        // 다운로드한 데이터 캐시에 저장
-        saveToCache(fileId, fileData, 'chart');
-        
-        // 데이터 반환
-        return new NextResponse(fileData, {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/csv; charset=utf-8',
-          },
+        return NextResponse.json({
+          success: true,
+          data: chartData
         });
-      } catch (downloadError) {
-        console.error('Google Drive 다운로드 실패:', downloadError);
-        return NextResponse.json(
-          { error: '차트 데이터를 다운로드하는 중 오류가 발생했습니다.' },
-          { status: 500 }
-        );
+      } else {
+        return NextResponse.json({
+          success: false,
+          message: `차트 데이터를 찾을 수 없습니다. (ID: ${fileId})`
+        }, { status: 404 });
       }
     }
     
-    // 3. 주식 데이터 요청 처리 (기존 코드)
-    // 데이터 타입이 제공된 경우 해당 파일 ID 사용
-    let targetFileId = fileId;
-    
-    if (dataType && !fileId) {
-      switch (dataType) {
-        case 'rs-rank':
-          targetFileId = FILE_IDS.RS_RANK;
-          break;
-        case 'week-high':
-          targetFileId = FILE_IDS.WEEK_HIGH;
-          break;
-        case 'stock-list':
-          targetFileId = FILE_IDS.STOCK_LIST;
-          break;
-        default:
-          return NextResponse.json({ error: '유효하지 않은 데이터 타입입니다.' }, { status: 400 });
-      }
-    }
-    
-    // 파일 ID가 없는 경우 오류 반환
-    if (!targetFileId) {
-      return NextResponse.json({ error: '파일 ID 또는 데이터 타입이 필요합니다.' }, { status: 400 });
-    }
-    
-    console.log(`데이터 요청: 파일 ID ${targetFileId}`);
-    
-    // 캐시 확인
-    const cachedData = getFromCache(targetFileId);
-    
-    // 캐시가 있는 경우
-    if (cachedData) {
-      console.log(`캐시된 데이터 반환: ${targetFileId}`);
-      return new NextResponse(cachedData, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-        },
-      });
-    }
-    
-    // 캐시가 없는 경우 Google Drive에서 다운로드
-    console.log(`캐시된 데이터 없음. Google Drive에서 다운로드 시도: ${targetFileId}`);
-    try {
-      const fileData = await downloadFileFromGoogleDrive(targetFileId);
-      
-      // 다운로드한 데이터 캐시에 저장
-      saveToCache(targetFileId, fileData);
-      
-      // 데이터 반환
-      return new NextResponse(fileData, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-        },
-      });
-    } catch (downloadError) {
-      console.error('Google Drive 다운로드 실패:', downloadError);
-      return NextResponse.json(
-        { error: '데이터를 다운로드하는 중 오류가 발생했습니다.' },
-        { status: 500 }
-      );
-    }
+    return NextResponse.json({
+      success: false,
+      message: '지원되지 않는 작업'
+    }, { status: 400 });
   } catch (error) {
-    console.error('API 오류:', error);
-    return NextResponse.json(
-      { error: `데이터를 처리하는 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}` },
-      { status: 500 }
-    );
+    console.error('POST 요청 처리 중 오류 발생:', error);
+    return NextResponse.json({
+      success: false,
+      message: '요청 처리 중 오류가 발생했습니다.',
+      error: (error as Error).message
+    }, { status: 500 });
   }
 }
 
 // GET: 데이터 업데이트 확인 및 수행
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const forceUpdate = searchParams.get('force') === 'true';
+    // 요청 URL에서 쿼리 파라미터 추출
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
     
-    if (forceUpdate) {
-      // 강제 업데이트 요청 시 시간 체크 없이 모든 파일 업데이트
-      console.log('강제 업데이트 요청이 들어왔습니다.');
+    // 모든 데이터 업데이트 요청
+    if (action === 'update-all') {
+      // 모든 파일 업데이트
       await updateAllCSVFiles();
-      return NextResponse.json({ 
-        success: true, 
-        message: '모든 CSV 파일이 성공적으로 업데이트되었습니다.',
-        updatedAt: getLastUpdateTime()
+      
+      // ETF 파일도 업데이트
+      await syncAllETFFiles();
+      
+      // 마지막 업데이트 시간 저장
+      saveLastUpdateTime();
+      
+      return NextResponse.json({
+        success: true,
+        message: '모든 데이터 파일이 업데이트되었습니다.',
+        lastUpdate: getLastUpdateTime()
       });
     }
     
-    // 업데이트 필요 여부 확인
-    const shouldUpdate = await needUpdate();
-    
-    if (shouldUpdate) {
-      // 업데이트 필요 시 모든 파일 업데이트
-      await updateAllCSVFiles();
-      return NextResponse.json({ 
-        success: true, 
-        message: '모든 CSV 파일이 성공적으로 업데이트되었습니다.',
-        updatedAt: getLastUpdateTime()
-      });
-    } else {
-      // 업데이트 불필요 시 현재 상태 반환
-      return NextResponse.json({ 
-        success: true, 
-        message: '업데이트가 필요하지 않습니다.',
-        updatedAt: getLastUpdateTime()
-      });
+    // ETF 데이터 요청
+    if (action === 'get-etf-current') {
+      const filePath = await getETFCurrentPricesPath();
+      if (filePath && fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf-8');
+        const parsedData = parseCSV(data);
+        return NextResponse.json({
+          success: true,
+          data: parsedData.rows
+        });
+      } else {
+        return NextResponse.json({
+          success: false,
+          message: 'ETF 현재가 데이터를 찾을 수 없습니다.'
+        }, { status: 404 });
+      }
     }
+    
+    if (action === 'get-etf-high') {
+      const filePath = await getETFHighPricesPath();
+      if (filePath && fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf-8');
+        const parsedData = parseCSV(data);
+        return NextResponse.json({
+          success: true,
+          data: parsedData.rows
+        });
+      } else {
+        return NextResponse.json({
+          success: false,
+          message: 'ETF 52주 신고가 데이터를 찾을 수 없습니다.'
+        }, { status: 404 });
+      }
+    }
+    
+    // 기본 응답: 상태 정보 반환
+    const needsUpdateNow = needUpdate();
+    
+    return NextResponse.json({
+      success: true,
+      needsUpdate: needsUpdateNow,
+      lastUpdate: getLastUpdateTime()
+    });
   } catch (error) {
     console.error('GET 요청 처리 중 오류 발생:', error);
-    return NextResponse.json({ 
-      success: false, 
-      message: '업데이트 상태 확인 중 오류가 발생했습니다.',
+    return NextResponse.json({
+      success: false,
+      message: '데이터 업데이트 확인 중 오류가 발생했습니다.',
       error: (error as Error).message
     }, { status: 500 });
   }

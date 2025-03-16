@@ -125,10 +125,10 @@ export default function RSRankPage() {
       
       try {
         // 로컬 캐시 파일 경로
-        const cacheFilePath = '/cache/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
+        const cacheFilePath = '/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
         
         // 로컬 캐시 파일 로드
-        const response = await fetch(cacheFilePath);
+        const response = await fetch(cacheFilePath, { cache: 'no-store' });
         
         if (!response.ok) {
           throw new Error(`캐시 파일 로드 실패: ${response.status}`);
@@ -158,44 +158,19 @@ export default function RSRankPage() {
       setHighDataError(null);
       
       try {
-        // 캐시된 데이터 확인
-        const cachedDataJSON = localStorage.getItem('stockEasyHighData');
-        const cachedTimestamp = localStorage.getItem('stockEasyHighTimestamp');
-        const cachedDate = localStorage.getItem('stockEasyHighDate');
-        
-        // 현재 시간 정보
-        const now = new Date();
-        const currentTime = now.getTime();
-        const today = now.toISOString().split('T')[0]; // YYYY-MM-DD 형식
-        
-        // 캐시 유효성 확인 (오늘 이미 업데이트 되었거나, 아직 업데이트 시간이 아닌 경우)
-        const isCacheValid = 
-          cachedDataJSON !== null && 
-          cachedTimestamp !== null && 
-          cachedDate === today;
-        
-        // 캐시가 유효하면 캐시된 데이터 사용
-        if (isCacheValid) {
-          console.log('로컬 캐시에서 52주 신고가 데이터 로드 중...');
-          const parsedData = JSON.parse(cachedDataJSON);
-          setHighData(parsedData);
-          setHighDataLoading(false);
-          return;
-        }
-        
-        // 캐시가 없거나 유효하지 않은 경우 로컬 캐시 파일에서 직접 로드
-        console.log('캐시가 없거나 만료됨. 로컬 캐시 파일에서 52주 신고가 데이터 로드 중...');
+        // 로컬 캐시 파일에서 직접 로드
+        console.log('서버 캐시 파일에서 52주 신고가 데이터 로드 중...');
         
         try {
           // 로컬 캐시 파일 경로
-          const cacheFilePath = '/cache/stock-data/stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv';
-          const rsDataFilePath = '/cache/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
+          const cacheFilePath = '/stock-data/stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv';
+          const rsDataFilePath = '/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
           
           console.log('캐시 파일 경로:', cacheFilePath);
           console.log('RS 데이터 파일 경로:', rsDataFilePath);
           
           // 로컬 캐시 파일 로드
-          const response = await fetch(cacheFilePath);
+          const response = await fetch(cacheFilePath, { cache: 'no-store' });
           
           if (!response.ok) {
             throw new Error(`캐시 파일 로드 실패: ${response.status}`);
@@ -206,7 +181,7 @@ export default function RSRankPage() {
           console.log('52주 신고가 데이터 샘플:', csvText.substring(0, 200));
           
           // RS 데이터 파일 로드
-          const rsResponse = await fetch(rsDataFilePath);
+          const rsResponse = await fetch(rsDataFilePath, { cache: 'no-store' });
           
           if (!rsResponse.ok) {
             console.error(`RS 데이터 파일 로드 실패: ${rsResponse.status} ${rsResponse.statusText}`);
@@ -273,15 +248,10 @@ export default function RSRankPage() {
           console.log('변환된 데이터 샘플:', JSON.stringify(transformedData.rows.slice(0, 2)));
           console.log('변환된 데이터 행 수:', transformedData.rows.length);
           
-          // 데이터 캐시에 저장
-          localStorage.setItem('stockEasyHighData', JSON.stringify(transformedData));
-          localStorage.setItem('stockEasyHighTimestamp', String(new Date().getTime()));
-          localStorage.setItem('stockEasyHighDate', new Date().toISOString().split('T')[0]); // 오늘 날짜 저장
-          
           setHighData(transformedData);
         } catch (error) {
-          console.error('로컬 캐시 파일 로드 실패:', error);
-          throw new Error(`로컬 캐시 파일 로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+          console.error('서버 캐시 파일 로드 실패:', error);
+          throw new Error(`서버 캐시 파일 로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
         }
       } catch (err) {
         console.error('52주 신고가 데이터 로드 오류:', err);
@@ -294,10 +264,10 @@ export default function RSRankPage() {
     const loadStockPriceData = async () => {
       try {
         // 종목 가격 데이터 파일 경로
-        const stockPriceDataPath = '/cache/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+        const stockPriceDataPath = '/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
         
         // 파일 로드
-        const response = await fetch(stockPriceDataPath);
+        const response = await fetch(stockPriceDataPath, { cache: 'no-store' });
         
         if (!response.ok) {
           console.error(`종목 가격 데이터 파일 로드 실패: ${response.status} ${response.statusText}`);
@@ -380,31 +350,31 @@ export default function RSRankPage() {
       
       // 차트 데이터 파일 경로 배열 (순서대로 매핑)
       const chartFilePaths = [
-        '/cache/chart-data/1t2z88ntuzd2r3ct5oy8ic3ja09tqfaof.csv',
-        '/cache/chart-data/1mhuyrpe378v1j2qmsx1sufmzkmokjv_4.csv',
-        '/cache/chart-data/1wdrfq_8w9hwydadcfi7dgptwdmnxl3fk.csv',
-        '/cache/chart-data/1wjdxsztimlfizel30weqzkkv4tiadhqg.csv',
-        '/cache/chart-data/1zefwp0b0-8wzilvbmktyh_zyjg5cl0pw.csv',
-        '/cache/chart-data/1cjeyuaoew_qler37nfiqlwgdmgeimnej.csv',
-        '/cache/chart-data/12n6x15dkl1vjmzmk9ahobyiyat1unrse.csv',
-        '/cache/chart-data/1i-bg0puf8rbmxekhs1toboqjxrjbwlco.csv',
-        '/cache/chart-data/1apwisocpqh4r5336namsor_vdg6bbclg.csv',
-        '/cache/chart-data/1st-nzj2wo3fptb6swk8glqcxyjqgx7-k.csv',
-        '/cache/chart-data/1atorxqqrdjahkmginh-ajxogo7ptljpm.csv',
-        '/cache/chart-data/1jctjmbiwgiihvzcppirxbnppe5gljctw.csv',
-        '/cache/chart-data/11hgiohutm5yzbaguemzpxdtw4fv0wdmd.csv',
-        '/cache/chart-data/1bxdtowr97lhxl8ymecl84qlbe09h6wwk.csv',
-        '/cache/chart-data/1w0mug-pgv_jgsj44w3hmtfgaoq0npgos.csv',
-        '/cache/chart-data/1178693zjykqgp-iesphmq8qcxgbspg0q.csv',
-        '/cache/chart-data/15cqztbbinqf0f6rcir2d01bc_vc0attg.csv',
-        '/cache/chart-data/1ene8lrq_9kqvootf_wil-dt9jxoqj0cd.csv',
-        '/cache/chart-data/1iznpzmimg-yk2z20w2c9tjewlcdswww0.csv',
-        '/cache/chart-data/1f2k3mrwuazufdx4mkl89pmg33dbfil8g.csv'
+        '/chart-data/1t2z88ntuzd2r3ct5oy8ic3ja09tqfaof.csv',
+        '/chart-data/1mhuyrpe378v1j2qmsx1sufmzkmokjv_4.csv',
+        '/chart-data/1wdrfq_8w9hwydadcfi7dgptwdmnxl3fk.csv',
+        '/chart-data/1wjdxsztimlfizel30weqzkkv4tiadhqg.csv',
+        '/chart-data/1zefwp0b0-8wzilvbmktyh_zyjg5cl0pw.csv',
+        '/chart-data/1cjeyuaoew_qler37nfiqlwgdmgeimnej.csv',
+        '/chart-data/12n6x15dkl1vjmzmk9ahobyiyat1unrse.csv',
+        '/chart-data/1i-bg0puf8rbmxekhs1toboqjxrjbwlco.csv',
+        '/chart-data/1apwisocpqh4r5336namsor_vdg6bbclg.csv',
+        '/chart-data/1st-nzj2wo3fptb6swk8glqcxyjqgx7-k.csv',
+        '/chart-data/1atorxqqrdjahkmginh-ajxogo7ptljpm.csv',
+        '/chart-data/1jctjmbiwgiihvzcppirxbnppe5gljctw.csv',
+        '/chart-data/11hgiohutm5yzbaguemzpxdtw4fv0wdmd.csv',
+        '/chart-data/1bxdtowr97lhxl8ymecl84qlbe09h6wwk.csv',
+        '/chart-data/1w0mug-pgv_jgsj44w3hmtfgaoq0npgos.csv',
+        '/chart-data/1178693zjykqgp-iesphmq8qcxgbspg0q.csv',
+        '/chart-data/15cqztbbinqf0f6rcir2d01bc_vc0attg.csv',
+        '/chart-data/1ene8lrq_9kqvootf_wil-dt9jxoqj0cd.csv',
+        '/chart-data/1iznpzmimg-yk2z20w2c9tjewlcdswww0.csv',
+        '/chart-data/1f2k3mrwuazufdx4mkl89pmg33dbfil8g.csv'
       ];
       
       // 시장 지수 데이터 파일 경로
-      const kospiIndexPath = '/cache/market-index/market_1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv';
-      const kosdaqIndexPath = '/cache/market-index/market_1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
+      const kospiIndexPath = '/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv';
+      const kosdaqIndexPath = '/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
       
       // 시장 지수 데이터 로드
       let kospiIndexData: CandleData[] = [];
@@ -412,7 +382,20 @@ export default function RSRankPage() {
       
       try {
         // KOSPI 지수 데이터 로드
-        const kospiResponse = await fetch(kospiIndexPath);
+        let kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
+        
+        // 파일이 없으면 API를 통해 다운로드 요청
+        if (!kospiResponse.ok) {
+          console.log('코스피 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
+          await fetch('/api/stocks?action=update-file&fileId=1dzf65fz6elq6b5znvhuaftn10hqjbe_c&dataType=market-index');
+          
+          // 다시 로컬 파일 시도
+          kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
+          if (!kospiResponse.ok) {
+            throw new Error(`코스피 지수 데이터 파일 로드 실패: ${kospiResponse.status}`);
+          }
+        }
+        
         if (kospiResponse.ok) {
           const kospiCsvText = await kospiResponse.text();
           const kospiParsedData = Papa.parse(kospiCsvText, {
@@ -454,7 +437,20 @@ export default function RSRankPage() {
         }
         
         // KOSDAQ 지수 데이터 로드
-        const kosdaqResponse = await fetch(kosdaqIndexPath);
+        let kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
+        
+        // 파일이 없으면 API를 통해 다운로드 요청
+        if (!kosdaqResponse.ok) {
+          console.log('코스닥 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
+          await fetch('/api/stocks?action=update-file&fileId=1ks9qkdzmsxv-qenv6udzzidfwgykc1qg&dataType=market-index');
+          
+          // 다시 로컬 파일 시도
+          kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
+          if (!kosdaqResponse.ok) {
+            throw new Error(`코스닥 지수 데이터 파일 로드 실패: ${kosdaqResponse.status}`);
+          }
+        }
+        
         if (kosdaqResponse.ok) {
           const kosdaqCsvText = await kosdaqResponse.text();
           const kosdaqParsedData = Papa.parse(kosdaqCsvText, {
@@ -495,7 +491,7 @@ export default function RSRankPage() {
           console.log(`KOSDAQ 지수 데이터 로드 완료: ${kosdaqIndexData.length}개 항목`);
         }
       } catch (error) {
-        console.error('시장 지수 데이터 로드 실패:', error);
+        console.error('시장 지수 데이터 로드 오류:', error);
       }
       
       // 실제 데이터 로드 (최대 20개)
@@ -521,7 +517,7 @@ export default function RSRankPage() {
         const loadPromise = (async (index) => {
           try {
             console.log(`${index+1}번째 차트 데이터 파일 로드 시작: ${chartFilePaths[index]}`);
-            const response = await fetch(chartFilePaths[index]);
+            const response = await fetch(chartFilePaths[index], { cache: 'no-store' });
             
             if (!response.ok) {
               throw new Error(`캐시 파일 로드 실패: ${response.status}`);
@@ -1130,6 +1126,139 @@ export default function RSRankPage() {
       clearTimeout(timeoutId);
     };
   }, []);
+
+  // 시장 지수 데이터 로드 함수
+  const loadMarketIndexData = async () => {
+    try {
+      // 시장 지수 데이터 로드 (코스피, 코스닥)
+      const kospiIndexPath = '/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv';
+      const kosdaqIndexPath = '/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
+      
+      // 시장 지수 데이터 로드
+      let kospiIndexData: CandleData[] = [];
+      let kosdaqIndexData: CandleData[] = [];
+      
+      try {
+        // KOSPI 지수 데이터 로드
+        let kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
+        
+        // 파일이 없으면 API를 통해 다운로드 요청
+        if (!kospiResponse.ok) {
+          console.log('코스피 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
+          await fetch('/api/stocks?action=update-file&fileId=1dzf65fz6elq6b5znvhuaftn10hqjbe_c&dataType=market-index');
+          
+          // 다시 로컬 파일 시도
+          kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
+          if (!kospiResponse.ok) {
+            throw new Error(`코스피 지수 데이터 파일 로드 실패: ${kospiResponse.status}`);
+          }
+        }
+        
+        if (kospiResponse.ok) {
+          const kospiCsvText = await kospiResponse.text();
+          const kospiParsedData = Papa.parse(kospiCsvText, {
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: true,
+          });
+          
+          kospiIndexData = kospiParsedData.data
+            .filter((row: any) => {
+              const isValid = row && row['날짜'] && row['시가'] && row['고가'] && row['저가'] && row['종가'];
+              return isValid;
+            })
+            .map((row: any) => {
+              // 날짜 형식 변환 (YYYYMMDD -> YYYY-MM-DD)
+              let timeStr = String(row['날짜'] || '');
+              let formattedTime = '';
+              
+              if (timeStr.length === 8) {
+                const year = timeStr.substring(0, 4);
+                const month = timeStr.substring(4, 6);
+                const day = timeStr.substring(6, 8);
+                formattedTime = `${year}-${month}-${day}`;
+              } else {
+                formattedTime = timeStr;
+              }
+              
+              return {
+                time: formattedTime,
+                open: parseFloat(row['시가'] || 0),
+                high: parseFloat(row['고가'] || 0),
+                low: parseFloat(row['저가'] || 0),
+                close: parseFloat(row['종가'] || 0),
+                volume: parseFloat(row['거래량'] || 0),
+              };
+            });
+          
+          console.log(`KOSPI 지수 데이터 로드 완료: ${kospiIndexData.length}개 항목`);
+        }
+        
+        // KOSDAQ 지수 데이터 로드
+        let kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
+        
+        // 파일이 없으면 API를 통해 다운로드 요청
+        if (!kosdaqResponse.ok) {
+          console.log('코스닥 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
+          await fetch('/api/stocks?action=update-file&fileId=1ks9qkdzmsxv-qenv6udzzidfwgykc1qg&dataType=market-index');
+          
+          // 다시 로컬 파일 시도
+          kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
+          if (!kosdaqResponse.ok) {
+            throw new Error(`코스닥 지수 데이터 파일 로드 실패: ${kosdaqResponse.status}`);
+          }
+        }
+        
+        if (kosdaqResponse.ok) {
+          const kosdaqCsvText = await kosdaqResponse.text();
+          const kosdaqParsedData = Papa.parse(kosdaqCsvText, {
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: true,
+          });
+          
+          kosdaqIndexData = kosdaqParsedData.data
+            .filter((row: any) => {
+              const isValid = row && row['날짜'] && row['시가'] && row['고가'] && row['저가'] && row['종가'];
+              return isValid;
+            })
+            .map((row: any) => {
+              // 날짜 형식 변환 (YYYYMMDD -> YYYY-MM-DD)
+              let timeStr = String(row['날짜'] || '');
+              let formattedTime = '';
+              
+              if (timeStr.length === 8) {
+                const year = timeStr.substring(0, 4);
+                const month = timeStr.substring(4, 6);
+                const day = timeStr.substring(6, 8);
+                formattedTime = `${year}-${month}-${day}`;
+              } else {
+                formattedTime = timeStr;
+              }
+              
+              return {
+                time: formattedTime,
+                open: parseFloat(row['시가'] || 0),
+                high: parseFloat(row['고가'] || 0),
+                low: parseFloat(row['저가'] || 0),
+                close: parseFloat(row['종가'] || 0),
+                volume: parseFloat(row['거래량'] || 0),
+              };
+            });
+          
+          console.log(`KOSDAQ 지수 데이터 로드 완료: ${kosdaqIndexData.length}개 항목`);
+        }
+      } catch (error) {
+        console.error('시장 지수 데이터 로드 오류:', error);
+      }
+      
+      // 상태 업데이트
+      setKospiIndexData(kospiIndexData);
+      setKosdaqIndexData(kosdaqIndexData);
+    } catch (error) {
+      console.error('시장 지수 데이터 로드 오류:', error);
+    }
+  };
 
   return (
     <div className="flex h-screen bg-gray-100">
