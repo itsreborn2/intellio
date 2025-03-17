@@ -98,31 +98,17 @@ function AIChatAreaContent() {
 
     const fetchStockList = async () => {
       try {
-        // 캐시가 유효한지 확인 (캐시된 데이터가 있고, 캐시 유효 시간이 지나지 않았는지)
-        const currentTime = Date.now();
-        if (cachedStockData.length > 0 && (currentTime - lastFetchTime) < CACHE_DURATION) {
-          console.log('캐시된 종목 데이터 사용:', cachedStockData.length);
-          setStockOptions(cachedStockData);
-          return;
-        }
-
         setIsLoading(true);
         setError(null); // 요청 시작 시 오류 상태 초기화
         
-        // 구글 드라이브 파일 ID
-        const fileId = '1idVB5kIo0d6dChvOyWE7OvWr-eZ1cbpB'; // 원래 종목 리스트 파일 ID로 복원
+        // 서버 캐시 CSV 파일 경로
+        const csvFilePath = '/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
         
-        // API 라우트를 통해 구글 드라이브에서 종목 리스트 가져오기
-        const response = await fetch('/api/stocks', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ fileId }),
-        });
+        // 서버 캐시 파일 가져오기 (항상 최신 데이터 사용)
+        const response = await fetch(csvFilePath, { cache: 'no-store' });
         
         if (!response.ok) {
-          throw new Error(`API 응답 오류: ${response.status}`);
+          throw new Error(`서버 캐시 파일 로드 오류: ${response.status}`);
         }
         
         // CSV 파일 내용 가져오기
@@ -161,18 +147,8 @@ function AIChatAreaContent() {
         if (stockData.length > 0) {
           console.log(`종목 데이터 ${stockData.length}개 로드 완료`);
           setStockOptions(stockData);
-          
-          // 캐시 업데이트
           setCachedStockData(stockData);
-          setLastFetchTime(currentTime);
-          
-          // 로컬 스토리지에도 캐싱 (페이지 새로고침 시에도 유지)
-          try {
-            localStorage.setItem('cachedStockData', JSON.stringify(stockData));
-            localStorage.setItem('lastFetchTime', currentTime.toString());
-          } catch (storageError) {
-            console.warn('로컬 스토리지 저장 실패:', storageError);
-          }
+          setLastFetchTime(Date.now());
         } else {
           const errorMsg = '유효한 종목 데이터를 받지 못했습니다.';
           console.error(errorMsg);
@@ -187,36 +163,6 @@ function AIChatAreaContent() {
         setIsLoading(false);
       }
     };
-
-    // 로컬 스토리지에서 캐시된 데이터 불러오기 시도
-    try {
-      const cachedDataStr = localStorage.getItem('cachedStockData');
-      const cachedTimeStr = localStorage.getItem('lastFetchTime');
-      
-      if (cachedDataStr && cachedTimeStr) {
-        const cachedData = JSON.parse(cachedDataStr);
-        const cachedTime = parseInt(cachedTimeStr, 10);
-        
-        if (Array.isArray(cachedData) && cachedData.length > 0) {
-          console.log('로컬 스토리지에서 캐시된 종목 데이터 불러옴:', cachedData.length);
-          setCachedStockData(cachedData);
-          setLastFetchTime(cachedTime);
-          
-          // 캐시가 유효한지 확인
-          const currentTime = Date.now();
-          if ((currentTime - cachedTime) < CACHE_DURATION) {
-            console.log('유효한 캐시 사용');
-            setStockOptions(cachedData);
-            setIsLoading(false);
-            return;
-          } else {
-            console.log('캐시 만료됨, 새로운 데이터 가져오기');
-          }
-        }
-      }
-    } catch (storageError) {
-      console.warn('로컬 스토리지 읽기 실패:', storageError);
-    }
 
     fetchStockList();
   }, [isMounted]); // 의존성 배열에서 cachedStockData와 lastFetchTime 제거
@@ -300,35 +246,25 @@ function AIChatAreaContent() {
   useEffect(() => {
     if (!isMounted) return;
     
-    try {
-      const savedMessages = localStorage.getItem('chatMessages');
-      if (savedMessages) {
-        const parsedMessages = JSON.parse(savedMessages);
-        if (Array.isArray(parsedMessages)) {
-          setMessages(parsedMessages);
-        }
-      }
-    } catch (error) {
-      console.warn('메시지 불러오기 실패:', error);
-    }
+
   }, [isMounted]);
   
-  // 메시지 저장
+  // 메시지 저장 - 서버 측 저장 방식으로 변경 (현재는 구현하지 않음)
   useEffect(() => {
-    if (!isMounted || messages.length === 0) return;
-    
-    try {
-      localStorage.setItem('chatMessages', JSON.stringify(messages));
-    } catch (error) {
-      console.warn('메시지 저장 실패:', error);
-    }
+    // 메시지 저장 로직은 서버 측 구현이 필요하므로 여기서는 생략
+    // 추후 API 엔드포인트를 통해 메시지를 서버에 저장하는 방식으로 변경 가능
   }, [messages, isMounted]);
 
   // 컴포넌트가 마운트되었을 때 초기 메시지 설정
   useEffect(() => {
     if (!isMounted) return;
     
+    // 이미 메시지가 있으면 초기화하지 않음
+    if (messages.length > 0) {
+      return;
+    }
     
+    // 초기 메시지 설정 로직은 위의 fetchMessages 함수에서 처리
   }, [isMounted, messages.length]);
 
   // 입력 필드 포커스 시 종목 추천 목록 표시
