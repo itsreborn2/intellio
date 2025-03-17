@@ -43,6 +43,7 @@ class TelegramRAGService:
 4. 구체적인 수치나 통계는 정확히 인용하세요.
 5. 메시지 작성자의 주관적 의견과 객관적 사실을 구분하세요.
 6. 요약은 명확하고 간결하게 작성하되, 중요한 세부사항은 포함하세요.
+7. 채널명, 채널이름은 반드시 제거하세요.
 """
 
     def _calculate_message_importance(self, message: str) -> float:
@@ -374,7 +375,7 @@ class TelegramRAGService:
             if not found_messages:
                 return "관련된 메시지를 찾을 수 없습니다."
             
-            messages_text = "\n".join([f"- {msg}" for msg in found_messages])
+            messages_text = "\n-=-=-=-=-=-=-=-=-=-=-\n".join([f"- {msg}" for msg in found_messages])
             messages_text += "\n\n-------\n" + self.MakeUserPrompt(query, stock_code, stock_name, classification)
             # 질문 분류 결과에 따라 프롬프트 생성
             prompt_context = self.MakeSummaryPrompt(classification)

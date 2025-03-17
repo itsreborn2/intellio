@@ -39,7 +39,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             query = state.get("query", "")
             stock_code = state.get("stock_code", "")
             stock_name = state.get("stock_name", "")
-            classification = state.get("classification", {})
+            classification = state.get("question_classification", {})
 
             # 실제 분석은 구현되지 않음 - 더미 데이터 반환
             financial_data = self._get_dummy_financial_data(stock_name, stock_code)

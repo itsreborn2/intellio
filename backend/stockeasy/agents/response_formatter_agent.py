@@ -12,7 +12,8 @@ from typing import Dict, List, Any, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
-from backend.stockeasy.prompts.response_formatter_prompts import format_response_formatter_prompt
+from stockeasy.prompts.response_formatter_prompts import format_response_formatter_prompt
+from common.core.config import settings
 
 class ResponseFormatterAgent:
     """
@@ -27,7 +28,7 @@ class ResponseFormatterAgent:
             model_name: 사용할 OpenAI 모델 이름
             temperature: 모델 출력의 다양성 조절 파라미터
         """
-        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature)
+        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
         logger.info(f"ResponseFormatterAgent initialized with model: {model_name}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -42,7 +43,7 @@ class ResponseFormatterAgent:
         """
         try:
             # 현재 사용자 쿼리 및 종목 정보 추출
-            query = state.get("current_query", "")
+            query = state.get("query", "")
             stock_code = state.get("stock_code")
             stock_name = state.get("stock_name")
             

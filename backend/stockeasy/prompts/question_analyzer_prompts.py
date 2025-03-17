@@ -56,7 +56,7 @@ QUESTION_ANALYZER_PROMPT = """
 
 # 최적화된 질문 분석기 프롬프트
 OPTIMIZED_QUESTION_ANALYZER_PROMPT = """
-당신은 금융 도메인 특화 질문 분석 전문가입니다. 다음 사용자 질문을 분석하여 JSON 형식으로 정보를 추출해 주세요:
+당신은 금융 도메인 특화 질문 분석 전문가입니다. 다음 사용자 질문을 분석하여 구조화된 형식으로 정보를 추출해 주세요:
 
 사용자 질문: {query}
 
@@ -74,29 +74,27 @@ OPTIMIZED_QUESTION_ANALYZER_PROMPT = """
 - 한국 주식 시장 맥락에서 분석할 것
 - 확실하지 않은 정보는 추측하지 말 것
 
-출력 형식:
-```json
-{
-  "entities": {
+다음 구조로 응답해주세요:
+{{
+  "entities": {{
     "stock_name": "종목명 또는 null",
     "stock_code": "종목코드 또는 null",
     "sector": "산업/섹터 또는 null",
     "time_range": "시간범위 또는 null"
-  },
-  "classification": {
+  }},
+  "question_classification": {{
     "primary_intent": "종목기본정보/성과전망/재무분석/산업동향/기타 중 하나",
     "complexity": "단순/중간/복합/전문가급 중 하나"
-  },
-  "data_requirements": {
+  }},
+  "data_requirements": {{
     "telegram_needed": true/false,
     "reports_needed": true/false,
     "financial_statements_needed": true/false,
     "industry_data_needed": true/false
-  },
+  }},
   "keywords": ["키워드1", "키워드2", "키워드3"],
   "detail_level": "간략/보통/상세 중 하나"
-}
-```
+}}
 """
 
 def format_question_analyzer_prompt(query: str) -> str:

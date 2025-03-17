@@ -25,8 +25,8 @@ class SummarizerAgent(BaseAgent):
         """에이전트 초기화"""
         super().__init__("summarizer")
         self.llm = ChatOpenAI(
-            model=settings.OPENAI_MODEL_NAME,
-            temperature=0.1,  # 창의성을 약간 허용
+            model="gpt-4o-mini",
+            #temperature=0.1,  # 창의성을 약간 허용
             api_key=settings.OPENAI_API_KEY
         )
         self.parser = StrOutputParser()
@@ -45,7 +45,7 @@ class SummarizerAgent(BaseAgent):
             query = state.get("query", "")
             stock_code = state.get("stock_code")
             stock_name = state.get("stock_name")
-            classification = state.get("classification", {})
+            classification = state.get("question_classification", {})
             telegram_messages = state.get("telegram_messages", [])
             report_data = state.get("report_data", [])
             financial_data = state.get("financial_data", {})
@@ -225,34 +225,3 @@ class SummarizerAgent(BaseAgent):
             sources_info=sources_info
         )
 
-
-class KnowledgeIntegratorAgent(BaseAgent):
-    """여러 소스의 검색 결과를 통합하는 에이전트"""
-    
-    def __init__(self):
-        """에이전트 초기화"""
-        super().__init__("knowledge_integrator")
-    
-    async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        검색 결과를 통합합니다.
-        
-        현재는 단순히 각 소스의 데이터를 통과시키는 역할만 수행합니다.
-        향후 구현 시 소스 간의 정보 중복 제거, 충돌 해결 등의 로직을 추가할 수 있습니다.
-        
-        Args:
-            state: 현재 상태
-            
-        Returns:
-            업데이트된 상태
-        """
-        # 향후 구현: 여러 데이터 소스의 정보를 통합하는 로직
-        # 현재는 단순히 상태를 그대로 통과
-        
-        return {
-            **state,
-            "processing_status": {
-                **state.get("processing_status", {}),
-                "knowledge_integrator": "completed"
-            }
-        } 

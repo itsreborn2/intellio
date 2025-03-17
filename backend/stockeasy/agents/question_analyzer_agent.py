@@ -1,22 +1,75 @@
 """
 질문 분석기 에이전트 모듈
 
-이 모듈은 사용자 질문을 분석하여 종목명, 종목코드, 산업 및 기타 
-중요 엔티티와 정보 요구사항을 추출하는 에이전트 클래스를 구현합니다.
+이 모듈은 사용자 질문을 분석하여 의도, 엔티티, 키워드 등의 
+중요한 정보를 추출하는 QuestionAnalyzerAgent 클래스를 구현합니다.
 """
 
 import json
 from loguru import logger
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Literal, cast
+from datetime import datetime
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
-from backend.stockeasy.prompts.question_analyzer_prompts import format_question_analyzer_prompt
+from pydantic import BaseModel, Field
+from typing import List, Optional as PydanticOptional
+from stockeasy.prompts.question_analyzer_prompts import format_question_analyzer_prompt
+from common.core.config import settings
+from stockeasy.models.agent_io import (
+    QuestionAnalysisResult, ExtractedEntity, QuestionClassification, 
+    DataRequirement, pydantic_to_typeddict
+)
+
+
+class Entities(BaseModel):
+    """추출된 엔티티 정보"""
+    stock_name: PydanticOptional[str] = Field(None, description="종목명 또는 null")
+    stock_code: PydanticOptional[str] = Field(None, description="종목코드 또는 null")
+    sector: PydanticOptional[str] = Field(None, description="산업/섹터 또는 null")
+    time_range: PydanticOptional[str] = Field(None, description="시간범위 또는 null")
+    financial_metric: PydanticOptional[str] = Field(None, description="재무지표 또는 null")
+    competitor: PydanticOptional[str] = Field(None, description="경쟁사 또는 null")
+    product: PydanticOptional[str] = Field(None, description="제품/서비스 또는 null")
+
+
+class Classification(BaseModel):
+    """질문 분류 정보"""
+    primary_intent: Literal["종목기본정보", "성과전망", "재무분석", "산업동향", "기타"] = Field(
+        ..., description="주요 질문 의도"
+    )
+    complexity: Literal["단순", "중간", "복합", "전문가급"] = Field(
+        ..., description="질문 복잡도"
+    )
+    expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형"] = Field(
+        ..., description="기대하는 답변 유형"
+    )
+
+
+class DataRequirements(BaseModel):
+    """데이터 요구사항"""
+    telegram_needed: bool = Field(..., description="텔레그램 데이터 필요 여부")
+    reports_needed: bool = Field(..., description="리포트 데이터 필요 여부")
+    financial_statements_needed: bool = Field(..., description="재무제표 데이터 필요 여부")
+    industry_data_needed: bool = Field(..., description="산업 데이터 필요 여부")
+
+
+class QuestionAnalysis(BaseModel):
+    """질문 분석 결과"""
+    entities: Entities = Field(..., description="추출된 엔티티 정보")
+    classification: Classification = Field(..., description="질문 분류 정보")
+    data_requirements: DataRequirements = Field(..., description="필요한 데이터 소스 정보")
+    keywords: List[str] = Field(..., description="중요 키워드 목록")
+    detail_level: Literal["간략", "보통", "상세"] = Field(..., description="요구되는 상세도")
+
 
 class QuestionAnalyzerAgent:
     """
-    사용자 질문에서 중요 정보를 추출하는 질문 분석기 에이전트 클래스
+    사용자 질문을 분석하여 의도, 엔티티, 키워드 등의 중요 정보를 추출하는 질문 분석기 에이전트
+    
+    이 에이전트는 워크플로우의 초기 단계에서 실행되어 질문의 '내용'을 분석하고,
+    오케스트레이터가 워크플로우를 설계하는 데 필요한 정보를 제공합니다.
     """
     
     def __init__(self, model_name: str = "gpt-4o", temperature: float = 0):
@@ -27,8 +80,12 @@ class QuestionAnalyzerAgent:
             model_name: 사용할 OpenAI 모델 이름
             temperature: 모델 출력의 다양성 조절 파라미터
         """
-        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature)
-        self.output_parser = JsonOutputParser()
+        self.llm = ChatOpenAI(
+            model_name=model_name, 
+            temperature=temperature, 
+            api_key=settings.OPENAI_API_KEY
+        )
+        self.model_name = model_name
         logger.info(f"QuestionAnalyzerAgent initialized with model: {model_name}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -42,12 +99,16 @@ class QuestionAnalyzerAgent:
             업데이트된 상태 딕셔너리
         """
         try:
+            # 성능 측정 시작
+            start_time = datetime.now()
+            logger.info(f"QuestionAnalyzerAgent starting processing")
+            
             # 현재 사용자 쿼리 추출
-            query = state.get("current_query", "")
+            query = state.get("query", "")
             
             if not query:
                 logger.warning("Empty query provided to QuestionAnalyzerAgent")
-                state["error"] = "질문이 비어 있습니다."
+                self._add_error(state, "질문이 비어 있습니다.")
                 return state
             
             logger.info(f"QuestionAnalyzerAgent analyzing query: {query}")
@@ -55,75 +116,70 @@ class QuestionAnalyzerAgent:
             # 프롬프트 준비
             prompt = format_question_analyzer_prompt(query=query)
             
-            # LLM 호출로 분석 수행
-            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
-            content = response.content
+            # LLM 호출로 분석 수행 - structured output 사용
+            response:QuestionAnalysis = await self.llm.with_structured_output(QuestionAnalysis).ainvoke(
+                [HumanMessage(content=prompt)]
+            )
             
-            # JSON 응답 파싱
-            try:
-                if "```json" in content:
-                    # JSON 코드 블록 추출
-                    json_content = content.split("```json")[1].split("```")[0].strip()
-                    analysis_result = json.loads(json_content)
-                else:
-                    # 일반 JSON 파싱 시도
-                    analysis_result = json.loads(content)
-                    
-                logger.info(f"Analysis result: {analysis_result}")
-                
-                # 엔티티 정보 추출
-                entities = analysis_result.get("entities", {})
-                classification = analysis_result.get("classification", {})
-                data_requirements = analysis_result.get("data_requirements", {})
-                
-                # 상태 업데이트
-                state["extracted_entities"] = entities
-                state["question_classification"] = classification
-                state["data_requirements"] = data_requirements
-                state["keywords"] = analysis_result.get("keywords", [])
-                state["detail_level"] = analysis_result.get("detail_level", "보통")
-                
-                # 중요 엔티티 정보 상태 업데이트
-                if not state.get("stock_code") and entities.get("stock_code"):
-                    state["stock_code"] = entities.get("stock_code")
-                    
-                if not state.get("stock_name") and entities.get("stock_name"):
-                    state["stock_name"] = entities.get("stock_name")
-                    
-                state["sector"] = entities.get("sector", state.get("sector"))
-                state["time_range"] = entities.get("time_range", state.get("time_range"))
-                
-                # 필요한 에이전트 결정
-                needed_agents = []
-                
-                if data_requirements.get("telegram_needed", True):
-                    needed_agents.append("telegram_retriever")
-                    
-                if data_requirements.get("reports_needed", False):
-                    needed_agents.append("report_analyzer")
-                    
-                if data_requirements.get("financial_statements_needed", False):
-                    needed_agents.append("financial_analyzer")
-                    
-                if data_requirements.get("industry_data_needed", False):
-                    needed_agents.append("industry_analyzer")
-                
-                # 적어도 하나의 에이전트가 필요함
-                if not needed_agents:
-                    needed_agents = ["telegram_retriever"]  # 기본값
-                
-                state["needed_agents"] = needed_agents
-                
-                logger.info(f"QuestionAnalyzerAgent determined needed agents: {needed_agents}")
-                
-            except json.JSONDecodeError:
-                logger.error(f"Failed to parse analysis result JSON: {content}")
-                state["needed_agents"] = ["telegram_retriever"]  # 기본값
-                state["error"] = "분석 결과 파싱 실패"
-                
+            # 분석 결과 로깅
+            logger.info(f"Analysis result: {response}")
+            
+            # QuestionAnalysisResult 객체 생성 - 유틸리티 함수 사용
+            question_analysis: QuestionAnalysisResult = {
+                "entities": response.entities.dict(),
+                "classification": response.classification.dict(),
+                "data_requirements": response.data_requirements.dict(),
+                "keywords": response.keywords,
+                "detail_level": response.detail_level
+            }
+            
+            # 상태에 저장
+            state["question_analysis"] = question_analysis
+            
+            # 성능 지표 업데이트
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            # 메트릭 기록
+            state["metrics"] = state.get("metrics", {})
+            state["metrics"]["question_analyzer"] = {
+                "start_time": start_time,
+                "end_time": end_time,
+                "duration": duration,
+                "status": "completed",
+                "error": None,
+                "model_name": self.model_name
+            }
+            
+            # 처리 상태 업데이트
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["question_analyzer"] = "completed"
+            
+            logger.info(f"QuestionAnalyzerAgent completed in {duration:.2f} seconds")
             return state
             
         except Exception as e:
             logger.exception(f"Error in QuestionAnalyzerAgent: {str(e)}")
-            state["error"] = f"질문 분석기 에이전트 오류: {str(e)}"
+            self._add_error(state, f"질문 분석기 에이전트 오류: {str(e)}")
             return state 
+    
+    def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
+        """
+        상태 객체에 오류 정보를 추가합니다.
+        
+        Args:
+            state: 상태 객체
+            error_message: 오류 메시지
+        """
+        state["errors"] = state.get("errors", [])
+        state["errors"].append({
+            "agent": "question_analyzer",
+            "error": error_message,
+            "type": "processing_error",
+            "timestamp": datetime.now(),
+            "context": {"query": state.get("query", "")}
+        })
+        
+        # 처리 상태 업데이트
+        state["processing_status"] = state.get("processing_status", {})
+        state["processing_status"]["question_analyzer"] = "failed" 

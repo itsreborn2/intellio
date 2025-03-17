@@ -119,9 +119,9 @@ class LLMModels:
             return ChatOpenAI(
                         model="gpt-4o-mini",
                         openai_api_key=api_key,
-                        # temperature=kwargs.get("temperature", 0.2),
-                        # max_tokens=kwargs.get("max_output_tokens", 2048),
-                        # top_p=kwargs.get("top_p", 0.7),
+                        temperature=kwargs.get("temperature", 0.2),
+                        max_tokens=kwargs.get("max_output_tokens", 2048),
+                        top_p=kwargs.get("top_p", 0.7),
                         streaming=streaming,
                         callbacks=callbacks,
                     )
@@ -163,10 +163,10 @@ class LLMModels:
                         #model="models/gemini-2.0-flash-001",
                         model="models/gemini-2.0-flash", # 실험모델은 분당 횟수 제한이 심함 분당 2~5회. 사용불가한 수준
                         google_api_key=api_key,
-                        # temperature=kwargs.get("temperature", 0.3),
-                        # max_output_tokens=kwargs.get("max_output_tokens", 2048),
-                        # top_p=kwargs.get("top_p", 0.7),
-                        # top_k=kwargs.get("top_k", 20),
+                        temperature=kwargs.get("temperature", 0.2),
+                        max_output_tokens=kwargs.get("max_output_tokens", 2048),
+                        top_p=kwargs.get("top_p", 0.7),
+                        top_k=kwargs.get("top_k", 20),
                         streaming=streaming,
                         callbacks=callbacks,
                     )

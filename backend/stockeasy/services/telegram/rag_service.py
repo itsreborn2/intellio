@@ -61,7 +61,7 @@ class StockRAGService:
             }
             
             if classification:
-                initial_state["classification"] = classification.model_dump()
+                initial_state["question_classification"] = classification.model_dump()
 
             # 세션 ID 생성 (필요 시 구현)
             # initial_state["session_id"] = self._generate_session_id()
@@ -152,7 +152,7 @@ class TelegramRAGLangraphService:
             return {
                 "summary": final_response,
                 "telegram_messages": result.get("retrieved_data", {}).get("telegram_messages", []),
-                "classification": result.get("classification", {}),
+                "question_classification": result.get("question_classification", {}),
                 "processing_time": processing_status.get("total_time", 0)
             }
             
@@ -161,7 +161,7 @@ class TelegramRAGLangraphService:
             return {
                 "summary": f"죄송합니다. 검색 중 오류가 발생했습니다: {str(e)}",
                 "telegram_messages": [],
-                "classification": classification.model_dump() if classification else {},
+                "question_classification": classification.model_dump() if classification else {},
                 "processing_time": 0,
                 "error": str(e)
             } 

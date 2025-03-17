@@ -16,13 +16,12 @@ from stockeasy.agents.question_analyzer_agent import QuestionAnalyzerAgent
 from stockeasy.agents.knowledge_integrator_agent import KnowledgeIntegratorAgent
 from stockeasy.agents.response_formatter_agent import ResponseFormatterAgent
 from stockeasy.agents.fallback_manager_agent import FallbackManagerAgent
+from stockeasy.agents.telegram_retriever_agent import TelegramRetrieverAgent
+from stockeasy.agents.report_analyzer_agent import ReportAnalyzerAgent
 # 기존 에이전트들 임포트
-from stockeasy.agents.telegram_retriever import TelegramRetrieverAgent
-from stockeasy.agents.report_analyzer import ReportAnalyzerAgent
-from stockeasy.agents.financial_analyzer import FinancialAnalyzerAgent
-from stockeasy.agents.industry_analyzer import IndustryAnalyzerAgent
+from stockeasy.agents.financial_analyzer_agent import FinancialAnalyzerAgent
+from stockeasy.agents.industry_analyzer_agent import IndustryAnalyzerAgent
 from stockeasy.agents.summarizer import SummarizerAgent
-from stockeasy.graph.stock_analysis_graph import StockAnalysisGraph
 
 
 class AgentRegistry:
@@ -31,7 +30,7 @@ class AgentRegistry:
     def __init__(self):
         """에이전트 레지스트리 초기화"""
         self.agents: Dict[str, BaseAgent] = {}
-        self.graph: Optional[StockAnalysisGraph] = None
+        self.graph = None
         self.db_session: Optional[AsyncSession] = None
         self.agent_classes: Dict[str, Type[BaseAgent]] = {
             "session_manager": SessionManagerAgent,
@@ -71,26 +70,28 @@ class AgentRegistry:
             logger.warning("DB 세션 없이 에이전트 초기화 - 세션 관리자는 초기화되지 않습니다.")
         
         # 기타 에이전트 초기화 - 새로 구현한 클래스 사용
-        self.agents["orchestrator"] = OrchestratorAgent()
-        self.agents["question_analyzer"] = QuestionAnalyzerAgent()
+        self.agents["orchestrator"] = OrchestratorAgent(model_name="gpt-4o", temperature=0)
+        self.agents["question_analyzer"] = QuestionAnalyzerAgent(model_name="gpt-4o-mini", temperature=0)
         
-        # 검색 및 분석 에이전트 초기화
-        self.agents["telegram_retriever"] = TelegramRetrieverAgent()
-        self.agents["report_analyzer"] = ReportAnalyzerAgent()
-        self.agents["financial_analyzer"] = FinancialAnalyzerAgent()
-        self.agents["industry_analyzer"] = IndustryAnalyzerAgent()
+        # 검색 및 분석 에이전트 초기화 - 새로 구현한 클래스 사용
+        self.agents["telegram_retriever"] = TelegramRetrieverAgent(model_name="gpt-4o-mini", temperature=0)
+        self.agents["report_analyzer"] = ReportAnalyzerAgent(model_name="gpt-4o-mini", temperature=0)
         
-        # 통합 및 요약 에이전트 초기화 - 새로 구현한 통합기 클래스 사용
-        self.agents["knowledge_integrator"] = KnowledgeIntegratorAgent()
+        # 기존 검색 및 분석 에이전트 초기화
+        self.agents["financial_analyzer"] = FinancialAnalyzerAgent(model_name="gpt-4o-mini", temperature=0)
+        self.agents["industry_analyzer"] = IndustryAnalyzerAgent(model_name="gpt-4o-mini", temperature=0)
+        
+        # 통합 및 요약 에이전트 초기화 - 새로 구현한 통합기 클래스 사용 
+        self.agents["knowledge_integrator"] = KnowledgeIntegratorAgent(model_name="gpt-4o-mini", temperature=0)
         self.agents["summarizer"] = SummarizerAgent()
         
         # 응답 및 오류 처리 에이전트 초기화 - 새로 구현한 클래스 사용
-        self.agents["response_formatter"] = ResponseFormatterAgent()
-        self.agents["fallback_manager"] = FallbackManagerAgent()
+        self.agents["response_formatter"] = ResponseFormatterAgent(model_name="gpt-4o-mini", temperature=0)
+        self.agents["fallback_manager"] = FallbackManagerAgent(model_name="gpt-4o-mini", temperature=0)
         
         logger.info(f"총 {len(self.agents)} 개의 에이전트가 초기화되었습니다.")
     
-    def initialize_graph(self, db: AsyncSession = None) -> Optional[StockAnalysisGraph]:
+    def initialize_graph(self, db: AsyncSession = None):
         """
         그래프 초기화 및 에이전트 연결
         
@@ -105,6 +106,9 @@ class AgentRegistry:
             if not self.agents:
                 self.initialize_agents(db)
             
+            # 순환 참조 방지를 위해 런타임에 임포트
+            from stockeasy.graph.stock_analysis_graph import StockAnalysisGraph
+            
             # 그래프 초기화
             logger.info("Stock Analysis Graph 초기화 시작")
             self.graph = StockAnalysisGraph(self.agents)
@@ -118,10 +122,10 @@ class AgentRegistry:
             return self.graph
             
         except Exception as e:
-            logger.error(f"그래프 초기화 중 오류 발생: {e}", exc_info=True)
+            logger.exception(f"그래프 초기화 중 오류 발생: {e}")
             return None
 
-    def get_graph(self, db: AsyncSession = None) -> Optional[StockAnalysisGraph]:
+    def get_graph(self, db: AsyncSession = None):
         """
         초기화된 그래프 인스턴스 조회
         
