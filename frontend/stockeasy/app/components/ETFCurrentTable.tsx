@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import Papa from 'papaparse'
 import React from 'react';
-import { Sparklines, SparklinesLine } from 'react-sparklines';
+import { Sparklines, SparklinesLine, SparklinesSpots, SparklinesReferenceLine, SparklinesBars } from 'react-sparklines';
 
 // CSV 데이터를 파싱한 결과를 위한 인터페이스
 interface CSVData {
@@ -36,6 +36,18 @@ interface StockPriceData {
 
 // 정렬 타입 정의
 type SortDirection = 'asc' | 'desc' | null;
+
+// ETF 파일 정보
+const ETF_FILES = {
+  currentPrice: {
+    fileId: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA',
+    fileName: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA.csv',
+    path: '/today_price_etf'
+  },
+  stockList: {
+    path: '/etf_stocklist/etf_stocklist.csv'
+  }
+};
 
 // CSV 파일 파싱 함수
 function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedData; errors: any[] } {
@@ -110,6 +122,7 @@ export default function ETFCurrentTable() {
     tickerMap: {[key: string]: string},
     stockNameMap: {[key: string]: string}
   }>({ tickerMap: {}, stockNameMap: {} });
+  const [etfStockList, setEtfStockList] = useState<{[key: string]: string[]}>({});
   
   // 사용 가능한 티커 목록 (rs_etf 폴더에 있는 파일 이름)
   const availableTickers = [
@@ -365,6 +378,216 @@ export default function ETFCurrentTable() {
     return null;
   };
   
+  // 20일선 돌파/이탈 계산 함수
+  const calculate20DayCrossover = (ticker: string): { date: string; type: 'cross_above' | 'cross_below' } | null => {
+    if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) {
+      return null;
+    }
+    
+    // 현재 날짜 (2025-03-17 기준)
+    const currentDate = new Date(2025, 2, 17); // 2025년 3월 17일
+    
+    // 최근 데이터 추출 (가능한 많은 데이터 사용)
+    const recentData = stockPriceData[ticker];
+    const events = [];
+    
+    // 각 날짜에 대해 20일 이동평균선 계산 및 돌파/이탈 확인
+    // 최소 20일 데이터가 있어야 시작
+    for (let i = 19; i < recentData.length; i++) {
+      try {
+        // i번째 날짜의 20일 이동평균 계산
+        const ma20 = recentData.slice(i - 19, i + 1).reduce((acc, val) => acc + val, 0) / 20;
+        
+        // 가격 데이터
+        const currPrice = recentData[i];
+        
+        // 날짜 계산 (i에 따라 다른 날짜 할당)
+        const eventDate = new Date(currentDate);
+        eventDate.setDate(currentDate.getDate() - (recentData.length - 1 - i));
+        const dateString = eventDate.toISOString().slice(0, 10);
+        
+        // 이전 데이터가 있는 경우에만 돌파/이탈 확인
+        if (i > 19) {
+          const prevMa20 = recentData.slice(i - 20, i).reduce((acc, val) => acc + val, 0) / 20;
+          const prevPrice = recentData[i - 1];
+          
+          // 가격이 20일선 아래에서 위로 돌파
+          if (prevPrice < prevMa20 && currPrice > ma20) {
+            events.push({
+              date: dateString,
+              type: 'cross_above' as const,
+              index: i
+            });
+          }
+          // 가격이 20일선 위에서 아래로 이탈
+          else if (prevPrice > prevMa20 && currPrice < ma20) {
+            events.push({
+              date: dateString,
+              type: 'cross_below' as const,
+              index: i
+            });
+          }
+        }
+        
+        // 첫 번째 데이터 포인트에 대한 특별 처리 (이전 데이터가 없는 경우)
+        // 첫 번째 데이터 포인트의 위치에 따라 초기 이벤트 설정
+        if (i === 19 && events.length === 0) {
+          if (currPrice > ma20) {
+            events.push({
+              date: dateString,
+              type: 'cross_above' as const,
+              index: i
+            });
+          } else if (currPrice < ma20) {
+            events.push({
+              date: dateString,
+              type: 'cross_below' as const,
+              index: i
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`Error calculating MA for ticker ${ticker} at index ${i}:`, error);
+      }
+    }
+    
+    // 이벤트가 없으면 현재 상태에 따라 기본 이벤트 생성
+    if (events.length === 0) {
+      try {
+        const lastIndex = recentData.length - 1;
+        if (lastIndex >= 19) {
+          const lastPrice = recentData[lastIndex];
+          const lastMA20 = recentData.slice(lastIndex - 19, lastIndex + 1).reduce((acc, val) => acc + val, 0) / 20;
+          
+          const today = new Date(currentDate);
+          const dateString = today.toISOString().slice(0, 10);
+          
+          if (lastPrice > lastMA20) {
+            return {
+              date: dateString,
+              type: 'cross_above'
+            };
+          } else {
+            return {
+              date: dateString,
+              type: 'cross_below'
+            };
+          }
+        }
+      } catch (error) {
+        console.error(`Error creating default event for ticker ${ticker}:`, error);
+      }
+      return null;
+    }
+    
+    // 가장 최근 상태 확인
+    try {
+      const lastIndex = recentData.length - 1;
+      const lastPrice = recentData[lastIndex];
+      const lastMA20 = recentData.slice(lastIndex - 19, lastIndex + 1).reduce((acc, val) => acc + val, 0) / 20;
+      const isAboveMA = lastPrice > lastMA20;
+      
+      // 현재 상태에 따라 가장 최근의 유의미한 이벤트 반환
+      if (isAboveMA) {
+        // 현재 20일선 위에 있으면, 가장 최근 돌파 이벤트 찾기
+        const lastCrossAbove = events.filter(e => e.type === 'cross_above')
+                                    .sort((a, b) => b.index - a.index)[0];
+        if (lastCrossAbove) {
+          return {
+            date: lastCrossAbove.date,
+            type: lastCrossAbove.type
+          };
+        }
+      } else {
+        // 현재 20일선 아래에 있으면, 가장 최근 이탈 이벤트 찾기
+        const lastCrossBelow = events.filter(e => e.type === 'cross_below')
+                                    .sort((a, b) => b.index - a.index)[0];
+        if (lastCrossBelow) {
+          return {
+            date: lastCrossBelow.date,
+            type: lastCrossBelow.type
+          };
+        }
+      }
+      
+      // 현재 상태와 일치하는 이벤트가 없으면 가장 최근 이벤트 반환
+      const lastEvent = events.sort((a, b) => b.index - a.index)[0];
+      return {
+        date: lastEvent.date,
+        type: lastEvent.type
+      };
+    } catch (error) {
+      console.error(`Error determining current state for ticker ${ticker}:`, error);
+      
+      // 오류 발생 시 가장 최근 이벤트 반환
+      if (events.length > 0) {
+        const lastEvent = events.sort((a, b) => b.index - a.index)[0];
+        return {
+          date: lastEvent.date,
+          type: lastEvent.type
+        };
+      }
+      return null;
+    }
+  };
+  
+  // 종목별 20일 이동평균선 위치 계산
+  const calculate20DayMAPosition = (ticker: string): string => {
+    if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) {
+      return '-';
+    }
+    
+    // 최근 20일 데이터 추출
+    const recentData = stockPriceData[ticker].slice(-20);
+    
+    // 20일 이동평균 계산
+    const sum = recentData.reduce((acc, val) => acc + val, 0);
+    const ma20 = sum / recentData.length;
+    
+    // 현재가 (가장 최근 데이터)
+    const currentPrice = stockPriceData[ticker][stockPriceData[ticker].length - 1];
+    
+    // 현재가와 20일 이동평균선 비교
+    const diffPercent = ((currentPrice - ma20) / ma20 * 100).toFixed(1);
+    
+    // 위치 표시 (위, 아래 또는 일치)
+    if (currentPrice > ma20) {
+      return `+${diffPercent}%`;
+    } else if (currentPrice < ma20) {
+      return `${diffPercent}%`;
+    } else {
+      return '0%';
+    }
+  };
+
+  // 돌파/이탈 유지 기간 계산
+  const calculatePositionDuration = (ticker: string): number | null => {
+    if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) {
+      return null;
+    }
+    
+    // 현재 날짜 (2025-03-17 기준)
+    const currentDate = new Date(2025, 2, 17); // 2025년 3월 17일
+    
+    // 최근 돌파/이탈 이벤트 가져오기
+    const crossover = calculate20DayCrossover(ticker);
+    if (!crossover) {
+      return null;
+    }
+    
+    // 이벤트 날짜 파싱
+    const eventDate = new Date(crossover.date);
+    if (isNaN(eventDate.getTime())) {
+      return null;
+    }
+    
+    // 현재 날짜와 이벤트 날짜의 차이 계산 (일 단위)
+    const diffTime = Math.abs(currentDate.getTime() - eventDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return diffDays;
+  };
+
   useEffect(() => {
     // 페이지 로드 시 데이터 로드
     const loadData = async () => {
@@ -373,7 +596,7 @@ export default function ETFCurrentTable() {
       
       try {
         // ETF 현재가 데이터 파일 경로 - 구글 드라이브 동기화 시스템과 일치
-        const filePath = '/today_price_etf/1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA.csv';
+        const filePath = `${ETF_FILES.currentPrice.path}/${ETF_FILES.currentPrice.fileName}`;
         console.log(`ETF 현재가 데이터 파일 경로: ${filePath}`);
         
         // 로컬 캐시 파일 로드 - 직접 fetch 사용
@@ -410,13 +633,32 @@ export default function ETFCurrentTable() {
         
         setStockPriceData(priceData);
         setTickerMappingInfo({ tickerMap, stockNameMap });
+        
+        // ETF 대표종목 데이터 로드
+        const stockListResponse = await fetch(ETF_FILES.stockList.path);
+        if (stockListResponse.ok) {
+          const stockListText = await stockListResponse.text();
+          const stockListResult = Papa.parse(stockListText, { header: true });
+          
+          // ETF 티커별 대표종목 매핑 생성
+          const stockListMap: {[key: string]: string[]} = {};
+          stockListResult.data.forEach((row: any) => {
+            if (row['티커']) {
+              stockListMap[row['티커']] = [
+                row['대표 구성 종목 1'] || '',
+                row['대표 구성 종목 2'] || '',
+                row['대표 구성 종목 3'] || '',
+                row['대표 구성 종목 4'] || ''
+              ].filter(item => item); // 빈 문자열 제거
+            }
+          });
+          
+          setEtfStockList(stockListMap);
+          console.log('ETF 대표종목 데이터 로드 완료:', Object.keys(stockListMap).length);
+        }
       } catch (err) {
         console.error('데이터 로드 오류:', err);
         setError(`데이터 로드 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
-        
-        // 오류 발생 시 샘플 데이터 사용
-        const sampleData = generateSampleETFData();
-        setCsvData(sampleData);
       } finally {
         setLoading(false);
       }
@@ -424,46 +666,6 @@ export default function ETFCurrentTable() {
     
     loadData();
   }, []);
-  
-  // 샘플 ETF 데이터 생성 함수
-  const generateSampleETFData = (): { headers: string[]; groupedData: GroupedData; errors: any[] } => {
-    const headers = ['코드', '이름', '가격', '변동', '변동률', '거래량', '시가총액'];
-    const etfNames = [
-      '코스피200', 'KODEX 200', 'TIGER 200', 'KODEX 인버스', 'TIGER 인버스',
-      'KODEX 레버리지', 'TIGER 레버리지', 'KODEX 은행', 'KODEX 바이오', 'KODEX IT',
-      'TIGER 반도체', 'KODEX 자동차', 'KODEX 배당', 'TIGER 배당', 'KODEX 중소형'
-    ];
-    
-    const rows = etfNames.map((name, index) => {
-      const code = `069${index.toString().padStart(3, '0')}`;
-      const price = Math.round(10000 + Math.random() * 40000);
-      const change = Math.round((Math.random() * 2 - 1) * 1000);
-      const changePercent = +(change / price * 100).toFixed(2);
-      const volume = Math.round(100000 + Math.random() * 9000000);
-      const marketCap = Math.round(1000 + Math.random() * 9000);
-      
-      return {
-        '코드': code,
-        '이름': name,
-        '가격': price.toString(),
-        '변동': change.toString(),
-        '변동률': changePercent.toString(),
-        '거래량': volume.toString(),
-        '시가총액': marketCap.toString()
-      };
-    });
-    
-    const groupedData: GroupedData = rows.reduce((acc: GroupedData, row: any) => {
-      const industry = row['산업'] || '기타';
-      if (!acc[industry]) {
-        acc[industry] = [];
-      }
-      acc[industry].push(row);
-      return acc;
-    }, {});
-    
-    return { headers, groupedData, errors: [] };
-  };
   
   // 정렬 처리 함수
   const handleSort = (key: string) => {
@@ -534,6 +736,20 @@ export default function ETFCurrentTable() {
     return '';
   };
 
+  // 변동률에 따른 색상 코드 반환 함수
+  const getChangeColorCode = (change: number) => {
+    if (change > 0) return '#EF4444';
+    if (change < 0) return '#3B82F6';
+    return '#4B5563';
+  };
+
+  // 변동률에 따른 배경 색상 코드 반환 함수
+  const getChangeBgColorCode = (change: number) => {
+    if (change > 0) return '#FEE2E2';
+    if (change < 0) return '#DBEAFE';
+    return '#F3F4F6';
+  };
+
   // 산업별 평균 등락률 계산
   const calculateIndustryAverage = useCallback((industry: string, data: Record<string, any[]>) => {
     if (!data[industry] || data[industry].length === 0) return '0.00%';
@@ -565,6 +781,33 @@ export default function ETFCurrentTable() {
     return 'text-gray-500';
   };
 
+  // 돌파/이탈 일 컬럼 렌더링 함수
+  const renderCrossoverDate = (ticker: string) => {
+    const crossover = calculate20DayCrossover(ticker);
+    
+    if (!crossover) {
+      return <span className="text-gray-400">-</span>;
+    }
+    
+    // 날짜 형식 변환 (YYYY-MM-DD -> MM-DD)
+    const dateParts = crossover.date.split('-');
+    const formattedDate = `${dateParts[1]}-${dateParts[2]}`;
+    
+    return (
+      <div className="flex items-center justify-center">
+        <span 
+          className={`text-xs font-medium ${
+            crossover.type === 'cross_above' 
+              ? 'text-red-500' 
+              : 'text-blue-500'
+          }`}
+        >
+          {formattedDate} {crossover.type === 'cross_above' ? '돌파' : '이탈'}
+        </span>
+      </div>
+    );
+  };
+
   // 로딩 중 표시
   if (loading) {
     return (
@@ -592,6 +835,84 @@ export default function ETFCurrentTable() {
     );
   }
   
+  // 산업 그룹 순서 정의
+  const industryOrder = [
+    '마켓',
+    '반도체',
+    '2차전지',
+    '철강',
+    '조선',
+    '자동차',
+    '에너지',
+    '화학',
+    '바이오',
+    '제약',
+    '헬스케어',
+    '의료',
+    '금융',
+    '은행',
+    '증권',
+    '보험',
+    '여행',
+    '항공',
+    '호텔',
+    '레저',
+    '엔터',
+    '게임',
+    '미디어',
+    '통신',
+    '인터넷',
+    '소프트웨어',
+    '유통',
+    '음식료',
+    '필수소비재',
+    '전력기기',
+    '인프라',
+    '부동산',
+    '친환경',
+    '수소',
+    '원자력',
+    '메타버스',
+    '로보틱스',
+    '우주항공',
+    '농업',
+    '기타'
+  ];
+
+  // 모든 산업 그룹을 포함하도록 보장 (Set을 Array로 변환)
+  const allIndustries = Array.from(new Set([...industryOrder, ...Object.keys(sortedData)]));
+  
+  // industryOrder의 순서를 유지하면서 누락된 산업 그룹을 추가
+  const orderedIndustries = [...industryOrder];
+  allIndustries.forEach(industry => {
+    if (!orderedIndustries.includes(industry)) {
+      orderedIndustries.push(industry);
+    }
+  });
+
+  // 디버깅: 각 산업 그룹별 종목 수 확인
+  const industryCounts: Record<string, number> = {};
+  Object.keys(sortedData).forEach(industry => {
+    industryCounts[industry] = sortedData[industry].length;
+  });
+  console.log("산업 그룹별 종목 수:", industryCounts);
+
+  // 전체 종목 수 확인
+  const totalETFs = Object.values(sortedData).reduce((acc: number, curr: any[]) => acc + curr.length, 0);
+  console.log("전체 ETF 종목 수:", totalETFs);
+
+  // 모든 티커 목록 확인
+  const allTickers: string[] = [];
+  Object.values(sortedData).forEach((industryData: any[]) => {
+    industryData.forEach((item: any) => {
+      if (item.티커) {
+        allTickers.push(item.티커);
+      }
+    });
+  });
+  console.log("전체 티커 수:", allTickers.length);
+  console.log("티커 목록:", allTickers);
+
   return (
     <div className="bg-white rounded-md shadow">
       <div className="p-4 border-b border-gray-200 font-medium flex justify-between items-center">
@@ -625,24 +946,24 @@ export default function ETFCurrentTable() {
         <table className="min-w-full border border-gray-200 table-fixed">
           <thead className="bg-gray-100">
             <tr>
-              {[ '산업/섹터', ...filteredHeaders.filter(header => header !== '산업' && header !== '섹터'), '52주 차트'].map((header) => (
+              {['산업/섹터', ...filteredHeaders.filter(header => header !== '산업' && header !== '섹터'), '1년 차트', '20일선 등락', '돌파/이탈 일', '포지션', '대표종목'].map((header) => (
                 <th
                   key={header}
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
-                    width: header === '산업/섹터' ? '220px' : header === '종목명' ? '180px' : header === '1년 차트' ? '150px' : '100px',
+                    width: header === '산업/섹터' ? '150px' : header === '종목명' ? '180px' : header === '티커' ? '60px' : header === '등락율' ? '50px' : header === '1년 차트' ? '180px' : header === '20일선 등락' ? '100px' : header === '돌파/이탈 일' ? '100px' : header === '포지션' ? '80px' : header === '대표종목' ? '200px' : '100px',
                     height: '35px'
                   }}
                   onClick={() => {
-                    if (header !== '1년 차트') {
+                    if (header !== '1년 차트' && header !== '20일선 등락' && header !== '돌파/이탈 일' && header !== '포지션' && header !== '대표종목') {
                       handleSort(header);
                     }
                   }}
                 >
                   <div className="flex justify-center items-center">
                     {header}
-                    {header !== '1년 차트' && sortKey === header && (
+                    {header !== '1년 차트' && header !== '20일선 등락' && header !== '돌파/이탈 일' && header !== '포지션' && header !== '대표종목' && sortKey === header && (
                       <span className="ml-1">
                         {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
                       </span>
@@ -653,79 +974,186 @@ export default function ETFCurrentTable() {
             </tr>
           </thead>
           <tbody className="bg-gray-50">
-            {Object.keys(sortedData).map((industry, index) => (
+            {orderedIndustries.map((industry, index) => (
               <React.Fragment key={industry}>
-                <tr className="bg-white">
-                  <th colSpan={filteredHeaders.length + 1} className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200" style={{ height: '35px' }}>
-                    <div className="flex items-center">
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-800">
-                        {industry}
-                      </span>
-                      <span className={`ml-2 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`}>
-                        {calculateIndustryAverage(industry, sortedData)}
-                      </span>
-                    </div>
-                  </th>
-                </tr>
-                {sortedData[industry].map((row: Record<string, any>, rowIndex: number) => (
-                  <tr key={rowIndex} className="hover:bg-gray-100">
-                    <td
-                      key="산업/섹터"
-                      className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200"
-                      style={{ width: '220px', height: '25px' }}
-                    >
-                      {row['섹터']}
-                    </td>
-                    {filteredHeaders.filter(header => header !== '산업' && header !== '섹터').map((header) => {
-                      // 변동 및 변동률 컬럼에 색상 적용
-                      const isChangeColumn = header === '등락율';
-                      const value = row[header];
-                      const numericValue = isChangeColumn ? parseFloat(value) : null;
-                      const colorClass = isChangeColumn ? getChangeColorClass(numericValue!) : '';
-                      
-                      return (
+                {sortedData[industry] && (
+                  <React.Fragment>
+                    <tr className="bg-white">
+                      <th colSpan={filteredHeaders.length + 5} className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200" style={{ height: '42px' }}>
+                        <div className="flex items-center">
+                          <span className="ml-1 text-xs px-3 py-1.5 rounded-md bg-white text-gray-700 border border-gray-200 shadow-sm">
+                            {industry}
+                          </span>
+                          <span className={`ml-2 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`}>
+                            {calculateIndustryAverage(industry, sortedData)}
+                          </span>
+                        </div>
+                      </th>
+                    </tr>
+                    {sortedData[industry].map((row: Record<string, any>, rowIndex: number) => (
+                      <tr key={rowIndex} className="hover:bg-gray-100">
                         <td
-                          key={header}
-                          className={`px-4 py-1 whitespace-nowrap text-xs ${colorClass} border border-gray-200`}
-                          style={{ width: header === '종목명' ? '180px' : '100px', height: '25px' }}
+                          key="산업/섹터"
+                          className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200"
+                          style={{ width: '150px', height: '16px' }}
                         >
-                          {isChangeColumn && numericValue! > 0 ? '+' : ''}
-                          {value}
+                          {row['섹터']}
                         </td>
-                      );
-                    })}
-                    <td className="px-4 py-1 whitespace-nowrap border border-gray-200" style={{ width: '150px', height: '25px' }}>
-                      {(() => {
-                        // 디버깅을 위한 로그
-                        const ticker = row['티커'];
-                        // 티커 변형 생성 (앞에 0 추가)
-                        const normalizedTicker = ticker ? ticker.padStart(6, '0') : '';
-                        const mappedTicker = tickerMappingInfo.tickerMap[ticker] || '';
-                        const stockName = row['종목명'] || tickerMappingInfo.stockNameMap[ticker] || '';
-                        
-                        // 데이터 확인
-                        const hasData = ticker && stockPriceData[ticker] && stockPriceData[ticker].length > 0;
-                        console.log(`티커: ${ticker}, 정규화: ${normalizedTicker}, 매핑: ${mappedTicker}, 종목명: ${stockName}, 데이터 있음: ${hasData ? 'O' : 'X'}, 데이터 길이: ${hasData ? stockPriceData[ticker].length : 0}`);
-                        
-                        if (hasData) {
+                        {filteredHeaders.filter(header => header !== '산업' && header !== '섹터').map((header) => {
+                          const isChangeColumn = header === '등락율' || header === '전일대비';
+                          const isTickerColumn = header === '티커';
+                          const value = row[header];
+                          const numericValue = isChangeColumn ? parseFloat(value) : null;
+                          const colorClass = isChangeColumn
+                            ? numericValue! > 0 ? 'text-red-500' : numericValue! < 0 ? 'text-blue-500' : 'text-gray-600'
+                            : '';
+                          
                           return (
-                            <div className="w-full h-full flex items-center">
-                              <Sparklines data={stockPriceData[ticker]} width={140} height={28} margin={2}>
-                                <SparklinesLine color="#5f88cc" style={{ strokeWidth: 1.5 }} />
-                              </Sparklines>
-                            </div>
+                            <td
+                              key={header}
+                              className={`px-4 py-1 whitespace-nowrap text-xs ${colorClass} border border-gray-200 ${isChangeColumn || isTickerColumn ? 'text-center' : ''}`}
+                              style={{ width: header === '종목명' ? '180px' : header === '티커' ? '60px' : header === '등락율' ? '50px' : '100px', height: '16px' }}
+                            >
+                              {isChangeColumn && numericValue! > 0 ? '+' : ''}
+                              {value}
+                            </td>
                           );
-                        } else {
-                          return (
-                            <div className="flex items-center justify-center h-full">
-                              <span className="text-xs text-gray-400">데이터 없음</span>
-                            </div>
-                          );
-                        }
-                      })()}
-                    </td>
-                  </tr>
-                ))}
+                        })}
+                        <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '180px', height: '16px' }}>
+                          {(() => {
+                            // 디버깅을 위한 로그
+                            const ticker = row['티커'];
+                            if (!ticker) return null;
+                            
+                            // 티커 변형 생성 (앞에 0 추가)
+                            const normalizedTicker = ticker ? ticker.padStart(6, '0') : '';
+                            const mappedTicker = tickerMappingInfo.tickerMap[ticker] || '';
+                            const stockName = row['종목명'] || tickerMappingInfo.stockNameMap[ticker] || '';
+                            
+                            // 데이터 확인
+                            const hasData = ticker && stockPriceData[ticker] && stockPriceData[ticker].length > 0;
+                            console.log(`티커: ${ticker}, 정규화: ${normalizedTicker}, 매핑: ${mappedTicker}, 종목명: ${stockName}, 데이터 있음: ${hasData ? 'O' : 'X'}, 데이터 길이: ${hasData ? stockPriceData[ticker].length : 0}`);
+                            
+                            if (hasData) {
+                              return (
+                                <div className="w-full h-full flex items-center">
+                                  <Sparklines data={stockPriceData[ticker]} width={180} height={25.2} margin={1.8}>
+                                    <SparklinesLine 
+                                      color={(() => {
+                                        const changeRate = parseFloat(row['등락율'] || '0');
+                                        if (changeRate > 0) return "#EF4444"; // 상승 - 빨강
+                                        if (changeRate < 0) return "#3B82F6"; // 하락 - 파랑
+                                        return "#000000"; // 보합 - 검정
+                                      })()} 
+                                      style={{ 
+                                        strokeWidth: 1.5, 
+                                        stroke: (() => {
+                                          const changeRate = parseFloat(row['등락율'] || '0');
+                                          if (changeRate > 0) return "#EF4444"; // 상승 - 빨강
+                                          if (changeRate < 0) return "#3B82F6"; // 하락 - 파랑
+                                          return "#000000"; // 보합 - 검정
+                                        })(), 
+                                        fill: (() => {
+                                          const changeRate = parseFloat(row['등락율'] || '0');
+                                          if (changeRate > 0) return "#FEE2E2"; // 상승 - 연한 빨강
+                                          if (changeRate < 0) return "#DBEAFE"; // 하락 - 연한 파랑
+                                          return "#F3F4F6"; // 보합 - 연한 회색
+                                        })(), 
+                                        fillOpacity: 0.5 
+                                      }} 
+                                    />
+                                  </Sparklines>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="flex items-center justify-center h-full">
+                                  <span className="text-xs text-gray-400">데이터 없음</span>
+                                </div>
+                              );
+                            }
+                          })()}
+                        </td>
+                        <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '100px', height: '16px' }}>
+                          {/* 20일선 위치 데이터 표시 */}
+                          <div className="flex items-center justify-center h-full">
+                            {(() => {
+                              const ticker = row['티커'];
+                              if (!ticker) return '-';
+                              
+                              const position = calculate20DayMAPosition(ticker);
+                              const positionValue = parseFloat(position);
+                              
+                              // 색상 결정
+                              let colorClass = 'text-gray-600';
+                              if (!isNaN(positionValue)) {
+                                if (positionValue > 0) {
+                                  colorClass = 'text-red-500';
+                                } else if (positionValue < 0) {
+                                  colorClass = 'text-blue-500';
+                                }
+                              }
+                              
+                              return (
+                                <span className={`text-xs font-medium ${colorClass}`}>
+                                  {position}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </td>
+                        <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '100px', height: '16px' }}>
+                          {/* 돌파/이탈 일 데이터 표시 */}
+                          <div className="flex items-center justify-center h-full">
+                            {renderCrossoverDate(row['티커'])}
+                          </div>
+                        </td>
+                        <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '80px', height: '16px' }}>
+                          {/* 포지션 상태 표시 */}
+                          <div className="flex items-center justify-center h-full">
+                            {(() => {
+                              const ticker = row['티커'];
+                              if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) return '-';
+                              
+                              // 현재가와 20일 이동평균선 데이터 가져오기
+                              const priceData = stockPriceData[ticker];
+                              if (!priceData || priceData.length < 20) return '-';
+                              
+                              const currentPrice = priceData[priceData.length - 1];
+                              const ma20 = priceData.slice(-20).reduce((acc, val) => acc + val, 0) / 20;
+                              
+                              // 현재가와 20일 이동평균선 비교
+                              const isAboveMA = currentPrice > ma20;
+                              
+                              // 유지 기간 계산
+                              const duration = calculatePositionDuration(ticker);
+                              const durationText = duration !== null ? `+${duration}일` : '';
+                              
+                              return (
+                                <span className={`text-xs font-medium px-2 py-1 rounded-md ${isAboveMA ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                  {isAboveMA ? `유지 ${durationText}` : `이탈 ${durationText}`}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </td>
+                        <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '200px', height: '16px' }}>
+                          {(() => {
+                            const ticker = row['티커'];
+                            if (!ticker) return '-';
+                            
+                            // 티커에 해당하는 대표종목 가져오기
+                            const stockList = etfStockList[ticker];
+                            if (!stockList || stockList.length === 0) return '-';
+                            
+                            // 모든 대표종목 표시
+                            return stockList.join(', ');
+                          })()}
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                )}
               </React.Fragment>
             ))}
           </tbody>
