@@ -7,7 +7,8 @@
 
 import json
 from loguru import logger
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, cast
+from datetime import datetime
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
@@ -16,6 +17,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from pydantic.v1 import BaseModel, Field
 from stockeasy.prompts.knowledge_integrator_prompts import format_knowledge_integrator_prompt
 from common.core.config import settings
+from stockeasy.models.agent_io import IntegratedKnowledge, pydantic_to_typeddict
 
 # Pydantic 모델 정의
 class CoreInsights(BaseModel):
@@ -65,6 +67,9 @@ class KnowledgeIntegratorAgent:
             업데이트된 상태 딕셔너리
         """
         try:
+            # 성능 측정 시작
+            start_time = datetime.now()
+            
             # 현재 사용자 쿼리 및 종목 정보 추출
             query = state.get("query", "")
             stock_code = state.get("stock_code")
@@ -104,14 +109,62 @@ class KnowledgeIntegratorAgent:
             integration_result = await self.chain.ainvoke(prompt)
             logger.info("Knowledge integration completed successfully")
             
-            # 통합된 지식 저장
-            state["integrated_knowledge"] = integration_result.dict()
+            # 형식 변환: Pydantic 모델을 IntegratedKnowledge 타입으로 변환
+            # 핵심 인사이트 변환
+            core_insights = []
+            if integration_result.핵심_결론.주요_인사이트1:
+                core_insights.append(integration_result.핵심_결론.주요_인사이트1)
+            if integration_result.핵심_결론.주요_인사이트2:
+                core_insights.append(integration_result.핵심_결론.주요_인사이트2)
+            if integration_result.핵심_결론.주요_인사이트3:
+                core_insights.append(integration_result.핵심_결론.주요_인사이트3)
             
-            # 주요 인사이트 및 응답 저장
-            state["core_insights"] = integration_result.핵심_결론.dict()
-            state["confidence_assessment"] = integration_result.신뢰도_평가.dict()
-            state["uncertain_areas"] = integration_result.불확실_영역
+            # 신뢰도 평가 정보를 analysis 딕셔너리에 포함
+            confidence_info = integration_result.신뢰도_평가.dict()
+            
+            # 통합된 지식 베이스 생성 (IntegratedKnowledge 타입 형식으로)
+            integrated_knowledge: IntegratedKnowledge = {
+                "core_insights": core_insights,
+                "facts": [],  # 현재 모델에서는 별도 facts를 제공하지 않음
+                "opinions": [],  # 현재 모델에서는 별도 opinions를 제공하지 않음
+                "analysis": {
+                    "confidence_assessment": confidence_info,
+                    "uncertain_areas": integration_result.불확실_영역
+                },
+                "sources": {
+                    "telegram": state.get("telegram_sources", []),
+                    "reports": state.get("report_sources", []),
+                    "financial": state.get("financial_sources", []),
+                    "industry": state.get("industry_sources", [])
+                }
+            }
+            
+            # 통합된 지식 저장
+            state["integrated_knowledge"] = integrated_knowledge
+            
+            # 추가 정보 (API 호환성 유지)
             state["integrated_response"] = integration_result.통합_응답
+            
+            # 성능 지표 업데이트
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            # 메트릭 기록
+            state["metrics"] = state.get("metrics", {})
+            state["metrics"]["knowledge_integrator"] = {
+                "start_time": start_time,
+                "end_time": end_time,
+                "duration": duration,
+                "status": "completed",
+                "error": None,
+                "model_name": self.llm.model_name
+            }
+            
+            # 처리 상태 업데이트
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["knowledge_integrator"] = "completed"
+            
+            logger.info(f"KnowledgeIntegratorAgent completed in {duration:.2f} seconds")
             
             # 오류 제거 (성공적으로 처리됨)
             if "error" in state:
@@ -121,6 +174,21 @@ class KnowledgeIntegratorAgent:
             
         except Exception as e:
             logger.exception(f"Error in KnowledgeIntegratorAgent: {str(e)}")
-            state["error"] = f"지식 통합기 에이전트 오류: {str(e)}"
+            
+            # 오류 정보 추가
+            state["errors"] = state.get("errors", [])
+            state["errors"].append({
+                "agent": "knowledge_integrator",
+                "error": str(e),
+                "type": "processing_error",
+                "timestamp": datetime.now(),
+                "context": {"query": state.get("query", "")}
+            })
+            
+            # 처리 상태 업데이트
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["knowledge_integrator"] = "failed"
+            
+            # 응답에 오류 메시지 추가
             state["integrated_response"] = "죄송합니다. 정보를 통합하는 중 오류가 발생했습니다."
             return state 
