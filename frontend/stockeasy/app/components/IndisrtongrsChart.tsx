@@ -394,14 +394,14 @@ export default function IndustryCharts() {
     return data;
   };
   
-  // 헤더 배경색 결정 함수
-  const getHeaderBackgroundColor = (etf: ETFInfo): string => {
+  // 20일선 상태에 따른 배경색 결정
+  const getStatusBackgroundColor = (etf: ETFInfo): string => {
     if (etf.isAboveMA20 === true) {
-      return 'bg-green-100 border-green-200'; // 20일선 위에 있는 경우 (유지)
+      return 'bg-green-100'; // 20일선 위에 있는 경우 녹색 배경
     } else if (etf.isAboveMA20 === false) {
-      return 'bg-yellow-100 border-yellow-200'; // 20일선 아래에 있는 경우 (이탈)
+      return 'bg-yellow-100'; // 20일선 아래에 있는 경우 노란색 배경
     }
-    return 'bg-gray-100 border-gray-200'; // 상태를 알 수 없는 경우
+    return 'bg-gray-100'; // 상태를 알 수 없는 경우 회색 배경
   };
   
   // 상태 텍스트 가져오기
@@ -422,7 +422,7 @@ export default function IndustryCharts() {
         .map((etf, index) => (
         <div key={index} className="flex-1 rounded-md p-1">
           <div>
-            <div className={`px-3 py-1 border flex justify-between items-center ${getHeaderBackgroundColor(etf)}`} style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
+            <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
               <div className="flex items-center gap-2">
                 <span className="font-medium text-sm">{etf.name}</span>
                 <span className={`text-xs px-1.5 py-0.5 rounded ${etf.changePercent >= 0 ? 'text-red-600' : 'text-blue-600'}`}>

@@ -51,6 +51,7 @@ interface ChartProps {
   showVolume?: boolean;
   marketType?: string; // 시장 구분 (KOSDAQ 또는 KOSPI)
   stockName?: string; // 종목명 추가
+  showMA20?: boolean; // 20일 이동평균선 표시 여부 - 사용하지 않음
 }
 
 /**
@@ -62,6 +63,7 @@ interface ChartProps {
  * @param showVolume - 거래량 차트 표시 여부 (기본값: true)
  * @param marketType - 시장 구분 (기본값: undefined)
  * @param stockName - 종목명 (기본값: undefined)
+ * @param showMA20 - 20일 이동평균선 표시 여부 (기본값: true) - 현재 사용하지 않음
  */
 const ChartComponent: React.FC<ChartProps> = ({ 
   data, 
@@ -70,13 +72,15 @@ const ChartComponent: React.FC<ChartProps> = ({
   width = '100%',
   showVolume = true,
   marketType,
-  stockName
+  stockName,
+  showMA20 = true // 파라미터는 유지하되 사용하지 않음
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
   const volumeSeriesRef = useRef<any>(null);
   const lineSeriesRef = useRef<any>(null); // 시장 지수 라인 시리즈 ref
+  const ma20SeriesRef = useRef<any>(null); // 참조용으로 유지
   const [marketIndexData, setMarketIndexData] = useState<LineData<Time>[]>([]);
   const [isLoadingMarketIndex, setIsLoadingMarketIndex] = useState<boolean>(false);
   const [marketIndexError, setMarketIndexError] = useState<string | null>(null);
@@ -196,6 +200,7 @@ const ChartComponent: React.FC<ChartProps> = ({
       candlestickSeriesRef.current = null;
       volumeSeriesRef.current = null;
       lineSeriesRef.current = null;
+      ma20SeriesRef.current = null;
     }
     
     console.log('차트 생성 시작...');
@@ -466,7 +471,14 @@ const ChartComponent: React.FC<ChartProps> = ({
           type: 'price',
           precision: 0, // 소수점 제거
           minMove: 1, // 최소 이동 단위
-        }
+        },
+        // 한국식 캔들 색상 설정 (상승 시 빨간색, 하락 시 파란색)
+        upColor: '#ef5350',       // 상승 시 빨간색
+        downColor: '#2962FF',     // 하락 시 파란색
+        borderUpColor: '#ef5350', // 상승 시 테두리 색상
+        borderDownColor: '#2962FF', // 하락 시 테두리 색상
+        wickUpColor: '#ef5350',   // 상승 시 꼬리 색상
+        wickDownColor: '#2962FF'  // 하락 시 꼬리 색상
       });
       candlestickSeriesRef.current = candleSeries;
 
@@ -555,7 +567,8 @@ const ChartComponent: React.FC<ChartProps> = ({
             volume = 0;
           }
           
-          const color = (candle.close >= candle.open) ? '#26a69a' : '#ef5350';
+          // 한국식 볼륨 색상 설정 (상승 시 빨간색, 하락 시 파란색)
+          const color = (candle.close >= candle.open) ? '#ef5350' : '#2962FF';
           
           if (volume > 0) {
             console.log(`볼륨 데이터 생성 성공: 시간=${candle.time}, 볼륨=${volume}`);
@@ -611,7 +624,7 @@ const ChartComponent: React.FC<ChartProps> = ({
                   return {
                     time: candle.time,
                     value: sampleVolume,
-                    color: (candle.close >= candle.open) ? '#26a69a' : '#ef5350'
+                    color: (candle.close >= candle.open) ? '#ef5350' : '#2962FF'
                   } as HistogramData<Time>;
                 });
                 
@@ -651,8 +664,8 @@ const ChartComponent: React.FC<ChartProps> = ({
           color: marketColor, // 시장 구분에 따른 색상 적용
           lineWidth: 2,
           crosshairMarkerVisible: true,
-          lastValueVisible: true,
-          priceLineVisible: true,
+          lastValueVisible: true, // 마지막 값 표시 활성화
+          priceLineVisible: true, // 가격선 표시 활성화
           priceScaleId: 'market-index',
           title: marketType,
           priceFormat: {
@@ -677,8 +690,6 @@ const ChartComponent: React.FC<ChartProps> = ({
         marketIndexSeries.setData(marketIndexData);
         lineSeriesRef.current = marketIndexSeries;
         
-        chartContainerRef.current.style.position = 'relative';
-        
         console.log('시장 지수 라인 시리즈 추가 완료');
       }
 
@@ -699,6 +710,7 @@ const ChartComponent: React.FC<ChartProps> = ({
           candlestickSeriesRef.current = null;
           volumeSeriesRef.current = null;
           lineSeriesRef.current = null;
+          ma20SeriesRef.current = null;
         }
       };
     } catch (error) {
@@ -743,16 +755,16 @@ const ChartComponent: React.FC<ChartProps> = ({
   };
 
   return (
-    <div className="chart-container">
-      <div
-        ref={chartContainerRef}
+    <div style={{ position: 'relative', width, height: `${height}px` }}>
+      <div 
+        ref={chartContainerRef} 
         style={{ 
-          height: `${height}px`, 
-          width, 
+          width: '100%', 
+          height: '100%',
           border: '1px solid #e2e8f0', 
           borderRadius: '0 0 0.375rem 0.375rem',
-          overflow: 'hidden' 
-        }}
+          overflow: 'hidden'
+        }} 
       />
     </div>
   );
