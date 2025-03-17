@@ -782,7 +782,7 @@ export default function ETFCurrentTable() {
   };
 
   // 돌파/이탈 일 컬럼 렌더링 함수
-  const renderCrossoverDate = (ticker: string) => {
+  const renderCrossover = (ticker: string) => {
     const crossover = calculate20DayCrossover(ticker);
     
     if (!crossover) {
@@ -946,24 +946,24 @@ export default function ETFCurrentTable() {
         <table className="min-w-full border border-gray-200 table-fixed">
           <thead className="bg-gray-100">
             <tr>
-              {['산업/섹터', ...filteredHeaders.filter(header => header !== '산업' && header !== '섹터'), '1년 차트', '20일선 등락', '돌파/이탈 일', '포지션', '대표종목'].map((header) => (
+              {['산업/섹터', ...filteredHeaders.filter(header => header !== '산업' && header !== '섹터'), '52주 차트', '20일선 기준가', '돌파/이탈', '포지션', '대표종목'].map((header) => (
                 <th
                   key={header}
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
-                    width: header === '산업/섹터' ? '150px' : header === '종목명' ? '180px' : header === '티커' ? '60px' : header === '등락율' ? '50px' : header === '1년 차트' ? '180px' : header === '20일선 등락' ? '100px' : header === '돌파/이탈 일' ? '100px' : header === '포지션' ? '80px' : header === '대표종목' ? '200px' : '100px',
+                    width: header === '산업/섹터' ? '150px' : header === '종목명' ? '180px' : header === '티커' ? '60px' : header === '등락율' ? '50px' : header === '52주 차트' ? '180px' : header === '20일선 기준가' ? '100px' : header === '돌파/이탈' ? '100px' : header === '포지션' ? '80px' : header === '대표종목' ? '200px' : '100px',
                     height: '35px'
                   }}
                   onClick={() => {
-                    if (header !== '1년 차트' && header !== '20일선 등락' && header !== '돌파/이탈 일' && header !== '포지션' && header !== '대표종목') {
+                    if (header !== '52주 차트' && header !== '20일선 기준가' && header !== '돌파/이탈' && header !== '포지션' && header !== '대표종목') {
                       handleSort(header);
                     }
                   }}
                 >
                   <div className="flex justify-center items-center">
                     {header}
-                    {header !== '1년 차트' && header !== '20일선 등락' && header !== '돌파/이탈 일' && header !== '포지션' && header !== '대표종목' && sortKey === header && (
+                    {header !== '52주 차트' && header !== '20일선 기준가' && header !== '돌파/이탈' && header !== '포지션' && header !== '대표종목' && sortKey === header && (
                       <span className="ml-1">
                         {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
                       </span>
@@ -1103,9 +1103,9 @@ export default function ETFCurrentTable() {
                           </div>
                         </td>
                         <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '100px', height: '16px' }}>
-                          {/* 돌파/이탈 일 데이터 표시 */}
+                          {/* 돌파/이탈 데이터 표시 */}
                           <div className="flex items-center justify-center h-full">
-                            {renderCrossoverDate(row['티커'])}
+                            {renderCrossover(row['티커'])}
                           </div>
                         </td>
                         <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '80px', height: '16px' }}>
