@@ -5,6 +5,8 @@
 형태로 포맷팅하는 응답 포맷터 에이전트에서 사용하는 프롬프트 템플릿을 정의합니다.
 """
 
+from typing import Union, Dict, List, Any
+
 # 응답 포맷터 프롬프트
 RESPONSE_FORMATTER_PROMPT = """
 당신은 금융 정보 시스템의 응답 포맷팅 전문가입니다. 통합된 정보를 사용자에게 이해하기 쉽고
@@ -90,7 +92,7 @@ def format_response_formatter_prompt(
     stock_name: str = None,
     stock_code: str = None,
     integrated_response: str = None,
-    core_insights: dict = None,
+    core_insights: Union[Dict[str, str], List[str]] = None,
     confidence_assessment: dict = None,
     uncertain_areas: list = None
 ) -> str:
@@ -102,7 +104,7 @@ def format_response_formatter_prompt(
         stock_name: 종목명
         stock_code: 종목코드
         integrated_response: 통합된 응답
-        core_insights: 핵심 인사이트
+        core_insights: 핵심 인사이트 (딕셔너리 또는 리스트)
         confidence_assessment: 신뢰도 평가
         uncertain_areas: 불확실한 영역
         
@@ -112,8 +114,14 @@ def format_response_formatter_prompt(
     # 핵심 인사이트 포맷팅
     core_insights_str = ""
     if core_insights:
-        for key, value in core_insights.items():
-            core_insights_str += f"- {key}: {value}\n"
+        if isinstance(core_insights, list):
+            for i, insight in enumerate(core_insights, 1):
+                core_insights_str += f"- 인사이트 {i}: {insight}\n"
+        elif isinstance(core_insights, dict):
+            for key, value in core_insights.items():
+                core_insights_str += f"- {key}: {value}\n"
+        else:
+            core_insights_str = str(core_insights)
     
     # 신뢰도 평가 포맷팅
     confidence_assessment_str = ""
