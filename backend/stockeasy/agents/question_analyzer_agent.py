@@ -15,6 +15,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import List, Optional as PydanticOptional
+from common.services.agent_llm import get_llm_for_agent
 from stockeasy.prompts.question_analyzer_prompts import format_question_analyzer_prompt
 from common.core.config import settings
 from stockeasy.models.agent_io import (
@@ -72,7 +73,7 @@ class QuestionAnalyzerAgent:
     오케스트레이터가 워크플로우를 설계하는 데 필요한 정보를 제공합니다.
     """
     
-    def __init__(self, model_name: str = "gpt-4o", temperature: float = 0):
+    def __init__(self):
         """
         질문 분석기 에이전트 초기화
         
@@ -80,13 +81,9 @@ class QuestionAnalyzerAgent:
             model_name: 사용할 OpenAI 모델 이름
             temperature: 모델 출력의 다양성 조절 파라미터
         """
-        self.llm = ChatOpenAI(
-            model_name=model_name, 
-            temperature=temperature, 
-            api_key=settings.OPENAI_API_KEY
-        )
-        self.model_name = model_name
-        logger.info(f"QuestionAnalyzerAgent initialized with model: {model_name}")
+        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        self.llm, self.model_name, self.provider = get_llm_for_agent("question_analyzer_agent")
+        logger.info(f"QuestionAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """

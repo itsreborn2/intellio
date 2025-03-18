@@ -10,11 +10,12 @@ import re
 import asyncio
 from datetime import datetime, timedelta
 from loguru import logger
-from typing import Dict, List, Any, Optional, cast
+from typing import Dict, List, Any, Optional, cast, Tuple
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.language_models import BaseChatModel
 
 from common.services.embedding_models import EmbeddingModelType
 from stockeasy.prompts.report_prompts import (
@@ -27,7 +28,8 @@ from common.services.retrievers.semantic import SemanticRetriever, SemanticRetri
 from common.services.retrievers.models import RetrievalResult
 from common.utils.util import async_retry
 from stockeasy.models.agent_io import RetrievedData, ReportData
-
+from langchain_core.messages import AIMessage
+from common.services.agent_llm import get_llm_for_agent, get_agent_llm
 
 def format_report_contents(reports: List[Dict[str, Any]]) -> str:
     """
@@ -53,17 +55,14 @@ def format_report_contents(reports: List[Dict[str, Any]]) -> str:
 class ReportAnalyzerAgent:
     """기업리포트 검색 및 분석 에이전트"""
     
-    def __init__(self, model_name: str = "gpt-4o-mini", temperature: float = 0):
+    def __init__(self):
         """
         기업리포트 검색 및 분석 에이전트 초기화
-        
-        Args:
-            model_name: 사용할 OpenAI 모델 이름
-            temperature: 모델 출력의 다양성 조절 파라미터
         """
-        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        # 설정 파일에서 LLM 생성 및 모델 정보 가져오기
+        self.llm, self.model_name, self.provider = get_llm_for_agent("report_analyzer_agent")
         self.parser = JsonOutputParser()
-        logger.info(f"ReportAnalyzerAgent initialized with model: {model_name}")
+        logger.info(f"ReportAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -78,7 +77,7 @@ class ReportAnalyzerAgent:
         try:
             # 성능 측정 시작
             start_time = datetime.now()
-            logger.info(f"ReportAnalyzerAgent starting processing")
+            logger.info(f"ReportAnalyzerAgent starting processing with {self.provider} {self.model_name}")
             
             # 현재 사용자 쿼리 및 세션 정보 추출
             query = state.get("query", "")
@@ -140,7 +139,9 @@ class ReportAnalyzerAgent:
                     "execution_time": duration,
                     "metadata": {
                         "report_count": 0,
-                        "threshold": threshold
+                        "threshold": threshold,
+                        "model_name": self.model_name,
+                        "provider": self.provider
                     }
                 }
                 
@@ -162,7 +163,8 @@ class ReportAnalyzerAgent:
                     "duration": duration,
                     "status": "completed_no_data",
                     "error": None,
-                    "model_name": self.llm.model_name
+                    "model_name": self.model_name,
+                    "provider": self.provider
                 }
                 
                 logger.info(f"ReportAnalyzerAgent completed in {duration:.2f} seconds, found 0 reports")
@@ -213,7 +215,9 @@ class ReportAnalyzerAgent:
                 "metadata": {
                     "report_count": len(processed_reports),
                     "threshold": threshold,
-                    "detailed_analysis": need_detailed_analysis
+                    "detailed_analysis": need_detailed_analysis,
+                    "model_name": self.model_name,
+                    "provider": self.provider
                 }
             }
             
@@ -237,7 +241,8 @@ class ReportAnalyzerAgent:
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.llm.model_name
+                "model_name": self.model_name,
+                "provider": self.provider
             }
             
             logger.info(f"ReportAnalyzerAgent completed in {duration:.2f} seconds, found {len(processed_reports)} reports")
@@ -255,7 +260,10 @@ class ReportAnalyzerAgent:
                 "data": [],
                 "error": str(e),
                 "execution_time": 0,
-                "metadata": {}
+                "metadata": {
+                    "model_name": self.model_name,
+                    "provider": self.provider
+                }
             }
             
             # 타입 주석을 사용한 데이터 할당
@@ -364,13 +372,13 @@ class ReportAnalyzerAgent:
         # 단순한 질문일수록 높은 임계값 (정확한 결과)
         # 복잡한 질문일수록 낮은 임계값 (더 많은 결과)
         if complexity == "단순":
-            return 0.75
+            return 0.6
         elif complexity == "중간":
-            return 0.65
+            return 0.45
         elif complexity == "복합":
-            return 0.55
+            return 0.3
         else:  # "전문가급"
-            return 0.5
+            return 0.25
     
     def _create_metadata_filter(self, stock_code: Optional[str], stock_name: Optional[str],
                               classification: Dict[str, Any], state: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -496,7 +504,7 @@ class ReportAnalyzerAgent:
             return None
     
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
-    async def _search_reports(self, query: str, k: int = 5, threshold: float = 0.7,
+    async def _search_reports(self, query: str, k: int = 5, threshold: float = 0.3,
                              metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         파인콘 DB에서 기업리포트 검색
@@ -598,7 +606,7 @@ class ReportAnalyzerAgent:
         검색된 리포트 처리
         
         Args:
-            reports: 검색된 리포트 목록
+            reports: 검색된 리포트 목록, 벡터 DB 검색 내용.
             
         Returns:
             처리된 리포트 목록
@@ -697,76 +705,94 @@ class ReportAnalyzerAgent:
             report_contents=formatted_reports
         )
         
-        # 병렬로 분석 실행
-        analysis_chain = analysis_prompt | self.llm | self.parser
-        opinion_chain = opinion_prompt | self.llm | self.parser
+        # 폴백을 지원하는 AgentLLM 객체 가져오기
+        agent_llm = get_agent_llm("report_analyzer_agent")
         
-        # 병렬 실행
-        results = await asyncio.gather(
-            analysis_chain.ainvoke({}),
-            opinion_chain.ainvoke({}),
-            return_exceptions=True
-        )
-        
-        # 결과 처리
-        analysis_result = results[0] if not isinstance(results[0], Exception) else ""
-        opinion_result = results[1] if not isinstance(results[1], Exception) else ""
-        
-        # 투자 의견 및 목표가 추출
-        investment_opinions = []
-        target_prices = []
-        
-        if opinion_result:
-            try:
-                # 투자 의견 정보 파싱 시도
-                opinion_data = {}
-                
-                # "투자의견:" 또는 "투자 의견:" 패턴 찾기
-                opinion_pattern = r'(투자\s*의견|투자의견)\s*:\s*([^\n,]+)'
-                opinion_matches = re.findall(opinion_pattern, opinion_result)
-                
-                # "목표가:" 또는 "목표 가격:" 패턴 찾기
-                price_pattern = r'(목표\s*가격|목표가|목표\s*주가)\s*:\s*([\d,]+)'
-                price_matches = re.findall(price_pattern, opinion_result)
-                
-                for report in reports:
-                    source = report["source"]
-                    date = report["date"]
+        # 병렬로 분석 실행 (폴백 메커니즘 사용)
+        try:
+            # 프롬프트 형식화
+            formatted_analysis_prompt = analysis_prompt.format_prompt()
+            formatted_opinion_prompt = opinion_prompt.format_prompt()
+            
+            # 병렬 실행
+            results = await asyncio.gather(
+                agent_llm.ainvoke_with_fallback(formatted_analysis_prompt, {}),
+                agent_llm.ainvoke_with_fallback(formatted_opinion_prompt, {}),
+                return_exceptions=True
+            )
+            
+            # 결과 처리
+            analysis_result:AIMessage = results[0] if not isinstance(results[0], Exception) else ""
+            opinion_result:AIMessage = results[1] if not isinstance(results[1], Exception) else ""
+            
+            # 예외 로깅
+            if isinstance(results[0], Exception):
+                logger.error(f"리포트 분석 중 오류 발생: {str(results[0])}")
+            if isinstance(results[1], Exception):
+                logger.error(f"투자 의견 추출 중 오류 발생: {str(results[1])}")
+            
+            # 투자 의견 및 목표가 추출
+            investment_opinions = []
+            target_prices = []
+            
+            if opinion_result:
+                try:
+                    # 투자 의견 정보 파싱 시도
+                    opinion_data = {}
+                    opinion_content = opinion_result.content
+                    # "투자의견:" 또는 "투자 의견:" 패턴 찾기
+                    opinion_pattern = r'(투자\s*의견|투자의견)\s*:\s*([^\n,]+)'
+                    opinion_matches = re.findall(opinion_pattern, opinion_content)
                     
-                    # 해당 리포트에 대한 투자 의견 찾기
-                    report_opinion = None
-                    for _, opinion in opinion_matches:
-                        if source in opinion_result and date in opinion_result:
-                            report_opinion = opinion.strip()
-                            break
+                    # "목표가:" 또는 "목표 가격:" 패턴 찾기
+                    price_pattern = r'(목표\s*가격|목표가|목표\s*주가)\s*:\s*([\d,]+)'
+                    price_matches = re.findall(price_pattern, opinion_content)
                     
-                    # 해당 리포트에 대한 목표가 찾기
-                    report_price = None
-                    for _, price in price_matches:
-                        if source in opinion_result and date in opinion_result:
-                            try:
-                                # 쉼표 제거 후 숫자로 변환
-                                report_price = int(price.replace(",", ""))
-                            except ValueError:
-                                pass
-                            break
-                    
-                    investment_opinions.append({
-                        "source": source,
-                        "date": date,
-                        "opinion": report_opinion,
-                        "target_price": report_price
-                    })
-            except Exception as e:
-                logger.error(f"투자 의견 추출 중 오류: {e}", exc_info=True)
-        
-        # 분석 결과 구조화
-        report_analyses = []
-        for report in reports:
-            report_analyses.append({
-                "analysis": analysis_result,
-                "investment_opinions": investment_opinions,
-                "opinion_summary": opinion_result
-            })
-        
-        return report_analyses 
+                    for report in reports:
+                        source = report["source"] # provider_code, 증권사
+                        date = report["date"]
+                        
+                        # 해당 리포트에 대한 투자 의견 찾기
+                        report_opinion = None
+                        for _, opinion in opinion_matches:
+                            if source in opinion_content and date in opinion_content:
+                                report_opinion = opinion.strip()
+                                break
+                        
+                        # 해당 리포트에 대한 목표가 찾기
+                        report_price = None
+                        for _, price in price_matches:
+                            if source in opinion_content and date in opinion_content:
+                                try:
+                                    # 쉼표 제거 후 숫자로 변환
+                                    report_price = int(price.replace(",", ""))
+                                except ValueError:
+                                    pass
+                                break
+                        
+                        investment_opinions.append({
+                            "source": source,
+                            "date": date,
+                            "opinion": report_opinion,
+                            "target_price": report_price
+                        })
+                except Exception as e:
+                    logger.error(f"투자 의견 추출 중 오류: {e}", exc_info=True)
+            
+            # 분석 결과 구조화
+            report_analyses = []
+            for report in reports:
+                analysis_content = analysis_result.content if not isinstance(analysis_result, Exception) else "분석 중 오류가 발생했습니다."
+                opinion_content = opinion_result.content if not isinstance(opinion_result, Exception) else "의견 추출 중 오류가 발생했습니다."
+                
+                report_analyses.append({
+                    "llm_response": analysis_content,
+                    "investment_opinions": investment_opinions,
+                    "opinion_summary": opinion_content
+                })
+            
+            return report_analyses
+            
+        except Exception as e:
+            logger.exception(f"리포트 분석 프로세스 전체 오류: {str(e)}")
+            return [] 

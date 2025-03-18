@@ -15,6 +15,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic.v1 import BaseModel, Field
+from common.services.agent_llm import get_llm_for_agent
 from stockeasy.prompts.knowledge_integrator_prompts import format_knowledge_integrator_prompt
 from common.core.config import settings
 from stockeasy.models.agent_io import IntegratedKnowledge, pydantic_to_typeddict
@@ -43,7 +44,7 @@ class KnowledgeIntegratorAgent:
     여러 검색 에이전트에서 수집된 정보를 통합하는 지식 통합기 에이전트 클래스
     """
     
-    def __init__(self, model_name: str = "gpt-4o", temperature: float = 0):
+    def __init__(self):
         """
         지식 통합기 에이전트 초기화
         
@@ -51,10 +52,11 @@ class KnowledgeIntegratorAgent:
             model_name: 사용할 OpenAI 모델 이름
             temperature: 모델 출력의 다양성 조절 파라미터
         """
-        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        self.llm, self.model_name, self.provider = get_llm_for_agent("knowledge_integrator_agent")
         self.parser = JsonOutputParser(pydantic_object=KnowledgeIntegratorOutput)
         self.chain = self.llm.with_structured_output(KnowledgeIntegratorOutput)
-        logger.info(f"KnowledgeIntegratorAgent initialized with model: {model_name}")
+        logger.info(f"KnowledgeIntegratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -72,16 +74,47 @@ class KnowledgeIntegratorAgent:
             
             # 현재 사용자 쿼리 및 종목 정보 추출
             query = state.get("query", "")
-            stock_code = state.get("stock_code")
-            stock_name = state.get("stock_name")
             
-            # 각 검색 에이전트 결과 추출
-            telegram_results = state.get("telegram_results", "정보 없음")
-            report_results = state.get("report_results", "정보 없음")
-            financial_results = state.get("financial_results", "정보 없음")
-            industry_results = state.get("industry_results", "정보 없음")
+            # 질문 분석 결과 추출
+            question_analysis = state.get("question_analysis", {})
+            entities = question_analysis.get("entities", {})
             
-            # 데이터 중요도 추출 (기본값: 5/10)
+            # 엔티티에서 종목 정보 추출
+            stock_code = entities.get("stock_code", state.get("stock_code"))
+            stock_name = entities.get("stock_name", state.get("stock_name"))
+            
+            # 새로운 구조에서 각 에이전트 결과 추출
+            agent_results = state.get("agent_results", {})
+            
+            # 텔레그램 검색 결과 추출
+            telegram_results = "정보 없음"
+            if "telegram_retriever" in agent_results:
+                telegram_agent = agent_results["telegram_retriever"]
+                if telegram_agent.get("status") == "success" and telegram_agent.get("data"):
+                    telegram_results = self._format_telegram_results(telegram_agent["data"])
+            
+            # 기업 리포트 결과 추출
+            report_results = "정보 없음"
+            if "report_analyzer" in agent_results:
+                report_agent = agent_results["report_analyzer"]
+                if report_agent.get("status") == "success" and report_agent.get("data"):
+                    report_results = self._format_report_results(report_agent["data"])
+            
+            # 재무 분석 결과 추출
+            financial_results = "정보 없음"
+            if "financial_analyzer" in agent_results:
+                financial_agent = agent_results["financial_analyzer"]
+                if financial_agent.get("status") == "success" and financial_agent.get("data"):
+                    financial_results = self._format_financial_results(financial_agent["data"])
+            
+            # 산업 분석 결과 추출
+            industry_results = "정보 없음"
+            if "industry_analyzer" in agent_results:
+                industry_agent = agent_results["industry_analyzer"]
+                if industry_agent.get("status") == "success" and industry_agent.get("data"):
+                    industry_results = self._format_industry_results(industry_agent["data"])
+            
+            # 데이터 중요도 설정 (기본값: 5/10)
             data_importance = state.get("data_importance", {})
             telegram_importance = data_importance.get("telegram_retriever", 5)
             report_importance = data_importance.get("report_analyzer", 5)
@@ -132,10 +165,10 @@ class KnowledgeIntegratorAgent:
                     "uncertain_areas": integration_result.불확실_영역
                 },
                 "sources": {
-                    "telegram": state.get("telegram_sources", []),
-                    "reports": state.get("report_sources", []),
-                    "financial": state.get("financial_sources", []),
-                    "industry": state.get("industry_sources", [])
+                    "telegram": self._extract_sources(agent_results, "telegram_retriever"),
+                    "reports": self._extract_sources(agent_results, "report_analyzer"),
+                    "financial": self._extract_sources(agent_results, "financial_analyzer"),
+                    "industry": self._extract_sources(agent_results, "industry_analyzer")
                 }
             }
             
@@ -144,6 +177,27 @@ class KnowledgeIntegratorAgent:
             
             # 추가 정보 (API 호환성 유지)
             state["integrated_response"] = integration_result.통합_응답
+            
+            # 에이전트 결과 업데이트
+            state["agent_results"] = state.get("agent_results", {})
+            state["agent_results"]["knowledge_integrator"] = {
+                "agent_name": "knowledge_integrator",
+                "status": "success",
+                "data": {
+                    "integrated_response": integration_result.통합_응답,
+                    "core_insights": core_insights,
+                    "uncertain_areas": integration_result.불확실_영역,
+                    "confidence_assessment": confidence_info
+                },
+                "error": None,
+                "execution_time": (datetime.now() - start_time).total_seconds(),
+                "metadata": {
+                    "total_sources": len(self._extract_sources(agent_results, "telegram_retriever")) +
+                                    len(self._extract_sources(agent_results, "report_analyzer")) +
+                                    len(self._extract_sources(agent_results, "financial_analyzer")) +
+                                    len(self._extract_sources(agent_results, "industry_analyzer"))
+                }
+            }
             
             # 성능 지표 업데이트
             end_time = datetime.now()
@@ -185,10 +239,132 @@ class KnowledgeIntegratorAgent:
                 "context": {"query": state.get("query", "")}
             })
             
+            # 에이전트 결과 업데이트 (오류)
+            state["agent_results"] = state.get("agent_results", {})
+            state["agent_results"]["knowledge_integrator"] = {
+                "agent_name": "knowledge_integrator",
+                "status": "failed",
+                "data": {},
+                "error": str(e),
+                "execution_time": (datetime.now() - start_time).total_seconds() if 'start_time' in locals() else 0,
+                "metadata": {}
+            }
+            
             # 처리 상태 업데이트
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["knowledge_integrator"] = "failed"
             
             # 응답에 오류 메시지 추가
             state["integrated_response"] = "죄송합니다. 정보를 통합하는 중 오류가 발생했습니다."
-            return state 
+            return state
+            
+    def _format_telegram_results(self, telegram_data: List[Dict[str, Any]]) -> str:
+        """텔레그램 결과를 문자열로 포맷팅"""
+        if not telegram_data:
+            return "텔레그램 검색 결과 없음"
+            
+        formatted = "텔레그램 검색 결과:\n"
+        for i, msg in enumerate(telegram_data):
+            formatted += f"[{i+1}] 출처: {msg.get('source', '알 수 없음')}\n"
+            formatted += f"내용: {msg.get('content', '내용 없음')}\n"
+            if msg.get('message_created_at'):
+                formatted += f"작성일: {msg.get('message_created_at')}\n"
+            formatted += "---\n"
+            
+        return formatted
+    
+    def _format_report_results(self, report_data: List[Dict[str, Any]]) -> str:
+        """기업 리포트 결과를 문자열로 포맷팅"""
+        if not report_data:
+            return "기업 리포트 검색 결과 없음"
+            
+        formatted = "기업 리포트 검색 결과:\n"
+        for i, report in enumerate(report_data):
+            formatted += f"[{i+1}] 제목: {report.get('title', '제목 없음')}\n"
+            formatted += f"출처: {report.get('source', '알 수 없음')}\n"
+            formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
+            
+            # 분석 정보가 있는 경우 추가
+            if "analysis" in report and report["analysis"]:
+                analysis = report["analysis"]
+                if "ai_response" in analysis:
+                    formatted += f"분석: {analysis.get('ai_response', '')[:300]}...\n"
+                if "investment_opinions" in analysis and analysis["investment_opinions"]:
+                    opinions = analysis["investment_opinions"]
+                    formatted += "투자의견: "
+                    for op in opinions[:2]:  # 처음 2개만 표시
+                        formatted += f"{op.get('source', '')}: {op.get('opinion', '없음')} (목표가: {op.get('target_price', '없음')}), "
+                    formatted += "\n"
+            
+            # 내용 축약
+            content = report.get('content', '내용 없음')
+            formatted += f"내용: {content[:300]}...\n"
+            formatted += "---\n"
+            
+        return formatted
+    
+    def _format_financial_results(self, financial_data: List[Dict[str, Any]]) -> str:
+        """재무 분석 결과를 문자열로 포맷팅"""
+        if not financial_data:
+            return "재무 분석 결과 없음"
+            
+        formatted = "재무 분석 결과:\n"
+        for i, data in enumerate(financial_data):
+            formatted += f"[{i+1}] 기간: {data.get('period', '기간 정보 없음')}\n"
+            
+            # 재무 지표 정보
+            metrics = data.get('metrics', {})
+            if metrics:
+                formatted += "주요 지표:\n"
+                for key, value in metrics.items():
+                    formatted += f"- {key}: {value}\n"
+            
+            # 분석 정보
+            analysis = data.get('analysis', {})
+            if analysis:
+                formatted += f"분석: {str(analysis)[:300]}\n"
+                
+            formatted += "---\n"
+            
+        return formatted
+    
+    def _format_industry_results(self, industry_data: List[Dict[str, Any]]) -> str:
+        """산업 분석 결과를 문자열로 포맷팅"""
+        if not industry_data:
+            return "산업 분석 결과 없음"
+            
+        formatted = "산업 분석 결과:\n"
+        for i, data in enumerate(industry_data):
+            formatted += f"[{i+1}] 산업: {data.get('sector', '산업 정보 없음')}\n"
+            formatted += f"기간: {data.get('period', '기간 정보 없음')}\n"
+            
+            # 트렌드 정보
+            trends = data.get('trends', {})
+            if trends:
+                formatted += "트렌드:\n"
+                for key, value in trends.items():
+                    formatted += f"- {key}: {value}\n"
+            
+            # 경쟁사 정보
+            competitors = data.get('competitors', [])
+            if competitors:
+                formatted += "주요 경쟁사:\n"
+                for comp in competitors[:3]:  # 상위 3개만
+                    formatted += f"- {comp.get('name', '이름 없음')}: {comp.get('info', '')}\n"
+                    
+            formatted += "---\n"
+            
+        return formatted
+    
+    def _extract_sources(self, agent_results: Dict[str, Any], agent_name: str) -> List[str]:
+        """에이전트 결과에서 소스 목록 추출"""
+        sources = []
+        if agent_name in agent_results:
+            agent_data = agent_results[agent_name]
+            if agent_data.get("status") == "success" and agent_data.get("data"):
+                for item in agent_data["data"]:
+                    if "source" in item:
+                        sources.append(item["source"])
+                    elif "title" in item:
+                        sources.append(item["title"])
+        return sources 

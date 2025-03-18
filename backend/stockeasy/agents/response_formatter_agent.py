@@ -12,6 +12,7 @@ from typing import Dict, List, Any, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
+from common.services.agent_llm import get_llm_for_agent
 from stockeasy.prompts.response_formatter_prompts import format_response_formatter_prompt
 from common.core.config import settings
 
@@ -20,7 +21,7 @@ class ResponseFormatterAgent:
     통합된 정보를 사용자에게 이해하기 쉬운 형태로 포맷팅하는 응답 포맷터 에이전트 클래스
     """
     
-    def __init__(self, model_name: str = "gpt-4o", temperature: float = 0.2):
+    def __init__(self):
         """
         응답 포맷터 에이전트 초기화
         
@@ -28,8 +29,9 @@ class ResponseFormatterAgent:
             model_name: 사용할 OpenAI 모델 이름
             temperature: 모델 출력의 다양성 조절 파라미터
         """
-        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
-        logger.info(f"ResponseFormatterAgent initialized with model: {model_name}")
+        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        self.llm, self.model_name, self.provider = get_llm_for_agent("response_formatter_agent")
+        logger.info(f"ResponseFormatterAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """

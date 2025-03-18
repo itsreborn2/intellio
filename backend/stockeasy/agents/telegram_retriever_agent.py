@@ -17,9 +17,8 @@ from typing import Dict, List, Any, Optional, Set, cast
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
 
+from common.services.agent_llm import get_llm_for_agent
 from common.utils.util import async_retry
-#from common.core.logger import get_logger
-#from common.core.llm import LLMProvider
 from common.core.config import settings
 from stockeasy.services.telegram.embedding import TelegramEmbeddingService
 
@@ -32,7 +31,7 @@ from stockeasy.models.agent_io import RetrievedData, RetrievedMessage
 class TelegramRetrieverAgent:
     """텔레그램 메시지 검색 에이전트"""
     
-    def __init__(self, model_name: str = "gpt-4o-mini", temperature: float = 0):
+    def __init__(self):
         """
         텔레그램 메시지 검색 에이전트 초기화
         
@@ -41,9 +40,10 @@ class TelegramRetrieverAgent:
             temperature: 모델 출력의 다양성 조절 파라미터
         """
         self.embedding_service = TelegramEmbeddingService()
-        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        self.llm, self.model_name, self.provider = get_llm_for_agent("telegram_retriever_agent")
         self.parser = JsonOutputParser()
-        logger.info(f"TelegramRetrieverAgent initialized with model: {model_name}")
+        logger.info(f"TelegramRetrieverAgent initialized with provider: {self.provider}, model: {self.model_name}")
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """

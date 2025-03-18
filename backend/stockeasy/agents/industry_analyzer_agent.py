@@ -16,12 +16,12 @@ from stockeasy.prompts.industry_prompts import INDUSTRY_ANALYSIS_PROMPT
 # from stockeasy.services.industry.industry_data_service import IndustryDataService
 # from stockeasy.services.stock.stock_info_service import StockInfoService
 from stockeasy.models.agent_io import RetrievedData, IndustryData
-
+from common.services.agent_llm import get_llm_for_agent
 
 class IndustryAnalyzerAgent:
     """산업 및 시장 동향 분석 에이전트"""
 
-    def __init__(self, model_name: str = "gpt-4o-mini", temperature: float = 0):
+    def __init__(self):
         """
         IndustryAnalyzerAgent를 초기화합니다.
         
@@ -29,9 +29,12 @@ class IndustryAnalyzerAgent:
             model_name: 사용할 LLM 모델 이름
             temperature: 모델 온도(창의성) 설정
         """
-        self.model_name = model_name
-        self.temperature = temperature
-        self.llm = ChatOpenAI(model=model_name, temperature=temperature)
+        #self.model_name = model_name
+        #self.temperature = temperature
+        #self.llm = ChatOpenAI(model=model_name, temperature=temperature)
+
+        self.llm, self.model_name, self.provider = get_llm_for_agent("industry_analyzer_agent")
+        logger.info(f"IndustryAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
         # 서비스 초기화
         #self.industry_service = IndustryDataService()

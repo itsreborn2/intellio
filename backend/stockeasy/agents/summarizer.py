@@ -16,7 +16,7 @@ from stockeasy.agents.base import BaseAgent
 from stockeasy.models.agent_io import AgentState, RetrievedMessage
 from stockeasy.prompts.telegram_prompts import format_telegram_messages
 from common.core.config import settings
-
+from common.services.agent_llm import get_llm_for_agent
 
 class SummarizerAgent(BaseAgent):
     """검색된 정보를 요약하는 에이전트"""
@@ -24,11 +24,9 @@ class SummarizerAgent(BaseAgent):
     def __init__(self):
         """에이전트 초기화"""
         super().__init__("summarizer")
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            #temperature=0.1,  # 창의성을 약간 허용
-            api_key=settings.OPENAI_API_KEY
-        )
+        #self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1,api_key=settings.OPENAI_API_KEY )
+        self.llm, self.model_name, self.provider = get_llm_for_agent("summarizer_agent")
+        logger.info(f"SummarizerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         self.parser = StrOutputParser()
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:

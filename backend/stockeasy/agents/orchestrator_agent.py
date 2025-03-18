@@ -15,6 +15,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
+from common.services.agent_llm import get_llm_for_agent
 from stockeasy.models.agent_io import QuestionAnalysisResult
 from stockeasy.prompts.orchestrator_prompts import format_orchestrator_prompt
 from common.core.config import settings
@@ -48,7 +49,7 @@ class OrchestratorAgent:
     4. 예외 상황 대응 계획 마련
     """
     
-    def __init__(self, model_name: str = "gpt-4o", temperature: float = 0):
+    def __init__(self):
         """
         오케스트레이터 에이전트 초기화
         
@@ -56,13 +57,14 @@ class OrchestratorAgent:
             model_name: 사용할 OpenAI 모델 이름
             temperature: 모델 출력의 다양성 조절 파라미터
         """
-        self.llm = ChatOpenAI(
-            model_name=model_name, 
-            temperature=temperature, 
-            api_key=settings.OPENAI_API_KEY
-        )
-        self.model_name = model_name
-        logger.info(f"OrchestratorAgent initialized with model: {model_name}")
+        # self.llm = ChatOpenAI(
+        #     model_name=model_name, 
+        #     temperature=temperature, 
+        #     api_key=settings.OPENAI_API_KEY
+        # )
+        self.llm, self.model_name, self.provider = get_llm_for_agent("orchestrator_agent")
+        #self.model_name = model_name
+        logger.info(f"OrchestratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
         # 사용 가능한 에이전트 목록
         self.available_agents = {

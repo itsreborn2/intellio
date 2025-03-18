@@ -58,9 +58,9 @@ class CommonSettings(BaseSettings):
     # AI Model Settings - from .env
     OPENAI_API_KEY: str
     GEMINI_API_KEY: str
-    UPSTAGE_API_KEY:str
+    UPSTAGE_API_KEY: str
+    CLAUDE_API_KEY: str 
 
-    
     # Redis 설정
     REDIS_HOST: str 
     REDIS_PORT: int 

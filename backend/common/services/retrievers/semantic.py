@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Tuple
 import logging
 from .base import BaseRetriever, RetrieverConfig
-from .models import Document, RetrievalResult
+from .models import DocumentWithScore, RetrievalResult
 
 from common.services.vector_store_manager import VectorStoreManager
 
@@ -46,7 +46,7 @@ class SemanticRetriever(BaseRetriever):
             if not search_results:
                 logger.warning("검색 결과가 없습니다.")
                 return RetrievalResult(documents=[])
-            logger.info(f"검색된 총 매치 수: {len(search_results)}")
+            #logger.info(f"검색된 총 매치 수: {len(search_results)}")
             
             # 상위 K개만 선택하고 Document 객체만 추출
             actual_top_k = min(len(search_results), _top_k)
@@ -56,12 +56,15 @@ class SemanticRetriever(BaseRetriever):
             documents = []
             for doc, score in filtered_results:
                 # 기존 Document 객체의 속성을 복사하여 새로운 Document 생성
-                new_doc = Document(
-                    page_content=doc.page_content,
-                    metadata=doc.metadata.copy(),  # metadata는 깊은 복사
-                    score=score  # score 추가
-                )
-                documents.append(new_doc)
+                logger.info(f"score: {score}, min_score: {self.config.min_score}")
+                if score >= self.config.min_score:
+                    new_doc = DocumentWithScore(
+                        page_content=doc.page_content,
+                        metadata=doc.metadata.copy(),  # metadata는 깊은 복사
+                        score=score  # score 추가
+                        )
+                    documents.append(new_doc)
+            logger.info(f"검색된 총 매치 수: {len(search_results)}, 최소 점수: {self.config.min_score}, 검색된 수: {len(documents)}")
             
             # 쿼리 분석 정보 추가
             query_analysis = {
@@ -80,7 +83,7 @@ class SemanticRetriever(BaseRetriever):
             logger.error(f"시맨틱 검색 중 오류 발생: {str(e)}")
             raise
         
-    async def add_documents(self, documents: List[Document]) -> bool:
+    async def add_documents(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 벡터 스토어에 추가"""
         # TODO: 문서 임베딩 및 저장 구현
         return True
@@ -90,7 +93,7 @@ class SemanticRetriever(BaseRetriever):
         # TODO: 문서 삭제 구현
         return True
         
-    async def update_documents(self, documents: List[Document]) -> bool:
+    async def update_documents(self, documents: List[DocumentWithScore]) -> bool:
         """벡터 스토어의 문서 업데이트"""
         # TODO: 문서 업데이트 구현
         return True 

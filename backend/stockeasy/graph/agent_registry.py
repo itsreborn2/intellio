@@ -70,24 +70,24 @@ class AgentRegistry:
             logger.warning("DB 세션 없이 에이전트 초기화 - 세션 관리자는 초기화되지 않습니다.")
         
         # 기타 에이전트 초기화 - 새로 구현한 클래스 사용
-        self.agents["orchestrator"] = OrchestratorAgent(model_name="gpt-4o", temperature=0)
-        self.agents["question_analyzer"] = QuestionAnalyzerAgent(model_name="gpt-4o-mini", temperature=0)
+        self.agents["orchestrator"] = OrchestratorAgent()
+        self.agents["question_analyzer"] = QuestionAnalyzerAgent()
         
         # 검색 및 분석 에이전트 초기화 - 새로 구현한 클래스 사용
-        self.agents["telegram_retriever"] = TelegramRetrieverAgent(model_name="gpt-4o-mini", temperature=0)
-        self.agents["report_analyzer"] = ReportAnalyzerAgent(model_name="gpt-4o-mini", temperature=0)
+        self.agents["telegram_retriever"] = TelegramRetrieverAgent()
+        self.agents["report_analyzer"] = ReportAnalyzerAgent()
         
         # 기존 검색 및 분석 에이전트 초기화
-        self.agents["financial_analyzer"] = FinancialAnalyzerAgent(model_name="gpt-4o-mini", temperature=0)
-        self.agents["industry_analyzer"] = IndustryAnalyzerAgent(model_name="gpt-4o-mini", temperature=0)
+        self.agents["financial_analyzer"] = FinancialAnalyzerAgent()
+        self.agents["industry_analyzer"] = IndustryAnalyzerAgent()
         
         # 통합 및 요약 에이전트 초기화 - 새로 구현한 통합기 클래스 사용 
-        self.agents["knowledge_integrator"] = KnowledgeIntegratorAgent(model_name="gpt-4o-mini", temperature=0)
+        self.agents["knowledge_integrator"] = KnowledgeIntegratorAgent()
         self.agents["summarizer"] = SummarizerAgent()
         
         # 응답 및 오류 처리 에이전트 초기화 - 새로 구현한 클래스 사용
-        self.agents["response_formatter"] = ResponseFormatterAgent(model_name="gpt-4o-mini", temperature=0)
-        self.agents["fallback_manager"] = FallbackManagerAgent(model_name="gpt-4o-mini", temperature=0)
+        self.agents["response_formatter"] = ResponseFormatterAgent()
+        self.agents["fallback_manager"] = FallbackManagerAgent()
         
         logger.info(f"총 {len(self.agents)} 개의 에이전트가 초기화되었습니다.")
     

@@ -14,13 +14,14 @@ from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from stockeasy.prompts.fallback_manager_prompts import format_fallback_manager_prompt
 from common.core.config import settings
+from common.services.agent_llm import get_llm_for_agent
 
 class FallbackManagerAgent:
     """
     오류 상황이나 응답 생성 실패 시 대체 응답을 제공하는 폴백 매니저 에이전트 클래스
     """
     
-    def __init__(self, model_name: str = "gpt-4o", temperature: float = 0.2):
+    def __init__(self):
         """
         폴백 매니저 에이전트 초기화
         
@@ -28,8 +29,9 @@ class FallbackManagerAgent:
             model_name: 사용할 OpenAI 모델 이름
             temperature: 모델 출력의 다양성 조절 파라미터
         """
-        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
-        logger.info(f"FallbackManagerAgent initialized with model: {model_name}")
+        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        self.llm, self.model_name, self.provider = get_llm_for_agent("fallback_manager_agent")
+        logger.info(f"FallbackManagerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """

@@ -11,7 +11,7 @@ from loguru import logger
 from doceasy.services.document import AsyncDocumentDatabaseManager
 from common.services.embedding import EmbeddingService
 from .base import BaseRetriever, RetrieverConfig
-from .models import Document, RetrievalResult
+from .models import DocumentWithScore, RetrievalResult
 from pydantic import BaseModel, Field, model_validator, field_validator
 
 class ContextualBM25Config(RetrieverConfig):
@@ -95,7 +95,7 @@ class ContextualBM25Retriever(BaseRetriever):
         #return np.array(embeddings)
         return embeddings
         
-    async def add_documents_llama(self, documents: List[Document]) -> bool:
+    async def add_documents_llama(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 검색 인덱스에 추가"""
         try:
             logger.info(f"Contextual BM25 인덱스 생성 시작: {len(documents)} 청크")
@@ -120,7 +120,7 @@ class ContextualBM25Retriever(BaseRetriever):
         except Exception as e:
             logger.error(f"Contextual BM25 인덱스 생성 중 오류: {str(e)}")
             return False
-    async def add_documents(self, documents: List[Document]) -> bool:
+    async def add_documents(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 검색 인덱스에 추가"""
         try:
             logger.info(f"Contextual BM25 인덱스 생성 시작: {len(documents)} 청크")
@@ -138,7 +138,7 @@ class ContextualBM25Retriever(BaseRetriever):
             logger.error(f"Contextual BM25 인덱스 생성 중 오류: {str(e)}")
             return False
         
-    async def make_document_from_chunk_table(self, filters: Dict) -> List[Document]:
+    async def make_document_from_chunk_table(self, filters: Dict) -> List[DocumentWithScore]:
         """Documentchunk Table에서 문서를 읽어와서 추가"""
         try:
             if not self.db:
@@ -158,7 +158,7 @@ class ContextualBM25Retriever(BaseRetriever):
 
                 # 각 청크를 Document 형식으로 변환
                 converted_docs = [
-                    Document(
+                    DocumentWithScore(
                         page_content=chunk.chunk_content,
                         metadata={
                             "document_id": str(chunk.document_id),
@@ -231,7 +231,7 @@ class ContextualBM25Retriever(BaseRetriever):
                     )
                     
                     if final_score >= self.config.min_score:
-                        new_doc = Document(
+                        new_doc = DocumentWithScore(
                             page_content=doc.page_content,
                             metadata={
                                 **doc.metadata,
@@ -278,7 +278,7 @@ class ContextualBM25Retriever(BaseRetriever):
             logger.error(f"문서 삭제 중 오류 발생: {str(e)}")
             return False
             
-    async def update_documents(self, documents: List[Document]) -> bool:
+    async def update_documents(self, documents: List[DocumentWithScore]) -> bool:
         """검색 인덱스의 문서 업데이트"""
         try:
             update_ids = [

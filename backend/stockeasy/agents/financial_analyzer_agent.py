@@ -23,11 +23,12 @@ from stockeasy.prompts.financial_prompts import (
     #FINANCIAL_DATA_EXTRACTION_PROMPT
 )
 from stockeasy.models.agent_io import RetrievedData, FinancialData
+from common.services.agent_llm import get_llm_for_agent
 
 class FinancialAnalyzerAgent:
     """금융 데이터를 분석하는 에이전트"""
 
-    def __init__(self, model_name: str = "gpt-4o-mini", temperature: float = 0):
+    def __init__(self):
         """
         FinancialAnalyzerAgent를 초기화합니다.
         
@@ -35,9 +36,10 @@ class FinancialAnalyzerAgent:
             model_name: 사용할 LLM 모델 이름
             temperature: 모델 온도(창의성) 설정
         """
-        self.model_name = model_name
-        self.temperature = temperature
-        self.llm = ChatOpenAI(model=model_name, temperature=temperature)
+        
+        #self.llm = ChatOpenAI(model=model_name, temperature=temperature)
+        self.llm, self.model_name, self.provider = get_llm_for_agent("financial_analyzer_agent")
+        logger.info(f"FinancialAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         #self.financial_service = FinancialDataService()
         #self.stock_service = StockInfoService()
         
@@ -134,7 +136,7 @@ class FinancialAnalyzerAgent:
                     "duration": duration,
                     "status": "completed_no_data",
                     "error": None,
-                    "model_name": self.model_name
+                    "model_name": self.llm.model_name
                 }
                 
                 logger.info(f"FinancialAnalyzerAgent completed in {duration:.2f} seconds, no data found")
