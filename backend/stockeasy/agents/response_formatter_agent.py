@@ -50,10 +50,14 @@ class ResponseFormatterAgent:
             stock_name = state.get("stock_name")
             
             # 통합된 응답 및 인사이트 추출
-            integrated_response = state.get("integrated_response", "")
-            core_insights = state.get("core_insights", {})
-            confidence_assessment = state.get("confidence_assessment", {})
-            uncertain_areas = state.get("uncertain_areas", [])
+            integrated_knowledge = state.get("integrated_knowledge", {})
+            
+            integrated_response = integrated_knowledge.get("integrated_response", state.get("integrated_response", ""))
+            core_insights = integrated_knowledge.get("core_insights", [])
+            
+            analysis = integrated_knowledge.get("analysis", {})
+            confidence_assessment = analysis.get("confidence_assessment", {})
+            uncertain_areas = analysis.get("uncertain_areas", [])
             
             logger.info(f"ResponseFormatterAgent formatting response for query: {query}")
             
