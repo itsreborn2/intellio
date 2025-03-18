@@ -63,6 +63,37 @@ class QuestionAnalysis(BaseModel):
     data_requirements: DataRequirements = Field(..., description="필요한 데이터 소스 정보")
     keywords: List[str] = Field(..., description="중요 키워드 목록")
     detail_level: Literal["간략", "보통", "상세"] = Field(..., description="요구되는 상세도")
+    
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "entities": {
+                        "stock_name": "삼성전자",
+                        "stock_code": "005930",
+                        "sector": "전자",
+                        "time_range": "최근",
+                        "financial_metric": "실적",
+                        "competitor": None,
+                        "product": None
+                    },
+                    "classification": {
+                        "primary_intent": "성과전망",
+                        "complexity": "단순",
+                        "expected_answer_type": "사실형"
+                    },
+                    "data_requirements": {
+                        "telegram_needed": True,
+                        "reports_needed": True,
+                        "financial_statements_needed": True,
+                        "industry_data_needed": False
+                    },
+                    "keywords": ["삼성전자", "실적", "최근", "재무"],
+                    "detail_level": "보통"
+                }
+            ]
+        }
+    }
 
 
 class QuestionAnalyzerAgent:
