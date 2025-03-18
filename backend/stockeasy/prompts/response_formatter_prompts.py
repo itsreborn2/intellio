@@ -5,7 +5,7 @@
 형태로 포맷팅하는 응답 포맷터 에이전트에서 사용하는 프롬프트 템플릿을 정의합니다.
 """
 
-from typing import Union, Dict, List, Any
+from typing import Dict, List, Union, Any
 
 # 응답 포맷터 프롬프트
 RESPONSE_FORMATTER_PROMPT = """
@@ -92,7 +92,7 @@ def format_response_formatter_prompt(
     stock_name: str = None,
     stock_code: str = None,
     integrated_response: str = None,
-    core_insights: Union[Dict[str, str], List[str]] = None,
+    core_insights: Union[Dict[str, Any], List[str]] = None,
     confidence_assessment: dict = None,
     uncertain_areas: list = None
 ) -> str:
