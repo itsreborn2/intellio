@@ -14,7 +14,8 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from pydantic.v1 import BaseModel, Field
+#from pydantic.v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from common.services.agent_llm import get_llm_for_agent
 from stockeasy.prompts.knowledge_integrator_prompts import format_knowledge_integrator_prompt
 from common.core.config import settings
@@ -24,20 +25,21 @@ from stockeasy.models.agent_io import IntegratedKnowledge, pydantic_to_typeddict
 class CoreInsights(BaseModel):
     주요_인사이트1: Optional[str] = Field(default=None, description="통합된 첫 번째 주요 인사이트")
     주요_인사이트2: Optional[str] = Field(default=None, description="통합된 두 번째 주요 인사이트")
-    주요_인사이트3: Optional[str] = Field(default=None, description="통합된 세 번째 주요 인사이트")
-    # 추가적인 인사이트가 필요한 경우 동적으로 처리
+    주요_인사이트3: Optional[str] = Field( default=None, description="통합된 세 번째 주요 인사이트")
+
 
 class ConfidenceAssessment(BaseModel):
     정보_영역1: Optional[str] = Field(default=None, description="첫 번째 정보 영역의 신뢰도 (높음/중간/낮음)")
     정보_영역2: Optional[str] = Field(default=None, description="두 번째 정보 영역의 신뢰도 (높음/중간/낮음)")
     정보_영역3: Optional[str] = Field(default=None, description="세 번째 정보 영역의 신뢰도 (높음/중간/낮음)")
-    # 추가적인 영역이 필요한 경우 동적으로 처리
+
 
 class KnowledgeIntegratorOutput(BaseModel):
-    핵심_결론: CoreInsights = Field(description="통합된 핵심 결론과 인사이트")
-    신뢰도_평가: ConfidenceAssessment = Field(description="정보 영역별 신뢰도 평가")
-    불확실_영역: List[str] = Field(description="부족하거나 불확실한 정보 영역 목록")
-    통합_응답: str = Field(description="사용자 질문에 대한 종합적인 답변")
+    핵심_결론: CoreInsights = Field(..., description="통합된 핵심 결론과 인사이트")
+    신뢰도_평가: ConfidenceAssessment = Field(...,  description="정보 영역별 신뢰도 평가")
+    불확실_영역: List[str] = Field(..., description="부족하거나 불확실한 정보 영역 목록")
+    통합_응답: str = Field(..., description="사용자 질문에 대한 종합적인 답변")
+
 
 class KnowledgeIntegratorAgent:
     """
@@ -55,7 +57,10 @@ class KnowledgeIntegratorAgent:
         #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
         self.llm, self.model_name, self.provider = get_llm_for_agent("knowledge_integrator_agent")
         self.parser = JsonOutputParser(pydantic_object=KnowledgeIntegratorOutput)
-        self.chain = self.llm.with_structured_output(KnowledgeIntegratorOutput)
+        #self.chain = self.llm.with_structured_output(KnowledgeIntegratorOutput,method="function_calling")
+        # execution_plan = await self.llm.with_structured_output(ExecutionPlanModel,method="function_calling").ainvoke(
+        #         [HumanMessage(content=prompt)]
+        #     )
         logger.info(f"KnowledgeIntegratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -98,7 +103,7 @@ class KnowledgeIntegratorAgent:
             if "report_analyzer" in agent_results:
                 report_agent = agent_results["report_analyzer"]
                 if report_agent.get("status") == "success" and report_agent.get("data"):
-                    report_results = self._format_report_results(report_agent["data"])
+                    report_results = self._format_report_results(report_agent)#report_agent["data"])
             
             # 재무 분석 결과 추출
             financial_results = "정보 없음"
@@ -139,7 +144,10 @@ class KnowledgeIntegratorAgent:
             )
             
             # LLM 호출로 통합 수행
-            integration_result = await self.chain.ainvoke(prompt)
+            #integration_result = await self.chain.ainvoke(prompt)
+            integration_result = await self.llm.with_structured_output(KnowledgeIntegratorOutput).ainvoke(
+                [HumanMessage(content=prompt)]
+            )
             logger.info("Knowledge integration completed successfully")
             
             # 형식 변환: Pydantic 모델을 IntegratedKnowledge 타입으로 변환
@@ -157,6 +165,7 @@ class KnowledgeIntegratorAgent:
             
             # 통합된 지식 베이스 생성 (IntegratedKnowledge 타입 형식으로)
             integrated_knowledge: IntegratedKnowledge = {
+                "integrated_response": integration_result.통합_응답,
                 "core_insights": core_insights,
                 "facts": [],  # 현재 모델에서는 별도 facts를 제공하지 않음
                 "opinions": [],  # 현재 모델에서는 별도 opinions를 제공하지 않음
@@ -211,7 +220,7 @@ class KnowledgeIntegratorAgent:
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.llm.model_name
+                "model_name": self.model_name
             }
             
             # 처리 상태 업데이트
@@ -273,33 +282,65 @@ class KnowledgeIntegratorAgent:
             
         return formatted
     
-    def _format_report_results(self, report_data: List[Dict[str, Any]]) -> str:
+    def _format_report_results(self, report_agent: List[Dict[str, Any]]) -> str:
         """기업 리포트 결과를 문자열로 포맷팅"""
+
+        report_data = report_agent["data"]
         if not report_data:
             return "기업 리포트 검색 결과 없음"
+        analysis = report_data.get("analysis", None)
+        searched_reports = report_data.get("searched_reports", [])
             
         formatted = "기업 리포트 검색 결과:\n"
-        for i, report in enumerate(report_data):
-            formatted += f"[{i+1}] 제목: {report.get('title', '제목 없음')}\n"
-            formatted += f"출처: {report.get('source', '알 수 없음')}\n"
-            formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
-            
-            # 분석 정보가 있는 경우 추가
-            if "analysis" in report and report["analysis"]:
-                analysis = report["analysis"]
-                if "ai_response" in analysis:
-                    formatted += f"분석: {analysis.get('ai_response', '')[:300]}...\n"
-                if "investment_opinions" in analysis and analysis["investment_opinions"]:
-                    opinions = analysis["investment_opinions"]
-                    formatted += "투자의견: "
-                    for op in opinions[:2]:  # 처음 2개만 표시
-                        formatted += f"{op.get('source', '')}: {op.get('opinion', '없음')} (목표가: {op.get('target_price', '없음')}), "
-                    formatted += "\n"
-            
-            # 내용 축약
-            content = report.get('content', '내용 없음')
-            formatted += f"내용: {content[:300]}...\n"
-            formatted += "---\n"
+        if analysis: # 분석결과가 있으면 결과만 리턴.
+            #analysis = report["analysis"]
+            # llm_response 키 사용 (report_analyzer_agent의 실제 출력 키)
+            if "llm_response" in analysis:
+                formatted += f"분석 결과: {analysis.get('llm_response', '')}\n"
+            # 투자 의견 정보 추가
+            if "investment_opinions" in analysis and analysis["investment_opinions"]:
+                opinions = analysis["investment_opinions"]
+                formatted += "투자의견: "
+                for op in opinions[:2]:  # 처음 2개만 표시
+                    formatted += f"{op.get('source', '')}: {op.get('opinion', '없음')} (목표가: {op.get('target_price', '없음')}), "
+                formatted += "\n"
+            # 종합 의견이 있는 경우 추가
+            if "opinion_summary" in analysis and analysis["opinion_summary"]:
+                formatted += f"종합의견: {analysis.get('opinion_summary', '')}\n"
+        else:
+            # 분석결과가 없다면, 찾은 문서 내용을 리턴.
+            for i, report in enumerate(report_data):
+                formatted += f"[{i+1}] 제목: {report.get('title', '제목 없음')}\n"
+                formatted += f"출처: {report.get('source', '알 수 없음')}\n"
+                formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
+                content = report.get('content', '내용 없음')
+                formatted += f"내용: {content}\n"
+                
+                # # 분석 정보가 있는 경우 우선적으로 사용
+                # has_analysis = False
+                # if "analysis" in report and report["analysis"]:
+                #     analysis = report["analysis"]
+                #     # llm_response 키 사용 (report_analyzer_agent의 실제 출력 키)
+                #     if "llm_response" in analysis:
+                #         formatted += f"분석 결과: {analysis.get('llm_response', '')}\n"
+                #         has_analysis = True
+                #     # 투자 의견 정보 추가
+                #     if "investment_opinions" in analysis and analysis["investment_opinions"]:
+                #         opinions = analysis["investment_opinions"]
+                #         formatted += "투자의견: "
+                #         for op in opinions[:2]:  # 처음 2개만 표시
+                #             formatted += f"{op.get('source', '')}: {op.get('opinion', '없음')} (목표가: {op.get('target_price', '없음')}), "
+                #         formatted += "\n"
+                #     # 종합 의견이 있는 경우 추가
+                #     if "opinion_summary" in analysis and analysis["opinion_summary"]:
+                #         formatted += f"종합의견: {analysis.get('opinion_summary', '')}\n"
+                
+                # # 분석 정보가 없는 경우에만 원본 내용 추가 
+                # if not has_analysis:
+                #     content = report.get('content', '내용 없음')
+                #     formatted += f"내용: {content}\n"
+                    
+                formatted += "---\n"
             
         return formatted
     

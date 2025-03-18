@@ -61,7 +61,7 @@ class LLMFactory:
         # 1. 환경 변수에서 API 키 가져오기 (api_key_env 지정된 경우)
         if api_key_env:
             api_key = os.getenv(api_key_env)
-            logger.info(f"환경변수 {api_key_env}에서 API 키 가져오기 시도")
+            #logger.info(f"환경변수 {api_key_env}에서 API 키 가져오기 시도")
         
         # 콜백 설정
         callbacks = None

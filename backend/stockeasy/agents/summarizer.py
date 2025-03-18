@@ -208,6 +208,7 @@ class SummarizerAgent(BaseAgent):
         # 통합된 지식
         if integrated_knowledge:
             sources_info += f"통합된 지식:\n{integrated_knowledge}\n\n"
+
         
         # 정보가 없는 경우
         if not sources_info:

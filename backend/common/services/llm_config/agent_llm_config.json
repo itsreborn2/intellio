@@ -30,11 +30,11 @@
       "api_key_env": "GEMINI_API_KEY"
     },
     "knowledge_integrator_agent": {
-      "provider": "openai",
-      "model_name": "gpt-4o",
+      "provider": "gemini",
+      "model_name": "models/gemini-2.0-flash",
       "temperature": 0.1,
       "max_tokens": 4096,
-      "api_key_env": "OPENAI_API_KEY"
+      "api_key_env": "GEMINI_API_KEY"
     },
 
     "financial_analyzer_agent": {

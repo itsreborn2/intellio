@@ -47,7 +47,7 @@ def format_report_contents(reports: List[Dict[str, Any]]) -> str:
         formatted += f"제목: {report.get('title', '제목 없음')}\n"
         formatted += f"출처: {report.get('source', '미상')}\n"
         formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
-        formatted += f"내용:\n{report.get('content', '내용 없음')[:1500]}...\n"  # 내용 일부만 포함
+        formatted += f"내용:\n{report.get('content', '내용 없음')}\n"  # 내용 일부만 포함
         
     return formatted
 
@@ -177,6 +177,11 @@ class ReportAnalyzerAgent:
             primary_intent = classification.get("primary_intent", "")
             complexity = classification.get("complexity", "")
             
+            # primary_intent: Literal["종목기본정보", "성과전망", "재무분석", "산업동향", "기타"] # 주요 질문 의도
+            # complexity: Literal["단순", "중간", "복합", "전문가급"]                      # 질문 복잡도
+            # expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형"]  # 기대하는 답변 유형
+
+            # 성과전망, 복합, 전문가급 질문이 아니면. 그냥 벡터 DB 검색결과를 리턴함.
             need_detailed_analysis = (
                 primary_intent == "성과전망" or 
                 complexity in ["복합", "전문가급"]
@@ -193,10 +198,11 @@ class ReportAnalyzerAgent:
                     )
                     
                     # 핵심 정보가 추출된 경우, 이를 포함
-                    if analysis:
-                        for i, report in enumerate(processed_reports):
-                            if i < len(analysis) and analysis[i]:
-                                processed_reports[i]["analysis"] = analysis[i]
+                    #if analysis:
+                        #processed_reports["analysis"] = analysis
+                        # for i, report in enumerate(processed_reports):
+                        #     if i < len(analysis) and analysis[i]:
+                        #         processed_reports[i]["analysis"] = analysis[i]
                 except Exception as e:
                     logger.error(f"기업 리포트 분석 중 오류 발생: {str(e)}")
             
@@ -204,12 +210,15 @@ class ReportAnalyzerAgent:
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
-            # 새로운 구조로 상태 업데이트
+
             state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["report_analyzer"] = {
                 "agent_name": "report_analyzer",
                 "status": "success",
-                "data": processed_reports,
+                "data": {
+                        "analysis": analysis if need_detailed_analysis else None,
+                        "searched_reports": processed_reports,
+                    },
                 "error": None,
                 "execution_time": duration,
                 "metadata": {
@@ -317,17 +326,19 @@ class ReportAnalyzerAgent:
         if stock_name and stock_name not in query:
             search_query = f"{stock_name} {search_query}"
         
+        
         # question_analyzer_agent의 분류 정보 기반 검색 키워드 추가
         primary_intent = classification.get("primary_intent", "")
         
         if primary_intent == "종목기본정보":
-            search_query += " 기본 정보 사업 구조 핵심 지표"
+            search_query += ", 기본 정보 사업 구조 핵심 지표"
         elif primary_intent == "성과전망":
-            search_query += " 전망 목표가 예상 성장"
+            #search_query += f", 오늘 {datetime.now().strftime('%Y-%m-%d')} 기준"
+            search_query += ", 전망 목표가 예상 성장"
         elif primary_intent == "재무분석":
-            search_query += " 재무제표 실적 매출 영업이익"
+            search_query += ", 재무제표 실적 매출 영업이익"
         elif primary_intent == "산업동향":
-            search_query += " 산업 동향 시장 구조 경쟁사"
+            search_query += ", 산업 동향 시장 구조 경쟁사"
         
         # 키워드 추가
         if "keywords" in state and state["keywords"]:
@@ -543,10 +554,14 @@ class ReportAnalyzerAgent:
             results = []
             seen_contents = set()  # 중복 제거를 위한 집합
             
-            for doc in retrieval_result.documents:
+            for i, doc in enumerate(retrieval_result.documents):
                 content = doc.page_content
                 metadata = doc.metadata
                 score = doc.score or 0.0
+                logger.info(f"문서 {i} 점수: {score}")
+                logger.info(f"문서 {i} 내용({len(content)}): {content}")
+                logger.info(f"문서 {i} 메타데이터: {metadata}")
+                logger.info(f"---------------------------------------------------------------")
                 
                 # 내용 기반 중복 제거 (문서 일부가 중복되는 경우가 많음)
                 content_hash = hash(content[:100])  # 앞부분을 기준으로
@@ -691,8 +706,9 @@ class ReportAnalyzerAgent:
         formatted_reports = format_report_contents(reports)
         
         # 1) 기본 분석 프롬프트 생성
+        query_with_date = f"오늘 {datetime.now().strftime('%Y-%m-%d')} 기준, {query}"
         analysis_prompt = ChatPromptTemplate.from_template(REPORT_ANALYSIS_PROMPT).partial(
-            query=query,
+            query=query_with_date,
             stock_code=stock_code or "정보 없음",
             stock_name=stock_name or "정보 없음",
             report_contents=formatted_reports
@@ -780,18 +796,21 @@ class ReportAnalyzerAgent:
                     logger.error(f"투자 의견 추출 중 오류: {e}", exc_info=True)
             
             # 분석 결과 구조화
-            report_analyses = []
-            for report in reports:
-                analysis_content = analysis_result.content if not isinstance(analysis_result, Exception) else "분석 중 오류가 발생했습니다."
-                opinion_content = opinion_result.content if not isinstance(opinion_result, Exception) else "의견 추출 중 오류가 발생했습니다."
+            #report_analyses = []
+            #for report in reports:
+            analysis_content = analysis_result.content if not isinstance(analysis_result, Exception) else "분석 중 오류가 발생했습니다."
+            opinion_content = opinion_result.content if not isinstance(opinion_result, Exception) else "의견 추출 중 오류가 발생했습니다."
                 
-                report_analyses.append({
+            #report_analyses.append()
+            
+            return {
+                #"analysis": {
                     "llm_response": analysis_content,
                     "investment_opinions": investment_opinions,
                     "opinion_summary": opinion_content
-                })
-            
-            return report_analyses
+                #}
+                #"searched_documents": reports
+            }
             
         except Exception as e:
             logger.exception(f"리포트 분석 프로세스 전체 오류: {str(e)}")
