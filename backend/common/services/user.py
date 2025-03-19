@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict, Any
 from uuid import UUID, uuid4
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,8 @@ from common.models.user import User, Session
 from common.schemas.user import UserCreate, UserUpdate, SessionBase, SessionUpdate
 from common.core.config import settings
 import logging
+
+from stockeasy.agents.base import BaseAgent
 
 router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)

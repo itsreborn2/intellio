@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional
 from .base import BaseRetriever, RetrieverConfig
-from .models import Document, RetrievalResult
+from .models import DocumentWithScore, RetrievalResult
 from .semantic import SemanticRetriever, SemanticRetrieverConfig
 from .contextual_bm25 import ContextualBM25Retriever, ContextualBM25Config
 from pydantic import BaseModel, Field
@@ -69,10 +69,10 @@ class HybridRetriever(BaseRetriever):
     
     def _merge_results(
         self,
-        semantic_docs: List[Document],
-        contextual_docs: List[Document],
+        semantic_docs: List[DocumentWithScore],
+        contextual_docs: List[DocumentWithScore],
         top_k: int
-    ) -> List[Document]:
+    ) -> List[DocumentWithScore]:
         """검색 결과 병합"""
         # 문서 ID를 키로 사용하여 결과 병합
         merged_docs = {}
@@ -122,7 +122,7 @@ class HybridRetriever(BaseRetriever):
                 "combined_score": item["score"]
             })
             
-            new_doc = Document(
+            new_doc = DocumentWithScore(
                 page_content=doc.page_content,
                 metadata=metadata,
                 score=item["score"]
@@ -131,7 +131,7 @@ class HybridRetriever(BaseRetriever):
             
         return result_docs
         
-    async def add_documents(self, documents: List[Document]) -> bool:
+    async def add_documents(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 양쪽 검색기에 추가"""
         try:
             semantic_success = await self.semantic_retriever.add_documents(documents)
@@ -151,7 +151,7 @@ class HybridRetriever(BaseRetriever):
             logger.error(f"문서 삭제 중 오류 발생: {str(e)}")
             return False
             
-    async def update_documents(self, documents: List[Document]) -> bool:
+    async def update_documents(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 양쪽 검색기에서 업데이트"""
         try:
             semantic_success = await self.semantic_retriever.update_documents(documents)

@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from unittest.mock import Mock, patch
 from common.services.retrievers.contextual_bm25 import ContextualBM25Retriever, ContextualBM25Config
-from common.services.retrievers.models import Document, RetrievalResult
+from common.services.retrievers.models import DocumentWithScore, RetrievalResult
 from llama_index.core.schema import NodeWithScore, TextNode, BaseNode
 import torch
 
@@ -10,17 +10,17 @@ import torch
 def sample_documents():
     """테스트용 샘플 문서 생성"""
     return [
-        Document(
+        DocumentWithScore(
             page_content="한국의 경제 성장률이 2023년에는 2.5% 증가할 것으로 전망됩니다.",
             metadata={"document_id": "doc1", "page_number": 1},
             score=0.0
         ),
-        Document(
+        DocumentWithScore(
             page_content="인공지능 기술의 발전으로 자동화가 가속화되고 있습니다.",
             metadata={"document_id": "doc2", "page_number": 1},
             score=0.0
         ),
-        Document(
+        DocumentWithScore(
             page_content="기후 변화로 인한 환경 문제가 심각해지고 있습니다.",
             metadata={"document_id": "doc3", "page_number": 1},
             score=0.0
@@ -201,7 +201,7 @@ async def test_update_documents(retriever, sample_documents):
         await retriever.add_documents(sample_documents)
         
         # 업데이트할 문서 준비
-        updated_doc = Document(
+        updated_doc = DocumentWithScore(
             page_content="업데이트된 경제 전망 내용입니다.",
             metadata={"document_id": "doc1", "page_number": 1},
             score=0.0

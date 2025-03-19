@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
-from .models import Document, RetrievalResult
+from .models import DocumentWithScore, RetrievalResult
 from pydantic import BaseModel
 
 class RetrieverConfig(BaseModel):
@@ -35,7 +35,7 @@ class BaseRetriever(ABC):
         pass
 
     @abstractmethod
-    async def add_documents(self, documents: List[Document]) -> bool:
+    async def add_documents(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 검색 인덱스에 추가
 
         Args:
@@ -59,7 +59,7 @@ class BaseRetriever(ABC):
         pass
 
     @abstractmethod
-    async def update_documents(self, documents: List[Document]) -> bool:
+    async def update_documents(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 검색 인덱스에서 업데이트
 
         Args:

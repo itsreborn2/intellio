@@ -156,7 +156,7 @@ class VectorStoreManager:
             await self._initialized_future
         return True
 
-    def search(self, query: str, top_k: int, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
+    def search(self, query: str, top_k: int, threshold: float = 0.2, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
         """벡터 스토어에서 검색 수행"""
         logger.info(f"[{self.namespace}] 벡터 스토어 검색 시작 : {query}")
 

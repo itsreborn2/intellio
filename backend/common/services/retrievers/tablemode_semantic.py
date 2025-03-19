@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Tuple
 import logging
 from loguru import logger
-from .models import Document, RetrievalResult
+from .models import DocumentWithScore, RetrievalResult
 
 from common.services.vector_store_manager import VectorStoreManager
 from common.core.config import settings
@@ -46,7 +46,7 @@ class TableModeSemanticRetriever(SemanticRetriever):
             RetrievalResult: 검색 결과
         """
         try:
-            async def _recursive_search(remaining_doc_ids: set, found_docs: List[Document], max_retries: int = 3) -> List[Document]:
+            async def _recursive_search(remaining_doc_ids: set, found_docs: List[DocumentWithScore], max_retries: int = 3) -> List[DocumentWithScore]:
                 """재귀적으로 누락된 문서를 검색하는 내부 함수"""
                 if not remaining_doc_ids or max_retries <= 0:
                     return found_docs
@@ -72,7 +72,7 @@ class TableModeSemanticRetriever(SemanticRetriever):
                     if doc_id:
                         newly_found_doc_ids.add(doc_id)
                     
-                    new_doc = Document(
+                    new_doc = DocumentWithScore(
                         page_content=doc.page_content,
                         metadata=doc.metadata.copy(),
                         score=score
@@ -117,7 +117,7 @@ class TableModeSemanticRetriever(SemanticRetriever):
                 if doc_id:
                     found_doc_ids.add(doc_id)
                 
-                new_doc = Document(
+                new_doc = DocumentWithScore(
                     page_content=doc.page_content,
                     metadata=doc.metadata.copy(),
                     score=score
@@ -155,7 +155,7 @@ class TableModeSemanticRetriever(SemanticRetriever):
             logger.error(f"테이블 모드 시맨틱 검색 중 오류 발생: {str(e)}")
             raise
         
-    async def add_documents(self, documents: List[Document]) -> bool:
+    async def add_documents(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 벡터 스토어에 추가"""
         return await super().add_documents(documents)
         
@@ -163,7 +163,7 @@ class TableModeSemanticRetriever(SemanticRetriever):
         """벡터 스토어에서 문서 삭제"""
         return await super().delete_documents(document_ids)
         
-    async def update_documents(self, documents: List[Document]) -> bool:
+    async def update_documents(self, documents: List[DocumentWithScore]) -> bool:
         """벡터 스토어의 문서 업데이트"""
         return await super().update_documents(documents) 
     
