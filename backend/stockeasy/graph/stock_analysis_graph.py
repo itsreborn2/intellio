@@ -6,6 +6,7 @@
 
 import os
 from typing import Dict, Any, List, Literal, Union, Optional, TypedDict, Tuple, Set, cast
+from common.core.config import settings
 from langchain_core.runnables import ConfigurableField
 import langgraph.graph as lg
 from langgraph.graph import END, StateGraph
@@ -13,7 +14,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import BaseMessage, HumanMessage
 from datetime import datetime
 from loguru import logger
-from langchain.callbacks.tracers import LangChainTracer
+
 
 from stockeasy.models.agent_io import AgentState
 from stockeasy.agents.base import BaseAgent
@@ -22,11 +23,6 @@ from common.services.user import UserService
 from common.schemas.user import SessionBase
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# LangSmith 트레이서 초기화
-os.environ["LANGCHAIN_TRACING"] = "true"
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_PROJECT"] = "stockeasy_multiagent"
-tracer = LangChainTracer(project_name="stockeasy_multiagent")
 
 def should_use_telegram(state: AgentState) -> bool:
     """텔레그램 검색 에이전트를 사용해야 하는지 결정합니다."""

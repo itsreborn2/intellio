@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import os
 import threading
 from typing import Dict, List, Any, Optional, ClassVar
 from loguru import logger
@@ -16,7 +17,7 @@ from stockeasy.services.telegram.question_classifier import QuestionClassificati
 from common.utils.util import async_retry
 from common.core.config import settings
 from common.core.database import get_db_session
-
+from langchain.callbacks.tracers import LangChainTracer
 
 class StockRAGService:
     """Langgraph 기반 주식 분석 RAG 서비스 (싱글톤 패턴)"""
@@ -39,6 +40,15 @@ class StockRAGService:
         Args:
             db: 데이터베이스 세션 객체 (선택적)
         """
+        # LangSmith 트레이서 초기화
+        os.environ["LANGCHAIN_TRACING"] = "true"
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        if settings.ENV == "production":
+            os.environ["LANGCHAIN_PROJECT"] = "stockeasy_server_agents"
+            tracer = LangChainTracer(project_name="stockeasy_server_agents")
+        else:
+            os.environ["LANGCHAIN_PROJECT"] = "stockeasy_dev"
+            tracer = LangChainTracer(project_name="stockeasy_dev")        
         # 이미 초기화된 경우 스킵
         if self._initialized:
             return
