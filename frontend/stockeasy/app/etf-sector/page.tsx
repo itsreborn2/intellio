@@ -31,16 +31,6 @@ export default function ETFSectorPage() {
           <div className="flex mb-0">
             <button
               className={`px-4 py-2 rounded-t-lg font-medium text-xs transition-all ${
-                activeTab === 'leading' 
-                ? 'bg-gray-300 text-gray-800 shadow-lg transform scale-105 -translate-y-0.5 z-10 relative' 
-                : 'bg-gray-200 text-gray-600 shadow-md hover:bg-gray-250'
-              }`}
-              onClick={() => setActiveTab('leading')}
-            >
-              섹터별 주도주 차트
-            </button>
-            <button
-              className={`px-4 py-2 rounded-t-lg font-medium text-xs transition-all ${
                 activeTab === 'industry' 
                 ? 'bg-gray-300 text-gray-800 shadow-lg transform scale-105 -translate-y-0.5 z-10 relative' 
                 : 'bg-gray-200 text-gray-600 shadow-md hover:bg-gray-250'
@@ -48,6 +38,16 @@ export default function ETFSectorPage() {
               onClick={() => setActiveTab('industry')}
             >
               산업별 ETF 차트
+            </button>
+            <button
+              className={`px-4 py-2 rounded-t-lg font-medium text-xs transition-all ${
+                activeTab === 'leading' 
+                ? 'bg-gray-300 text-gray-800 shadow-lg transform scale-105 -translate-y-0.5 z-10 relative' 
+                : 'bg-gray-200 text-gray-600 shadow-md hover:bg-gray-250'
+              }`}
+              onClick={() => setActiveTab('leading')}
+            >
+              섹터별 주도주 차트
             </button>
           </div>
           <div className="bg-white rounded-b-md rounded-tr-md shadow">

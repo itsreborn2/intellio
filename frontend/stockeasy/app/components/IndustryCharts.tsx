@@ -39,11 +39,11 @@ export default function IndustryCharts() {
     { name: '반도체', code: '091160' },
     { name: '반도체 전공정', code: '475300' },
     { name: '반도체 후공정', code: '475310' },
-    { name: '2차전지', code: '455860' },
+    { name: '2차전지', code: '364980' },
     { name: '전력기기', code: '487240' },
     { name: '에너지', code: '433500' },
     { name: '태양광/ESS', code: '457990' },
-    { name: '차전지 소부장', code: '364980' },
+    { name: '2차전지 소부장', code: '455860' },
     { name: '조선', code: '466920' },
     { name: '운송', code: '140710' },
     { name: '자동차', code: '091180' },
@@ -57,12 +57,12 @@ export default function IndustryCharts() {
     { name: '여행레저', code: '228800' },
     { name: '게임', code: '364990' },
     { name: '방산/우주', code: '463250' },
-    { name: '철강', code: '463250' },
+    { name: '철강', code: '139240' },
     { name: '석유', code: '139250' },
-    { name: '은행', code: '139250' },
+    { name: '은행', code: '091170' },
     { name: '증권', code: '102970' },
-    { name: '보험', code: '102970' },
-    { name: '화장품', code: '102970' },
+    { name: '보험', code: '140700' },
+    { name: '화장품', code: '479850' },
     { name: '음식료', code: '438900' }
   ];
   
@@ -303,7 +303,22 @@ export default function IndustryCharts() {
       const openPrice = latestData.open;
       const closePrice = latestData.close;
       
-      return ((closePrice - openPrice) / openPrice) * 100;
+      // 시가가 0이거나 유효하지 않은 경우 0 반환
+      if (openPrice === 0 || !openPrice || isNaN(openPrice)) {
+        console.warn(`유효하지 않은 시가 (${ticker}): ${openPrice}`);
+        return 0;
+      }
+      
+      // 등락률 계산 및 소수점 제한 (무한대 값 방지)
+      const changePercent = ((closePrice - openPrice) / openPrice) * 100;
+      
+      // 무한대 값 체크
+      if (!isFinite(changePercent)) {
+        console.warn(`무한대 등락률 감지 (${ticker}): ${changePercent}`);
+        return 0;
+      }
+      
+      return changePercent;
     } catch (error) {
       console.error(`등락율 계산 오류 (${ticker}):`, error);
       return 0;
@@ -416,59 +431,73 @@ export default function IndustryCharts() {
   }, [etfInfoList]);
   
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-      {[...etfInfoList]
-        .sort((a, b) => b.changePercent - a.changePercent)
-        .map((etf, index) => (
-        <div key={index} className="flex-1 rounded-md p-1">
-          <div>
-            <div className={`px-3 py-1 border flex justify-between items-center ${getHeaderBackgroundColor(etf)}`} style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">{etf.name}</span>
-                <span className={`text-xs px-1.5 py-0.5 rounded ${etf.changePercent >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                  {etf.changePercent >= 0 ? '+' : ''}{etf.changePercent.toFixed(2)}%
-                </span>
+    <div className="p-4">
+      {/* 차트 제목 및 설명 추가 */}
+      <div className="mb-4">
+        <h2 className="text-xl font-bold mb-2">산업별 ETF 차트</h2>
+        <p className="text-sm text-gray-600">
+          각 산업별 ETF의 20일 이동평균선 기준 상태와 등락률을 확인할 수 있습니다. 
+          녹색 배경은 20일선 위에 있는 ETF, 노란색 배경은 20일선 아래에 있는 ETF를 나타냅니다.
+          각 ETF는 등락률 기준으로 내림차순 정렬되어 있습니다.
+        </p>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+        {[...etfInfoList]
+          .sort((a, b) => b.changePercent - a.changePercent)
+          .map((etf, index) => (
+          <div key={index} className="flex-1 rounded-md p-1">
+            <div>
+              <div className={`px-3 py-1 border flex justify-between items-center ${getHeaderBackgroundColor(etf)}`} style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{etf.name}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${etf.changePercent >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                    {etf.changePercent >= 0 ? '+' : ''}{etf.changePercent.toFixed(2)}%
+                  </span>
+                </div>
+                {etf.isLoading ? (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
+                    로딩 중...
+                  </span>
+                ) : (
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${etf.isAboveMA20 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                    {getStatusText(etf)}
+                  </span>
+                )}
               </div>
-              {etf.isLoading ? (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
-                  로딩 중...
-                </span>
-              ) : (
-                <span className={`text-xs px-1.5 py-0.5 rounded ${etf.isAboveMA20 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                  {getStatusText(etf)}
-                </span>
-              )}
-            </div>
-            
-            <div className="chart-container">
-              {etf.isLoading ? (
-                <div className="flex items-center justify-center border border-t-0 border-gray-200" style={{ height: '300px', borderRadius: '0 0 0.375rem 0.375rem' }}>
-                  <div className="text-gray-500 text-sm">차트 로딩 중...</div>
-                </div>
-              ) : etf.error ? (
-                <div className="flex items-center justify-center border border-t-0 border-gray-200" style={{ height: '300px', borderRadius: '0 0 0.375rem 0.375rem' }}>
-                  <div className="text-red-500 text-sm">{etf.error}</div>
-                </div>
-              ) : etf.chartData.length === 0 ? (
-                <div className="flex items-center justify-center border border-t-0 border-gray-200" style={{ height: '300px', borderRadius: '0 0 0.375rem 0.375rem' }}>
-                  <div className="text-gray-500 text-sm">데이터가 없습니다.</div>
-                </div>
-              ) : (
-                <div className="border border-t-0 border-gray-200" style={{ borderRadius: '0 0 0.375rem 0.375rem', overflow: 'hidden' }}>
-                  <ChartComponent
-                    data={etf.chartData}
-                    height={300}
-                    width="100%"
-                    showVolume={true}
-                    showMA20={true}
-                    title={`${etf.name}`}
-                  />
-                </div>
-              )}
+              
+              <div className="chart-container">
+                {etf.isLoading ? (
+                  <div className="flex items-center justify-center border border-t-0 border-gray-200" style={{ height: '300px', borderRadius: '0 0 0.375rem 0.375rem' }}>
+                    <div className="text-gray-500 text-sm">차트 로딩 중...</div>
+                  </div>
+                ) : etf.error ? (
+                  <div className="flex items-center justify-center border border-t-0 border-gray-200" style={{ height: '300px', borderRadius: '0 0 0.375rem 0.375rem' }}>
+                    <div className="text-red-500 text-sm">{etf.error}</div>
+                  </div>
+                ) : etf.chartData.length === 0 ? (
+                  <div className="flex items-center justify-center border border-t-0 border-gray-200" style={{ height: '300px', borderRadius: '0 0 0.375rem 0.375rem' }}>
+                    <div className="text-gray-500 text-sm">데이터가 없습니다.</div>
+                  </div>
+                ) : (
+                  <div className="border border-t-0 border-gray-200" style={{ borderRadius: '0 0 0.375rem 0.375rem', overflow: 'hidden' }}>
+                    <ChartComponent
+                      data={etf.chartData}
+                      height={300}
+                      width="100%"
+                      showVolume={true}
+                      showMA20={true}
+                      title={`${etf.name} (${etf.code})`}
+                      subtitle={`${getStatusText(etf)} | 등락률: ${etf.changePercent >= 0 ? '+' : ''}${etf.changePercent.toFixed(2)}%`}
+                      parentComponent="IndustryCharts"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

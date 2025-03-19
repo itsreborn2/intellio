@@ -76,7 +76,12 @@ function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedDat
 
     // 산업별로 그룹화
     const groupedData: GroupedData = results.data.reduce((acc: GroupedData, row: any) => {
-      const industry = row['산업'];
+      // 뷰티와 음식료 카테고리를 소비재/음식료로 통합
+      let industry = row['산업'];
+      if (industry === '뷰티' || industry === '음식료' || industry === '소비재') {
+        industry = '소비재/음식료';
+      }
+      
       if (!acc[industry]) {
         acc[industry] = [];
       }
@@ -644,12 +649,26 @@ export default function ETFCurrentTable() {
           const stockListMap: {[key: string]: string[]} = {};
           stockListResult.data.forEach((row: any) => {
             if (row['티커']) {
-              stockListMap[row['티커']] = [
+              // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
+              const tickerVariations = [
+                row['티커'],
+                row['티커'].padStart(6, '0'),
+                row['티커'].replace(/^0+/, '')
+              ];
+              
+              const stockList = [
                 row['대표 구성 종목 1'] || '',
                 row['대표 구성 종목 2'] || '',
                 row['대표 구성 종목 3'] || '',
                 row['대표 구성 종목 4'] || ''
               ].filter(item => item); // 빈 문자열 제거
+              
+              // 모든 티커 변형에 대해 매핑 추가
+              tickerVariations.forEach(variant => {
+                if (variant) {
+                  stockListMap[variant] = stockList;
+                }
+              });
             }
           });
           
@@ -708,7 +727,9 @@ export default function ETFCurrentTable() {
 
   // 날짜 컬럼을 제외한 헤더 필터링
   const filteredHeaders = useMemo(() => {
-    return csvData.headers.filter(header => header !== '날짜');
+    // 표시하지 않을 컬럼 목록
+    const excludedColumns = ['날짜', '시가', '종가', '고가', '저가', '거래량', '전일종가'];
+    return csvData.headers.filter(header => !excludedColumns.includes(header));
   }, [csvData.headers]);
   
   // 코스피/코스닥 데이터 추출
@@ -864,7 +885,7 @@ export default function ETFCurrentTable() {
     '인터넷',
     '소프트웨어',
     '유통',
-    '음식료',
+    '소비재/음식료',
     '필수소비재',
     '전력기기',
     '인프라',
@@ -883,12 +904,17 @@ export default function ETFCurrentTable() {
   const allIndustries = Array.from(new Set([...industryOrder, ...Object.keys(sortedData)]));
   
   // industryOrder의 순서를 유지하면서 누락된 산업 그룹을 추가
-  const orderedIndustries = [...industryOrder];
+  const orderedIndustries = [...industryOrder].filter(industry => industry !== '기타');
   allIndustries.forEach(industry => {
-    if (!orderedIndustries.includes(industry)) {
+    if (!orderedIndustries.includes(industry) && industry !== '기타') {
       orderedIndustries.push(industry);
     }
   });
+  
+  // '기타' 섹터를 항상 마지막에 추가
+  if (allIndustries.includes('기타')) {
+    orderedIndustries.push('기타');
+  }
 
   // 디버깅: 각 산업 그룹별 종목 수 확인
   const industryCounts: Record<string, number> = {};
@@ -982,7 +1008,7 @@ export default function ETFCurrentTable() {
                       <th colSpan={filteredHeaders.length + 5} className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200" style={{ height: '42px' }}>
                         <div className="flex items-center">
                           <span className="ml-1 text-xs px-3 py-1.5 rounded-md bg-white text-gray-700 border border-gray-200 shadow-sm">
-                            {industry}
+                            {industry === '소비재/음식료' ? '소비재/음식료' : industry}
                           </span>
                           <span className={`ml-2 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`}>
                             {calculateIndustryAverage(industry, sortedData)}
@@ -1015,7 +1041,7 @@ export default function ETFCurrentTable() {
                               style={{ width: header === '종목명' ? '180px' : header === '티커' ? '60px' : header === '등락율' ? '50px' : '100px', height: '16px' }}
                             >
                               {isChangeColumn && numericValue! > 0 ? '+' : ''}
-                              {value}
+                              {isTickerColumn ? (value ? value.padStart(6, '0') : '') : value}
                             </td>
                           );
                         })}
@@ -1142,9 +1168,27 @@ export default function ETFCurrentTable() {
                             const ticker = row['티커'];
                             if (!ticker) return '-';
                             
-                            // 티커에 해당하는 대표종목 가져오기
-                            const stockList = etfStockList[ticker];
-                            if (!stockList || stockList.length === 0) return '-';
+                            // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
+                            const tickerVariations = [
+                              ticker,
+                              ticker.padStart(6, '0'),
+                              ticker.replace(/^0+/, '')
+                            ];
+                            
+                            // 모든 티커 변형에 대해 대표종목 검색
+                            let stockList = null;
+                            for (const variant of tickerVariations) {
+                              if (etfStockList[variant] && etfStockList[variant].length > 0) {
+                                stockList = etfStockList[variant];
+                                break;
+                              }
+                            }
+                            
+                            // 대표종목이 없으면 '-' 반환
+                            if (!stockList || stockList.length === 0) {
+                              console.log(`티커 ${ticker}의 대표종목 정보 없음`);
+                              return '-';
+                            }
                             
                             // 모든 대표종목 표시
                             return stockList.join(', ');

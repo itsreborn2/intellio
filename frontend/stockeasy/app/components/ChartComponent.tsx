@@ -18,7 +18,8 @@ import {
   CandlestickData,
   HistogramData,
   LineData,
-  TickMarkType
+  TickMarkType,
+  LineStyle
 } from 'lightweight-charts';
 import Papa from 'papaparse';
 
@@ -46,45 +47,55 @@ interface ExtendedCandleData {
 interface ChartProps {
   data: CandleData[];
   title?: string;
+  subtitle?: string; // 부제목 속성 추가
   height?: number;
   width?: string;
   showVolume?: boolean;
   marketType?: string; // 시장 구분 (KOSDAQ 또는 KOSPI)
   stockName?: string; // 종목명 추가
-  showMA20?: boolean; // 20일 이동평균선 표시 여부 - 사용하지 않음
+  showMA20?: boolean; // 20일 이동평균선 표시 여부
+  parentComponent?: string; // 부모 컴포넌트 식별자 추가
 }
 
 /**
  * 캔들스틱 차트 컴포넌트
  * @param data - 차트에 표시할 캔들 데이터 배열
  * @param title - 차트 제목 (선택 사항)
+ * @param subtitle - 차트 부제목 (선택 사항)
  * @param height - 차트 높이 (기본값: 400px)
  * @param width - 차트 너비 (기본값: '100%')
  * @param showVolume - 거래량 차트 표시 여부 (기본값: true)
  * @param marketType - 시장 구분 (기본값: undefined)
  * @param stockName - 종목명 (기본값: undefined)
- * @param showMA20 - 20일 이동평균선 표시 여부 (기본값: true) - 현재 사용하지 않음
+ * @param showMA20 - 20일 이동평균선 표시 여부 (기본값: true)
+ * @param parentComponent - 부모 컴포넌트 식별자 (기본값: undefined)
  */
 const ChartComponent: React.FC<ChartProps> = ({ 
   data, 
   title, 
+  subtitle, // 부제목 속성 추가
   height = 400, 
   width = '100%',
   showVolume = true,
   marketType,
   stockName,
-  showMA20 = true // 파라미터는 유지하되 사용하지 않음
+  showMA20 = true,
+  parentComponent
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
   const volumeSeriesRef = useRef<any>(null);
   const lineSeriesRef = useRef<any>(null); // 시장 지수 라인 시리즈 ref
-  const ma20SeriesRef = useRef<any>(null); // 참조용으로 유지
+  const ma20SeriesRef = useRef<any>(null); // 20일 이동평균선 시리즈 ref
   const [marketIndexData, setMarketIndexData] = useState<LineData<Time>[]>([]);
   const [isLoadingMarketIndex, setIsLoadingMarketIndex] = useState<boolean>(false);
   const [marketIndexError, setMarketIndexError] = useState<string | null>(null);
   const [marketIndexLoaded, setMarketIndexLoaded] = useState<boolean>(false);
+
+  // 실제로 20일선을 표시할지 여부 결정
+  // parentComponent가 지정되지 않은 경우(직접 사용되는 경우) 20일선을 표시하지 않음
+  const shouldShowMA20 = showMA20 && parentComponent !== undefined;
 
   // 시장 지수 데이터 가져오는 함수
   const fetchMarketIndexData = useCallback(async () => {
@@ -648,15 +659,6 @@ const ChartComponent: React.FC<ChartProps> = ({
       if (marketType && marketIndexData.length > 0) {
         console.log(`시장 지수 라인 시리즈 추가: ${marketType}, 데이터 ${marketIndexData.length}개`);
         
-        // 시장 지수 차트에도 localization 옵션 적용
-        chart.applyOptions({
-          localization: {
-            priceFormatter: (price: number) => {
-              return price.toLocaleString('ko-KR');
-            },
-          },
-        });
-        
         // 시장 구분에 따라 색상 설정
         const marketColor = marketType === 'KOSPI' ? '#2962FF' : '#00C853'; // KOSPI는 파란색, KOSDAQ은 녹색
         
@@ -693,6 +695,56 @@ const ChartComponent: React.FC<ChartProps> = ({
         console.log('시장 지수 라인 시리즈 추가 완료');
       }
 
+      // 20일 이동평균선 추가
+      if (shouldShowMA20 && uniqueCandleData.length > 0) {
+        console.log('20일 이동평균선 추가 중...');
+        
+        // 20일 이동평균선 데이터 계산
+        const ma20Data = calculateMA20(uniqueCandleData);
+        
+        if (ma20Data.length > 0) {
+          // 20일 이동평균선 시리즈 추가
+          const ma20Series = chart.addSeries(LineSeries, {
+            color: '#000080', // 남색(navy)
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            lastValueVisible: false, // 마지막 값 표시 비활성화
+            priceLineVisible: false,
+            title: '', // 타이틀 제거
+          });
+          
+          ma20Series.setData(ma20Data);
+          ma20SeriesRef.current = ma20Series;
+          
+          // 차트 좌측 상단에 MA20 텍스트 추가
+          const container = chartContainerRef.current;
+          if (container) {
+            // 기존 MA20 레전드가 있다면 제거
+            const existingLegend = container.querySelector('.ma20-legend');
+            if (existingLegend) {
+              container.removeChild(existingLegend);
+            }
+            
+            const legendDiv = document.createElement('div');
+            legendDiv.className = 'ma20-legend';
+            legendDiv.style.position = 'absolute';
+            legendDiv.style.left = '10px';
+            legendDiv.style.top = '10px';
+            legendDiv.style.zIndex = '3';
+            legendDiv.style.fontSize = '12px';
+            legendDiv.style.padding = '2px 5px';
+            legendDiv.style.borderRadius = '3px';
+            legendDiv.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+            legendDiv.innerHTML = '<span style="color: #000080; font-weight: bold;">MA20</span>';
+            container.appendChild(legendDiv);
+          }
+          
+          console.log('20일 이동평균선 추가 완료');
+        } else {
+          console.log('20일 이동평균선 데이터가 충분하지 않습니다.');
+        }
+      }
+
       try {
         chart.timeScale().fitContent();
       } catch (error) {
@@ -712,6 +764,15 @@ const ChartComponent: React.FC<ChartProps> = ({
           lineSeriesRef.current = null;
           ma20SeriesRef.current = null;
         }
+        
+        // 차트 컨테이너에서 MA20 레전드 제거
+        const container = chartContainerRef.current;
+        if (container) {
+          const legend = container.querySelector('.ma20-legend');
+          if (legend) {
+            container.removeChild(legend);
+          }
+        }
       };
     } catch (error) {
       console.error('차트 생성 중 오류 발생:', error);
@@ -720,6 +781,15 @@ const ChartComponent: React.FC<ChartProps> = ({
         if (chartRef.current) {
           chartRef.current.remove();
           chartRef.current = null;
+        }
+        
+        // 차트 컨테이너에서 MA20 레전드 제거
+        const container = chartContainerRef.current;
+        if (container) {
+          const legend = container.querySelector('.ma20-legend');
+          if (legend) {
+            container.removeChild(legend);
+          }
         }
       };
     }
@@ -754,6 +824,44 @@ const ChartComponent: React.FC<ChartProps> = ({
     return 0;
   };
 
+  // 20일 이동평균선 계산 함수
+  const calculateMA20 = (data: CandlestickData<Time>[]): LineData<Time>[] => {
+    if (!data || data.length === 0) return [];
+    
+    const period = 20;
+    const result: LineData<Time>[] = [];
+    
+    // 데이터가 충분하지 않은 경우에도 이동평균선을 계산하기 위한 방법
+    // 부족한 데이터는 첫 번째 데이터로 채움
+    for (let i = 0; i < data.length; i++) {
+      let sum = 0;
+      let count = 0;
+      
+      // 이전 20일 데이터 수집
+      for (let j = 0; j < period; j++) {
+        if (i - j >= 0) {
+          // 실제 데이터가 있는 경우
+          sum += data[i - j].close;
+          count++;
+        } else {
+          // 데이터가 부족한 경우 첫 번째 데이터로 대체
+          sum += data[0].close;
+          count++;
+        }
+      }
+      
+      // 평균 계산
+      const ma = sum / count;
+      
+      result.push({
+        time: data[i].time,
+        value: ma
+      });
+    }
+    
+    return result;
+  };
+
   return (
     <div style={{ position: 'relative', width, height: `${height}px` }}>
       <div 
@@ -766,6 +874,33 @@ const ChartComponent: React.FC<ChartProps> = ({
           overflow: 'hidden'
         }} 
       />
+      {title && (
+        <div 
+          style={{
+            position: 'absolute',
+            top: '5px',
+            left: '10px',
+            color: '#333',
+            fontSize: '14px',
+            fontWeight: 'bold',
+          }}
+        >
+          {title}
+        </div>
+      )}
+      {subtitle && (
+        <div 
+          style={{
+            position: 'absolute',
+            top: '25px',
+            left: '10px',
+            color: '#666',
+            fontSize: '12px',
+          }}
+        >
+          {subtitle}
+        </div>
+      )}
     </div>
   );
 };
