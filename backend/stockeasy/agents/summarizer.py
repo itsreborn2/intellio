@@ -8,12 +8,11 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from loguru import logger
 
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 from stockeasy.agents.base import BaseAgent
-from stockeasy.models.agent_io import AgentState, RetrievedMessage
+from stockeasy.models.agent_io import RetrievedTelegramMessage
 from stockeasy.prompts.telegram_prompts import format_telegram_messages
 from common.core.config import settings
 from common.services.agent_llm import get_llm_for_agent
@@ -43,52 +42,57 @@ class SummarizerAgent(BaseAgent):
             query = state.get("query", "")
             stock_code = state.get("stock_code")
             stock_name = state.get("stock_name")
-            classification = state.get("question_classification", {})
-            telegram_messages = state.get("telegram_messages", [])
-            report_data = state.get("report_data", [])
-            financial_data = state.get("financial_data", {})
-            industry_data = state.get("industry_data", [])
+            classification = state.get("question_classification", {}).get("classification", {})
+            agent_results = state.get("agent_results", {})
+
+            telegram_messages = agent_results.get("telegram_retriever", {}).get("data", [])
+            report_data = agent_results.get("report_analyzer", {}).get("data", [])
+            financial_data = agent_results.get("financial_analyzer", {}).get("data", {})
+            industry_data = agent_results.get("industry_analyzer", {}).get("data", [])
             
             # 통합된 지식이 있으면 사용
-            integrated_knowledge = state.get("integrated_knowledge")
+            integrated_knowledge = agent_results.get("knowledge_integrator", {}).get("data", {})
+            #integrated_knowledge = state.get("integrated_knowledge")
             
             if not query:
-                return {
-                    **state,
-                    "errors": state.get("errors", []) + [{
-                        "agent": self.get_name(),
-                        "error": "질문이 제공되지 않았습니다.",
-                        "type": "InvalidInputError",
-                        "timestamp": datetime.now()
-                    }],
-                    "processing_status": {
-                        **state.get("processing_status", {}),
-                        "summarizer": "error"
-                    }
-                }
+                state["errors"] = state.get("errors", []) + [{
+                    "agent": self.get_name(),
+                    "error": "질문이 제공되지 않았습니다.",
+                    "type": "InvalidInputError",
+                    "timestamp": datetime.now()
+                }]
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["summarizer"] = "error"
+                return state
             
-            if (not telegram_messages and not report_data and 
+            if ( (not telegram_messages or len(telegram_messages) == 0) and 
+                (not report_data or len(report_data)) == 0 and 
                 not financial_data and not industry_data and 
                 not integrated_knowledge):
-                return {
-                    **state,
-                    "errors": state.get("errors", []) + [{
-                        "agent": self.get_name(),
-                        "error": "요약할 정보가 없습니다.",
-                        "type": "InsufficientDataError",
-                        "timestamp": datetime.now()
-                    }],
-                    "processing_status": {
-                        **state.get("processing_status", {}),
-                        "summarizer": "error"
-                    }
-                }
-            
+                state["errors"] = state.get("errors", []) + [{
+                    "agent": self.get_name(),
+                    "error": "요약할 정보가 없습니다.",
+                    "type": "InsufficientDataError",
+                    "timestamp": datetime.now()
+                }]
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["summarizer"] = "error"
+                return state
+        except Exception as e:
+            logger.exception(f"정보 요약 중 오류 발생: {e}")
+            state["errors"] = state.get("errors", []) + [{
+                "agent": self.get_name(),
+                "error": str(e),
+                "type": type(e).__name__,
+                "timestamp": datetime.now()
+            }]
+
+        try:
             # 요약 프롬프트 생성
             prompt = self._create_prompt(
-                query, stock_code, stock_name, classification,
-                telegram_messages, report_data, financial_data, industry_data,
-                integrated_knowledge
+                query=query, stock_code=stock_code, stock_name=stock_name, classification=classification,
+                telegram_messages=telegram_messages, report_data=report_data, financial_data=financial_data, industry_data=industry_data,
+                integrated_knowledge=integrated_knowledge
             )
             
             # LLM으로 요약 생성
@@ -96,33 +100,23 @@ class SummarizerAgent(BaseAgent):
             summary = await chain.ainvoke({})
             
             # 상태 업데이트
-            return {
-                **state,
-                "summary": summary,
-                "processing_status": {
-                    **state.get("processing_status", {}),
-                    "summarizer": "completed"
-                }
-            }
+            state["summary"] = summary
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["summarizer"] = "completed"
             
+            return state
         except Exception as e:
-            logger.error(f"정보 요약 중 오류 발생: {e}", exc_info=True)
-            return {
-                **state,
-                "errors": state.get("errors", []) + [{
-                    "agent": self.get_name(),
-                    "error": str(e),
-                    "type": type(e).__name__,
-                    "timestamp": datetime.now()
-                }],
-                "processing_status": {
-                    **state.get("processing_status", {}),
-                    "summarizer": "error"
-                }
-            }
+            logger.exception(f"요약 프롬프트 생성 중 오류 발생: {e}")
+            state["errors"] = state.get("errors", []) + [{
+                "agent": self.get_name(),
+                "error": str(e),
+                "type": type(e).__name__,
+                "timestamp": datetime.now()
+            }]
+        
     
     def _create_prompt(self, query: str, stock_code: Optional[str], stock_name: Optional[str],
-                      classification: Dict[str, Any], telegram_messages: List[RetrievedMessage],
+                      classification: Dict[str, Any], telegram_messages: List[RetrievedTelegramMessage],
                       report_data: List[Dict[str, Any]], financial_data: Dict[str, Any],
                       industry_data: List[Dict[str, Any]], integrated_knowledge: Optional[Any]) -> ChatPromptTemplate:
         """요약을 위한 프롬프트 생성"""
@@ -134,9 +128,11 @@ class SummarizerAgent(BaseAgent):
 사용자 질문: {query}
 종목코드: {stock_code}
 종목명: {stock_name}
-질문 유형: {question_type}
-답변 수준: {answer_level}
+질문 의도: {primary_intent}
+질문 복잡도: {complexity}
+기대 답변 유형: {expected_answer_type}
 
+출처: 
 {sources_info}
 
 요약 전략:
@@ -162,15 +158,23 @@ class SummarizerAgent(BaseAgent):
 요약에는 불확실한 정보나 추가 확인이 필요한 부분을 명시하세요.
 """
         
+        # classification
+        # primary_intent: Literal["종목기본정보", "성과전망", "재무분석", "산업동향", "기타"] # 주요 질문 의도
+        # complexity: Literal["단순", "중간", "복합", "전문가급"]                      # 질문 복잡도
+        # expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형"]  # 기대하는 답변 유형
+
         # 질문 유형 및 답변 수준 매핑
-        question_types = ["종목기본정보", "전망", "재무분석", "산업동향", "기타"]
-        answer_levels = ["간단한답변", "긴설명요구", "종합적판단", "전문가분석"]
+        # question_types = ["종목기본정보", "전망", "재무분석", "산업동향", "기타"]
+        # answer_levels = ["간단한답변", "긴설명요구", "종합적판단", "전문가분석"]
         
-        question_type_idx = classification.get("질문주제", 4)
-        answer_level_idx = classification.get("답변수준", 1)
+        # question_type_idx = classification.get("질문주제", 4)
+        # answer_level_idx = classification.get("답변수준", 1)
         
-        question_type = question_types[question_type_idx] if 0 <= question_type_idx < len(question_types) else "기타"
-        answer_level = answer_levels[answer_level_idx] if 0 <= answer_level_idx < len(answer_levels) else "긴설명요구"
+        # question_type = question_types[question_type_idx] if 0 <= question_type_idx < len(question_types) else "기타"
+        # answer_level = answer_levels[answer_level_idx] if 0 <= answer_level_idx < len(answer_levels) else "긴설명요구"
+        primary_intent = classification.get("primary_intent", "기타")
+        complexity = classification.get("complexity", "중간")
+        expected_answer_type = classification.get("expected_answer_type", "사실형")
         
         # 소스 정보 형식화
         sources_info = ""
@@ -182,28 +186,45 @@ class SummarizerAgent(BaseAgent):
         
         # 기업 리포트
         if report_data:
+            analysis = report_data.get("analysis", {})
             sources_info += "기업 리포트:\n"
-            for report in report_data:
-                report_info = report.get("content", "")
-                report_source = report.get("source", "미상")
-                report_date = report.get("date", "날짜 미상")
-                sources_info += f"[출처: {report_source}, {report_date}]\n{report_info}\n\n"
+            if analysis:
+                # 전체 소스를 다 줄게 아니라, 기업리포트 에이전트가 출력한 결과만 전달.
+                # 아.. 인용처리가 애매해지네.
+                # 일단은 기업리포트 결과만 남겨보자.
+                sources_info += f" - 투자의견:\n{analysis.get('investment_opinions', '')}\n\n"
+                sources_info += f" - 최종결과:\n{analysis.get('opinion_summary', '')}\n\n"
+                sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
+            else:
+                searched_reports = report_data.get("searched_reports", [])
+                for report in searched_reports[:5]:
+                    report_info = report.get("content", "")
+                    report_source = report.get("source", "미상")
+                    report_date = report.get("published_date", "날짜 미상")
+                    report_page = f"report.get('page', '페이지 미상') page"
+                    sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
+
+                
+            
+
+
+            
         
-        # 재무 정보
-        if financial_data:
-            sources_info += "재무 정보:\n"
-            for key, value in financial_data.items():
-                sources_info += f"{key}: {value}\n"
-            sources_info += "\n"
+        # 재무 정보(일단 미구현. 재무분석 에이전트 추가 후에 풀것)
+        # if financial_data:
+        #     sources_info += "재무 정보:\n"
+        #     for key, value in financial_data.items():
+        #         sources_info += f"{key}: {value}\n"
+        #     sources_info += "\n"
         
-        # 산업 동향
-        if industry_data:
-            sources_info += "산업 동향:\n"
-            for item in industry_data:
-                industry_info = item.get("content", "")
-                industry_source = item.get("source", "미상")
-                industry_date = item.get("date", "날짜 미상")
-                sources_info += f"[출처: {industry_source}, {industry_date}]\n{industry_info}\n\n"
+        # 산업 동향(일단 미구현. 산업리포트 에이전트 추가 후에 풀것)
+        # if industry_data:
+        #     sources_info += "산업 동향:\n"
+        #     for item in industry_data:
+        #         industry_info = item.get("content", "")
+        #         industry_source = item.get("source", "미상")
+        #         industry_date = item.get("date", "날짜 미상")
+        #         sources_info += f"[출처: {industry_source}, {industry_date}]\n{industry_info}\n\n"
         
         # 통합된 지식
         if integrated_knowledge:
@@ -219,8 +240,9 @@ class SummarizerAgent(BaseAgent):
             query=query,
             stock_code=stock_code or "정보 없음",
             stock_name=stock_name or "정보 없음",
-            question_type=question_type,
-            answer_level=answer_level,
+            primary_intent=primary_intent,
+            complexity=complexity,
+            expected_answer_type=expected_answer_type,
             sources_info=sources_info
         )
 

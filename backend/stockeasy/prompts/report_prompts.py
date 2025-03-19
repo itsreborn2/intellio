@@ -34,6 +34,7 @@ REPORT_ANALYSIS_PROMPT = """
 사용자 질문: {query}
 종목명: {stock_name}
 종목코드: {stock_code}
+키워드: {keywords}
 
 기업리포트 내용:
 {report_contents}

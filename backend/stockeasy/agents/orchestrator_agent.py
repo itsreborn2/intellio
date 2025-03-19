@@ -122,7 +122,8 @@ class OrchestratorAgent:
             )
             
             # LLM 호출로 계획 수립
-            execution_plan = await self.llm.with_structured_output(ExecutionPlanModel,method="function_calling").ainvoke(
+            #execution_plan = await self.llm.with_structured_output(ExecutionPlanModel,method="function_calling").ainvoke(
+            execution_plan = await self.llm.with_structured_output(ExecutionPlanModel).ainvoke(
                 [HumanMessage(content=prompt)]
             )
             

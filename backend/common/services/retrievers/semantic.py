@@ -54,9 +54,12 @@ class SemanticRetriever(BaseRetriever):
             
             # Document 객체에 score 정보를 포함시킴
             documents = []
-            for doc, score in filtered_results:
+            score_list = []
+            for i, (doc, score) in enumerate(filtered_results):
                 # 기존 Document 객체의 속성을 복사하여 새로운 Document 생성
-                logger.info(f"score: {score}, min_score: {self.config.min_score}")
+                if i < 5:
+                    #logger.info(f"[{i}]score: {score}, min_score: {self.config.min_score}")
+                    score_list.append(score)
                 if score >= self.config.min_score:
                     new_doc = DocumentWithScore(
                         page_content=doc.page_content,
@@ -64,7 +67,9 @@ class SemanticRetriever(BaseRetriever):
                         score=score  # score 추가
                         )
                     documents.append(new_doc)
+
             logger.info(f"검색된 총 매치 수: {len(search_results)}, 최소 점수: {self.config.min_score}, 검색된 수: {len(documents)}")
+            logger.info(f"score_list: {score_list}")
             
             # 쿼리 분석 정보 추가
             query_analysis = {

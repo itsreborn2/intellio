@@ -67,6 +67,7 @@ OPTIMIZED_KNOWLEDGE_INTEGRATOR_PROMPT = """
 사용자 질문: {query}
 종목명: {stock_name}
 종목코드: {stock_code}
+keyword: {keywords}
 
 수집된 정보:
 {collected_information}
@@ -91,6 +92,7 @@ def format_knowledge_integrator_prompt(
     query: str,
     stock_name: str = None,
     stock_code: str = None,
+    keywords: str = None,
     telegram_results: str = None,
     report_results: str = None,
     financial_results: str = None,
@@ -141,5 +143,6 @@ def format_knowledge_integrator_prompt(
         query=query,
         stock_name=stock_name or "알 수 없음",
         stock_code=stock_code or "알 수 없음",
+        keywords=keywords or "",
         collected_information=collected_information.strip()
     ) 

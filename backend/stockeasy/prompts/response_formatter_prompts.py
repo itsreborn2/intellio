@@ -93,7 +93,7 @@ def format_response_formatter_prompt(
     stock_code: str = None,
     integrated_response: str = None,
     core_insights: Union[Dict[str, Any], List[str]] = None,
-    confidence_assessment: dict = None,
+    confidence_assessment: Union[Dict[str, Any], List[str]] = None,
     uncertain_areas: list = None
 ) -> str:
     """
@@ -105,7 +105,7 @@ def format_response_formatter_prompt(
         stock_code: 종목코드
         integrated_response: 통합된 응답
         core_insights: 핵심 인사이트 (딕셔너리 또는 리스트)
-        confidence_assessment: 신뢰도 평가
+        confidence_assessment: 신뢰도 평가 (딕셔너리 또는 리스트)
         uncertain_areas: 불확실한 영역
         
     Returns:
@@ -126,8 +126,14 @@ def format_response_formatter_prompt(
     # 신뢰도 평가 포맷팅
     confidence_assessment_str = ""
     if confidence_assessment:
-        for key, value in confidence_assessment.items():
-            confidence_assessment_str += f"- {key}: {value}\n"
+        if isinstance(confidence_assessment, list):
+            for i, assessment in enumerate(confidence_assessment, 1):
+                confidence_assessment_str += f"- 평가 {i}: {assessment}\n"
+        elif isinstance(confidence_assessment, dict):
+            for key, value in confidence_assessment.items():
+                confidence_assessment_str += f"- {key}: {value}\n"
+        else:
+            confidence_assessment_str = str(confidence_assessment)
     
     # 불확실 영역 포맷팅
     uncertain_areas_str = ""
@@ -139,7 +145,7 @@ def format_response_formatter_prompt(
         query=query,
         stock_name=stock_name or "알 수 없음",
         stock_code=stock_code or "알 수 없음",
-        integrated_response=integrated_response or "통합된 응답이 없습니다.",
+        integrated_response=integrated_response or "최종 요약 응답이 없습니다.",
         core_insights=core_insights_str or "핵심 인사이트가 없습니다.",
         confidence_assessment=confidence_assessment_str or "신뢰도 평가가 없습니다.",
         uncertain_areas=uncertain_areas_str or "불확실한 영역이 없습니다."

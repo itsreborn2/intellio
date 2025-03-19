@@ -10,6 +10,7 @@ import json
 import asyncio
 import hashlib
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from loguru import logger
 from typing import Dict, List, Any, Optional, Set, cast
 
@@ -25,7 +26,7 @@ from stockeasy.services.telegram.embedding import TelegramEmbeddingService
 from common.services.vector_store_manager import VectorStoreManager
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import RetrievalResult
-from stockeasy.models.agent_io import RetrievedData, RetrievedMessage
+from stockeasy.models.agent_io import RetrievedAllAgentData, RetrievedTelegramMessage
 
 
 class TelegramRetrieverAgent:
@@ -95,7 +96,7 @@ class TelegramRetrieverAgent:
             search_query = self._make_search_query(query, stock_code, stock_name, classification, sector)
             
             # 메시지 검색 실행
-            messages = await self._search_messages(
+            messages:List[RetrievedTelegramMessage] = await self._search_messages(
                 search_query, 
                 message_count, 
                 threshold
@@ -126,8 +127,8 @@ class TelegramRetrieverAgent:
                 # 타입 주석을 사용한 데이터 할당
                 if "retrieved_data" not in state:
                     state["retrieved_data"] = {}
-                retrieved_data = cast(RetrievedData, state["retrieved_data"])
-                telegram_messages: List[RetrievedMessage] = []
+                retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
+                telegram_messages: List[RetrievedTelegramMessage] = []
                 retrieved_data["telegram_messages"] = telegram_messages
                 
                 state["processing_status"] = state.get("processing_status", {})
@@ -141,7 +142,7 @@ class TelegramRetrieverAgent:
                     "duration": duration,
                     "status": "completed_no_data",
                     "error": None,
-                    "model_name": self.llm.model_name
+                    "model_name": self.model_name
                 }
                 
                 logger.info(f"TelegramRetrieverAgent completed in {duration:.2f} seconds, found 0 messages")
@@ -168,8 +169,8 @@ class TelegramRetrieverAgent:
             # 타입 주석을 사용한 데이터 할당
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedData, state["retrieved_data"])
-            telegram_messages: List[RetrievedMessage] = messages
+            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
+            telegram_messages: List[RetrievedTelegramMessage] = messages
             retrieved_data["telegram_messages"] = telegram_messages
             
             state["processing_status"] = state.get("processing_status", {})
@@ -183,7 +184,7 @@ class TelegramRetrieverAgent:
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.llm.model_name
+                "model_name": self.model_name
             }
             
             logger.info(f"TelegramRetrieverAgent completed in {duration:.2f} seconds, found {len(messages)} messages")
@@ -207,8 +208,8 @@ class TelegramRetrieverAgent:
             # 타입 주석을 사용한 데이터 할당
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedData, state["retrieved_data"])
-            telegram_messages: List[RetrievedMessage] = []
+            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
+            telegram_messages: List[RetrievedTelegramMessage] = []
             retrieved_data["telegram_messages"] = telegram_messages
             
             state["processing_status"] = state.get("processing_status", {})
@@ -247,13 +248,13 @@ class TelegramRetrieverAgent:
         
         # 복잡도에 따른 임계값 설정
         if complexity == "단순":
-            return 0.7  # 단순 질문일수록 높은 임계값 (정확한 결과 필요)
+            return 0.6  # 단순 질문일수록 높은 임계값 (정확한 결과 필요)
         elif complexity == "중간":
-            return 0.6
+            return 0.45
         elif complexity == "복합":
-            return 0.5
+            return 0.3
         else:  # "전문가급"
-            return 0.4  # 복잡한 질문일수록 낮은 임계값 (폭넓은 결과 수집)
+            return 0.23  # 복잡한 질문일수록 낮은 임계값 (폭넓은 결과 수집)
     
     def _get_message_count(self, classification: Dict[str, Any]) -> int:
         """
@@ -332,26 +333,25 @@ class TelegramRetrieverAgent:
             
         return False
     
-    def _calculate_time_weight(self, created_at_str: str) -> float:
+    def _calculate_time_weight(self, created_at: datetime) -> float:
         """
         메시지 생성 시간 기반의 가중치를 계산합니다.
         
         Args:
-            created_at_str: 메시지 생성 시간 문자열 (ISO 형식)
+            created_at: 메시지 생성 시간 (datetime 객체)
             
         Returns:
             시간 기반 가중치 (0.4 ~ 1.0)
         """
         try:
-            # 시간 문자열을 datetime 객체로 변환
-            if created_at_str:
-                created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-            else:
-                # 시간 정보가 없는 경우 1개월 전으로 가정
-                created_at = datetime.now(timezone.utc) - timedelta(days=30)
+            seoul_tz = timezone(timedelta(hours=9), 'Asia/Seoul')
+        
+            # naive datetime인 경우 서버 로컬 시간(Asia/Seoul)으로 간주
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=ZoneInfo("Asia/Seoul"))
                 
-            # 현재 시간과의 차이 계산
-            now = datetime.now(timezone.utc)
+            # now도 timezone 정보를 포함하도록 수정
+            now = datetime.now(seoul_tz)
             delta = now - created_at
             
             # 시간 차이에 따른 가중치 설정
@@ -433,7 +433,7 @@ class TelegramRetrieverAgent:
         return enhanced_query
     
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
-    async def _search_messages(self, search_query: str, k: int, threshold: float) -> List[Dict[str, Any]]:
+    async def _search_messages(self, search_query: str, k: int, threshold: float) -> List[RetrievedTelegramMessage]:
         """
         텔레그램 메시지 검색을 수행합니다.
         
@@ -499,45 +499,45 @@ class TelegramRetrieverAgent:
             
             for doc in result.documents:
                 doc_metadata = doc.metadata
-                content = doc_metadata.get("text", "")
+                content = doc.page_content# doc_metadata.get("text", "")
                 
                 # 내용이 없거나 너무 짧은 메시지 제외
-                if not content or len(content) < 10:
+                if not content or len(content) < 20:
                     continue
-                    
+                
+                normalized_content = re.sub(r'\s+', ' ', content).strip().lower()
                 # 중복 메시지 확인
-                if self._is_duplicate(content, seen_messages):
+                if self._is_duplicate(normalized_content, seen_messages):
                     continue
+
+                
                     
-                seen_messages.add(self._get_message_hash(content))
+                seen_messages.add(self._get_message_hash(normalized_content))
                 
                 # 메시지 중요도 계산
                 importance_score = self._calculate_message_importance(content)
                 
                 # 시간 기반 가중치 계산
-                time_weight = self._calculate_time_weight(
-                    doc_metadata.get("message_created_at", datetime.now().isoformat())
-                )
+                message_created_at = datetime.fromisoformat(doc.metadata["message_created_at"])
+                time_weight = self._calculate_time_weight(message_created_at)
                 
                 # 최종 점수 = 유사도 * 중요도 * 시간 가중치
-                final_score = doc.score * importance_score * time_weight
-                
+                #final_score = doc.score * importance_score * time_weight
+                final_score = (doc.score * 0.5) + (importance_score * 0.3) + (time_weight * 0.2)
                 # 메시지 데이터 구성
-                message = {
+                message:RetrievedTelegramMessage = {
                     "content": content,
                     "channel_name": doc_metadata.get("channel_name", "알 수 없음"),
-                    "message_created_at": doc_metadata.get("message_created_at"),
-                    "similarity": doc.score,
-                    "importance": importance_score,
-                    "time_weight": time_weight,
+                    "message_created_at": message_created_at,
                     "final_score": final_score,
-                    "id": doc_metadata.get("id", "")
+                    "metadata": doc_metadata
                 }
                 
                 processed_messages.append(message)
             
             # 최종 점수 기준으로 정렬하고 상위 k개 선택
             processed_messages.sort(key=lambda x: x["final_score"], reverse=True)
+            logger.info(f"최종 점수 기준으로 정렬된 메시지 수: {len(processed_messages)}")
             result_messages = processed_messages[:k]
             
             # 점수 분포 정규화

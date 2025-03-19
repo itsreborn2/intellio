@@ -7,6 +7,8 @@
 import os
 import sys
 
+
+
 # 상위 디렉토리를 sys.path에 추가하여 모듈을 import할 수 있게 함
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -24,6 +26,8 @@ os.environ["LANGCHAIN_TRACING"] = "true"
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "stockeasy_multiagent"
 # LANGSMITH_API_KEY는 .env 파일에서 로드됨
+
+from stockeasy.models.agent_io import QuestionAnalysisResult
 
 # 로그 시간을 한국 시간으로 설정
 logger.remove()  # 기존 핸들러 제거
@@ -51,11 +55,11 @@ async def test_simple_query():
     _db = await get_db_session()
     rag_service = StockRAGService(_db)
     
-    query = "삼성전자 최근 실적은 어떤가요?"
-    stock_code = "005930"
-    stock_name = "삼성전자"
+    query = "파마리서치 좋나? 사까?"
+    stock_code = "214450"
+    stock_name = "파마리서치"
     
-    logger.info(f"테스트 쿼리: {query}")
+    logger.info(f"질문: {query}")
     
     result = await rag_service.analyze_stock(
         query=query,
@@ -63,10 +67,24 @@ async def test_simple_query():
         stock_name=stock_name
     )
     
-    logger.info(f"분류 결과: {result.get('classification')}")
-    logger.info(f"요약 결과: {result.get('summary')}")
+    # result의 모든 키값들 출력
+    # print(f"# result 키값 목록:")
+    # for key in result.keys():
+    #     print(f" - {key}: {type(result[key])}")
+    # print(f"-"*70)
+
+    # print(f"="*70)
+    # print(f"# 질문: {query}")
+    # print(f"-"*70)
+    # question_classification:QuestionAnalysisResult = result.get('question_classification', {})
+    # classification = question_classification.get('classification', {})
+    # data_requirements = question_classification.get("data_requirements", {})
+    # print(f"분류 결과: {classification}")
+    # print(f"데이터 요구사항: {data_requirements}")
+    # print(f"-"*70)
+    # print(f"## 응답: {result.get('formatted_response')}")
     
-    return result
+    return query, result
 
 
 async def test_complex_query():
@@ -76,9 +94,16 @@ async def test_complex_query():
     
     query = "NAND 반도체 시장 전망과 관련해 삼성전자의 경쟁력은 어떤가요?"
     #query = "HBM 시장 전망과 관련해 삼성전자의 경쟁력은?"
-    
-    stock_code = "005930"
-    stock_name = "삼성전자"
+    # stock_code = "005930"
+    # stock_name = "삼성전자"
+    #query = "러시아-우크라이나 전쟁의 종전으로 인해 방산업체들의 수익성을 분석해봐"
+    query = "최근 실적이 어닝 서프가 나온 원인을 알려줘"
+    stock_code = "012450"
+    stock_name = "한화에어로스페이스"
+
+    query = "효성중공업을 사고 싶은데, 건설부문이 마음에 걸리네. 니 생각은 어때?"
+    stock_code = "298040"
+    stock_name = "효성중공업"
     
     logger.info(f"테스트 쿼리: {query}")
     
@@ -88,8 +113,8 @@ async def test_complex_query():
         stock_name=stock_name
     )
     
-    logger.info(f"분류 결과: {result.get('classification')}")
-    logger.info(f"요약 결과: {result.get('summary')}")
+    #logger.info(f"분류 결과: {result.get('classification')}")
+    #logger.info(f"요약 결과: {result.get('summary')}")
     
     # 트레이스 정보 확인
     if hasattr(rag_service.graph, 'memory_saver'):
@@ -98,7 +123,10 @@ async def test_complex_query():
             thread_ids = list(rag_service.graph.memory_saver.storage.keys())
             logger.info(f"저장된 스레드 ID 목록: {thread_ids}")
     
-    return result
+    # result의 모든 키값들 출력
+    
+    
+    return query, result
 
 
 async def test_no_data_query():
@@ -121,7 +149,7 @@ async def test_no_data_query():
     logger.info(f"분류 결과: {result.get('classification')}")
     logger.info(f"요약 결과: {result.get('summary')}")
     
-    return result
+    return query, result
 
 
 async def test_without_stock_info():
@@ -140,7 +168,7 @@ async def test_without_stock_info():
     logger.info(f"분류 결과: {result.get('classification')}")
     logger.info(f"요약 결과: {result.get('summary')}")
     
-    return result
+    return query, result
 
 
 async def main():
@@ -148,20 +176,69 @@ async def main():
     logger.info("=== Stockeasy 멀티에이전트 시스템 테스트 시작 ===")
     
     try:
+        result1 = None
+        result2 = None
+        result3 = None
+        result4 = None
+        query1 = None
+        query2 = None
+        query3 = None
+        query4 = None
+        
         # 테스트 케이스 실행
         logger.info("\n=== 테스트 1: 간단한 쿼리 ===")
-        result1 = await test_simple_query()
+        query1, result1 = await test_simple_query()
         
-        #logger.info("\n=== 테스트 2: 복잡한 쿼리 ===")
-        #result2 = await test_complex_query()
+        logger.info("\n=== 테스트 2: 복잡한 쿼리 ===")
+        #query2, result2 = await test_complex_query()
         
         #logger.info("\n=== 테스트 3: 데이터 없는 쿼리 ===")
-        #result3 = await test_no_data_query()
+        #query3, result3 = await test_no_data_query()
         
         #logger.info("\n=== 테스트 4: 종목 정보 없는 쿼리 ===")
-        #result4 = await test_without_stock_info()
+        #query4,result4 = await test_without_stock_info()
         
         logger.info("=== 테스트 완료 ===")
+
+        query_result_pairs = [
+            (query1, result1),
+            (query2, result2),
+            (query3, result3),
+            (query4, result4)
+        ]
+# # result 키값 목록:
+#  - query: <class 'str'>
+#  - stock_code: <class 'str'>
+#  - stock_name: <class 'str'>
+#  - session_id: <class 'str'>
+#  - user_context: <class 'dict'>
+#  - conversation_history: <class 'list'>
+#  - question_analysis: <class 'dict'>
+#  - execution_plan: <class 'dict'>
+#  - agent_results: <class 'dict'>
+#  - retrieved_data: <class 'dict'>
+#  - summary: <class 'str'>
+#  - formatted_response: <class 'str'>
+#  - errors: <class 'list'>
+#  - metrics: <class 'dict'>
+#  - processing_status: <class 'dict'>
+        for query, result in query_result_pairs:
+            if result is None:
+                continue
+
+            print(f"*"*70)
+            print(f"## 질문: {query}")
+            print(f"-"*70)
+            question_classification:QuestionAnalysisResult = result.get('question_analysis', {})
+            classification = question_classification.get('classification', {})
+            data_requirements = question_classification.get("data_requirements", {})
+            # classification의 각 키값이 True인것만 출력
+            data_on = {k: v for k, v in data_requirements.items() if v}
+            print(f"* 분류 결과: {classification}")
+            print(f"* 데이터 요구사항: {data_on}")
+            print(f"-"*70)
+            #print(f"### 응답: \n{result.get('formatted_response')}")
+            print(f"\n{result.get('formatted_response')}")
         
         # 결과 저장 (선택 사항)
         # save_results({

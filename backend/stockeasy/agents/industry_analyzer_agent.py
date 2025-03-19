@@ -15,7 +15,7 @@ from langchain.prompts import PromptTemplate
 from stockeasy.prompts.industry_prompts import INDUSTRY_ANALYSIS_PROMPT
 # from stockeasy.services.industry.industry_data_service import IndustryDataService
 # from stockeasy.services.stock.stock_info_service import StockInfoService
-from stockeasy.models.agent_io import RetrievedData, IndustryData
+from stockeasy.models.agent_io import RetrievedAllAgentData, IndustryData
 from common.services.agent_llm import get_llm_for_agent
 
 class IndustryAnalyzerAgent:
@@ -83,18 +83,19 @@ class IndustryAnalyzerAgent:
             
             # 산업/섹터 정보가 없는 경우 조회
             if not sector and stock_name:
-                try:
-                    stock_info = await self.stock_service.get_stock_by_name(stock_name)
-                    if stock_info and "sector" in stock_info:
-                        sector = stock_info["sector"]
-                        logger.info(f"Retrieved sector '{sector}' for {stock_name}")
-                    else:
-                        # 임시 더미 데이터 사용
-                        sector = self._get_dummy_sector(stock_name)
-                        logger.info(f"Using dummy sector '{sector}' for {stock_name}")
-                except Exception as e:
-                    logger.error(f"Error retrieving sector info: {str(e)}")
-                    sector = self._get_dummy_sector(stock_name)
+                logger.info(f"Retrieving sector info for {stock_name}, no sector provided")
+                # try:
+                #     stock_info = await self.stock_service.get_stock_by_name(stock_name)
+                #     if stock_info and "sector" in stock_info:
+                #         sector = stock_info["sector"]
+                #         logger.info(f"Retrieved sector '{sector}' for {stock_name}")
+                #     else:
+                #         # 임시 더미 데이터 사용
+                #         sector = self._get_dummy_sector(stock_name)
+                #         logger.info(f"Using dummy sector '{sector}' for {stock_name}")
+                # except Exception as e:
+                #     logger.error(f"Error retrieving sector info: {str(e)}")
+                #     sector = self._get_dummy_sector(stock_name)
             
             # 산업 데이터 조회
             try:
@@ -102,7 +103,8 @@ class IndustryAnalyzerAgent:
                 # industry_data = await self.industry_service.get_industry_data(sector)
                 
                 # 임시 샘플 데이터 사용
-                industry_data_raw = self._get_dummy_industry_data(stock_name, sector)
+                #industry_data_raw = self._get_dummy_industry_data(stock_name, sector)
+                industry_data_raw = None
                 
                 if not industry_data_raw:
                     logger.warning(f"No industry data found for sector: {sector}")
@@ -128,7 +130,7 @@ class IndustryAnalyzerAgent:
                     # 타입 주석을 사용한 데이터 할당
                     if "retrieved_data" not in state:
                         state["retrieved_data"] = {}
-                    retrieved_data = cast(RetrievedData, state["retrieved_data"])
+                    retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
                     industry_data_result: List[IndustryData] = []
                     retrieved_data["industry"] = industry_data_result
                     
@@ -154,6 +156,7 @@ class IndustryAnalyzerAgent:
                     industry_data_raw, 
                     query,
                     sector,
+                    stock_code,
                     stock_name,
                     classification,
                     detail_level
@@ -183,7 +186,7 @@ class IndustryAnalyzerAgent:
                 # 타입 주석을 사용한 데이터 할당
                 if "retrieved_data" not in state:
                     state["retrieved_data"] = {}
-                retrieved_data = cast(RetrievedData, state["retrieved_data"])
+                retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
                 industry_data_result: List[IndustryData] = [{
                     "raw_data": industry_data_raw,
                     "analysis": analysis_results
@@ -225,7 +228,7 @@ class IndustryAnalyzerAgent:
                 # 타입 주석을 사용한 데이터 할당
                 if "retrieved_data" not in state:
                     state["retrieved_data"] = {}
-                retrieved_data = cast(RetrievedData, state["retrieved_data"])
+                retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
                 industry_data_result: List[IndustryData] = []
                 retrieved_data["industry"] = industry_data_result
                 
@@ -252,7 +255,7 @@ class IndustryAnalyzerAgent:
             # 타입 주석을 사용한 데이터 할당
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedData, state["retrieved_data"])
+            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
             industry_data_result: List[IndustryData] = []
             retrieved_data["industry"] = industry_data_result
             
@@ -355,7 +358,8 @@ class IndustryAnalyzerAgent:
     async def _analyze_industry_data(self, 
                                     industry_data: List[Dict[str, Any]],
                                     query: str,
-                                    sector: str,
+                                    sector_name: str,
+                                    stock_code: str,
                                     stock_name: str,
                                     classification: Dict[str, Any],
                                     detail_level: str) -> Dict[str, Any]:
@@ -365,7 +369,8 @@ class IndustryAnalyzerAgent:
         Args:
             industry_data: 산업 데이터
             query: 사용자 쿼리
-            sector: 산업/섹터
+            sector_name: 산업/섹터명
+            stock_code: 종목코드
             stock_name: 종목명
             classification: 질문 분류 정보
             detail_level: 분석 세부 수준
@@ -377,9 +382,9 @@ class IndustryAnalyzerAgent:
             # 간단한 분석일 경우
             if detail_level == "간단" or classification.get("complexity", "") == "단순":
                 return {
-                    "summary": f"{sector} 산업 분석",
+                    "summary": f"{sector_name} 산업 분석",
                     "highlights": [
-                        f"{sector} 산업은 2024년 상반기 성장세를 보이고 있음",
+                        f"{sector_name} 산업은 2024년 상반기 성장세를 보이고 있음",
                         f"{stock_name}이 속한 세부 분야는 전년 대비 12% 성장 예상",
                         "기술 혁신과 규제 환경 변화가 주요 성장 동력",
                         "디지털 전환 가속화와 친환경 기술 투자 확대가 주요 트렌드"
@@ -395,7 +400,7 @@ class IndustryAnalyzerAgent:
             # 프롬프트 생성
             prompt = PromptTemplate(
                 template=INDUSTRY_ANALYSIS_PROMPT,
-                input_variables=["industry_data", "query", "stock_name", "sector", "primary_intent"]
+                input_variables=["industry_data", "query", "stock_name", "stock_code", "sector", "classification"]
             )
             
             # JSON 파서 생성
@@ -408,8 +413,9 @@ class IndustryAnalyzerAgent:
                 "industry_data": industry_data,
                 "query": query,
                 "stock_name": stock_name,
-                "sector": sector,
-                "primary_intent": classification.get("primary_intent", "일반")
+                "stock_code": stock_code,
+                "sector": sector_name,
+                "classification": classification
             })
             
             return analysis

@@ -27,11 +27,11 @@ from common.services.vector_store_manager import VectorStoreManager
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import RetrievalResult
 from common.utils.util import async_retry
-from stockeasy.models.agent_io import RetrievedData, ReportData
+from stockeasy.models.agent_io import RetrievedAllAgentData, ReportData
 from langchain_core.messages import AIMessage
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
 
-def format_report_contents(reports: List[Dict[str, Any]]) -> str:
+def format_report_contents(reports: List[ReportData]) -> str:
     """
     리포트 내용을 문자열로 형식화합니다.
     
@@ -41,12 +41,23 @@ def format_report_contents(reports: List[Dict[str, Any]]) -> str:
     Returns:
         형식화된 리포트 내용 문자열
     """
+    # title: str                      # 제목
+    # publish_date: datetime          # 발행일
+    # author: str                     # 작성자/증권사
+    # content: str                    # 내용
+    # stock_name: str                 # 종목명
+    # stock_code: str                 # 종목코드
+    # score: float                    # 유사도 점수
+    # analysis: Dict[str, Any]        # 추가 분석 정보
+    # page: int                       # 페이지 번호
+    # source: str                     # 출처
+    # sector_name: str                # 산업명    
     formatted = ""
     for i, report in enumerate(reports):
         formatted += f"\n--- 리포트 {i+1} ---\n"
         formatted += f"제목: {report.get('title', '제목 없음')}\n"
         formatted += f"출처: {report.get('source', '미상')}\n"
-        formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
+        formatted += f"날짜: {report.get('publish_date', '날짜 정보 없음')}\n"
         formatted += f"내용:\n{report.get('content', '내용 없음')}\n"  # 내용 일부만 포함
         
     return formatted
@@ -101,11 +112,13 @@ class ReportAnalyzerAgent:
             
             logger.info(f"ReportAnalyzerAgent processing query: {query}")
             logger.info(f"Classification data: {classification}")
-            logger.info(f"State keys: {state.keys()}")
+            #logger.info(f"State keys: {state.keys()}")
             logger.info(f"Entities: {entities}")
-            logger.info(f"Data requirements: {data_requirements}")
+            #logger.info(f"Data requirements: {data_requirements}")
+            #logger.info(f"stock_code: {state.get('stock_code')}")
+            #logger.info(f"type(state): {type(state)}")
             
-            # 검색 쿼리 생성 - question_classification 활용
+            # 벡터DB 검색 쿼리 생성 - question_classification 활용
             search_query = self._make_search_query(query, stock_code, stock_name, classification, state)
             
             # 검색 매개변수 설정 - 세부 의도와 복잡성에 따라 조정
@@ -114,7 +127,7 @@ class ReportAnalyzerAgent:
             metadata_filter = self._create_metadata_filter(stock_code, stock_name, classification, state)
             
             # 기업리포트 검색
-            reports = await self._search_reports(
+            reports:List[ReportData] = await self._search_reports(
                 search_query, 
                 k, 
                 threshold, 
@@ -148,7 +161,7 @@ class ReportAnalyzerAgent:
                 # 타입 주석을 사용한 데이터 할당
                 if "retrieved_data" not in state:
                     state["retrieved_data"] = {}
-                retrieved_data = cast(RetrievedData, state["retrieved_data"])
+                retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
                 reports: List[ReportData] = []
                 retrieved_data["reports"] = reports
                 
@@ -171,7 +184,7 @@ class ReportAnalyzerAgent:
                 return state
             
             # 검색 결과 가공
-            processed_reports = self._process_reports(reports)
+            processed_reports:List[ReportData] = self._process_reports(reports)
             
             # 상세한 분석이 필요한 경우 (primary_intent와 complexity 기반 판단)
             primary_intent = classification.get("primary_intent", "")
@@ -183,9 +196,10 @@ class ReportAnalyzerAgent:
 
             # 성과전망, 복합, 전문가급 질문이 아니면. 그냥 벡터 DB 검색결과를 리턴함.
             need_detailed_analysis = (
-                primary_intent == "성과전망" or 
+                primary_intent in ["성과전망", "재무분석", "산업동향"] or 
                 complexity in ["복합", "전문가급"]
             )
+            logger.info(f"need_detailed_analysis: {need_detailed_analysis}")
             
             if need_detailed_analysis:
                 # 리포트 내용에서 핵심 정보 추출 및 분석
@@ -194,7 +208,8 @@ class ReportAnalyzerAgent:
                         processed_reports, 
                         query, 
                         stock_code, 
-                        stock_name
+                        stock_name,
+                        state
                     )
                     
                     # 핵심 정보가 추출된 경우, 이를 포함
@@ -234,7 +249,7 @@ class ReportAnalyzerAgent:
             # state["retrieved_data"]["reports"] = processed_reports
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedData, state["retrieved_data"])
+            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
             reports: List[ReportData] = processed_reports
             retrieved_data["reports"] = reports
 
@@ -278,7 +293,7 @@ class ReportAnalyzerAgent:
             # 타입 주석을 사용한 데이터 할당
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedData, state["retrieved_data"])
+            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
             reports: List[ReportData] = []
             retrieved_data["reports"] = reports
             
@@ -341,8 +356,10 @@ class ReportAnalyzerAgent:
             search_query += ", 산업 동향 시장 구조 경쟁사"
         
         # 키워드 추가
-        if "keywords" in state and state["keywords"]:
-            important_keywords = " ".join(state["keywords"][:3])  # 상위 3개 키워드 사용
+        qa = state.get("question_analysis", {})
+        keywords = qa.get("keywords", [])
+        if keywords:
+            important_keywords = " ".join(keywords[:3])  # 상위 3개 키워드 사용
             search_query += f" {important_keywords}"
         
         return search_query
@@ -389,7 +406,7 @@ class ReportAnalyzerAgent:
         elif complexity == "복합":
             return 0.3
         else:  # "전문가급"
-            return 0.25
+            return 0.23
     
     def _create_metadata_filter(self, stock_code: Optional[str], stock_name: Optional[str],
                               classification: Dict[str, Any], state: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -516,7 +533,7 @@ class ReportAnalyzerAgent:
     
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
     async def _search_reports(self, query: str, k: int = 5, threshold: float = 0.3,
-                             metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+                             metadata_filter: Optional[Dict[str, Any]] = None) -> List[ReportData]:
         """
         파인콘 DB에서 기업리포트 검색
         
@@ -558,10 +575,12 @@ class ReportAnalyzerAgent:
                 content = doc.page_content
                 metadata = doc.metadata
                 score = doc.score or 0.0
-                logger.info(f"문서 {i} 점수: {score}")
-                logger.info(f"문서 {i} 내용({len(content)}): {content}")
-                logger.info(f"문서 {i} 메타데이터: {metadata}")
-                logger.info(f"---------------------------------------------------------------")
+                if i < 2:
+                    short_content = (content[:50] if len(content) > 50 else content).strip()
+                    logger.info(f"문서 {i} 점수: {score:.3f}, 내용({len(content)}): {short_content}")
+                    short_metadata = {k: v for k, v in metadata.items() if k in ["stock_code", "stock_name", "sector_code", "sector_name", "document_date", "report_provider", "file_name", "page", "category"]}
+                    logger.info(f"문서 {i} 메타데이터: {short_metadata}")
+                    logger.info(f"---------------------------------------------------------------")
                 
                 # 내용 기반 중복 제거 (문서 일부가 중복되는 경우가 많음)
                 content_hash = hash(content[:100])  # 앞부분을 기준으로
@@ -570,18 +589,18 @@ class ReportAnalyzerAgent:
                 seen_contents.add(content_hash)
                 
                 # 결과 정보 구성
-                report_info = {
+                report_info:ReportData = {
                     "content": content,
                     "score": score,
                     "source": metadata.get("report_provider", "미상"),
-                    "date": self._format_date(metadata.get("document_date", "")),
+                    "publish_date": self._format_date(metadata.get("document_date", "")),
                     "file_name": metadata.get("file_name", ""),
                     "page": metadata.get("page", 0),
                     "stock_code": metadata.get("stock_code", ""),
                     "stock_name": metadata.get("stock_name", ""),
                     "sector_name": metadata.get("sector_name", ""),
-                    "heading": metadata.get("category", "")
-                }
+
+                }             
                 
                 results.append(report_info)
             
@@ -616,7 +635,7 @@ class ReportAnalyzerAgent:
         except:
             return date_str
     
-    def _process_reports(self, reports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _process_reports(self, reports: List[ReportData]) -> List[ReportData]:
         """
         검색된 리포트 처리
         
@@ -684,9 +703,10 @@ class ReportAnalyzerAgent:
         # 첫 60자를 제목으로 사용
         return content[:60] + "..." if len(content) > 60 else content
     
-    async def _generate_report_analysis(self, reports: List[Dict[str, Any]], query: str, 
+    async def _generate_report_analysis(self, reports: List[ReportData], query: str, 
                                        stock_code: Optional[str] = None, 
-                                       stock_name: Optional[str] = None) -> List[Dict[str, Any]]:
+                                       stock_name: Optional[str] = None,
+                                       state: Dict[str, Any] = {}) -> List[ReportData]:
         """
         검색된 리포트의 투자 의견 및 목표가 정보 추출
         
@@ -707,11 +727,16 @@ class ReportAnalyzerAgent:
         
         # 1) 기본 분석 프롬프트 생성
         query_with_date = f"오늘 {datetime.now().strftime('%Y-%m-%d')} 기준, {query}"
+        qa = state.get("question_analysis", {})
+        keywords = qa.get("keywords", [])
+        if keywords:
+            important_keywords = ", ".join(keywords[:3])  # 상위 3개 키워드 사용
         analysis_prompt = ChatPromptTemplate.from_template(REPORT_ANALYSIS_PROMPT).partial(
             query=query_with_date,
             stock_code=stock_code or "정보 없음",
             stock_name=stock_name or "정보 없음",
-            report_contents=formatted_reports
+            report_contents=formatted_reports,
+            keywords=important_keywords if important_keywords else ""
         )
         
         # 2) 투자 의견 및 목표가 추출 프롬프트
@@ -766,7 +791,7 @@ class ReportAnalyzerAgent:
                     
                     for report in reports:
                         source = report["source"] # provider_code, 증권사
-                        date = report["date"]
+                        date = report["publish_date"]
                         
                         # 해당 리포트에 대한 투자 의견 찾기
                         report_opinion = None

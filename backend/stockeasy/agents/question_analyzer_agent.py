@@ -63,37 +63,6 @@ class QuestionAnalysis(BaseModel):
     data_requirements: DataRequirements = Field(..., description="필요한 데이터 소스 정보")
     keywords: List[str] = Field(..., description="중요 키워드 목록")
     detail_level: Literal["간략", "보통", "상세"] = Field(..., description="요구되는 상세도")
-    
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "entities": {
-                        "stock_name": "삼성전자",
-                        "stock_code": "005930",
-                        "sector": "전자",
-                        "time_range": "최근",
-                        "financial_metric": "실적",
-                        "competitor": None,
-                        "product": None
-                    },
-                    "classification": {
-                        "primary_intent": "성과전망",
-                        "complexity": "단순",
-                        "expected_answer_type": "사실형"
-                    },
-                    "data_requirements": {
-                        "telegram_needed": True,
-                        "reports_needed": True,
-                        "financial_statements_needed": True,
-                        "industry_data_needed": False
-                    },
-                    "keywords": ["삼성전자", "실적", "최근", "재무"],
-                    "detail_level": "보통"
-                }
-            ]
-        }
-    }
 
 
 class QuestionAnalyzerAgent:
@@ -133,7 +102,9 @@ class QuestionAnalyzerAgent:
             
             # 현재 사용자 쿼리 추출
             query = state.get("query", "")
-            
+            stock_code = state.get("stock_code", "")
+            stock_name = state.get("stock_name", "")
+            logger.info(f"query[{stock_name},{stock_code}] : {query}")
             if not query:
                 logger.warning("Empty query provided to QuestionAnalyzerAgent")
                 self._add_error(state, "질문이 비어 있습니다.")
@@ -142,17 +113,18 @@ class QuestionAnalyzerAgent:
             logger.info(f"QuestionAnalyzerAgent analyzing query: {query}")
             
             # 프롬프트 준비
-            prompt = format_question_analyzer_prompt(query=query)
+            prompt = format_question_analyzer_prompt(query=query, stock_name=stock_name, stock_code=stock_code)
             
             # LLM 호출로 분석 수행 - structured output 사용
             response:QuestionAnalysis = await self.llm.with_structured_output(QuestionAnalysis).ainvoke(
                 [HumanMessage(content=prompt)]
             )
-            
+            response.entities.stock_name = stock_name
+            response.entities.stock_code = stock_code
             # 분석 결과 로깅
             logger.info(f"Analysis result: {response}")
             
-            # QuestionAnalysisResult 객체 생성 - 유틸리티 함수 사용
+            # QuestionAnalysisResult 객체 생성 - 유틸리티 함수 사   용
             question_analysis: QuestionAnalysisResult = {
                 "entities": response.entities.dict(),
                 "classification": response.classification.dict(),
@@ -160,6 +132,8 @@ class QuestionAnalyzerAgent:
                 "keywords": response.keywords,
                 "detail_level": response.detail_level
             }
+            #question_analysis["entities"]["stock_name"] = stock_name
+            #question_analysis["entities"]["stock_code"] = stock_code
             
             # 상태에 저장
             state["question_analysis"] = question_analysis

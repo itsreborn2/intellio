@@ -10,16 +10,14 @@ from loguru import logger
 from typing import Dict, List, Any, Optional, cast
 from datetime import datetime
 
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
-from langchain_core.prompts import ChatPromptTemplate
+
 from langchain_core.output_parsers import JsonOutputParser
 #from pydantic.v1 import BaseModel, Field
 from pydantic import BaseModel, Field
 from common.services.agent_llm import get_llm_for_agent
 from stockeasy.prompts.knowledge_integrator_prompts import format_knowledge_integrator_prompt
-from common.core.config import settings
-from stockeasy.models.agent_io import IntegratedKnowledge, pydantic_to_typeddict
+from stockeasy.models.agent_io import IntegratedKnowledge, RetrievedTelegramMessage
 
 # Pydantic 모델 정의
 class CoreInsights(BaseModel):
@@ -83,7 +81,10 @@ class KnowledgeIntegratorAgent:
             # 질문 분석 결과 추출
             question_analysis = state.get("question_analysis", {})
             entities = question_analysis.get("entities", {})
-            
+            keywords = question_analysis.get("keywords", [])
+            if keywords:
+                important_keywords = ", ".join(keywords[:3])  # 상위 3개 키워드 사용
+
             # 엔티티에서 종목 정보 추출
             stock_code = entities.get("stock_code", state.get("stock_code"))
             stock_name = entities.get("stock_name", state.get("stock_name"))
@@ -126,6 +127,7 @@ class KnowledgeIntegratorAgent:
             financial_importance = data_importance.get("financial_analyzer", 5)
             industry_importance = data_importance.get("industry_analyzer", 5)
             
+                
             logger.info(f"KnowledgeIntegratorAgent integrating results for query: {query}")
             
             # 프롬프트 준비
@@ -133,6 +135,7 @@ class KnowledgeIntegratorAgent:
                 query=query,
                 stock_name=stock_name,
                 stock_code=stock_code,
+                keywords=important_keywords if important_keywords else "",
                 telegram_results=telegram_results,
                 report_results=report_results,
                 financial_results=financial_results,
@@ -181,23 +184,24 @@ class KnowledgeIntegratorAgent:
                 }
             }
             
-            # 통합된 지식 저장
-            state["integrated_knowledge"] = integrated_knowledge
+            # 통합된 지식 저장 # 굳이 AgentState 최상위에 둘 필요없음.
+            #state["integrated_knowledge"] = integrated_knowledge
             
             # 추가 정보 (API 호환성 유지)
-            state["integrated_response"] = integration_result.통합_응답
+            #state["integrated_response"] = integration_result.통합_응답
             
             # 에이전트 결과 업데이트
             state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["knowledge_integrator"] = {
                 "agent_name": "knowledge_integrator",
                 "status": "success",
-                "data": {
-                    "integrated_response": integration_result.통합_응답,
-                    "core_insights": core_insights,
-                    "uncertain_areas": integration_result.불확실_영역,
-                    "confidence_assessment": confidence_info
-                },
+                "data": integrated_knowledge,
+                # "data": {
+                #     "integrated_response": integration_result.통합_응답,
+                #     "core_insights": core_insights,
+                #     "uncertain_areas": integration_result.불확실_영역,
+                #     "confidence_assessment": confidence_info
+                # },
                 "error": None,
                 "execution_time": (datetime.now() - start_time).total_seconds(),
                 "metadata": {
@@ -267,14 +271,15 @@ class KnowledgeIntegratorAgent:
             state["integrated_response"] = "죄송합니다. 정보를 통합하는 중 오류가 발생했습니다."
             return state
             
-    def _format_telegram_results(self, telegram_data: List[Dict[str, Any]]) -> str:
+    def _format_telegram_results(self, telegram_data: List[RetrievedTelegramMessage]) -> str:
         """텔레그램 결과를 문자열로 포맷팅"""
         if not telegram_data:
             return "텔레그램 검색 결과 없음"
             
         formatted = "텔레그램 검색 결과:\n"
         for i, msg in enumerate(telegram_data):
-            formatted += f"[{i+1}] 출처: {msg.get('source', '알 수 없음')}\n"
+            # 채널명 삭제.
+            #formatted += f"[{i+1}] 출처: {msg.get('channel_name', '알 수 없음')}\n"
             formatted += f"내용: {msg.get('content', '내용 없음')}\n"
             if msg.get('message_created_at'):
                 formatted += f"작성일: {msg.get('message_created_at')}\n"
@@ -291,7 +296,7 @@ class KnowledgeIntegratorAgent:
         analysis = report_data.get("analysis", None)
         searched_reports = report_data.get("searched_reports", [])
             
-        formatted = "기업 리포트 검색 결과:\n"
+        formatted = f"기업 리포트 검색 결과[{len(searched_reports)}개]:\n"
         if analysis: # 분석결과가 있으면 결과만 리턴.
             #analysis = report["analysis"]
             # llm_response 키 사용 (report_analyzer_agent의 실제 출력 키)
@@ -309,7 +314,7 @@ class KnowledgeIntegratorAgent:
                 formatted += f"종합의견: {analysis.get('opinion_summary', '')}\n"
         else:
             # 분석결과가 없다면, 찾은 문서 내용을 리턴.
-            for i, report in enumerate(report_data):
+            for i, report in enumerate(searched_reports):
                 formatted += f"[{i+1}] 제목: {report.get('title', '제목 없음')}\n"
                 formatted += f"출처: {report.get('source', '알 수 없음')}\n"
                 formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
@@ -371,20 +376,26 @@ class KnowledgeIntegratorAgent:
     
     def _format_industry_results(self, industry_data: List[Dict[str, Any]]) -> str:
         """산업 분석 결과를 문자열로 포맷팅"""
-        if not industry_data:
+        if not industry_data or len(industry_data) == 0:
             return "산업 분석 결과 없음"
-            
+        
+        raw_data = industry_data.get("raw_data", [])
         formatted = "산업 분석 결과:\n"
-        for i, data in enumerate(industry_data):
-            formatted += f"[{i+1}] 산업: {data.get('sector', '산업 정보 없음')}\n"
-            formatted += f"기간: {data.get('period', '기간 정보 없음')}\n"
-            
+        for i, data in enumerate(raw_data):
+            formatted += f"[{i+1}] 산업: {data.get('title', '산업 정보 없음')}\n"
+            formatted += f"날짜: {data.get('date', '기간 정보 없음')}\n"
+            formatted += f"내용: {data.get('content', '내용 없음')}\n"
             # 트렌드 정보
-            trends = data.get('trends', {})
+            trends = data.get('key_trends', {})
             if trends:
                 formatted += "트렌드:\n"
-                for key, value in trends.items():
-                    formatted += f"- {key}: {value}\n"
+                # 리스트인 경우와 딕셔너리인 경우 모두 처리
+                if isinstance(trends, list):
+                    for trend in trends:
+                        formatted += f"- {trend}\n"
+                elif isinstance(trends, dict):
+                    for key, value in trends.items():
+                        formatted += f"- {key}: {value}\n"
             
             # 경쟁사 정보
             competitors = data.get('competitors', [])

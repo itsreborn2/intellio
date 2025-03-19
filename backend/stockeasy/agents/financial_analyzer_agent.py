@@ -22,7 +22,7 @@ from stockeasy.prompts.financial_prompts import (
     FINANCIAL_ANALYSIS_PROMPT,
     #FINANCIAL_DATA_EXTRACTION_PROMPT
 )
-from stockeasy.models.agent_io import RetrievedData, FinancialData
+from stockeasy.models.agent_io import RetrievedAllAgentData, FinancialData
 from common.services.agent_llm import get_llm_for_agent
 
 class FinancialAnalyzerAgent:
@@ -84,10 +84,13 @@ class FinancialAnalyzerAgent:
             
             # 종목 코드가 없으면 종목명으로 조회
             if not stock_code and stock_name:
-                stock_info = await self.stock_service.get_stock_by_name(stock_name)
-                if stock_info:
-                    stock_code = stock_info.get("code")
-                    logger.info(f"Found stock code {stock_code} for {stock_name}")
+                # stock_info = await self.stock_service.get_stock_by_name(stock_name)
+                # if stock_info:
+                #     stock_code = stock_info.get("code")
+                #     logger.info(f"Found stock code {stock_code} for {stock_name}")
+                logger.warning("No stock_code information provided to FinancialAnalyzerAgent")
+                self._add_error(state, "재무 분석을 위한 종목 코드가 없습니다.")
+                return state
                     
             if not stock_code:
                 logger.warning(f"Could not find stock code for {stock_name}")
@@ -121,7 +124,7 @@ class FinancialAnalyzerAgent:
                 # 타입 주석을 사용한 데이터 할당
                 if "retrieved_data" not in state:
                     state["retrieved_data"] = {}
-                retrieved_data = cast(RetrievedData, state["retrieved_data"])
+                retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
                 financial_data_list: List[FinancialData] = []
                 retrieved_data["financials"] = financial_data_list
                 
@@ -136,7 +139,7 @@ class FinancialAnalyzerAgent:
                     "duration": duration,
                     "status": "completed_no_data",
                     "error": None,
-                    "model_name": self.llm.model_name
+                    "model_name": self.model_name
                 }
                 
                 logger.info(f"FinancialAnalyzerAgent completed in {duration:.2f} seconds, no data found")
@@ -159,7 +162,7 @@ class FinancialAnalyzerAgent:
             duration = (end_time - start_time).total_seconds()
             
             # 새로운 구조로 상태 업데이트
-            state["agent_results"] = state.get("agent_results", {})
+            #state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["financial_analyzer"] = {
                 "agent_name": "financial_analyzer",
                 "status": "success",
@@ -176,7 +179,7 @@ class FinancialAnalyzerAgent:
             # 타입 주석을 사용한 데이터 할당
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedData, state["retrieved_data"])
+            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
             financial_data_result: List[FinancialData] = [analysis_results]
             retrieved_data["financials"] = financial_data_result
             
@@ -215,7 +218,7 @@ class FinancialAnalyzerAgent:
             # 타입 주석을 사용한 데이터 할당
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedData, state["retrieved_data"])
+            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
             financial_data_list: List[FinancialData] = []
             retrieved_data["financials"] = financial_data_list
             

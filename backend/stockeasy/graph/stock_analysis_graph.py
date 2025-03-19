@@ -341,7 +341,7 @@ class StockAnalysisGraph:
                 "retrieved_data": {},  # 검색 결과를 담을 딕셔너리
                 **kwargs
             }
-            
+            logger.info(f"[process_query] initial_state: {initial_state}")
             # 그래프 실행 (thread_id 제거, config 매개변수만 사용)
             result = await self.graph.ainvoke(
                 initial_state,
@@ -376,15 +376,15 @@ class StockAnalysisGraph:
         return list(self.memory_saver.list_threads()) 
 
 # StockAnalysisGraph 인스턴스를 생성하고 그래프를 빌드하여 반환하는 함수
-def create_graph():
-    """
-    StockAnalysisGraph 인스턴스를 생성하고 그래프를 반환합니다.
-    이 함수는 LangGraph API에서 사용됩니다.
-    """
-    # 그래프 빌드 및 반환
-    #return analysis_graph._build_graph()
-    return get_graph(None)
+# def create_graph():
+#     """
+#     StockAnalysisGraph 인스턴스를 생성하고 그래프를 반환합니다.
+#     이 함수는 LangGraph API에서 사용됩니다.
+#     """
+#     # 그래프 빌드 및 반환
+#     #return analysis_graph._build_graph()
+#     return get_graph(None)
 
 
-# 팩토리 함수를 graph 변수로 내보냅니다
-graph = create_graph 
+# # 팩토리 함수를 graph 변수로 내보냅니다
+# graph = create_graph 

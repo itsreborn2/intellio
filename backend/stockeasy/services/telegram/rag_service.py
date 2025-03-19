@@ -65,7 +65,7 @@ class StockRAGService:
 
             # 세션 ID 생성 (필요 시 구현)
             # initial_state["session_id"] = self._generate_session_id()
-            
+            logger.info(f"[analyze_stock] initial_state: {initial_state}")
             result = await self.graph.process_query(**initial_state)
             
             end_time = time.time()

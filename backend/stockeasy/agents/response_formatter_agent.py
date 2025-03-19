@@ -7,14 +7,12 @@
 
 import json
 from loguru import logger
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage
 from common.services.agent_llm import get_llm_for_agent
 from stockeasy.prompts.response_formatter_prompts import format_response_formatter_prompt
-from common.core.config import settings
+from langchain_core.output_parsers import StrOutputParser
 
 class ResponseFormatterAgent:
     """
@@ -32,7 +30,8 @@ class ResponseFormatterAgent:
         #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
         self.llm, self.model_name, self.provider = get_llm_for_agent("response_formatter_agent")
         logger.info(f"ResponseFormatterAgent initialized with provider: {self.provider}, model: {self.model_name}")
-        
+        self.parser = StrOutputParser()
+
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         통합된 정보를 기반으로 사용자에게 이해하기 쉬운 응답을 생성합니다.
@@ -61,25 +60,33 @@ class ResponseFormatterAgent:
             
             logger.info(f"ResponseFormatterAgent formatting response for query: {query}")
             
+            summary = state.get("summary", "")
+            processing_status = state.get("processing_status", {})
+            summarizer_status = processing_status.get("summarizer", "not_started")
             # 통합된 응답이 없는 경우 처리
-            if not integrated_response or integrated_response == "응답을 생성할 수 없습니다.":
-                logger.warning("No integrated response available")
+            if not summary or summarizer_status != "completed":
+                logger.warning(f"No summary response available.")
+                logger.warning(f"processing_status: {processing_status}")
+                logger.warning(f"Summarizer status: {summarizer_status}")
                 state["formatted_response"] = "죄송합니다. 현재 요청에 대한 정보를 찾을 수 없습니다. 다른 질문을 해 주시거나 나중에 다시 시도해 주세요."
                 return state
             
             # 프롬프트 준비
-            prompt = format_response_formatter_prompt(
+            prompt_context = format_response_formatter_prompt(
                 query=query,
                 stock_name=stock_name,
                 stock_code=stock_code,
-                integrated_response=integrated_response,
+                integrated_response=summary,
                 core_insights=core_insights,
                 confidence_assessment=confidence_assessment,
                 uncertain_areas=uncertain_areas
             )
+            # prompt = ChatPromptTemplate.from_template(prompt_context)
             
-            # LLM 호출로 포맷팅 수행
-            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            # # LLM 호출로 포맷팅 수행
+            # chain = prompt | self.llm | self.parser
+            # response = await chain.ainvoke({})  
+            response:AIMessage = await self.llm.ainvoke([HumanMessage(content=prompt_context)])
             formatted_response = response.content
             
             logger.info("Response formatting completed successfully")
@@ -90,6 +97,10 @@ class ResponseFormatterAgent:
             # 오류 제거 (성공적으로 처리됨)
             if "error" in state:
                 del state["error"]
+                
+            # 처리 상태 업데이트
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["response_formatter"] = "completed"
                 
             return state
             

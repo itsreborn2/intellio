@@ -4,6 +4,11 @@
 이 모듈은 텔레그램 메시지 검색 및 관련 프롬프트 템플릿을 정의합니다.
 """
 
+from typing import List
+
+from stockeasy.models.agent_io import RetrievedTelegramMessage
+
+
 TELEGRAM_SEARCH_PROMPT = """
 당신은 금융 관련 텔레그램 메시지 검색 전문가입니다. 다음 정보를 바탕으로 가장 관련성 높은 메시지를 검색하세요:
 
@@ -45,7 +50,8 @@ TELEGRAM_SUMMARY_PROMPT = """
 """
 
 
-def format_telegram_messages(messages):
+#def format_telegram_messages(messages):
+def format_telegram_messages(messages: List[RetrievedTelegramMessage]):
     """텔레그램 메시지 목록을 형식화합니다.
     
     Args:
@@ -56,7 +62,7 @@ def format_telegram_messages(messages):
     """
     formatted_msgs = []
     for msg in messages:
-        created_at = msg["created_at"].strftime("%Y-%m-%d %H:%M")
+        created_at = msg["message_created_at"].strftime("%Y-%m-%d %H:%M")
         formatted_msgs.append(f"[{created_at}] {msg['content']}")
     
     return "\n\n".join(formatted_msgs) 

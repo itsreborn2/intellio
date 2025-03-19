@@ -180,9 +180,20 @@ class LLMFactory:
             if not api_key:
                 raise ValueError("Upstage API 키가 설정되지 않았습니다.")
             
+            return ChatOpenAI(
+                base_url="https://api.upstage.ai/v1/solar",
+                model=model_name, # "solar-pro"
+                openai_api_key=api_key,
+                temperature=temperature,
+                top_p=top_p,
+                streaming=streaming,
+                callbacks=callbacks,
+                **kwargs
+            )
+            
             # Upstage는 현재 공식 langchain 통합이 없음
             # 필요시 CustomLLM 클래스로 구현 필요
-            raise NotImplementedError("Upstage 모델은 아직 지원되지 않습니다.")
+            #raise NotImplementedError("Upstage 모델은 아직 지원되지 않습니다.")
             
         # 지원하지 않는 LLM 제공자인 경우
         else:

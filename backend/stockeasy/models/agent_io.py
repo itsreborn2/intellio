@@ -100,28 +100,30 @@ class AgentExecutionResult(TypedDict, total=False):
     metadata: Dict[str, Any]        # 기타 메타데이터
 
 
-class RetrievedMessage(TypedDict):
+class RetrievedTelegramMessage(TypedDict):
     """검색된 텔레그램 메시지"""
     content: str                    # 메시지 내용
-    message_created_at: datetime            # 생성 시간
-    score: float                    # 유사도 점수
-    source: str                     # 출처 (채널명 등)
+    channel_name: str              # 채널명
+    message_created_at: datetime    # 생성 시간
+    final_score: float              # 최종 점수
     metadata: Dict[str, Any]        # 메타데이터
 
 
 class ReportData(TypedDict, total=False):
-    """분석된 기업 리포트 데이터"""
+    """분석된 기업 리포트 데이터
+     리포트의 개별 청크를 분석 결과
+    """
     title: str                      # 제목
     publish_date: datetime          # 발행일
     author: str                     # 작성자/증권사
     content: str                    # 내용
     stock_name: str                 # 종목명
     stock_code: str                 # 종목코드
-    target_price: Optional[str]     # 목표가
-    investment_opinion: Optional[str] # 투자의견
-    summary: Optional[str]          # 요약
     score: float                    # 유사도 점수
     analysis: Dict[str, Any]        # 추가 분석 정보
+    page: int                       # 페이지 번호
+    source: str                     # 출처
+    sector_name: str                # 산업명
 
 
 class FinancialData(TypedDict, total=False):
@@ -142,9 +144,9 @@ class IndustryData(TypedDict, total=False):
     market_share: Dict[str, float]  # 시장 점유율
 
 
-class RetrievedData(TypedDict, total=False):
+class RetrievedAllAgentData(TypedDict, total=False):
     """검색 및 분석된 모든 데이터"""
-    telegram_messages: List[RetrievedMessage] # 텔레그램 메시지
+    telegram_messages: List[RetrievedTelegramMessage] # 텔레그램 메시지
     reports: List[ReportData]       # 기업 리포트
     financials: List[FinancialData] # 재무 데이터
     industry: List[IndustryData]    # 산업 정보
@@ -188,6 +190,8 @@ class AgentState(TypedDict, total=False):
     """
     # 기본 정보
     query: str                      # 사용자 질문
+    stock_code: str                 # 종목코드
+    stock_name: str                 # 종목명
     session_id: str                 # 세션 ID
     
     # 사용자 컨텍스트
@@ -204,7 +208,7 @@ class AgentState(TypedDict, total=False):
     agent_results: Dict[str, AgentExecutionResult]  # 각 에이전트의 실행 결과
     
     # 검색된 데이터
-    retrieved_data: RetrievedData   # 검색 및 분석된 데이터
+    retrieved_data: RetrievedAllAgentData   # 검색 및 분석된 데이터
     
     # 통합 및 요약
     integrated_knowledge: Optional[IntegratedKnowledge]  # 통합된 지식 베이스
