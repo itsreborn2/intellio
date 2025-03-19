@@ -6,6 +6,12 @@ import Papa from 'papaparse'
 import { MentionsInput, Mention } from 'react-mentions'
 import { sendChatMessage } from '@/services/api/chat'
 import { IChatResponse } from '@/types/api/chat'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
+import rehypeHighlight from 'rehype-highlight'
+import { CSSProperties } from 'react'
+import 'highlight.js/styles/github.css' // 하이라이트 스타일 추가
 
 // 종목 타입 정의
 interface StockOption {
@@ -45,6 +51,8 @@ function AIChatAreaContent() {
   const [recentStocks, setRecentStocks] = useState<StockOption[]>([]); // 최근 조회한 종목 목록
   const [messages, setMessages] = useState<ChatMessage[]>([]); // 채팅 메시지 목록
   const [isProcessing, setIsProcessing] = useState<boolean>(false); // 메시지 처리 중 상태
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -88,6 +96,12 @@ function AIChatAreaContent() {
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      
+      // 타이머 정리
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, []);
 
@@ -194,6 +208,16 @@ function AIChatAreaContent() {
     
     // 메시지 처리 중 상태로 변경
     setIsProcessing(true);
+    setElapsedTime(0);
+    
+    // 타이머 시작
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    
+    timerRef.current = setInterval(() => {
+      setElapsedTime(prev => prev + 1);
+    }, 1000);
     
     try {
       // 백엔드 API 호출
@@ -232,6 +256,12 @@ function AIChatAreaContent() {
     } finally {
       // 메시지 처리 완료 상태로 변경
       setIsProcessing(false);
+      
+      // 타이머 중지
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     }
   };
   
@@ -375,6 +405,207 @@ function AIChatAreaContent() {
       searchInputRef.current.style.border = '1px solid #ddd';
     }
   };
+
+  // 타임스탬프 포맷팅 함수 수정
+  const formatTimestamp = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  // 로딩 스피너 컴포넌트
+  const LoadingSpinner = () => (
+    <div className="loading-spinner" style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      margin: '12px 0'
+    }}>
+      <div style={{
+        width: '36px',
+        height: '36px',
+        borderRadius: '50%',
+        border: '3px solid #f3f3f3',
+        borderTop: '3px solid #3498db',
+        animation: 'spin 1s linear infinite',
+      }}></div>
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+
+  // 검색 중 타이머 컴포넌트
+  const SearchTimer = () => (
+    <div className="search-timer" style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '8px',
+      backgroundColor: '#f5f9ff',
+      padding: '8px 12px',
+      borderRadius: '8px',
+      boxShadow: '0 2px 5px rgba(0, 0, 0, 0.05)',
+      marginBottom: '12px'
+    }}>
+      <div style={{
+        position: 'relative',
+        width: '28px',
+        height: '28px',
+        borderRadius: '50%',
+        border: '2px solid #e1e1e1',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          width: '14px',
+          height: '2px',
+          background: 'transparent',
+          transform: 'rotate(0deg) translateX(0)',
+          transformOrigin: '0 0',
+          zIndex: 2
+        }}>
+          <div style={{
+            position: 'absolute',
+            width: '8px',
+            height: '2px',
+            backgroundColor: '#3498db',
+            animation: 'stopwatch-sec 60s steps(60, end) infinite',
+            transformOrigin: 'left center'
+          }}></div>
+        </div>
+        <div style={{
+          width: '6px',
+          height: '6px',
+          backgroundColor: '#3498db',
+          borderRadius: '50%',
+          zIndex: 3
+        }}></div>
+      </div>
+      <div style={{
+        fontFamily: 'monospace',
+        fontSize: '0.9rem',
+        fontWeight: 'bold',
+        color: '#555'
+      }}>
+        {Math.floor(elapsedTime / 60).toString().padStart(2, '0')}:{(elapsedTime % 60).toString().padStart(2, '0')}
+      </div>
+      <style jsx>{`
+        @keyframes stopwatch-sec {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+
+  // 검색 애니메이션 컴포넌트
+  const SearchingAnimation = () => (
+    <div className="searching-animation" style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      padding: '10px 14px',
+      backgroundColor: '#ffffff',
+      borderRadius: '12px',
+      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+      maxWidth: '95%',
+      marginBottom: '16px'
+    }}>
+      <div style={{ 
+        fontSize: '0.85rem',
+        marginBottom: '8px',
+        color: '#555',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        <div className="loading-icon" style={{
+          width: '16px',
+          height: '16px',
+          borderRadius: '50%',
+          border: '2px solid #f3f3f3',
+          borderTop: '2px solid #3498db',
+          animation: 'spin 1s linear infinite',
+        }}></div>
+        <span>정보를 검색 중입니다...</span>
+      </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        margin: '4px 0',
+        fontSize: '0.75rem',
+        color: '#888'
+      }}>
+        <div className="dot" style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: '#3498db',
+          opacity: 0.5,
+          animation: 'pulse 1.5s infinite',
+        }}></div>
+        <span>종목 정보 확인 중</span>
+      </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        margin: '4px 0',
+        fontSize: '0.75rem',
+        color: '#888'
+      }}>
+        <div className="dot" style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: '#3498db',
+          opacity: 0.8,
+          animation: 'pulse 1.5s infinite',
+          animationDelay: '0.5s'
+        }}></div>
+        <span>투자 분석 보고서 조회 중</span>
+      </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        margin: '4px 0',
+        fontSize: '0.75rem',
+        color: '#888'
+      }}>
+        <div className="dot" style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: '#3498db',
+          opacity: 0.8,
+          animation: 'pulse 1.5s infinite',
+          animationDelay: '1s'
+        }}></div>
+        <span>최신 종목 뉴스 분석 중</span>
+      </div>
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
 
   // 스타일 정의
   const aiChatAreaStyle: React.CSSProperties = {
@@ -754,15 +985,17 @@ function AIChatAreaContent() {
               style={{
                 marginBottom: '16px',
                 display: 'flex',
-                flexDirection: 'column',
-                alignItems: message.role === 'user' ? 'flex-end' : 'flex-start'
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start'
               }}
             >
+              {/* 메시지 내용 */}
               <div style={{
                 backgroundColor: message.role === 'user' ? '#e1f5fe' : '#ffffff',
                 padding: '10px 14px',
                 borderRadius: '12px',
-                maxWidth: '95%', // 너비를 95%로 확장
+                maxWidth: '85%',
                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
                 position: 'relative'
               }}>
@@ -777,22 +1010,50 @@ function AIChatAreaContent() {
                   </div>
                 )}
                 <div style={{
-                  whiteSpace: message.role === 'user' ? 'nowrap' : 'pre-wrap',
                   overflow: message.role === 'user' ? 'hidden' : 'visible',
                   textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
                   wordBreak: 'break-word',
-                  fontSize: message.role === 'user' ? '0.75rem' : '0.85rem', // AI 응답 폰트 크기 증가
-                  lineHeight: '1.6', // 줄 간격 증가
-                  width: '100%', // 너비를 100%로 설정
-                  padding: message.role === 'user' ? '0' : '4px 2px', // AI 응답에 패딩 추가
-                  letterSpacing: message.role === 'user' ? 'normal' : '0.01em' // AI 응답 글자 간격 조정
+                  width: '100%',
+                  padding: message.role === 'user' ? '0' : '4px 2px'
                 }}>
-                  {message.content}
+                  {message.role === 'user' ? (
+                    // 사용자 메시지는 일반 텍스트로 표시
+                    <div style={{
+                      whiteSpace: 'nowrap',
+                      fontSize: '0.75rem',
+                      lineHeight: '1.6',
+                      letterSpacing: 'normal'
+                    }}>
+                      {message.content}
+                    </div>
+                  ) : (
+                    // AI 응답은 마크다운으로 렌더링
+                    <div className="markdown-content">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeHighlight]}>
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           ))
         )}
+        
+        {/* 메시지 처리 중 로딩 표시 (말풍선 왼쪽에 시간 카운터와 함께) */}
+        {isProcessing && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: '12px',
+            marginBottom: '16px'
+          }}>
+            <SearchTimer />
+            <SearchingAnimation />
+          </div>
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
     </div>

@@ -311,3 +311,129 @@
   background-color: #ffffff;
   box-sizing: border-box;
 }
+
+/* 마크다운 스타일링 */
+.markdown-content {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+}
+
+.markdown-content p {
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+
+.markdown-content h1 {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 1rem 0 0.5rem 0;
+  line-height: 1.6;
+}
+
+.markdown-content h2 {
+  font-size: 1.3rem;
+  font-weight: bold;
+  margin: 1rem 0 0.5rem 0;
+  line-height: 1.6;
+}
+
+.markdown-content h3 {
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin: 0.8rem 0 0.4rem 0;
+  line-height: 1.6;
+}
+
+.markdown-content ul, .markdown-content ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.markdown-content li {
+  margin: 0.2rem 0;
+}
+
+.markdown-content a {
+  color: #0066cc;
+  text-decoration: underline;
+}
+
+.markdown-content code {
+  background-color: #f4f4f4;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.85em;
+}
+
+.markdown-content pre {
+  background-color: #f4f4f4;
+  padding: 0.5rem;
+  border-radius: 4px;
+  overflow: auto;
+  margin: 0.5rem 0;
+}
+
+.markdown-content pre > code {
+  display: block;
+  background-color: transparent;
+  padding: 0;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid #ddd;
+  padding-left: 1rem;
+  margin: 0.5rem 0;
+  color: #555;
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.markdown-content th {
+  border: 1px solid #ddd;
+  padding: 0.4rem;
+  text-align: left;
+  background-color: #f4f4f4;
+}
+
+.markdown-content td {
+  border: 1px solid #ddd;
+  padding: 0.4rem;
+  text-align: left;
+}
+
+/* 강조, 굵게, 기울임 스타일 */
+.markdown-content strong {
+  font-weight: bold;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+/* 체크박스 리스트 스타일 */
+.markdown-content input[type="checkbox"] {
+  margin-right: 0.5rem;
+}
+
+/* 코드 하이라이팅 컨테이너 */
+.markdown-content .hljs {
+  background-color: #f8f8f8;
+  display: block;
+  padding: 0.5rem;
+  overflow-x: auto;
+  border-radius: 3px;
+}
+
+/* 이미지 스타일 */
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+  margin: 0.5rem 0;
+  border-radius: 4px;
+}

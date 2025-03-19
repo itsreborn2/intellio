@@ -47,7 +47,7 @@ logger.add(
 # 로거 설정 이후에 모듈 임포트
 from common.core.database import get_db_session
 from stockeasy.graph.agent_registry import get_graph
-from stockeasy.services.telegram.rag_service import StockRAGService
+from stockeasy.services.rag_service import StockRAGService
 
 
 async def test_simple_query():

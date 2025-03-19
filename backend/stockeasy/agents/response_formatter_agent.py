@@ -93,6 +93,7 @@ class ResponseFormatterAgent:
             
             # 포맷팅된 응답 저장
             state["formatted_response"] = formatted_response
+            state["answer"] = formatted_response
             
             # 오류 제거 (성공적으로 처리됨)
             if "error" in state:
@@ -108,4 +109,5 @@ class ResponseFormatterAgent:
             logger.exception(f"Error in ResponseFormatterAgent: {str(e)}")
             state["error"] = f"응답 포맷터 에이전트 오류: {str(e)}"
             state["formatted_response"] = "죄송합니다. 응답을 포맷팅하는 중 오류가 발생했습니다."
+            state["answer"] = state["formatted_response"]
             return state 

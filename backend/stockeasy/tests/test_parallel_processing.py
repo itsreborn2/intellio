@@ -11,7 +11,7 @@ from typing import Dict, Any, List
 from loguru import logger
 
 from stockeasy.graph.agent_registry import agent_registry, get_graph
-from stockeasy.services.telegram.rag_service import TelegramRAGLangraphService
+from stockeasy.services.rag_service import TelegramRAGLangraphService
 from stockeasy.services.telegram.question_classifier import QuestionClassification
 
 

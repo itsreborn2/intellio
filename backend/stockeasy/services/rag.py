@@ -20,6 +20,8 @@ from common.core.config import settings
 from langchain_core.messages import AIMessage
 from stockeasy.services.telegram.rag import TelegramRAGService
 
+# 멀티에이전트 이전의 RAG 서비스
+# 추후 사용하지 않을 예정.
 class StockeasyRAGService:
     """텔레그램 메시지 RAG 서비스"""
 

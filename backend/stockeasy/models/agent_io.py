@@ -214,6 +214,7 @@ class AgentState(TypedDict, total=False):
     integrated_knowledge: Optional[IntegratedKnowledge]  # 통합된 지식 베이스
     summary: Optional[str]          # 생성된 요약
     formatted_response: Optional[str]  # 최종 응답
+    answer: Optional[str]           # 최종 답변
     
     # 에러 및 메트릭
     errors: List[AgentError]        # 발생한 오류 목록
