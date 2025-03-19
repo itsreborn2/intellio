@@ -18,7 +18,7 @@ Stockeasy 멀티에이전트 시스템은 한국 주식 시장 정보를 통합�
 ### 2.2 기술 스택
 
 - **기반 프레임워크**: LangChain, LangGraph
-- **언어 모델**: OpenAI GPT-4 (모델명: gpt-4o)
+- **언어 모델**: OpenAI GPT-4 (gpt-4o), Google Gemini (gemini-2.0-flash)
 - **데이터베이스**: PostgreSQL (세션 관리)
 - **벡터 데이터베이스**: Pinecone (텔레그램 메시지, 기업 리포트)
 - **백엔드**: FastAPI, SQLAlchemy 2.0
@@ -27,20 +27,20 @@ Stockeasy 멀티에이전트 시스템은 한국 주식 시장 정보를 통합�
 
 ```
 사용자 → 세션 관리자 → 오케스트레이터 → 질문 분석기
-                                    ↓
-                      ┌────────────┴───────────────┐
-                      ↓             ↓              ↓
-               텔레그램 검색   기업리포트 분석   재무/산업 분석
-                      ↓             ↓              ↓
-                      └────────────→←──────────────┘
-                                    ↓
-                             지식 통합기
-                                    ↓
-                               요약 생성
-                                    ↓
-                             응답 포맷팅
-                                    ↓
-                                사용자
+                                          ↓
+                            ┌─────────────┴─────────────────────────────┐
+                            ↓             ↓              ↓              ↓
+                    텔레그램 검색   기업리포트 분석     재무 분석        산업 분석
+                            ↓             ↓              ↓              ↓
+                            └────────────→←──────────────←──────────────┘
+                                            ↓
+                                    지식 통합기
+                                            ↓
+                                    요약 생성
+                                            ↓
+                                    응답 포맷팅
+                                            ↓
+                                        사용자
 ```
 
 ## 3. 구현된 에이전트
@@ -65,7 +65,7 @@ class BaseAgent(ABC):
 
 - **역할**: 사용자 세션 관리 및 컨텍스트 유지
 - **기능**: 세션 생성, 이전 대화 컨텍스트 로드, 컨텍스트 기반 질문 보강
-- **구현 상태**: 기본 기능 구현 완료
+- **구현 상태**: 완료
 
 #### 3.2.2 오케스트레이터 에이전트 (OrchestratorAgent)
 
@@ -74,6 +74,7 @@ class BaseAgent(ABC):
   - 사용자 질문 분석
   - 필요한 에이전트 선택
   - 정보 소스별 중요도 결정
+  - 실행 계획 수립
 - **구현 상태**: 완료
 
 #### 3.2.3 질문 분석기 에이전트 (QuestionAnalyzerAgent)
@@ -95,7 +96,16 @@ class BaseAgent(ABC):
   - 통합된 정보 생성
 - **구현 상태**: 완료
 
-#### 3.2.5 응답 포맷터 에이전트 (ResponseFormatterAgent)
+#### 3.2.5 요약 생성 에이전트 (SummarizerAgent)
+
+- **역할**: 통합된 정보에서 핵심 내용 요약
+- **기능**:
+  - 통합된 정보 요약
+  - 핵심 포인트 추출
+  - 사용자 맞춤형 요약 생성
+- **구현 상태**: 완료
+
+#### 3.2.6 응답 포맷터 에이전트 (ResponseFormatterAgent)
 
 - **역할**: 최종 응답을 사용자 친화적 형식으로 변환
 - **기능**: 
@@ -104,7 +114,7 @@ class BaseAgent(ABC):
   - 구조화된 응답 생성
 - **구현 상태**: 완료
 
-#### 3.2.6 폴백 관리자 에이전트 (FallbackManagerAgent)
+#### 3.2.7 폴백 관리자 에이전트 (FallbackManagerAgent)
 
 - **역할**: 오류 발생 시 대체 응답 제공
 - **기능**: 
@@ -113,12 +123,44 @@ class BaseAgent(ABC):
   - 사용자 안내 메시지 제공
 - **구현 상태**: 완료
 
-### 3.3 검색 에이전트 (구현 중)
+### 3.3 검색 에이전트 (구현 완료)
 
-- **텔레그램 검색 에이전트 (TelegramRetrieverAgent)**
-- **기업리포트 분석 에이전트 (ReportAnalyzerAgent)**
-- **재무제표 분석 에이전트 (FinancialAnalyzerAgent)**
-- **산업 분석 에이전트 (IndustryAnalyzerAgent)**
+#### 3.3.1 텔레그램 검색 에이전트 (TelegramRetrieverAgent)
+
+- **역할**: 관련 텔레그램 메시지 검색
+- **기능**:
+  - 벡터 검색을 통한 관련 메시지 검색
+  - 메시지 중요도 및 신선도 평가
+  - 관련성 높은 메시지 필터링
+- **구현 상태**: 완료
+
+#### 3.3.2 기업리포트 분석 에이전트 (ReportAnalyzerAgent)
+
+- **역할**: 기업 리포트 검색 및 분석
+- **기능**:
+  - 벡터 검색을 통한 관련 리포트 검색
+  - 리포트 내용 요약 및 분석
+  - 관련 정보 추출
+- **모델**: Google Gemini (gemini-2.0-flash)
+- **구현 상태**: 완료
+
+#### 3.3.3 재무제표 분석 에이전트 (FinancialAnalyzerAgent)
+
+- **역할**: 재무제표 검색 및 분석
+- **기능**:
+  - 재무제표 데이터 검색
+  - 지표 계산 및 트렌드 분석
+  - 핵심 재무 정보 추출
+- **구현 상태**: 완료
+
+#### 3.3.4 산업 분석 에이전트 (IndustryAnalyzerAgent)
+
+- **역할**: 산업 동향 데이터 검색 및 분석
+- **기능**:
+  - 산업 관련 데이터 검색
+  - 산업 트렌드 분석
+  - 동종 업계 비교 정보 제공
+- **구현 상태**: 완료
 
 ## 4. 워크플로우 그래프
 
@@ -130,9 +172,9 @@ LangGraph의 `StateGraph`를 사용하여 에이전트 간 워크플로우를 �
 workflow = StateGraph(AgentState)
 
 # 기본 노드 추가
-workflow.add_node("session_manager", {})
-workflow.add_node("orchestrator", {})
-workflow.add_node("question_analyzer", {})
+workflow.add_node("session_manager", session_manager_agent)
+workflow.add_node("orchestrator", orchestrator_agent)
+workflow.add_node("question_analyzer", question_analyzer_agent)
 # ... 생략 ...
 
 # 기본 흐름 정의
@@ -143,40 +185,49 @@ workflow.add_edge("orchestrator", "question_analyzer")
 
 ### 4.2 병렬 처리 구현
 
-검색 에이전트들은 병렬로 실행되도록 브랜치로 구현했습니다:
+검색 에이전트들은 조건부로 실행되며, 병렬적으로 처리될 수 있습니다:
 
 ```python
-# 브랜치 정의
-with workflow.branch("retrieval_branch") as branch:
-    branch.add_node("telegram_retriever", {})
-    branch.add_node("report_analyzer", {})
-    branch.add_node("financial_analyzer", {})
-    branch.add_node("industry_analyzer", {})
-
 # 조건부 라우팅
+def should_use_telegram(state: AgentState) -> bool:
+    data_requirements = state.get("data_requirements", {})
+    telegram_needed = data_requirements.get("telegram_needed", True)
+    return telegram_needed
+
+def should_use_report(state: AgentState) -> bool:
+    data_requirements = state.get("data_requirements", {})
+    reports_needed = data_requirements.get("reports_needed", True)
+    return reports_needed
+
+# 조건부 에지 추가
 workflow.add_conditional_edges(
-    "question_analyzer_next",
-    router_function,
+    "question_analyzer",
+    should_use_telegram,
     {
-        "telegram_retriever": ["retrieval_branch.telegram_retriever"],
-        # ... 생략 ...
+        True: "telegram_retriever",
+        False: "knowledge_integrator"  # 텔레그램 검색이 필요 없는 경우 스킵
     }
 )
 ```
 
-### 4.3 조건부 경로
+### 4.3 동적 경로 구성
 
-사용자 질문 유형에 따라 실행할 에이전트를 동적으로 결정합니다:
+오케스트레이터가 생성한 실행 계획에 따라 워크플로우가 동적으로 구성됩니다:
 
 ```python
-def router_function(state: AgentState) -> Union[str, List[str]]:
-    classification = state.get("question_classification", {})
-    question_type = classification.get("질문주제", 4)  # 기본값: 기타
+def has_insufficient_data(state: AgentState) -> str:
+    # 검색된 데이터가 없는 경우 Fallback
+    retrieved_data = state.get("retrieved_data", {})
+    telegram_messages = retrieved_data.get("telegram_messages", [])
+    report_data = retrieved_data.get("report_data", [])
+    financial_data = retrieved_data.get("financial_data", [])
+    industry_data = retrieved_data.get("industry_data", [])
     
-    # 종목기본정보: 텔레그램, 기업리포트
-    if question_type == 0:
-        return ["telegram_retriever", "report_analyzer"]
-    # ... 생략 ...
+    # 모든 소스에서 데이터를 찾지 못한 경우
+    if not telegram_messages and not report_data and not financial_data and not industry_data:
+        return "fallback_manager"
+    else:
+        return "summarizer"
 ```
 
 ### 4.4 오류 처리
@@ -184,7 +235,7 @@ def router_function(state: AgentState) -> Union[str, List[str]]:
 각 단계에서 오류가 발생할 경우 폴백 메커니즘이 작동합니다:
 
 ```python
-# 검색 결과 기반 조건부 경로
+# 오류 발생 시 폴백 매니저로 라우팅
 workflow.add_conditional_edges(
     "knowledge_integrator",
     has_insufficient_data,
@@ -195,34 +246,9 @@ workflow.add_conditional_edges(
 )
 ```
 
-## 5. 프롬프트 템플릿
+## 5. 에이전트 간 통신
 
-각 에이전트는 특화된 프롬프트 템플릿을 사용합니다:
-
-### 5.1 구현된 프롬프트
-
-- **오케스트레이터 프롬프트**: 질문 분석 및 에이전트 선택 지시
-- **질문 분석기 프롬프트**: 질문 분류 및 엔티티 추출 지시
-- **지식 통합기 프롬프트**: 다양한 소스 정보 통합 지시
-- **응답 포맷터 프롬프트**: 사용자 친화적 응답 생성 지시
-- **폴백 매니저 프롬프트**: 오류 상황 대응 지시
-
-### 5.2 프롬프트 예시 (질문 분석기)
-
-```
-당신은 금융 도메인 특화 질문 분석 전문가입니다. 다음 사용자 질문을 분석하여 JSON 형식으로 정보를 추출해 주세요:
-
-사용자 질문: {query}
-
-분석 지침:
-1. 한국 주식 종목명과 종목코드 추출 (예: 삼성전자, 005930)
-2. 산업/섹터 정보 식별 (예: 반도체, IT, 금융 등)
-...
-```
-
-## 6. 데이터 흐름
-
-### 6.1 상태 모델
+### 5.1 상태 모델
 
 에이전트 간 데이터는 공통 상태 객체를 통해 전달됩니다:
 
@@ -232,90 +258,128 @@ class AgentState(TypedDict):
     session_id: str                   # 세션 ID
     stock_code: Optional[str]         # 종목 코드
     stock_name: Optional[str]         # 종목명
-    # ... 생략 ...
+    user_context: Dict[str, Any]      # 사용자 컨텍스트
+    conversation_history: List[Dict]  # 대화 이력
+    question_analysis: Dict[str, Any] # 질문 분석 결과
+    execution_plan: Dict[str, Any]    # 실행 계획
+    retrieved_data: Dict[str, Any]    # 검색된 데이터
+    agent_results: Dict[str, Any]     # 에이전트 결과
+    errors: List[Dict[str, Any]]      # 오류 정보
+    metrics: Dict[str, Any]           # 성능 측정
+    processing_status: Dict[str, str] # 처리 상태
 ```
 
-### 6.2 주요 데이터 흐름
+### 5.2 주요 데이터 흐름
 
 1. 사용자 질문 → 세션 관리자 → 오케스트레이터
-2. 오케스트레이터 → 질문 분석기 → 필요한 검색 에이전트들
-3. 검색 에이전트들 → 지식 통합기 → 요약기 → 응답 포맷터
-4. 응답 포맷터 → 사용자 응답
+2. 오케스트레이터 → 질문 분석기 → 데이터 요구사항 결정
+3. 데이터 요구사항에 따라 필요한 검색 에이전트들 실행
+4. 검색 에이전트들 → 지식 통합기 → 요약기 → 응답 포맷터
+5. 응답 포맷터 → 사용자 응답
 
-## 7. 데이터베이스 연동
+## 6. 최근 업데이트 (2025년 3월)
 
-### 7.1 세션 관리
+### 6.1 기능 개선
 
-PostgreSQL을 사용하여 사용자 세션 및 대화 이력을 관리합니다:
+1. **멀티 모델 지원**
+   - OpenAI GPT-4(gpt-4o) 및 Google Gemini(gemini-2.0-flash) 모델 지원
+   - 에이전트별 최적 모델 선택 기능
 
-```python
-async def get_db_session() -> AsyncSession:
-    session = AsyncSessionLocal()
-    try:
-        logger.debug("새 DB 세션 생성")
-        return session
-    except Exception as e:
-        logger.error(f"DB 세션 생성 중 오류 발생: {e}")
-        await session.close()
-        raise
+2. **데이터 요구사항 분석 강화**
+   - 질문 분석기가 필요한 데이터 소스를 보다 정확하게 판단
+   - 불필요한 에이전트 실행 최소화
+
+3. **실행 계획 생성**
+   - 오케스트레이터가 질문에 따른 최적의 실행 계획 생성
+   - 에이전트별 우선순위 및 실행 순서 최적화
+
+4. **에러 복구 및 폴백 전략**
+   - 에이전트 실패 시 대체 전략 구현
+   - 데이터 부족 시 대체 정보 소스 활용
+
+### 6.2 성능 개선
+
+1. **병렬 처리 최적화**
+   - 독립적인 검색 에이전트의 병렬 실행
+   - 전체 응답 시간 단축
+
+2. **캐싱 및 최적화**
+   - 유사 질문에 대한 중간 결과 캐싱
+   - 모델 호출 최소화
+
+3. **동적 임계값 조정**
+   - 질문 복잡도에 따른 검색 임계값 자동 조정
+   - 질문 유형별 최적화된 파라미터 적용
+
+## 7. 실제 실행 예시
+
+아래는 실제 시스템 로그에서 발췌한 "올해 실적은?" 쿼리 처리 과정입니다:
+
+```
+1. 오케스트레이터 분석 결과:
+   - 데이터 요구사항: {'telegram_needed': False, 'reports_needed': True, 'financial_statements_needed': True, 'industry_data_needed': False}
+   
+2. 실행 계획 생성:
+   - 순서: ['telegram_retriever', 'report_analyzer', 'financial_analyzer', 'knowledge_integrator', 'summarizer', 'response_formatter']
+   - 통합 전략: Knowledge Integrator를 사용하여 기업 리포트, 재무제표, 텔레그램 메시지에서 추출된 정보를 통합
+   
+3. 텔레그램 검색 결과:
+   - 2개의 관련 메시지 발견
+   
+4. 리포트 분석 결과:
+   - 3개의 관련 리포트 발견 및 분석
+   
+5. 재무 분석 결과:
+   - 데이터 없음 (분석 스킵)
+   
+6. 지식 통합 및 요약:
+   - 모든 소스의 정보 통합 및 요약
+   
+7. 최종 응답 생성:
+   - 사용자 친화적 형식으로 응답 포맷팅
 ```
 
-## 8. 구현 현황 및 남은 작업
+## 8. 구현 현황 및 향후 개선 사항
 
 ### 8.1 구현 완료된 작업
 
-1. **기본 아키텍처 설계**
-   - 전체 멀티에이전트 시스템 설계
-   - 에이전트 간 인터페이스 정의
+1. **전체 아키텍처 구현**
+   - 모든 핵심 에이전트 구현 완료
+   - 워크플로우 그래프 구현 완료
+   - 병렬 처리 및 조건부 실행 구현
 
-2. **핵심 에이전트 구현**
-   - SessionManagerAgent (세션 관리)
-   - OrchestratorAgent (워크플로우 조정)
-   - QuestionAnalyzerAgent (질문 분석)
-   - KnowledgeIntegratorAgent (정보 통합)
-   - ResponseFormatterAgent (응답 포맷팅)
-   - FallbackManagerAgent (오류 처리)
+2. **데이터 검색 에이전트 구현**
+   - TelegramRetrieverAgent
+   - ReportAnalyzerAgent
+   - FinancialAnalyzerAgent
+   - IndustryAnalyzerAgent
 
-3. **워크플로우 그래프 구현**
-   - LangGraph 기반 그래프 구조 설정
-   - 조건부 라우팅 로직 구현
-   - 병렬 처리 브랜치 구현
+3. **통합 및 응답 생성 에이전트 구현**
+   - KnowledgeIntegratorAgent
+   - SummarizerAgent
+   - ResponseFormatterAgent
 
-4. **데이터베이스 연동**
-   - PostgreSQL 세션 관리 구현
-   - 데이터베이스 연결 관리 코드 통합
-
-### 8.2 우선순위 작업
-
-1. **검색 에이전트 구현/통합**
-   - TelegramRetrieverAgent 연결
-   - ReportAnalyzerAgent, FinancialAnalyzerAgent, IndustryAnalyzerAgent 구현
-
-2. **테스트 코드 작성**
-   - 통합 테스트 코드 개발
-   - 성능 측정 및 최적화
-
-3. **API 서비스 구현**
+4. **API 서비스 구현**
    - FastAPI 엔드포인트 연결
-   - 요청/응답 처리 최적화
+   - 세션 관리 구현
 
-### 8.3 향후 개선 사항
+### 8.2 개선 계획
 
-1. **모니터링 시스템 구현**
-   - 에이전트 성능 측정
-   - 로깅 및 분석 기능
+1. **모델 최적화**
+   - 에이전트별 최적 모델 선택 로직 개선
+   - 모델 성능/비용 최적화
 
-2. **캐싱 전략 구현**
-   - 반복 질문에 대한 응답 캐싱
-   - 유사 질문 처리 최적화
+2. **캐싱 전략 강화**
+   - 유사 질문 캐싱 구현
+   - 중간 결과 재사용
 
-3. **UI/UX 개선**
-   - 대화형 인터페이스 개발
-   - 결과 시각화 기능 추가
+3. **응답 품질 개선**
+   - 보다 자연스러운 응답 생성
+   - 더 정확한 정보 추출
 
-## 9. 결론
-
-Stockeasy 멀티에이전트 시스템은 다양한 금융 데이터 소스를 통합하여 사용자 질문에 대한 종합적인 응답을 제공합니다. 현재까지 핵심 에이전트들의 구현을 완료했으며, 검색 에이전트 구현 및 통합을 진행 중입니다. LangGraph를 활용한 병렬 처리 구조를 통해 효율적인 데이터 검색 및 통합이 가능하며, 향후 지속적인 개선을 통해 더욱 강력한 금융 정보 제공 시스템으로 발전할 예정입니다.
+4. **모니터링 강화**
+   - 각 에이전트 성능 모니터링 시스템 구축
+   - 오류 추적 및 분석 개선
 
 ## 부록: 폴더 구조
 
@@ -327,7 +391,12 @@ backend/
     │   ├── session_manager.py
     │   ├── orchestrator_agent.py
     │   ├── question_analyzer_agent.py
+    │   ├── telegram_retriever_agent.py
+    │   ├── report_analyzer_agent.py
+    │   ├── financial_analyzer_agent.py
+    │   ├── industry_analyzer_agent.py
     │   ├── knowledge_integrator_agent.py
+    │   ├── summarizer.py
     │   ├── response_formatter_agent.py
     │   └── fallback_manager_agent.py
     ├── graph/                # 워크플로우 그래프
@@ -343,7 +412,7 @@ backend/
     │   ├── telegram/
     │   │   ├── rag_service.py
     │   │   └── embedding.py
-    │   └── ...
+    │   └── rag_service.py     # 통합 RAG 서비스
     └── models/               # 데이터 모델
         └── agent_io.py       # 에이전트 I/O 모델
 ``` 
