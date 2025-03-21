@@ -30,11 +30,7 @@ interface ETFInfo {
   etfChangePercent: string; // 20malist.csv에서 가져온 ETF 등락률
   대표종목?: string;  // 대표 종목 정보 추가
   지속일?: string;      // 지속일 정보 추가
-  calculatedMA20Status?: {  // 차트 데이터에서 계산된 실제 MA20 상태
-    isAboveMA20: boolean;
-    durationDays: number;
-    statusText: string;
-  };
+  변동일?: string;      // 변동일 정보 추가 - 추가된 필드
   selectedStocks?: {   // 선택된 대표 종목 정보 추가 (복수형으로 변경)
     code: string;
     name: string;
@@ -131,14 +127,14 @@ export default function IndustryCharts() {
         
         // 디버깅: 필터링 로직 로깅
         const isIncluded = !isNaN(durationDays) && durationDays >= 10;
-        console.log(`ETF ${row.종목명} (${row.종목코드}): 지속일=${durationText}, 파싱된 일수=${durationDays}, 포함여부=${isIncluded}, 종목코드=${row.종목코드}`);
+        console.log(`ETF ${row.종목명} (${row.종목코드}): 지속일=${durationText}, 파싱된 일수=${durationDays}, 포함여부=${isIncluded}, 종목코드=${row.종목코드}, 변동일=${row.변동일}`);
         
         // 유지 +10일 이상인 경우만 포함
         return isIncluded;
       });
       
       // 디버깅: 필터링된 ETF 데이터 로깅
-      console.log('필터링된 ETF 데이터:', filteredRows.map(row => `${row.종목명} (${row.종목코드}): ${row.지속일}`));
+      console.log('필터링된 ETF 데이터:', filteredRows.map(row => `${row.종목명} (${row.종목코드}): ${row.지속일}, 변동일: ${row.변동일}`));
       
       // 각 ETF에 대해 대표 주식 로드
       const stocksData = await loadAllStocksData();
@@ -164,7 +160,8 @@ export default function IndustryCharts() {
           })(),
           etfChangePercent: etf.등락률 || '0%', // 20malist.csv에서 가져온 원본 등락률 문자열 저장
           대표종목: etf.대표종목,
-          지속일: etf.지속일
+          지속일: etf.지속일,
+          변동일: etf.변동일 // 변동일 정보 추가
         } as ETFInfo;
       });
       
@@ -240,14 +237,15 @@ export default function IndustryCharts() {
     try {
       const stocksData: RepresentativeStock[] = [];
       
-      // etf_indiestocklist 디렉토리에서 파일 목록 가져오기
+      // JSON 파일에서 파일 목록 가져오기
       try {
-        const response = await fetch('/api/list-files?directory=etf_indiestocklist');
+        const response = await fetch('/etf_indiestocklist/file_list.json');
         if (!response.ok) {
-          throw new Error(`파일 목록을 가져오는데 실패했습니다: ${response.status}`);
+          throw new Error(`파일 목록 JSON을 가져오는데 실패했습니다: ${response.status}`);
         }
         
-        const fileList = await response.json();
+        const fileListData = await response.json();
+        const fileList = fileListData.files || [];
         console.log('etf_indiestocklist 파일 목록:', fileList);
         
         // 각 파일에서 종목코드, 종목명, RS 값 추출
@@ -264,7 +262,7 @@ export default function IndustryCharts() {
           }
         }
       } catch (error) {
-        console.error('파일 목록을 가져오는데 실패했습니다:', error);
+        console.error('파일 목록 JSON을 가져오는데 실패했습니다:', error);
         
         // 폴백: 기존 방식으로 파일 목록 가져오기
         console.log('폴백 방식으로 파일 목록 가져오기 시도...');
@@ -527,9 +525,6 @@ export default function IndustryCharts() {
         setChartDataMap(prev => ({ ...prev, [code]: etfChartData }));
       }
       
-      // 20일 이동평균선 상태 계산
-      const ma20Status = calculateMA20StatusFromChartData(etfChartData);
-      
       // 등락율 계산 (차트 데이터가 있는 경우에만)
       const changePercent = etfChartData && etfChartData.length >= 2 ? calculateChangePercent(code) : 0;
       
@@ -547,8 +542,7 @@ export default function IndustryCharts() {
             code: loadedStocksData[0].code,
             name: loadedStocksData[0].name,
             rsValue: loadedStocksData[0].rsValue
-          },
-          calculatedMA20Status: ma20Status // 계산된 MA20 상태 추가
+          }
         };
         return newList;
       });
@@ -816,8 +810,24 @@ export default function IndustryCharts() {
   
   // 상태 텍스트 가져오기
   const getStatusText = (etf: ETFInfo) => {
-    if (etf.isLoading) return '상태 확인 중';
-    return `${etf.isAboveMA20 ? '유지' : '이탈'} +${etf.durationDays}일`;
+    // 지속일 정보가 있는 경우
+    if (etf.지속일) {
+      // 변동일 정보 추가 (연도 제거하고 월-일만 표시)
+      let 변동일Text = '';
+      if (etf.변동일) {
+        // YYYY-MM-DD 형식에서 MM-DD만 추출
+        const dateParts = etf.변동일.split('-');
+        if (dateParts.length === 3) {
+          변동일Text = `(${dateParts[1]}-${dateParts[2]})`;
+        } else {
+          변동일Text = `(${etf.변동일})`;
+        }
+      }
+      return `${etf.지속일} ${변동일Text}`;
+    }
+    
+    // 기본값
+    return '정보 없음';
   };
   
   // ETF를 행과 열로 분배
@@ -850,49 +860,6 @@ export default function IndustryCharts() {
     
     return rows;
   }, [etfInfoList]);
-
-  // 차트 데이터에서 20일 이동평균선 상태 계산
-  const calculateMA20StatusFromChartData = (chartData: CandleData[]): { isAboveMA20: boolean; durationDays: number; statusText: string } => {
-    try {
-      if (!chartData || chartData.length < 20) {
-        return { isAboveMA20: false, durationDays: 0, statusText: '데이터 부족' };
-      }
-
-      // 최근 데이터 가져오기
-      const recentData = [...chartData].slice(-30); // 최근 30일 데이터
-      
-      // 현재 종가
-      const currentPrice = recentData[recentData.length - 1].close;
-      
-      // 20일 이동평균 계산
-      const ma20 = recentData.slice(-20).reduce((sum, data) => sum + data.close, 0) / 20;
-      
-      // 20일선 위/아래 여부
-      const isAboveMA20 = currentPrice > ma20;
-      
-      // 연속 일수 계산
-      let durationDays = 1;
-      for (let i = recentData.length - 2; i >= 0; i--) {
-        if (i < 19) break; // 20일선을 계산할 수 없는 경우
-        
-        const price = recentData[i].close;
-        const prevMA20 = recentData.slice(i-19, i+1).reduce((sum, data) => sum + data.close, 0) / Math.min(20, i + 1);
-        
-        if ((price > prevMA20) !== isAboveMA20) {
-          break;
-        }
-        durationDays++;
-      }
-      
-      // 상태 텍스트 생성
-      const statusText = `${isAboveMA20 ? '유지' : '이탈'} +${durationDays}일`;
-      
-      return { isAboveMA20, durationDays, statusText };
-    } catch (error) {
-      console.error('20일선 상태 계산 오류:', error);
-      return { isAboveMA20: false, durationDays: 0, statusText: '계산 오류' };
-    }
-  };
 
   // 종목명 우측에 등락률 표시
   const calculateStockChangePercent = (stock: { code: string; name: string; rsValue: number; chartData: CandleData[] }) => {
@@ -1015,8 +982,8 @@ export default function IndustryCharts() {
                             {etf.etfChangePercent}
                           </span>
                         </div>
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${etf.calculatedMA20Status?.isAboveMA20 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                          {etf.calculatedMA20Status?.statusText || etf.지속일 || getStatusText(etf)}
+                        <span className={`text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-800`}>
+                          {getStatusText(etf)}
                         </span>
                       </div>
                       
