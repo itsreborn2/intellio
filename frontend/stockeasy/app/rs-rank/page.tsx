@@ -184,7 +184,7 @@ export default function RSRankPage() {
           const rsResponse = await fetch(rsDataFilePath, { cache: 'no-store' });
           
           if (!rsResponse.ok) {
-            console.error(`RS 데이터 파일 로드 실패: ${rsResponse.status} ${rsResponse.statusText}`);
+            console.error(`RS 데이터 파일 로드 실패: ${response.status} ${response.statusText}`);
             throw new Error(`RS 데이터 파일 로드 실패: ${response.status}`);
           }
           
@@ -384,16 +384,10 @@ export default function RSRankPage() {
         // KOSPI 지수 데이터 로드
         let kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
         
-        // 파일이 없으면 API를 통해 다운로드 요청
+        // 파일이 없으면 오류 메시지 표시
         if (!kospiResponse.ok) {
-          console.log('코스피 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
-          await fetch('/api/stocks?action=update-file&fileId=1dzf65fz6elq6b5znvhuaftn10hqjbe_c&dataType=market-index');
-          
-          // 다시 로컬 파일 시도
-          kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
-          if (!kospiResponse.ok) {
-            throw new Error(`코스피 지수 데이터 파일 로드 실패: ${kospiResponse.status}`);
-          }
+          console.log('코스피 지수 데이터 파일을 찾을 수 없습니다.');
+          throw new Error(`코스피 지수 데이터 파일을 찾을 수 없습니다.`);
         }
         
         if (kospiResponse.ok) {
@@ -439,16 +433,10 @@ export default function RSRankPage() {
         // KOSDAQ 지수 데이터 로드
         let kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
         
-        // 파일이 없으면 API를 통해 다운로드 요청
+        // 파일이 없으면 오류 메시지 표시
         if (!kosdaqResponse.ok) {
-          console.log('코스닥 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
-          await fetch('/api/stocks?action=update-file&fileId=1ks9qkdzmsxv-qenv6udzzidfwgykc1qg&dataType=market-index');
-          
-          // 다시 로컬 파일 시도
-          kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
-          if (!kosdaqResponse.ok) {
-            throw new Error(`코스닥 지수 데이터 파일 로드 실패: ${kosdaqResponse.status}`);
-          }
+          console.log('코스닥 지수 데이터 파일을 찾을 수 없습니다.');
+          throw new Error(`코스닥 지수 데이터 파일을 찾을 수 없습니다.`);
         }
         
         if (kosdaqResponse.ok) {
@@ -520,7 +508,10 @@ export default function RSRankPage() {
             const response = await fetch(chartFilePaths[index], { cache: 'no-store' });
             
             if (!response.ok) {
-              throw new Error(`캐시 파일 로드 실패: ${response.status}`);
+              console.log(`차트 데이터 파일을 찾을 수 없습니다: ${chartFilePaths[index]}`);
+              newChartErrorArray[index] = `차트 데이터 파일을 찾을 수 없습니다.`;
+              newChartLoadingArray[index] = false;
+              return;
             }
             
             const csvText = await response.text();
@@ -1142,16 +1133,10 @@ export default function RSRankPage() {
         // KOSPI 지수 데이터 로드
         let kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
         
-        // 파일이 없으면 API를 통해 다운로드 요청
+        // 파일이 없으면 오류 메시지 표시
         if (!kospiResponse.ok) {
-          console.log('코스피 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
-          await fetch('/api/stocks?action=update-file&fileId=1dzf65fz6elq6b5znvhuaftn10hqjbe_c&dataType=market-index');
-          
-          // 다시 로컬 파일 시도
-          kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
-          if (!kospiResponse.ok) {
-            throw new Error(`코스피 지수 데이터 파일 로드 실패: ${kospiResponse.status}`);
-          }
+          console.log('코스피 지수 데이터 파일을 찾을 수 없습니다.');
+          throw new Error(`코스피 지수 데이터 파일을 찾을 수 없습니다.`);
         }
         
         if (kospiResponse.ok) {
@@ -1197,16 +1182,10 @@ export default function RSRankPage() {
         // KOSDAQ 지수 데이터 로드
         let kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
         
-        // 파일이 없으면 API를 통해 다운로드 요청
+        // 파일이 없으면 오류 메시지 표시
         if (!kosdaqResponse.ok) {
-          console.log('코스닥 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
-          await fetch('/api/stocks?action=update-file&fileId=1ks9qkdzmsxv-qenv6udzzidfwgykc1qg&dataType=market-index');
-          
-          // 다시 로컬 파일 시도
-          kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
-          if (!kosdaqResponse.ok) {
-            throw new Error(`코스닥 지수 데이터 파일 로드 실패: ${kosdaqResponse.status}`);
-          }
+          console.log('코스닥 지수 데이터 파일을 찾을 수 없습니다.');
+          throw new Error(`코스닥 지수 데이터 파일을 찾을 수 없습니다.`);
         }
         
         if (kosdaqResponse.ok) {
