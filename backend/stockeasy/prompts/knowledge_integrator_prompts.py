@@ -13,13 +13,13 @@ KNOWLEDGE_INTEGRATOR_PROMPT = """
 사용자 질문: {query}
 
 수집된 정보:
-1. 텔레그램 검색 결과: {telegram_results}
+1. 자체DB 검색 결과: {telegram_results}
 2. 기업 리포트 검색 결과: {report_results}
 3. 재무제표 분석 결과: {financial_results}
 4. 산업 동향 분석 결과: {industry_results}
 
 각 정보 소스의 중요도:
-- 텔레그램 검색: {telegram_importance}/10
+- 자체DB 검색: {telegram_importance}/10
 - 기업 리포트: {report_importance}/10
 - 재무제표 분석: {financial_importance}/10
 - 산업 동향 분석: {industry_importance}/10
@@ -125,7 +125,7 @@ def format_knowledge_integrator_prompt(
     collected_information = ""
     
     if telegram_results:
-        collected_information += f"텔레그램 검색 결과 (중요도: {telegram_importance}/10):\n{telegram_results}\n\n"
+        collected_information += f"자체DB 검색 결과 (중요도: {telegram_importance}/10):\n{telegram_results}\n\n"
     
     if report_results:
         collected_information += f"기업 리포트 검색 결과 (중요도: {report_importance}/10):\n{report_results}\n\n"

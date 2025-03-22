@@ -173,7 +173,7 @@ class LLMModels:
                     # 모델 이름: models/gemini-embedding-exp
                     # 표시 이름: Gemini Embedding Experimental
                     # ---
-                    # 모델 이름: models/aqa
+                    # 모델 이름: models/aqa # 2년전.
                     # 표시 이름: Model that performs Attributed Question Answering.
                     # ---
                     # 모델 이름: models/imagen-3.0-generate-002

@@ -28,7 +28,7 @@ os.environ["LANGCHAIN_PROJECT"] = "stockeasy_multiagent"
 # LANGSMITH_API_KEY는 .env 파일에서 로드됨
 
 from stockeasy.models.agent_io import QuestionAnalysisResult
-
+from common.core.config import settings
 # 로그 시간을 한국 시간으로 설정
 logger.remove()  # 기존 핸들러 제거
 
@@ -64,8 +64,11 @@ async def test_simple_query():
     result = await rag_service.analyze_stock(
         query=query,
         stock_code=stock_code,
-        stock_name=stock_name
-    )
+        stock_name=stock_name,
+        session_id="60a566aa-5eed-44ac-9380-1349f76259e7",
+        user_id="blueslame@gmail.com"  # None이더라도 명시적으로 전달
+        )
+        
     
     # result의 모든 키값들 출력
     # print(f"# result 키값 목록:")
@@ -172,6 +175,8 @@ async def test_without_stock_info():
 
 
 async def main():
+
+    #settings.POSTGRES_PORT = 5433
     """테스트 메인 함수"""
     logger.info("=== Stockeasy 멀티에이전트 시스템 테스트 시작 ===")
     
@@ -187,6 +192,7 @@ async def main():
         
         # 테스트 케이스 실행
         logger.info("\n=== 테스트 1: 간단한 쿼리 ===")
+
         query1, result1 = await test_simple_query()
         
         logger.info("\n=== 테스트 2: 복잡한 쿼리 ===")

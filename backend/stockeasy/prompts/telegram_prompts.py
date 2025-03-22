@@ -10,7 +10,7 @@ from stockeasy.models.agent_io import RetrievedTelegramMessage
 
 
 TELEGRAM_SEARCH_PROMPT = """
-당신은 금융 관련 텔레그램 메시지 검색 전문가입니다. 다음 정보를 바탕으로 가장 관련성 높은 메시지를 검색하세요:
+당신은 금융 관련 자체DB 메시지 검색 전문가입니다. 다음 정보를 바탕으로 가장 관련성 높은 메시지를 검색하세요:
 
 질문: {query}
 종목코드: {stock_code}
@@ -31,7 +31,7 @@ TELEGRAM_SEARCH_PROMPT = """
 """
 
 TELEGRAM_SUMMARY_PROMPT = """
-당신은 금융 시장과 주식 관련 텔레그램 메시지를 분석하고 요약하는 전문가입니다.
+당신은 금융 시장과 주식 관련 자체DB 메시지를 분석하고 요약하는 전문가입니다.
 주어진 메시지들을 분석하여 다음 사항을 고려해 요약해주세요:
 
 1. 메시지의 시간 순서를 고려하여 사건의 흐름을 파악하세요.

@@ -4,6 +4,12 @@
 특히 검색 에이전트들의 순차 실행과 병렬 실행의 성능 차이를 측정합니다.
 """
 
+import os
+import sys
+
+# 상위 디렉토리를 sys.path에 추가하여 모듈을 import할 수 있게 함
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import pytest
 import asyncio
 import time

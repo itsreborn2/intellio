@@ -4,6 +4,7 @@ from .base import BaseRetriever, RetrieverConfig
 from .models import DocumentWithScore, RetrievalResult
 
 from common.services.vector_store_manager import VectorStoreManager
+from common.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,9 @@ class SemanticRetriever(BaseRetriever):
             for i, (doc, score) in enumerate(filtered_results):
                 # 기존 Document 객체의 속성을 복사하여 새로운 Document 생성
                 if i < 5:
-                    #logger.info(f"[{i}]score: {score}, min_score: {self.config.min_score}")
+                    if settings.ENV == "development":
+                        logger.info(f"[{i}] score: {score}, min_score: {self.config.min_score}")
+                        logger.info(f"doc: {doc.page_content[:300]}")
                     score_list.append(score)
                 if score >= self.config.min_score:
                     new_doc = DocumentWithScore(

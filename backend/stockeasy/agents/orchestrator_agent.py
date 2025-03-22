@@ -68,7 +68,7 @@ class OrchestratorAgent:
         
         # 사용 가능한 에이전트 목록
         self.available_agents = {
-            "telegram_retriever": "텔레그램 메시지 검색 에이전트",
+            "telegram_retriever": "자체DB 검색 에이전트",
             "report_analyzer": "기업 리포트 검색 및 분석 에이전트",
             "financial_analyzer": "재무제표 분석 에이전트",
             "industry_analyzer": "산업 동향 분석 에이전트",
