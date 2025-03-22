@@ -42,6 +42,7 @@ const markdownClassName = `prose dark:prose-invert max-w-none
 function MarkdownCell({ content }: { content: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [needsScroll, setNeedsScroll] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
@@ -142,6 +143,13 @@ function MarkdownCell({ content }: { content: string }) {
     toggleExpand();
   }, [toggleExpand]);
   
+  // 아이콘 클릭 이벤트 핸들러
+  const handleIconClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleExpand();
+  }, [toggleExpand]);
+  
   // 컨텐츠나 확장 상태가 변경될 때 높이 체크
   useEffect(() => {
     // 약간의 지연을 두고 높이 체크 (렌더링 완료 후)
@@ -189,6 +197,7 @@ function MarkdownCell({ content }: { content: string }) {
       className={`
         transition-all duration-300 cursor-pointer text-xs relative
         ${needsScroll ? 'overflow-y-auto overflow-x-hidden' : 'overflow-visible'}
+        ${isHovering ? 'bg-gray-90' : ''}
       `}
       style={{
         userSelect: 'none',
@@ -202,6 +211,8 @@ function MarkdownCell({ content }: { content: string }) {
         scrollbarColor: '#cbd5e1 transparent'
       }}
       onDoubleClick={handleDoubleClick}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
     >
       <style jsx>{`
         /* 웹킷 기반 브라우저용 스크롤바 스타일 */
@@ -250,7 +261,8 @@ function MarkdownCell({ content }: { content: string }) {
           userSelect: 'none',
           width: '100%',
           boxSizing: 'border-box',
-          paddingRight: '0'
+          paddingRight: '0',
+          paddingBottom: '16px' // 아이콘을 위한 공간 확보
         }}
       >
         <ReactMarkdown 
@@ -260,11 +272,41 @@ function MarkdownCell({ content }: { content: string }) {
           {content}
         </ReactMarkdown>
       </div>
+      
+      {/* 스크롤 표시를 위한 UI */}
       {needsScroll && (
-        <div className="text-right mt-1 mr-0">
-          <span className="text-[9px] text-gray-400 italic">↓</span>
+        <div className="absolute right-0 bottom-0 px-1 py-0.5 z-10">
+          <span className="text-[9px] text-gray-500 mr-1">↓</span>
         </div>
       )}
+      
+      {/* 셀 확장 버튼 - 항상 고정된 위치 */}
+      <div 
+        className="absolute right-0 bottom-0 z-20 flex items-center bg-gray-50 bg-opacity-80 px-1 py-0.5 rounded-tl cursor-pointer hover:bg-gray-100"
+        onClick={handleIconClick}
+        title="클릭하여 자세히 보기"
+        data-tooltip-delay="100"
+      >
+        <span className="text-[9px] text-blue-500 italic">
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            width="12" 
+            height="12" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            className="inline-block"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="11" y1="8" x2="11" y2="14"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+        </span>
+      </div>
     </div>
   );
   
@@ -336,7 +378,9 @@ function MarkdownCell({ content }: { content: string }) {
           style={{
             userSelect: 'text',
             width: '100%',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            position: 'relative',
+            paddingBottom: '26px' // 닫기 버튼을 위한 공간 확보
           }}
         >
           <ReactMarkdown 
@@ -345,14 +389,14 @@ function MarkdownCell({ content }: { content: string }) {
           >
             {content}
           </ReactMarkdown>
-        </div>
-        <div className="text-right mt-2 text-xs text-gray-500">
-          <span 
-            className="text-[10px] italic bg-gray-100 px-2 py-0.5 rounded cursor-pointer hover:bg-gray-200"
-            onClick={handleCollapseClick}
-          >
-            클릭하여 접기
-          </span>
+          <div className="absolute bottom-0 right-0 mt-2">
+            <span 
+              className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded cursor-pointer hover:bg-gray-200"
+              onClick={handleCollapseClick}
+            >
+              닫기
+            </span>
+          </div>
         </div>
       </div>
     </div>,
@@ -866,6 +910,29 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         /* 헤더 셀 스타일 직접 조정 */
         .MuiTableHead-root {
           background-color:rgb(219, 227, 228) !important;
+        }
+        
+        /* 툴팁 딜레이 줄이기 */
+        [title]:hover::after {
+          content: attr(title);
+          position: absolute;
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          background-color: rgba(0, 0, 0, 0.8);
+          color: white;
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-size: 10px;
+          white-space: nowrap;
+          z-index: 100;
+          transition-delay: 0.1s !important;
+          transition-duration: 0.1s !important;
+        }
+        
+        /* 툴팁 딜레이 속성이 있는 경우 */
+        [data-tooltip-delay="100"]:hover::after {
+          transition-delay: 0.1s !important;
         }
         
         .MuiTableHead-root .MuiTableCell-root {

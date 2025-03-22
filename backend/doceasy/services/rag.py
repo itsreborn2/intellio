@@ -796,7 +796,11 @@ class RAGService:
             #     }
             # }
             
-            rr: RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="table")
+            rr: RetrievalResult = await self.process_retrival(query=query, 
+                                                              query_analysis=query_analysis,
+                                                              top_k=k,
+                                                              document_ids=document_ids, 
+                                                              query_type="table")
             logger.warning(f"청크 추출 완료 : {len(rr.documents)} 개")
             
             if not rr.documents:
