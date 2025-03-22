@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import ChartComponent from './ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
 import Papa from 'papaparse'
@@ -32,7 +32,13 @@ export default function IndustryCharts() {
   // ETF 정보 상태
   const [etfInfoList, setEtfInfoList] = useState<ETFInfo[]>([]);
   const [stockPriceData, setStockPriceData] = useState<{[key: string]: number[]}>({});
-  const chartDataMap: {[key: string]: CandleData[]} = {};
+  const [chartDataMap, setChartDataMap] = useState<Record<string, CandleData[]>>({});
+  const [selectedStocksChartMap, setSelectedStocksChartMap] = useState<Record<string, CandleData[]>>({});
+  const [processedStocks, setProcessedStocks] = useState<string[]>([]);
+  const [selectedStockCodes, setSelectedStockCodes] = useState<string[]>([]);
+  
+  // 차트 컨테이너 ref 추가
+  const chartRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
   
   // 산업-ETF 매핑 데이터
   const industryETFMapping = [
@@ -434,7 +440,7 @@ export default function IndustryCharts() {
     <div className="p-4">
       {/* 차트 제목 및 설명 추가 */}
       <div className="mb-4">
-        <h2 className="text-xl font-bold mb-2">산업별 ETF 차트</h2>
+        <h2 className="text-xl font-bold mb-2">산업별 주도ETF 차트</h2>
         <p className="text-sm text-gray-600">
           각 산업별 ETF의 20일 이동평균선 기준 상태와 등락률을 확인할 수 있습니다. 
           녹색 배경은 20일선 위에 있는 ETF, 노란색 배경은 20일선 아래에 있는 ETF를 나타냅니다.
@@ -455,44 +461,37 @@ export default function IndustryCharts() {
                     {etf.changePercent >= 0 ? '+' : ''}{etf.changePercent.toFixed(2)}%
                   </span>
                 </div>
-                {etf.isLoading ? (
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
-                    로딩 중...
-                  </span>
-                ) : (
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${etf.isAboveMA20 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                    {getStatusText(etf)}
-                  </span>
-                )}
+                <div className="flex items-center gap-1">
+                  {!etf.isLoading && !etf.error && etf.chartData.length > 0 && (
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${etf.isAboveMA20 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {getStatusText(etf)}
+                    </span>
+                  )}
+                  {etf.isLoading ? (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
+                      로딩 중...
+                    </span>
+                  ) : (
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${etf.isAboveMA20 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {getStatusText(etf)}
+                    </span>
+                  )}
+                </div>
               </div>
               
-              <div className="chart-container">
-                {etf.isLoading ? (
-                  <div className="flex items-center justify-center border border-t-0 border-gray-200" style={{ height: '300px', borderRadius: '0 0 0.375rem 0.375rem' }}>
-                    <div className="text-gray-500 text-sm">차트 로딩 중...</div>
-                  </div>
-                ) : etf.error ? (
-                  <div className="flex items-center justify-center border border-t-0 border-gray-200" style={{ height: '300px', borderRadius: '0 0 0.375rem 0.375rem' }}>
-                    <div className="text-red-500 text-sm">{etf.error}</div>
-                  </div>
-                ) : etf.chartData.length === 0 ? (
-                  <div className="flex items-center justify-center border border-t-0 border-gray-200" style={{ height: '300px', borderRadius: '0 0 0.375rem 0.375rem' }}>
-                    <div className="text-gray-500 text-sm">데이터가 없습니다.</div>
-                  </div>
-                ) : (
-                  <div className="border border-t-0 border-gray-200" style={{ borderRadius: '0 0 0.375rem 0.375rem', overflow: 'hidden' }}>
-                    <ChartComponent
-                      data={etf.chartData}
-                      height={300}
-                      width="100%"
-                      showVolume={true}
-                      showMA20={true}
-                      title={`${etf.name} (${etf.code})`}
-                      subtitle={`${getStatusText(etf)} | 등락률: ${etf.changePercent >= 0 ? '+' : ''}${etf.changePercent.toFixed(2)}%`}
-                      parentComponent="IndustryCharts"
-                    />
-                  </div>
-                )}
+              <div className="border border-t-0 border-gray-200" style={{ borderRadius: '0 0 0.375rem 0.375rem', overflow: 'hidden' }}>
+                <div ref={(el) => { chartRefs.current[etf.code] = el; }}>
+                  <ChartComponent
+                    data={etf.chartData}
+                    height={300}
+                    width="100%"
+                    showVolume={true}
+                    showMA20={true}
+                    title={`${etf.name} (${etf.code})`}
+                    subtitle={`${getStatusText(etf)} | 등락률: ${etf.changePercent >= 0 ? '+' : ''}${etf.changePercent.toFixed(2)}%`}
+                    parentComponent="IndustryCharts"
+                  />
+                </div>
               </div>
             </div>
           </div>

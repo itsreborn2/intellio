@@ -460,11 +460,23 @@ const ChartComponent: React.FC<ChartProps> = ({
           borderColor: 'rgba(197, 203, 206, 0.8)',
           timeVisible: true,
           secondsVisible: false,
-          tickMarkFormatter: (time: Time, tickMarkType: any, locale: string) => {
+          tickMarkFormatter: (time: Time, tickMarkType: TickMarkType, locale: string) => {
             const date = new Date(Number(time) * 1000);
+            const year = date.getFullYear();
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
             const day = date.getDate().toString().padStart(2, '0');
-            return `${month}-${day}`;
+            
+            // 메이저 틱(주요 눈금)에는 연도-월-일 형식으로 표시
+            if (tickMarkType === TickMarkType.Year) {
+              return `${year}`;
+            } else if (tickMarkType === TickMarkType.Month) {
+              return `${year}-${month}`;
+            } else if (tickMarkType === TickMarkType.DayOfMonth) {
+              return `${month}.${day}`;
+            }
+            
+            // 기본 형식은 월.일
+            return `${month}.${day}`;
           },
         },
         localization: {

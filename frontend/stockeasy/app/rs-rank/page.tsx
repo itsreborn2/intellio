@@ -1,10 +1,15 @@
 'use client'
 
-import { Suspense, useState, useEffect, useMemo, useCallback } from 'react'
+import { Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation';
+import Papa from 'papaparse';
+import { format, subDays } from 'date-fns';
 import Sidebar from '../components/Sidebar'
-import Papa from 'papaparse'
 import ChartComponent from '../components/ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
+import html2canvas from 'html2canvas';
+import { copyTableAsImage } from '../utils/tableCopyUtils';
+import TableCopyButton from '../components/TableCopyButton';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -116,7 +121,15 @@ export default function RSRankPage() {
   const [chartRsValues, setChartRsValues] = useState<string[]>(Array.from({length: 20}, () => ''));
   const [kospiIndexData, setKospiIndexData] = useState<CandleData[]>([]);
   const [kosdaqIndexData, setKosdaqIndexData] = useState<CandleData[]>([]);
-
+  
+  // 테이블 참조
+  const rsTableRef = useRef<HTMLDivElement>(null);
+  const highTableRef = useRef<HTMLDivElement>(null);
+  const rsHeaderRef = useRef<HTMLDivElement>(null);
+  const highHeaderRef = useRef<HTMLDivElement>(null);
+  
+  // 이미지로 복사하는 함수는 utils/tableCopyUtils.ts로 이동했습니다.
+  
   useEffect(() => {
     // 페이지 로드 시 데이터 로드
     const loadData = async () => {
@@ -968,9 +981,9 @@ export default function RSRankPage() {
     
     // 거래대금이 0인 항목 제외 및 시가총액 2천억 이상인 종목만 필터링
     const filteredData = mappedData.filter((item) => {
-      // 시가총액 필터링 - 2천억 이상만 포함 (필터링 조건 완화)
+      // 시가총액 필터링 - 2천억 이상만 포함
       const marketCap = Number(item['시가총액(억)'] || 0);
-      return marketCap > 0; // 시가총액이 0보다 큰 종목만 포함
+      return marketCap >= 2000; // 시가총액이 2천억 이상인 종목만 포함
     });
     
     console.log('필터링된 데이터 행 수:', filteredData.length);
@@ -1001,7 +1014,7 @@ export default function RSRankPage() {
               </div>
             )}
           </div>
-          <div className="h-80 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
+          <div className="h-72 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
             <div className="flex flex-col items-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-2"></div>
               <span className="text-gray-500">차트 데이터 로딩 중...</span>
@@ -1028,7 +1041,7 @@ export default function RSRankPage() {
               </div>
             )}
           </div>
-          <div className="h-80 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
+          <div className="h-72 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
             <span className="text-red-500">{chartErrorArray[index]}</span>
           </div>
         </div>
@@ -1052,7 +1065,7 @@ export default function RSRankPage() {
               </div>
             )}
           </div>
-          <div className="h-80 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
+          <div className="h-72 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
             <div className="flex flex-col items-center">
               <span className="text-gray-400">표시할 차트 데이터가 없습니다.</span>
             </div>
@@ -1085,7 +1098,7 @@ export default function RSRankPage() {
         <ChartComponent 
           data={chartDataArray[index]} 
           marketType={marketType} 
-          height={300}
+          height={280}
         />
       </div>
     );
@@ -1240,7 +1253,7 @@ export default function RSRankPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-white">
       {/* 사이드바 */}
       <Suspense fallback={<div>로딩 중...</div>}>
         <Sidebar />
@@ -1249,7 +1262,7 @@ export default function RSRankPage() {
       {/* 메인 콘텐츠 - 왼쪽 여백을 추가하여 고정된 사이드바와 겹치지 않도록 함 */}
       <div className="flex-1 p-3 ml-[59px] flex flex-col">
         {/* 상단 헤더 - 브랜드 표시 */}
-        <div className="flex justify-between items-center mb-1">
+        <div className="flex justify-between items-center mb-1 bg-white rounded-lg p-2">
           <div className="flex items-center">
             <h1 className="text-lg font-bold">StockEasy</h1>
           </div>
@@ -1271,11 +1284,18 @@ export default function RSRankPage() {
                 <div className="text-red-500 text-center py-4">{error}</div>
               ) : csvData ? (
                 <div className="flex flex-col h-full">
-                  <div className="flex justify-between items-center mb-3">
+                  <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
                     <h2 className="text-lg font-semibold">RS순위</h2>
-                    <span className="text-xs text-gray-600">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                    <div className="flex items-center justify-end">
+                      <span className="text-xs text-gray-600 mr-2">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                      <TableCopyButton 
+                        tableRef={rsTableRef}
+                        headerRef={rsHeaderRef}
+                        tableName="RS순위 테이블"
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1" style={{ overflowX: 'hidden' }}>
+                  <div className="flex-1" style={{ overflowX: 'hidden' }} ref={rsTableRef}>
                     <table className="w-full bg-white border border-gray-200 table-fixed">
                       <thead>
                         <tr className="bg-gray-100">
@@ -1285,8 +1305,8 @@ export default function RSRankPage() {
                               className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
                               style={{ 
                                 width: header === '종목명' ? '100px' : 
-                                       header === '테마명' ? '220px' :
-                                       header === '시가총액' ? '85px' : 
+                                       header === '테마명' ? '280px' :
+                                       header === '시가총액' ? '70px' : 
                                        header === '종목코드' ? '60px' : 
                                        header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MMT' ? '45px' :
                                        header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '40px' :
@@ -1316,14 +1336,14 @@ export default function RSRankPage() {
                                 className={`py-1.5 px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis`}
                                 style={{ 
                                   width: header === '종목명' ? '100px' : 
-                                          header === '테마명' ? '220px' :
-                                          header === '시가총액' ? '40px' :
+                                          header === '테마명' ? '280px' :
+                                          header === '시가총액' ? '70px' :
                                           header === '종목코드' ? '60px' : 
                                           header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MMT' ? '45px' :
                                           header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '40px' :
                                           header === '업종' ? '220px' : '70px',
                                   fontSize: '0.875rem',
-                                  maxWidth: header === '테마명' ? '265px' : 'auto',
+                                  maxWidth: header === '테마명' ? '280px' : 'auto',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis'
@@ -1393,9 +1413,16 @@ export default function RSRankPage() {
             <div className="w-[30%] bg-white rounded-lg shadow p-4">
               {/* 금주 52주 신고가 정보 영역 */}
               <div className="flex flex-col">
-                <div className="flex justify-between items-center mb-3">
+                <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
                   <h2 className="text-lg font-semibold">52주 신고가</h2>
-                  <span className="text-xs text-gray-600">당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                  <div className="flex items-center justify-end">
+                    <span className="text-xs text-gray-600 mr-2">당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                    <TableCopyButton 
+                      tableRef={highTableRef}
+                      headerRef={highHeaderRef}
+                      tableName="52주 신고가 테이블"
+                    />
+                  </div>
                 </div>
                 <div className="flex-1" style={{ overflowX: 'hidden' }}>
                   {/* 신고가 데이터 테이블 */}
@@ -1407,7 +1434,7 @@ export default function RSRankPage() {
                     <div className="text-red-500">{highDataError}</div>
                   ) : (
                     (highData && highData.rows && highData.rows.length > 0) ? (
-                      <div className="overflow-x-auto" style={{ overflowX: 'hidden' }}>
+                      <div className="overflow-x-auto" style={{ overflowX: 'hidden' }} ref={highTableRef}>
                         <table className="w-full bg-white border border-gray-200 table-fixed">
                           <thead>
                             <tr className="bg-gray-100">
@@ -1441,7 +1468,7 @@ export default function RSRankPage() {
                               </th>
                               <th 
                                 className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '70px', fontSize: '0.875rem' }}
+                                style={{ width: '75px', fontSize: '0.875rem' }}
                                 onClick={() => requestSort('등락률')}
                               >
                                 <div className="flex items-center justify-center">
@@ -1567,13 +1594,13 @@ export default function RSRankPage() {
               <span className="text-xs text-gray-600">RS상위와 시가총액 순서로 해당 종목이 속한 시장 지수를 비교합니다.</span>
             </div>
             
-            {/* 7줄에 3개의 차트를 가로로 배치 */}
-            {Array.from({length: 7}).map((_, rowIndex) => (
-              <div key={rowIndex} className="flex flex-row gap-1 mb-4">
-                {Array.from({length: 3}).map((_, colIndex) => {
-                  const index = rowIndex * 3 + colIndex;
+            {/* 5줄에 4개의 차트를 가로로 배치 */}
+            {Array.from({length: 5}).map((_, rowIndex) => (
+              <div key={rowIndex} className="flex flex-row gap-2 mb-4">
+                {Array.from({length: 4}).map((_, colIndex) => {
+                  const index = rowIndex * 4 + colIndex;
                   return (
-                    <div key={colIndex} className="flex-1 rounded-md p-1">
+                    <div key={colIndex} className="flex-1 rounded-md">
                       {renderChartComponent(index)}
                     </div>
                   );

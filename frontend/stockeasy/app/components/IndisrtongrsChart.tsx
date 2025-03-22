@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import ChartComponent from './ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
 import Papa from 'papaparse'
+import { copyTableAsImage } from '../utils/tableCopyUtils'
 
 // 차트 데이터 타입 정의
 interface CandleData {
@@ -97,7 +98,7 @@ export default function IndustryCharts() {
       // 선택된 종목 코드 초기화
       setSelectedStockCodes([]);
       
-      // 20malist.csv 파일에서 "유지 +10" 이상인 ETF 데이터 로드
+      // 20malist.csv 파일 로드
       const response = await fetch('/20ma_list/20malist.csv');
       const csvText = await response.text();
       
@@ -108,12 +109,10 @@ export default function IndustryCharts() {
       });
       
       // 데이터 변환 및 필터링
-      const rows = results.data as ETFData[];
+      const rows = results.data as ETFListRow[];
+      console.log(`20malist.csv 파일에서 로드된 전체 ETF 수: ${rows.length}`);
       
-      // 디버깅: 모든 ETF 데이터 로깅
-      console.log('모든 ETF 데이터:', rows);
-      
-      // 필터링 기준 변경: "유지 +10일" 이상인 ETF만 포함
+      // 유지일 10일 이상인 ETF 필터링 및 로깅
       const filteredRows = rows.filter(row => {
         // 지속일 파싱 - 정규식 개선
         const durationText = row.지속일 || '';
@@ -125,19 +124,19 @@ export default function IndustryCharts() {
           durationDays = match ? parseInt(match[1]) : 0;
         }
         
-        // 디버깅: 필터링 로직 로깅
-        const isIncluded = !isNaN(durationDays) && durationDays >= 10;
-        console.log(`ETF ${row.종목명} (${row.종목코드}): 지속일=${durationText}, 파싱된 일수=${durationDays}, 포함여부=${isIncluded}, 종목코드=${row.종목코드}, 변동일=${row.변동일}`);
+        const isAbove10Days = !isNaN(durationDays) && durationDays >= 10;
+        console.log(`ETF ${row.종목명} (${row.종목코드}), 섹터: ${row.섹터}, 지속일: ${row.지속일}, 10일 이상: ${isAbove10Days}, 대표종목: ${row.대표종목}`);
         
         // 유지 +10일 이상인 경우만 포함
-        return isIncluded;
+        return isAbove10Days;
       });
       
-      // 디버깅: 필터링된 ETF 데이터 로깅
-      console.log('필터링된 ETF 데이터:', filteredRows.map(row => `${row.종목명} (${row.종목코드}): ${row.지속일}, 변동일: ${row.변동일}`));
+      console.log(`유지일 10일 이상 필터링 후 ETF 수: ${filteredRows.length}`);
+      console.log('필터링된 ETF 섹터 목록:', Array.from(new Set(filteredRows.map(row => row.섹터))));
       
       // 각 ETF에 대해 대표 주식 로드
       const stocksData = await loadAllStocksData();
+      console.log(`로드된 전체 주식 데이터 수: ${stocksData.length}`);
       
       // 로딩 상태 초기화
       const initialETFInfoList = filteredRows.map(etf => {
@@ -155,7 +154,6 @@ export default function IndustryCharts() {
           changePercent: (() => {
             const rawValue = etf.등락률 || '0%';
             const numericValue = parseFloat(rawValue.replace('%', '')) || 0;
-            console.log(`ETF ${etf.종목명} 등락률: ${rawValue} -> ${numericValue}`);
             return numericValue;
           })(),
           etfChangePercent: etf.등락률 || '0%', // 20malist.csv에서 가져온 원본 등락률 문자열 저장
@@ -164,6 +162,11 @@ export default function IndustryCharts() {
           변동일: etf.변동일 // 변동일 정보 추가
         } as ETFInfo;
       });
+      
+      // 각 ETF에 대해 대표 주식 로드
+      for (const etf of filteredRows) {
+        await loadRepresentativeStocks(etf, stocksData);
+      }
       
       setEtfInfoList(initialETFInfoList);
       
@@ -181,49 +184,6 @@ export default function IndustryCharts() {
       }
       
       console.log('모든 ETF 데이터 로드 완료');
-      
-      return filteredRows;
-    } catch (error) {
-      console.error('20malist.csv 파일 로드 오류:', error);
-      return [];
-    }
-  };
-  
-  // 모든 ETF 데이터 로드 함수
-  const load20MAListData = async (): Promise<ETFListRow[]> => {
-    try {
-      const response = await fetch('/20ma_list/20malist.csv');
-      if (!response.ok) {
-        throw new Error('20malist.csv 파일을 찾을 수 없습니다.');
-      }
-      
-      const csvText = await response.text();
-      const result = Papa.parse(csvText, { header: true });
-      
-      // 데이터 변환 및 필터링
-      const rows = result.data as ETFListRow[];
-      
-      // 필터링 기준 변경: "유지 +10일" 이상인 ETF만 포함
-      const filteredRows = rows.filter(row => {
-        // 지속일 파싱 - 정규식 개선
-        const durationText = row.지속일 || '';
-        let durationDays = 0;
-        
-        // "유지 +" 패턴 확인
-        if (durationText.includes('유지 +')) {
-          const match = durationText.match(/유지\s+\+(\d+)일/);
-          durationDays = match ? parseInt(match[1]) : 0;
-        }
-        
-        // 유지 +10일 이상인 경우만 포함
-        return !isNaN(durationDays) && durationDays >= 10;
-      });
-      
-      // 각 ETF에 대해 대표 주식 로드
-      const stocksData = await loadAllStocksData();
-      for (const etf of filteredRows) {
-        await loadRepresentativeStocks(etf, stocksData);
-      }
       
       return filteredRows;
     } catch (error) {
@@ -321,13 +281,22 @@ export default function IndustryCharts() {
   // 대표 주식 로드 함수
   const loadRepresentativeStocks = async (etf: ETFListRow, stocksData: RepresentativeStock[]) => {
     try {
-      // 대표 주식 목록 가져오기
-      const stockNames = etf.대표종목.split(',').map(name => name.trim());
+      // 대표 주식 배열 초기화
       const representativeStocks: RepresentativeStock[] = [];
+      
+      // 대표 주식 목록 가져오기
+      const stockNames = etf.대표종목.split(',').map(name => {
+        // 괄호와 숫자 제거 (예: "파마리서치 (85)" -> "파마리서치")
+        return name.trim().replace(/\s*\(\d+\)/g, '');
+      }) || [];
+      
+      if (stockNames.length === 0) {
+        console.log(`대표종목이 없습니다: ${etf.종목명}`);
+      }
       
       // 각 대표 주식에 대해 RS 값 찾기
       for (const stockName of stockNames) {
-        // 주식 이름으로 stocksData에서 찾기 (정확한 매칭을 위해 정규화)
+        // 현재 종목명과 일치하는 주식 찾기 (대소문자 무시 및 공백 처리)
         const normalizedStockName = stockName.replace(/\s+/g, '').toLowerCase();
         
         const matchingStocks = stocksData.filter(stock => {
@@ -335,7 +304,12 @@ export default function IndustryCharts() {
           return normalizedName.includes(normalizedStockName) || normalizedStockName.includes(normalizedName);
         });
         
-        representativeStocks.push(...matchingStocks);
+        if (matchingStocks.length > 0) {
+          console.log(`ETF ${etf.종목명}의 대표종목 ${stockName}에 대해 ${matchingStocks.length}개 매칭 종목 찾음`);
+          representativeStocks.push(...matchingStocks);
+        } else {
+          console.log(`ETF ${etf.종목명}의 대표종목 ${stockName}에 대한 매칭 종목을 찾을 수 없음`);
+        }
       }
       
       // 중복 제거 (동일한 종목코드는 한 번만 포함)
@@ -348,6 +322,9 @@ export default function IndustryCharts() {
       
       // 상위 2개 주식 선택
       const topStocks = uniqueStocks.slice(0, 2);
+      
+      console.log(`ETF ${etf.종목명}의 최종 선택된 대표종목: ${topStocks.map(s => `${s.name} (RS: ${s.rsValue})`).join(', ')}`);
+      console.log(`ETF ${etf.종목명}의 대표종목 수: ${topStocks.length}`);
       
       // 선택된 대표 주식 정보 저장
       etf.대표종목 = topStocks.map(stock => `${stock.name} (${stock.rsValue})`).join(', ');
@@ -377,7 +354,7 @@ export default function IndustryCharts() {
       }) || [];
       
       if (stockNames.length === 0) {
-        throw new Error(`대표종목이 없습니다: ${etfInfo.name}`);
+        console.log(`대표종목이 없습니다: ${etfInfo.종목명}`);
       }
       
       // 모든 주식 데이터 로드
@@ -389,33 +366,27 @@ export default function IndustryCharts() {
       // 각 대표종목에 대해 개별적으로 검색
       for (const stockName of stockNames) {
         // 현재 종목명과 일치하는 주식 찾기 (대소문자 무시 및 공백 처리)
+        const normalizedStockName = stockName.replace(/\s+/g, '').toLowerCase();
+        
         const matchingStocks = stocksData.filter(stock => {
-          // 종목명 비교 시 대소문자 무시 및 공백 처리
-          const normalizedStockName = stockName.replace(/\s+/g, '').toLowerCase();
           const normalizedName = stock.name.replace(/\s+/g, '').toLowerCase();
-          
-          // 괄호와 숫자 제거 (예: "파마리서치 (85)" -> "파마리서치")
-          const cleanStockName = normalizedStockName.replace(/\(\d+\)/g, '');
-          
-          return normalizedName.includes(cleanStockName) || cleanStockName.includes(normalizedName);
+          return normalizedName.includes(normalizedStockName) || normalizedStockName.includes(normalizedName);
         });
         
         if (matchingStocks.length > 0) {
-          // 일치하는 모든 주식을 배열에 추가
+          console.log(`ETF ${etfInfo.종목명}의 대표종목 ${stockName}에 대해 ${matchingStocks.length}개 매칭 종목 찾음`);
           allMatchingStocks.push(...matchingStocks);
         } else {
-          console.log(`대표종목 ${stockName}에 대한 일치하는 주식을 찾을 수 없음`);
+          console.log(`ETF ${etfInfo.종목명}의 대표종목 ${stockName}에 대한 일치하는 주식을 찾을 수 없음`);
         }
-      }
-      
-      if (allMatchingStocks.length === 0) {
-        throw new Error(`대표종목에 해당하는 주식 파일을 찾을 수 없습니다: ${stockNames.join(', ')}`);
       }
       
       // 중복 제거 (동일한 종목코드는 한 번만 포함)
       const uniqueStocks = Array.from(
         new Map(allMatchingStocks.map(stock => [stock.code, stock])).values()
       );
+      
+      console.log(`ETF ${etfInfo.종목명}의 중복 제거 후 대표종목 수: ${uniqueStocks.length}`);
       
       // 이미 선택된 종목 제외하고 RS 값 기준으로 내림차순 정렬
       const availableStocks = uniqueStocks
@@ -427,10 +398,24 @@ export default function IndustryCharts() {
         ? availableStocks.slice(0, 2) 
         : uniqueStocks.sort((a, b) => b.rsValue - a.rsValue).slice(0, 2);
       
-      console.log(`ETF ${etfInfo.name}의 상위 종목:`, topStocks.map(s => `${s.name} (RS: ${s.rsValue})`));
+      console.log(`ETF ${etfInfo.종목명}의 상위 종목:`, topStocks.map(s => `${s.name} (RS: ${s.rsValue})`));
       
+      // 대표종목이 없는 경우 처리
       if (topStocks.length === 0) {
-        throw new Error(`대표종목에 해당하는 주식 파일을 찾을 수 없습니다: ${stockNames.join(', ')}`);
+        console.log(`ETF ${etfInfo.종목명}에 대한 대표종목을 찾을 수 없습니다.`);
+        
+        // 오류 상태 업데이트
+        setEtfInfoList(prev => {
+          const newList = [...prev];
+          newList[index] = {
+            ...newList[index],
+            isLoading: false,
+            error: '대표종목을 찾을 수 없습니다.'
+          };
+          return newList;
+        });
+        
+        return [];
       }
       
       // 선택된 종목 코드 추가
@@ -474,6 +459,7 @@ export default function IndustryCharts() {
             chartData 
           });
           
+          console.log(`종목 ${stock.name}의 차트 데이터 로드 성공: ${chartData.length}개 데이터 포인트`);
         } catch (error) {
           console.log(`종목 ${stock.name} 파일 로드 실패: ${error}`);
           // 오류가 발생해도 다음 종목으로 계속 진행
@@ -482,6 +468,8 @@ export default function IndustryCharts() {
       
       // 로드된 종목이 없는 경우
       if (loadedStocksData.length === 0) {
+        console.log(`ETF ${etfInfo.종목명}에 대한 대표종목 차트 데이터를 찾을 수 없습니다.`);
+        
         setEtfInfoList(prev => {
           const newList = [...prev];
           newList[index] = {
@@ -519,7 +507,7 @@ export default function IndustryCharts() {
         // 차트 데이터 맵에 저장
         setChartDataMap(prev => ({ ...prev, [code]: etfChartData }));
       } catch (error) {
-        console.log(`ETF ${etfInfo.name} 차트 파일 로드 실패: ${error}, 첫 번째 종목의 차트 데이터를 사용합니다.`);
+        console.log(`ETF ${etfInfo.종목명} 차트 파일 로드 실패: ${error}, 첫 번째 종목의 차트 데이터를 사용합니다.`);
         // 오류 발생 시 첫 번째 종목의 차트 데이터 사용
         etfChartData = loadedStocksData[0].chartData;
         setChartDataMap(prev => ({ ...prev, [code]: etfChartData }));
@@ -538,11 +526,11 @@ export default function IndustryCharts() {
           error: '',
           changePercent,
           selectedStocks: loadedStocksData, // 로드된 종목 정보 저장 (차트 데이터 포함)
-          selectedStock: { // 첫 번째 종목 정보 저장 (호환성 유지)
+          selectedStock: loadedStocksData.length > 0 ? { // 첫 번째 종목 정보 저장 (호환성 유지)
             code: loadedStocksData[0].code,
             name: loadedStocksData[0].name,
             rsValue: loadedStocksData[0].rsValue
-          }
+          } : undefined
         };
         return newList;
       });
@@ -834,9 +822,6 @@ export default function IndustryCharts() {
   const etfGrid = useMemo(() => {
     // 유지 +10일 이상인 ETF만 필터링하고 지속일 기준으로 정렬
     const sortedETFs = [...etfInfoList].filter(etf => {
-      // 대표종목이 있는지 확인
-      const hasStocks = etf.selectedStocks && etf.selectedStocks.length > 0;
-      
       // 지속일 추출 및 10일 이상인지 확인
       const durationDays = extractDurationDays(etf.지속일);
       const isAbove10Days = durationDays >= 10;
@@ -844,11 +829,21 @@ export default function IndustryCharts() {
       // 유지 상태인지 확인
       const isMaintenanceStatus = etf.지속일?.includes('유지') || false;
       
-      return hasStocks && isAbove10Days && isMaintenanceStatus;
+      // 디버깅 로그 추가
+      console.log(`ETF ${etf.종목명}, 섹터: ${etf.섹터}, 지속일: ${etf.지속일}, 대표종목 수: ${etf.selectedStocks?.length || 0}`);
+      
+      // 필터링 조건 완화: 유지 상태이고 10일 이상인 경우만 확인
+      return isAbove10Days && isMaintenanceStatus;
     }).sort((a, b) => {
       const daysA = extractDurationDays(a.지속일);
       const daysB = extractDurationDays(b.지속일);
       return daysB - daysA; // 지속일 내림차순 정렬
+    });
+    
+    // 디버깅 로그 추가
+    console.log(`필터링 후 ETF 개수: ${sortedETFs.length}`);
+    sortedETFs.forEach(etf => {
+      console.log(`선택된 ETF: ${etf.종목명}, 섹터: ${etf.섹터}, 지속일: ${etf.지속일}, 대표종목 수: ${etf.selectedStocks?.length || 0}`);
     });
     
     // 4개씩 ETF를 행으로 나누기
@@ -860,7 +855,7 @@ export default function IndustryCharts() {
     
     return rows;
   }, [etfInfoList]);
-
+  
   // 종목명 우측에 등락률 표시
   const calculateStockChangePercent = (stock: { code: string; name: string; rsValue: number; chartData: CandleData[] }) => {
     try {
@@ -958,8 +953,8 @@ export default function IndustryCharts() {
   return (
     <div className="p-4">
       <div className="mb-4">
-        <h2 className="text-xl font-bold">ETF 차트</h2>
-        <p className="text-sm text-gray-500">20일 이동평균선 위에 있는 ETF와 대표종목 차트</p>
+        <h2 className="text-xl font-bold">섹터별 주도종목 차트</h2>
+        <p className="text-sm text-gray-500">20일 이동평균선 위에 10일 이상 유지중인 섹터별 ETF중 60RS 이상의 대표종목 차트</p>
       </div>
       
       {etfInfoList.length === 0 ? (
