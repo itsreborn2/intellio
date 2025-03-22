@@ -9,6 +9,7 @@ import { IDocument, IUploadProgressData, IDocumentStatus } from "@/types"
 import { useFileUpload } from "@/hooks/useFileUpload"
 import { DocumentStatusBadge } from '@/components/DocumentStatusBadge'
 import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
+import { FileUploadErrorDialog } from '@/components/FileUploadErrorDialog'
 
 // 문서 분석 진행 상태 컴포넌트
 const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => {
@@ -90,7 +91,7 @@ export const UploadSection = () => {
     error: 0,
     failedFiles: [] as string[]
   })
-  const { uploadProgress, handleFileUpload } = useFileUpload()
+  const { uploadProgress, uploadError, handleFileUpload, closeErrorDialog, showErrorDialog } = useFileUpload()
 
   const updateUploadStatus = useCallback(
     (
@@ -107,6 +108,25 @@ export const UploadSection = () => {
   )
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    console.log('onDrop 호출됨, 파일 개수:', acceptedFiles.length);
+    
+    // 파일 개수 검증
+    if (acceptedFiles.length === 0) {
+      console.warn('업로드할 파일이 선택되지 않았습니다.');
+      return;
+    }
+    
+    if (acceptedFiles.length > 100) {
+      console.warn('최대 100개까지만 업로드할 수 있습니다.');
+      showErrorDialog('최대 100개까지만 업로드할 수 있습니다.');
+      setUploadStatus({
+        total: acceptedFiles.length,
+        error: acceptedFiles.length,
+        failedFiles: ['최대 100개까지만 업로드할 수 있습니다']
+      });
+      return;
+    }
+
     // 파일 MIME 타입 처리 및 로깅
     const processedFiles = acceptedFiles.map(file => {
       let mimeType = file.type;
@@ -140,16 +160,67 @@ export const UploadSection = () => {
     });
     
     await handleFileUpload(processedFiles);
-  }, [handleFileUpload])
+  }, [handleFileUpload, showErrorDialog])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
-    accept: ACCEPTED_FILE_TYPES
+    accept: ACCEPTED_FILE_TYPES,
+    maxFiles: 100,
+    maxSize: 40 * 1024 * 1024, // 40MB 제한 추가
+    onDropRejected: (rejectedFiles) => {
+      console.log('onDropRejected 호출됨:', rejectedFiles);
+      
+      // 다양한 오류 유형 처리
+      const errorMessages: string[] = [];
+      
+      // 파일 개수 초과 검사
+      const tooManyFiles = rejectedFiles.some(item => 
+        item.errors.some(err => err.code === 'too-many-files')
+      );
+      
+      // 파일 크기 초과 검사
+      const fileSizeExceeded = rejectedFiles.some(item => 
+        item.errors.some(err => err.code === 'file-too-large')
+      );
+      
+      // 파일 타입 불일치 검사
+      const fileTypeNotAccepted = rejectedFiles.some(item => 
+        item.errors.some(err => err.code === 'file-invalid-type')
+      );
+      
+      if (tooManyFiles) {
+        errorMessages.push('파일 개수가 100개를 초과하였습니다.');
+      }
+      
+      if (fileSizeExceeded) {
+        errorMessages.push('파일 크기가 50MB를 초과하였습니다.');
+      }
+      
+      if (fileTypeNotAccepted) {
+        errorMessages.push('지원하지 않는 파일 형식이 포함되어 있습니다.');
+      }
+      
+      // 오류 메시지가 있으면 상태 업데이트 및 오류 다이얼로그 표시
+      if (errorMessages.length > 0) {
+        setUploadStatus(prev => ({
+          ...prev,
+          error: prev.error + rejectedFiles.length,
+          failedFiles: [...prev.failedFiles, ...errorMessages]
+        }));
+        
+        showErrorDialog(errorMessages.join('\n'));
+      }
+    }
   })
 
   return (
     <>
       <UploadProgressDialog {...uploadProgress} />
+      <FileUploadErrorDialog 
+        isOpen={uploadError.isOpen}
+        onClose={closeErrorDialog}
+        errorMessage={uploadError.message}
+      />
       <div className="w-full h-[50vh] flex items-center justify-center p-4">
         <div
           {...getRootProps()}
@@ -167,9 +238,29 @@ export const UploadSection = () => {
               <p className="text-sm text-muted-foreground">
                 이곳에 문서를 끌어다 놓거나 클릭하여 선택하세요
               </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                최대 100개 파일까지 업로드 가능
+              </p>
               <p className="text-xs text-muted-foreground mt-2">
                 PDF, Word(doc/docx), 한글(hwp/hwpx), 엑셀(xls/xlsx), 이미지(jpg/jpeg/png/gif/tiff), 텍스트(txt)
               </p>
+              
+              <div className="mt-6">
+                <Button
+                  variant="outline"
+                  className="border-primary text-primary hover:bg-primary/10"
+                  onClick={(e) => {
+                    e.stopPropagation(); // 이벤트 버블링 방지
+                    const input = document.querySelector('input[type="file"]');
+                    if (input) {
+                      (input as HTMLInputElement).click();
+                    }
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  파일 선택하기
+                </Button>
+              </div>
             </div>
 
             <input {...getInputProps()} />

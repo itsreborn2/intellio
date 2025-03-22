@@ -546,7 +546,7 @@ export const ChatSection = () => {
             className="text-xs"
             disabled={isGenerating || state.isAnalyzing}
           >
-            채팅
+            통합분석
           </Button>
           <Button
             variant={state.analysis.mode === 'table' ? 'default' : 'outline'}
@@ -555,7 +555,7 @@ export const ChatSection = () => {
             className="text-xs"
             disabled={isGenerating || state.isAnalyzing}
           >
-            테이블
+            개별분석
           </Button>
         </div>
       </div>
