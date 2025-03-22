@@ -459,7 +459,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       {
         id: "filename",
         accessorKey: "filename",
-        header: "Document",
+        header: "문서이름",
         enableSorting: true, // Document 컬럼만 정렬 활성화
         Cell: ({ row }: { row: MRT_Row<IDocument> }) => {
           const document = row.original;
@@ -591,8 +591,8 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           ...baseColumns[i],
           size: undefined, // 자동으로 크기 조절되도록
           grow: true,      // 남은 공간을 균등하게 차지
-          minSize: 80,     // 최소 크기 축소 (100 -> 80)
-          maxSize: 500,    // 최대 크기 유지
+          minSize: 180,    // 최소 크기 설정 (각 컬럼의 최소 너비)
+          maxSize: 300,    // 최대 크기 유지
           muiTableHeadCellProps: {
             sx: {
               // 모바일에서 더 작은 크기로 조정
@@ -617,9 +617,87 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       }
     }
     
+    // 칼럼이 5개를 초과하면 테이블에 가로 스크롤 적용
+    const hasHorizontalScroll = baseColumns.length > 5; // 체크박스 컬럼까지 포함해서 총 6개 이상
+    console.log(`[DocumentTable] 총 컬럼 수: ${baseColumns.length}, 가로 스크롤: ${hasHorizontalScroll}`);
+    
+    // Document 컬럼을 고정 설정
+    if (hasHorizontalScroll && baseColumns.length > 0) {
+      // Document 컬럼 스티키 설정
+      baseColumns[0] = {
+        ...baseColumns[0],
+        muiTableHeadCellProps: {
+          align: 'left',
+          sx: {
+            position: 'sticky',
+            left: '30px', // 체크박스 컬럼 너비
+            zIndex: 2,
+            backgroundColor: 'rgb(219, 227, 228)',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: '1px',
+              backgroundColor: '#ccc',
+              boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
+            },
+          }
+        },
+        muiTableBodyCellProps: {
+          align: 'left',
+          sx: {
+            position: 'sticky',
+            left: '30px', // 체크박스 컬럼 너비
+            zIndex: 1,
+            backgroundColor: 'white',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: '1px',
+              backgroundColor: '#ccc',
+              boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
+            },
+          }
+        }
+      };
+    }
+    
     return baseColumns;
   }, [dispatch, documentColContexts, state.documents]);
 
+  // 칼럼 수에 따라 테이블 너비 계산
+  const calculateTableWidth = useMemo(() => {
+    // 컬럼 수에 따라 테이블 너비 계산 (체크박스 열 포함)
+    const totalColumns = columns.length;
+    
+    // 기본 열 너비 (체크박스 + Document 열 + 추가 컬럼)
+    const checkboxColWidth = 30; // 체크박스 열
+    const documentColWidth = 250; // Document 열
+    const additionalColWidth = 200; // 기본 추가 컬럼 너비
+    
+    // 추가된 컬럼 수 (체크박스, Document 열 제외)
+    const additionalColumns = Math.max(0, totalColumns - 2);
+    
+    // 5개 이하일 때는 100%로 설정, 그 이상일 때는 계산된 너비
+    if (totalColumns <= 5) {
+      return '100%';
+    } else {
+      // 계산된 총 너비 (체크박스 + Document 열 + 추가 컬럼들)
+      const calculatedWidth = checkboxColWidth + documentColWidth + (additionalColumns * additionalColWidth);
+      
+      // 최소 너비 1200px 보장
+      return Math.max(1200, calculatedWidth) + 'px';
+    }
+  }, [columns.length]);
+
+  // 칼럼이 5개를 초과하는지 여부 계산 (체크박스 열 포함하여 체크)
+  const hasHorizontalScroll = useMemo(() => columns.length > 5, [columns.length]);
+  
   const table = useMaterialReactTable({
     columns,
     data: tableData,
@@ -660,12 +738,40 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           align: 'center',
           sx: {
             padding: '0 !important',
+            position: hasHorizontalScroll ? 'sticky' : 'relative', // 가로 스크롤 시 고정
+            left: 0,
+            zIndex: 3, // 다른 셀보다 위에 표시
+            backgroundColor: 'rgb(219, 227, 228)', // 배경색 설정
+            '&::after': hasHorizontalScroll ? {
+              content: '""',
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: '1px',
+              backgroundColor: '#ccc',
+              boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
+            } : {},
           },
         },
         muiTableBodyCellProps: {
           align: 'center',
           sx: {
             padding: '0 !important',
+            position: hasHorizontalScroll ? 'sticky' : 'relative', // 가로 스크롤 시 고정
+            left: 0,
+            zIndex: 1, // 다른 셀보다 위에 표시
+            backgroundColor: 'white', // 배경색 설정
+            '&::after': hasHorizontalScroll ? {
+              content: '""',
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: '1px',
+              backgroundColor: '#ccc',
+              boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
+            } : {},
           },
         },
       },
@@ -677,14 +783,15 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     muiTableProps: {
       sx: {
         tableLayout: 'fixed', // 'auto' -> 'fixed'로 변경하여 테이블 너비 제어
-        width: '100%',
-        maxWidth: '100%', // 최대 너비 제한 추가
+        width: calculateTableWidth, // 계산된 테이블 너비
+        maxWidth: hasHorizontalScroll ? 'none' : '100%', // 칼럼이 5개 초과하면 최대 너비 제한 해제
         maxHeight: '100%',
         borderCollapse: 'separate',  // 테이블 경계선 분리
         borderSpacing: 0,  // 경계선 간격 없음
         // 모바일 환경에서 폰트 크기 조정
         '@media (max-width: 640px)': {
           fontSize: '0.7rem',
+          width: hasHorizontalScroll ? calculateTableWidth : '100%', // 계산된 테이블 너비
         }
       },
     },
@@ -740,18 +847,19 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       sx: { 
         height: 'auto',
         maxHeight: '100%',
-        overflow: 'auto',
+        overflowX: hasHorizontalScroll ? 'auto' : 'hidden', // 칼럼이 5개 초과하면 가로 스크롤 활성화
+        overflowY: 'auto',
         flex: 1,
         width: '100%', // 너비 100% 설정
         maxWidth: '100%', // 최대 너비 제한
         // 스크롤바 스타일
         '&::-webkit-scrollbar': {
           width: '4px',
-          height: '4px',
+          height: '8px', // 가로 스크롤바 높이 증가
           // 모바일에서 더 작은 스크롤바
           '@media (max-width: 640px)': {
             width: '2px',
-            height: '2px',
+            height: '6px', // 모바일에서 가로 스크롤바 높이
           }
         },
         '&::-webkit-scrollbar-track': {
@@ -770,8 +878,8 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         // 내부 테이블 스타일링
         '& .MuiTable-root': {
           margin: 0,
-          width: '100%',
-          maxWidth: '100%', // 최대 너비 제한 추가
+          width: calculateTableWidth, // 계산된 테이블 너비
+          maxWidth: hasHorizontalScroll ? 'none' : '100%', // 칼럼이 5개 초과하면 최대 너비 제한 해제
           borderCollapse: 'separate',
           borderSpacing: 0,
           border: '1px solid #e2e8f0'  // 테이블 전체 테두리 추가
@@ -781,7 +889,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           position: 'sticky',
           top: 0,
           zIndex: 2,
-          backgroundColor: '#f80000 !important',
+          backgroundColor: 'rgb(219, 227, 228) !important',
           boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'  // 헤더에 미세한 그림자 추가
         },
         // 헤더 셀 직접 스타일링
@@ -791,7 +899,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           height: '36px',
           padding: '0 10px',
           hover: {
-            backgroundColor: 'rgb(0, 226, 228) !important',
+            backgroundColor: 'rgb(200, 226, 228) !important',
           },
           // 모바일 환경에서 헤더 셀 조정
           '@media (max-width: 640px)': {
@@ -804,7 +912,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     muiTableHeadCellProps: {
       sx: {
         padding: '0px 10px',  // 상하 패딩 제거, 좌우 패딩 유지
-        backgroundColor: '#f80000 !important',
+        backgroundColor: 'rgb(219, 227, 228) !important',
         borderRight: '1px solid #e2e8f0',
         borderBottom: '2px solid #e2e8f0',
         fontWeight: 600,
@@ -816,7 +924,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         justifyContent: 'flex-start',
         height: '36px',
         '&:hover': {
-          backgroundColor: '#ff3333 !important'
+          backgroundColor: 'rgb(200, 226, 228) !important'
         },
         // 모바일 환경에서 헤더 셀 조정
         '@media (max-width: 640px)': {
@@ -986,8 +1094,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
   });
 
   return (
-    // 전역 설정은 되도록이면 제거하는 방향으로 가야햔다. 지금은 급하니 일단 ..
-    <div className="w-full h-full overflow-hidden">
+    <div className="w-full h-full overflow-hidden relative">
       <style jsx global>{`
         /* 헤더 셀 스타일 직접 조정 */
         .MuiTableHead-root {
@@ -1226,7 +1333,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           white-space: normal;
           word-break: break-all;
           word-wrap: break-word;
-          overflow-wrap: break-word;
+          overflowWrap: 'break-word',
           hyphens: 'auto',
         },
         
@@ -1563,8 +1670,132 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         .MuiTableHead-root .MuiTableCell-root:not([data-column-id="filename"]) {
           cursor: default !important; /* 정렬 불가능 표시 */
         }
+        
+        /* 가로 스크롤 컨테이너 스타일 */
+        .MuiTableContainer-root {
+          overflow-x: ${hasHorizontalScroll ? 'auto !important' : 'hidden !important'};
+        }
+        
+        /* 가로 스크롤바 스타일 */
+        .MuiTableContainer-root::-webkit-scrollbar {
+          height: 8px !important;
+        }
+        
+        /* 가로 스크롤바 트랙 */
+        .MuiTableContainer-root::-webkit-scrollbar-track {
+          background-color: #f1f1f1 !important;
+        }
+        
+        /* 가로 스크롤바 썸 */
+        .MuiTableContainer-root::-webkit-scrollbar-thumb {
+          background-color: #888 !important;
+          border-radius: 4px !important;
+        }
+        
+        /* 가로 스크롤바 호버 */
+        .MuiTableContainer-root::-webkit-scrollbar-thumb:hover {
+          background-color: #555 !important;
+        }
+        
+        /* 모바일 환경에서 가로 스크롤바 */
+        @media (max-width: 640px) {
+          .MuiTableContainer-root::-webkit-scrollbar {
+            height: 6px !important;
+          }
+        }
+        
+        /* Document 컬럼 헤더 고정 스타일 */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] {
+          position: ${hasHorizontalScroll ? 'sticky' : 'relative'} !important;
+          left: ${hasHorizontalScroll ? '30px' : '0'} !important; /* 체크박스 열 너비만큼 떨어짐 */
+          z-index: 3 !important; /* z-index 증가: 2 -> 3 */
+          background-color: rgb(219, 227, 228) !important;
+        }
+        
+        /* Document 컬럼 고정 경계선 */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"]::after {
+          content: ${hasHorizontalScroll ? '""' : 'none'} !important;
+          position: absolute !important;
+          right: 0 !important;
+          top: 0 !important;
+          bottom: 0 !important;
+          width: 1px !important;
+          background-color: #ccc !important;
+          box-shadow: 2px 0 5px rgba(0,0,0,0.1) !important;
+          z-index: 4 !important; /* z-index 추가 */
+        }
+        
+        /* Document 컬럼 본문 셀 고정 스타일 */
+        .MuiTableBody-root .MuiTableCell-root[data-column-id="filename"] {
+          position: ${hasHorizontalScroll ? 'sticky' : 'relative'} !important;
+          left: ${hasHorizontalScroll ? '30px' : '0'} !important; /* 체크박스 열 너비만큼 떨어짐 */
+          z-index: 2 !important; /* z-index 증가: 1 -> 2 */
+          background-color: white !important;
+        }
+        
+        /* Document 컬럼 본문 셀 고정 경계선 */
+        .MuiTableBody-root .MuiTableCell-root[data-column-id="filename"]::after {
+          content: ${hasHorizontalScroll ? '""' : 'none'} !important;
+          position: absolute !important;
+          right: 0 !important;
+          top: 0 !important;
+          bottom: 0 !important;
+          width: 1px !important;
+          background-color: #ccc !important;
+          box-shadow: 2px 0 5px rgba(0,0,0,0.1) !important;
+          z-index: 3 !important; /* z-index 추가 */
+        }
+        
+        /* 체크박스 열 고정 스타일 */
+        .MuiTableHead-root .MuiTableCell-root.mrt-row-select-head-cell {
+          position: ${hasHorizontalScroll ? 'sticky' : 'relative'} !important;
+          left: 0 !important;
+          z-index: 4 !important; /* z-index 증가: 3 -> 4 */
+          background-color: rgb(219, 227, 228) !important;
+        }
+        
+        /* 체크박스 열 본문 셀 고정 스타일 */
+        .MuiTableBody-root .MuiTableCell-root.mrt-row-select-cell {
+          position: ${hasHorizontalScroll ? 'sticky' : 'relative'} !important;
+          left: 0 !important;
+          z-index: 3 !important; /* z-index 증가: 1 -> 3 */
+          background-color: white !important;
+        }
+        
+        /* 스크롤바 보이기 표시 */
+        .horizontal-scroll-indicator {
+          position: absolute;
+          bottom: 12px;
+          right: 16px;
+          background-color: rgba(0, 0, 0, 0.5);
+          color: white;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          opacity: ${hasHorizontalScroll ? 0.8 : 0};
+          transition: opacity 0.3s;
+          pointer-events: none;
+          z-index: 10;
+          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        
+        .horizontal-scroll-indicator svg {
+          width: 14px;
+          height: 14px;
+        }
+        
+        /* 스크롤 중일 때 인디케이터 숨김 */
+        .MuiTableContainer-root:active + .horizontal-scroll-indicator,
+        .MuiTableContainer-root:focus + .horizontal-scroll-indicator,
+        .MuiTableContainer-root:hover + .horizontal-scroll-indicator {
+          opacity: 0 !important;
+        }
       `}</style>
       <MaterialReactTable table={table} />
+      
     </div>
   );
 });
