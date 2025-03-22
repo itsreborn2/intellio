@@ -1106,7 +1106,7 @@ export async function getChatHistory(projectId: string): Promise<IMessage[]> {
 
 
 export async function getDocumentUploadStatus(documentIds: string[]): Promise<DocumentStatusResponse[]> {
-  console.log('getDocumentUploadStatus', documentIds)
+  console.debug('getDocumentUploadStatus', documentIds)
   const response = await apiFetch(`${API_ENDPOINT}/rag/document-status`, {
     method: 'POST',
     headers: {

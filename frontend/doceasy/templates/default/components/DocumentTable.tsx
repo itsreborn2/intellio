@@ -443,7 +443,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     const additionalData = Object.values(state.documents).map((document) => ({
       ...document
     }));
-    console.log(`[DocumentTable] documents 변경 : ` , additionalData)
+    console.debug(`[DocumentTable] documents 변경 : ` , additionalData)
 
     return [...baseData, ...additionalData];
   }, [state.documents]);
@@ -619,7 +619,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     
     // 칼럼이 5개를 초과하면 테이블에 가로 스크롤 적용
     const hasHorizontalScroll = baseColumns.length > 5; // 체크박스 컬럼까지 포함해서 총 6개 이상
-    console.log(`[DocumentTable] 총 컬럼 수: ${baseColumns.length}, 가로 스크롤: ${hasHorizontalScroll}`);
+    console.debug(`[DocumentTable] 총 컬럼 수: ${baseColumns.length}, 가로 스크롤: ${hasHorizontalScroll}`);
     
     // Document 컬럼을 고정 설정
     if (hasHorizontalScroll && baseColumns.length > 0) {

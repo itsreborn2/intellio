@@ -127,7 +127,7 @@ export const useAuth = create<AuthState>()(
                                 token: tokenCookie,
                                 isAuthenticated: true
                             });
-                            console.debug('[useAuth] 쿠키에서 사용자 정보 로드 완료:', userData);
+                            //console.debug('[useAuth] 쿠키에서 사용자 정보 로드 완료:', userData);
                         } catch (error) {
                             console.error('[useAuth] 쿠키 파싱 오류:', error);
                             set({
