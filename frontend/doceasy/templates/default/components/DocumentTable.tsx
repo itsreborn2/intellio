@@ -27,16 +27,19 @@ export interface ITableUtils {
 // 마크다운 스타일 상수 정의
 const markdownClassName = `prose dark:prose-invert max-w-none 
   [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-  [&>h1]:mt-3 [&>h1]:mb-1 [&>h1]:text-lg [&>h1]:font-bold
-  [&>h2]:mt-2 [&>h2]:mb-1 [&>h2]:text-base [&>h2]:font-semibold
-  [&>h3]:mt-1 [&>h3]:mb-1 [&>h3]:text-sm [&>h3]:font-normal
-  [&>p]:my-0.5 [&>p]:leading-4 [&>p]:whitespace-pre-line [&>p]:text-xs
-  [&>ul]:my-0.5 [&>ul>li]:mt-1 [&>ul>li]:text-xs
-  [&>ol]:my-0.5 [&>ol>li]:mt-1 [&>ol>li]:text-xs
-  [&>table]:w-full [&>table]:my-2 [&>table]:border-collapse
-  [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-1 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left [&>table>thead>tr>th]:text-xs
+  [&>h1]:mt-1 [&>h1]:mb-0 [&>h1]:text-lg [&>h1]:font-bold [&>h1]:text-gray-800
+  [&>h2]:mt-1 [&>h2]:mb-0 [&>h2]:text-base [&>h2]:font-semibold [&>h2]:text-gray-700
+  [&>h3]:mt-1 [&>h3]:mb-0 [&>h3]:text-sm [&>h3]:font-normal [&>h3]:text-gray-600
+  [&>p]:my-0 [&>p]:leading-4 [&>p]:whitespace-pre-line [&>p]:text-xs [&>p]:text-gray-800
+  [&>ul]:my-0 [&>ul>li]:mt-0 [&>ul>li]:text-xs [&>ul>li]:text-gray-800
+  [&>ol]:my-0 [&>ol>li]:mt-0 [&>ol>li]:text-xs [&>ol>li]:text-gray-800
+  [&>table]:w-full [&>table]:my-1 [&>table]:border-collapse
+  [&>table>thead>tr>th]:border [&>table>thead>tr>th]:border-gray-300 [&>table>thead>tr>th]:p-0 [&>table>thead>tr>th]:bg-gray-100 [&>table>thead>tr>th]:text-left [&>table>thead>tr>th]:text-xs
   sm:[&>p]:text-xs sm:[&>ul>li]:text-xs sm:[&>ol>li]:text-xs sm:[&>table>thead>tr>th]:text-xs
-  xs:[&>p]:text-[0.65rem] xs:[&>ul>li]:text-[0.65rem] xs:[&>ol>li]:text-[0.65rem] xs:[&>table>thead>tr>th]:text-[0.65rem]`;
+  xs:[&>p]:text-[0.65rem] xs:[&>ul>li]:text-[0.65rem] xs:[&>ol>li]:text-[0.65rem] xs:[&>table>thead>tr>th]:text-[0.65rem]
+  prose-strong:text-blue-700 prose-strong:font-bold
+  prose-em:text-gray-600 prose-em:italic
+  prose-code:text-red-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded`;
 
 // 마크다운 셀 컴포넌트
 function MarkdownCell({ content }: { content: string }) {
@@ -78,6 +81,7 @@ function MarkdownCell({ content }: { content: string }) {
   const calculateSafePosition = useCallback((rect: DOMRect) => {
     const padding = 20; // 화면 가장자리로부터의 최소 여백
     const headerHeight = 36; // 테이블 헤더의 높이
+    const minPopupWidth = 400; // 팝업창의 최소 너비
     
     // DocumentTable의 위치 정보 가져오기
     let tableTop = 0;
@@ -89,12 +93,17 @@ function MarkdownCell({ content }: { content: string }) {
     const minTopPadding = Math.max(headerHeight + 10, tableTop); // 헤더 높이 + 추가 여백 또는 테이블 상단 중 큰 값
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const expandedWidth = rect.width + 40; // 확장 시 추가되는 너비
+    const expandedWidth = Math.max(minPopupWidth, rect.width + 40); // 확장 시 너비 (최소 300px)
     const estimatedHeight = Math.min(rect.height * 5, 500); // 예상 높이 (최대 500px)
     
-    // 기본 위치 (원래 셀 위치)
+    // 기본 위치 (셀의 중앙에서 시작)
     let top = rect.top;
     let left = rect.left;
+    
+    // 너무 작은 칼럼인 경우 팝업이 셀 중앙에서 시작하도록 조정
+    if (rect.width < minPopupWidth) {
+      left = Math.max(padding, rect.left - (minPopupWidth - rect.width) / 2);
+    }
     
     // 오른쪽 경계 확인 및 조정
     if (left + expandedWidth > viewportWidth - padding) {
@@ -110,7 +119,7 @@ function MarkdownCell({ content }: { content: string }) {
     const bottomSpace = viewportHeight - rect.bottom - padding;
     if (estimatedHeight > bottomSpace) {
       // 하단에 충분한 공간이 없으면 셀 바로 위에 표시
-      top = Math.max(minTopPadding, rect.top - estimatedHeight); // 셀 위에 간격 없이 표시 (2px 제거)
+      top = Math.max(minTopPadding, rect.top - estimatedHeight); // 셀 위에 간격 없이 표시
       
       // 계산된 위치가 테이블 상단보다 작으면 조정
       if (top < minTopPadding) {
@@ -119,10 +128,10 @@ function MarkdownCell({ content }: { content: string }) {
       }
     } else {
       // 하단에 충분한 공간이 있으면 셀 아래에 표시
-      top = rect.bottom; // 셀 아래에 간격 없이 표시 (2px 제거)
+      top = rect.bottom; // 셀 아래에 표시
     }
     
-    return { top, left, width: rect.width };
+    return { top, left, width: Math.max(minPopupWidth - 40, rect.width) }; // 최소 너비 보장 (padding 40px 고려)
   }, []);
   
   // 확장/축소 토글 함수
@@ -197,115 +206,126 @@ function MarkdownCell({ content }: { content: string }) {
       className={`
         transition-all duration-300 cursor-pointer text-xs relative
         ${needsScroll ? 'overflow-y-auto overflow-x-hidden' : 'overflow-visible'}
-        ${isHovering ? 'bg-gray-90' : ''}
+        ${isHovering ? 'bg-gray-50' : ''}
       `}
       style={{
         userSelect: 'none',
         maxHeight: '55px',
         width: '100%',
-        paddingTop: '0.125rem',
-        paddingBottom: '0.125rem',
-        paddingLeft: '4px',
-        paddingRight: '0px',
-        scrollbarWidth: 'thin',
-        scrollbarColor: '#cbd5e1 transparent'
+        paddingTop: '0',        // 패딩 제거
+        paddingBottom: '0',     // 패딩 제거
+        paddingLeft: '0',       // 패딩 제거
+        paddingRight: '0',      // 패딩 제거
+        position: 'relative'    // 명시적으로 position 지정
       }}
       onDoubleClick={handleDoubleClick}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <style jsx>{`
-        /* 웹킷 기반 브라우저용 스크롤바 스타일 */
-        div::-webkit-scrollbar {
-          width: 1px;
-          height: 1px;
-          position: absolute;
-          right: 0;
-        }
-        div::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        div::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 0;
-        }
-        div::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
-        }
-        /* 스크롤바가 필요할 때만 표시 */
-        div::-webkit-scrollbar {
-          display: auto;
-        }
-        div:not(:hover)::-webkit-scrollbar-thumb {
-          background: transparent;
-        }
-        div:hover::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-        }
-        /* 스크롤 이동 버튼 제거 */
-        div::-webkit-scrollbar-button {
-          display: none;
-        }
-        
-        /* 모바일 환경에서 스크롤바 조정 */
-        @media (max-width: 640px) {
-          div::-webkit-scrollbar {
-            width: 0.5px;
-            height: 0.5px;
-          }
-        }
-      `}</style>
+      {/* 스크롤 가능한 내용 컨테이너 */}
       <div 
-        ref={contentRef}
+        className={`${needsScroll ? 'overflow-y-auto overflow-x-hidden' : 'overflow-visible'}`}
         style={{
-          userSelect: 'none',
+          maxHeight: '55px',
           width: '100%',
-          boxSizing: 'border-box',
-          paddingRight: '0',
-          paddingBottom: '16px' // 아이콘을 위한 공간 확보
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#cbd5e1 transparent',
         }}
       >
-        <ReactMarkdown 
-          remarkPlugins={[remarkGfm]}
-          className={`${markdownClassName} leading-4 text-xs prose-strong:text-blue-700 prose-em:text-gray-600 prose-code:text-red-600 prose-code:bg-gray-100`}
+        <style jsx>{`
+          /* 웹킷 기반 브라우저용 스크롤바 스타일 */
+          div::-webkit-scrollbar {
+            width: 1px;
+            height: 1px;
+            position: absolute;
+            right: 0;
+          }
+          div::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          div::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 0;
+          }
+          div::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+          /* 스크롤바가 필요할 때만 표시 */
+          div::-webkit-scrollbar {
+            display: auto;
+          }
+          div:not(:hover)::-webkit-scrollbar-thumb {
+            background: transparent;
+          }
+          div:hover::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+          }
+          /* 스크롤 이동 버튼 제거 */
+          div::-webkit-scrollbar-button {
+            display: none;
+          }
+          
+          /* 모바일 환경에서 스크롤바 조정 */
+          @media (max-width: 640px) {
+            div::-webkit-scrollbar {
+              width: 0.5px;
+              height: 0.5px;
+            }
+          }
+        `}</style>
+        <div 
+          ref={contentRef}
+          style={{
+            userSelect: 'none',
+            width: '100%',
+            boxSizing: 'border-box',
+            paddingRight: '0',
+            margin: '0'        // 마진 제거
+          }}
         >
-          {content}
-        </ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} className={markdownClassName}>
+            {content}
+          </ReactMarkdown>
+        </div>
       </div>
       
-      {/* 스크롤 표시를 위한 UI */}
-      {needsScroll && (
-        <div className="absolute right-0 bottom-0 px-1 py-0.5 z-10">
-          <span className="text-[9px] text-gray-500 mr-1">↓</span>
+      {/* UI 요소들을 위한 절대 위치 컨테이너 */}
+      {/* 이 요소들은 스크롤과 무관하게 항상 고정된 위치에 표시됨 */}
+      <div className="absolute inset-0 pointer-events-none">
+        {/* 스크롤 표시를 위한 UI - 고정 위치 */}
+        {needsScroll && (
+          <div className="absolute left-0 bottom-0 px-1 py-0.5">
+            <span className="text-[9px] text-gray-500">↓</span>
+          </div>
+        )}
+        
+        {/* 셀 확장 버튼 - 항상 고정된 위치, 내용 위에 겹침 */}
+        <div 
+          className="absolute right-0 bottom-0 z-20 flex items-center bg-white bg-opacity-70 px-1 py-0.5 rounded-tl cursor-pointer hover:bg-gray-100 pointer-events-auto"
+          onClick={handleIconClick}
+          title="클릭하여 자세히 보기"
+          data-tooltip-delay="100"
+        >
+          <span className="text-[9px] text-blue-500 italic">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="12" 
+              height="12" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2" 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              className="inline-block"
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              <line x1="11" y1="8" x2="11" y2="14"></line>
+              <line x1="8" y1="11" x2="14" y2="11"></line>
+            </svg>
+          </span>
         </div>
-      )}
-      
-      {/* 셀 확장 버튼 - 항상 고정된 위치 */}
-      <div 
-        className="absolute right-0 bottom-0 z-20 flex items-center bg-gray-50 bg-opacity-80 px-1 py-0.5 rounded-tl cursor-pointer hover:bg-gray-100"
-        onClick={handleIconClick}
-        title="클릭하여 자세히 보기"
-        data-tooltip-delay="100"
-      >
-        <span className="text-[9px] text-blue-500 italic">
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            width="12" 
-            height="12" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2" 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            className="inline-block"
-          >
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            <line x1="11" y1="8" x2="11" y2="14"></line>
-            <line x1="8" y1="11" x2="14" y2="11"></line>
-          </svg>
-        </span>
       </div>
     </div>
   );
@@ -322,10 +342,10 @@ function MarkdownCell({ content }: { content: string }) {
           position: 'absolute',
           top: `${position.top}px`,
           left: `${position.left}px`,
-          width: `${Math.min(position.width + 40, window.innerWidth - 40)}px`, // 너비가 화면을 넘지 않도록
+          width: `${Math.max(300, Math.min(position.width + 40, window.innerWidth - 40))}px`, // 최소 너비 300px 보장
           maxHeight: `${Math.min(500, window.innerHeight - Math.max(position.top, 20) - 20)}px`, // 높이 제한 개선
           minHeight: '100px',
-          padding: '12px',
+          padding: '8px',       // 패딩 줄임 (12px → 8px)
           transition: 'all 0.3s ease',
           scrollbarWidth: 'thin',
           scrollbarColor: '#cbd5e1 transparent',
@@ -336,9 +356,9 @@ function MarkdownCell({ content }: { content: string }) {
             : '0 -4px 12px rgba(0, 0, 0, 0.15)', // 셀 아래에 표시될 때
           // 모바일 환경에서 조정
           ...(window.innerWidth <= 640 && {
-            width: `${Math.min(window.innerWidth - 20, position.width + 20)}px`,
-            padding: '8px',
-            left: `${Math.max(10, Math.min(position.left, window.innerWidth - (position.width + 20) - 10))}px`
+            width: `${Math.max(250, Math.min(window.innerWidth - 20, position.width + 20))}px`, // 모바일에서도 최소 너비 250px 보장
+            padding: '4px',     // 모바일 패딩 더 줄임 (8px → 4px)
+            left: `${Math.max(10, Math.min(position.left, window.innerWidth - Math.max(250, position.width + 20) - 10))}px`
           })
         }}
         onClick={(e) => e.stopPropagation()}
@@ -380,16 +400,13 @@ function MarkdownCell({ content }: { content: string }) {
             width: '100%',
             boxSizing: 'border-box',
             position: 'relative',
-            paddingBottom: '26px' // 닫기 버튼을 위한 공간 확보
+            paddingBottom: '20px' // 닫기 버튼을 위한 공간 확보 (26px → 20px)
           }}
         >
-          <ReactMarkdown 
-            remarkPlugins={[remarkGfm]}
-            className={`${markdownClassName} leading-4 text-xs prose-strong:text-blue-700 prose-em:text-gray-600 prose-code:text-red-600 prose-code:bg-gray-100`}
-          >
+          <ReactMarkdown remarkPlugins={[remarkGfm]} className={markdownClassName}>
             {content}
           </ReactMarkdown>
-          <div className="absolute bottom-0 right-0 mt-2">
+          <div className="absolute bottom-0 right-0">
             <span 
               className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded cursor-pointer hover:bg-gray-200"
               onClick={handleCollapseClick}
@@ -443,21 +460,38 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         id: "filename",
         accessorKey: "filename",
         header: "Document",
+        enableSorting: true, // Document 컬럼만 정렬 활성화
         Cell: ({ row }: { row: MRT_Row<IDocument> }) => {
           const document = row.original;
           const status = document.status;
           
-          // 상태에 따른 파일명 색상 설정
-          const filenameColorClass = status === 'ERROR' 
-            ? 'text-red-500' 
-            : (status === 'PROCESSING' || status === 'PARTIAL' || status === 'UPLOADING' || status === 'UPLOADED') 
-              ? 'text-gray-400' 
-              : 'text-foreground';
+          // 파일명 길이 확인 (긴 파일명 여부 체크)
+          const isLongFilename = document.filename.length > 25;
+          
+          // 상태에 따른 색상 클래스 결정
+          let colorClass = '';
+          if (status === 'ERROR') {
+            colorClass = 'doc-filename-error';
+          } else if (status === 'PROCESSING' || status === 'PARTIAL' || status === 'UPLOADING' || status === 'UPLOADED') {
+            colorClass = 'doc-filename-processing';
+          }
 
           return (
-            <div className="flex items-center gap-1 w-full overflow-hidden">
-              <span className={`${filenameColorClass} truncate flex-1 text-xs font-medium`}>{document.filename}</span>
-              <DocumentStatusBadge status={status} />
+            <div className="doc-filename-cell">
+              <div className="doc-filename-container">
+                <p 
+                  className={`doc-filename-text ${isLongFilename ? 'doc-filename-long' : 'doc-filename-short'} ${colorClass}`}
+                  title={document.filename}
+                >
+                  {document.filename}
+                </p>
+              </div>
+              
+              {status !== 'COMPLETED' && (
+                <div className="doc-status-container">
+                  <DocumentStatusBadge status={status} />
+                </div>
+              )}
             </div>
           );
         },
@@ -481,6 +515,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           baseColumns.push({
             accessorKey: cell.header,
             header: cell.header,
+            enableSorting: false, // 추가 컬럼은 정렬 비활성화
             grow: true, // 새로 추가되는 컬럼들은 남은 공간을 균등하게 차지
             Cell: ({ row }) => {
               // 해당 row의 added_col_context에서 matching되는 cell의 value를 찾아 표시
@@ -590,7 +625,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     data: tableData,
     enableRowSelection: true,
     enableMultiRowSelection: true,
-    enableColumnResizing: true,
+    enableColumnResizing: false,
     enableStickyHeader: true,
     enableStickyFooter: false,
     enableColumnVirtualization: false,
@@ -607,6 +642,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     enableTopToolbar: false,
     enablePagination: false,
     enableBottomToolbar: false,
+    enableSorting: true, // 테이블 전체 정렬 기능 활성화 (개별 컬럼에서 제어)
     positionToolbarAlertBanner: 'none',
     getRowId: (doc) => doc.id,
     defaultColumn: {
@@ -676,13 +712,14 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     muiTableBodyProps: {
       sx: {
         '& tr': {
-          height: columns.length === 1 ? '36px' : 'auto',  // 본문 행 높이 축소
-          maxHeight: '60px',  // 최대 높이 제한
+          height: 'auto',  // 본문 행 높이 자동으로 설정
+          minHeight: '60px',  // 최소 높이 설정
+          maxHeight: 'none',  // 최대 높이 제한 제거
           borderBottom: '1px solid #e2e8f0',  // 행 하단 경계선 추가
           // 모바일 환경에서 행 높이 조정
           '@media (max-width: 640px)': {
-            height: columns.length === 1 ? '30px' : 'auto',
-            maxHeight: '50px',
+            height: 'auto',
+            minHeight: '50px',
           }
         }
       }
@@ -818,22 +855,22 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     },
     muiTableBodyCellProps: {
       sx: {
-        padding: '0.5rem',
-        paddingRight: '0.25rem', // 오른쪽 패딩 줄임
+        padding: '0.25rem',        // 기존 0.5rem에서 줄임
+        paddingRight: '0.25rem',   // 오른쪽 패딩은 유지
         fontSize: '0.75rem',
         borderRight: '1px solid #e2e8f0',
-        verticalAlign: 'top',  // 셀 내용을 상단에 정렬
-        color: '#334155',  // 텍스트 색상 개선
-        height: '59px', // 셀 높이 고정
-        maxHeight: '59px', // 최대 높이 제한
-        overflow: 'visible', // 셀 자체는 오버플로우 허용 (내부 컨텐츠가 스크롤 처리)
+        verticalAlign: 'top',      // 셀 내용을 상단에 정렬
+        color: '#334155',          // 텍스트 색상 개선
+        minHeight: '59px',         // 최소 높이 설정
+        maxHeight: 'none',         // 최대 높이 제한 제거
+        overflow: 'visible',       // 셀 자체는 오버플로우 허용 (내부 컨텐츠가 스크롤 처리)
+        whiteSpace: 'normal',      // 텍스트가 줄바꿈되도록 설정
         
         // 모바일 환경에서 셀 조정
         '@media (max-width: 640px)': {
-          padding: '0.25rem',
+          padding: '0.125rem',     // 모바일에서는 더 줄임
           fontSize: '0.7rem',
-          height: '50px',
-          maxHeight: '50px',
+          minHeight: '50px',
         },
         
         // 마크다운 스타일링 - 이 스타일을 포탈에도 적용
@@ -867,15 +904,64 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           }
         },
         '&:hover': {
-          backgroundColor: 'f80000',
+          backgroundColor: '#f8f8f8',
           cursor: 'pointer',
         },
-        // Document 칼럼 셀 내부 요소가 셀 너비를 초과하지 않도록 설정
+        
+        // Document 칼럼 셀 스타일 (filename)
         '&[data-column-id="filename"]': {
-          '& > div': {
+          height: 'auto',
+          minHeight: '30px',
+          maxHeight: 'none',
+          padding: '4px 2px',      // 패딩 더 줄임
+          overflow: 'visible',
+          
+          // Document 칼럼 내 파일명 컨테이너
+          '& .filename-container': {
             width: '100%',
+            padding: '2px 0',      // 패딩 줄임
+          },
+          
+          // Document 칼럼 내 파일명 문단 공통 스타일
+          '& p': {
+            margin: 0,
             maxWidth: '100%',
-            overflow: 'hidden'
+            lineHeight: 1.2,
+            paddingTop: '2px',
+            paddingBottom: '2px',
+            width: '100%',
+            textAlign: 'left',
+          },
+          
+          // 길이가 짧은 파일명 (한 줄로 표시)
+          '& p.short-filename': {
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          },
+          
+          // 길이가 긴 파일명 (여러 줄로 표시)
+          '& p.long-filename': {
+            whiteSpace: 'normal',
+            wordBreak: 'break-all',
+            wordWrap: 'break-word',
+            overflowWrap: 'break-word',
+            hyphens: 'auto',
+          },
+          
+          // 상태 배지 위치 조정
+          '& .status-badge': {
+            marginTop: '2px',
+            flexShrink: 0,
+            display: 'inline-flex',
+          },
+          
+          // 모바일 환경에서 Document 칼럼 내 파일명 스타일 조정
+          '@media (max-width: 640px)': {
+            '& span:first-child': {
+              fontSize: '0.7rem',
+              lineHeight: 1.1,
+            }
           }
         }
       }
@@ -899,13 +985,9 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
     layoutMode: 'grid', //모든 칼럼은 남은 공간을 채우는 형태
   });
 
-
-
-  
   return (
     // 전역 설정은 되도록이면 제거하는 방향으로 가야햔다. 지금은 급하니 일단 ..
     <div className="w-full h-full overflow-hidden">
-      
       <style jsx global>{`
         /* 헤더 셀 스타일 직접 조정 */
         .MuiTableHead-root {
@@ -1086,195 +1168,6 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           align-items: center !important;
         }
         
-        /* Document 칼럼 셀 내부 요소 너비 제한 */
-        .MuiTableBody-root .MuiTableCell-root[data-column-id="filename"] > div {
-          width: 100% !important;
-          max-width: 100% !important;
-          overflow: hidden !important;
-        }
-        
-        /* Document 칼럼 내 파일명 너비 제한 */
-        .MuiTableBody-root .MuiTableCell-root[data-column-id="filename"] .truncate {
-          max-width: calc(100% - 24px) !important; /* 상태 배지 너비와 간격을 고려한 값 */
-        }
-        
-        /* 모바일 환경에서 Document 칼럼 내 파일명 너비 제한 조정 */
-        @media (max-width: 640px) {
-          .MuiTableBody-root .MuiTableCell-root[data-column-id="filename"] .truncate {
-            max-width: calc(100% - 20px) !important; /* 상태 배지 너비와 간격을 고려한 값 */
-            font-size: 0.7rem !important;
-          }
-        }
-        
-        /* 테이블 너비 제한 */
-        .MuiTable-root {
-          width: 100% !important;
-          max-width: 100% !important;
-        }
-        
-        /* 테이블 셀 너비 제한 */
-        .MuiTableCell-root {
-          max-width: 100% !important;
-          overflow: hidden !important;
-        }
-        
-        /* 모바일 환경에서 테이블 셀 조정 */
-        @media (max-width: 640px) {
-          .MuiTableBody-root .MuiTableCell-root {
-            padding: 0.25rem !important;
-            font-size: 0.7rem !important;
-          }
-        }
-        
-        /* 리액트 포탈 마크다운 스타일 통일 */
-        body > div > div > div .prose,
-        .MuiTableBody-root .prose {
-          max-width: none !important;
-          font-size: 0.75rem !important;
-        }
-        
-        body > div > div > div .prose h1,
-        .MuiTableBody-root .prose h1 { 
-          font-size: 0.9rem !important; 
-          font-weight: bold !important; 
-          margin-bottom: 0.25rem !important;
-          margin-top: 0.5rem !important;
-        }
-        
-        body > div > div > div .prose h2,
-        .MuiTableBody-root .prose h2 { 
-          font-size: 0.85rem !important; 
-          font-weight: bold !important; 
-          margin-bottom: 0.25rem !important;
-          margin-top: 0.5rem !important;
-        }
-        
-        body > div > div > div .prose h3,
-        .MuiTableBody-root .prose h3 { 
-          font-size: 0.8rem !important; 
-          font-weight: bold !important; 
-          margin-bottom: 0.25rem !important;
-          margin-top: 0.25rem !important;
-        }
-        
-        body > div > div > div .prose p,
-        .MuiTableBody-root .prose p { 
-          margin-bottom: 0.25rem !important; 
-          font-size: 0.75rem !important; 
-          line-height: 1.2 !important;
-        }
-        
-        /* 모바일 환경에서 포탈 마크다운 스타일 조정 */
-        @media (max-width: 640px) {
-          body > div > div > div .prose h1,
-          .MuiTableBody-root .prose h1 { 
-            font-size: 0.85rem !important;
-          }
-          
-          body > div > div > div .prose h2,
-          .MuiTableBody-root .prose h2 { 
-            font-size: 0.8rem !important;
-          }
-          
-          body > div > div > div .prose h3,
-          .MuiTableBody-root .prose h3 { 
-            font-size: 0.75rem !important;
-          }
-          
-          body > div > div > div .prose p,
-          body > div > div > div .prose li,
-          .MuiTableBody-root .prose p,
-          .MuiTableBody-root .prose li { 
-            font-size: 0.7rem !important;
-          }
-        }
-        
-        body > div > div > div .prose strong,
-        .MuiTableBody-root .prose strong { 
-          color: rgb(29 78 216) !important; 
-          font-weight: bold !important;
-        }
-        
-        body > div > div > div .prose em,
-        .MuiTableBody-root .prose em { 
-          color: rgb(75 85 99) !important; 
-          font-style: italic !important;
-        }
-        
-        body > div > div > div .prose code,
-        .MuiTableBody-root .prose code { 
-          background-color: rgb(243 244 246) !important; 
-          padding: 0.15rem !important; 
-          border-radius: 0.25rem !important; 
-          color: rgb(220 38 38) !important; 
-          font-size: 0.75rem !important;
-        }
-        
-        body > div > div > div .prose ul,
-        .MuiTableBody-root .prose ul { 
-          list-style-type: disc !important; 
-          padding-left: 1rem !important; 
-          margin-bottom: 0.25rem !important;
-        }
-        
-        body > div > div > div .prose ol,
-        .MuiTableBody-root .prose ol { 
-          list-style-type: decimal !important; 
-          padding-left: 1rem !important; 
-          margin-bottom: 0.25rem !important;
-        }
-        
-        body > div > div > div .prose li,
-        .MuiTableBody-root .prose li { 
-          margin-bottom: 0.15rem !important; 
-          font-size: 0.75rem !important; 
-          line-height: 1.2 !important;
-        }
-        
-        body > div > div > div .prose table,
-        .MuiTableBody-root .prose table { 
-          width: 100% !important; 
-          border-collapse: collapse !important; 
-          margin-bottom: 0.25rem !important; 
-          font-size: 0.75rem !important;
-        }
-        
-        body > div > div > div .prose th,
-        .MuiTableBody-root .prose th { 
-          border-width: 1px !important; 
-          border-color: rgb(209 213 219) !important; 
-          padding: 0.25rem 0.5rem !important; 
-          background-color: rgb(249 250 251) !important; 
-          font-weight: 600 !important; 
-          font-size: 0.75rem !important;
-        }
-        
-        body > div > div > div .prose td,
-        .MuiTableBody-root .prose td { 
-          border-width: 1px !important; 
-          border-color: rgb(209 213 219) !important; 
-          padding: 0.25rem 0.5rem !important; 
-          font-size: 0.75rem !important;
-        }
-        
-        /* 모바일 환경에서 테이블 조정 */
-        @media (max-width: 640px) {
-          body > div > div > div .prose table,
-          body > div > div > div .prose th,
-          body > div > div > div .prose td,
-          .MuiTableBody-root .prose table,
-          .MuiTableBody-root .prose th,
-          .MuiTableBody-root .prose td { 
-            font-size: 0.65rem !important;
-            padding: 0.15rem 0.3rem !important;
-          }
-        }
-        
-        /* 모든 스크롤바 이동 버튼 제거 */
-        *::-webkit-scrollbar-button {
-          display: none !important;
-        }
-        
         /* 테이블 본문 셀의 우측 테두리 강화 */
         .MuiTableBody-root .MuiTableCell-root {
           border-right: 1px solid #e2e8f0 !important;
@@ -1283,6 +1176,392 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         /* 마지막 칼럼은 오른쪽 테두리 제외 */
         .MuiTableBody-root .MuiTableCell-root:last-child {
           border-right: none !important;
+        }
+        
+        /* 테이블 행 높이 자동 조정 */
+        .MuiTableBody-root .MuiTableRow-root {
+          height: auto !important;
+          min-height: 60px !important;
+        }
+        
+        /* 모바일 환경에서 테이블 행 높이 조정 */
+        @media (max-width: 640px) {
+          .MuiTableBody-root .MuiTableRow-root {
+            min-height: 50px !important;
+          }
+        }
+        
+        /* Document 칼럼 셀 스타일 */
+        .doc-filename-cell {
+          overflow: hidden;
+          width: 100%;
+        }
+        
+        /* 파일명 컨테이너 스타일 */
+        .doc-filename-container {
+          padding: 4px 0;
+          width: 100%;
+        }
+        
+        /* 파일명 텍스트 기본 스타일 */
+        .doc-filename-text {
+          margin: 0;
+          padding: 2px 0;
+          font-size: 0.75rem;
+          font-weight: 500;
+          line-height: 1.2;
+          width: 100%;
+          text-align: left;
+        }
+        
+        /* 짧은 파일명 (한 줄) 스타일 */
+        .doc-filename-short {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        
+        /* 긴 파일명 (여러 줄) 스타일 */
+        .doc-filename-long {
+          white-space: normal;
+          word-break: break-all;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          hyphens: 'auto',
+        },
+        
+        /* 상태 배지 컨테이너 */
+        .doc-status-container {
+          margin-top: 4px;
+        }
+        
+        /* 파일명 텍스트 색상 (에러) */
+        .doc-filename-error {
+          color: #ef4444;
+        }
+        
+        /* 파일명 텍스트 색상 (처리 중) */
+        .doc-filename-processing {
+          color: #9ca3af;
+        }
+        
+        /* 패딩과 마진 최소화하여 컨텐츠 영역 최대화 */
+        .MuiTableBody-root .MuiTableCell-root {
+          padding: 0.4rem !important;
+        }
+        
+        /* 모든 셀 내부 요소의 마진 제거 */
+        .MuiTableBody-root .MuiTableCell-root > div {
+          margin: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          padding: 0 !important;
+        }
+        
+        /* MUI 테이블 셀 컨텐츠 최대화 */
+        .MuiTableCell-body {
+          padding: 3px !important;
+        }
+        
+        /* 셀 내부의 p 태그 패딩/마진 제거 */
+        .MuiTableBody-root .MuiTableCell-root p {
+          margin: 0 !important;
+          padding: 0 !important;
+          line-height: 1.2 !important;
+        }
+        
+        /* 파일명 텍스트 패딩 축소 */
+        .doc-filename-text {
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+        
+        /* 파일명 컨테이너 패딩 축소 */
+        .doc-filename-container {
+          padding: 0 !important;
+        }
+        
+        /* 상태 배지 컨테이너 마진 축소 */
+        .doc-status-container {
+          margin-top: 2px !important;
+        }
+        
+        /* MarkdownCell 내 컨텐츠 패딩 축소 */
+        .MuiTableBody-root .prose {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        
+        /* prose 내부 요소들의 마진 축소 */
+        .MuiTableBody-root .prose > * {
+          margin-top: 1px !important;
+          margin-bottom: 1px !important;
+        }
+        
+        /* 마크다운 스타일 복원 */
+        .MuiTableBody-root .prose,
+        body > div > div > div .prose {
+          max-width: none !important;
+          font-size: 0.75rem !important;
+        }
+        
+        /* 제목 스타일 */
+        .MuiTableBody-root .prose h1,
+        body > div > div > div .prose h1 { 
+          font-size: 0.9rem !important; 
+          font-weight: bold !important; 
+          margin-bottom: 0.25rem !important;
+          margin-top: 0.5rem !important;
+          color: #333 !important;
+        }
+        
+        .MuiTableBody-root .prose h2,
+        body > div > div > div .prose h2 { 
+          font-size: 0.85rem !important; 
+          font-weight: bold !important; 
+          margin-bottom: 0.25rem !important;
+          margin-top: 0.5rem !important;
+          color: #444 !important;
+        }
+        
+        .MuiTableBody-root .prose h3,
+        body > div > div > div .prose h3 { 
+          font-size: 0.8rem !important; 
+          font-weight: bold !important; 
+          margin-bottom: 0.25rem !important;
+          margin-top: 0.25rem !important;
+          color: #555 !important;
+        }
+        
+        /* 단락 스타일 */
+        .MuiTableBody-root .prose p,
+        body > div > div > div .prose p { 
+          margin-bottom: 0.25rem !important; 
+          font-size: 0.75rem !important; 
+          line-height: 1.2 !important;
+          color: #333 !important;
+        }
+        
+        /* 강조 스타일 */
+        .MuiTableBody-root .prose strong,
+        body > div > div > div .prose strong { 
+          color: rgb(29 78 216) !important; 
+          font-weight: bold !important;
+        }
+        
+        /* 이탤릭 스타일 */
+        .MuiTableBody-root .prose em,
+        body > div > div > div .prose em { 
+          color: rgb(75 85 99) !important; 
+          font-style: italic !important;
+        }
+        
+        /* 코드 스타일 */
+        .MuiTableBody-root .prose code,
+        body > div > div > div .prose code { 
+          background-color: rgb(243 244 246) !important; 
+          padding: 0.15rem !important; 
+          border-radius: 0.25rem !important; 
+          color: rgb(220 38 38) !important; 
+          font-size: 0.75rem !important;
+        }
+        
+        /* 리스트 스타일 */
+        .MuiTableBody-root .prose ul,
+        body > div > div > div .prose ul { 
+          list-style-type: disc !important; 
+          padding-left: 1rem !important; 
+          margin-bottom: 0.25rem !important;
+        }
+        
+        .MuiTableBody-root .prose ol,
+        body > div > div > div .prose ol { 
+          list-style-type: decimal !important; 
+          padding-left: 1rem !important; 
+          margin-bottom: 0.25rem !important;
+        }
+        
+        .MuiTableBody-root .prose li,
+        body > div > div > div .prose li { 
+          margin-bottom: 0.15rem !important; 
+          font-size: 0.75rem !important; 
+          line-height: 1.2 !important;
+          color: #333 !important;
+        }
+        
+        /* 테이블 스타일 */
+        .MuiTableBody-root .prose table,
+        body > div > div > div .prose table { 
+          width: 100% !important; 
+          border-collapse: collapse !important; 
+          margin-bottom: 0.25rem !important; 
+          font-size: 0.75rem !important;
+        }
+        
+        .MuiTableBody-root .prose th,
+        body > div > div > div .prose th { 
+          border-width: 1px !important; 
+          border-color: rgb(209 213 219) !important; 
+          padding: 0.25rem 0.5rem !important; 
+          background-color: rgb(249 250 251) !important; 
+          font-weight: 600 !important; 
+          font-size: 0.75rem !important;
+          color: #333 !important;
+        }
+        
+        .MuiTableBody-root .prose td,
+        body > div > div > div .prose td { 
+          border-width: 1px !important; 
+          border-color: rgb(209 213 219) !important; 
+          padding: 0.25rem 0.5rem !important; 
+          font-size: 0.75rem !important;
+          color: #333 !important;
+        }
+        
+        /* 모바일 환경에서 마크다운 스타일 조정 */
+        @media (max-width: 640px) {
+          .MuiTableBody-root .prose h1,
+          body > div > div > div .prose h1 { 
+            font-size: 0.85rem !important;
+          }
+          
+          .MuiTableBody-root .prose h2,
+          body > div > div > div .prose h2 { 
+            font-size: 0.8rem !important;
+          }
+          
+          .MuiTableBody-root .prose h3,
+          body > div > div > div .prose h3 { 
+            font-size: 0.75rem !important;
+          }
+          
+          .MuiTableBody-root .prose p,
+          .MuiTableBody-root .prose li,
+          body > div > div > div .prose p,
+          body > div > div > div .prose li { 
+            font-size: 0.7rem !important;
+          }
+          
+          .MuiTableBody-root .prose code,
+          body > div > div > div .prose code { 
+            font-size: 0.7rem !important;
+          }
+          
+          .MuiTableBody-root .prose th,
+          .MuiTableBody-root .prose td,
+          body > div > div > div .prose th,
+          body > div > div > div .prose td { 
+            font-size: 0.7rem !important;
+            padding: 0.15rem 0.3rem !important;
+          }
+        }
+        
+        /* 칼럼 리사이징 관련 커서 스타일 제거 */
+        .mrt-header-cell-resizer {
+          display: none !important;
+          cursor: default !important;
+          width: 0 !important;
+          pointer-events: none !important;
+        }
+        
+        /* 칼럼 리사이저 관련 모든 요소 숨김 */
+        .mrt-column-resize-handle, 
+        .mrt-column-resize-handle-left, 
+        .mrt-column-resize-handle-right {
+          display: none !important;
+          width: 0 !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+        
+        /* 헤더 셀 호버 시 리사이징 관련 시각적 힌트 제거 */
+        .MuiTableCell-root:hover .mrt-header-cell-resizer,
+        .MuiTableCell-root:hover .mrt-column-resize-handle {
+          display: none !important;
+          width: 0 !important;
+          opacity: 0 !important;
+        }
+        
+        /* 헤더 셀 경계에 마우스를 올렸을 때 커서 스타일 */
+        .MuiTableHead-root .MuiTableCell-root {
+          cursor: default !important;
+        }
+        
+        /* 칼럼 경계 호버 시 스타일 제거 */
+        .MuiTableCell-root:hover {
+          cursor: default !important;
+        }
+        
+        /* 모든 정렬 아이콘 숨김 (기본값) */
+        .MuiTableHead-root .MuiTableCell-root .mrt-sorting-icons {
+          opacity: 0 !important;
+          visibility: hidden !important;
+          display: none !important;
+        }
+        
+        /* Document 컬럼(filename)에만 정렬 아이콘 표시 */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] .mrt-sorting-icons {
+          opacity: 1 !important;
+          visibility: visible !important;
+          display: flex !important;
+          margin-left: 4px !important;
+        }
+        
+        /* 정렬 아이콘 크기 조정 */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] .mrt-sorting-icons svg {
+          width: 14px !important;
+          height: 14px !important;
+        }
+        
+        /* 정렬 버튼 스타일 개선 */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] .mrt-sorting-icon {
+          color: #666 !important;
+        }
+        
+        /* 활성화된 정렬 아이콘 강조 */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] .mrt-sorting-icon-active {
+          color: #1976d2 !important;
+        }
+        
+        /* 모바일 환경에서 정렬 아이콘 조정 */
+        @media (max-width: 640px) {
+          .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] .mrt-sorting-icons svg {
+            width: 12px !important;
+            height: 12px !important;
+          }
+        }
+        
+        /* Document 컬럼 헤더 스타일 (정렬 가능 표시) */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] {
+          cursor: pointer !important; /* 정렬 가능함을 표시하는 커서 */
+          color: #1e293b !important; /* 색상 강조 */
+          font-weight: 600 !important; /* 굵기 강조 */
+        }
+        
+        /* Document 컬럼 헤더 호버 효과 */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"]:hover {
+          background-color: rgb(200, 220, 225) !important; /* 호버 시 배경색 변경 */
+        }
+        
+        /* Document 컬럼 헤더와 정렬 아이콘 배치 */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] .mrt-header-content {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
+        }
+        
+        /* Document 컬럼(filename)에만 정렬 아이콘 표시 */
+        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] .mrt-sorting-icons {
+          opacity: 1 !important;
+          visibility: visible !important;
+          display: flex !important;
+          margin-left: 4px !important;
+          align-items: center !important;
+        }
+        
+        /* 정렬되지 않은 다른 컬럼 헤더 */
+        .MuiTableHead-root .MuiTableCell-root:not([data-column-id="filename"]) {
+          cursor: default !important; /* 정렬 불가능 표시 */
         }
       `}</style>
       <MaterialReactTable table={table} />

@@ -79,7 +79,7 @@ const TableAnalysisProgress = React.memo(function TableAnalysisProgress({
   return (
     <div className="fixed bottom-24 right-8 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 z-50 max-w-xs">
       <div className="flex flex-col space-y-2">
-        <h4 className="font-semibold text-sm">{streamingState.headerName ? `'${streamingState.headerName}' 컬럼 분석 중` : '컬럼 생성 중'}</h4>
+        <h4 className="font-semibold text-sm">{streamingState.headerName ? `'${streamingState.headerName}' 분석 중` : '문서 분석 중'}</h4>
         
         <div className="space-y-1">
           <div className="flex justify-between text-xs">
