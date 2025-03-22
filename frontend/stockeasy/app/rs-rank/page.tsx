@@ -8,8 +8,6 @@ import Sidebar from '../components/Sidebar'
 import ChartComponent from '../components/ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
 import html2canvas from 'html2canvas';
-import { copyTableAsImage } from '../utils/tableCopyUtils';
-import TableCopyButton from '../components/TableCopyButton';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -127,8 +125,6 @@ export default function RSRankPage() {
   const highTableRef = useRef<HTMLDivElement>(null);
   const rsHeaderRef = useRef<HTMLDivElement>(null);
   const highHeaderRef = useRef<HTMLDivElement>(null);
-  
-  // 이미지로 복사하는 함수는 utils/tableCopyUtils.ts로 이동했습니다.
   
   useEffect(() => {
     // 페이지 로드 시 데이터 로드
@@ -751,7 +747,7 @@ export default function RSRankPage() {
   // 셀의 정렬 방향을 결정하는 함수
   const getCellAlignment = (header: string) => {
     // RS 관련 수치들은 가운데 정렬
-    if (header.startsWith('RS') || ['MMT'].includes(header)) {
+    if (header.startsWith('RS') || ['MTT'].includes(header)) {
       return 'text-center';
     }
     
@@ -1287,12 +1283,7 @@ export default function RSRankPage() {
                   <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
                     <h2 className="text-lg font-semibold">RS순위</h2>
                     <div className="flex items-center justify-end">
-                      <span className="text-xs text-gray-600 mr-2">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
-                      <TableCopyButton 
-                        tableRef={rsTableRef}
-                        headerRef={rsHeaderRef}
-                        tableName="RS순위 테이블"
-                      />
+                      <span className="text-xs text-gray-600">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
                     </div>
                   </div>
                   <div className="flex-1" style={{ overflowX: 'hidden' }} ref={rsTableRef}>
@@ -1416,12 +1407,7 @@ export default function RSRankPage() {
                 <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
                   <h2 className="text-lg font-semibold">52주 신고가</h2>
                   <div className="flex items-center justify-end">
-                    <span className="text-xs text-gray-600 mr-2">당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
-                    <TableCopyButton 
-                      tableRef={highTableRef}
-                      headerRef={highHeaderRef}
-                      tableName="52주 신고가 테이블"
-                    />
+                    <span className="text-xs text-gray-600">당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
                   </div>
                 </div>
                 <div className="flex-1" style={{ overflowX: 'hidden' }}>
