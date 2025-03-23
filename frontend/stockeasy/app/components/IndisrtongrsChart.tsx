@@ -1056,13 +1056,6 @@ export default function IndustryCharts() {
                               title={`${stock.name}`}
                               parentComponent="IndisrtongrsChart"
                             />
-                            {/* 종목 코드 복사 버튼 추가 */}
-                            <button 
-                              className="absolute top-2 right-2 bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded"
-                              onClick={() => copyStockCode(etf)}
-                            >
-                              복사
-                            </button>
                           </div>
                         </div>
                       ))}

@@ -8,6 +8,7 @@ import Sidebar from '../components/Sidebar'
 import ChartComponent from '../components/ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
 import html2canvas from 'html2canvas';
+import TableCopyButton from '../components/TableCopyButton';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -97,8 +98,12 @@ export default function RSRankPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [sortKey, setSortKey] = useState<string>('');
-  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [sortKey, setSortKey] = useState<string>('RS');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const rsTableRef = useRef<HTMLDivElement>(null);
+  const rsHeaderRef = useRef<HTMLDivElement>(null);
+  const highTableRef = useRef<HTMLDivElement>(null);
+  const highHeaderRef = useRef<HTMLDivElement>(null);
   
   // 52주 신고가 데이터 관련 상태
   const [highData, setHighData] = useState<CSVData>({ headers: [], rows: [], errors: [] });
@@ -119,12 +124,6 @@ export default function RSRankPage() {
   const [chartRsValues, setChartRsValues] = useState<string[]>(Array.from({length: 20}, () => ''));
   const [kospiIndexData, setKospiIndexData] = useState<CandleData[]>([]);
   const [kosdaqIndexData, setKosdaqIndexData] = useState<CandleData[]>([]);
-  
-  // 테이블 참조
-  const rsTableRef = useRef<HTMLDivElement>(null);
-  const highTableRef = useRef<HTMLDivElement>(null);
-  const rsHeaderRef = useRef<HTMLDivElement>(null);
-  const highHeaderRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     // 페이지 로드 시 데이터 로드
@@ -1283,7 +1282,13 @@ export default function RSRankPage() {
                   <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
                     <h2 className="text-lg font-semibold">RS순위</h2>
                     <div className="flex items-center justify-end">
-                      <span className="text-xs text-gray-600">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                      <span className="text-xs text-gray-600 mr-2">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                      <TableCopyButton
+                        tableRef={rsTableRef}
+                        headerRef={rsHeaderRef}
+                        tableName="RS순위 테이블"
+                        buttonText="이미지 복사"
+                      />
                     </div>
                   </div>
                   <div className="flex-1" style={{ overflowX: 'hidden' }} ref={rsTableRef}>
@@ -1407,7 +1412,13 @@ export default function RSRankPage() {
                 <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
                   <h2 className="text-lg font-semibold">52주 신고가</h2>
                   <div className="flex items-center justify-end">
-                    <span className="text-xs text-gray-600">당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                    <span className="text-xs text-gray-600 mr-2">당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                    <TableCopyButton
+                      tableRef={highTableRef}
+                      headerRef={highHeaderRef}
+                      tableName="52주 신고가 테이블"
+                      buttonText="이미지 복사"
+                    />
                   </div>
                 </div>
                 <div className="flex-1" style={{ overflowX: 'hidden' }}>

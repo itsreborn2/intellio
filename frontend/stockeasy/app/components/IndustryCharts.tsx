@@ -462,11 +462,6 @@ export default function IndustryCharts() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  {!etf.isLoading && !etf.error && etf.chartData.length > 0 && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${etf.isAboveMA20 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                      {getStatusText(etf)}
-                    </span>
-                  )}
                   {etf.isLoading ? (
                     <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
                       로딩 중...
