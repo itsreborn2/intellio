@@ -8,13 +8,14 @@ interface FileInfo {
   fileId: string;
   folderPath: string;
   fileName: string;
-  updateSchedule: 'regular' | 'market' | 'market_20ma' | 'afternoon' | 'stock_daily' | 'chart_daily' | 'etf_stocks' | 'today_price' | 'etf_indiestocklist';
+  updateSchedule: 'regular' | 'market' | 'market_20ma' | 'afternoon' | 'stock_daily' | 'chart_daily' | 'etf_stocks' | 'today_price' | 'etf_indiestocklist' | 'on_demand';
 }
 
 // 캐시 정보 인터페이스
 interface CacheInfo {
   cachePath: string;
   lastUpdated: string;
+  backupPath?: string;
 }
 
 // 캐시 레지스트리 인터페이스
@@ -23,8 +24,9 @@ interface CacheRegistry {
 }
 
 // 구글 드라이브 폴더 ID 상수
-const CHART_DATA_FOLDER_ID = '1VFOD15oWpFvzG4rZz8FWWZZT_BGxb4M_';
-const ETF_INDIESTOCKLIST_FOLDER_ID = '1PFBQNJ6qC0iRbZDK_4zI-jKQhTtTKS-V';
+// const CHART_DATA_FOLDER_ID = '1VFOD15oWpFvzG4rZz8FWWZZT_BGxb4M_';
+// const ETF_INDIESTOCKLIST_FOLDER_ID = '1PFBQNJ6qC0iRbZDK_4zI-jKQhTtTKS-V';
+// const MARKET_INDEX_FOLDER_ID = '1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg';
 
 // 캐시 레지스트리 파일 경로
 const CACHE_REGISTRY_PATH = path.join(process.cwd(), 'public', 'last_update.json');
@@ -33,17 +35,10 @@ const CACHE_REGISTRY_PATH = path.join(process.cwd(), 'public', 'last_update.json
 const FILES_TO_SYNC: FileInfo[] = [
   // ETF 현재가 데이터
   {
-    fileId: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA',
+    fileId: '1txqtWnVImMAq6vjD4byFiFFgmbM9KrrA',
     folderPath: 'today_price_etf',
     fileName: 'today_price_etf.csv',
     updateSchedule: 'etf_stocks'
-  },
-  // ETF 52주 신고가 데이터
-  {
-    fileId: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0',
-    folderPath: 'rs_etf',
-    fileName: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0.csv',
-    updateSchedule: 'afternoon'
   },
   // 20MA 리스트
   {
@@ -57,26 +52,6 @@ const FILES_TO_SYNC: FileInfo[] = [
     fileId: '1bJ4CnCgd6dSAAgbPgKvWbElSxWhertIy',
     folderPath: 'etf_stocklist',
     fileName: 'etf_stocklist.csv',
-    updateSchedule: 'etf_stocks'
-  },
-  // Market-Index 파일들
-  {
-    fileId: '1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg',
-    folderPath: 'market-index',
-    fileName: '1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg.csv',
-    updateSchedule: 'chart_daily'
-  },
-  {
-    fileId: '1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c',
-    folderPath: 'market-index',
-    fileName: '1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c.csv',
-    updateSchedule: 'chart_daily'
-  },
-  // 추가 파일
-  {
-    fileId: '1txqtWnVImMAq6vjD4byFiFFgmbM9KrrA',
-    folderPath: 'today_price_etf',
-    fileName: 'today_price_etf.csv',
     updateSchedule: 'etf_stocks'
   },
   // Stock-Data 파일들
@@ -97,11 +72,24 @@ const FILES_TO_SYNC: FileInfo[] = [
     folderPath: 'stock-data',
     fileName: 'stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv',
     updateSchedule: 'stock_daily'
+  },
+  // googleDriveSync.ts에서 추가된 ETF 파일들
+  {
+    fileId: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA', // ETF 현재가 데이터 파일 ID
+    folderPath: 'today_price_etf',
+    fileName: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA.csv', // 파일 ID를 파일명으로 사용
+    updateSchedule: 'market'
+  },
+  {
+    fileId: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0', // ETF 52주 신고가 데이터 파일 ID
+    folderPath: 'rs_etf',
+    fileName: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0.csv', // 파일 ID를 파일명으로 사용
+    updateSchedule: 'afternoon'  // 16:30에 업데이트
   }
 ];
 
 // 폴더 ID 목록
-const FOLDER_IDS = [CHART_DATA_FOLDER_ID, ETF_INDIESTOCKLIST_FOLDER_ID];
+const FOLDER_IDS: string[] = [];
 
 // 마지막 실행 시간을 저장하는 변수
 let lastRunTime = 0;
@@ -241,9 +229,30 @@ async function needsUpdate(
     return true;
   }
 
+  // 파일 존재 여부 및 크기 확인
+  let fileExists = false;
+  let fileSize = 0;
+  
+  try {
+    if (fs.existsSync(filePath)) {
+      const stats = fs.statSync(filePath);
+      fileExists = true;
+      fileSize = stats.size;
+    }
+  } catch (error) {
+    console.log(`파일 상태 확인 중 오류 발생: ${filePath}`);
+    fileExists = false;
+  }
+
   // 파일이 존재하지 않으면 업데이트 필요
-  if (!fs.existsSync(filePath)) {
+  if (!fileExists) {
     console.log(`파일이 존재하지 않아 업데이트 필요: ${filePath}`);
+    return true;
+  }
+  
+  // 파일이 비어있으면 업데이트 필요
+  if (fileSize === 0) {
+    console.log(`파일이 비어있어 업데이트 필요: ${filePath}`);
     return true;
   }
   
@@ -254,22 +263,11 @@ async function needsUpdate(
     return true;
   }
   
-  // 캐시 정보가 없으면 업데이트 필요
+  // 캐시 정보가 없으면, 파일이 이미 존재하고 크기가 0이 아니면 업데이트 불필요
   if (!cacheInfo) {
-    console.log(`캐시 정보가 없어 업데이트 필요: ${filePath}`);
-    return true;
-  }
-  
-  // 파일이 비어있거나 크기가 0이면 업데이트 필요
-  try {
-    const stats = fs.statSync(filePath);
-    if (stats.size === 0) {
-      console.log(`파일이 비어있어 업데이트 필요: ${filePath}`);
-      return true;
-    }
-  } catch (error) {
-    console.log(`파일 상태 확인 중 오류 발생, 업데이트 필요: ${filePath}`);
-    return true;
+    console.log(`캐시 정보가 없지만 파일이 존재하고 크기가 ${fileSize}바이트로 유효함: ${filePath}`);
+    // 캐시 정보 생성 로직을 여기에 추가할 수 있음
+    return false;
   }
   
   const now = new Date();
@@ -345,434 +343,457 @@ async function needsUpdate(
       return (now.getTime() - lastUpdated.getTime()) >= 10 * 60 * 1000;
     }
     
+    case 'on_demand': {
+      // 항상 false 반환 (파일이 없을 때만 별도 로직으로 처리)
+      return false;
+    }
+    
     default:
       return false;
   }
 }
 
 /**
- * 구글 드라이브에서 파일을 다운로드합니다.
+ * 파일 동기화 함수
+ * @param fileInfo 파일 정보
+ * @param forceUpdate 강제 업데이트 여부
+ * @returns 동기화 결과 메시지
  */
-async function downloadFromGoogleDrive(fileId: string, outputPath: string): Promise<boolean> {
+async function syncFile(fileInfo: FileInfo, forceUpdate: boolean = false): Promise<string> {
+  const { fileId, folderPath, fileName } = fileInfo;
+  
   try {
-    console.log(`구글 드라이브에서 파일 다운로드 시작 (ID: ${fileId})`);
+    // 폴더 경로 생성
+    const folderFullPath = path.join(process.cwd(), 'public', folderPath);
     
-    // 구글 드라이브 다운로드 URL
-    const url = `https://drive.google.com/uc?id=${fileId}&export=download&confirm=t`;
+    if (!fs.existsSync(folderFullPath)) {
+      fs.mkdirSync(folderFullPath, { recursive: true });
+      console.log(`폴더 생성됨: ${folderFullPath}`);
+    }
     
-    // 최대 3번 재시도
-    let retryCount = 0;
-    const maxRetries = 3;
+    // 파일 경로 설정
+    const filePath = path.join(folderFullPath, fileName);
     
-    while (retryCount < maxRetries) {
+    // 파일 다운로드 URL 생성
+    const urls = [
+      `https://drive.google.com/uc?export=download&id=${fileId}`,
+      `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}`,
+      `https://docs.google.com/uc?export=download&id=${fileId}`
+    ];
+    
+    // 파일 다운로드 시도
+    let success = false;
+    let error: any = null;
+    
+    for (const url of urls) {
+      if (success) break;
+      
       try {
-        // 파일 다운로드
+        console.log(`다운로드 시도: ${url}`);
+        
+        // 응답 요청
         const response = await axios({
           method: 'get',
-          url,
+          url: url,
           responseType: 'arraybuffer',
-          timeout: 120000, // 타임아웃 시간 증가 (120초)
+          timeout: 120000, // 2분 타임아웃
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
             'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
+            'Pragma': 'no-cache',
+            'Cookie': 'download_warning_13058876669=yes' // 다운로드 경고 우회 시도
+          },
+          maxRedirects: 5 // 리다이렉트 허용 증가
         });
         
         // 응답 상태 코드 확인
         if (response.status !== 200) {
-          console.error(`파일 다운로드 실패 (ID: ${fileId}): 상태 코드 ${response.status}`);
-          retryCount++;
+          console.error(`URL ${url} 시도 실패: 상태 코드 ${response.status}`);
           continue;
         }
         
         // 응답 데이터 확인
         if (!response.data || response.data.length === 0) {
-          console.error(`파일 다운로드 실패 (ID: ${fileId}): 빈 응답 데이터`);
-          retryCount++;
+          console.error(`URL ${url} 시도 실패: 빈 응답 데이터`);
           continue;
         }
         
         // HTML 응답 확인 (오류 응답일 수 있음)
-        const dataString = Buffer.from(response.data).toString('utf8').slice(0, 100);
-        if (dataString.includes('<!DOCTYPE html>') || dataString.includes('<html')) {
-          console.error(`파일 다운로드 실패 (ID: ${fileId}): HTML 응답 받음`);
-          retryCount++;
-          continue;
-        }
+        const dataString = Buffer.from(response.data).toString('utf8').slice(0, 500);
         
-        // 디렉토리가 없으면 생성
-        const dir = path.dirname(outputPath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
+        // HTML 응답이지만 다운로드 링크가 포함된 경우 처리 시도
+        if (dataString.includes('<!DOCTYPE html>') || dataString.includes('<html')) {
+          console.error(`URL ${url} 시도 실패: HTML 응답 받음`);
+          
+          // HTML에서 다운로드 링크 추출 시도
+          const downloadUrlMatch = dataString.match(/href="(\/uc\?export=download[^"]+)/);
+          if (downloadUrlMatch && downloadUrlMatch[1]) {
+            const extractedUrl = `https://drive.google.com${downloadUrlMatch[1].replace(/&amp;/g, '&')}`;
+            console.log(`HTML에서 다운로드 링크 추출: ${extractedUrl}`);
+            
+            try {
+              const directResponse = await axios({
+                method: 'get',
+                url: extractedUrl,
+                responseType: 'arraybuffer',
+                timeout: 120000,
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+                  'Cache-Control': 'no-cache'
+                },
+                maxRedirects: 5
+              });
+              
+              if (directResponse.status === 200 && directResponse.data && directResponse.data.length > 0) {
+                const directDataString = Buffer.from(directResponse.data).toString('utf8').slice(0, 100);
+                if (!directDataString.includes('<!DOCTYPE html>') && !directDataString.includes('<html')) {
+                  // 직접 다운로드 성공
+                  fs.writeFileSync(filePath, directResponse.data);
+                  success = true;
+                  
+                  // 캐시 정보 업데이트
+                  updateCacheInfo(fileId, filePath);
+                  
+                  console.log(`파일 다운로드 성공 (직접 링크): ${fileName}`);
+                  break;
+                }
+              }
+            } catch (directError: any) {
+              console.error(`직접 링크 다운로드 실패: ${directError.message}`);
+            }
+          }
+          continue;
         }
         
         // 파일 저장
-        fs.writeFileSync(outputPath, Buffer.from(response.data));
+        fs.writeFileSync(filePath, response.data);
+        success = true;
         
-        // 파일이 제대로 저장되었는지 확인
-        if (fs.existsSync(outputPath)) {
-          const stats = fs.statSync(outputPath);
-          if (stats.size > 0) {
-            console.log(`파일 다운로드 완료 (ID: ${fileId}, 경로: ${outputPath}, 크기: ${stats.size} 바이트)`);
-            return true;
-          } else {
-            console.error(`파일 다운로드 실패 (ID: ${fileId}): 파일 크기가 0입니다.`);
-            fs.unlinkSync(outputPath); // 크기가 0인 파일 삭제
-            retryCount++;
-            continue;
-          }
-        } else {
-          console.error(`파일 다운로드 실패 (ID: ${fileId}): 파일이 저장되지 않았습니다.`);
-          retryCount++;
-          continue;
-        }
-      } catch (innerError) {
-        console.error(`파일 다운로드 시도 ${retryCount + 1}/${maxRetries} 중 오류 발생 (ID: ${fileId}):`, innerError);
-        retryCount++;
+        // 캐시 정보 업데이트
+        updateCacheInfo(fileId, filePath);
         
-        // 재시도 전 잠시 대기
-        if (retryCount < maxRetries) {
-          console.log(`${retryCount * 2}초 후 재시도...`);
-          await new Promise(resolve => setTimeout(resolve, retryCount * 2000));
-        }
+        console.log(`파일 다운로드 성공: ${fileName}`);
+        break;
+      } catch (err: any) {
+        error = err;
+        console.error(`URL ${url} 다운로드 중 오류 발생:`, err.message);
       }
     }
     
-    console.error(`최대 재시도 횟수(${maxRetries})를 초과했습니다. 파일 다운로드 실패 (ID: ${fileId})`);
-    return false;
-  } catch (error) {
-    console.error(`파일 다운로드 중 오류 발생 (ID: ${fileId}):`, error);
-    return false;
-  }
-}
-
-/**
- * 차트 데이터 폴더 JSON 파일을 생성합니다.
- */
-function createChartDataFolderJSON(): any[] {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const dateStr = `${year}${month}${day}`;
-  
-  // 날짜 기반 파일명 생성
-  const chartFileName = `chart_${dateStr}.csv`;
-  const marketFileName = `market_${dateStr}.csv`;
-  
-  return [
-    {
-      id: chartFileName.replace('.csv', ''),
-      name: chartFileName,
-      mimeType: 'text/csv',
-      modifiedTime: now.toISOString(),
-      size: '10000'
-    },
-    {
-      id: marketFileName.replace('.csv', ''),
-      name: marketFileName,
-      mimeType: 'text/csv',
-      modifiedTime: now.toISOString(),
-      size: '10000'
-    }
-  ];
-}
-
-/**
- * ETF 인디스톡 리스트 폴더 JSON 파일을 생성합니다.
- */
-function createETFIndieStockListFolderJSON(): any[] {
-  const now = new Date();
-  
-  // 기본 파일 목록
-  return [
-    {
-      id: '000250_삼천당제약_97',
-      name: '000250_삼천당제약_97.csv',
-      mimeType: 'text/csv',
-      modifiedTime: now.toISOString(),
-      size: '5000'
-    },
-    {
-      id: '000660_SK하이닉스_82',
-      name: '000660_SK하이닉스_82.csv',
-      mimeType: 'text/csv',
-      modifiedTime: now.toISOString(),
-      size: '5000'
-    },
-    {
-      id: '000720_현대건설_81',
-      name: '000720_현대건설_81.csv',
-      mimeType: 'text/csv',
-      modifiedTime: now.toISOString(),
-      size: '5000'
-    }
-  ];
-}
-
-/**
- * 폴더 ID에 따른 JSON 파일을 생성합니다.
- */
-function createFolderJSON(folderId: string): any[] {
-  if (folderId === CHART_DATA_FOLDER_ID) {
-    return createChartDataFolderJSON();
-  } else if (folderId === ETF_INDIESTOCKLIST_FOLDER_ID) {
-    return createETFIndieStockListFolderJSON();
-  }
-  
-  return [];
-}
-
-/**
- * 자동 동기화 실행 함수
- * 이 함수는 API 요청이 들어올 때마다 호출되어 필요한 경우 파일을 동기화합니다.
- */
-async function runAutoSync(): Promise<string[]> {
-  const results: string[] = [];
-  
-  // 필수 파일 중 누락된 파일이 있는지 확인
-  for (const fileInfo of FILES_TO_SYNC) {
-    const outputPath = path.join(process.cwd(), 'public', fileInfo.folderPath, fileInfo.fileName);
-    
-    // 파일이 없으면 즉시 다운로드
-    if (!fs.existsSync(outputPath)) {
-      console.log(`파일이 없음: ${outputPath}, 다운로드 시작...`);
-      const result = await syncFile(fileInfo, true);
-      results.push(result);
-    } else {
-      // 파일 크기가 0이면 즉시 다운로드
-      try {
-        const stats = fs.statSync(outputPath);
-        if (stats.size === 0) {
-          console.log(`파일이 비어있음: ${outputPath}, 다운로드 시작...`);
-          const result = await syncFile(fileInfo, true);
-          results.push(result);
-          continue;
-        }
-      } catch (error) {
-        console.log(`파일 상태 확인 중 오류 발생: ${outputPath}, 다운로드 시작...`);
-        const result = await syncFile(fileInfo, true);
-        results.push(result);
-        continue;
+    // 디버깅을 위한 파일 크기 확인
+    if (success && fs.existsSync(filePath)) {
+      const stats = fs.statSync(filePath);
+      console.log(`다운로드된 파일 크기: ${stats.size} 바이트`);
+      
+      // 파일 크기가 0이면 실패로 간주
+      if (stats.size === 0) {
+        success = false;
+        fs.unlinkSync(filePath); // 빈 파일 삭제
+        console.error(`다운로드된 파일이 비어 있습니다: ${fileName}`);
       }
       
-      // 파일이 있으면 정해진 스케줄에 따라 업데이트 여부 결정
-      const cacheRegistry = loadCacheRegistry();
-      const cacheInfo = cacheRegistry[fileInfo.fileId];
-      const shouldUpdate = await needsUpdate(outputPath, cacheInfo, fileInfo.updateSchedule, false);
-      
-      if (shouldUpdate) {
-        const result = await syncFile(fileInfo, false);
-        results.push(result);
-      } else {
-        results.push(`파일 업데이트 불필요: ${fileInfo.fileName}`);
+      // 파일 내용 확인 (JSON 파일인 경우)
+      if (fileName.endsWith('.json') && stats.size > 0) {
+        try {
+          const content = fs.readFileSync(filePath, 'utf8');
+          console.log(`JSON 파일 내용 확인: ${content.substring(0, 100)}...`);
+          
+          // JSON 파싱 시도
+          JSON.parse(content);
+        } catch (jsonError: any) {
+          console.error(`JSON 파일 파싱 오류: ${jsonError.message}`);
+          success = false;
+        }
       }
     }
-  }
-  
-  // 폴더 정보 처리
-  for (const folderId of FOLDER_IDS) {
-    const folderName = folderId === CHART_DATA_FOLDER_ID ? 'chart-data' : 
-                      folderId === ETF_INDIESTOCKLIST_FOLDER_ID ? 'etf_indiestocklist' : folderId;
-    const outputPath = path.join(process.cwd(), 'public', folderName, `${folderName}_files.json`);
-    
-    // 폴더 정보 파일이 없으면 생성
-    if (!fs.existsSync(outputPath)) {
-      console.log(`폴더 정보 파일이 없음: ${outputPath}, 생성 시작...`);
-      const result = await handleFolderId(folderId);
-      results.push(result);
-    }
-  }
-  
-  return results.length > 0 ? results : ['모든 파일이 최신 상태입니다.'];
-}
-
-/**
- * 파일을 동기화합니다.
- */
-async function syncFile(fileInfo: FileInfo, forceUpdate: boolean = false): Promise<string> {
-  try {
-    // 파일 경로 생성
-    const outputPath = path.join(process.cwd(), 'public', fileInfo.folderPath, fileInfo.fileName);
-    
-    // 파일 경로 로그 출력 (디버깅용)
-    console.log(`파일 경로 확인: ${outputPath}`);
-    console.log(`폴더 경로 확인: ${path.dirname(outputPath)}`);
-    
-    // 캐시 레지스트리 로드
-    const cacheRegistry = loadCacheRegistry();
-    const cacheInfo = cacheRegistry[fileInfo.fileId];
-    
-    // 디렉토리가 없으면 생성 (파일 다운로드 전에 먼저 확인)
-    const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) {
-      console.log(`디렉토리 생성: ${dir}`);
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    // 업데이트가 필요한지 확인
-    const shouldUpdate = await needsUpdate(outputPath, cacheInfo, fileInfo.updateSchedule, forceUpdate);
-    
-    if (!shouldUpdate) {
-      console.log(`파일 업데이트 불필요 (ID: ${fileInfo.fileId}, 경로: ${outputPath})`);
-      return `파일 업데이트 불필요: ${fileInfo.fileName}`;
-    }
-    
-    // 구글 드라이브에서 파일 다운로드
-    const success = await downloadFromGoogleDrive(fileInfo.fileId, outputPath);
     
     if (success) {
-      // 캐시 정보 업데이트
-      cacheRegistry[fileInfo.fileId] = {
-        cachePath: outputPath,
-        lastUpdated: new Date().toISOString()
-      };
-      
-      // 캐시 레지스트리 저장
-      saveCacheRegistry(cacheRegistry);
-      
-      return `파일 업데이트 완료: ${fileInfo.fileName}`;
+      return `파일 다운로드 성공: ${fileName}`;
     } else {
-      return `파일 업데이트 실패: ${fileInfo.fileName}`;
+      return `파일 다운로드 실패: ${fileName}, 오류: ${error ? error.message : '알 수 없는 오류'}`;
     }
-  } catch (error) {
-    console.error(`파일 동기화 중 오류 발생 (ID: ${fileInfo.fileId}):`, error);
-    return `파일 업데이트 오류: ${fileInfo.fileName}`;
+  } catch (error: any) {
+    console.error(`파일 동기화 중 오류 발생: ${fileName}`, error);
+    return `파일 동기화 오류: ${fileName}, ${error.message}`;
   }
 }
 
 /**
- * 폴더 ID인 경우 JSON 파일을 생성합니다.
+ * 캐시 정보를 업데이트합니다.
+ * @param fileId 파일 ID
+ * @param filePath 파일 경로
  */
-async function handleFolderId(folderId: string): Promise<string> {
-  try {
-    // 폴더 이름 결정
-    let folderName = '';
-    if (folderId === CHART_DATA_FOLDER_ID) {
-      folderName = 'chart-data';
-    } else if (folderId === ETF_INDIESTOCKLIST_FOLDER_ID) {
-      folderName = 'etf_indiestocklist';
-    } else {
-      return `알 수 없는 폴더 ID: ${folderId}`;
-    }
-    
-    // JSON 파일 경로 생성
-    const jsonFileName = `${folderName}_files.json`;
-    const jsonFilePath = path.join(process.cwd(), 'public', folderName, jsonFileName);
-    
-    // 디렉토리가 없으면 생성
-    const dir = path.dirname(jsonFilePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    // JSON 파일 생성
-    const folderContents = createFolderJSON(folderId);
-    fs.writeFileSync(jsonFilePath, JSON.stringify(folderContents, null, 2), 'utf8');
-    
-    // 캐시 레지스트리 로드
-    const cacheRegistry = loadCacheRegistry();
-    
-    // 캐시 정보 업데이트
-    cacheRegistry[folderId] = {
-      cachePath: jsonFilePath,
-      lastUpdated: new Date().toISOString()
-    };
-    
-    // 캐시 레지스트리 저장
-    saveCacheRegistry(cacheRegistry);
-    
-    return `폴더 정보 업데이트 완료: ${folderName}`;
-  } catch (error) {
-    console.error(`폴더 정보 생성 중 오류 발생 (ID: ${folderId}):`, error);
-    return `폴더 정보 업데이트 오류: ${folderId}`;
-  }
+function updateCacheInfo(fileId: string, filePath: string): void {
+  const cacheRegistry = loadCacheRegistry();
+  cacheRegistry[fileId] = {
+    cachePath: filePath,
+    lastUpdated: new Date().toISOString()
+  };
+  saveCacheRegistry(cacheRegistry);
 }
 
 /**
  * 모든 파일을 동기화합니다.
  */
-async function syncAllFiles(forceUpdate: boolean = false): Promise<string[]> {
+async function syncAllFiles(): Promise<string[]> {
   const results: string[] = [];
   
-  // 폴더 ID 처리
-  for (const folderId of FOLDER_IDS) {
-    const result = await handleFolderId(folderId);
-    results.push(result);
-  }
-  
-  // 파일 동기화
+  // 모든 파일 동기화 실행
   for (const fileInfo of FILES_TO_SYNC) {
-    const result = await syncFile(fileInfo, forceUpdate);
-    results.push(result);
+    try {
+      const result = await syncFile(fileInfo);
+      results.push(result);
+    } catch (error: any) {
+      console.error(`파일 동기화 중 오류 발생 (${fileInfo.fileName}):`, error);
+      results.push(`파일 동기화 오류: ${fileInfo.fileName}`);
+    }
   }
   
   return results;
 }
 
 /**
- * 클라이언트에서 주기적으로 호출할 수 있는 API 핸들러
+ * 자동 동기화 실행 함수
+ * 이 함수는 API 요청이 들어올 때마다 호출되어 필요한 경우 파일을 동기화합니다.
  */
-export async function POST(request: NextRequest) {
+async function runAutoSync(forceUpdate: boolean = false): Promise<string[]> {
+  const now = Date.now();
+  
+  // 마지막 실행 후 5초 이내에는 다시 실행하지 않음 (중복 호출 방지)
+  if (now - lastRunTime < 5000 && !forceUpdate) {
+    console.log('최근에 이미 실행되었습니다. 5초 후에 다시 시도하세요.');
+    return ['최근에 이미 실행되었습니다. 5초 후에 다시 시도하세요.'];
+  }
+  
+  lastRunTime = now;
+  console.log(`자동 동기화 시작: ${new Date().toISOString()}`);
+  
   try {
-    const results = await syncAllFiles();
-    return NextResponse.json({ results });
-  } catch (error) {
-    console.error('API 처리 중 오류 발생:', error);
-    return NextResponse.json({ error: '파일 동기화 중 오류가 발생했습니다.' }, { status: 500 });
+    // 파일 목록 동기화
+    const results: string[] = [];
+    
+    // ETF 인디스톡 리스트 file_list.json 파일 먼저 확인 및 동기화
+    const fileListInfo = FILES_TO_SYNC.find(file => file.fileName === 'file_list.json');
+    if (fileListInfo) {
+      const filePath = path.join(process.cwd(), 'public', fileListInfo.folderPath, fileListInfo.fileName);
+      const fileExists = fs.existsSync(filePath);
+      
+      if (!fileExists || forceUpdate) {
+        console.log(`file_list.json 파일이 ${fileExists ? '존재하지만 강제 업데이트 요청됨' : '존재하지 않음'}, 다운로드 시도...`);
+        const result = await syncFile(fileListInfo, forceUpdate);
+        results.push(result);
+      }
+    }
+    
+    // 다른 모든 파일 동기화
+    for (const fileInfo of FILES_TO_SYNC) {
+      // file_list.json은 이미 처리했으므로 건너뜀
+      if (fileInfo.fileName === 'file_list.json') continue;
+      
+      const filePath = path.join(process.cwd(), 'public', fileInfo.folderPath, fileInfo.fileName);
+      const cacheRegistry = loadCacheRegistry();
+      const cacheInfo = cacheRegistry[fileInfo.fileId];
+      
+      // 파일 업데이트가 필요한지 확인
+      const shouldUpdate = await needsUpdate(filePath, cacheInfo, fileInfo.updateSchedule, forceUpdate);
+      
+      if (shouldUpdate) {
+        console.log(`파일 업데이트 필요: ${fileInfo.fileName}`);
+        const result = await syncFile(fileInfo, forceUpdate);
+        results.push(result);
+      } else {
+        console.log(`파일 업데이트 불필요: ${fileInfo.fileName}`);
+      }
+    }
+    
+    // 폴더 ID 처리
+    for (const folderId of FOLDER_IDS) {
+      const result = await handleFolderId(folderId);
+      results.push(`폴더 ID ${folderId} 처리 완료: ${result.length}개 파일 발견`);
+    }
+    
+    console.log(`자동 동기화 완료: ${new Date().toISOString()}`);
+    return results;
+  } catch (error: any) {
+    console.error('자동 동기화 중 오류 발생:', error);
+    return [`오류 발생: ${error.message}`];
   }
 }
 
 /**
- * API 핸들러
+ * 폴더 ID에 따른 처리를 수행합니다.
+ */
+async function handleFolderId(folderId: string): Promise<string[]> {
+  try {
+    console.log(`폴더 처리 시작 (ID: ${folderId})`);
+    return [`폴더 처리 기능이 비활성화되었습니다 (ID: ${folderId})`];
+  } catch (error: any) {
+    console.error(`폴더 처리 중 오류 발생 (ID: ${folderId}):`, error);
+    return [`폴더 처리 오류 (ID: ${folderId})`];
+  }
+}
+
+/**
+ * 폴더 ID에 따른 JSON 파일을 생성합니다.
+ */
+function createFolderJSON(folderId: string): any[] {
+  console.log(`폴더 JSON 생성 기능이 비활성화되었습니다 (ID: ${folderId})`);
+  return [];
+}
+
+/**
+ * ETF 인디스톡 리스트 폴더 JSON 파일을 생성합니다.
+ */
+function createETFIndieStockListFolderJSON(): any[] {
+  console.log(`ETF 인디스톡 리스트 폴더 JSON 생성 기능이 비활성화되었습니다`);
+  return [];
+}
+
+/**
+ * 파일을 백업합니다.
+ * @param sourcePath 원본 파일 경로
+ * @param backupPath 백업 파일 경로
+ * @returns 백업 성공 여부
+ */
+function backupFile(sourcePath: string, backupPath: string): boolean {
+  try {
+    if (!fs.existsSync(sourcePath)) {
+      console.error(`백업 실패: 원본 파일이 존재하지 않습니다 (${sourcePath})`);
+      return false;
+    }
+    
+    const dir = path.dirname(backupPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    fs.copyFileSync(sourcePath, backupPath);
+    console.log(`파일 백업 완료: ${sourcePath} -> ${backupPath}`);
+    return true;
+  } catch (error: any) {
+    console.error(`파일 백업 중 오류 발생: ${error}`);
+    return false;
+  }
+}
+
+/**
+ * ETF 현재가 데이터 파일 경로를 가져옵니다.
+ * 파일이 없으면 자동으로 다운로드합니다.
+ * @returns 파일 경로
+ */
+export async function getETFCurrentPricesPath(): Promise<string> {
+  const fileInfo = FILES_TO_SYNC.find(file => file.fileId === '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA');
+  if (!fileInfo) {
+    throw new Error('ETF 현재가 데이터 파일 정보를 찾을 수 없습니다.');
+  }
+  
+  const filePath = path.join(process.cwd(), 'public', fileInfo.folderPath, fileInfo.fileName);
+  await syncFile(fileInfo);
+  return filePath;
+}
+
+/**
+ * ETF 52주 신고가 데이터 파일 경로를 가져옵니다.
+ * 파일이 없으면 자동으로 다운로드합니다.
+ * @returns 파일 경로
+ */
+export async function getETFHighPricesPath(): Promise<string> {
+  const fileInfo = FILES_TO_SYNC.find(file => file.fileId === '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0');
+  if (!fileInfo) {
+    throw new Error('ETF 52주 신고가 데이터 파일 정보를 찾을 수 없습니다.');
+  }
+  
+  const filePath = path.join(process.cwd(), 'public', fileInfo.folderPath, fileInfo.fileName);
+  await syncFile(fileInfo);
+  return filePath;
+}
+
+/**
+ * 모든 ETF 관련 파일을 동기화합니다.
+ */
+export async function syncAllETFFiles(): Promise<void> {
+  const etfFiles = FILES_TO_SYNC.filter(file => 
+    file.folderPath.includes('etf') || 
+    file.folderPath.includes('rs_etf') || 
+    file.folderPath.includes('today_price_etf')
+  );
+  
+  for (const fileInfo of etfFiles) {
+    await syncFile(fileInfo);
+  }
+}
+
+/**
+ * POST 요청 처리 핸들러
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { fileId, folderId, forceUpdate } = body;
+    
+    // 파일 ID가 제공된 경우
+    if (fileId) {
+      // 파일 ID에 해당하는 파일 정보 찾기
+      const fileInfo = FILES_TO_SYNC.find(f => f.fileId === fileId);
+      
+      if (!fileInfo) {
+        return NextResponse.json({ error: `알 수 없는 파일 ID: ${fileId}` }, { status: 404 });
+      }
+      
+      // 파일 동기화 실행
+      const result = await syncFile(fileInfo, forceUpdate === true);
+      return NextResponse.json({ result });
+    }
+    
+    // 폴더 ID가 제공된 경우
+    if (folderId) {
+      // 폴더 ID 처리는 비활성화되었습니다
+      return NextResponse.json({ 
+        result: [`폴더 ID 처리 기능이 비활성화되었습니다 (ID: ${folderId})`] 
+      });
+    }
+    
+    // 파일 ID나 폴더 ID가 제공되지 않은 경우 자동 동기화 실행
+    const results = await runAutoSync(forceUpdate === true);
+    return NextResponse.json({ result: results });
+  } catch (error: any) {
+    console.error('API 요청 처리 중 오류 발생:', error);
+    return NextResponse.json(
+      { error: '파일 동기화 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * GET 요청 처리 핸들러
  */
 export async function GET(request: NextRequest) {
   try {
-    // URL 파라미터 확인
     const { searchParams } = new URL(request.url);
-    const fileId = searchParams.get('fileId');
+    const folderId = searchParams.get('folderId');
     const forceUpdate = searchParams.get('force') === 'true';
-    const autoSync = searchParams.get('autoSync') !== 'false'; // 기본값은 true
     
-    let results: string[] = [];
-    
-    // 특정 파일 ID가 지정된 경우
-    if (fileId) {
-      const fileInfo = FILES_TO_SYNC.find(file => file.fileId === fileId);
-      
-      if (fileInfo) {
-        // 특정 파일 동기화
-        const result = await syncFile(fileInfo, forceUpdate);
-        results = [result];
-      } else if (FOLDER_IDS.includes(fileId)) {
-        // 폴더 ID인 경우
-        const result = await handleFolderId(fileId);
-        results = [result];
-      } else {
-        return NextResponse.json({ error: '파일 ID를 찾을 수 없습니다.' }, { status: 404 });
-      }
-    } 
-    // 자동 동기화가 활성화된 경우 (기본값)
-    else if (autoSync) {
-      // 파일 존재 여부 확인 및 필요한 파일 동기화
-      results = await runAutoSync();
-      
-      // 강제 업데이트 요청된 경우
-      if (forceUpdate) {
-        results = await syncAllFiles(true);
-      }
-    } 
-    // 자동 동기화가 비활성화되고 파일 ID도 없는 경우
-    else {
-      results = await syncAllFiles(forceUpdate);
+    // 폴더 ID가 제공된 경우
+    if (folderId) {
+      // 폴더 ID 처리는 비활성화되었습니다
+      return NextResponse.json({ 
+        result: [`폴더 ID 처리 기능이 비활성화되었습니다 (ID: ${folderId})`] 
+      });
     }
     
-    return NextResponse.json({ results });
-  } catch (error) {
-    console.error('API 처리 중 오류 발생:', error);
-    return NextResponse.json({ error: '파일 동기화 중 오류가 발생했습니다.' }, { status: 500 });
+    // 파일 동기화 실행
+    const results = await runAutoSync(forceUpdate);
+    
+    return NextResponse.json({ result: results });
+  } catch (error: any) {
+    console.error('API 요청 처리 중 오류 발생:', error);
+    return NextResponse.json(
+      { error: '파일 동기화 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
   }
 }

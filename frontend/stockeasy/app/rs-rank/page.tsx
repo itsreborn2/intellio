@@ -359,26 +359,26 @@ export default function RSRankPage() {
       
       // 차트 데이터 파일 경로 배열 (순서대로 매핑)
       const chartFilePaths = [
-        '/chart-data/1t2z88ntuzd2r3ct5oy8ic3ja09tqfaof.csv',
-        '/chart-data/1mhuyrpe378v1j2qmsx1sufmzkmokjv_4.csv',
-        '/chart-data/1wdrfq_8w9hwydadcfi7dgptwdmnxl3fk.csv',
-        '/chart-data/1wjdxsztimlfizel30weqzkkv4tiadhqg.csv',
-        '/chart-data/1zefwp0b0-8wzilvbmktyh_zyjg5cl0pw.csv',
-        '/chart-data/1cjeyuaoew_qler37nfiqlwgdmgeimnej.csv',
-        '/chart-data/12n6x15dkl1vjmzmk9ahobyiyat1unrse.csv',
-        '/chart-data/1i-bg0puf8rbmxekhs1toboqjxrjbwlco.csv',
-        '/chart-data/1apwisocpqh4r5336namsor_vdg6bbclg.csv',
-        '/chart-data/1st-nzj2wo3fptb6swk8glqcxyjqgx7-k.csv',
-        '/chart-data/1atorxqqrdjahkmginh-ajxogo7ptljpm.csv',
-        '/chart-data/1jctjmbiwgiihvzcppirxbnppe5gljctw.csv',
-        '/chart-data/11hgiohutm5yzbaguemzpxdtw4fv0wdmd.csv',
-        '/chart-data/1bxdtowr97lhxl8ymecl84qlbe09h6wwk.csv',
-        '/chart-data/1w0mug-pgv_jgsj44w3hmtfgaoq0npgos.csv',
-        '/chart-data/1178693zjykqgp-iesphmq8qcxgbspg0q.csv',
-        '/chart-data/15cqztbbinqf0f6rcir2d01bc_vc0attg.csv',
-        '/chart-data/1ene8lrq_9kqvootf_wil-dt9jxoqj0cd.csv',
-        '/chart-data/1iznpzmimg-yk2z20w2c9tjewlcdswww0.csv',
-        '/chart-data/1f2k3mrwuazufdx4mkl89pmg33dbfil8g.csv'
+        '/chart-data/1.csv',
+        '/chart-data/2.csv',
+        '/chart-data/3.csv',
+        '/chart-data/4.csv',
+        '/chart-data/5.csv',
+        '/chart-data/6.csv',
+        '/chart-data/7.csv',
+        '/chart-data/8.csv',
+        '/chart-data/9.csv',
+        '/chart-data/10.csv',
+        '/chart-data/11.csv',
+        '/chart-data/12.csv',
+        '/chart-data/13.csv',
+        '/chart-data/14.csv',
+        '/chart-data/15.csv',
+        '/chart-data/16.csv',
+        '/chart-data/17.csv',
+        '/chart-data/18.csv',
+        '/chart-data/19.csv',
+        '/chart-data/20.csv'
       ];
       
       // 시장 지수 데이터 파일 경로

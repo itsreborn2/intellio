@@ -1052,7 +1052,7 @@ export default function ETFCurrentTable() {
                   )}
                 </div>
               </th>
-              {['섹터', ...filteredHeaders.filter(header => header !== '산업' && header !== '섹터'), '3개월 차트', '20일선 등락', '돌파/이탈', '포지션', '대표종목'].map((header) => (
+              {['섹터', ...filteredHeaders.filter(header => header !== '산업' && header !== '섹터'), '2개월 차트', '20일선 이격', '돌파/이탈', '포지션', '대표종목'].map((header) => (
                 <th
                   key={header}
                   scope="col"

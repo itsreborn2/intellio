@@ -197,32 +197,65 @@ export default function IndustryCharts() {
     try {
       const stocksData: RepresentativeStock[] = [];
       
-      // JSON 파일에서 파일 목록 가져오기
       try {
-        const response = await fetch('/etf_indiestocklist/file_list.json');
-        if (!response.ok) {
-          throw new Error(`파일 목록 JSON을 가져오는데 실패했습니다: ${response.status}`);
-        }
+        // 폴더 내의 CSV 파일들을 직접 읽는 방식으로 변경
+        // 파일 이름 패턴: 000250_삼천당제약.csv (종목코드_종목명.csv)
+        const folderPath = '/etf_indiestocklist';
         
-        const fileListData = await response.json();
-        const fileList = fileListData.files || [];
-        console.log('etf_indiestocklist 파일 목록:', fileList);
+        // 폴더 내 모든 CSV 파일 목록 가져오기 시도
+        const files = await listDirectoryFiles(folderPath);
+        console.log(`etf_indiestocklist 폴더에서 찾은 파일 수: ${files.length}`);
         
         // 각 파일에서 종목코드, 종목명, RS 값 추출
-        for (const fileName of fileList) {
-          // 파일명에서 종목코드, 종목명, RS 값 추출
-          const match = fileName.match(/(\d+)_(.+)_(\d+)\.csv/);
+        for (const fileName of files) {
+          // 파일명에서 종목코드와 종목명 추출 (RS 값은 파일 내용에서 가져올 예정)
+          const match = fileName.match(/(\d+)_(.+)\.csv/);
           if (match) {
-            const [_, code, name, rsValue] = match;
-            stocksData.push({
-              code,
-              name, // 원래 이름 그대로 사용
-              rsValue: parseInt(rsValue)
-            });
+            const [_, code, name] = match;
+            
+            try {
+              // 파일 내용 읽기
+              const response = await fetch(`${folderPath}/${fileName}`);
+              const csvText = await response.text();
+              
+              // 첫 두 줄만 추출 (헤더와 첫 번째 데이터 행)
+              const lines = csvText.split('\n').slice(0, 2);
+              if (lines.length < 2) {
+                console.warn(`${fileName} 파일에 충분한 데이터가 없습니다.`);
+                continue;
+              }
+              
+              // 헤더 행과 데이터 행 분리
+              const headerLine = lines[0];
+              const dataLine = lines[1];
+              
+              // 헤더에서 RS 컬럼의 인덱스 찾기
+              const headers = headerLine.split(',');
+              const rsIndex = headers.findIndex(h => h.trim() === 'RS');
+              
+              if (rsIndex === -1) {
+                console.warn(`${fileName} 파일에 RS 컬럼이 없습니다.`);
+                continue;
+              }
+              
+              // 데이터 행에서 RS 값 추출
+              const values = dataLine.split(',');
+              const rsValue = values[rsIndex] ? parseInt(values[rsIndex].trim()) : 0;
+              
+              stocksData.push({
+                code,
+                name, // 원래 이름 그대로 사용
+                rsValue: rsValue
+              });
+              
+              console.log(`종목 ${name}(${code})의 RS 값을 파일 내용에서 추출: ${rsValue}`);
+            } catch (error) {
+              console.error(`${fileName} 파일 읽기 오류:`, error);
+            }
           }
         }
       } catch (error) {
-        console.error('파일 목록 JSON을 가져오는데 실패했습니다:', error);
+        console.error('폴더 내 파일 목록을 가져오는데 실패했습니다:', error);
         
         // 폴백: 기존 방식으로 파일 목록 가져오기
         console.log('폴백 방식으로 파일 목록 가져오기 시도...');
@@ -274,6 +307,22 @@ export default function IndustryCharts() {
       return stocksData;
     } catch (error) {
       console.error('주식 데이터 로드 오류:', error);
+      return [];
+    }
+  };
+  
+  // 폴더 내 파일 목록 가져오기 함수
+  const listDirectoryFiles = async (folderPath: string): Promise<string[]> => {
+    try {
+      // file_list.json 파일에서 파일 목록 가져오기
+      const response = await fetch(`${folderPath}/file_list.json`);
+      const fileList = await response.json();
+      
+      console.log('file_list.json에서 가져온 파일 목록:', fileList.files);
+      
+      return fileList.files || [];
+    } catch (error) {
+      console.error('파일 목록을 가져오는데 실패했습니다:', error);
       return [];
     }
   };
@@ -430,7 +479,7 @@ export default function IndustryCharts() {
       
       // 각 종목별로 차트 데이터 로드
       for (const stock of topStocks) {
-        const csvFilePath = `/etf_indiestocklist/${stock.code}_${stock.name}_${stock.rsValue}.csv`;
+        const csvFilePath = `/etf_indiestocklist/${stock.code}_${stock.name}.csv`;
         console.log(`종목 ${stock.name}에 대한 파일 경로: ${csvFilePath}`);
         
         try {
@@ -824,7 +873,7 @@ export default function IndustryCharts() {
     const sortedETFs = [...etfInfoList].filter(etf => {
       // 지속일 추출 및 10일 이상인지 확인
       const durationDays = extractDurationDays(etf.지속일);
-      const isAbove10Days = durationDays >= 10;
+      const isAbove10Days = !isNaN(durationDays) && durationDays >= 10;
       
       // 유지 상태인지 확인
       const isMaintenanceStatus = etf.지속일?.includes('유지') || false;
