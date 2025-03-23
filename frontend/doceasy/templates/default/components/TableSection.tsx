@@ -11,6 +11,7 @@ import { useFileUpload } from "@/hooks/useFileUpload"
 import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
 import { IDocument, DocumentStatus, IDocumentStatus, DocumentStatusResponse } from "@/types"
 import { getDocumentUploadStatus } from "@/services/api"
+import { FileUploadErrorDialog } from '@/components/FileUploadErrorDialog'
 
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
   <div className="bg-muted/90 w-fit px-2 py-1 rounded">
@@ -205,7 +206,7 @@ export const TableSection = () => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const tableRef = useRef<ITableUtils>(null);
-  const { uploadProgress, handleFileUpload } = useFileUpload()
+  const { uploadProgress, uploadError, handleFileUpload, closeErrorDialog, showErrorDialog } = useFileUpload()
 
   // 컬럼 상태 동기화
   useEffect(() => {
@@ -285,6 +286,14 @@ export const TableSection = () => {
       if (!projectId) {
         console.error('No project ID available')
         return
+      }
+
+      // 파일 개수 검증 (최대 100개)
+      if (Object.keys(state.documents).length + files.length > 100) {
+        console.warn('최대 100개까지만 업로드할 수 있습니다.');
+        // 에러 메시지 표시
+        showErrorDialog('최대 100개까지만 업로드할 수 있습니다.');
+        return;
       }
 
       // 채팅 메시지는 직접 추가하고, useFileUpload에서는 메시지 추가를 건너뜁니다
@@ -403,6 +412,11 @@ export const TableSection = () => {
   return (
     <div className="h-full flex-1 overflow-hidden flex flex-col">
       <UploadProgressDialog {...uploadProgress} />
+      <FileUploadErrorDialog 
+        isOpen={uploadError.isOpen}
+        onClose={closeErrorDialog}
+        errorMessage={uploadError.message}
+      />
       <div className="flex-shrink-0 bg-background border-b">
         <div className="flex items-center justify-between p-2 gap-2">
           <div className="flex items-center gap-2">

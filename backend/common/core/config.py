@@ -58,9 +58,9 @@ class CommonSettings(BaseSettings):
     # AI Model Settings - from .env
     OPENAI_API_KEY: str
     GEMINI_API_KEY: str
-    UPSTAGE_API_KEY:str
+    UPSTAGE_API_KEY: str
+    CLAUDE_API_KEY: str 
 
-    
     # Redis 설정
     REDIS_HOST: str 
     REDIS_PORT: int 
@@ -222,22 +222,21 @@ def get_settings() -> CommonSettings:
 settings = get_settings()
 logger.info(f"commonsetting")
 logger.info(f"ENV: {settings.ENV}")
-logger.info(f"REDIS_HOST: {settings.REDIS_HOST}")
-#logger.info(f"REDIS_PORT: {settings.REDIS_PORT}")
-logger.info(f"REDIS_URL: {settings.REDIS_URL}")
-logger.info(f"CELERY_BROKER_URL: {settings.CELERY_BROKER_URL}")
-logger.info(f"CELERY_RESULT_BACKEND: {settings.CELERY_RESULT_BACKEND}")
-logger.info(f"TIKA_HOST: {settings.TIKA_HOST}")
-logger.info(f"TIKA_SERVER_ENDPOINT: {settings.TIKA_SERVER_ENDPOINT}")
+#logger.info(f"REDIS_HOST: {settings.REDIS_HOST}")
+# logger.info(f"REDIS_URL: {settings.REDIS_URL}")
+# logger.info(f"CELERY_BROKER_URL: {settings.CELERY_BROKER_URL}")
+# logger.info(f"CELERY_RESULT_BACKEND: {settings.CELERY_RESULT_BACKEND}")
+# logger.info(f"TIKA_HOST: {settings.TIKA_HOST}")
+# logger.info(f"TIKA_SERVER_ENDPOINT: {settings.TIKA_SERVER_ENDPOINT}")
 logger.info(f"FASTAPI_URL: {settings.FASTAPI_URL}")
 logger.info(f"INTELLIO_URL: {settings.INTELLIO_URL}")
-logger.info(f"DOCEASY_URL: {settings.DOCEASY_URL}")
+#logger.info(f"DOCEASY_URL: {settings.DOCEASY_URL}")
 
-logger.info(f"PINECONE_NAMESPACE_DOCEASY: {settings.PINECONE_NAMESPACE_DOCEASY}")
+#logger.info(f"PINECONE_NAMESPACE_DOCEASY: {settings.PINECONE_NAMESPACE_DOCEASY}")
 
 logger.info(f"POSTGRES_SERVER: {settings.POSTGRES_SERVER}")
-logger.info(f"POSTGRES_USER: {settings.POSTGRES_USER}")
-logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
-logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
+# logger.info(f"POSTGRES_USER: {settings.POSTGRES_USER}")
+# logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
+# logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
 #logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
 

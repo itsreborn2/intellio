@@ -26,7 +26,7 @@ from doceasy.workers.rag import analyze_table_mode_task
 from celery import group
 
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
-from common.services.retrievers.models import RetrievalResult
+from common.services.retrievers.models import DocumentWithScore, RetrievalResult
 from common.services.retrievers.hybrid import HybridRetriever, HybridRetrieverConfig, ContextualBM25Config
 
 # logging 설정
@@ -279,48 +279,92 @@ class RAGService:
 
         return query
     
-    # AI삭제금지.
-    # 안쓰이는 함수
-    # async def _search_document_chunks(self, doc_id: str, query: str, top_k: int) -> List[Dict[str, Any]]:
-    #     """단일 문서의 청크 검색 (에러 처리 포함)"""
-    #     try:
-    #         # 쿼리 분석
-    #         query_analysis = self._analyze_query(query)
-
-    #         # 증권사 관련 쿼리인 경우, 문서 시작 부분도 포함
-    #         if query_analysis["requires_all_docs"] or query_analysis["query_type"] == "securities":
-    #             first_chunk = self.embedding_service.get_first_chunk(doc_id)
-    #             chunks = await self.embedding_service.search_similar(
-    #                 query=query,
-    #                 document_ids=[doc_id],
-    #                 top_k=min(self.max_chunks_per_doc - 1, self.chunk_multiplier * top_k)
-    #             if first_chunk:
-    #                 # 첫 번째 청크를 앞에 추가 (증권사 정보가 주로 여기에 있음)
-    #                 return [first_chunk] + (chunks or [])
-
-    #         # 일반 쿼리
-    #         chunks = await self.embedding_service.search_similar(
-    #             query=query,
-    #             document_ids=[doc_id],
-    #             top_k=min(self.max_chunks_per_doc, self.chunk_multiplier * top_k)
-    #         )
-    #         return chunks or []
-
-    #     except Exception as e:
-    #         logger.error(f"문서 {doc_id} 검색 중 오류 발생: {str(e)}")
-    #         return []
-
     async def _get_first_chunks_parallel(self, doc_ids: List[str]) -> List[Dict[str, Any]]:
-        """여러 문서의 첫 번째 청크 병렬 검색"""
-        tasks = [self.embedding_service.get_first_chunk(doc_id) for doc_id in doc_ids]
+        """여러 문서의 첫 번째 청크 병렬 검색
+        
+        EmbeddingService를 통하지 않고 VectorStoreManager를 직접 사용하여 
+        문서의 첫 번째 청크를 효율적으로 병렬 검색합니다.
+        
+        Args:
+            doc_ids: 문서 ID 목록
+            
+        Returns:
+            List[Dict[str, Any]]: 각 문서의 첫 번째 청크 정보
+        """
+        if not doc_ids:
+            logger.warning("검색할 문서 ID가 없습니다")
+            return []
+            
+        logger.info(f"문서 {len(doc_ids)}개의 첫 번째 청크 병렬 검색 시작")
+        start_time = time.time()
+        
+        # VectorStoreManager 인스턴스 생성
+        vs_manager = VectorStoreManager(
+            embedding_model_type=self.embedding_service.get_model_type(),
+            project_name="doceasy",
+            namespace=settings.PINECONE_NAMESPACE_DOCEASY
+        )
+        
+        # 각 문서에 대한 첫 번째 청크 검색 작업 비동기 생성
+        async def get_first_chunk(doc_id: str) -> Dict[str, Any]:
+            try:
+                # VS Manager 초기화 확인
+                await vs_manager.ensure_initialized()
+                
+                # 임베딩 모델의 차원 정보 가져오기
+                dimension = self.embedding_service.current_model_config.dimension
+                
+                # 청크 인덱스가 0인 청크 검색 시도 (metadata 접두어 없이 필터 지정)
+                filters = {"document_id": doc_id, "chunk_index": 0}
+                query_response = await vs_manager.query_async(
+                    vector=[0.0] * dimension,  # 더미 벡터
+                    top_k=1,
+                    filters=filters
+                )
+                
+                # 첫 번째 청크가 없으면 페이지 번호가 1인 청크 검색
+                if not query_response.matches:
+                    filters = {"document_id": doc_id, "page_number": 1}
+                    query_response = await vs_manager.query_async(
+                        vector=[0.0] * dimension,
+                        top_k=1,
+                        filters=filters
+                    )
+                
+                # 결과가 있으면 포맷팅하여 반환
+                if query_response.matches:
+                    match = query_response.matches[0]
+                    return {
+                        "id": match.id,
+                        "score": 0.9,  # 첫 번째 청크이므로 높은 점수 부여
+                        "metadata": match.metadata
+                    }
+                
+                logger.warning(f"문서 {doc_id}의 첫 번째 청크를 찾을 수 없음")
+                return None
+                
+            except Exception as e:
+                logger.error(f"문서 {doc_id}의 첫 번째 청크 검색 중 오류: {str(e)}")
+                return None
+        
+        # 병렬로 작업 실행
+        tasks = [get_first_chunk(doc_id) for doc_id in doc_ids]
         chunks = await asyncio.gather(*tasks, return_exceptions=True)
-
+        
+        # 유효한 청크만 필터링
         valid_chunks = []
         for doc_id, chunk in zip(doc_ids, chunks):
             if isinstance(chunk, Exception):
                 logger.error(f"문서 {doc_id}의 첫 번째 청크 검색 실패: {str(chunk)}")
             elif chunk:
                 valid_chunks.append(chunk)
+                logger.debug(f"문서 {doc_id}의 첫 번째 청크 검색 성공")
+            else:
+                logger.warning(f"문서 {doc_id}의 첫 번째 청크가 없습니다")
+                
+        end_time = time.time()
+        logger.info(f"첫 번째 청크 검색 완료: {len(valid_chunks)}/{len(doc_ids)} ({end_time - start_time:.2f}초)")
+        
         return valid_chunks
 
     def contains_keywords(self, text: str, keywords: List[str]) -> bool:
@@ -416,15 +460,18 @@ class RAGService:
         return filtered_chunks
 
     @measure_time_async
-    async def process_retrival(self, query: str, top_k: int = 5, document_ids: List[str] = None, query_type:str = "chat") -> RetrievalResult:
+    async def process_retrival(self, query: str, query_analysis: Dict[str, Any] = None, top_k: int = 5, document_ids: List[str] = None, query_type:str = "chat") -> RetrievalResult:
         """관련 문서 청크 검색 및 패턴 분석"""
         # 쿼리 정규화
         normalized_query = self._normalize_query(query)
-        #logger.info(f"정규화된 쿼리: {normalized_query}")
         logger.info(f"청크 검색 시작 - 쿼리: {normalized_query}, top_k: {top_k}")
         
         try:
-              
+            logger.info(f"검색할 문서별 청크 수: {top_k * 1}")
+            
+            # 쿼리 분석
+            #query_analysis = self._analyze_query(normalized_query)
+            query_intent = query_analysis.get("intent", "general")
             
             # 문서 검색
             #all_chunks = await self.embedding_service.search_similar(
@@ -432,7 +479,6 @@ class RAGService:
             #     document_ids=doc_ids_str if doc_ids_str else None,
             #     top_k=search_top_k
             # )
-            logger.info(f"검색할 문서별 청크 수: {top_k * 1}")
             
             filtersMetadata = { "document_id": {"$in": document_ids} } if document_ids else None
             
@@ -440,9 +486,21 @@ class RAGService:
                                             project_name="doceasy",
                                             namespace=settings.PINECONE_NAMESPACE_DOCEASY)
 
+            # 요약 관련 쿼리인지 확인
+            is_summary_query = query_intent == "summary"
+            
+            # 검색 전략 조정
+            min_score = 0.15 if is_summary_query else 0.22  # 요약 쿼리면 더 낮은 임계값 사용
+            
+            if is_summary_query:
+                logger.warning(f"요약 의도 감지: '{normalized_query}' - min_score를 {min_score}로 설정")
+                # 요약 쿼리의 경우 검색 범위 확대
+                top_k = max(top_k * 3, 15)  # 최소 15개 이상 결과 확보 (기존 2배에서 3배로 증가)
+                logger.warning(f"요약 쿼리를 위해 top_k를 {top_k}로 증가")
+
             if query_type == "table":
                 tablemode_retriever = TableModeSemanticRetriever(config=SemanticRetrieverConfig(
-                                                                min_score=0.6, # 최소 유사도 0.6 고정
+                                                                min_score=min_score
                                                                 ), vs_manager=vs_manager)
                 all_chunks:RetrievalResult = await tablemode_retriever.retrieve(
                     query=normalized_query, 
@@ -452,7 +510,7 @@ class RAGService:
             else:
                 #Chat Mode
                 semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
-                                                        min_score=0.6, # 최소 유사도 0.6 고정
+                                                        min_score=min_score
                                                         ), vs_manager=vs_manager)
                 
                 all_chunks:RetrievalResult = await semantic_retriever.retrieve(
@@ -472,7 +530,6 @@ class RAGService:
                 #     semantic_weight=0.6,
                 #     contextual_bm25_weight=0.4
                 # )
-                
                 # hybrid_retriever = HybridRetriever(config=hybrid_config, vs_manager=vs_manager)
                 # hybrid_retriever.contextual_bm25_retriever.db = self.db  # db 세션 전달
                 
@@ -481,21 +538,59 @@ class RAGService:
                 #     top_k=top_k,
                 #     filters=filtersMetadata
                 # )
+                # 요약 쿼리이고 결과가 부족한 경우
+                if is_summary_query and document_ids:
+                    # 모든 문서의 첫 번째 청크 가져오기 (충분한 청크가 있더라도 문서의 시작 부분은 중요)
+                    logger.warning(f"요약 쿼리에 대해 각 문서의 첫 번째 청크를 추가로 가져옵니다.")
+                    
+                    # 각 문서의 첫 청크도 가져오기 시도
+                    first_chunks = await self._get_first_chunks_parallel(document_ids)
+                    
+                    if first_chunks:
+                        # 중복 제거를 위해 이미 가져온 청크 ID 추적
+                        existing_ids = {doc.metadata.get("chunk_id", doc.metadata.get("id", "")) 
+                                       for doc in all_chunks.documents 
+                                       if doc.metadata.get("chunk_id") or doc.metadata.get("id")}
+                        
+                        # 중복되지 않은 첫 청크만 추가
+                        chunks_added = 0
+                        for chunk in first_chunks:
+                            chunk_id = chunk.get("id")
+                            if not chunk_id or chunk_id in existing_ids:
+                                continue
+                                
+                            # first_chunk를 DocumentWithScore로 변환
+                            metadata = chunk.get("metadata", {})
+                            content = metadata.get("text", "")
+                            
+                            if not content:
+                                continue
+                                
+                            document = DocumentWithScore(
+                                page_content=content,
+                                metadata=metadata,
+                                score=chunk.get("score", 0.9)  # 첫 번째 청크는 높은 점수 부여
+                            )
+                            all_chunks.documents.append(document)
+                            existing_ids.add(chunk_id)
+                            chunks_added += 1
+                        
+                        if chunks_added > 0:
+                            logger.warning(f"요약을 위해 {chunks_added}개의 첫 번째 청크가 추가되었습니다.")
+                        else:
+                            logger.warning("추가 가능한 첫 번째 청크가 없습니다.")
+                    else:
+                        logger.warning("문서의 첫 번째 청크를 찾을 수 없습니다.")
 
             # 상위 3개의 문서 텍스트 출력
             for idx, doc in enumerate(all_chunks.documents[:3], start=1):
-                # 삭제금지.
-                 # content: str = Field(..., description="문서의 실제 내용")
-                # metadata: Dict = Field(default_factory=dict, description="문서의 메타데이터 (ID, 제목, 페이지 번호 등)")
-                # score: Optional[float] = Field(None, description="검색 결과의 관련성 점수")
                 logger.warning(f"문서 #{idx}")
                 score_str = f"{doc.score:.4f}" if doc.score is not None else "0.0000"
                 logger.warning(f"- 유사도 점수: {score_str}")
                 logger.warning(f"- 메타데이터: {json.dumps(doc.metadata, ensure_ascii=False)}")
-                logger.warning(f"- 내용: {doc.page_content[:100]}...")  # 내용이 너무 길 수 있으므로 200자로 제한
+                logger.warning(f"- 내용: {doc.page_content[:100]}...")
             logger.info(f"검색된 총 청크 수: {len(all_chunks.documents)}")
             
-                
             return all_chunks
         except Exception as e:
             
@@ -701,7 +796,11 @@ class RAGService:
             #     }
             # }
             
-            rr: RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="table")
+            rr: RetrievalResult = await self.process_retrival(query=query, 
+                                                              query_analysis=query_analysis,
+                                                              top_k=k,
+                                                              document_ids=document_ids, 
+                                                              query_type="table")
             logger.warning(f"청크 추출 완료 : {len(rr.documents)} 개")
             
             if not rr.documents:
@@ -1045,7 +1144,7 @@ class RAGService:
             # 짧은 문서는 k=5로 충분. 그러나 매우 긴 문서는? k=5로는 턱없이 부족할텐데.
             # 사용자 입력에 따라서, 어떤 스타일로 k값을 결정하고 응답을 줄지 
             # 사용자 입력의 전처리 과정 필요. _analyze_query로는 안됨.
-            rr:RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="chat")
+            rr:RetrievalResult = await self.process_retrival(query=query, query_analysis=query_analysis, top_k=k, document_ids=document_ids, query_type="chat")
 
             #logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks.documents)}개 청크 발견")
             doc_cnt = len(rr.documents)
@@ -1213,6 +1312,9 @@ class RAGService:
             
         # 쿼리를 소문자로 변환
         query_lower = query.lower()
+        
+        # 쿼리 의도 분석
+        query_intent = self._analyze_query_intent(query_lower)
             
         analysis = {
             "query": query_lower,        # 원본 쿼리 (소문자)
@@ -1222,10 +1324,46 @@ class RAGService:
             "has_special_chars": bool(re.search(r'[^\w\s]', query)),  # 특수문자 포함 여부
             "timestamp": datetime.now().isoformat(),  # 분석 시간
             "focus_area": self._get_query_focus(query_lower),  # 쿼리 초점 영역(어떤 분야에 대한 질문인지)
-            "doc_type": self._get_doc_type(query_lower)  # 문서 타입 추론
+            "doc_type": self._get_doc_type(query_lower),  # 문서 타입 추론
+            "intent": query_intent  # 쿼리 의도 추가
         }
         
         return analysis
+        
+    def _analyze_query_intent(self, query: str) -> str:
+        """쿼리 의도 분석 (요약, 세부정보 등)
+        
+        Args:
+            query: 소문자로 변환된 쿼리
+            
+        Returns:
+            str: 쿼리 의도
+        """
+        # 요약 관련 키워드
+        summary_keywords = [
+            "summarize", "summary", "overview", "brief", "outline", 
+            "highlight", "key points", "key information", "main points",
+            "요약", "개요", "정리", "핵심", "중요 내용", "주요 정보"
+        ]
+        
+        # 세부 정보 관련 키워드
+        detail_keywords = [
+            "detail", "explain", "elaborate", "specific", "exactly",
+            "세부", "상세", "자세히", "구체적", "정확히"
+        ]
+        
+        # 요약 키워드 포함 여부 확인
+        if any(keyword in query for keyword in summary_keywords):
+            return "summary"
+            
+        # 세부 정보 키워드 포함 여부 확인
+        if any(keyword in query for keyword in detail_keywords):
+            return "detail"
+            
+        # 기타 의도 분석 (추가 가능)
+        
+        # 기본 의도
+        return "general"
         
     def _get_query_focus(self, query: str) -> str:
         """쿼리 초점 영역 분석

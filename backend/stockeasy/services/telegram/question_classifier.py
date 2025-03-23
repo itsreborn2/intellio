@@ -183,10 +183,12 @@ class QuestionClassifierService:
       return result
 
    def make_user_question_prompt(self, question: str, stock_code: str, stock_name: str) -> str:
-      return f"""
-종목코드: {stock_code}
-종목명: {stock_name}
-질문: {question}
-"""
+      result = ""
+      if stock_code and len(stock_code) > 0:
+         result += f"종목코드: {stock_code}\n"
+      if stock_name and len(stock_name) > 0:
+         result += f"종목명: {stock_name}\n"
+      result += f"질문: {question}\n"
+      return result
 
 

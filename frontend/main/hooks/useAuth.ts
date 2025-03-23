@@ -123,7 +123,7 @@ export const useAuth = create<AuthState>()(
                     const userCookie = cookies['user']; // 사용자 정보 쿠키
                     const tokenCookie = cookies['token']; // 토큰 쿠키
                     
-                    console.log('[useAuth] 쿠키 확인:', { sessionId, userCookie, tokenCookie });
+                    console.debug('[useAuth] 쿠키 확인:', { sessionId, userCookie, tokenCookie });
                     
                     if (sessionId) {
                         // 세션 ID가 있으면 사용자 정보 요청
@@ -162,7 +162,7 @@ export const useAuth = create<AuthState>()(
                                 token: tokenCookie,
                                 isAuthenticated: true
                             });
-                            console.log('[useAuth] 쿠키에서 사용자 정보 로드 완료:', userData);
+                            //console.log('[useAuth] 쿠키에서 사용자 정보 로드 완료:', userData);
                         } catch (error) {
                             console.error('[useAuth] 쿠키 파싱 오류:', error);
                             get().clearAuthState();

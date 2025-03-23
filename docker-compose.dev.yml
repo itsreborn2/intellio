@@ -7,6 +7,8 @@ services:
       context: .
       dockerfile: Dockerfile.base.dev
     image: intellio-base-dev:latest
+    volumes:
+      - ./backend:/backend
     profiles: ["build"]
 
   fastapi:

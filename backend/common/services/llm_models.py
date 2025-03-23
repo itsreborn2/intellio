@@ -1,23 +1,16 @@
 import asyncio
-from typing import Any, List, Optional, Union, Callable, Dict, Iterator, AsyncIterator
+from typing import Any, List, Optional,  Callable
 
-from langchain_core.messages import BaseMessage, AIMessage, ChatMessage, AIMessageChunk
-from langchain_core.messages.base import BaseMessage
-from langchain_core.outputs import ChatGeneration, ChatResult, ChatGenerationChunk
-from langchain.prompts import PromptTemplate
+from langchain_core.messages import AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.callbacks.manager import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 from langchain_core.callbacks import BaseCallbackHandler
 
 from langchain_openai import ChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 
 from pydantic import BaseModel
-import torch
-from transformers import AutoModel, AutoTokenizer
 from google.oauth2 import service_account
 import json
 #from loguru import logger
@@ -126,38 +119,65 @@ class LLMModels:
                         callbacks=callbacks,
                     )
         elif model_name == "gemini":
-            # 모델 이름: models/gemini-2.0-flash-exp # 분당 5회 제한. 실험모델이라 증량 ㅈ불가. 쓰면 안됨.
-            # 표시 이름: Gemini 2.0 Flash Experimental
-            # ---
-            # 모델 이름: models/gemini-2.0-flash
-            # 표시 이름: Gemini 2.0 Flash
-            # ---
-            # 모델 이름: models/gemini-2.0-flash-001
-            # 표시 이름: Gemini 2.0 Flash 001
-            # ---
-            # 모델 이름: models/gemini-2.0-flash-lite-preview
-            # 표시 이름: Gemini 2.0 Flash-Lite Preview
-            # ---
-            # 모델 이름: models/gemini-2.0-flash-lite-preview-02-05
-            # 표시 이름: Gemini 2.0 Flash-Lite Preview 02-05
-            # ---
-            # 모델 이름: models/gemini-2.0-pro-exp
-            # 표시 이름: Gemini 2.0 Pro Experimental
-            # ---
-            # 모델 이름: models/gemini-2.0-pro-exp-02-05
-            # 표시 이름: Gemini 2.0 Pro Experimental 02-05
-            # ---
-            # 모델 이름: models/gemini-exp-1206
-            # 표시 이름: Gemini Experimental 1206
-            # ---
-            # 모델 이름: models/gemini-2.0-flash-thinking-exp-01-21
-            # 표시 이름: Gemini 2.0 Flash Thinking Experimental 01-21
-            # ---
-            # 모델 이름: models/gemini-2.0-flash-thinking-exp
-            # 표시 이름: Gemini 2.0 Flash Thinking Experimental 01-21
-            # ---
-            # 모델 이름: models/gemini-2.0-flash-thinking-exp-1219
-            # 표시 이름: Gemini 2.0 Flash Thinking Experimental            
+                    # 모델 이름: models/gemini-2.0-flash
+                    # 표시 이름: Gemini 2.0 Flash
+                    # ---
+                    # 모델 이름: models/gemini-2.0-flash-001
+                    # 표시 이름: Gemini 2.0 Flash 001
+                    # ---
+                    # 모델 이름: models/gemini-2.0-flash-exp-image-generation
+                    # 표시 이름: Gemini 2.0 Flash (Image Generation) Experimental
+                    # ---
+                    # 모델 이름: models/gemini-2.0-flash-lite-001
+                    # 표시 이름: Gemini 2.0 Flash-Lite 001
+                    # ---
+                    # 모델 이름: models/gemini-2.0-flash-lite
+                    # 표시 이름: Gemini 2.0 Flash-Lite
+                    # ---
+                    # 모델 이름: models/gemini-2.0-flash-lite-preview-02-05
+                    # 표시 이름: Gemini 2.0 Flash-Lite Preview 02-05
+                    # ---
+                    # 모델 이름: models/gemini-2.0-flash-lite-preview
+                    # 표시 이름: Gemini 2.0 Flash-Lite Preview
+                    # ---
+                    # 모델 이름: models/gemini-2.0-pro-exp
+                    # 표시 이름: Gemini 2.0 Pro Experimental
+                    # ---
+                    # 모델 이름: models/gemini-2.0-pro-exp-02-05
+                    # 표시 이름: Gemini 2.0 Pro Experimental 02-05
+                    # ---
+                    # 모델 이름: models/gemini-2.0-flash-thinking-exp-01-21
+                    # 표시 이름: Gemini 2.0 Flash Thinking Experimental 01-21
+                    # ---
+                    # 모델 이름: models/gemini-2.0-flash-thinking-exp
+                    # 표시 이름: Gemini 2.0 Flash Thinking Experimental 01-21
+                    # ---
+                    # 모델 이름: models/gemini-2.0-flash-thinking-exp-1219
+                    # 표시 이름: Gemini 2.0 Flash Thinking Experimental
+                    # ---
+                    # 모델 이름: models/learnlm-1.5-pro-experimental
+                    # 표시 이름: LearnLM 1.5 Pro Experimental
+                    # ---
+                    # 모델 이름: models/gemma-3-27b-it
+                    # 표시 이름: Gemma 3 27B
+                    # ---
+                    # 모델 이름: models/embedding-001
+                    # 표시 이름: Embedding 001
+                    # ---
+                    # 모델 이름: models/text-embedding-004
+                    # 표시 이름: Text Embedding 004
+                    # ---
+                    # 모델 이름: models/gemini-embedding-exp-03-07
+                    # 표시 이름: Gemini Embedding Experimental 03-07
+                    # ---
+                    # 모델 이름: models/gemini-embedding-exp
+                    # 표시 이름: Gemini Embedding Experimental
+                    # ---
+                    # 모델 이름: models/aqa # 2년전.
+                    # 표시 이름: Model that performs Attributed Question Answering.
+                    # ---
+                    # 모델 이름: models/imagen-3.0-generate-002
+                    # 표시 이름: Imagen 3.0 002 model   
             callbacks = [callback_handler] if callback_handler else None
             return ChatGoogleGenerativeAI(
                         #model="models/gemini-2.0-flash-001",

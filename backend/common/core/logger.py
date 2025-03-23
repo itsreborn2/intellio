@@ -6,6 +6,7 @@ from typing import Any
 from loguru import logger
 import json
 from datetime import datetime
+import pytz
 
 from common.core.config import settings
 
@@ -18,6 +19,9 @@ class Formatter:
 
     def format(self, record: Any) -> str:
         """로그 메시지 포맷"""
+        # 한국 시간으로 변환
+        record["time"] = record["time"].replace(tzinfo=pytz.UTC).astimezone(pytz.timezone('Asia/Seoul'))
+        
         # 예외 정보가 있는 경우 스택 트레이스 포함
         if record["exception"]:
             record["exception"] = "\n" + record["exception"]

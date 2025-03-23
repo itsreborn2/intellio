@@ -6,6 +6,12 @@ import Papa from 'papaparse'
 import { MentionsInput, Mention } from 'react-mentions'
 import { sendChatMessage } from '@/services/api/chat'
 import { IChatResponse } from '@/types/api/chat'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
+import rehypeHighlight from 'rehype-highlight'
+import { CSSProperties } from 'react'
+import 'highlight.js/styles/github.css' // 하이라이트 스타일 추가
 
 // 종목 타입 정의
 interface StockOption {
@@ -45,6 +51,8 @@ function AIChatAreaContent() {
   const [recentStocks, setRecentStocks] = useState<StockOption[]>([]); // 최근 조회한 종목 목록
   const [messages, setMessages] = useState<ChatMessage[]>([]); // 채팅 메시지 목록
   const [isProcessing, setIsProcessing] = useState<boolean>(false); // 메시지 처리 중 상태
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -88,6 +96,12 @@ function AIChatAreaContent() {
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      
+      // 타이머 정리
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, []);
 
@@ -172,9 +186,7 @@ function AIChatAreaContent() {
     if (!inputMessage.trim() && !selectedStock) return;
     
     // 사용자 메시지 생성
-    const userMessageContent = selectedStock 
-      ? `${selectedStock.stockName}(${selectedStock.stockCode}) 종목에 대해 ${inputMessage}` 
-      : inputMessage;
+    const userMessageContent = inputMessage;
     
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -196,6 +208,16 @@ function AIChatAreaContent() {
     
     // 메시지 처리 중 상태로 변경
     setIsProcessing(true);
+    setElapsedTime(0);
+    
+    // 타이머 시작
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    
+    timerRef.current = setInterval(() => {
+      setElapsedTime(prev => prev + 1);
+    }, 1000);
     
     try {
       // 백엔드 API 호출
@@ -206,6 +228,7 @@ function AIChatAreaContent() {
       }
       
       const responseData = response.answer;
+      console.log('answer : ', responseData);
       
       // 응답 메시지 생성
       const assistantMessage: ChatMessage = {
@@ -233,6 +256,12 @@ function AIChatAreaContent() {
     } finally {
       // 메시지 처리 완료 상태로 변경
       setIsProcessing(false);
+      
+      // 타이머 중지
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     }
   };
   
@@ -247,61 +276,9 @@ function AIChatAreaContent() {
   useEffect(() => {
     if (!isMounted) return;
     
-    // 서버에서 메시지 데이터를 가져오는 함수
-    const fetchMessages = async () => {
-      try {
-        // 초기 메시지 설정 (개발용)
-        const initialMessages: ChatMessage[] = [
-          {
-            id: `user-${Date.now()-2000}`,
-            role: 'user',
-            content: '올해 실적 전망이 어떻게 돼?',
-            timestamp: Date.now()-2000,
-            stockInfo: {
-              stockName: '삼성전자',
-              stockCode: '005930'
-            }
-          },
-          {
-            id: `assistant-${Date.now()-1000}`,
-            role: 'assistant',
-            content: `삼성전자의 올해 실적 전망은 전반적으로 긍정적입니다. 주요 내용을 요약해 드리겠습니다:
-
-1. **메모리 반도체 부문 호조**
-   - HBM(High Bandwidth Memory) 수요 급증으로 메모리 가격 상승세가 유지될 전망
-   - AI 서버용 고부가가치 메모리 비중 확대로 ASP 상승 및 수익성 개선 기대
-   - 하반기 서버 및 모바일 시장 회복으로 메모리 부문 매출 성장 가속화
-
-2. **파운드리 사업 경쟁력 강화**
-   - 3나노 이하 첨단 공정 확대로 시장 점유율 상승 기대
-   - NVIDIA와의 협력 강화로 AI 반도체 시장 입지 확대
-
-3. **숫자로 보는 전망**
-   - 매출액: 전년 대비 약 12% 증가 예상
-   - 영업이익: 전년 대비 25~30% 성장 전망
-   - 특히 반도체 부문 영업이익률 15% 이상으로 회복 기대
-
-4. **위험 요소**
-   - 글로벌 경쟁 심화 및 기술 변화 가속화
-   - 무역 분쟁 및 보호무역주의 강화로 인한 불확실성
-   - 원자재 및 부품 가격 변동성에 따른 수익성 영향
-
-종합적으로 반도체 수요 증가와 AI 시장 확대에 따른 수혜가 예상되며, 특히 HBM 메모리와 파운드리 사업 확장이 실적 개선의 핵심 동력이 될 것으로 분석됩니다.
-
-더 구체적인 세부 사업 부문별 전망이 필요하시면 추가로 질문해 주세요.`,
-            timestamp: Date.now()-1000
-          }
-        ];
-        
-        setMessages(initialMessages);
-      } catch (error) {
-        console.warn('메시지 불러오기 실패:', error);
-      }
-    };
-
-    fetchMessages();
+    // 초기 메시지 설정은 현재 구현하지 않음
   }, [isMounted]);
-  
+
   // 메시지 저장 - 서버 측 저장 방식으로 변경 (현재는 구현하지 않음)
   useEffect(() => {
     // 메시지 저장 로직은 서버 측 구현이 필요하므로 여기서는 생략
@@ -429,6 +406,207 @@ function AIChatAreaContent() {
     }
   };
 
+  // 타임스탬프 포맷팅 함수 수정
+  const formatTimestamp = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  // 로딩 스피너 컴포넌트
+  const LoadingSpinner = () => (
+    <div className="loading-spinner" style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      margin: '12px 0'
+    }}>
+      <div style={{
+        width: '36px',
+        height: '36px',
+        borderRadius: '50%',
+        border: '3px solid #f3f3f3',
+        borderTop: '3px solid #3498db',
+        animation: 'spin 1s linear infinite',
+      }}></div>
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+
+  // 검색 중 타이머 컴포넌트
+  const SearchTimer = () => (
+    <div className="search-timer" style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '8px',
+      backgroundColor: '#f5f9ff',
+      padding: '8px 12px',
+      borderRadius: '8px',
+      boxShadow: '0 2px 5px rgba(0, 0, 0, 0.05)',
+      marginBottom: '12px'
+    }}>
+      <div style={{
+        position: 'relative',
+        width: '28px',
+        height: '28px',
+        borderRadius: '50%',
+        border: '2px solid #e1e1e1',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          width: '14px',
+          height: '2px',
+          background: 'transparent',
+          transform: 'rotate(0deg) translateX(0)',
+          transformOrigin: '0 0',
+          zIndex: 2
+        }}>
+          <div style={{
+            position: 'absolute',
+            width: '8px',
+            height: '2px',
+            backgroundColor: '#3498db',
+            animation: 'stopwatch-sec 60s steps(60, end) infinite',
+            transformOrigin: 'left center'
+          }}></div>
+        </div>
+        <div style={{
+          width: '6px',
+          height: '6px',
+          backgroundColor: '#3498db',
+          borderRadius: '50%',
+          zIndex: 3
+        }}></div>
+      </div>
+      <div style={{
+        fontFamily: 'monospace',
+        fontSize: '0.9rem',
+        fontWeight: 'bold',
+        color: '#555'
+      }}>
+        {Math.floor(elapsedTime / 60).toString().padStart(2, '0')}:{(elapsedTime % 60).toString().padStart(2, '0')}
+      </div>
+      <style jsx>{`
+        @keyframes stopwatch-sec {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+
+  // 검색 애니메이션 컴포넌트
+  const SearchingAnimation = () => (
+    <div className="searching-animation" style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      padding: '10px 14px',
+      backgroundColor: '#ffffff',
+      borderRadius: '12px',
+      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+      maxWidth: '95%',
+      marginBottom: '16px'
+    }}>
+      <div style={{ 
+        fontSize: '0.85rem',
+        marginBottom: '8px',
+        color: '#555',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        <div className="loading-icon" style={{
+          width: '16px',
+          height: '16px',
+          borderRadius: '50%',
+          border: '2px solid #f3f3f3',
+          borderTop: '2px solid #3498db',
+          animation: 'spin 1s linear infinite',
+        }}></div>
+        <span>정보를 검색 중입니다...</span>
+      </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        margin: '4px 0',
+        fontSize: '0.75rem',
+        color: '#888'
+      }}>
+        <div className="dot" style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: '#3498db',
+          opacity: 0.5,
+          animation: 'pulse 1.5s infinite',
+        }}></div>
+        <span>종목 정보 확인 중</span>
+      </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        margin: '4px 0',
+        fontSize: '0.75rem',
+        color: '#888'
+      }}>
+        <div className="dot" style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: '#3498db',
+          opacity: 0.8,
+          animation: 'pulse 1.5s infinite',
+          animationDelay: '0.5s'
+        }}></div>
+        <span>투자 분석 보고서 조회 중</span>
+      </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        margin: '4px 0',
+        fontSize: '0.75rem',
+        color: '#888'
+      }}>
+        <div className="dot" style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: '#3498db',
+          opacity: 0.8,
+          animation: 'pulse 1.5s infinite',
+          animationDelay: '1s'
+        }}></div>
+        <span>최신 종목 뉴스 분석 중</span>
+      </div>
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+
   // 스타일 정의
   const aiChatAreaStyle: React.CSSProperties = {
     display: 'flex',
@@ -436,9 +614,10 @@ function AIChatAreaContent() {
     height: '100%',
     width: '100%',
     maxWidth: '1200px',
-    padding: '0 0 0 0', // 모든 패딩 제거
+    padding: '10px',
     boxSizing: 'border-box',
-    position: 'relative'
+    position: 'relative',
+    overflow: 'hidden' // 오버플로우 숨김 추가
   };
 
   const inputAreaStyle: React.CSSProperties = {
@@ -777,17 +956,16 @@ function AIChatAreaContent() {
         style={{
           flex: 1,
           overflowY: 'auto',
+          overflowX: 'hidden',
           padding: '10px',
-          marginBottom: '0', // 하단 여백 제거
+          margin: '0',
           border: '1px solid #eee',
           borderRadius: '4px',
-          backgroundColor: '#ffffff', // 배경색을 흰색으로 변경
-          marginTop: '0', // 상단 여백 제거
-          width: '100%', // 너비 100%로 확장
-          height: 'calc(100% - 50px)', // 입력 영역을 제외한 전체 높이
-          boxSizing: 'border-box', // 패딩과 테두리를 너비에 포함
-          borderRight: '1px solid #eee', // 우측 테두리 추가
-          borderBottom: '1px solid #eee' // 하단 테두리 추가
+          backgroundColor: '#ffffff',
+          width: '100%',
+          height: 'calc(100% - 60px)',
+          boxSizing: 'border-box',
+          position: 'relative'
         }}
       >
         {messages.length === 0 ? (
@@ -807,15 +985,17 @@ function AIChatAreaContent() {
               style={{
                 marginBottom: '16px',
                 display: 'flex',
-                flexDirection: 'column',
-                alignItems: message.role === 'user' ? 'flex-end' : 'flex-start'
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start'
               }}
             >
+              {/* 메시지 내용 */}
               <div style={{
                 backgroundColor: message.role === 'user' ? '#e1f5fe' : '#ffffff',
                 padding: '10px 14px',
                 borderRadius: '12px',
-                maxWidth: '95%', // 너비를 95%로 확장
+                maxWidth: '85%',
                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
                 position: 'relative'
               }}>
@@ -830,22 +1010,50 @@ function AIChatAreaContent() {
                   </div>
                 )}
                 <div style={{
-                  whiteSpace: message.role === 'user' ? 'nowrap' : 'pre-wrap',
                   overflow: message.role === 'user' ? 'hidden' : 'visible',
                   textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
                   wordBreak: 'break-word',
-                  fontSize: message.role === 'user' ? '0.75rem' : '0.85rem', // AI 응답 폰트 크기 증가
-                  lineHeight: '1.6', // 줄 간격 증가
-                  width: '100%', // 너비를 100%로 설정
-                  padding: message.role === 'user' ? '0' : '4px 2px', // AI 응답에 패딩 추가
-                  letterSpacing: message.role === 'user' ? 'normal' : '0.01em' // AI 응답 글자 간격 조정
+                  width: '100%',
+                  padding: message.role === 'user' ? '0' : '4px 2px'
                 }}>
-                  {message.content}
+                  {message.role === 'user' ? (
+                    // 사용자 메시지는 일반 텍스트로 표시
+                    <div style={{
+                      whiteSpace: 'nowrap',
+                      fontSize: '0.75rem',
+                      lineHeight: '1.6',
+                      letterSpacing: 'normal'
+                    }}>
+                      {message.content}
+                    </div>
+                  ) : (
+                    // AI 응답은 마크다운으로 렌더링
+                    <div className="markdown-content">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeHighlight]}>
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           ))
         )}
+        
+        {/* 메시지 처리 중 로딩 표시 (말풍선 왼쪽에 시간 카운터와 함께) */}
+        {isProcessing && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: '12px',
+            marginBottom: '16px'
+          }}>
+            <SearchTimer />
+            <SearchingAnimation />
+          </div>
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
     </div>

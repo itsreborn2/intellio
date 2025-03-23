@@ -12,10 +12,8 @@ from functools import wraps
 from common.services.embedding import EmbeddingService
 from numpy.linalg import norm
 import numpy as np
-from datetime import datetime
-#from langchain_teddynote.community.pinecone import upsert_documents, upsert_documents_parallel
-
-logger = logging.getLogger(__name__)
+from loguru import logger
+#logger = logging.getLogger(__name__)
 
 def async_init(func):
     """비동기 초기화를 위한 데코레이터"""
@@ -156,7 +154,7 @@ class VectorStoreManager:
             await self._initialized_future
         return True
 
-    def search(self, query: str, top_k: int, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
+    def search(self, query: str, top_k: int, threshold: float = 0.2, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
         """벡터 스토어에서 검색 수행"""
         logger.info(f"[{self.namespace}] 벡터 스토어 검색 시작 : {query}")
 
@@ -426,23 +424,63 @@ class VectorStoreManager:
             return False
             
     async def delete_namespace_async(self) -> bool:
-        """현재 네임스페이스의 모든 데이터를 비동기적으로 삭제합니다."""
+        """현재 네임스페이스의 모든 데이터를 삭제합니다. (비동기 버전)"""
+        await self.ensure_initialized()
+        return self.delete_namespace()
+        
+    def query(self, vector: List[float], top_k: int = 1, filters: Optional[Dict] = None):
+        """Pinecone 인덱스에 직접 쿼리를 실행합니다.
+        
+        Args:
+            vector: 검색할 벡터
+            top_k: 반환할 결과 개수
+            filters: 검색 필터 (예: {"document_id": "doc123", "chunk_index": 0})
+            
+        Returns:
+            pinecone 응답 객체: Pinecone 검색 응답
+        """
         try:
-            if not self.namespace:
-                logger.warning("네임스페이스가 지정되지 않았습니다.")
-                return False
+            logger.debug(f"[{self.namespace}] 벡터 검색 시작 (top_k: {top_k}, filters: {filters})")
             
-            logger.info(f"[{self.namespace}] 네임스페이스 전체 삭제 시작 (Async)")
-            result = await asyncio.to_thread(self.index.delete, delete_all=True, namespace=self.namespace)
-            
-            # 반환값이 빈 딕셔너리인지 확인하여 삭제 성공 여부를 판단
-            if isinstance(result, dict) and result == {}:
-                logger.info(f"[{self.namespace}] 네임스페이스 전체 삭제 완료 (Async)")
-                return True
-            else:
-                logger.error(f"[{self.namespace}] 삭제 결과 값이 유효하지 않음 (Async): {result}")
-                return False
+            # 인덱스가 초기화되지 않았을 경우 빈 응답 반환
+            if self.index is None:
+                logger.error(f"[{self.namespace}] 인덱스가 초기화되지 않았습니다.")
+                class EmptyResponse:
+                    def __init__(self):
+                        self.matches = []
+                return EmptyResponse()
                 
+            # Pinecone 쿼리 실행
+            response = self.index.query(
+                namespace=self.namespace,
+                vector=vector,
+                top_k=top_k,
+                filter=filters,
+                include_metadata=True
+            )
+            
+            logger.debug(f"[{self.namespace}] 검색 완료: {len(response.matches)}개 결과")
+            return response
+            
         except Exception as e:
-            logger.error(f"[{self.namespace}] 네임스페이스 삭제 중 오류 발생 (Async): {str(e)}")
-            return False 
+            logger.error(f"[{self.namespace}] 벡터 검색 중 오류 발생: {str(e)}")
+            # Pinecone 응답과 유사한 구조의 빈 결과 반환
+            class EmptyResponse:
+                def __init__(self):
+                    self.matches = []
+            
+            return EmptyResponse()
+            
+    async def query_async(self, vector: List[float], top_k: int = 1, filters: Optional[Dict] = None):
+        """Pinecone 인덱스에 직접 쿼리를 실행합니다. (비동기 버전)
+        
+        Args:
+            vector: 검색할 벡터
+            top_k: 반환할 결과 개수
+            filters: 검색 필터 (예: {"document_id": "doc123", "chunk_index": 0})
+            
+        Returns:
+            pinecone 응답 객체: Pinecone 검색 응답
+        """
+        await self.ensure_initialized()
+        return self.query(vector, top_k, filters) 

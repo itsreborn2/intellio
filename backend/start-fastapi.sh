@@ -13,4 +13,9 @@ export PYTHONPATH=/backend
 
 # Start the FastAPI application
 echo "Starting FastAPI application..."
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /backend --log-level debug 
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload \
+    --reload-dir /backend/main.py \
+    --reload-dir /backend/common \
+    --reload-dir /backend/doceasy \
+    --reload-dir /backend/stockeasy \
+    --log-level debug 
