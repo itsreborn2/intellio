@@ -52,10 +52,7 @@
     "echarts": "^5.6.0",
     "echarts-for-react": "^3.0.2",
     "html-react-parser": "^5.2.2",
-<<<<<<< HEAD
     "html-void-elements": "^3.0.0",
-=======
->>>>>>> feature/stockeasy-front-work
     "html2canvas": "^1.4.1",
     "lightweight-charts": "^5.0.3",
     "lucide-react": "^0.460.0",
