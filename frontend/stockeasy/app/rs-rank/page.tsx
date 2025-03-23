@@ -1,10 +1,14 @@
 'use client'
 
-import { Suspense, useState, useEffect, useMemo, useCallback } from 'react'
+import { Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation';
+import Papa from 'papaparse';
+import { format, subDays } from 'date-fns';
 import Sidebar from '../components/Sidebar'
-import Papa from 'papaparse'
 import ChartComponent from '../components/ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
+import html2canvas from 'html2canvas';
+import TableCopyButton from '../components/TableCopyButton';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -94,8 +98,12 @@ export default function RSRankPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [sortKey, setSortKey] = useState<string>('');
-  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [sortKey, setSortKey] = useState<string>('RS');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const rsTableRef = useRef<HTMLDivElement>(null);
+  const rsHeaderRef = useRef<HTMLDivElement>(null);
+  const highTableRef = useRef<HTMLDivElement>(null);
+  const highHeaderRef = useRef<HTMLDivElement>(null);
   
   // 52주 신고가 데이터 관련 상태
   const [highData, setHighData] = useState<CSVData>({ headers: [], rows: [], errors: [] });
@@ -116,7 +124,7 @@ export default function RSRankPage() {
   const [chartRsValues, setChartRsValues] = useState<string[]>(Array.from({length: 20}, () => ''));
   const [kospiIndexData, setKospiIndexData] = useState<CandleData[]>([]);
   const [kosdaqIndexData, setKosdaqIndexData] = useState<CandleData[]>([]);
-
+  
   useEffect(() => {
     // 페이지 로드 시 데이터 로드
     const loadData = async () => {
@@ -184,7 +192,7 @@ export default function RSRankPage() {
           const rsResponse = await fetch(rsDataFilePath, { cache: 'no-store' });
           
           if (!rsResponse.ok) {
-            console.error(`RS 데이터 파일 로드 실패: ${rsResponse.status} ${rsResponse.statusText}`);
+            console.error(`RS 데이터 파일 로드 실패: ${response.status} ${response.statusText}`);
             throw new Error(`RS 데이터 파일 로드 실패: ${response.status}`);
           }
           
@@ -350,26 +358,26 @@ export default function RSRankPage() {
       
       // 차트 데이터 파일 경로 배열 (순서대로 매핑)
       const chartFilePaths = [
-        '/chart-data/1t2z88ntuzd2r3ct5oy8ic3ja09tqfaof.csv',
-        '/chart-data/1mhuyrpe378v1j2qmsx1sufmzkmokjv_4.csv',
-        '/chart-data/1wdrfq_8w9hwydadcfi7dgptwdmnxl3fk.csv',
-        '/chart-data/1wjdxsztimlfizel30weqzkkv4tiadhqg.csv',
-        '/chart-data/1zefwp0b0-8wzilvbmktyh_zyjg5cl0pw.csv',
-        '/chart-data/1cjeyuaoew_qler37nfiqlwgdmgeimnej.csv',
-        '/chart-data/12n6x15dkl1vjmzmk9ahobyiyat1unrse.csv',
-        '/chart-data/1i-bg0puf8rbmxekhs1toboqjxrjbwlco.csv',
-        '/chart-data/1apwisocpqh4r5336namsor_vdg6bbclg.csv',
-        '/chart-data/1st-nzj2wo3fptb6swk8glqcxyjqgx7-k.csv',
-        '/chart-data/1atorxqqrdjahkmginh-ajxogo7ptljpm.csv',
-        '/chart-data/1jctjmbiwgiihvzcppirxbnppe5gljctw.csv',
-        '/chart-data/11hgiohutm5yzbaguemzpxdtw4fv0wdmd.csv',
-        '/chart-data/1bxdtowr97lhxl8ymecl84qlbe09h6wwk.csv',
-        '/chart-data/1w0mug-pgv_jgsj44w3hmtfgaoq0npgos.csv',
-        '/chart-data/1178693zjykqgp-iesphmq8qcxgbspg0q.csv',
-        '/chart-data/15cqztbbinqf0f6rcir2d01bc_vc0attg.csv',
-        '/chart-data/1ene8lrq_9kqvootf_wil-dt9jxoqj0cd.csv',
-        '/chart-data/1iznpzmimg-yk2z20w2c9tjewlcdswww0.csv',
-        '/chart-data/1f2k3mrwuazufdx4mkl89pmg33dbfil8g.csv'
+        '/chart-data/1.csv',
+        '/chart-data/2.csv',
+        '/chart-data/3.csv',
+        '/chart-data/4.csv',
+        '/chart-data/5.csv',
+        '/chart-data/6.csv',
+        '/chart-data/7.csv',
+        '/chart-data/8.csv',
+        '/chart-data/9.csv',
+        '/chart-data/10.csv',
+        '/chart-data/11.csv',
+        '/chart-data/12.csv',
+        '/chart-data/13.csv',
+        '/chart-data/14.csv',
+        '/chart-data/15.csv',
+        '/chart-data/16.csv',
+        '/chart-data/17.csv',
+        '/chart-data/18.csv',
+        '/chart-data/19.csv',
+        '/chart-data/20.csv'
       ];
       
       // 시장 지수 데이터 파일 경로
@@ -384,16 +392,10 @@ export default function RSRankPage() {
         // KOSPI 지수 데이터 로드
         let kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
         
-        // 파일이 없으면 API를 통해 다운로드 요청
+        // 파일이 없으면 오류 메시지 표시
         if (!kospiResponse.ok) {
-          console.log('코스피 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
-          await fetch('/api/stocks?action=update-file&fileId=1dzf65fz6elq6b5znvhuaftn10hqjbe_c&dataType=market-index');
-          
-          // 다시 로컬 파일 시도
-          kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
-          if (!kospiResponse.ok) {
-            throw new Error(`코스피 지수 데이터 파일 로드 실패: ${kospiResponse.status}`);
-          }
+          console.log('코스피 지수 데이터 파일을 찾을 수 없습니다.');
+          throw new Error(`코스피 지수 데이터 파일을 찾을 수 없습니다.`);
         }
         
         if (kospiResponse.ok) {
@@ -439,16 +441,10 @@ export default function RSRankPage() {
         // KOSDAQ 지수 데이터 로드
         let kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
         
-        // 파일이 없으면 API를 통해 다운로드 요청
+        // 파일이 없으면 오류 메시지 표시
         if (!kosdaqResponse.ok) {
-          console.log('코스닥 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
-          await fetch('/api/stocks?action=update-file&fileId=1ks9qkdzmsxv-qenv6udzzidfwgykc1qg&dataType=market-index');
-          
-          // 다시 로컬 파일 시도
-          kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
-          if (!kosdaqResponse.ok) {
-            throw new Error(`코스닥 지수 데이터 파일 로드 실패: ${kosdaqResponse.status}`);
-          }
+          console.log('코스닥 지수 데이터 파일을 찾을 수 없습니다.');
+          throw new Error(`코스닥 지수 데이터 파일을 찾을 수 없습니다.`);
         }
         
         if (kosdaqResponse.ok) {
@@ -520,7 +516,10 @@ export default function RSRankPage() {
             const response = await fetch(chartFilePaths[index], { cache: 'no-store' });
             
             if (!response.ok) {
-              throw new Error(`캐시 파일 로드 실패: ${response.status}`);
+              console.log(`차트 데이터 파일을 찾을 수 없습니다: ${chartFilePaths[index]}`);
+              newChartErrorArray[index] = `차트 데이터 파일을 찾을 수 없습니다.`;
+              newChartLoadingArray[index] = false;
+              return;
             }
             
             const csvText = await response.text();
@@ -747,7 +746,7 @@ export default function RSRankPage() {
   // 셀의 정렬 방향을 결정하는 함수
   const getCellAlignment = (header: string) => {
     // RS 관련 수치들은 가운데 정렬
-    if (header.startsWith('RS') || ['MMT'].includes(header)) {
+    if (header.startsWith('RS') || ['MTT'].includes(header)) {
       return 'text-center';
     }
     
@@ -966,7 +965,7 @@ export default function RSRankPage() {
         // 테마명 추가
         '테마명': matchingRSRow && matchingRSRow['테마명'] ? matchingRSRow['테마명'] : '-',
         
-        'MMT': matchingRSRow ? matchingRSRow['MMT'] : '-'
+        'MTT': matchingRSRow ? matchingRSRow['MTT'] : '-'
       };
     });
     
@@ -977,9 +976,9 @@ export default function RSRankPage() {
     
     // 거래대금이 0인 항목 제외 및 시가총액 2천억 이상인 종목만 필터링
     const filteredData = mappedData.filter((item) => {
-      // 시가총액 필터링 - 2천억 이상만 포함 (필터링 조건 완화)
+      // 시가총액 필터링 - 2천억 이상만 포함
       const marketCap = Number(item['시가총액(억)'] || 0);
-      return marketCap > 0; // 시가총액이 0보다 큰 종목만 포함
+      return marketCap >= 2000; // 시가총액이 2천억 이상인 종목만 포함
     });
     
     console.log('필터링된 데이터 행 수:', filteredData.length);
@@ -1010,7 +1009,7 @@ export default function RSRankPage() {
               </div>
             )}
           </div>
-          <div className="h-80 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
+          <div className="h-72 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
             <div className="flex flex-col items-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-2"></div>
               <span className="text-gray-500">차트 데이터 로딩 중...</span>
@@ -1037,7 +1036,7 @@ export default function RSRankPage() {
               </div>
             )}
           </div>
-          <div className="h-80 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
+          <div className="h-72 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
             <span className="text-red-500">{chartErrorArray[index]}</span>
           </div>
         </div>
@@ -1061,7 +1060,7 @@ export default function RSRankPage() {
               </div>
             )}
           </div>
-          <div className="h-80 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
+          <div className="h-72 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
             <div className="flex flex-col items-center">
               <span className="text-gray-400">표시할 차트 데이터가 없습니다.</span>
             </div>
@@ -1094,7 +1093,7 @@ export default function RSRankPage() {
         <ChartComponent 
           data={chartDataArray[index]} 
           marketType={marketType} 
-          height={300}
+          height={280}
         />
       </div>
     );
@@ -1142,16 +1141,10 @@ export default function RSRankPage() {
         // KOSPI 지수 데이터 로드
         let kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
         
-        // 파일이 없으면 API를 통해 다운로드 요청
+        // 파일이 없으면 오류 메시지 표시
         if (!kospiResponse.ok) {
-          console.log('코스피 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
-          await fetch('/api/stocks?action=update-file&fileId=1dzf65fz6elq6b5znvhuaftn10hqjbe_c&dataType=market-index');
-          
-          // 다시 로컬 파일 시도
-          kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
-          if (!kospiResponse.ok) {
-            throw new Error(`코스피 지수 데이터 파일 로드 실패: ${kospiResponse.status}`);
-          }
+          console.log('코스피 지수 데이터 파일을 찾을 수 없습니다.');
+          throw new Error(`코스피 지수 데이터 파일을 찾을 수 없습니다.`);
         }
         
         if (kospiResponse.ok) {
@@ -1197,16 +1190,10 @@ export default function RSRankPage() {
         // KOSDAQ 지수 데이터 로드
         let kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
         
-        // 파일이 없으면 API를 통해 다운로드 요청
+        // 파일이 없으면 오류 메시지 표시
         if (!kosdaqResponse.ok) {
-          console.log('코스닥 지수 데이터 파일이 없습니다. API를 통해 다운로드를 시도합니다.');
-          await fetch('/api/stocks?action=update-file&fileId=1ks9qkdzmsxv-qenv6udzzidfwgykc1qg&dataType=market-index');
-          
-          // 다시 로컬 파일 시도
-          kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
-          if (!kosdaqResponse.ok) {
-            throw new Error(`코스닥 지수 데이터 파일 로드 실패: ${kosdaqResponse.status}`);
-          }
+          console.log('코스닥 지수 데이터 파일을 찾을 수 없습니다.');
+          throw new Error(`코스닥 지수 데이터 파일을 찾을 수 없습니다.`);
         }
         
         if (kosdaqResponse.ok) {
@@ -1261,7 +1248,7 @@ export default function RSRankPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-white">
       {/* 사이드바 */}
       <Suspense fallback={<div>로딩 중...</div>}>
         <Sidebar />
@@ -1270,7 +1257,7 @@ export default function RSRankPage() {
       {/* 메인 콘텐츠 - 왼쪽 여백을 추가하여 고정된 사이드바와 겹치지 않도록 함 */}
       <div className="flex-1 p-3 ml-[59px] flex flex-col">
         {/* 상단 헤더 - 브랜드 표시 */}
-        <div className="flex justify-between items-center mb-1">
+        <div className="flex justify-between items-center mb-1 bg-white rounded-lg p-2">
           <div className="flex items-center">
             <h1 className="text-lg font-bold">StockEasy</h1>
           </div>
@@ -1292,11 +1279,19 @@ export default function RSRankPage() {
                 <div className="text-red-500 text-center py-4">{error}</div>
               ) : csvData ? (
                 <div className="flex flex-col h-full">
-                  <div className="flex justify-between items-center mb-3">
+                  <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
                     <h2 className="text-lg font-semibold">RS순위</h2>
-                    <span className="text-xs text-gray-600">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                    <div className="flex items-center justify-end">
+                      <span className="text-xs text-gray-600 mr-2">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                      <TableCopyButton
+                        tableRef={rsTableRef}
+                        headerRef={rsHeaderRef}
+                        tableName="RS순위 테이블"
+                        buttonText="이미지 복사"
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1" style={{ overflowX: 'hidden' }}>
+                  <div className="flex-1" style={{ overflowX: 'hidden' }} ref={rsTableRef}>
                     <table className="w-full bg-white border border-gray-200 table-fixed">
                       <thead>
                         <tr className="bg-gray-100">
@@ -1306,11 +1301,10 @@ export default function RSRankPage() {
                               className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
                               style={{ 
                                 width: header === '종목명' ? '100px' : 
-                                       header === '테마명' ? '220px' :
-                                       header === '시가총액' ? '85px' : 
+                                       header === '테마명' ? '300px' :
+                                       header === '시가총액' ? '70px' : 
                                        header === '종목코드' ? '60px' : 
-                                       header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MMT' ? '45px' :
-                                       header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '40px' :
+                                       header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MTT' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '45px' :
                                        header === '업종' ? '220px' : '70px',
                                 fontSize: '0.875rem'
                               }}
@@ -1337,14 +1331,13 @@ export default function RSRankPage() {
                                 className={`py-1.5 px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis`}
                                 style={{ 
                                   width: header === '종목명' ? '100px' : 
-                                          header === '테마명' ? '220px' :
-                                          header === '시가총액' ? '40px' :
+                                          header === '테마명' ? '300px' :
+                                          header === '시가총액' ? '70px' :
                                           header === '종목코드' ? '60px' : 
-                                          header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MMT' ? '45px' :
-                                          header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '40px' :
+                                          header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MTT' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '45px' :
                                           header === '업종' ? '220px' : '70px',
                                   fontSize: '0.875rem',
-                                  maxWidth: header === '테마명' ? '265px' : 'auto',
+                                  maxWidth: header === '테마명' ? '300px' : 'auto',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis'
@@ -1414,9 +1407,17 @@ export default function RSRankPage() {
             <div className="w-[30%] bg-white rounded-lg shadow p-4">
               {/* 금주 52주 신고가 정보 영역 */}
               <div className="flex flex-col">
-                <div className="flex justify-between items-center mb-3">
+                <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
                   <h2 className="text-lg font-semibold">52주 신고가</h2>
-                  <span className="text-xs text-gray-600">당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                  <div className="flex items-center justify-end">
+                    <span className="text-xs text-gray-600 mr-2">당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                    <TableCopyButton
+                      tableRef={highTableRef}
+                      headerRef={highHeaderRef}
+                      tableName="52주 신고가 테이블"
+                      buttonText="이미지 복사"
+                    />
+                  </div>
                 </div>
                 <div className="flex-1" style={{ overflowX: 'hidden' }}>
                   {/* 신고가 데이터 테이블 */}
@@ -1428,7 +1429,7 @@ export default function RSRankPage() {
                     <div className="text-red-500">{highDataError}</div>
                   ) : (
                     (highData && highData.rows && highData.rows.length > 0) ? (
-                      <div className="overflow-x-auto" style={{ overflowX: 'hidden' }}>
+                      <div className="overflow-x-auto" style={{ overflowX: 'hidden' }} ref={highTableRef}>
                         <table className="w-full bg-white border border-gray-200 table-fixed">
                           <thead>
                             <tr className="bg-gray-100">
@@ -1462,7 +1463,7 @@ export default function RSRankPage() {
                               </th>
                               <th 
                                 className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '70px', fontSize: '0.875rem' }}
+                                style={{ width: '75px', fontSize: '0.875rem' }}
                                 onClick={() => requestSort('등락률')}
                               >
                                 <div className="flex items-center justify-center">
@@ -1588,13 +1589,13 @@ export default function RSRankPage() {
               <span className="text-xs text-gray-600">RS상위와 시가총액 순서로 해당 종목이 속한 시장 지수를 비교합니다.</span>
             </div>
             
-            {/* 7줄에 3개의 차트를 가로로 배치 */}
-            {Array.from({length: 7}).map((_, rowIndex) => (
-              <div key={rowIndex} className="flex flex-row gap-1 mb-4">
-                {Array.from({length: 3}).map((_, colIndex) => {
-                  const index = rowIndex * 3 + colIndex;
+            {/* 5줄에 4개의 차트를 가로로 배치 */}
+            {Array.from({length: 5}).map((_, rowIndex) => (
+              <div key={rowIndex} className="flex flex-row gap-2 mb-4">
+                {Array.from({length: 4}).map((_, colIndex) => {
+                  const index = rowIndex * 4 + colIndex;
                   return (
-                    <div key={colIndex} className="flex-1 rounded-md p-1">
+                    <div key={colIndex} className="flex-1 rounded-md">
                       {renderChartComponent(index)}
                     </div>
                   );

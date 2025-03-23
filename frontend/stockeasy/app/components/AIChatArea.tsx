@@ -276,7 +276,6 @@ function AIChatAreaContent() {
   useEffect(() => {
     if (!isMounted) return;
     
-
   }, [isMounted]);
   
   // 메시지 저장 - 서버 측 저장 방식으로 변경 (현재는 구현하지 않음)
