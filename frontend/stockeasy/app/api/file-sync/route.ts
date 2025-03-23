@@ -73,18 +73,18 @@ const FILES_TO_SYNC: FileInfo[] = [
     fileName: 'stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv',
     updateSchedule: 'stock_daily'
   },
-  // googleDriveSync.ts에서 추가된 ETF 파일들
+  // market-index 폴더 파일들 추가
   {
-    fileId: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA', // ETF 현재가 데이터 파일 ID
-    folderPath: 'today_price_etf',
-    fileName: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA.csv', // 파일 ID를 파일명으로 사용
-    updateSchedule: 'market'
+    fileId: '1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg',
+    folderPath: 'market-index',
+    fileName: '1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg.csv',
+    updateSchedule: 'chart_daily'  // 17:10에 한 번 업데이트 (휴일 제외)
   },
   {
-    fileId: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0', // ETF 52주 신고가 데이터 파일 ID
-    folderPath: 'rs_etf',
-    fileName: '1cUcNxRD307dLGQVLiw1snAkX1LY0sEo0.csv', // 파일 ID를 파일명으로 사용
-    updateSchedule: 'afternoon'  // 16:30에 업데이트
+    fileId: '1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c',
+    folderPath: 'market-index',
+    fileName: '1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c.csv',
+    updateSchedule: 'chart_daily'  // 17:10에 한 번 업데이트 (휴일 제외)
   }
 ];
 
