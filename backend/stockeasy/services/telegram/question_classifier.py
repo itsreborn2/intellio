@@ -1,7 +1,7 @@
 import json
 from typing import Dict, Any, List, Tuple, Optional
-import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from loguru import logger
+
 from pydantic import BaseModel, Field
 
 from common.services.llm_models import LLMModels
@@ -98,9 +98,14 @@ class QuestionClassifierService:
 
    def __init__(self):
       self.llm = LLMModels()
+      logger.info("QuestionClassifierService 초기화 완료")
 
-   def classify_question(self, question: str) -> QuestionClassification:
-      result = self.llm.generate(question, self.AI_ROLE)
+   def classify_question(self, question: str, stock_code: str, stock_name: str) -> QuestionClassification:
+      logger.info(f"질문 분류 시작: {question}")
+      prompt = self.make_user_question_prompt(question, stock_code, stock_name)
+      logger.info(f"질문 분류 프롬프트: {prompt}")
+      result = self.llm.generate(prompt, self.AI_ROLE)
+      logger.info(f"LLM 응답 받음: {result.content[:100]}...")
       
       # 아래와 같은 포맷으로 리턴되는데, 불필요한 문자 제거 후 json 파싱
       # ```json
@@ -115,16 +120,19 @@ class QuestionClassifierService:
             content = content[:-3]  # "```" 제거
          content = content.strip()
          
+         logger.info(f"파싱할 JSON 내용: {content}")
+         
          # JSON 파싱
          json_data = json.loads(content)
+         logger.info(f"JSON 파싱 완료: {json_data}")
          
          # 필드명 매핑 (LLM 응답의 한글 필드명을 영어 필드명으로 변환)
          field_mapping = {
-            "질문주제": "주제",
-            "답변수준": "answer_level",
+            "질문주제": "질문주제",
+            "답변수준": "답변수준",
             "종목코드": "종목코드",
-            "종목명": "stock_name",
-            "추가옵션": "additional_option"
+            "종목명": "종목명",
+            "추가옵션": "추가옵션"
          }
          
          # 매핑된 필드명으로 데이터 변환
@@ -133,21 +141,23 @@ class QuestionClassifierService:
             if k in field_mapping:
                mapped_data[field_mapping[k]] = v
          
+         logger.info(f"매핑된 데이터: {mapped_data}")
+         
          # 문자열 레이블을 숫자 인덱스로 변환
-         if "topic" in mapped_data and isinstance(mapped_data["topic"], str):
+         if "질문주제" in mapped_data and isinstance(mapped_data["질문주제"], str):
             # 유사한 문자열 처리 (공백, 대소문자 등 무시)
-            topic_str = mapped_data["topic"].strip().lower()
+            topic_str = mapped_data["질문주제"].strip().lower()
             for label, idx in self.TOPIC_INDICES.items():
                if label.lower() in topic_str:
-                  mapped_data["topic"] = idx
+                  mapped_data["질문주제"] = idx
                   break
             else:
                # 일치하는 항목이 없으면 기본값 설정
-               mapped_data["topic"] = 2  # 기타
+               mapped_data["질문주제"] = 2  # 기타
          
-         if "answer_level" in mapped_data and isinstance(mapped_data["answer_level"], str):
+         if "답변수준" in mapped_data and isinstance(mapped_data["답변수준"], str):
             # 여러 답변 수준이 포함된 경우 (예: "긴설명요구|종합판단")
-            answer_level_str = mapped_data["answer_level"].strip().lower()
+            answer_level_str = mapped_data["답변수준"].strip().lower()
             
             # 가장 높은 수준의 답변 요구를 선택 (숫자가 클수록 복잡한 답변)
             max_level = 0
@@ -155,16 +165,30 @@ class QuestionClassifierService:
                if label.lower() in answer_level_str:
                   max_level = max(max_level, idx)
             
-            mapped_data["answer_level"] = max_level
+            mapped_data["답변수준"] = max_level
+         
+         logger.info(f"최종 변환된 데이터: {mapped_data}")
          
          # Pydantic 모델로 변환하여 반환
          return QuestionClassification(**mapped_data)
       except json.JSONDecodeError as e:
+         logger.error(f"JSON 파싱 오류: {str(e)}, 원본 내용: {content}", exc_info=True)
          raise ValueError(f"LLM이 반환한 결과를 JSON으로 파싱할 수 없습니다: {str(e)}")
       except Exception as e:
+         logger.error(f"질문 분류 중 오류 발생: {str(e)}", exc_info=True)
          raise ValueError(f"질문 분류 중 오류가 발생했습니다: {str(e)}")
    
    def classify_question_with_structured_output(self, question: str) -> QuestionClassification:
       result = self.llm.generate_with_structured_output(question, self.AI_ROLE, QuestionClassification)
       return result
+
+   def make_user_question_prompt(self, question: str, stock_code: str, stock_name: str) -> str:
+      result = ""
+      if stock_code and len(stock_code) > 0:
+         result += f"종목코드: {stock_code}\n"
+      if stock_name and len(stock_name) > 0:
+         result += f"종목명: {stock_name}\n"
+      result += f"질문: {question}\n"
+      return result
+
 

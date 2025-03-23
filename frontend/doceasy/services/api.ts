@@ -58,7 +58,7 @@ export const createProject = async (
   description?: string, 
   retention_period: string = 'THIRTY_DAYS'
 ): Promise<IProject> => {
-  console.log('Creating project with:', { name, description, retention_period })
+  console.debug('Creating project with:', { name, description, retention_period })
   
   try {
     const response = await apiFetch(`${API_ENDPOINT}/projects/`, {
@@ -88,7 +88,7 @@ export const createProject = async (
     }
 
     const project = await response.json()
-    console.log('Project created successfully:', project)
+    console.debug('Project created successfully:', project)
     
     // 프로젝트 생성 이벤트 발생
     const projectCreatedEvent = new CustomEvent('projectCreated', {
@@ -1106,7 +1106,7 @@ export async function getChatHistory(projectId: string): Promise<IMessage[]> {
 
 
 export async function getDocumentUploadStatus(documentIds: string[]): Promise<DocumentStatusResponse[]> {
-  console.log('getDocumentUploadStatus', documentIds)
+  console.debug('getDocumentUploadStatus', documentIds)
   const response = await apiFetch(`${API_ENDPOINT}/rag/document-status`, {
     method: 'POST',
     headers: {

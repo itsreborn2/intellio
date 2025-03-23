@@ -291,7 +291,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         try:
             # 토큰 제한을 고려하여 텍스트 분할
             batches = self.validate_and_split_texts(texts)
-            logger.info(f"OpenAI 임베딩 생성 시작: {len(batches)} 배치")
+            logger.info(f"OpenAI 임베딩 생성 시작[{self.model_name}]: {len(batches)} 배치")
             all_embeddings = []
             
             for batch in batches:
@@ -305,12 +305,12 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             return all_embeddings
             
         except Exception as e:
-            logger.error(f"OpenAI 임베딩 생성 실패: {str(e)}")
+            logger.error(f"OpenAI 임베딩 생성 실패[{self.model_name}]: {str(e)}")
             raise
     def create_embeddings(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY") -> List[List[float]]:
         try:
             batches = self.validate_and_split_texts(texts)
-            logger.info(f"OpenAI 임베딩 생성 시작: {len(batches)} 배치")
+            logger.info(f"OpenAI 임베딩 생성 시작[{self.model_name}]: {len(batches)} 배치")
             all_embeddings = []
             
             for batch in batches:

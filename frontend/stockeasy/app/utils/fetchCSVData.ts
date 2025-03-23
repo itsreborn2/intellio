@@ -1,38 +1,38 @@
 /**
  * fetchCSVData.ts
- * 구글 드라이브에서 CSV 파일을 가져오는 유틸리티 함수
+ * CSV 파일을 가져오는 유틸리티 함수
+ * 모든 파일은 public 폴더에서 로드하거나 API를 통해 다운로드합니다.
  */
 import Papa from 'papaparse';
 
 /**
- * CSV 파일을 가져오는 함수
- * @param fileUrl - CSV 파일의 URL 또는 파일 ID
- * @returns CSV 텍스트 데이터
+ * CSV 데이터를 가져오는 함수
+ * 
+ * public 폴더에서 CSV 파일을 로드합니다.
+ * 
+ * @param filePath 파일 경로 (public 폴더 기준)
+ * @returns CSV 데이터 문자열
  */
-export const fetchCSVData = async (fileUrl: string): Promise<string> => {
+export const fetchCSVData = async (filePath: string): Promise<string> => {
   try {
-    // 구글 드라이브 파일 ID인지 확인하고 URL로 변환
-    const isGoogleDriveFileId = !fileUrl.includes('http') && fileUrl.length > 20;
-    const url = isGoogleDriveFileId 
-      ? `https://drive.google.com/uc?export=download&id=${fileUrl}`
-      : fileUrl;
+    console.log(`파일 로드 시작: ${filePath}`);
     
-    console.log(`CSV 다운로드 시작: ${isGoogleDriveFileId ? '구글 드라이브 ID' : 'URL'} - ${fileUrl}`);
+    // 파일 경로가 /로 시작하지 않으면 추가
+    const normalizedPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
     
-    // 파일 다운로드
-    const response = await fetch(url);
+    // public 폴더에서 파일 로드
+    const response = await fetch(normalizedPath, { cache: 'no-store' });
     
     if (!response.ok) {
-      throw new Error(`CSV 파일을 다운로드하는데 실패했습니다: ${response.statusText}`);
+      throw new Error(`파일을 찾을 수 없습니다: ${filePath}`);
     }
     
-    // 텍스트로 변환
-    const csvText = await response.text();
-    console.log(`CSV 다운로드 완료: ${csvText.length}자`);
+    const data = await response.text();
+    console.log(`파일 로드 완료: ${filePath}`);
     
-    return csvText;
+    return data;
   } catch (error) {
-    console.error('CSV 데이터 로딩 오류:', error);
+    console.error(`파일 로드 실패: ${filePath}`, error);
     throw error;
   }
-};
+}

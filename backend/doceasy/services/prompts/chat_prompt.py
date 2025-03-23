@@ -89,7 +89,14 @@ class QueryAnalyzer:
                 r"핵심|요점|포인트",
                 r"결론|시사점",
                 r"컨센서스|의견",
-                r"정리|요약"
+                r"정리|요약|메인",
+                r"summarize|summary|main",
+                r"overview|outline|abstract",
+                r"digest|brief|synopsis",
+                r"highlight|key takeaway|essence",
+                r"gist|main point|wrap up",
+                r"summarization|요약해|정리해",
+                r"documents?(\s+|에서\s+|의\s+)?(내용|정보)?"
             ]
         }
         
@@ -318,6 +325,7 @@ class ChatPrompt(BasePrompt):
         base_format = """응답 형식 지침:
 
 1. 기본 원칙:
+- 사용자 입력한 언어와 같은 답변 언어를 사용할 것
 - 단락구분, 이중줄바꿈과 빈칸 공백을 절대 사용하지마.
 - 문장은 간결하고 명확하게 작성.
 - 중복되는 내용은 제거.
@@ -432,9 +440,21 @@ Root
         # 분석 유형 확인
         analysis_types = {AnalysisType(at) for at in query_analysis.get("analysis_types", [])}
         
+        # 쿼리 의도 확인
+        query_intent = query_analysis.get("intent", "general")
+        is_summary_query = query_intent == "summary"
+        
         # 기본 프롬프트
         base_prompt = """당신은 문서를 분석하고 사용자의 질문에 답변하는 AI 어시스턴트입니다.
 주어진 문서의 내용만을 기반으로 답변해야 하며, 문서에 없는 내용은 '관련 내용 없음' 을 응답해."""
+
+        # 요약 모드일 경우 프롬프트 수정
+        if is_summary_query:
+            base_prompt = """당신은 문서를 요약하고 핵심 내용을 추출하는 AI 어시스턴트입니다.
+주어진 문서의 내용만을 기반으로 주요 정보를 파악하고 명확하게 요약해주세요.
+문서에 없는 내용은 추가하지 마시고, 주요 내용과 핵심 포인트만 포함하세요."""
+            # 통합 분석 유형 추가
+            analysis_types.add(AnalysisType.INTEGRATION)
 
         # 분석 유형별 프롬프트 생성
         analysis_prompts = []
@@ -449,8 +469,12 @@ Root
         # 키워드 프롬프트
         keyword_prompt = self._get_keyword_prompt(keywords)
         
-        # 응답 형식
-        response_format = self._get_response_format(analysis_types)
+        # 응답 형식 - 요약 쿼리인 경우 특별 처리
+        if is_summary_query:
+            #response_format = self._get_summary_response_format() #요약 전용 프롬프트.
+            response_format = self._get_response_format(analysis_types)
+        else:
+            response_format = self._get_response_format(analysis_types)
         
         # 최종 프롬프트 조합
         parts = [
@@ -472,3 +496,15 @@ Root
         parts.append(f"\n응답 형식:\n{response_format}")
         
         return "\n".join(parts)
+        
+    def _get_summary_response_format(self) -> str:
+        """요약 응답 형식 생성"""
+        return """1. 문서 개요: 문서의 전체적인 주제와 목적을 1-2문장으로 설명하세요.
+
+2. 핵심 내용: 문서의 가장 중요한 정보와 메시지를 3-5개의 요점으로 정리하세요.
+
+3. 세부 사항: 중요한 세부 정보, 수치, 데이터를 제시하세요.
+
+4. 결론: 문서의 결론이나 시사점이 있다면 요약하세요.
+
+답변은 간결하고 명확하게 작성하되, 중요한 정보는 모두 포함시키세요. 문서에 없는 내용은 추가하지 마세요."""

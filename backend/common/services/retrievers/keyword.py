@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional
 from .base import BaseRetriever, RetrieverConfig
-from .models import Document, RetrievalResult
+from .models import DocumentWithScore, RetrievalResult
 from pydantic import BaseModel
 
 from loguru import logger
@@ -120,7 +120,7 @@ class KeywordRetriever(BaseRetriever):
 
         return keywords
 
-    async def add_documents(self, documents: List[Document]) -> bool:
+    async def add_documents(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 검색 인덱스에 추가"""
         # TODO: 문서 인덱싱 구현
         return True
@@ -130,7 +130,7 @@ class KeywordRetriever(BaseRetriever):
         # TODO: 문서 삭제 구현
         return True
         
-    async def update_documents(self, documents: List[Document]) -> bool:
+    async def update_documents(self, documents: List[DocumentWithScore]) -> bool:
         """검색 인덱스의 문서 업데이트"""
         # TODO: 문서 업데이트 구현
         return True 

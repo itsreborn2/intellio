@@ -81,3 +81,7 @@ celerybeat.pid
 evaluation/datasets
 evaluation/results
 
+
+# langgraph
+langgraph_project/
+.langgraph_api

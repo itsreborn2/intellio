@@ -29,7 +29,8 @@ class EmbeddingService:
             self.current_model_config.name
         )
         
-        #self.create_pinecone_index(self.current_model)
+        # VectorStoreManager는 필요시 외부에서 생성하여 사용
+        # (관련 코드 삭제)
     def change_model(self, model_type: EmbeddingModelType):
         self.current_model_config = self.model_manager.get_model_config(model_type)
         self.provider = EmbeddingProviderFactory.create_provider(

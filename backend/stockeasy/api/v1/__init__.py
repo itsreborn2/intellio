@@ -5,12 +5,16 @@
 
 from fastapi import APIRouter
 from stockeasy.api.v1.telegram import telegram_router
-import logging
-
-logger = logging.getLogger(__name__)
+from stockeasy.api.v1.root_router import router
+from loguru import logger
 
 # API v1 라우터
+#root_router = APIRouter(prefix="/stockeasy", tags=["stockeasy"])
 api_router_stockeasy = APIRouter(prefix="/stockeasy", tags=["stockeasy"])
+
+logger.info("루트 라우터 등록 시작")
+api_router_stockeasy.include_router(router)
+logger.info("루트 라우터 등록 완료")
 
 # 텔레그램 라우터 등록
 logger.info("텔레그램 라우터 등록 시작")

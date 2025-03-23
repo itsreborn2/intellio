@@ -8,6 +8,9 @@ services:
       context: .
       dockerfile: Dockerfile.base.prod
     image: intellio-base-prod:latest
+    volumes:
+      - ./backend:/backend
+      #- ./backend/stockeasy/telegram_channels.json:/app/backend/stockeasy/telegram_channels.json
     profiles: ["build"]
 
   fastapi:

@@ -8,6 +8,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
+.pytest_cache
 
 # Celery
 celerybeat*
@@ -18,6 +19,7 @@ celerybeat-schedule.dir
 
 # Virtual Environment
 venv/
+backend/venv/
 #env/
 #.env
 

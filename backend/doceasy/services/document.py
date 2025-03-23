@@ -445,6 +445,8 @@ class DocumentService:
             # 7. 텍스트 추출
             try:
                 extracted_text = self.extractor.extract_text(content, content_type)
+                if extracted_text:
+                    extracted_text = extracted_text.replace('\x00', '')
             except Exception as e:
                 logger.error(f"Text extraction error: {str(e)}")
                 extracted_text = None

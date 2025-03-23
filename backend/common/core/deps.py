@@ -37,7 +37,7 @@ async def get_current_session(
                 return session
         logger.warning('세션이 없거나 만료됨')
         #status_code = status.HTTP_401_UNAUTHORIZED
-        raise AuthenticationRedirectException(f'{settings.DOCEASY_URL}/error')
+        raise AuthenticationRedirectException(f'{settings.INTELLIO_URL}/error')
 
     except AuthenticationRedirectException:
         raise

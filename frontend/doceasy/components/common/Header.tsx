@@ -110,7 +110,7 @@ function HeaderContent({ className }: { className?: string }) {
   }
 
   useEffect(() => {
-    console.log('[Header1] Auth State Updated:', {
+    console.debug('[Header1] Auth State Updated:', {
       isAuthenticated,
       user,
     })

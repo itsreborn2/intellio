@@ -12,13 +12,21 @@ interface UploadProgress {
   totalFiles: number
 }
 
+interface UploadError {
+  isOpen: boolean
+  message: string
+}
+
 interface UseFileUploadOptions {
   skipChatMessages?: boolean
 }
 
 interface UseFileUploadReturn {
   uploadProgress: UploadProgress
+  uploadError: UploadError
   handleFileUpload: (files: File[], projectId?: string, options?: UseFileUploadOptions) => Promise<void>
+  closeErrorDialog: () => void
+  showErrorDialog: (message: string) => void
 }
 
 export function useFileUpload(): UseFileUploadReturn {
@@ -30,6 +38,22 @@ export function useFileUpload(): UseFileUploadReturn {
     processedFiles: 0,
     totalFiles: 0
   })
+  
+  const [uploadError, setUploadError] = useState<UploadError>({
+    isOpen: false,
+    message: ''
+  })
+  
+  const closeErrorDialog = useCallback(() => {
+    setUploadError(prev => ({ ...prev, isOpen: false }))
+  }, [])
+  
+  const showErrorDialog = useCallback((message: string) => {
+    setUploadError({
+      isOpen: true,
+      message
+    })
+  }, [])
 
   const handleFileUpload = useCallback(async (
     files: File[], 
@@ -37,9 +61,27 @@ export function useFileUpload(): UseFileUploadReturn {
     options: UseFileUploadOptions = {}
   ) => {
     try {
+      // 파일 배열이 비어있는지 먼저 확인
+      if (!files.length) {
+        showErrorDialog('업로드할 파일이 선택되지 않았습니다.');
+        return;
+      }
+      
+      // 파일 개수 제한 (최대 100개)
+      if (files.length > 100) {
+        const errorMessage = '최대 100개까지만 업로드할 수 있습니다.';
+        console.warn(errorMessage);
+        setUploadError({
+          isOpen: true,
+          message: errorMessage
+        });
+        // 함수 실행 즉시 중단
+        return;
+      }
+      
       // 파일 MIME 타입 로깅
       files.forEach(file => {
-        console.log(`파일명: ${file.name}, MIME 타입: ${file.type}`);
+        console.debug(`파일명: ${file.name}, MIME 타입: ${file.type}`);
       });
       
       let projectId = existingProjectId
@@ -134,6 +176,9 @@ export function useFileUpload(): UseFileUploadReturn {
 
   return {
     uploadProgress,
-    handleFileUpload
+    uploadError,
+    handleFileUpload,
+    closeErrorDialog,
+    showErrorDialog
   }
 } 

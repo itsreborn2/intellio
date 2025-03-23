@@ -118,7 +118,7 @@ function ProjectCategorySectionContent({
           //console.warn('로그인되지 않았습니다.');
           return;
         }
-        console.log('최근 프로젝트 로딩');
+        console.debug('최근 프로젝트 로딩');
         const response:IRecentProjectsResponse = await getRecentProjects()
         dispatch({ type: actionTypes.UPDATE_RECENT_PROJECTS, payload: response })
       } catch (error) {
