@@ -276,62 +276,6 @@ function AIChatAreaContent() {
   useEffect(() => {
     if (!isMounted) return;
     
-<<<<<<< HEAD
-=======
-    // 서버에서 메시지 데이터를 가져오는 함수
-    const fetchMessages = async () => {
-      try {
-        // 초기 메시지 설정 (개발용)
-        const initialMessages: ChatMessage[] = [
-          {
-            id: `user-${Date.now()-2000}`,
-            role: 'user',
-            content: '올해 실적 전망이 어떻게 돼?',
-            timestamp: Date.now()-2000,
-            stockInfo: {
-              stockName: '삼성전자',
-              stockCode: '005930'
-            }
-          },
-          {
-            id: `assistant-${Date.now()-1000}`,
-            role: 'assistant',
-            content: `삼성전자의 올해 실적 전망은 전반적으로 긍정적입니다. 주요 내용을 요약해 드리겠습니다:
-
-1. **메모리 반도체 부문 호조**
-   - HBM(High Bandwidth Memory) 수요 급증으로 메모리 가격 상승세가 유지될 전망
-   - AI 서버용 고부가가치 메모리 비중 확대로 ASP 상승 및 수익성 개선 기대
-   - 하반기 서버 및 모바일 시장 회복으로 메모리 부문 매출 성장 가속화
-
-2. **파운드리 사업 경쟁력 강화**
-   - 3나노 이하 첨단 공정 확대로 시장 점유율 상승 기대
-   - NVIDIA와의 협력 강화로 AI 반도체 시장 입지 확대
-
-3. **숫자로 보는 전망**
-   - 매출액: 전년 대비 약 12% 증가 예상
-   - 영업이익: 전년 대비 25~30% 성장 전망
-   - 특히 반도체 부문 영업이익률 15% 이상으로 회복 기대
-
-4. **위험 요소**
-   - 글로벌 경쟁 심화 및 기술 변화 가속화
-   - 무역 분쟁 및 보호무역주의 강화로 인한 불확실성
-   - 원자재 및 부품 가격 변동성에 따른 수익성 영향
-
-종합적으로 반도체 수요 증가와 AI 시장 확대에 따른 수혜가 예상되며, 특히 HBM 메모리와 파운드리 사업 확장이 실적 개선의 핵심 동력이 될 것으로 분석됩니다.
-
-더 구체적인 세부 사업 부문별 전망이 필요하시면 추가로 질문해 주세요.`,
-            timestamp: Date.now()-1000
-          }
-        ];
-        
-        setMessages(initialMessages);
-      } catch (error) {
-        console.warn('메시지 불러오기 실패:', error);
-      }
-    };
-
-    fetchMessages();
->>>>>>> feature/stockeasy-front-work
   }, [isMounted]);
   
   // 메시지 저장 - 서버 측 저장 방식으로 변경 (현재는 구현하지 않음)
