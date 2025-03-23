@@ -965,7 +965,7 @@ export default function RSRankPage() {
         // 테마명 추가
         '테마명': matchingRSRow && matchingRSRow['테마명'] ? matchingRSRow['테마명'] : '-',
         
-        'MMT': matchingRSRow ? matchingRSRow['MMT'] : '-'
+        'MTT': matchingRSRow ? matchingRSRow['MTT'] : '-'
       };
     });
     
@@ -1301,11 +1301,10 @@ export default function RSRankPage() {
                               className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
                               style={{ 
                                 width: header === '종목명' ? '100px' : 
-                                       header === '테마명' ? '280px' :
+                                       header === '테마명' ? '300px' :
                                        header === '시가총액' ? '70px' : 
                                        header === '종목코드' ? '60px' : 
-                                       header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MMT' ? '45px' :
-                                       header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '40px' :
+                                       header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MTT' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '45px' :
                                        header === '업종' ? '220px' : '70px',
                                 fontSize: '0.875rem'
                               }}
@@ -1332,14 +1331,13 @@ export default function RSRankPage() {
                                 className={`py-1.5 px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis`}
                                 style={{ 
                                   width: header === '종목명' ? '100px' : 
-                                          header === '테마명' ? '280px' :
+                                          header === '테마명' ? '300px' :
                                           header === '시가총액' ? '70px' :
                                           header === '종목코드' ? '60px' : 
-                                          header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MMT' ? '45px' :
-                                          header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '40px' :
+                                          header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MTT' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '45px' :
                                           header === '업종' ? '220px' : '70px',
                                   fontSize: '0.875rem',
-                                  maxWidth: header === '테마명' ? '280px' : 'auto',
+                                  maxWidth: header === '테마명' ? '300px' : 'auto',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis'
