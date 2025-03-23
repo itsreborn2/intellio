@@ -444,7 +444,7 @@ export default function IndustryCharts() {
         <p className="text-sm text-gray-600">
           각 산업별 ETF의 20일 이동평균선 기준 상태와 등락률을 확인할 수 있습니다. 
           녹색 배경은 20일선 위에 있는 ETF, 노란색 배경은 20일선 아래에 있는 ETF를 나타냅니다.
-          각 ETF는 등락률 기준으로 내림차순 정렬되어 있습니다.
+          각 ETF는 당일 등락률 기준으로 내림차순 정렬되어 있습니다.
         </p>
       </div>
       
