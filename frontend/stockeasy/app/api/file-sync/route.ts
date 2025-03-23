@@ -96,7 +96,7 @@ let lastRunTime = 0;
 
 /**
  * 캐시 레지스트리를 로드합니다.
- * 파일이 없으면 빈 객체를 반환합니다.
+ * 파일이 없으면 빈 객체를 반환.
  */
 function loadCacheRegistry(): CacheRegistry {
   try {
