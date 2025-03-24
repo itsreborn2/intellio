@@ -129,7 +129,7 @@ export default function ETFCurrentTable() {
     tickerMap: {[key: string]: string},
     stockNameMap: {[key: string]: string}
   }>({ tickerMap: {}, stockNameMap: {} });
-  const [etfStockList, setEtfStockList] = useState<{[key: string]: string[]}>({});
+  const [etfStockList, setEtfStockList] = useState<{[key: string]: Array<{name: string, rs: string}>}>({});
   
   // 테이블 복사 기능을 위한 ref 생성
   const tableRef = useRef<HTMLDivElement>(null);
@@ -201,7 +201,7 @@ export default function ETFCurrentTable() {
         return [];
       }
       
-      console.log(`${ticker} 종가 데이터 로드 시작`);
+      // console.log(`${ticker} 종가 데이터 로드 시작`);
       
       // CSV 파일 로드
       const response = await fetch(`/requestfile/rs_etf/${ticker}.csv`);
@@ -228,15 +228,15 @@ export default function ETFCurrentTable() {
         return dateA.getTime() - dateB.getTime();
       });
       
-      // 디버깅을 위해 처음 몇 개와 마지막 몇 개 데이터 출력
-      if (closePrices.length > 0) {
-        console.log(`${ticker} 종가 데이터 샘플:`, {
-          처음_3개: closePrices.slice(0, 3),
-          마지막_3개: closePrices.slice(-3)
-        });
-      }
+      // // 디버깅을 위해 처음 몇 개와 마지막 몇 개 데이터 출력
+      // if (closePrices.length > 0) {
+      //   console.log(`${ticker} 종가 데이터 샘플:`, {
+      //     처음_3개: closePrices.slice(0, 3),
+      //     마지막_3개: closePrices.slice(-3)
+      //   });
+      // }
       
-      console.log(`${ticker} 종가 데이터 로드 완료: ${closePrices.length}개 데이터`);
+      // console.log(`${ticker} 종가 데이터 로드 완료: ${closePrices.length}개 데이터`);
       return closePrices;
     } catch (error) {
       console.error(`${ticker} 종가 데이터 로드 중 오류 발생:`, error);
@@ -252,11 +252,11 @@ export default function ETFCurrentTable() {
     
     // 유효한 티커만 필터링
     const validTickers = tickers.filter(ticker => ticker && ticker.trim().length > 0);
-    console.log('유효한 티커 목록:', validTickers);
+    // console.log('유효한 티커 목록:', validTickers);
     
-    // 데이터 구조 확인을 위한 로그
-    console.log('csvData 구조:', Object.keys(csvData));
-    console.log('groupedData 구조:', Object.keys(csvData.groupedData));
+    // // 데이터 구조 확인을 위한 로그
+    // // console.log('csvData 구조:', Object.keys(csvData));
+    // // console.log('groupedData 구조:', Object.keys(csvData.groupedData));
     
     // 티커별 데이터 로드 (순차적으로 처리하여 종목명 매칭 로직이 제대로 작동하도록 함)
     for (const ticker of validTickers) {
@@ -310,21 +310,21 @@ export default function ETFCurrentTable() {
           const prices = await loadPriceData(normalizedTicker);
           if (prices && prices.length > 0) {
             priceData[ticker] = prices; // 원래 티커 값을 키로 사용
-            console.log(`${ticker} 데이터 로드 성공 (${prices.length}개 데이터)`);
+            // console.log(`${ticker} 데이터 로드 성공 (${prices.length}개 데이터)`);
           } else {
-            console.log(`${ticker} 데이터 로드 실패 (정규화된 티커: ${normalizedTicker})`);
+            // console.log(`${ticker} 데이터 로드 실패 (정규화된 티커: ${normalizedTicker})`);
           }
         } else {
-          console.log(`${ticker} 티커에 해당하는 파일을 찾을 수 없음`);
+          // console.log(`${ticker} 티커에 해당하는 파일을 찾을 수 없음`);
         }
       } catch (error) {
         console.error(`${ticker} 처리 중 오류:`, error);
       }
     }
     
-    console.log('로드된 티커 데이터:', Object.keys(priceData));
-    console.log('티커 매핑:', tickerMap);
-    console.log('종목명 매핑:', stockNameMap);
+    // console.log('로드된 티커 데이터:', Object.keys(priceData));
+    // console.log('티커 매핑:', tickerMap);
+    // console.log('종목명 매핑:', stockNameMap);
     return { priceData, tickerMap, stockNameMap };
   };
   
@@ -342,13 +342,13 @@ export default function ETFCurrentTable() {
       cleaned.replace(/^0+/, '')         // 앞의 0 제거 (69500 -> 69500)
     ];
     
-    console.log(`티커 변형 시도: ${variations.join(', ')}`);
+    // console.log(`티커 변형 시도: ${variations.join(', ')}`);
     
     // 1. 티커 매핑 테이블에서 매핑된 티커를 찾음
     for (const variant of variations) {
       if (tickerMappingTable[variant]) {
         const mappedTicker = tickerMappingTable[variant];
-        console.log(`${ticker} -> ${mappedTicker} (매핑 테이블 - 변형: ${variant})`);
+        // console.log(`${ticker} -> ${mappedTicker} (매핑 테이블 - 변형: ${variant})`);
         return mappedTicker;
       }
     }
@@ -356,7 +356,7 @@ export default function ETFCurrentTable() {
     // 2. 정확히 일치하는 티커가 있는지 확인
     for (const variant of variations) {
       if (availableTickers.includes(variant)) {
-        console.log(`${ticker} -> ${variant} (정확히 일치 - 변형: ${variant})`);
+        // console.log(`${ticker} -> ${variant} (정확히 일치 - 변형: ${variant})`);
         return variant;
       }
     }
@@ -382,7 +382,7 @@ export default function ETFCurrentTable() {
                 const csvStockName = firstRow['종목명'] as string;
                 
                 if (csvStockName && csvStockName.includes(prefix)) {
-                  console.log(`${ticker} -> ${availableTicker} (종목명 매칭: ${csvStockName})`);
+                  // console.log(`${ticker} -> ${availableTicker} (종목명 매칭: ${csvStockName})`);
                   return availableTicker;
                 }
               }
@@ -395,7 +395,7 @@ export default function ETFCurrentTable() {
     }
     
     // 매칭되는 티커가 없음
-    console.log(`${ticker} -> 매칭되는 티커 없음`);
+    // console.log(`${ticker} -> 매칭되는 티커 없음`);
     return null;
   };
   
@@ -410,7 +410,7 @@ export default function ETFCurrentTable() {
     const events = [];
     
     // 디버깅용 로그
-    console.log(`${ticker} 데이터 분석 시작 - 총 ${recentData.length}개 데이터`);
+    // console.log(`${ticker} 데이터 분석 시작 - 총 ${recentData.length}개 데이터`);
     
     // 각 날짜에 대해 20일 이동평균선 계산 및 돌파/이탈 확인
     // 최소 20일 데이터가 있어야 시작
@@ -437,7 +437,7 @@ export default function ETFCurrentTable() {
               type: 'cross_above' as const,
               index: i
             });
-            console.log(`${ticker} 20일선 상향 돌파 이벤트 감지: ${dateString}, 가격: ${currPrice}, MA20: ${ma20.toFixed(2)}`);
+            // console.log(`${ticker} 20일선 상향 돌파 이벤트 감지: ${dateString}, 가격: ${currPrice}, MA20: ${ma20.toFixed(2)}`);
           }
           // 가격이 20일선 위에서 아래로 이탈 (종가 기준)
           else if (prevPrice > prevMa20 && currPrice < ma20) {
@@ -446,7 +446,7 @@ export default function ETFCurrentTable() {
               type: 'cross_below' as const,
               index: i
             });
-            console.log(`${ticker} 20일선 하향 이탈 이벤트 감지: ${dateString}, 가격: ${currPrice}, MA20: ${ma20.toFixed(2)}`);
+            // console.log(`${ticker} 20일선 하향 이탈 이벤트 감지: ${dateString}, 가격: ${currPrice}, MA20: ${ma20.toFixed(2)}`);
           }
         }
         
@@ -459,14 +459,14 @@ export default function ETFCurrentTable() {
               type: 'cross_above' as const,
               index: i
             });
-            console.log(`${ticker} 초기 상태 - 20일선 위: ${dateString}, 가격: ${currPrice}, MA20: ${ma20.toFixed(2)}`);
+            // console.log(`${ticker} 초기 상태 - 20일선 위: ${dateString}, 가격: ${currPrice}, MA20: ${ma20.toFixed(2)}`);
           } else if (currPrice < ma20) {
             events.push({
               date: dateString,
               type: 'cross_below' as const,
               index: i
             });
-            console.log(`${ticker} 초기 상태 - 20일선 아래: ${dateString}, 가격: ${currPrice}, MA20: ${ma20.toFixed(2)}`);
+            // console.log(`${ticker} 초기 상태 - 20일선 아래: ${dateString}, 가격: ${currPrice}, MA20: ${ma20.toFixed(2)}`);
           }
         }
       } catch (error) {
@@ -482,17 +482,17 @@ export default function ETFCurrentTable() {
           const lastPrice = recentData[lastIndex].price;
           const lastMA20 = recentData.slice(lastIndex - 19, lastIndex + 1).reduce((acc, val) => acc + val.price, 0) / 20;
           
-          // 실제 마지막 데이터의 날짜 사용
+          // 실제 데이터의 날짜 사용
           const dateString = recentData[lastIndex].date;
           
           if (lastPrice > lastMA20) {
-            console.log(`${ticker} 기본 이벤트 생성 - 20일선 위: ${dateString}`);
+            // console.log(`${ticker} 기본 이벤트 생성 - 20일선 위: ${dateString}`);
             return {
               date: dateString,
               type: 'cross_above'
             };
           } else {
-            console.log(`${ticker} 기본 이벤트 생성 - 20일선 아래: ${dateString}`);
+            // console.log(`${ticker} 기본 이벤트 생성 - 20일선 아래: ${dateString}`);
             return {
               date: dateString,
               type: 'cross_below'
@@ -506,56 +506,47 @@ export default function ETFCurrentTable() {
     }
     
     // 모든 이벤트 로깅
-    if (events.length > 0) {
-      console.log(`${ticker} 감지된 모든 이벤트:`, events.map(e => `${e.date} (${e.type})`).join(', '));
+    // if (events.length > 0) {
+    //   console.log(`${ticker} 감지된 모든 이벤트:`, events.map(e => `${e.date} (${e.type})`).join(', '));
+    // }
+    
+    // 현재 상태에 따라 가장 최근의 유의미한 이벤트 반환
+    const lastIndex = recentData.length - 1;
+    const lastPrice = recentData[lastIndex].price;
+    const lastMA20 = recentData.slice(lastIndex - 19, lastIndex + 1).reduce((acc, val) => acc + val.price, 0) / 20;
+    const isAboveMA = lastPrice > lastMA20;
+    
+    if (isAboveMA) {
+      // 현재 20일선 위에 있으면, 가장 최근 돌파 이벤트 찾기
+      const lastCrossAbove = events.filter(e => e.type === 'cross_above')
+                                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      if (lastCrossAbove) {
+        // console.log(`${ticker} 현재 20일선 위 - 마지막 돌파 이벤트: ${lastCrossAbove.date}`);
+        return {
+          date: lastCrossAbove.date,
+          type: lastCrossAbove.type
+        };
+      }
+    } else {
+      // 현재 20일선 아래에 있으면, 가장 최근 이탈 이벤트 찾기
+      const lastCrossBelow = events.filter(e => e.type === 'cross_below')
+                                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      if (lastCrossBelow) {
+        // console.log(`${ticker} 현재 20일선 아래 - 마지막 이탈 이벤트: ${lastCrossBelow.date}`);
+        return {
+          date: lastCrossBelow.date,
+          type: lastCrossBelow.type
+        };
+      }
     }
     
-    // 가장 최근 상태 확인
-    try {
-      const lastIndex = recentData.length - 1;
-      const lastPrice = recentData[lastIndex].price;
-      const lastMA20 = recentData.slice(lastIndex - 19, lastIndex + 1).reduce((acc, val) => acc + val.price, 0) / 20;
-      const isAboveMA = lastPrice > lastMA20;
-      
-      // 디버깅용 로그
-      console.log(`${ticker} 최근 상태: ${isAboveMA ? '위' : '아래'} (가격: ${lastPrice}, MA20: ${lastMA20.toFixed(2)})`);
-      
-      // 현재 상태에 따라 가장 최근의 유의미한 이벤트 반환
-      if (isAboveMA) {
-        // 현재 20일선 위에 있으면, 가장 최근 돌파 이벤트 찾기
-        const lastCrossAbove = events.filter(e => e.type === 'cross_above')
-                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-        if (lastCrossAbove) {
-          console.log(`${ticker} 현재 20일선 위 - 마지막 돌파 이벤트: ${lastCrossAbove.date}`);
-          return {
-            date: lastCrossAbove.date,
-            type: lastCrossAbove.type
-          };
-        }
-      } else {
-        // 현재 20일선 아래에 있으면, 가장 최근 이탈 이벤트 찾기
-        const lastCrossBelow = events.filter(e => e.type === 'cross_below')
-                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-        if (lastCrossBelow) {
-          console.log(`${ticker} 현재 20일선 아래 - 마지막 이탈 이벤트: ${lastCrossBelow.date}`);
-          return {
-            date: lastCrossBelow.date,
-            type: lastCrossBelow.type
-          };
-        }
-      }
-      
-      // 현재 상태와 일치하는 이벤트가 없으면 가장 최근 이벤트 반환
-      const lastEvent = events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-      console.log(`${ticker} 현재 상태와 일치하는 이벤트 없음 - 마지막 이벤트: ${lastEvent.date} (${lastEvent.type})`);
-      return {
-        date: lastEvent.date,
-        type: lastEvent.type
-      };
-    } catch (error) {
-      console.error(`Error determining current state for ticker ${ticker}:`, error);
-      return null;
-    }
+    // 현재 상태와 일치하는 이벤트가 없으면 가장 최근 이벤트 반환
+    const lastEvent = events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    // console.log(`${ticker} 현재 상태와 일치하는 이벤트 없음 - 마지막 이벤트: ${lastEvent.date} (${lastEvent.type})`);
+    return {
+      date: lastEvent.date,
+      type: lastEvent.type
+    };
   };
 
   // 종목별 20일 이동평균선 위치 계산
@@ -654,7 +645,7 @@ export default function ETFCurrentTable() {
       try {
         // ETF 현재가 데이터 파일 경로 - 구글 드라이브 동기화 시스템과 일치
         const filePath = `${ETF_FILES.currentPrice.path}/${ETF_FILES.currentPrice.fileName}`;
-        console.log(`ETF 현재가 데이터 파일 경로: ${filePath}`);
+        // console.log(`ETF 현재가 데이터 파일 경로: ${filePath}`);
         
         // 로컬 캐시 파일 로드 - 직접 fetch 사용
         const response = await fetch(filePath);
@@ -664,11 +655,11 @@ export default function ETFCurrentTable() {
         }
         
         const csvText = await response.text();
-        console.log(`ETF 현재가 데이터 로드 완료: ${csvText.length}자`);
+        // console.log(`ETF 현재가 데이터 로드 완료: ${csvText.length}자`);
         
         // CSV 파싱 및 데이터 처리
         const parsedData = parseCSV(csvText);
-        console.log(`파싱 완료: ${Object.keys(parsedData.groupedData).length}개 그룹`);
+        // console.log(`파싱 완료: ${Object.keys(parsedData.groupedData).length}개 그룹`);
         
         setCsvData(parsedData);
         
@@ -682,11 +673,11 @@ export default function ETFCurrentTable() {
           });
         });
         
-        console.log(`총 ${tickers.length}개 티커 데이터 로드 시작`);
+        // console.log(`총 ${tickers.length}개 티커 데이터 로드 시작`);
         
         // 티커별 종가 데이터 로드
         const { priceData, tickerMap, stockNameMap } = await loadAllPriceData(tickers);
-        console.log(`${Object.keys(priceData).length}개 티커 데이터 로드 완료`);
+        // console.log(`${Object.keys(priceData).length}개 티커 데이터 로드 완료`);
         
         setStockPriceData(priceData);
         setTickerMappingInfo({ tickerMap, stockNameMap });
@@ -698,7 +689,7 @@ export default function ETFCurrentTable() {
           const stockListResult = Papa.parse(stockListText, { header: true });
           
           // ETF 티커별 대표종목 매핑 생성
-          const stockListMap: {[key: string]: string[]} = {};
+          const stockListMap: {[key: string]: Array<{name: string, rs: string}>} = {};
           stockListResult.data.forEach((row: any) => {
             if (row['티커']) {
               // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
@@ -709,11 +700,11 @@ export default function ETFCurrentTable() {
               ];
               
               const stockList = [
-                row['대표 구성 종목 1'] || '',
-                row['대표 구성 종목 2'] || '',
-                row['대표 구성 종목 3'] || '',
-                row['대표 구성 종목 4'] || ''
-              ].filter(item => item); // 빈 문자열 제거
+                {name: row['대표 구성 종목 1'] || '', rs: row['대표 구성 종목 1rs'] || ''},
+                {name: row['대표 구성 종목 2'] || '', rs: row['대표 구성 종목 2rs'] || ''},
+                {name: row['대표 구성 종목 3'] || '', rs: row['대표 구성 종목 3rs'] || ''},
+                {name: row['대표 구성 종목 4'] || '', rs: row['대표 구성 종목 4rs'] || ''}
+              ].filter(item => item.name); // 빈 문자열 제거
               
               // 모든 티커 변형에 대해 매핑 추가
               tickerVariations.forEach(variant => {
@@ -725,7 +716,7 @@ export default function ETFCurrentTable() {
           });
           
           setEtfStockList(stockListMap);
-          console.log('ETF 대표종목 데이터 로드 완료:', Object.keys(stockListMap).length);
+          // console.log('ETF 대표종목 데이터 로드 완료:', Object.keys(stockListMap).length);
         }
         
       } catch (err) {
@@ -892,7 +883,7 @@ export default function ETFCurrentTable() {
     const currentPrice = priceData[priceData.length - 1].price;
     const ma20 = priceData.slice(-20).reduce((acc, val) => acc + val.price, 0) / 20;
     
-    // 현재가와 20일 이동평균선 비교
+    // 현재 상태 (20일선 위 또는 아래)
     const isAboveMA = currentPrice > ma20;
     
     // 유지 기간 계산
@@ -994,11 +985,11 @@ export default function ETFCurrentTable() {
   Object.keys(sortedData).forEach(industry => {
     industryCounts[industry] = sortedData[industry].length;
   });
-  console.log("산업 그룹별 종목 수:", industryCounts);
+  // console.log("산업 그룹별 종목 수:", industryCounts);
 
   // 전체 종목 수 확인
   const totalETFs = Object.values(sortedData).reduce((acc: number, curr: any[]) => acc + curr.length, 0);
-  console.log("전체 ETF 종목 수:", totalETFs);
+  // console.log("전체 ETF 종목 수:", totalETFs);
 
   // 모든 티커 목록 확인
   const allTickers: string[] = [];
@@ -1009,8 +1000,8 @@ export default function ETFCurrentTable() {
       }
     });
   });
-  console.log("전체 티커 수:", allTickers.length);
-  console.log("티커 목록:", allTickers);
+  // console.log("전체 티커 수:", allTickers.length);
+  // console.log("티커 목록:", allTickers);
 
   return (
     <div className="bg-white rounded-md shadow">
@@ -1038,7 +1029,7 @@ export default function ETFCurrentTable() {
                 scope="col"
                 className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
-                  width: '120px',
+                  width: '60px',
                   height: '35px'
                 }}
                 onClick={() => handleSort('산업')}
@@ -1058,7 +1049,16 @@ export default function ETFCurrentTable() {
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
-                    width: header === '종목명' ? '180px' : header === '티커' ? '60px' : header === '등락율' ? '50px' : header === '52주 차트' ? '180px' : header === '20일선 기준가' ? '100px' : header === '돌파/이탈' ? '100px' : header === '포지션' ? '80px' : header === '대표종목' ? '200px' : '100px',
+                    width: header === '종목명' ? '150px' : 
+                           header === '티커' ? '35px' : 
+                           header === '등락율' ? '40px' : 
+                           header === '52주 차트' ? '180px' : 
+                           header === '20일선 기준가' ? '80px' : 
+                           header === '돌파/이탈' ? '80px' : 
+                           header === '포지션' ? '80px' : 
+                           header === '대표종목' ? '380px' : 
+                           header === '섹터' ? '60px' : 
+                           header === '산업' ? '60px' : '80px',
                     height: '35px'
                   }}
                   onClick={() => {
@@ -1114,7 +1114,7 @@ export default function ETFCurrentTable() {
                       <td
                         rowSpan={rowCount}
                         className="px-2 py-1 whitespace-nowrap text-xs border border-gray-200 align-middle"
-                        style={{ width: '120px' }}
+                        style={{ width: '60px' }}
                       >
                         <div className="flex flex-col items-start">
                           <span className="text-xs px-2 py-1 rounded-md bg-white text-gray-700 border border-gray-200 shadow-sm inline-block">
@@ -1128,7 +1128,7 @@ export default function ETFCurrentTable() {
                     )}
                     <td 
                       className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} 
-                      style={{ width: '150px', height: '16px' }}
+                      style={{ width: '60px', height: '16px' }}
                     >
                       {row['섹터']}
                     </td>
@@ -1145,7 +1145,7 @@ export default function ETFCurrentTable() {
                         <td
                           key={header}
                           className={`px-4 py-1 whitespace-nowrap text-xs ${colorClass} border border-gray-200 ${isChangeColumn || isTickerColumn ? 'text-center' : ''} ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`}
-                          style={{ width: header === '종목명' ? '180px' : header === '티커' ? '60px' : header === '등락율' ? '50px' : '100px', height: '16px' }}
+                          style={{ width: header === '종목명' ? '150px' : header === '티커' ? '35px' : header === '등락율' ? '40px' : '80px', height: '16px' }}
                         >
                           {isChangeColumn && numericValue! > 0 ? '+' : ''}
                           {isTickerColumn ? (value ? value.padStart(6, '0') : '') : value}
@@ -1206,7 +1206,7 @@ export default function ETFCurrentTable() {
                         }
                       })()}
                     </td>
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '100px', height: '16px' }}>
+                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '80px', height: '16px' }}>
                       {/* 20일선 위치 데이터 표시 */}
                       <div className="flex items-center justify-center h-full">
                         {(() => {
@@ -1234,7 +1234,7 @@ export default function ETFCurrentTable() {
                         })()}
                       </div>
                     </td>
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '100px', height: '16px' }}>
+                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '80px', height: '16px' }}>
                       {/* 돌파/이탈 데이터 표시 */}
                       <div className="flex items-center justify-center h-full">
                         {renderCrossover(row['티커'])}
@@ -1254,7 +1254,7 @@ export default function ETFCurrentTable() {
                           const currentPrice = priceData[priceData.length - 1].price;
                           const ma20 = priceData.slice(-20).reduce((acc, val) => acc + val.price, 0) / 20;
                           
-                          // 현재가와 20일 이동평균선 비교
+                          // 현재 상태 (20일선 위 또는 아래)
                           const isAboveMA = currentPrice > ma20;
                           
                           // 유지 기간 계산
@@ -1269,7 +1269,7 @@ export default function ETFCurrentTable() {
                         })()}
                       </div>
                     </td>
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '200px', height: '16px' }}>
+                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '380px', height: '16px' }}>
                       {(() => {
                         const ticker = row['티커'];
                         if (!ticker) return '-';
@@ -1292,12 +1292,25 @@ export default function ETFCurrentTable() {
                         
                         // 대표종목이 없으면 '-' 반환
                         if (!stockList || stockList.length === 0) {
-                          console.log(`티커 ${ticker}의 대표종목 정보 없음`);
+                          // console.log(`티커 ${ticker}의 대표종목 정보 없음`);
                           return '-';
                         }
                         
                         // 모든 대표종목 표시
-                        return stockList.join(', ');
+                        return (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {stockList.map((item, index) => (
+                              <div key={index} className="flex items-center">
+                                <span className="text-xs">{item.name}</span>
+                                {item.rs && (
+                                  <span className={`text-xs ml-1 px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded-md ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`}>
+                                    {item.rs}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
                       })()}
                     </td>
                   </tr>

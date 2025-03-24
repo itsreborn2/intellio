@@ -11,10 +11,14 @@ export default function FileSyncInitializer() {
     // 페이지 로드 시 파일 동기화 API 호출
     const syncFiles = async () => {
       try {
-        console.log('파일 동기화 시작...');
+        // 파일 동기화 API 호출 (로그 최소화)
         const response = await fetch('/api/file-sync');
         const data = await response.json();
-        console.log('파일 동기화 결과:', data);
+        
+        // 오류가 있는 경우에만 로그 출력
+        if (!response.ok || data.error) {
+          console.error('파일 동기화 오류:', data);
+        }
       } catch (error) {
         console.error('파일 동기화 중 오류 발생:', error);
       }
