@@ -10,7 +10,10 @@ import { DragDropContext,   DropResult } from '@hello-pangea/dnd'
 import {
   PenSquare,
   ScrollText,
-  BarChart2
+  BarChart2,
+  ChevronLeft,
+  ChevronRight,
+  Menu
 } from "lucide-react"
 import { Button } from "intellio-common/components/ui/button"
 
@@ -45,6 +48,29 @@ function SidebarContent({ className }: SidebarProps) {
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
   const { isAuthenticated } = useAuth();
+  
+  // 사이드바 접기/펼치기 상태 관리
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // 초기 상태 로드 (로컬 스토리지에서 사용자 선호도 가져오기)
+  useEffect(() => {
+    const savedState = localStorage.getItem('sidebarCollapsed');
+    if (savedState !== null) {
+      setIsCollapsed(savedState === 'true');
+    }
+  }, []);
+
+  // 상태 변경 시 로컬 스토리지에 저장
+  const toggleSidebar = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    localStorage.setItem('sidebarCollapsed', String(newState));
+    
+    // 사이드바 상태 변경 이벤트 발생 (레이아웃에서 감지하기 위함)
+    window.dispatchEvent(new CustomEvent('sidebarStateChanged', {
+      detail: { isCollapsed: newState }
+    }));
+  };
 
   useEffect(() => {
     const fetchRecentProjects = async () => {
@@ -135,39 +161,6 @@ function SidebarContent({ className }: SidebarProps) {
       window.removeEventListener('projectCreated', handleProjectCreated)
     }
   }, [dispatch])
-
-  // useEffect(() => {
-  //   const loadCategories = async () => {
-  //     try {
-  //       if (!isAuthenticated) {  
-  //         return;
-  //       }
-  //       console.debug('[Sidebar] 카테고리 목록 로드')
-  //       const data = await api.getCategories();
-  //       setCategories(data);
-  //     } catch (error) {
-  //       console.error('카테고리 로드 실패:', error);
-  //     }
-  //   };
-  //   loadCategories();
-  // }, []);
-  
-  // 카테고리 목록이 로드되면 모든 카테고리를 확장 상태로 설정
-  // useEffect(() => {
-  //   if (categories.length > 0) {
-  //     const categoryIds = categories.map(category => `category-${category.id}`);
-  //     setExpandedSections(prev => {
-  //       const newExpandedSections = [...prev];
-  //       categoryIds.forEach(id => {
-  //         if (!newExpandedSections.includes(id)) {
-  //           newExpandedSections.push(id);
-  //         }
-  //       });
-  //       return newExpandedSections;
-  //     });
-  //     console.log('모든 카테고리 폴더를 확장 상태로 설정:', categoryIds);
-  //   }
-  // }, [categories]);
 
   const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
@@ -306,14 +299,6 @@ function SidebarContent({ className }: SidebarProps) {
           time: new Date().toISOString()
         });
       }}
-      // onDragUpdate={(update) => {
-      //   console.log('Drag Update:', {
-      //     draggableId: update.draggableId,
-      //     source: update.source,
-      //     destination: update.destination,
-      //     time: new Date().toISOString()
-      //   });
-      // }}
       onDragEnd={(result) => {
         console.log('Drag End in Context:', {
           draggableId: result.draggableId,
@@ -324,98 +309,189 @@ function SidebarContent({ className }: SidebarProps) {
         handleDragEnd(result);
       }}
     >
-      <div className="w-[250px] border-r bg-gray-200 flex flex-col h-full">
-        <div className="p-4 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <ScrollText className="h-6 w-6 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">DocEasy</h2>
-          </div>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-8 w-8"
-                  onClick={async () => {
-                      setIsLoading(true);
-                    try {
-                      // 현재 프로젝트 상태 저장
-                      if (state.currentProjectId) {
-                        // await api.autosaveProject(state.currentProjectId, {
-                        //   title: state.projectTitle,
-                        //   documents: state.documents,
-                        //   messages: state.messages,
-                        //   analysis: state.analysis,
-                        //   currentView: state.currentView
-                        // });
-                      }
-
-                      // 앱 상태 초기화
-                      dispatch({ type: 'SET_INITIAL_STATE' });
-                      
-                    } catch (error) {
-                      console.error('Error saving current project:', error);
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                >
-                  <PenSquare className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>새로 만들기</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="p-2">
-            <div className="space-y-6 w-full">
-              <TemplateSection
-                expandedSections={expandedSections}
-                toggleSection={toggleSection}
-              />
-              <ProjectCategorySection
-                expandedSections={expandedSections}
-                toggleSection={toggleSection}
-                categories={categories}
-                setCategories={setCategories}
-                dispatch={dispatch}
-                onDragEnd={handleDragEnd}
-                categoryProjects={categoryProjects}
-                setCategoryProjects={setCategoryProjects}
-              />
+      <div className={`transition-all duration-300 ease-in-out border-r bg-gray-200 flex flex-col h-full ${isCollapsed ? 'w-[50px]' : 'w-[250px]'}`}>
+        {isCollapsed ? (
+          // 접힌 상태의 사이드바 UI
+          <div className="flex flex-col h-full">
+            <div className="p-3 flex items-center justify-center flex-shrink-0 border-b">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={toggleSidebar}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>사이드바 펼치기</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            
+            <div className="flex-1 flex flex-col items-center py-4 space-y-4">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={async () => {
+                        setIsLoading(true);
+                        try {
+                          if (state.currentProjectId) {
+                            // 기존 로직 유지
+                          }
+                          dispatch({ type: 'SET_INITIAL_STATE' });
+                        } catch (error) {
+                          console.error('Error saving current project:', error);
+                        } finally {
+                          setIsLoading(false);
+                        }
+                      }}
+                    >
+                      <PenSquare className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>새로 만들기</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => {
+                        const stockEasyUrl = process.env.NEXT_PUBLIC_STOCKEASY_URL || 'https://stockeasy.intellio.kr';
+                        window.open(stockEasyUrl, '_blank');
+                      }}
+                    >
+                      <BarChart2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>AI 주식정보 서비스</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
-        </div>
-        
-        {/* StockEasy 바로가기 버튼 */}
-        <div className="p-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  className="w-full flex items-center justify-start gap-2 px-2 py-2 hover:bg-gray-50"
-                  onClick={() => {
-                    // 환경 변수를 사용하여 StockEasy URL 설정
-                    const stockEasyUrl = process.env.NEXT_PUBLIC_STOCKEASY_URL || 'https://stockeasy.intellio.kr';
-                    window.open(stockEasyUrl, '_blank');
-                  }}
-                >
-                  <BarChart2 className="h-4 w-4" />
-                  <span className="text-left flex-grow font-medium">StockEasy</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>AI 주식정보 서비스</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+        ) : (
+          // 펼쳐진 상태의 사이드바 UI (기존 UI)
+          <>
+            <div className="p-4 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <ScrollText className="h-6 w-6 text-primary" />
+                <h2 className="text-lg font-semibold tracking-tight">DocEasy</h2>
+              </div>
+              <div className="flex items-center">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={async () => {
+                          setIsLoading(true);
+                          try {
+                            if (state.currentProjectId) {
+                              // 기존 로직 유지
+                            }
+                            dispatch({ type: 'SET_INITIAL_STATE' });
+                          } catch (error) {
+                            console.error('Error saving current project:', error);
+                          } finally {
+                            setIsLoading(false);
+                          }
+                        }}
+                      >
+                        <PenSquare className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>새로 만들기</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 ml-1"
+                        onClick={toggleSidebar}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>사이드바 접기</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="p-2">
+                <div className="space-y-6 w-full">
+                  <TemplateSection
+                    expandedSections={expandedSections}
+                    toggleSection={toggleSection}
+                  />
+                  <ProjectCategorySection
+                    expandedSections={expandedSections}
+                    toggleSection={toggleSection}
+                    categories={categories}
+                    setCategories={setCategories}
+                    dispatch={dispatch}
+                    onDragEnd={handleDragEnd}
+                    categoryProjects={categoryProjects}
+                    setCategoryProjects={setCategoryProjects}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* StockEasy 바로가기 버튼 */}
+            <div className="p-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      className="w-full flex items-center justify-start gap-2 px-2 py-2 hover:bg-gray-50"
+                      onClick={() => {
+                        // 환경 변수를 사용하여 StockEasy URL 설정
+                        const stockEasyUrl = process.env.NEXT_PUBLIC_STOCKEASY_URL || 'https://stockeasy.intellio.kr';
+                        window.open(stockEasyUrl, '_blank');
+                      }}
+                    >
+                      <BarChart2 className="h-4 w-4" />
+                      <span className="text-left flex-grow font-medium">StockEasy</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>AI 주식정보 서비스</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </>
+        )}
       </div>
     </DragDropContext>
   )
@@ -424,7 +500,7 @@ function SidebarContent({ className }: SidebarProps) {
 // 사이드바 컴포넌트
 export const Sidebar = ({ className }: SidebarProps) => {
   return (
-    <Suspense fallback={<div className="w-[250px] bg-background border-r"></div>}>
+    <Suspense fallback={<div className="w-[50px] bg-background border-r"></div>}>
       <SidebarContent className={className} />
     </Suspense>
   )

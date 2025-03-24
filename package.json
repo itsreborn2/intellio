@@ -73,6 +73,8 @@
     "react-sparklines": "^1.7.0",
     "react-toastify": "^11.0.3",
     "react-window": "^1.8.11",
+    "rehype-highlight": "^7.0.2",
+    "rehype-raw": "^7.0.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.0",
     "sonner": "^1.7.0",

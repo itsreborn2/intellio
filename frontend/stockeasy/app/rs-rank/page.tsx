@@ -12,63 +12,34 @@ import TableCopyButton from '../components/TableCopyButton';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
-  console.log('CSV 파싱 시작...');
-  console.log('CSV 원본 데이터 길이:', csvText.length);
-  console.log('CSV 원본 데이터 처음 부분:', csvText.substring(0, 500));
-  
-  try {
-    if (!csvText || typeof csvText !== 'string') {
-      console.error('유효하지 않은 CSV 텍스트:', csvText);
-      // 기본 데이터 반환
-      return {
-        headers: ['날짜', '시가', '고가', '저가', '종가', '거래량'],
-        rows: [],
-        errors: [],
-      };
-    }
-    
-    // Papa Parse 옵션
-    const results = Papa.parse(csvText, {
-      header: true,       // 첫 번째 행을 헤더로 사용
-      skipEmptyLines: true, // 빈 줄 건너뛰기
-      dynamicTyping: false,  // 문자열 그대로 유지 (수동 변환)
-    });
-    
-    console.log('파싱 결과 오류:', results.errors);
-    console.log('파싱된 데이터 행 수:', results.data.length);
-    
-    // 컬럼 이름 확인 및 데이터 구조 디버깅
-    if (results.data.length > 0) {
-      const firstRow = results.data[0] as Record<string, any>;
-      console.log('컬럼 확인:');
-      for (const key in firstRow) {
-        console.log(`- '${key}': ${firstRow[key]}`);
-      }
-      
-      // 첫 번째 행 전체 데이터 출력
-      console.log('첫 번째 행 전체 데이터:', JSON.stringify(firstRow));
-      
-      // 두 번째 행 데이터 (있는 경우)
-      if (results.data.length > 1) {
-        const secondRow = results.data[1] as Record<string, any>;
-        console.log('두 번째 행 전체 데이터:', JSON.stringify(secondRow));
-      }
-    }
-    
-    return {
-      headers: results.meta.fields || [],
-      rows: results.data || [],
-      errors: results.errors || [],
-    };
-  } catch (error) {
-    console.error('CSV 파싱 오류:', error);
-    // 오류 발생 시 빈 데이터 반환
+  // 중요 로그만 유지
+  if (!csvText || typeof csvText !== 'string') {
+    console.error('유효하지 않은 CSV 텍스트:', csvText);
+    // 기본 데이터 반환
     return {
       headers: ['날짜', '시가', '고가', '저가', '종가', '거래량'],
       rows: [],
       errors: [],
     };
   }
+  
+  // Papa Parse 옵션
+  const results = Papa.parse(csvText, {
+    header: true,       // 첫 번째 행을 헤더로 사용
+    skipEmptyLines: true, // 빈 줄 건너뛰기
+    dynamicTyping: false,  // 문자열 그대로 유지 (수동 변환)
+  });
+  
+  // 중요 오류 로그만 유지
+  if (results.errors && results.errors.length > 0) {
+    console.log('파싱 결과 오류:', results.errors);
+  }
+  
+  return {
+    headers: results.meta.fields || [],
+    rows: results.data || [],
+    errors: results.errors || [],
+  };
 };
 
 // 정렬 타입 정의
@@ -143,11 +114,9 @@ export default function RSRankPage() {
         }
         
         const csvText = await response.text();
-        console.log(`RS 순위 데이터 로드 완료: ${csvText.length}자`);
         
         // CSV 파싱 및 데이터 처리
         const parsedData = parseCSV(csvText);
-        console.log(`파싱 완료: ${parsedData.rows.length}개 데이터 로드됨`);
         
         setCsvData(parsedData);
         
@@ -167,15 +136,10 @@ export default function RSRankPage() {
       
       try {
         // 로컬 캐시 파일에서 직접 로드
-        console.log('서버 캐시 파일에서 52주 신고가 데이터 로드 중...');
-        
         try {
           // 로컬 캐시 파일 경로
           const cacheFilePath = '/stock-data/stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv';
           const rsDataFilePath = '/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
-          
-          console.log('캐시 파일 경로:', cacheFilePath);
-          console.log('RS 데이터 파일 경로:', rsDataFilePath);
           
           // 로컬 캐시 파일 로드
           const response = await fetch(cacheFilePath, { cache: 'no-store' });
@@ -185,8 +149,6 @@ export default function RSRankPage() {
           }
           
           const csvText = await response.text();
-          console.log(`52주 신고가 데이터 로드 완료: ${csvText.length}자`);
-          console.log('52주 신고가 데이터 샘플:', csvText.substring(0, 200));
           
           // RS 데이터 파일 로드
           const rsResponse = await fetch(rsDataFilePath, { cache: 'no-store' });
@@ -197,17 +159,10 @@ export default function RSRankPage() {
           }
           
           const rsCsvText = await rsResponse.text();
-          console.log(`RS 데이터 로드 완료: ${rsCsvText.length}자`);
-          console.log('RS 데이터 샘플:', rsCsvText.substring(0, 200));
           
           // CSV 파싱 및 데이터 처리
           const parsedData = parseCSV(csvText);
           const rsParsedData = parseCSV(rsCsvText);
-          
-          console.log(`파싱 완료: ${parsedData.rows.length}개 데이터 로드됨`);
-          console.log(`RS 데이터 파싱 완료: ${rsParsedData.rows.length}개 데이터 로드됨`);
-          console.log('파싱된 데이터 샘플:', JSON.stringify(parsedData.rows.slice(0, 2)));
-          console.log('파싱된 RS 데이터 샘플:', JSON.stringify(rsParsedData.rows.slice(0, 2)));
           
           // RS 데이터를 종목명으로 매핑하여 빠르게 검색할 수 있도록 Map 생성
           const rsDataMap = new Map();
@@ -228,19 +183,14 @@ export default function RSRankPage() {
             }
           });
           
-          console.log('RS 데이터 맵 크기:', rsDataMap.size);
-          console.log('RS 데이터 맵 샘플:', Array.from(rsDataMap.entries()).slice(0, 2));
-          
           // 데이터 변환 - 컬럼명 매핑 (종목명 -> stockName, RS -> rs)
           const transformedData = {
             headers: parsedData.headers,
             rows: parsedData.rows.map(row => {
               // 종목명으로 RS 데이터 매핑
               const stockName = row['종목명'];
-              console.log('처리 중인 종목명:', stockName);
               
               const rsData = rsDataMap.get(stockName) || { RS: '', 시가총액: '', 테마명: '' }; // 테마명 추가
-              console.log('매핑된 RS 데이터:', rsData);
               
               return {
                 stockName: stockName,
@@ -252,9 +202,6 @@ export default function RSRankPage() {
             }),
             errors: parsedData.errors
           };
-          
-          console.log('변환된 데이터 샘플:', JSON.stringify(transformedData.rows.slice(0, 2)));
-          console.log('변환된 데이터 행 수:', transformedData.rows.length);
           
           setHighData(transformedData);
         } catch (error) {
@@ -314,7 +261,6 @@ export default function RSRankPage() {
         
         // 상태 업데이트
         setStockPriceData(priceDataMap);
-        console.log(`종목 가격 데이터 로드 완료: ${Object.keys(priceDataMap).length}개 종목`);
         
       } catch (error) {
         console.error('종목 가격 데이터 로드 오류:', error);
@@ -329,8 +275,6 @@ export default function RSRankPage() {
   // 차트 데이터 로드 함수
   const loadAllChartData = async (rsData?: CSVData) => {
     try {
-      console.log('차트 데이터 로드 시작...');
-      
       // RS 랭크 데이터가 없으면 리턴
       if (!rsData || !rsData.rows || rsData.rows.length === 0) {
         console.log('RS 랭크 데이터가 없어 차트 데이터를 로드하지 않습니다.');
@@ -434,8 +378,6 @@ export default function RSRankPage() {
                 volume: parseFloat(row['거래량'] || 0),
               };
             });
-          
-          console.log(`KOSPI 지수 데이터 로드 완료: ${kospiIndexData.length}개 항목`);
         }
         
         // KOSDAQ 지수 데이터 로드
@@ -483,8 +425,6 @@ export default function RSRankPage() {
                 volume: parseFloat(row['거래량'] || 0),
               };
             });
-          
-          console.log(`KOSDAQ 지수 데이터 로드 완료: ${kosdaqIndexData.length}개 항목`);
         }
       } catch (error) {
         console.error('시장 지수 데이터 로드 오류:', error);
@@ -492,27 +432,18 @@ export default function RSRankPage() {
       
       // 실제 데이터 로드 (최대 20개)
       const loadLimit = Math.min(20, top20Stocks.length);
-      console.log(`로드할 차트 데이터 수: ${loadLimit}`);
       
       // 모든 차트 데이터를 로드하기 위한 Promise 배열 생성
       const loadPromises = [];
       
       // 각 차트 데이터 로드를 위한 Promise 생성
       for (let i = 0; i < loadLimit; i++) {
-        // 임시로 종목 정보 저장 (나중에 CSV에서 가져온 정보로 덮어씌워짐)
-        // newStockNames[i] = top20Stocks[i]['종목명'] || `종목 ${i+1}`;
-        // 종목코드로 차트 데이터 파일 경로 생성
-        const stockCode = top20Stocks[i]['종목코드'] || '';
-        console.log(`${i+1}번째 차트 데이터 요청 - 종목코드: ${stockCode}, 임시 종목명: ${newStockNames[i]}`);
-        
         // 순서에 맞는 차트 데이터 파일 경로 사용
         const cacheFilePath = chartFilePaths[i];
-        console.log(`차트 데이터 파일 경로: ${cacheFilePath}`);
         
         // 차트 데이터 로드 Promise 생성
         const loadPromise = (async (index) => {
           try {
-            console.log(`${index+1}번째 차트 데이터 파일 로드 시작: ${chartFilePaths[index]}`);
             const response = await fetch(chartFilePaths[index], { cache: 'no-store' });
             
             if (!response.ok) {
@@ -523,7 +454,6 @@ export default function RSRankPage() {
             }
             
             const csvText = await response.text();
-            console.log(`${index+1}번째 차트 데이터 CSV 응답 길이: ${csvText.length}`);
             
             if (csvText.length === 0) {
               throw new Error('CSV 응답이 비어 있습니다.');
@@ -536,15 +466,13 @@ export default function RSRankPage() {
               dynamicTyping: true,
             });
             
-            // 파싱 결과 확인
-            console.log(`${index+1}번째 차트 데이터 파싱 결과 - 행 수: ${parsedData.data.length}, 에러: ${parsedData.errors.length}`);
-            
             // 차트 데이터 형식으로 변환
             const chartData: CandleData[] = parsedData.data
               .filter((row: any) => {
                 const isValid = row && row['날짜'] && row['시가'] && row['고가'] && row['저가'] && row['종가'];
-                if (!isValid) {
-                  console.warn(`유효하지 않은 데이터 행:`, row);
+                if (!isValid && row) {
+                  // 중요 경고만 유지
+                  console.warn(`유효하지 않은 데이터 행 발견`);
                 }
                 return isValid;
               })
@@ -572,9 +500,6 @@ export default function RSRankPage() {
                 };
               });
             
-            // 데이터 유효성 검사 로그 추가
-            console.log(`${index+1}번째 차트 데이터 변환 결과 - ${chartData.length}개 항목`);
-            
             // 시장 구분 및 종목명 확인 - 타입 안전하게 처리
             if (parsedData.data.length > 0 && parsedData.data[0]) {
               const firstRow = parsedData.data[0] as Record<string, any>;
@@ -582,25 +507,17 @@ export default function RSRankPage() {
               // CSV 파일에서 종목명 가져오기
               if ('종목명' in firstRow) {
                 const stockName = String(firstRow['종목명']);
-                console.log(`${index+1}번째 차트 데이터의 종목명: ${stockName}`);
                 // 종목명 정보 업데이트
                 newStockNames[index] = stockName;
-              } else {
-                console.warn(`${index+1}번째 차트 데이터에 종목명 컬럼이 없습니다.`);
               }
               
               // CSV 파일에서 시장구분 가져오기
               if ('시장구분' in firstRow) {
                 // 시장 구분 정보를 대문자로 정규화하여 저장
                 const marketType = String(firstRow['시장구분']).toUpperCase();
-                console.log(`${index+1}번째 차트 데이터의 시장 구분: ${marketType} (원본: ${firstRow['시장구분']})`);
                 // 시장 구분 정보 업데이트
                 newMarketTypes[index] = marketType;
-              } else {
-                console.warn(`${index+1}번째 차트 데이터에 시장구분 컬럼이 없습니다.`);
               }
-            } else {
-              console.warn(`${index+1}번째 차트 데이터가 비어있습니다.`);
             }
             
             // 데이터 저장
@@ -625,16 +542,6 @@ export default function RSRankPage() {
         newChartLoadingArray[i] = false;
       }
       
-      // 시장 지수 데이터 추가
-      for (let i = 0; i < loadLimit; i++) {
-        // 시장 구분 정보는 변경하지 않고 로그만 출력
-        console.log(`${i+1}번째 차트(${newStockNames[i]})의 최종 시장 구분: ${newMarketTypes[i]}`);
-        
-        // 시장 구분에 따라 적절한 시장 지수 데이터 선택
-        const marketIndexData = newMarketTypes[i] === 'KOSPI' ? kospiIndexData : kosdaqIndexData;
-        console.log(`${i+1}번째 차트에 사용할 시장 지수 데이터: ${newMarketTypes[i]}, 데이터 수: ${marketIndexData.length}`);
-      }
-      
       // 상태 업데이트 (한 번에 모든 차트 데이터 업데이트)
       setChartDataArray(newChartDataArray);
       setChartStockNames(newStockNames);
@@ -646,9 +553,6 @@ export default function RSRankPage() {
       // 시장 지수 데이터 상태 업데이트
       setKospiIndexData(kospiIndexData);
       setKosdaqIndexData(kosdaqIndexData);
-      
-      console.log('모든 차트 데이터 로드 완료');
-      console.log('차트 데이터 배열 상태:', newChartDataArray.map(data => data.length));
       
     } catch (error) {
       console.error('차트 데이터 로드 오류:', error);

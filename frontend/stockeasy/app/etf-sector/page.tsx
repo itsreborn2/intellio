@@ -30,7 +30,7 @@ export default function ETFSectorPage() {
         <div className="mb-4 mt-8">
           <div className="flex mb-0">
             <button
-              className={`px-4 py-2 rounded-t-lg font-medium text-xs transition-all ${
+              className={`px-4 py-2 rounded-t-xl rounded-l-xl font-medium text-xs transition-all ${
                 activeTab === 'industry' 
                 ? 'bg-gray-300 text-gray-800 shadow-lg transform scale-105 -translate-y-0.5 z-10 relative' 
                 : 'bg-gray-200 text-gray-600 shadow-md hover:bg-gray-250'
@@ -40,7 +40,7 @@ export default function ETFSectorPage() {
               산업별 ETF 차트
             </button>
             <button
-              className={`px-4 py-2 rounded-t-lg font-medium text-xs transition-all ${
+              className={`px-4 py-2 rounded-t-xl rounded-r-xl font-medium text-xs transition-all ${
                 activeTab === 'leading' 
                 ? 'bg-gray-300 text-gray-800 shadow-lg transform scale-105 -translate-y-0.5 z-10 relative' 
                 : 'bg-gray-200 text-gray-600 shadow-md hover:bg-gray-250'
