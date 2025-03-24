@@ -104,7 +104,7 @@ export default function RSRankPage() {
       
       try {
         // 로컬 캐시 파일 경로
-        const cacheFilePath = '/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
+        const cacheFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
         
         // 로컬 캐시 파일 로드
         const response = await fetch(cacheFilePath, { cache: 'no-store' });
@@ -138,8 +138,8 @@ export default function RSRankPage() {
         // 로컬 캐시 파일에서 직접 로드
         try {
           // 로컬 캐시 파일 경로
-          const cacheFilePath = '/stock-data/stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv';
-          const rsDataFilePath = '/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
+          const cacheFilePath = '/requestfile/stock-data/stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv';
+          const rsDataFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
           
           // 로컬 캐시 파일 로드
           const response = await fetch(cacheFilePath, { cache: 'no-store' });
@@ -219,7 +219,7 @@ export default function RSRankPage() {
     const loadStockPriceData = async () => {
       try {
         // 종목 가격 데이터 파일 경로
-        const stockPriceDataPath = '/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+        const stockPriceDataPath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
         
         // 파일 로드
         const response = await fetch(stockPriceDataPath, { cache: 'no-store' });
@@ -302,31 +302,31 @@ export default function RSRankPage() {
       
       // 차트 데이터 파일 경로 배열 (순서대로 매핑)
       const chartFilePaths = [
-        '/chart-data/1.csv',
-        '/chart-data/2.csv',
-        '/chart-data/3.csv',
-        '/chart-data/4.csv',
-        '/chart-data/5.csv',
-        '/chart-data/6.csv',
-        '/chart-data/7.csv',
-        '/chart-data/8.csv',
-        '/chart-data/9.csv',
-        '/chart-data/10.csv',
-        '/chart-data/11.csv',
-        '/chart-data/12.csv',
-        '/chart-data/13.csv',
-        '/chart-data/14.csv',
-        '/chart-data/15.csv',
-        '/chart-data/16.csv',
-        '/chart-data/17.csv',
-        '/chart-data/18.csv',
-        '/chart-data/19.csv',
-        '/chart-data/20.csv'
+        '/requestfile/chart-data/1.csv',
+        '/requestfile/chart-data/2.csv',
+        '/requestfile/chart-data/3.csv',
+        '/requestfile/chart-data/4.csv',
+        '/requestfile/chart-data/5.csv',
+        '/requestfile/chart-data/6.csv',
+        '/requestfile/chart-data/7.csv',
+        '/requestfile/chart-data/8.csv',
+        '/requestfile/chart-data/9.csv',
+        '/requestfile/chart-data/10.csv',
+        '/requestfile/chart-data/11.csv',
+        '/requestfile/chart-data/12.csv',
+        '/requestfile/chart-data/13.csv',
+        '/requestfile/chart-data/14.csv',
+        '/requestfile/chart-data/15.csv',
+        '/requestfile/chart-data/16.csv',
+        '/requestfile/chart-data/17.csv',
+        '/requestfile/chart-data/18.csv',
+        '/requestfile/chart-data/19.csv',
+        '/requestfile/chart-data/20.csv'
       ];
       
       // 시장 지수 데이터 파일 경로
-      const kospiIndexPath = '/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv';
-      const kosdaqIndexPath = '/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
+      const kospiIndexPath = '/requestfile/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv';
+      const kosdaqIndexPath = '/requestfile/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
       
       // 시장 지수 데이터 로드
       let kospiIndexData: CandleData[] = [];
@@ -1034,8 +1034,8 @@ export default function RSRankPage() {
   const loadMarketIndexData = async () => {
     try {
       // 시장 지수 데이터 로드 (코스피, 코스닥)
-      const kospiIndexPath = '/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv';
-      const kosdaqIndexPath = '/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
+      const kospiIndexPath = '/requestfile/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv';
+      const kosdaqIndexPath = '/requestfile/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
       
       // 시장 지수 데이터 로드
       let kospiIndexData: CandleData[] = [];

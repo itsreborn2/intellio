@@ -116,7 +116,7 @@ function AIChatAreaContent() {
         setError(null); // 요청 시작 시 오류 상태 초기화
         
         // 서버 캐시 CSV 파일 경로
-        const csvFilePath = '/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+        const csvFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
         
         // 서버 캐시 파일 가져오기 (항상 최신 데이터 사용)
         const response = await fetch(csvFilePath, { cache: 'no-store' });

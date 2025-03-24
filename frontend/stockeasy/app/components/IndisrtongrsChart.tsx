@@ -99,7 +99,7 @@ export default function IndustryCharts() {
       setSelectedStockCodes([]);
       
       // 20malist.csv 파일 로드
-      const response = await fetch('/20ma_list/20malist.csv');
+      const response = await fetch('/requestfile/20ma_list/20malist.csv');
       const csvText = await response.text();
       
       // CSV 파싱
@@ -200,7 +200,7 @@ export default function IndustryCharts() {
       try {
         // 폴더 내의 CSV 파일들을 직접 읽는 방식으로 변경
         // 파일 이름 패턴: 000250_삼천당제약.csv (종목코드_종목명.csv)
-        const folderPath = '/etf_indiestocklist';
+        const folderPath = '/requestfile/etf_indiestocklist';
         
         // 폴더 내 모든 CSV 파일 목록 가져오기 시도
         const files = await listDirectoryFiles(folderPath);
@@ -267,10 +267,10 @@ export default function IndustryCharts() {
         while (true) {
           try {
             // 파일이 존재하는지 확인하기 위해 HEAD 요청 시도
-            const testResponse = await fetch(`/etf_indiestocklist/file_${index}.csv`, { method: 'HEAD' });
+            const testResponse = await fetch(`/requestfile/etf_indiestocklist/file_${index}.csv`, { method: 'HEAD' });
             if (testResponse.ok) {
               // 파일이 존재하면 목록에 추가
-              const response = await fetch(`/etf_indiestocklist/file_${index}.csv`);
+              const response = await fetch(`/requestfile/etf_indiestocklist/file_${index}.csv`);
               const text = await response.text();
               const firstLine = text.split('\n')[0];
               if (firstLine) {
@@ -479,7 +479,7 @@ export default function IndustryCharts() {
       
       // 각 종목별로 차트 데이터 로드
       for (const stock of topStocks) {
-        const csvFilePath = `/etf_indiestocklist/${stock.code}_${stock.name}.csv`;
+        const csvFilePath = `/requestfile/etf_indiestocklist/${stock.code}_${stock.name}.csv`;
         console.log(`종목 ${stock.name}에 대한 파일 경로: ${csvFilePath}`);
         
         try {
@@ -532,7 +532,7 @@ export default function IndustryCharts() {
       }
       
       // ETF 차트 데이터 로드
-      const etfCsvFilePath = `/rs_etf/${code}.csv`;
+      const etfCsvFilePath = `/requestfile/rs_etf/${code}.csv`;
       let etfChartData: CandleData[] = [];
       
       try {
@@ -610,7 +610,7 @@ export default function IndustryCharts() {
     await Promise.all(
       tickers.map(async (ticker) => {
         try {
-          const response = await fetch(`/rs_etf/${ticker}.csv`);
+          const response = await fetch(`/requestfile/rs_etf/${ticker}.csv`);
           if (response.ok) {
             const csvText = await response.text();
             const result = Papa.parse(csvText, { header: true });
