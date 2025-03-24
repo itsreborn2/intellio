@@ -96,7 +96,7 @@ let lastRunTime = 0;
 
 /**
  * 캐시 레지스트리를 로드합니다.
- * 파일이 없으면 빈 객체를 반환합니다.
+ * 파일이 없으면 빈 객체를 반환.
  */
 function loadCacheRegistry(): CacheRegistry {
   try {
@@ -243,7 +243,7 @@ function updateCacheInfo(fileId: string, filePath: string): void {
  * 파일이 없으면 자동으로 다운로드합니다.
  * @returns 파일 경로
  */
-export async function getETFCurrentPricesPath(): Promise<string> {
+async function getETFCurrentPricesPath(): Promise<string> {
   const publicDir = path.join(process.cwd(), 'public');
   const targetDir = path.join(publicDir, 'today_price_etf');
   const filePath = path.join(targetDir, 'today_price_etf.csv');
@@ -264,7 +264,7 @@ export async function getETFCurrentPricesPath(): Promise<string> {
  * 파일이 없으면 자동으로 다운로드합니다.
  * @returns 파일 경로
  */
-export async function getETFHighPricesPath(): Promise<string> {
+async function getETFHighPricesPath(): Promise<string> {
   const publicDir = path.join(process.cwd(), 'public');
   const targetDir = path.join(publicDir, 'etf_stocklist');
   const filePath = path.join(targetDir, 'etf_stocklist.csv');
@@ -283,7 +283,7 @@ export async function getETFHighPricesPath(): Promise<string> {
 /**
  * 모든 ETF 관련 파일을 동기화합니다.
  */
-export async function syncAllETFFiles(): Promise<void> {
+async function syncAllETFFiles(): Promise<void> {
   // ETF 관련 파일만 필터링
   const etfFiles = FILES_TO_SYNC.filter(f => 
     f.updateSchedule === 'etf_stocks' || 
