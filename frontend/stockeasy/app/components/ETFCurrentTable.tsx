@@ -44,10 +44,10 @@ const ETF_FILES = {
   currentPrice: {
     fileId: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA',
     fileName: 'today_price_etf.csv',
-    path: '/today_price_etf'
+    path: '/requestfile/today_price_etf'
   },
   stockList: {
-    path: '/etf_stocklist/etf_stocklist.csv'
+    path: '/requestfile/etf_stocklist/requestfile/etf_stocklist.csv'
   }
 };
 
@@ -204,7 +204,7 @@ export default function ETFCurrentTable() {
       console.log(`${ticker} 종가 데이터 로드 시작`);
       
       // CSV 파일 로드
-      const response = await fetch(`/rs_etf/${ticker}.csv`);
+      const response = await fetch(`/requestfile/rs_etf/${ticker}.csv`);
       if (!response.ok) {
         console.error(`${ticker} CSV 파일을 불러오는데 실패했습니다: ${response.status}`);
         return [];
@@ -372,7 +372,7 @@ export default function ETFCurrentTable() {
         for (const availableTicker of availableTickers) {
           // 해당 티커의 CSV 파일을 로드하여 종목명 확인
           try {
-            const response = await fetch(`/rs_etf/${availableTicker}.csv`);
+            const response = await fetch(`/requestfile/rs_etf/${availableTicker}.csv`);
             if (response.ok) {
               const csvText = await response.text();
               const result = Papa.parse(csvText, { header: true });
