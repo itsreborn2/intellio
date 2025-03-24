@@ -1,6 +1,5 @@
 import './globals.css';
 import Script from 'next/script';
-import FileSyncInitializer from './components/FileSyncInitializer';
 
 export default function RootLayout({
   children,
@@ -26,7 +25,6 @@ export default function RootLayout({
       </head>
       <body>
         <div className="flex flex-col min-h-screen">
-          <FileSyncInitializer />
           <div className="flex-grow">
             {children}
           </div>

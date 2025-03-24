@@ -199,7 +199,7 @@ export default function IndustryCharts() {
       
       try {
         // 폴더 내의 CSV 파일들을 직접 읽는 방식으로 변경
-        // 파일 이름 패턴: 000250_삼천당제약.csv (종목코드_종목명.csv)
+        // 파일 이름 패턴: 036930_주성엔지니어링_91.csv (종목코드_종목명_RS값.csv)
         const folderPath = '/requestfile/etf_indiestocklist';
         
         // 폴더 내 모든 CSV 파일 목록 가져오기 시도
@@ -208,50 +208,24 @@ export default function IndustryCharts() {
         
         // 각 파일에서 종목코드, 종목명, RS 값 추출
         for (const fileName of files) {
-          // 파일명에서 종목코드와 종목명 추출 (RS 값은 파일 내용에서 가져올 예정)
-          const match = fileName.match(/(\d+)_(.+)\.csv/);
+          console.log(`처리 중인 파일: ${fileName}`);
+          
+          // 정규식 패턴 수정: 종목코드_종목명_RS값.csv 형식에 맞게 조정
+          const match = fileName.match(/^(\d+)_(.+)_(\d+)\.csv$/);
+          
           if (match) {
-            const [_, code, name] = match;
+            const [_, code, name, rsValueStr] = match;
+            const rsValue = parseInt(rsValueStr);
             
-            try {
-              // 파일 내용 읽기
-              const response = await fetch(`${folderPath}/${fileName}`);
-              const csvText = await response.text();
-              
-              // 첫 두 줄만 추출 (헤더와 첫 번째 데이터 행)
-              const lines = csvText.split('\n').slice(0, 2);
-              if (lines.length < 2) {
-                console.warn(`${fileName} 파일에 충분한 데이터가 없습니다.`);
-                continue;
-              }
-              
-              // 헤더 행과 데이터 행 분리
-              const headerLine = lines[0];
-              const dataLine = lines[1];
-              
-              // 헤더에서 RS 컬럼의 인덱스 찾기
-              const headers = headerLine.split(',');
-              const rsIndex = headers.findIndex(h => h.trim() === 'RS');
-              
-              if (rsIndex === -1) {
-                console.warn(`${fileName} 파일에 RS 컬럼이 없습니다.`);
-                continue;
-              }
-              
-              // 데이터 행에서 RS 값 추출
-              const values = dataLine.split(',');
-              const rsValue = values[rsIndex] ? parseInt(values[rsIndex].trim()) : 0;
-              
-              stocksData.push({
-                code,
-                name, // 원래 이름 그대로 사용
-                rsValue: rsValue
-              });
-              
-              console.log(`종목 ${name}(${code})의 RS 값을 파일 내용에서 추출: ${rsValue}`);
-            } catch (error) {
-              console.error(`${fileName} 파일 읽기 오류:`, error);
-            }
+            stocksData.push({
+              code,
+              name,
+              rsValue
+            });
+            
+            console.log(`종목 ${name}(${code})의 RS 값을 파일 이름에서 추출: ${rsValue}`);
+          } else {
+            console.warn(`파일 이름 형식이 일치하지 않습니다: ${fileName}`);
           }
         }
       } catch (error) {
@@ -316,10 +290,16 @@ export default function IndustryCharts() {
     try {
       // file_list.json 파일에서 파일 목록 가져오기
       const response = await fetch(`${folderPath}/file_list.json`);
+      
+      if (!response.ok) {
+        throw new Error(`파일 목록을 가져오는데 실패했습니다: ${response.status} ${response.statusText}`);
+      }
+      
       const fileList = await response.json();
       
       console.log('file_list.json에서 가져온 파일 목록:', fileList.files);
       
+      // file_list.json에 있는 파일 목록 반환 (files 배열)
       return fileList.files || [];
     } catch (error) {
       console.error('파일 목록을 가져오는데 실패했습니다:', error);
@@ -479,7 +459,8 @@ export default function IndustryCharts() {
       
       // 각 종목별로 차트 데이터 로드
       for (const stock of topStocks) {
-        const csvFilePath = `/requestfile/etf_indiestocklist/${stock.code}_${stock.name}.csv`;
+        // 파일 경로 수정: 종목코드_종목명_RS값.csv 형식에 맞게 변경
+        const csvFilePath = `/requestfile/etf_indiestocklist/${stock.code}_${stock.name}_${stock.rsValue}.csv`;
         console.log(`종목 ${stock.name}에 대한 파일 경로: ${csvFilePath}`);
         
         try {
@@ -574,7 +555,8 @@ export default function IndustryCharts() {
           isLoading: false,
           error: '',
           changePercent,
-          selectedStocks: loadedStocksData, // 로드된 종목 정보 저장 (차트 데이터 포함)
+          etfChangePercent: `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`,
+          selectedStocks: loadedStocksData, // 로드된 주식 데이터 설정
           selectedStock: loadedStocksData.length > 0 ? { // 첫 번째 종목 정보 저장 (호환성 유지)
             code: loadedStocksData[0].code,
             name: loadedStocksData[0].name,

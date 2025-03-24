@@ -47,7 +47,7 @@ const ETF_FILES = {
     path: '/requestfile/today_price_etf'
   },
   stockList: {
-    path: '/requestfile/etf_stocklist/requestfile/etf_stocklist.csv'
+    path: '/requestfile/etf_stocklist/etf_stocklist.csv'
   }
 };
 
@@ -1016,6 +1016,7 @@ export default function ETFCurrentTable() {
             headerRef={headerRef}
             tableName="ETF 현재가 테이블"
             buttonText="이미지 복사"
+            data-component-name="ETFCurrentTable"
           />
         </div>
       </div>
@@ -1303,7 +1304,7 @@ export default function ETFCurrentTable() {
                               <div key={index} className="flex items-center">
                                 <span className="text-xs">{item.name}</span>
                                 {item.rs && (
-                                  <span className={`text-xs ml-1 px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded-md ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`}>
+                                  <span className={`text-xs ml-1 px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-lg ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable">
                                     {item.rs}
                                   </span>
                                 )}
