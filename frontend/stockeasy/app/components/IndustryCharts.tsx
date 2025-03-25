@@ -122,7 +122,7 @@ export default function IndustryCharts() {
         return newList;
       });
 
-      const csvFilePath = `/rs_etf/${code}.csv`;
+      const csvFilePath = `/requestfile/rs_etf/${code}.csv`;
       const response = await fetch(csvFilePath);
       
       if (!response.ok) {
@@ -179,7 +179,7 @@ export default function IndustryCharts() {
     await Promise.all(
       tickers.map(async (ticker) => {
         try {
-          const response = await fetch(`/rs_etf/${ticker}.csv`);
+          const response = await fetch(`/requestfile/rs_etf/${ticker}.csv`);
           if (response.ok) {
             const csvText = await response.text();
             const result = Papa.parse(csvText, { header: true });

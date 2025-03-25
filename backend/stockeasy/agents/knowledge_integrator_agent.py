@@ -7,7 +7,7 @@
 
 import json
 from loguru import logger
-from typing import Dict, List, Any, Optional, cast
+from typing import Dict, List, Any, Optional, cast, Union
 from datetime import datetime
 
 from langchain_core.messages import HumanMessage
@@ -55,10 +55,6 @@ class KnowledgeIntegratorAgent:
         #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
         self.llm, self.model_name, self.provider = get_llm_for_agent("knowledge_integrator_agent")
         self.parser = JsonOutputParser(pydantic_object=KnowledgeIntegratorOutput)
-        #self.chain = self.llm.with_structured_output(KnowledgeIntegratorOutput,method="function_calling")
-        # execution_plan = await self.llm.with_structured_output(ExecutionPlanModel,method="function_calling").ainvoke(
-        #         [HumanMessage(content=prompt)]
-        #     )
         logger.info(f"KnowledgeIntegratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -118,7 +114,16 @@ class KnowledgeIntegratorAgent:
             if "industry_analyzer" in agent_results:
                 industry_agent = agent_results["industry_analyzer"]
                 if industry_agent.get("status") == "success" and industry_agent.get("data"):
-                    industry_results = self._format_industry_results(industry_agent["data"])
+                    #logger.info(f"산업 분석 결과: {industry_agent['data']}")
+                    analysis = industry_agent["data"].get("analysis", {})
+                    if analysis:
+                        if isinstance(analysis, dict):
+                            content = analysis.get("llm_response", "")
+                            industry_results = content if content else "산업 분석 결과 없음"
+                        else:
+                            industry_results = self._format_industry_results(analysis)
+                    else:
+                        industry_results = self._format_industry_results(industry_agent["data"])
             
             # 데이터 중요도 설정 (기본값: 5/10)
             data_importance = state.get("data_importance", {})
@@ -271,19 +276,28 @@ class KnowledgeIntegratorAgent:
             state["integrated_response"] = "죄송합니다. 정보를 통합하는 중 오류가 발생했습니다."
             return state
             
-    def _format_telegram_results(self, telegram_data: List[RetrievedTelegramMessage]) -> str:
+    def _format_telegram_results(self, telegram_data: Dict[str, Any]) -> str:
         """텔레그램 결과를 문자열로 포맷팅"""
         if not telegram_data:
-            return "텔레그램 검색 결과 없음"
-            
-        formatted = "텔레그램 검색 결과:\n"
-        for i, msg in enumerate(telegram_data):
-            # 채널명 삭제.
-            #formatted += f"[{i+1}] 출처: {msg.get('channel_name', '알 수 없음')}\n"
-            formatted += f"내용: {msg.get('content', '내용 없음')}\n"
-            if msg.get('message_created_at'):
-                formatted += f"작성일: {msg.get('message_created_at')}\n"
-            formatted += "---\n"
+            return "내부DB 검색 결과 없음"
+        
+        summary = telegram_data.get("summary", "")
+        messages: List[RetrievedTelegramMessage] = telegram_data.get("messages", [])
+        
+        # "summary": summary,
+        # "messages": messages
+        formatted = ""
+        if summary:
+            formatted += f"내부DB 검색 결과 요약:\n{summary}\n"
+        if messages:
+            formatted += "내부DB 검색 결과 상세:\n"
+            for i, msg in enumerate(messages):
+                # 채널명 삭제.
+                #formatted += f"[{i+1}] 출처: {msg.get('channel_name', '알 수 없음')}\n"
+                formatted += f"내용: {msg.get('content', '내용 없음')}\n"
+                if msg.get('message_created_at'):
+                    formatted += f"작성일: {msg.get('message_created_at')}\n"
+                formatted += "---\n"
             
         return formatted
     
@@ -374,39 +388,37 @@ class KnowledgeIntegratorAgent:
             
         return formatted
     
-    def _format_industry_results(self, industry_data: List[Dict[str, Any]]) -> str:
+    def _format_industry_results(self, industry_data: Union[List[Dict[str, Any]], Dict[str, Any], str]) -> str:
         """산업 분석 결과를 문자열로 포맷팅"""
-        if not industry_data or len(industry_data) == 0:
+        # 문자열인 경우 그대로 반환
+        if isinstance(industry_data, str):
+            return industry_data
+            
+        # 데이터가 없는 경우
+        if not industry_data:
             return "산업 분석 결과 없음"
-        
-        raw_data = industry_data.get("raw_data", [])
-        formatted = "산업 분석 결과:\n"
-        for i, data in enumerate(raw_data):
-            formatted += f"[{i+1}] 산업: {data.get('title', '산업 정보 없음')}\n"
-            formatted += f"날짜: {data.get('date', '기간 정보 없음')}\n"
-            formatted += f"내용: {data.get('content', '내용 없음')}\n"
-            # 트렌드 정보
-            trends = data.get('key_trends', {})
-            if trends:
-                formatted += "트렌드:\n"
-                # 리스트인 경우와 딕셔너리인 경우 모두 처리
-                if isinstance(trends, list):
-                    for trend in trends:
-                        formatted += f"- {trend}\n"
-                elif isinstance(trends, dict):
-                    for key, value in trends.items():
-                        formatted += f"- {key}: {value}\n"
             
-            # 경쟁사 정보
-            competitors = data.get('competitors', [])
-            if competitors:
-                formatted += "주요 경쟁사:\n"
-                for comp in competitors[:3]:  # 상위 3개만
-                    formatted += f"- {comp.get('name', '이름 없음')}: {comp.get('info', '')}\n"
-                    
-            formatted += "---\n"
+        # 딕셔너리인 경우
+        if isinstance(industry_data, dict):
+            analysis = industry_data.get("analysis", {})
+            content = analysis.get("llm_response", "")
+            return content
             
-        return formatted
+        # 리스트인 경우 첫 번째 항목 처리
+        if isinstance(industry_data, list) and len(industry_data) > 0:
+            first_item = industry_data[0]
+            if isinstance(first_item, dict):
+                analysis = first_item.get("analysis", {})
+                if isinstance(analysis, dict):
+                    content = analysis.get("llm_response", "")
+                    if content:
+                        return content
+                        
+        # 다른 형식의 경우 기본 문자열 변환 시도
+        try:
+            return str(industry_data)
+        except:
+            return "산업 분석 결과 포맷팅 오류"
     
     def _extract_sources(self, agent_results: Dict[str, Any], agent_name: str) -> List[str]:
         """에이전트 결과에서 소스 목록 추출"""

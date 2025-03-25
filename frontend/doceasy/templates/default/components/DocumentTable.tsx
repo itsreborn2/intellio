@@ -327,11 +327,6 @@ function MarkdownCell({ content }: { content: string }) {
           </span>
         </div>
       </div>
-      {needsScroll && (
-        <div className="text-right mt-1 mr-0">
-          <span className="text-[9px] text-gray-400 italic">↓</span>
-        </div>
-      )}
     </div>
   );
   
@@ -620,56 +615,6 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           }
         };
       }
-    }
-    
-    // 칼럼이 5개를 초과하면 테이블에 가로 스크롤 적용
-    const hasHorizontalScroll = baseColumns.length > 5; // 체크박스 컬럼까지 포함해서 총 6개 이상
-    console.debug(`[DocumentTable] 총 컬럼 수: ${baseColumns.length}, 가로 스크롤: ${hasHorizontalScroll}`);
-    
-    // Document 컬럼을 고정 설정
-    if (hasHorizontalScroll && baseColumns.length > 0) {
-      // Document 컬럼 스티키 설정
-      baseColumns[0] = {
-        ...baseColumns[0],
-        muiTableHeadCellProps: {
-          align: 'left',
-          sx: {
-            position: 'sticky',
-            left: '30px', // 체크박스 컬럼 너비
-            zIndex: 2,
-            backgroundColor: 'rgb(219, 227, 228)',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              right: 0,
-              top: 0,
-              bottom: 0,
-              width: '1px',
-              backgroundColor: '#ccc',
-              boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
-            },
-          }
-        },
-        muiTableBodyCellProps: {
-          align: 'left',
-          sx: {
-            position: 'sticky',
-            left: '30px', // 체크박스 컬럼 너비
-            zIndex: 1,
-            backgroundColor: 'white',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              right: 0,
-              top: 0,
-              bottom: 0,
-              width: '1px',
-              backgroundColor: '#ccc',
-              boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
-            },
-          }
-        }
-      };
     }
     
     // 칼럼이 5개를 초과하면 테이블에 가로 스크롤 적용

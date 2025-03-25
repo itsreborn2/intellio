@@ -7,11 +7,8 @@
 import os
 from typing import Dict, Any, List, Literal, Union, Optional, TypedDict, Tuple, Set, cast
 from common.core.config import settings
-from langchain_core.runnables import ConfigurableField
-import langgraph.graph as lg
 from langgraph.graph import END, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
-from langchain_core.messages import BaseMessage, HumanMessage
 from datetime import datetime
 from loguru import logger
 
@@ -19,10 +16,9 @@ from loguru import logger
 from stockeasy.models.agent_io import AgentState
 from stockeasy.agents.base import BaseAgent
 from stockeasy.agents.session_manager import SessionManagerAgent
-from common.services.user import UserService
-from common.schemas.user import SessionBase
+from stockeasy.agents.parallel_search_agent import ParallelSearchAgent
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from langchain.callbacks.tracers import LangChainTracer
 
 def should_use_telegram(state: AgentState) -> bool:
     """텔레그램 검색 에이전트를 사용해야 하는지 결정합니다."""
@@ -163,6 +159,14 @@ class StockAnalysisGraph:
         if "session_manager" not in self.agents and db:
             self.agents["session_manager"] = SessionManagerAgent(db)
         
+        # 병렬 검색 에이전트 생성
+        parallel_search_agent = ParallelSearchAgent({
+            "telegram_retriever": self.agents.get("telegram_retriever"),
+            "report_analyzer": self.agents.get("report_analyzer"),
+            "financial_analyzer": self.agents.get("financial_analyzer"),
+            "industry_analyzer": self.agents.get("industry_analyzer")
+        })
+        
         # 그래프 초기화
         workflow = StateGraph(AgentState)
         
@@ -174,44 +178,32 @@ class StockAnalysisGraph:
             else:
                 workflow.add_node(node_name, {})  # 빈 노드
         
-        # 새로운 흐름 정의: 질문분류기 -> 오케스트레이터 -> 동적 워크플로우
+        # 병렬 검색 노드 추가
+        workflow.add_node("parallel_search", parallel_search_agent.process)
+        
+        # 새로운 흐름 정의: 질문분류기 -> 오케스트레이터 -> 병렬 검색 -> 지식 통합
         workflow.add_edge("session_manager", "question_analyzer")
         workflow.add_edge("question_analyzer", "orchestrator")
         
-        # 오케스트레이터 이후의 흐름은 동적으로 결정
+        # 오케스트레이터 -> 병렬 검색 또는 fallback_manager
         workflow.add_conditional_edges(
             "orchestrator",
-            self._determine_next_agent,
+            lambda state: "fallback_manager" if state.get("errors") and len(state.get("errors", [])) > 2 else "parallel_search",
             {
-                "telegram_retriever": "telegram_retriever",
-                "report_analyzer": "report_analyzer",
-                "financial_analyzer": "financial_analyzer",
-                "industry_analyzer": "industry_analyzer",
-                "knowledge_integrator": "knowledge_integrator",
-                "summarizer": "summarizer",
-                "response_formatter": "response_formatter",
-                "fallback_manager": "fallback_manager",
-                END: END
+                "parallel_search": "parallel_search",
+                "fallback_manager": "fallback_manager"
             }
         )
         
-        # 각 검색 에이전트 이후의 다음 에이전트 결정
-        for agent_name in ["telegram_retriever", "report_analyzer", "financial_analyzer", "industry_analyzer"]:
-            workflow.add_conditional_edges(
-                agent_name,
-                self._determine_next_agent,
-                {
-                    "telegram_retriever": "telegram_retriever",
-                    "report_analyzer": "report_analyzer",
-                    "financial_analyzer": "financial_analyzer",
-                    "industry_analyzer": "industry_analyzer",
-                    "knowledge_integrator": "knowledge_integrator",
-                    "summarizer": "summarizer",
-                    "response_formatter": "response_formatter",
-                    "fallback_manager": "fallback_manager",
-                    END: END
-                }
-            )
+        # 병렬 검색 -> knowledge_integrator 또는 fallback_manager
+        workflow.add_conditional_edges(
+            "parallel_search",
+            lambda state: "fallback_manager" if not state.get("retrieved_data") else "knowledge_integrator",
+            {
+                "knowledge_integrator": "knowledge_integrator",
+                "fallback_manager": "fallback_manager"
+            }
+        )
         
         # 통합 및 요약 에이전트 이후의 흐름
         workflow.add_conditional_edges(
@@ -275,17 +267,16 @@ class StockAnalysisGraph:
             if status in ["completed", "completed_with_default_plan", "completed_no_data"]
         ]
         
-        # 아직 실행되지 않은 에이전트 찾기
-        next_agents = [
-            agent for agent in execution_order 
-            if agent not in executed_agents and agent in self.agents
-        ]
+        # 다음 단계 결정
+        if "knowledge_integrator" in executed_agents:
+            if "summarizer" in execution_order and "summarizer" not in executed_agents:
+                return "summarizer"
+            else:
+                return "response_formatter"
+        elif "summarizer" in executed_agents:
+            return "response_formatter"
         
-        # 다음 실행할 에이전트가 있으면 반환
-        if next_agents:
-            return next_agents[0]
-        
-        # 모든 에이전트가 실행되었으면 종료
+        # 여기까지 오면 END 반환
         return END
 
     def register_agents(self, agents: Dict[str, BaseAgent], db: AsyncSession):
@@ -323,6 +314,12 @@ class StockAnalysisGraph:
             if not self.graph:
                 raise ValueError("그래프가 초기화되지 않았습니다. register_agents 메서드를 먼저 호출하세요.")
             
+            if settings.ENV == "production":
+                #os.environ["LANGCHAIN_PROJECT"] = "stockeasy_server_agents"
+                tracer = LangChainTracer(project_name="stockeasy_server_agents")
+            else:
+                #os.environ["LANGCHAIN_PROJECT"] = "stockeasy_dev"
+                tracer = LangChainTracer(project_name="stockeasy_dev")        
             # 세션 ID 설정 (추적 ID로 사용)
             trace_id = session_id or datetime.now().strftime("%Y%m%d%H%M%S")
             
@@ -338,10 +335,12 @@ class StockAnalysisGraph:
                 **kwargs
             }
             logger.info(f"[process_query] initial_state: {initial_state}")
+            logger.info("병렬 처리 설정으로 그래프 실행 시작")
+            
             # 그래프 실행 (thread_id 제거, config 매개변수만 사용)
             result = await self.graph.ainvoke(
                 initial_state,
-                config={"configurable": {"thread_id": trace_id}}
+                config={"configurable": {"thread_id": trace_id}, "max_concurrency": 4}
             )
             
             # 트레이스 정보 기록
@@ -351,6 +350,12 @@ class StockAnalysisGraph:
             
         except Exception as e:
             logger.error(f"쿼리 처리 중 오류 발생: {str(e)}", exc_info=True)
+            
+            # 노드 전환 오류인 경우 특별 처리
+            if "telegram_retriever" in str(e) or "report_analyzer" in str(e):
+                logger.error(f"노드 전환 오류 감지됨: {str(e)}")
+                # 여기서 필요한 처리 추가
+                
             return {
                 "query": query,
                 "errors": [{

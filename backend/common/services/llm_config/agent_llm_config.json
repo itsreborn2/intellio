@@ -44,23 +44,23 @@
       "api_key_env": "OPENAI_API_KEY"
     },
     "industry_analyzer_agent": {
-      "provider": "anthropic",
-      "model_name": "claude-3-5-sonnet",
+      "provider": "gemini",
+      "model_name": "models/gemini-2.0-flash",
       "temperature": 0,
-      "max_tokens": 3096,
-      "api_key_env": "CLAUDE_API_KEY"
+      "max_tokens": 4096,
+      "api_key_env": "GEMINI_API_KEY"
     },
     "summarizer_agent": {
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
-      "temperature": 0.3,
+      "temperature": 0.1,
       "max_tokens": 4096,
       "api_key_env": "GEMINI_API_KEY"
     },
     "response_formatter_agent": {
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
-      "temperature": 0.3,
+      "temperature": 0.1,
       "max_tokens": 4096,
       "api_key_env": "GEMINI_API_KEY"
     },
@@ -77,6 +77,13 @@
       "temperature": 0,
       "max_tokens": 4096,
       "api_key_env": "GEMINI_API_KEY"
+    },
+    "industry_analyzer_agent_not-used": {
+      "provider": "anthropic",
+      "model_name": "claude-3-5-sonnet",
+      "temperature": 0,
+      "max_tokens": 3096,
+      "api_key_env": "CLAUDE_API_KEY"
     }
   },
   "fallback_settings": {

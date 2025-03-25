@@ -4,6 +4,7 @@
 이 모듈은 산업 및 시장 동향 정보를 검색하고 분석하는 에이전트를 정의합니다.
 """
 
+import re
 from typing import Dict, List, Any, Optional, cast
 from datetime import datetime
 from loguru import logger
@@ -12,11 +13,17 @@ from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import PromptTemplate
 
+from common.services.embedding_models import EmbeddingModelType
+from common.services.retrievers.models import RetrievalResult
+from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
+from common.services.vector_store_manager import VectorStoreManager
+from common.utils.util import async_retry
 from stockeasy.prompts.industry_prompts import INDUSTRY_ANALYSIS_PROMPT
 # from stockeasy.services.industry.industry_data_service import IndustryDataService
 # from stockeasy.services.stock.stock_info_service import StockInfoService
-from stockeasy.models.agent_io import RetrievedAllAgentData, IndustryData
+from stockeasy.models.agent_io import IndustryReportData, RetrievedAllAgentData, IndustryData
 from common.services.agent_llm import get_llm_for_agent
+from common.core.config import settings
 
 class IndustryAnalyzerAgent:
     """산업 및 시장 동향 분석 에이전트"""
@@ -32,7 +39,7 @@ class IndustryAnalyzerAgent:
         #self.model_name = model_name
         #self.temperature = temperature
         #self.llm = ChatOpenAI(model=model_name, temperature=temperature)
-
+        self.retrieved_str = "industry_reports"
         self.llm, self.model_name, self.provider = get_llm_for_agent("industry_analyzer_agent")
         logger.info(f"IndustryAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
@@ -72,6 +79,7 @@ class IndustryAnalyzerAgent:
             sector = entities.get("sector", "")
             
             logger.info(f"IndustryAnalyzerAgent analyzing: {stock_code or stock_name}")
+            logger.info(f"sector: {sector}, keywords: {keywords}")
             logger.info(f"Classification data: {classification}")
             logger.info(f"Data requirements: {data_requirements}")
             
@@ -101,12 +109,20 @@ class IndustryAnalyzerAgent:
             try:
                 # 실제 구현에서는 업종/산업 데이터 서비스 활용
                 # industry_data = await self.industry_service.get_industry_data(sector)
+
+                k = self._get_report_count(classification)
+                threshold = self._calculate_dynamic_threshold(classification)
+                if sector:
+                    keywords_list = keywords + [sector]
+                else:
+                    keywords_list = keywords
+                searched_industry_data = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"keywords": {"$in":keywords_list}})
                 
                 # 임시 샘플 데이터 사용
                 #industry_data_raw = self._get_dummy_industry_data(stock_name, sector)
-                industry_data_raw = None
+                #industry_data_raw = None
                 
-                if not industry_data_raw:
+                if not searched_industry_data:
                     logger.warning(f"No industry data found for sector: {sector}")
                     
                     # 실행 시간 계산
@@ -131,8 +147,8 @@ class IndustryAnalyzerAgent:
                     if "retrieved_data" not in state:
                         state["retrieved_data"] = {}
                     retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-                    industry_data_result: List[IndustryData] = []
-                    retrieved_data["industry"] = industry_data_result
+                    industry_data_result: List[IndustryReportData] = []
+                    retrieved_data[self.retrieved_str] = industry_data_result
                     
                     state["processing_status"] = state.get("processing_status", {})
                     state["processing_status"]["industry_analyzer"] = "completed_no_data"
@@ -151,16 +167,26 @@ class IndustryAnalyzerAgent:
                     logger.info(f"IndustryAnalyzerAgent completed in {duration:.2f} seconds, no data found")
                     return state
                 
-                # 산업 데이터 분석
-                analysis_results = await self._analyze_industry_data(
-                    industry_data_raw, 
-                    query,
-                    sector,
-                    stock_code,
-                    stock_name,
-                    classification,
-                    detail_level
-                )
+                # 검색 결과 가공
+                processed_industry_data:List[IndustryReportData] = self._process_reports(searched_industry_data)
+                
+                analysis = await self._generate_report_analysis(
+                        processed_industry_data, 
+                        query, 
+                        stock_code, 
+                        stock_name,
+                        state
+                    )
+                # # 산업 데이터 분석
+                # analysis_results = await self._analyze_industry_data(
+                #     searched_industry_data, 
+                #     query,
+                #     sector,
+                #     stock_code,
+                #     stock_name,
+                #     classification,
+                #     detail_level
+                # )
                 
                 # 실행 시간 계산
                 end_time = datetime.now()
@@ -172,8 +198,8 @@ class IndustryAnalyzerAgent:
                     "agent_name": "industry_analyzer",
                     "status": "success",
                     "data": {
-                        "raw_data": industry_data_raw,
-                        "analysis": analysis_results
+                        "analysis": analysis,
+                        "searched_reports": searched_industry_data
                     },
                     "error": None,
                     "execution_time": duration,
@@ -187,11 +213,11 @@ class IndustryAnalyzerAgent:
                 if "retrieved_data" not in state:
                     state["retrieved_data"] = {}
                 retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-                industry_data_result: List[IndustryData] = [{
-                    "raw_data": industry_data_raw,
-                    "analysis": analysis_results
-                }]
-                retrieved_data["industry"] = industry_data_result
+                industry_data_result: List[IndustryReportData] = {
+                    "searched_reports": searched_industry_data,
+                    "analysis": analysis
+                }
+                retrieved_data[self.retrieved_str] = industry_data_result
                 
                 state["processing_status"] = state.get("processing_status", {})
                 state["processing_status"]["industry_analyzer"] = "completed"
@@ -229,7 +255,7 @@ class IndustryAnalyzerAgent:
                 if "retrieved_data" not in state:
                     state["retrieved_data"] = {}
                 retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-                industry_data_result: List[IndustryData] = []
+                industry_data_result: List[IndustryReportData] = []
                 retrieved_data["industry"] = industry_data_result
                 
                 state["processing_status"] = state.get("processing_status", {})
@@ -256,8 +282,8 @@ class IndustryAnalyzerAgent:
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
             retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-            industry_data_result: List[IndustryData] = []
-            retrieved_data["industry"] = industry_data_result
+            industry_data_result: List[IndustryReportData] = []
+            retrieved_data[self.retrieved_str] = industry_data_result
             
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["industry_analyzer"] = "error"
@@ -281,6 +307,231 @@ class IndustryAnalyzerAgent:
             "context": {"query": state.get("query", "")}
         })
     
+    async def _generate_report_analysis(self, reports: List[IndustryReportData], query: str, 
+                                       stock_code: Optional[str] = None, 
+                                       stock_name: Optional[str] = None,
+                                       state: Dict[str, Any] = {}) -> List[IndustryReportData]:
+        """
+        파인콘 DB에서 검색된 산업 리포트를 분석합니다.
+        
+        Args:
+            reports: 산업 리포트 데이터 리스트
+            query: 사용자 질문
+            stock_code: 종목 코드 (선택)
+            stock_name: 종목명 (선택)
+            state: 현재 상태 정보
+            
+        Returns:
+            분석이 추가된 산업 리포트 데이터 리스트
+        """
+        if not reports:
+            logger.warning("산업 리포트 데이터가 없습니다.")
+            return []
+        
+        try:
+            # 질문 분류 정보 가져오기
+            classification = {}
+            if state and "question_analysis" in state and "classification" in state["question_analysis"]:
+                classification = state["question_analysis"]["classification"]
+            
+            # 섹터 정보 가져오기
+            sector = ""
+            if state and "question_analysis" in state and "entities" in state["question_analysis"]:
+                sector = state["question_analysis"]["entities"].get("sector", "")
+            # 없으면 첫 번째 리포트에서 가져오기
+            if not sector and reports and "sector_name" in reports[0]:
+                sector = reports[0]["sector_name"]
+            
+            # 산업 리포트 데이터 포맷팅
+            from stockeasy.prompts.industry_prompts import format_industry_data
+            formatted_industry_data = format_industry_data(reports)
+            
+            # 산업 분석 프롬프트 생성
+            from stockeasy.prompts.industry_prompts import INDUSTRY_ANALYSIS_PROMPT
+            prompt = PromptTemplate(
+                template=INDUSTRY_ANALYSIS_PROMPT,
+                input_variables=["query", "stock_code", "stock_name", "sector", "classification", "industry_data"]
+            )
+            
+            # 분석 결과를 파싱할 파서 설정
+            #parser = JsonOutputParser()
+            
+            # LLM 체인 설정 및 실행
+            chain = prompt | self.llm
+            
+            # 체인 실행
+            analysis_result = await chain.ainvoke({
+                "query": query,
+                "stock_code": stock_code or "",
+                "stock_name": stock_name or "",
+                "sector": sector,
+                "classification": classification,
+                "industry_data": formatted_industry_data
+            })
+            
+            logger.info(f"산업 리포트 분석 완료: {len(reports)} 개의 리포트")
+            
+            # 분석 결과를 각 리포트에 추가
+            # for report in reports:
+            #     report["analysis"] = analysis_result
+            
+            return {
+                "llm_response": analysis_result.content,
+            }
+            
+        except Exception as e:
+            logger.exception(f"산업 리포트 분석 중 오류 발생: {str(e)}")
+            # 오류 발생시 원본 데이터 반환
+            for report in reports:
+                report["analysis"] = {"error": f"분석 중 오류 발생: {str(e)}"}
+            return reports
+
+    def _get_report_count(self, classification: Dict[str, Any]) -> int:
+        """
+        검색할 리포트 수를 결정 - 복잡도 기반
+        
+        Args:
+            classification: 분류 결과
+            
+        Returns:
+            검색할 리포트 수
+        """
+        complexity = classification.get("complexity", "중간")
+        
+        if complexity == "단순":
+            return 5
+        elif complexity == "중간":
+            return 10
+        elif complexity == "복합":
+            return 20
+        else:  # "전문가급"
+            return 30
+        
+    def _calculate_dynamic_threshold(self, classification: Dict[str, Any]) -> float:
+        """
+        동적 유사도 임계값 계산
+        
+        Args:
+            classification: 분류 결과
+            
+        Returns:
+            유사도 임계값
+        """
+        complexity = classification.get("complexity", "중간")
+        
+        # 단순한 질문일수록 높은 임계값 (정확한 결과)
+        # 복잡한 질문일수록 낮은 임계값 (더 많은 결과)
+        if complexity == "단순":
+            return 0.5
+        elif complexity == "중간":
+            return 0.35
+        elif complexity == "복합":
+            return 0.25
+        else:  # "전문가급"
+            return 0.21
+        
+    @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
+    async def _search_reports(self, query: str, k: int = 5, threshold: float = 0.22,
+                             metadata_filter: Optional[Dict[str, Any]] = None) -> List[IndustryReportData]:
+        """
+        파인콘 DB에서 기업리포트 검색
+        
+        Args:
+            query: 검색 쿼리
+            k: 검색할 최대 결과 수
+            threshold: 유사도 임계값
+            metadata_filter: 메타데이터 필터
+            
+        Returns:
+            검색된 리포트 목록
+        """
+        try:
+            # 벡터 스토어 연결
+            vs_manager = VectorStoreManager(
+                embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+                project_name="stockeasy",
+                namespace=settings.PINECONE_NAMESPACE_STOCKEASY_INDUSTRY
+            )
+
+            # 시맨틱 검색 설정
+            semantic_retriever = SemanticRetriever(
+                config=SemanticRetrieverConfig(min_score=threshold),
+                vs_manager=vs_manager
+            )
+            
+            # 검색 수행
+            retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
+                query=query, 
+                top_k=k * 2,  # 중복 제거를 고려하여 2배로 검색
+                filters=metadata_filter
+            )
+            
+            # 검색 결과 처리
+            results = []
+            seen_contents = set()  # 중복 제거를 위한 집합
+            
+            for i, doc in enumerate(retrieval_result.documents):
+                content = doc.page_content
+                metadata = doc.metadata
+                score = doc.score or 0.0
+                if i < 2:
+                    short_content = (content[:50] if len(content) > 50 else content).strip()
+                    logger.info(f"문서 {i} 점수: {score:.3f}, 내용({len(content)}): {short_content}")
+                    short_metadata = {k: v for k, v in metadata.items() if k in ["sector_code", "sector_name", "document_date", "provider_code", "file_name", "page", "keywords"]}
+                    logger.info(f"문서 {i} 메타데이터: {short_metadata}")
+                    logger.info(f"---------------------------------------------------------------")
+                
+                # 내용 기반 중복 제거 (문서 일부가 중복되는 경우가 많음)
+                content_hash = hash(content[:100])  # 앞부분을 기준으로
+                if content_hash in seen_contents:
+                    continue
+                seen_contents.add(content_hash)
+                
+                # 결과 정보 구성
+                report_info:IndustryReportData = {
+                    "content": content,
+                    "score": score,
+                    "source": metadata.get("provider_code", "미상"),
+                    "publish_date": self._format_date(metadata.get("document_date", "")),
+                    "file_name": metadata.get("file_name", ""),
+                    "page": metadata.get("page", 0),
+                    "stock_code": metadata.get("stock_code", ""),
+                    "stock_name": metadata.get("stock_name", ""),
+                    "keyword_list": metadata.get("keywords", ""),
+               }             
+                
+                results.append(report_info)
+            
+            # 스코어 기준 정렬
+            results.sort(key=lambda x: x["score"], reverse=True)
+            
+            # 최대 k개만 반환
+            return results[:k]
+            
+        except Exception as e:
+            logger.error(f"기업리포트 검색 중 오류 발생: {str(e)}", exc_info=True)
+            raise
+    def _format_date(self, date_str: str) -> str:
+        """
+        날짜 문자열 형식화
+        
+        Args:
+            date_str: 날짜 문자열 (예: "20230101")
+            
+        Returns:
+            형식화된 날짜 문자열 (예: "2023-01-01")
+        """
+        if not date_str or len(date_str) != 8:
+            return date_str
+        
+        try:
+            year = date_str[:4]
+            month = date_str[4:6]
+            day = date_str[6:8]
+            return f"{year}-{month}-{day}"
+        except:
+            return date_str
+        
     def _get_dummy_sector(self, stock_name: str) -> str:
         """종목명으로부터 더미 산업/섹터 정보를 반환합니다.
 
@@ -306,57 +557,76 @@ class IndustryAnalyzerAgent:
         
         return sectors.get(stock_name, "IT/소프트웨어")  # 기본값
 
-    def _get_dummy_industry_data(self, stock_name: str, sector: str) -> List[Dict[str, Any]]:
-        """더미 산업 동향 데이터를 반환합니다.
-
-        Args:
-            stock_name: 종목명
-            sector: 산업/섹터
-
-        Returns:
-            List[Dict[str, Any]]: 더미 산업 동향 데이터
+    
+    def _process_reports(self, reports: List[IndustryReportData]) -> List[IndustryReportData]:
         """
-        return [
-            {
-                "source": "산업 동향 보고서",
-                "date": "2024-04-15",
-                "title": f"{sector} 산업 동향 분석",
-                "content": f"{sector} 산업은 2024년 상반기에 글로벌 수요 회복과 함께 성장세를 보이고 있습니다. 특히 {stock_name}이 속한 세부 분야는 전년 대비 약 12% 성장이 예상됩니다. 주요 성장 동력은 기술 혁신과 규제 환경 변화로 분석됩니다.",
-                "key_trends": [
-                    "디지털 전환 가속화로 인한 수요 증가",
-                    "친환경 기술 투자 확대",
-                    "글로벌 공급망 재편",
-                    "핵심 원자재 가격 안정화"
-                ]
-            },
-            {
-                "source": "시장 조사 리포트",
-                "date": "2024-03-20",
-                "title": f"{sector} 시장 전망",
-                "content": f"{sector} 시장은 2024-2028년 연평균 8.5% 성장이 전망됩니다. {stock_name}을 포함한 국내 기업들의 시장 점유율은 글로벌 시장에서 약 15%를 차지하고 있으며, 향후 기술 경쟁력 강화를 통해 20%까지 확대될 것으로 예상됩니다.",
-                "market_data": {
-                    "시장규모": "50조원 (2023년 기준)",
-                    "연평균성장률": "8.5% (2024-2028 전망)",
-                    "국내기업 점유율": "15%",
-                    "주요 경쟁사": "글로벌 Top 5 기업 및 주요 점유율"
-                }
-            },
-            {
-                "source": "산업 뉴스 분석",
-                "date": "2024-04-01",
-                "title": f"{sector} 최근 이슈 및 정책 동향",
-                "content": f"최근 정부는 {sector} 산업 경쟁력 강화를 위한 지원책을 발표했습니다. 약 2조원 규모의 R&D 지원과 세제 혜택이 포함되어 있어 {stock_name}을 포함한 국내 기업들에게 긍정적 영향이 예상됩니다. 또한 규제 완화를 통한 신사업 진출 기회도 확대될 전망입니다.",
-                "policy_changes": [
-                    "산업 지원 펀드 조성",
-                    "기술 개발 세제 혜택 확대",
-                    "신산업 규제 샌드박스 도입",
-                    "해외 진출 지원 강화"
-                ]
-            }
-        ]
+        검색된 리포트 처리
         
+        Args:
+            reports: 검색된 리포트 목록, 벡터 DB 검색 내용.
+            
+        Returns:
+            처리된 리포트 목록
+        """
+        processed_reports = []
+        
+        for report in reports:
+            # 원본 정보 유지
+            processed_report = report.copy()
+            
+            # 내용 정제 (예: 불필요한 공백 제거, 줄바꿈 정리 등)
+            content = report["content"]
+            cleaned_content = self._clean_report_content(content)
+            processed_report["content"] = cleaned_content
+            
+            # 제목 추출
+            heading = report.get("heading", "")
+            if heading:
+                processed_report["title"] = heading
+            else:
+                processed_report["title"] = self._extract_title_from_content(cleaned_content)
+            
+            processed_reports.append(processed_report)
+        
+        return processed_reports
+    def _extract_title_from_content(self, content: str) -> str:
+        """
+        내용에서 제목 추출 시도
+        
+        Args:
+            content: 리포트 내용
+            
+        Returns:
+            추출된 제목 또는 기본값
+        """
+        # 첫 줄이나 문장을 제목으로 사용
+        lines = content.split("\n")
+        if lines and len(lines[0]) < 100:  # 첫 줄이 짧으면 제목으로 간주
+            return lines[0]
+        
+        # 첫 60자를 제목으로 사용
+        return content[:60] + "..." if len(content) > 60 else content
+    
+    def _clean_report_content(self, content: str) -> str:
+        """
+        리포트 내용 정제
+        
+        Args:
+            content: 원본 리포트 내용
+            
+        Returns:
+            정제된 내용
+        """
+        # 불필요한 공백 제거
+        cleaned = re.sub(r'\s+', ' ', content).strip()
+        
+        # 표, 서식 등의 특수문자 정리
+        cleaned = re.sub(r'[\u2028\u2029\ufeff\xa0]', ' ', cleaned)
+        
+        return cleaned
+    
     async def _analyze_industry_data(self, 
-                                    industry_data: List[Dict[str, Any]],
+                                    industry_data: List[IndustryReportData],
                                     query: str,
                                     sector_name: str,
                                     stock_code: str,
@@ -379,23 +649,7 @@ class IndustryAnalyzerAgent:
             분석 결과
         """
         try:
-            # 간단한 분석일 경우
-            if detail_level == "간단" or classification.get("complexity", "") == "단순":
-                return {
-                    "summary": f"{sector_name} 산업 분석",
-                    "highlights": [
-                        f"{sector_name} 산업은 2024년 상반기 성장세를 보이고 있음",
-                        f"{stock_name}이 속한 세부 분야는 전년 대비 12% 성장 예상",
-                        "기술 혁신과 규제 환경 변화가 주요 성장 동력",
-                        "디지털 전환 가속화와 친환경 기술 투자 확대가 주요 트렌드"
-                    ],
-                    "market_trends": {
-                        "시장규모": "50조원 (2023년 기준)",
-                        "성장률": "8.5% (2024-2028 전망)",
-                        "주요 트렌드": "디지털 전환, 친환경, 공급망 재편"
-                    }
-                }
-            
+           # 필요가 없는데.
             # 상세 분석일 경우 - LLM을 통한 분석 수행
             # 프롬프트 생성
             prompt = PromptTemplate(

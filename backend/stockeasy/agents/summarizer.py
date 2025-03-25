@@ -45,7 +45,7 @@ class SummarizerAgent(BaseAgent):
             classification = state.get("question_classification", {}).get("classification", {})
             agent_results = state.get("agent_results", {})
 
-            telegram_messages = agent_results.get("telegram_retriever", {}).get("data", [])
+            telegram_data = agent_results.get("telegram_retriever", {}).get("data", [])
             report_data = agent_results.get("report_analyzer", {}).get("data", [])
             financial_data = agent_results.get("financial_analyzer", {}).get("data", {})
             industry_data = agent_results.get("industry_analyzer", {}).get("data", [])
@@ -65,7 +65,7 @@ class SummarizerAgent(BaseAgent):
                 state["processing_status"]["summarizer"] = "error"
                 return state
             
-            if ( (not telegram_messages or len(telegram_messages) == 0) and 
+            if ( (not telegram_data or len(telegram_data) == 0) and 
                 (not report_data or len(report_data)) == 0 and 
                 not financial_data and not industry_data and 
                 not integrated_knowledge):
@@ -91,7 +91,7 @@ class SummarizerAgent(BaseAgent):
             # 요약 프롬프트 생성
             prompt = self._create_prompt(
                 query=query, stock_code=stock_code, stock_name=stock_name, classification=classification,
-                telegram_messages=telegram_messages, report_data=report_data, financial_data=financial_data, industry_data=industry_data,
+                telegram_data=telegram_data, report_data=report_data, financial_data=financial_data, industry_data=industry_data,
                 integrated_knowledge=integrated_knowledge
             )
             
@@ -116,7 +116,7 @@ class SummarizerAgent(BaseAgent):
         
     
     def _create_prompt(self, query: str, stock_code: Optional[str], stock_name: Optional[str],
-                      classification: Dict[str, Any], telegram_messages: List[RetrievedTelegramMessage],
+                      classification: Dict[str, Any], telegram_data: Dict[str, Any],
                       report_data: List[Dict[str, Any]], financial_data: Dict[str, Any],
                       industry_data: List[Dict[str, Any]], integrated_knowledge: Optional[Any]) -> ChatPromptTemplate:
         """요약을 위한 프롬프트 생성"""
@@ -180,9 +180,9 @@ class SummarizerAgent(BaseAgent):
         sources_info = ""
         
         # 텔레그램 메시지
-        if telegram_messages:
-            formatted_msgs = format_telegram_messages(telegram_messages)
-            sources_info += f"텔레그램 메시지:\n{formatted_msgs}\n\n"
+        if telegram_data:
+            formatted_msgs = format_telegram_messages(telegram_data)
+            sources_info += f"내부DB :\n{formatted_msgs}\n\n"
         
         # 기업 리포트
         if report_data:
@@ -193,7 +193,7 @@ class SummarizerAgent(BaseAgent):
                 # 아.. 인용처리가 애매해지네.
                 # 일단은 기업리포트 결과만 남겨보자.
                 sources_info += f" - 투자의견:\n{analysis.get('investment_opinions', '')}\n\n"
-                sources_info += f" - 최종결과:\n{analysis.get('opinion_summary', '')}\n\n"
+                sources_info += f" - 종합의견:\n{analysis.get('opinion_summary', '')}\n\n"
                 sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
             else:
                 searched_reports = report_data.get("searched_reports", [])
@@ -203,11 +203,6 @@ class SummarizerAgent(BaseAgent):
                     report_date = report.get("published_date", "날짜 미상")
                     report_page = f"report.get('page', '페이지 미상') page"
                     sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
-
-                
-            
-
-
             
         
         # 재무 정보(일단 미구현. 재무분석 에이전트 추가 후에 풀것)

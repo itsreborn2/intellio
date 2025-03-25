@@ -5,6 +5,7 @@
 형태로 포맷팅하는 응답 포맷터 에이전트에서 사용하는 프롬프트 템플릿을 정의합니다.
 """
 
+from datetime import datetime
 from typing import Dict, List, Union, Any
 
 # 응답 포맷터 프롬프트
@@ -51,6 +52,7 @@ OPTIMIZED_RESPONSE_FORMATTER_PROMPT = """
 사용자 질문: {query}
 종목명: {stock_name}
 종목코드: {stock_code}
+오늘 날짜: {today}
 
 통합된 응답: 
 {integrated_response}
@@ -141,10 +143,12 @@ def format_response_formatter_prompt(
         for area in uncertain_areas:
             uncertain_areas_str += f"- {area}\n"
     
+    today = datetime.now().strftime("%Y-%m-%d")
     return OPTIMIZED_RESPONSE_FORMATTER_PROMPT.format(
         query=query,
         stock_name=stock_name or "알 수 없음",
         stock_code=stock_code or "알 수 없음",
+        today=today,
         integrated_response=integrated_response or "최종 요약 응답이 없습니다.",
         core_insights=core_insights_str or "핵심 인사이트가 없습니다.",
         confidence_assessment=confidence_assessment_str or "신뢰도 평가가 없습니다.",

@@ -82,7 +82,7 @@ OPTIMIZED_QUESTION_ANALYZER_PROMPT = """
   "entities": {{
     "stock_name": "종목명 또는 null",
     "stock_code": "종목코드 또는 null",
-    "sector": "산업/섹터 또는 null",
+    "sector": "종목이 속한 산업/섹터 또는 null",
     "time_range": "시간범위 또는 null"
   }},
   "question_classification": {{

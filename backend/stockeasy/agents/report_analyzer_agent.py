@@ -27,11 +27,11 @@ from common.services.vector_store_manager import VectorStoreManager
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import RetrievalResult
 from common.utils.util import async_retry
-from stockeasy.models.agent_io import RetrievedAllAgentData, ReportData
+from stockeasy.models.agent_io import RetrievedAllAgentData, CompanyReportData
 from langchain_core.messages import AIMessage
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
 
-def format_report_contents(reports: List[ReportData]) -> str:
+def format_report_contents(reports: List[CompanyReportData]) -> str:
     """
     리포트 내용을 문자열로 형식화합니다.
     
@@ -71,6 +71,7 @@ class ReportAnalyzerAgent:
         기업리포트 검색 및 분석 에이전트 초기화
         """
         # 설정 파일에서 LLM 생성 및 모델 정보 가져오기
+        self.retrieved_str = "company_report"
         self.llm, self.model_name, self.provider = get_llm_for_agent("report_analyzer_agent")
         self.parser = JsonOutputParser()
         logger.info(f"ReportAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
@@ -127,7 +128,7 @@ class ReportAnalyzerAgent:
             metadata_filter = self._create_metadata_filter(stock_code, stock_name, classification, state)
             
             # 기업리포트 검색
-            reports:List[ReportData] = await self._search_reports(
+            reports:List[CompanyReportData] = await self._search_reports(
                 search_query, 
                 k, 
                 threshold, 
@@ -162,8 +163,8 @@ class ReportAnalyzerAgent:
                 if "retrieved_data" not in state:
                     state["retrieved_data"] = {}
                 retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-                reports: List[ReportData] = []
-                retrieved_data["reports"] = reports
+                reports: List[CompanyReportData] = []
+                retrieved_data[self.retrieved_str] = reports
                 
                 state["processing_status"] = state.get("processing_status", {})
                 state["processing_status"]["report_analyzer"] = "completed_no_data"
@@ -184,7 +185,7 @@ class ReportAnalyzerAgent:
                 return state
             
             # 검색 결과 가공
-            processed_reports:List[ReportData] = self._process_reports(reports)
+            processed_reports:List[CompanyReportData] = self._process_reports(reports)
             
             # 상세한 분석이 필요한 경우 (primary_intent와 complexity 기반 판단)
             primary_intent = classification.get("primary_intent", "")
@@ -250,8 +251,8 @@ class ReportAnalyzerAgent:
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
             retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-            reports: List[ReportData] = processed_reports
-            retrieved_data["reports"] = reports
+            reports: List[CompanyReportData] = processed_reports
+            retrieved_data[self.retrieved_str] = reports
 
             
             state["processing_status"] = state.get("processing_status", {})
@@ -294,8 +295,8 @@ class ReportAnalyzerAgent:
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
             retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-            reports: List[ReportData] = []
-            retrieved_data["reports"] = reports
+            reports: List[CompanyReportData] = []
+            retrieved_data[self.retrieved_str] = reports
             
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["report_analyzer"] = "error"
@@ -400,13 +401,13 @@ class ReportAnalyzerAgent:
         # 단순한 질문일수록 높은 임계값 (정확한 결과)
         # 복잡한 질문일수록 낮은 임계값 (더 많은 결과)
         if complexity == "단순":
-            return 0.6
+            return 0.5
         elif complexity == "중간":
-            return 0.45
+            return 0.35
         elif complexity == "복합":
-            return 0.3
+            return 0.25
         else:  # "전문가급"
-            return 0.23
+            return 0.21
     
     def _create_metadata_filter(self, stock_code: Optional[str], stock_name: Optional[str],
                               classification: Dict[str, Any], state: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -533,7 +534,7 @@ class ReportAnalyzerAgent:
     
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
     async def _search_reports(self, query: str, k: int = 5, threshold: float = 0.3,
-                             metadata_filter: Optional[Dict[str, Any]] = None) -> List[ReportData]:
+                             metadata_filter: Optional[Dict[str, Any]] = None) -> List[CompanyReportData]:
         """
         파인콘 DB에서 기업리포트 검색
         
@@ -589,7 +590,7 @@ class ReportAnalyzerAgent:
                 seen_contents.add(content_hash)
                 
                 # 결과 정보 구성
-                report_info:ReportData = {
+                report_info:CompanyReportData = {
                     "content": content,
                     "score": score,
                     "source": metadata.get("report_provider", "미상"),
@@ -635,7 +636,7 @@ class ReportAnalyzerAgent:
         except:
             return date_str
     
-    def _process_reports(self, reports: List[ReportData]) -> List[ReportData]:
+    def _process_reports(self, reports: List[CompanyReportData]) -> List[CompanyReportData]:
         """
         검색된 리포트 처리
         
@@ -703,10 +704,10 @@ class ReportAnalyzerAgent:
         # 첫 60자를 제목으로 사용
         return content[:60] + "..." if len(content) > 60 else content
     
-    async def _generate_report_analysis(self, reports: List[ReportData], query: str, 
+    async def _generate_report_analysis(self, reports: List[CompanyReportData], query: str, 
                                        stock_code: Optional[str] = None, 
                                        stock_name: Optional[str] = None,
-                                       state: Dict[str, Any] = {}) -> List[ReportData]:
+                                       state: Dict[str, Any] = {}) -> List[CompanyReportData]:
         """
         검색된 리포트의 투자 의견 및 목표가 정보 추출
         

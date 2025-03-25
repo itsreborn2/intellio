@@ -18,7 +18,8 @@ from typing import Dict, List, Any, Optional, Set, cast
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
 
-from common.services.agent_llm import get_llm_for_agent
+from stockeasy.prompts.telegram_prompts import TELEGRAM_SUMMARY_PROMPT
+from common.services.agent_llm import get_agent_llm, get_llm_for_agent
 from common.utils.util import async_retry
 from common.core.config import settings
 from stockeasy.services.telegram.embedding import TelegramEmbeddingService
@@ -27,7 +28,7 @@ from common.services.vector_store_manager import VectorStoreManager
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import RetrievalResult
 from stockeasy.models.agent_io import RetrievedAllAgentData, RetrievedTelegramMessage
-
+from langchain_core.messages import AIMessage
 
 class TelegramRetrieverAgent:
     """텔레그램 메시지 검색 에이전트"""
@@ -40,6 +41,7 @@ class TelegramRetrieverAgent:
             model_name: 사용할 OpenAI 모델 이름
             temperature: 모델 출력의 다양성 조절 파라미터
         """
+        self.retrieved_str = "telegram_messages"
         self.embedding_service = TelegramEmbeddingService()
         #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
         self.llm, self.model_name, self.provider = get_llm_for_agent("telegram_retriever_agent")
@@ -102,6 +104,9 @@ class TelegramRetrieverAgent:
                 threshold
             )
             
+            # 메세지 요약
+            summary = await self.summarize(query, stock_code, stock_name, messages, classification)
+
             # 검색 결과가 없는 경우
             if not messages:
                 logger.warning("텔레그램 메시지 검색 결과가 없습니다.")
@@ -157,7 +162,10 @@ class TelegramRetrieverAgent:
             state["agent_results"]["telegram_retriever"] = {
                 "agent_name": "telegram_retriever",
                 "status": "success",
-                "data": messages,
+                "data": {
+                    "summary": summary,
+                    "messages": messages
+                },
                 "error": None,
                 "execution_time": duration,
                 "metadata": {
@@ -170,8 +178,11 @@ class TelegramRetrieverAgent:
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
             retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-            telegram_messages: List[RetrievedTelegramMessage] = messages
-            retrieved_data["telegram_messages"] = telegram_messages
+
+            retrieved_data[self.retrieved_str] = {
+                    "summary": summary,
+                    "messages": messages
+                }
             
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["telegram_retriever"] = "completed"
@@ -209,14 +220,185 @@ class TelegramRetrieverAgent:
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
             retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-            telegram_messages: List[RetrievedTelegramMessage] = []
-            retrieved_data["telegram_messages"] = telegram_messages
+            retrieved_data[self.retrieved_str] = {"summary": "", "messages": "" }
             
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["telegram_retriever"] = "error"
             
             return state
+    @async_retry(retries=2, delay=2.0, exceptions=(Exception,))
+    async def summarize(self, query:str, stock_code: str, stock_name: str, found_messages: List[RetrievedTelegramMessage], classification: Dict[str, Any]) -> str:
+        """메시지 목록을 요약합니다.
+        
+        Args:
+            messages (List[RetrievedTelegramMessage]): 요약할 메시지 목록
+            classification (QuestionClassification): 질문 분류 결과
             
+        Returns:
+            str: 요약된 내용
+            
+        Raises:
+            SummarizeError: 요약 생성 중 오류 발생 시
+        """
+        try:
+            if not found_messages:
+                return "관련된 메시지를 찾을 수 없습니다."
+            
+            # 각 메시지에서 content와 message_created_at만 추출하여 정렬된 형태로 표시
+            formatted_messages = []
+            for msg in found_messages:
+                created_at = msg["message_created_at"].strftime("%Y-%m-%d %H:%M")
+                content = msg["content"]
+                formatted_messages.append(f"[{created_at}] {content}")
+            
+            # 형식화된 메시지를 구분선으로 연결
+            messages_text = "\n------\n".join(formatted_messages)
+            messages_text += f"\n\n-------\n사용자 질문: {query}\n종목코드:{stock_code}\n종목명:{stock_name}"
+            
+            # 질문 분류 결과에 따라 프롬프트 생성
+            prompt_context = self.MakeSummaryPrompt(classification)
+            
+            agent_llm = get_agent_llm("telegram_retriever_agent")
+
+            # 프롬프트와 메시지를 하나의 문자열로 결합
+            combined_prompt = f"{prompt_context}\n\n내용: \n{messages_text}"
+            
+            # report_analyzer_agent와 같은 방식으로 호출
+            response:AIMessage = await agent_llm.ainvoke_with_fallback(input=combined_prompt)
+
+            if not response or not response.content:
+                raise Exception("LLM이 빈 응답을 반환했습니다.")
+
+            return response.content
+            
+        except Exception as e:
+            error_msg = f"메시지 요약 중 오류 발생: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise Exception(error_msg) from e
+        
+    def MakeSummaryPrompt(self, classification: Dict[str, Any]) -> str:
+        """질문 분류 결과에 따라 적절한 요약 프롬프트를 생성합니다.
+        
+        Args:
+            classification (QuestionClassification): 질문 분류 결과
+            
+        Returns:
+            str: 생성된 요약 프롬프트
+        """
+        # 기본 프롬프트 템플릿
+        base_prompt = TELEGRAM_SUMMARY_PROMPT
+        
+        # 1. 주요 의도(primary_intent)에 따른 프롬프트 추가
+        primary_intent = classification.get("primary_intent", "기타")
+        intent_prompt = ""
+        
+        if primary_intent == "종목기본정보":
+            intent_prompt = """
+종목 기본 정보에 관한 질문입니다. 다음 사항에 중점을 두어 요약하세요:
+- 해당 종목의 사업 영역, 주요 제품/서비스
+- 시가총액, 주가 등 기본 주식 정보
+- 주요 경영진 및 지배구조 관련 정보
+- 시장 내 위치 및 경쟁사 대비 특징
+"""
+        elif primary_intent == "성과전망":
+            intent_prompt = """
+해당 종목의 성과 및 전망에 관한 질문입니다. 다음 사항에 중점을 두어 요약하세요:
+- 실적 발표 및 향후 전망에 관한 내용
+- 애널리스트들의 목표가 및 투자의견
+- 매출, 영업이익, 순이익 등 주요 재무 지표 예측
+- 미래 성장 동력 및 위험 요소
+"""
+        elif primary_intent == "재무분석":
+            intent_prompt = """
+재무 분석에 관한 질문입니다. 다음 사항에 중점을 두어 요약하세요:
+- 주요 재무제표 수치 및 비율 분석
+- 동종 업계 대비 재무 건전성
+- 수익성, 성장성, 안정성 관련 지표
+- 실적 변화의 주요 요인
+"""
+        elif primary_intent == "산업동향":
+            intent_prompt = """
+산업 동향에 관한 질문입니다. 다음 사항에 중점을 두어 요약하세요:
+- 해당 산업의 최근 트렌드 및 변화
+- 정부 정책 및 규제 환경 영향
+- 산업 내 주요 경쟁사 동향
+- 기술 변화 및 혁신 정보
+"""
+        
+        # 2. 질문 복잡도(complexity)에 따른 요약 깊이 조정
+        complexity = classification.get("complexity", "중간")
+        complexity_prompt = ""
+        
+        if complexity == "단순":
+            complexity_prompt = """
+간결하고 직접적인 요약을 제공하세요. 핵심 정보 중심으로 1-3문장 정도로 요약하는 것이 적절합니다.
+"""
+        elif complexity == "중간":
+            complexity_prompt = """
+균형 잡힌 요약을 제공하세요. 중요 정보와 세부 사항을 적절히 포함하며, 5-7문장 정도의 요약이 적절합니다.
+"""
+        elif complexity == "복합":
+            complexity_prompt = """
+상세한 요약을 제공하세요. 다양한 측면의 정보를 포함하고, 상반된 견해가 있다면 함께 제시하세요. 
+여러 단락으로 구성된 포괄적인 요약이 적절합니다.
+"""
+        elif complexity == "전문가급":
+            complexity_prompt = """
+심층적이고 전문적인 분석 요약을 제공하세요. 다음을 포함해야 합니다:
+- 다양한 시각과 의견의 종합
+- 정보 간 상호 관계 및 인과관계 분석
+- 장기적/단기적 영향 구분
+- 시장 전문가의 다양한 관점 비교
+- 데이터 기반 근거와 전망 제시
+"""
+        
+        # 3. 기대하는 답변 유형(expected_answer_type)에 따른 조정
+        answer_type = classification.get("expected_answer_type", "사실형")
+        answer_type_prompt = ""
+        
+        if answer_type == "사실형":
+            answer_type_prompt = """
+사실에 기반한 객관적인 정보 중심으로 요약하세요. 주관적인 의견이나 추측은 최소화하고, 
+실제 발생한 사건, 공식 발표, 검증된 데이터를 중심으로 응답하세요.
+"""
+        elif answer_type == "추론형":
+            answer_type_prompt = """
+주어진 정보를 바탕으로 논리적 추론을 제공하세요. 근거가 되는 사실을 먼저 제시한 후, 
+그로부터 도출할 수 있는 합리적인 추론을 전개하세요.
+"""
+        elif answer_type == "비교형":
+            answer_type_prompt = """
+비교 분석을 중심으로 요약하세요. 다양한 관점, 의견, 데이터 간의 차이점과 공통점을 
+체계적으로 대조하여 제시하세요.
+"""
+        elif answer_type == "예측형":
+            answer_type_prompt = """
+미래 전망에 초점을 맞춰 요약하세요. 현재 정보를 바탕으로 향후 발생 가능한 시나리오를 
+제시하되, 각 전망의 확실성 정도를 함께 표현하세요.
+"""
+        elif answer_type == "설명형":
+            answer_type_prompt = """
+개념과 관계를 명확히 설명하는 요약을 제공하세요. 복잡한 정보를 체계적으로 정리하고, 
+인과관계와 상호작용을 이해하기 쉽게 설명하세요.
+"""
+        
+        # 최종 프롬프트 구성
+        additional_prompt = f"""
+{intent_prompt}
+
+{complexity_prompt}
+
+{answer_type_prompt}
+
+종합적으로, 이 메시지들을 분석하여 질문에 대한 명확하고 유용한 답변을 제공하세요.
+답변 시에는 메시지의 신뢰도, 최신성, 관련성을 고려하여 가중치를 부여하세요.
+"""
+        
+        # 기본 프롬프트에 추가 지시사항 결합
+        final_prompt = base_prompt + additional_prompt
+        
+        return final_prompt
+    
     def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
         """
         상태 객체에 오류 정보를 추가합니다.
@@ -248,13 +430,13 @@ class TelegramRetrieverAgent:
         
         # 복잡도에 따른 임계값 설정
         if complexity == "단순":
-            return 0.6  # 단순 질문일수록 높은 임계값 (정확한 결과 필요)
+            return 0.5  # 단순 질문일수록 높은 임계값 (정확한 결과 필요)
         elif complexity == "중간":
-            return 0.45
+            return 0.35
         elif complexity == "복합":
-            return 0.3
+            return 0.25
         else:  # "전문가급"
-            return 0.23  # 복잡한 질문일수록 낮은 임계값 (폭넓은 결과 수집)
+            return 0.21  # 복잡한 질문일수록 낮은 임계값 (폭넓은 결과 수집)
     
     def _get_message_count(self, classification: Dict[str, Any]) -> int:
         """
@@ -508,6 +690,7 @@ class TelegramRetrieverAgent:
                 normalized_content = re.sub(r'\s+', ' ', content).strip().lower()
                 # 중복 메시지 확인
                 if self._is_duplicate(normalized_content, seen_messages):
+                    logger.info(f"중복 메시지 제외: {normalized_content[:50]}")
                     continue
 
                 
@@ -527,7 +710,7 @@ class TelegramRetrieverAgent:
                 # 메시지 데이터 구성
                 message:RetrievedTelegramMessage = {
                     "content": content,
-                    "channel_name": doc_metadata.get("channel_name", "알 수 없음"),
+                    #"channel_name": doc_metadata.get("channel_title", "알 수 없음"), # 그러나 숨겨야함
                     "message_created_at": message_created_at,
                     "final_score": final_score,
                     "metadata": doc_metadata

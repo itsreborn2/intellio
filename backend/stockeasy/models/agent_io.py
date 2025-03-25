@@ -109,7 +109,7 @@ class RetrievedTelegramMessage(TypedDict):
     metadata: Dict[str, Any]        # 메타데이터
 
 
-class ReportData(TypedDict, total=False):
+class CompanyReportData(TypedDict, total=False):
     """분석된 기업 리포트 데이터
      리포트의 개별 청크를 분석 결과
     """
@@ -124,6 +124,24 @@ class ReportData(TypedDict, total=False):
     page: int                       # 페이지 번호
     source: str                     # 출처
     sector_name: str                # 산업명
+
+class IndustryReportData(TypedDict, total=False):
+    """분석된 산업 리포트 데이터
+     리포트의 개별 청크를 분석 결과
+    """
+    title: str                      # 제목
+    publish_date: datetime          # 발행일
+    author: str                     # 작성자/증권사
+    content: str                    # 내용
+    stock_name: str                 # 종목명
+    stock_code: str                 # 종목코드
+    score: float                    # 유사도 점수
+    analysis: Dict[str, Any]        # 추가 분석 정보
+    page: int                       # 페이지 번호
+    source: str                     # 출처
+    sector_name: str                # 산업명
+    subgroup_list: List[str]        # 세부 산업 목록
+    keyword_list: List[str]         # 키워드 목록
 
 
 class FinancialData(TypedDict, total=False):
@@ -147,7 +165,7 @@ class IndustryData(TypedDict, total=False):
 class RetrievedAllAgentData(TypedDict, total=False):
     """검색 및 분석된 모든 데이터"""
     telegram_messages: List[RetrievedTelegramMessage] # 텔레그램 메시지
-    reports: List[ReportData]       # 기업 리포트
+    reports: List[CompanyReportData]       # 기업 리포트
     financials: List[FinancialData] # 재무 데이터
     industry: List[IndustryData]    # 산업 정보
 
