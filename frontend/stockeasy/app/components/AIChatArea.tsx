@@ -625,7 +625,7 @@ function AIChatAreaContent() {
     width: '100%',
     paddingLeft: '0',
     boxSizing: 'border-box',
-    marginTop: '3px', // 상단 여백 3px 추가
+    marginTop: '-5px', // 상단 여백을 음수값으로 설정하여 위로 올림
     marginBottom: '10px' // 메시지 영역과의 간격 추가
   };
 
@@ -650,7 +650,7 @@ function AIChatAreaContent() {
 
   const stockSuggestionsStyle: React.CSSProperties = {
     position: 'absolute',
-    top: '100%',
+    bottom: '100%', // 상단에 위치하도록 변경
     left: 0,
     width: '100%',
     maxHeight: 'none', // 최대 높이 제거
@@ -658,14 +658,122 @@ function AIChatAreaContent() {
     backgroundColor: 'white',
     border: '1px solid #ccc',
     borderRadius: '4px',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    boxShadow: '0 -2px 4px rgba(0, 0, 0, 0.1)', // 그림자 방향 변경
     zIndex: 1000,
-    marginTop: '4px',
+    marginBottom: '4px', // 하단 마진 추가
     padding: '8px'
   };
 
   return (
     <div className="ai-chat-area" style={aiChatAreaStyle}>
+      {/* 메시지 표시 영역 */}
+      <div 
+        className="messages-container"
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '10px',
+          margin: '0',
+          border: 'none', 
+          borderRadius: '0', 
+          backgroundColor: '#f5f5f5', 
+          width: '100%',
+          height: 'calc(100% - 60px)',
+          boxSizing: 'border-box',
+          position: 'relative'
+        }}
+      >
+        {messages.length === 0 ? (
+          <div style={{ 
+            textAlign: 'center', 
+            color: '#888', 
+            padding: '20px',
+            fontSize: '0.9rem', 
+            display: 'none' // 안내 텍스트 숨기기
+          }}>
+            종목을 선택하고 질문을 입력하세요.
+          </div>
+        ) : (
+          messages.map(message => (
+            <div 
+              key={message.id}
+              style={{
+                marginBottom: '16px',
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start'
+              }}
+            >
+              {/* 메시지 내용 */}
+              <div style={{
+                backgroundColor: '#f5f5f5', // 모든 메시지 배경색을 연한 회색으로 통일
+                padding: '10px 14px',
+                borderRadius: '12px',
+                maxWidth: '85%',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                position: 'relative',
+                border: '1px solid #e0e0e0' // 테두리 추가하여 구분
+              }}>
+                {message.stockInfo && (
+                  <div style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    color: '#0066cc',
+                    marginBottom: '4px'
+                  }}>
+                    {message.stockInfo.stockName} ({message.stockInfo.stockCode})
+                  </div>
+                )}
+                <div style={{
+                  overflow: message.role === 'user' ? 'hidden' : 'visible',
+                  textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
+                  wordBreak: 'break-word',
+                  width: '100%',
+                  padding: message.role === 'user' ? '0' : '4px 2px'
+                }}>
+                  {message.role === 'user' ? (
+                    // 사용자 메시지는 일반 텍스트로 표시
+                    <div style={{
+                      whiteSpace: 'nowrap',
+                      fontSize: '0.75rem',
+                      lineHeight: '1.6',
+                      letterSpacing: 'normal'
+                    }}>
+                      {message.content}
+                    </div>
+                  ) : (
+                    // AI 응답은 마크다운으로 렌더링
+                    <div className="markdown-content">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeHighlight]}>
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+        
+        {/* 메시지 처리 중 로딩 표시 (말풍선 왼쪽에 시간 카운터와 함께) */}
+        {isProcessing && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: '12px',
+            marginBottom: '16px'
+          }}>
+            <SearchTimer />
+            <SearchingAnimation />
+          </div>
+        )}
+        
+        <div ref={messagesEndRef} />
+      </div>
+      
       {/* 입력 영역 */}
       <div className="input-area" style={inputAreaStyle}>
         <div className="integrated-input" style={integratedInputStyle}>
@@ -949,111 +1057,21 @@ function AIChatAreaContent() {
         </div>
       </div>
       
-      {/* 메시지 표시 영역 */}
-      <div 
-        className="messages-container"
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: '10px',
-          margin: '0',
-          border: '1px solid #eee',
-          borderRadius: '4px',
-          backgroundColor: '#ffffff',
-          width: '100%',
-          height: 'calc(100% - 60px)',
-          boxSizing: 'border-box',
-          position: 'relative'
-        }}
-      >
-        {messages.length === 0 ? (
-          <div style={{ 
-            textAlign: 'center', 
-            color: '#888', 
-            padding: '20px',
-            fontSize: '0.9rem', 
-            display: 'none' // 안내 텍스트 숨기기
-          }}>
-            종목을 선택하고 질문을 입력하세요.
-          </div>
-        ) : (
-          messages.map(message => (
-            <div 
-              key={message.id}
-              style={{
-                marginBottom: '16px',
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start'
-              }}
-            >
-              {/* 메시지 내용 */}
-              <div style={{
-                backgroundColor: message.role === 'user' ? '#e1f5fe' : '#ffffff',
-                padding: '10px 14px',
-                borderRadius: '12px',
-                maxWidth: '85%',
-                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
-                position: 'relative'
-              }}>
-                {message.stockInfo && (
-                  <div style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 'bold',
-                    color: '#0066cc',
-                    marginBottom: '4px'
-                  }}>
-                    {message.stockInfo.stockName} ({message.stockInfo.stockCode})
-                  </div>
-                )}
-                <div style={{
-                  overflow: message.role === 'user' ? 'hidden' : 'visible',
-                  textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
-                  wordBreak: 'break-word',
-                  width: '100%',
-                  padding: message.role === 'user' ? '0' : '4px 2px'
-                }}>
-                  {message.role === 'user' ? (
-                    // 사용자 메시지는 일반 텍스트로 표시
-                    <div style={{
-                      whiteSpace: 'nowrap',
-                      fontSize: '0.75rem',
-                      lineHeight: '1.6',
-                      letterSpacing: 'normal'
-                    }}>
-                      {message.content}
-                    </div>
-                  ) : (
-                    // AI 응답은 마크다운으로 렌더링
-                    <div className="markdown-content">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeHighlight]}>
-                        {message.content}
-                      </ReactMarkdown>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-        
-        {/* 메시지 처리 중 로딩 표시 (말풍선 왼쪽에 시간 카운터와 함께) */}
-        {isProcessing && (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'flex-start',
-            gap: '12px',
-            marginBottom: '16px'
-          }}>
-            <SearchTimer />
-            <SearchingAnimation />
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
+      {/* 저작권 정보 */}
+      <div style={{
+        width: '100%',
+        textAlign: 'center',
+        padding: '3px 0', // 여백 축소
+        marginTop: '2px', // 상단 여백 축소
+        borderTop: '1px solid #ddd',
+      }}>
+        <div style={{
+          fontSize: '0.75rem',
+          color: '#888',
+          fontWeight: '300'
+        }}>
+          스탁이지 (주)Intellio since 2025
+        </div>
       </div>
     </div>
   );
@@ -1062,10 +1080,6 @@ function AIChatAreaContent() {
 // 메인 컴포넌트
 export default function AIChatArea() {
   return (
-    <Suspense fallback={<div className="ai-chat-area animate-pulse">
-      <div className="h-10 bg-gray-200 rounded"></div>
-    </div>}>
-      <AIChatAreaContent />
-    </Suspense>
+    <AIChatAreaContent />
   )
 }
