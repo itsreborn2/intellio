@@ -38,6 +38,7 @@ interface ProjectCategorySectionProps {
   onDragEnd: (result: any) => void
   categoryProjects: { [key: string]: IProject[] }  // 추가: 각 카테고리의 프로젝트 목록
   setCategoryProjects: React.Dispatch<React.SetStateAction<{ [key: string]: IProject[] }>>
+  closeMenuOnProjectSelect: () => void  // 추가: 프로젝트 선택 시 메뉴 닫기 함수
 }
 
 // 프로젝트 카테고리 섹션 컨텐츠 컴포넌트
@@ -49,7 +50,8 @@ function ProjectCategorySectionContent({
   dispatch,
   onDragEnd,
   categoryProjects,
-  setCategoryProjects
+  setCategoryProjects,
+  closeMenuOnProjectSelect
 }: ProjectCategorySectionProps) {
   const router = useRouter()
   const { state } = useApp()
@@ -216,6 +218,9 @@ function ProjectCategorySectionContent({
     } catch (error) {
       console.error('테이블 히스토리 로드 실패:', error)
     }
+    
+    // 모바일에서 메뉴 닫기
+    closeMenuOnProjectSelect();
   }
 
   const handleDeleteCategory = async () => {

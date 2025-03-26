@@ -13,6 +13,26 @@ import { IDocument, DocumentStatus, IDocumentStatus, DocumentStatusResponse } fr
 import { getDocumentUploadStatus } from "@/services/api"
 import { FileUploadErrorDialog } from '@/components/FileUploadErrorDialog'
 
+// 모바일 환경 감지 훅
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768); // 768px 미만을 모바일로 간주
+    };
+
+    // 초기 체크
+    checkIsMobile();
+
+    // 리사이즈 이벤트에 대응
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  return isMobile;
+};
+
 const DocumentTitle = ({ fileName }: { fileName: string }) => (
   <div className="bg-muted/90 w-fit px-2 py-1 rounded">
     <span className="text-sm text-muted-foreground">{fileName}</span>
@@ -207,6 +227,7 @@ export const TableSection = () => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const tableRef = useRef<ITableUtils>(null);
   const { uploadProgress, uploadError, handleFileUpload, closeErrorDialog, showErrorDialog } = useFileUpload()
+  const isMobile = useIsMobile();
 
   // 컬럼 상태 동기화
   useEffect(() => {
@@ -410,35 +431,40 @@ export const TableSection = () => {
   }
 
   return (
-    <div className="h-full flex-1 overflow-hidden flex flex-col">
+    <div className={`h-full flex-1 overflow-hidden flex flex-col ${isMobile ? 'pt-9' : ''}`}>
       <UploadProgressDialog {...uploadProgress} />
       <FileUploadErrorDialog 
         isOpen={uploadError.isOpen}
         onClose={closeErrorDialog}
         errorMessage={uploadError.message}
       />
-      <div className="flex-shrink-0 bg-background border-b">
-        <div className="flex items-center justify-between p-2 gap-2">
-          <div className="flex items-center gap-2">
-            {isAuthenticated && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-2 text-xs transition-all duration-300 ease-in-out"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Plus className="h-3 w-3 mr-0.5" />
-                문서 추가
-              </Button>
-            )}
-          </div>
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            multiple
-            onChange={handleAddDocuments}
-          />
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleAddDocuments(e);
+            // 파일 선택 후 input 값을 초기화하여 같은 파일을 다시 선택할 수 있도록 함
+            e.target.value = '';
+          }
+        }}
+        multiple
+        accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.ppt"
+      />
+      <div className={`flex-shrink-0 bg-background border-b ${isMobile ? 'p-1' : 'p-2'}`}>
+        <div className={`flex items-center justify-between gap-2 ${isMobile ? 'flex-wrap' : ''}`}>
+          {isAuthenticated && (
+            <Button
+              variant="outline"
+              size={isMobile ? "sm" : "default"}
+              className={`h-8 px-2 text-xs transition-all duration-300 ease-in-out ${isMobile ? 'w-full' : ''}`}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Plus className={`h-3 w-3 mr-0.5 ${isMobile ? 'mr-1' : ''}`} />
+              {isMobile ? "문서 추가" : "문서 추가"}
+            </Button>
+          )}
         </div>
       </div>
       <div className="flex-1 overflow-hidden">

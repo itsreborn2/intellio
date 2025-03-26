@@ -4,8 +4,8 @@ import { useApp } from "@/contexts/AppContext"
 import { ChatSection } from './components/ChatSection'
 import { TableSection } from './components/TableSection'
 import { UploadSection } from './components/UploadSection'
-import { useState, useEffect } from 'react'
-import { Maximize2, Minimize2 } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Maximize2, Minimize2, MessageSquare, Table } from 'lucide-react'
 import { Button } from "intellio-common/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "intellio-common/components/ui/tooltip"
 import { useAuth } from "@/hooks/useAuth"
@@ -22,22 +22,91 @@ const collapseAnimation = {
   WebkitAnimation: 'collapseSection 0.1s forwards'
 };
 
+// 모바일 환경 감지 훅
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768); // 768px 미만을 모바일로 간주
+    };
+
+    // 초기 체크
+    checkIsMobile();
+
+    // 리사이즈 이벤트에 대응
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  return isMobile;
+};
+
 export const DefaultTemplate = () => {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const { isAuthenticated } = useAuth()
-  const [expandedSection, setExpandedSection] = useState<'none' | 'chat' | 'table'>('none')
+  const [activeTab, setActiveTab] = useState<'chat' | 'table'>('chat')
+  const [chatExpanded, setChatExpanded] = useState(true)
+  const [tableExpanded, setTableExpanded] = useState(true)
+  const isMobile = useIsMobile();
+
+  // 채팅 섹션 토글 핸들러
+  const toggleChat = () => {
+    if (isMobile) {
+      setActiveTab('chat');
+    } else {
+      setChatExpanded(!chatExpanded);
+    }
+  }
+
+  // 테이블 섹션 토글 핸들러
+  const toggleTable = () => {
+    if (isMobile) {
+      setActiveTab('table');
+    } else {
+      setTableExpanded(!tableExpanded);
+    }
+  }
+
+  // 모바일 환경에서 탭 변경 시 스크롤 초기화
+  useEffect(() => {
+    if (isMobile) {
+      window.scrollTo(0, 0);
+    }
+  }, [activeTab, isMobile]);
+
+  // 화면 크기 변경 시 레이아웃 조정
+  useEffect(() => {
+    if (!isMobile) {
+      setChatExpanded(true);
+      setTableExpanded(true);
+    }
+  }, [isMobile]);
 
   // ESC 키로 확장 모드 종료
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && expandedSection !== 'none') {
-        setExpandedSection('none');
+      if (e.key === 'Escape' && (chatExpanded || tableExpanded)) {
+        setChatExpanded(false);
+        setTableExpanded(false);
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [expandedSection]);
+  }, [chatExpanded, tableExpanded]);
+
+  // 모바일 환경에서 통합분석/개별분석 버튼 클릭 시 탭 전환 처리
+  useEffect(() => {
+    const handleSwitchTab = (e: CustomEvent) => {
+      if (e.detail && e.detail.tab) {
+        setActiveTab(e.detail.tab);
+      }
+    };
+    
+    window.addEventListener('switchToTab', handleSwitchTab as EventListener);
+    return () => window.removeEventListener('switchToTab', handleSwitchTab as EventListener);
+  }, []);
 
   const renderContent = () => {
     switch (state.currentView) {
@@ -57,73 +126,53 @@ export const DefaultTemplate = () => {
       
       case 'table':
       case 'chat':
-        if (expandedSection === 'chat') {
+        if (isMobile) {
           return (
-            <div className="h-full w-full flex flex-col">
-              <div 
-                className="relative bg-background h-full transition-all duration-300 ease-in-out text-sm"
-                style={{
-                  transformOrigin: 'center',
-                  ...expandAnimation
-                }}
-              >
-                <div className="absolute right-2 top-2 z-30">
-                  <TooltipProvider>
-                    <Tooltip delayDuration={100}>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 border bg-background hover:bg-accent transition-all duration-100"
-                          onClick={() => setExpandedSection('none')}
-                        >
-                          <Minimize2 className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" align="end">
-                        <p>복원</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+            <div className="flex flex-col h-full">
+              {/* 메인 콘텐츠 영역 */}
+              <div className="flex-1 overflow-hidden">
+                {/* 채팅 섹션 */}
+                <div 
+                  className={`
+                    ${activeTab === 'chat'
+                      ? 'flex-1 opacity-100 max-h-full'
+                      : 'max-h-0 opacity-0 overflow-hidden'
+                    }
+                    transition-all duration-300 ease-in-out
+                    ${activeTab === 'chat' ? 'z-10' : 'z-0'}
+                    h-full
+                  `}
+                >
+                  {activeTab === 'chat' && (
+                    <div className="h-full">
+                      <ChatSection />
+                    </div>
+                  )}
                 </div>
-                <ChatSection />
+
+                {/* 테이블 섹션 */}
+                <div 
+                  className={`
+                    ${activeTab === 'table'
+                      ? 'flex-1 opacity-100 max-h-full'
+                      : 'max-h-0 opacity-0 overflow-hidden'
+                    }
+                    transition-all duration-300 ease-in-out
+                    ${activeTab === 'table' ? 'z-10' : 'z-0'}
+                    h-full
+                  `}
+                >
+                  {activeTab === 'table' && (
+                    <div className="h-full">
+                      <TableSection />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          )
-        } else if (expandedSection === 'table') {
-          return (
-            <div className="h-full w-full flex flex-col">
-              <div 
-                className="relative bg-background h-full overflow-hidden transition-all duration-300 ease-in-out text-sm"
-                style={{
-                  transformOrigin: 'center',
-                  ...expandAnimation
-                }}
-              >
-                <div className="absolute right-2 top-2 z-30">
-                  <TooltipProvider>
-                    <Tooltip delayDuration={100}>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 border bg-background hover:bg-accent transition-all duration-100"
-                          onClick={() => setExpandedSection('none')}
-                        >
-                          <Minimize2 className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" align="end">
-                        <p>복원</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <TableSection />
-              </div>
-            </div>
-          )
+          );
         } else {
+          // 데스크톱 환경에서는 기존 레이아웃 유지
           return (
             <div className="h-full w-full flex flex-col">
               <ResizablePanelGroup direction="vertical" className="h-full">
@@ -132,7 +181,7 @@ export const DefaultTemplate = () => {
                     className="relative bg-background h-full transition-all duration-300 ease-in-out text-sm"
                     style={{
                       transformOrigin: 'center',
-                      ...(expandedSection === 'none' ? collapseAnimation : {})
+                      ...(chatExpanded ? expandAnimation : collapseAnimation)
                     }}
                   >
                     <div className="absolute right-2 top-2 z-30">
@@ -143,13 +192,13 @@ export const DefaultTemplate = () => {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 border bg-background hover:bg-accent transition-all duration-100"
-                              onClick={() => setExpandedSection('chat')}
+                              onClick={() => setChatExpanded(!chatExpanded)}
                             >
-                              <Maximize2 className="h-4 w-4" />
+                              {chatExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" align="end">
-                            <p>채팅 영역 최대화</p>
+                            <p>{chatExpanded ? '복원' : '채팅 영역 최대화'}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -165,7 +214,7 @@ export const DefaultTemplate = () => {
                     className="relative bg-background h-full transition-all duration-200 ease-in-out text-sm"
                     style={{
                       transformOrigin: 'center',
-                      ...(expandedSection === 'none' ? collapseAnimation : {})
+                      ...(tableExpanded ? expandAnimation : collapseAnimation)
                     }}
                   >
                     <div className="absolute right-2 top-2 z-30">
@@ -176,13 +225,13 @@ export const DefaultTemplate = () => {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 border bg-background hover:bg-accent transition-all duration-100"
-                              onClick={() => setExpandedSection('table')}
+                              onClick={() => setTableExpanded(!tableExpanded)}
                             >
-                              <Maximize2 className="h-4 w-4" />
+                              {tableExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" align="end">
-                            <p>테이블 영역 최대화</p>
+                            <p>{tableExpanded ? '복원' : '테이블 영역 최대화'}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -205,7 +254,37 @@ export const DefaultTemplate = () => {
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="h-full w-full">
+      {/* 모바일 환경 상단 분석 버튼 그룹 - 문서가 있을 때만 표시 */}
+      {isMobile && state.documents && Object.keys(state.documents).length > 0 && (
+        <div className="fixed top-3 right-3 z-[1200] flex gap-1 w-[160px]">
+          <Button
+            variant="outline"
+            size="sm"
+            className={`text-xs px-1 h-8 whitespace-nowrap flex-1 ${activeTab === 'chat' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
+            onClick={() => {
+              dispatch({ type: 'SET_MODE', payload: 'chat' });
+              const event = new CustomEvent('switchToTab', { detail: { tab: 'chat' } });
+              window.dispatchEvent(event);
+            }}
+          >
+            통합분석
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className={`text-xs px-1 h-8 whitespace-nowrap flex-1 ${activeTab === 'table' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
+            onClick={() => {
+              dispatch({ type: 'SET_MODE', payload: 'table' });
+              const event = new CustomEvent('switchToTab', { detail: { tab: 'table' } });
+              window.dispatchEvent(event);
+            }}
+          >
+            {isMobile ? '문서목록' : '개별분석'}
+          </Button>
+        </div>
+      )}
+      
       <style jsx global>{`
         @keyframes expandSection {
           0% { transform: scale(0.99); opacity: 0.95; }

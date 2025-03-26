@@ -440,7 +440,7 @@ export default function IndustryCharts() {
     <div className="p-4">
       {/* 차트 제목 및 설명 추가 */}
       <div className="mb-4">
-        <h2 className="text-xl font-bold mb-2">산업별 주도ETF 차트</h2>
+        <h2 className="text-xl font-bold mb-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>산업별 주도ETF 차트</h2>
         <p className="text-sm text-gray-600">
           각 산업별 ETF의 20일 이동평균선 기준 상태와 등락률을 확인할 수 있습니다. 
           녹색 배경은 20일선 위에 있는 ETF, 노란색 배경은 20일선 아래에 있는 ETF를 나타냅니다.

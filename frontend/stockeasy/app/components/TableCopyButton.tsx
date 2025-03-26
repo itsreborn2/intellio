@@ -36,6 +36,12 @@ export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
     }
   };
   
+  // 반응형 스타일 정의
+  const buttonStyle = {
+    fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
+    padding: 'clamp(0.15rem, 0.2vw, 0.25rem) clamp(0.3rem, 0.4vw, 0.5rem)',
+  };
+  
   return (
     <button 
       onClick={handleCopyImage}
@@ -45,6 +51,7 @@ export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
       type="button"
       aria-label={`${tableName} 이미지로 복사`}
       disabled={isLoading}
+      style={buttonStyle}
     >
       {isLoading ? "생성 중..." : buttonText}
     </button>

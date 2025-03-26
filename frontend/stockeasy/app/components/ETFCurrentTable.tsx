@@ -865,6 +865,7 @@ export default function ETFCurrentTable() {
               ? 'text-red-500' 
               : 'text-blue-500'
           }`}
+          style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
         >
           {formattedDate}
         </span>
@@ -1007,7 +1008,7 @@ export default function ETFCurrentTable() {
     <div className="bg-white rounded-md shadow">
       <div ref={headerRef} className="p-4 border-b border-gray-200 font-medium flex justify-between items-center">
         <div className="flex items-center space-x-4">
-          <div>ETF 현재가</div>
+          <div style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>ETF 현재가</div>
         </div>
         <div className="flex items-center space-x-2">
           <span className="text-xs text-gray-600">당일 섹터/ETF 등락율</span>
@@ -1031,7 +1032,8 @@ export default function ETFCurrentTable() {
                 className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
                   width: '60px',
-                  height: '35px'
+                  height: '35px',
+                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                 }}
                 onClick={() => handleSort('산업')}
               >
@@ -1044,23 +1046,69 @@ export default function ETFCurrentTable() {
                   )}
                 </div>
               </th>
-              {['섹터', ...filteredHeaders.filter(header => header !== '산업' && header !== '섹터'), '2개월 차트', '20일선 이격', '돌파/이탈', '포지션', '대표종목'].map((header) => (
+              <th
+                key="섹터"
+                scope="col"
+                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                style={{
+                  width: '60px',
+                  height: '35px',
+                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                }}
+                onClick={() => handleSort('섹터')}
+              >
+                <div className="flex justify-center items-center">
+                  섹터
+                  {sortKey === '섹터' && (
+                    <span className="ml-1">
+                      {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                    </span>
+                  )}
+                </div>
+              </th>
+              {filteredHeaders.filter(header => header === '등락율').map((header) => (
                 <th
                   key={header}
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
-                    width: header === '종목명' ? '150px' : 
-                           header === '티커' ? '35px' : 
-                           header === '등락율' ? '40px' : 
-                           header === '52주 차트' ? '180px' : 
-                           header === '20일선 기준가' ? '80px' : 
-                           header === '돌파/이탈' ? '80px' : 
-                           header === '포지션' ? '80px' : 
-                           header === '대표종목' ? '380px' : 
-                           header === '섹터' ? '60px' : 
-                           header === '산업' ? '60px' : '80px',
-                    height: '35px'
+                    width: '40px',
+                    height: '35px',
+                    fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                  }}
+                  onClick={() => handleSort(header)}
+                >
+                  <div className="flex justify-center items-center">
+                    {header}
+                    {sortKey === header && (
+                      <span className="ml-1">
+                        {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                      </span>
+                    )}
+                  </div>
+                </th>
+              ))}
+              <th
+                key="포지션"
+                scope="col"
+                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                style={{
+                  width: '80px',
+                  height: '35px',
+                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                }}
+              >
+                포지션
+              </th>
+              {['2개월 차트', '20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
+                <th
+                  key={header}
+                  scope="col"
+                  className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 hidden md:table-cell`}
+                  style={{
+                    width: header === '2개월 차트' ? '180px' : header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px',
+                    height: '35px',
+                    fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                   }}
                   onClick={() => {
                     if (header !== '52주 차트' && header !== '20일선 기준가' && header !== '돌파/이탈' && header !== '포지션' && header !== '대표종목') {
@@ -1115,13 +1163,13 @@ export default function ETFCurrentTable() {
                       <td
                         rowSpan={rowCount}
                         className="px-2 py-1 whitespace-nowrap text-xs border border-gray-200 align-middle"
-                        style={{ width: '60px' }}
+                        style={{ width: '60px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
                       >
                         <div className="flex flex-col items-start">
-                          <span className="text-xs px-2 py-1 rounded-md bg-white text-gray-700 border border-gray-200 shadow-sm inline-block">
+                          <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-md bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                             {industry === '소비재/음식료' ? '소비재/음식료' : industry}
                           </span>
-                          <span className={`mt-1 ml-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`}>
+                          <span className={`mt-1 ml-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`} style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                             {calculateIndustryAverage(industry, sortedData)}
                           </span>
                         </div>
@@ -1129,13 +1177,13 @@ export default function ETFCurrentTable() {
                     )}
                     <td 
                       className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} 
-                      style={{ width: '60px', height: '16px' }}
+                      style={{ width: '60px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
                     >
                       {row['섹터']}
                     </td>
-                    {filteredHeaders.filter(header => header !== '산업' && header !== '섹터').map((header) => {
+                    {filteredHeaders.filter(header => header === '등락율').map((header) => {
                       const isChangeColumn = header === '등락율' || header === '전일대비';
-                      const isTickerColumn = header === '티커';
+                      const isTickerColumn = false; // 티커 컬럼은 이 필터에 포함되지 않으므로 항상 false
                       const value = row[header];
                       const numericValue = isChangeColumn ? parseFloat(value) : null;
                       const colorClass = isChangeColumn
@@ -1146,102 +1194,18 @@ export default function ETFCurrentTable() {
                         <td
                           key={header}
                           className={`px-4 py-1 whitespace-nowrap text-xs ${colorClass} border border-gray-200 ${isChangeColumn || isTickerColumn ? 'text-center' : ''} ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`}
-                          style={{ width: header === '종목명' ? '150px' : header === '티커' ? '35px' : header === '등락율' ? '40px' : '80px', height: '16px' }}
+                          style={{ 
+                            width: '40px', 
+                            height: '16px',
+                            fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                          }}
                         >
                           {isChangeColumn && numericValue! > 0 ? '+' : ''}
-                          {isTickerColumn ? (value ? value.padStart(6, '0') : '') : value}
+                          {value}
                         </td>
                       );
                     })}
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '180px', height: '16px' }}>
-                      {(() => {
-                        // 디버깅을 위한 로그
-                        const ticker = row['티커'];
-                        if (!ticker) return null;
-                        
-                        // 티커 변형 생성 (앞에 0 추가)
-                        const normalizedTicker = ticker ? ticker.padStart(6, '0') : '';
-                        const mappedTicker = tickerMappingInfo.tickerMap[ticker] || '';
-                        const stockName = row['종목명'] || tickerMappingInfo.stockNameMap[ticker] || '';
-                        
-                        // 데이터 확인
-                        const hasData = ticker && stockPriceData[ticker] && stockPriceData[ticker].length > 0;
-                        
-                        if (hasData) {
-                          return (
-                            <div className="w-full h-full flex items-center">
-                              <Sparklines data={stockPriceData[ticker].map(data => data.price)} width={180} height={25.2} margin={1.8}>
-                                <SparklinesLine 
-                                  color={(() => {
-                                    const changeRate = parseFloat(row['등락율'] || '0');
-                                    if (changeRate > 0) return "#EF4444"; // 상승 - 빨강
-                                    if (changeRate < 0) return "#3B82F6"; // 하락 - 파랑
-                                    return "#000000"; // 보합 - 검정
-                                  })()} 
-                                  style={{ 
-                                    strokeWidth: 1.5, 
-                                    stroke: (() => {
-                                      const changeRate = parseFloat(row['등락율'] || '0');
-                                      if (changeRate > 0) return "#EF4444"; // 상승 - 빨강
-                                      if (changeRate < 0) return "#3B82F6"; // 하락 - 파랑
-                                      return "#000000"; // 보합 - 검정
-                                    })(), 
-                                    fill: (() => {
-                                      const changeRate = parseFloat(row['등락율'] || '0');
-                                      if (changeRate > 0) return "#FEE2E2"; // 상승 - 연한 빨강
-                                      if (changeRate < 0) return "#DBEAFE"; // 하락 - 연한 파랑
-                                      return "#F3F4F6"; // 보합 - 연한 회색
-                                    })(), 
-                                    fillOpacity: 0.5 
-                                  }} 
-                                />
-                              </Sparklines>
-                            </div>
-                          );
-                        } else {
-                          return (
-                            <div className="flex items-center justify-center h-full">
-                              <span className="text-xs text-gray-400">데이터 없음</span>
-                            </div>
-                          );
-                        }
-                      })()}
-                    </td>
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '80px', height: '16px' }}>
-                      {/* 20일선 위치 데이터 표시 */}
-                      <div className="flex items-center justify-center h-full">
-                        {(() => {
-                          const ticker = row['티커'];
-                          if (!ticker) return '-';
-                          
-                          const position = calculate20DayMAPosition(ticker);
-                          const positionValue = parseFloat(position);
-                          
-                          // 색상 결정
-                          let colorClass = 'text-gray-600';
-                          if (!isNaN(positionValue)) {
-                            if (positionValue > 0) {
-                              colorClass = 'text-red-500';
-                            } else if (positionValue < 0) {
-                              colorClass = 'text-blue-500';
-                            }
-                          }
-                          
-                          return (
-                            <span className={`text-xs font-medium ${colorClass}`}>
-                              {position}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </td>
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '80px', height: '16px' }}>
-                      {/* 돌파/이탈 데이터 표시 */}
-                      <div className="flex items-center justify-center h-full">
-                        {renderCrossover(row['티커'])}
-                      </div>
-                    </td>
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '80px', height: '16px' }}>
+                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '80px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                       {/* 포지션 상태 표시 */}
                       <div className="flex items-center justify-center h-full">
                         {(() => {
@@ -1263,57 +1227,153 @@ export default function ETFCurrentTable() {
                           const durationText = duration !== null ? `+${duration}일` : '';
                           
                           return (
-                            <span className={`text-xs font-medium px-2 py-1 rounded-md ${isAboveMA ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            <span className={`text-xs font-medium px-1 sm:px-2 py-0.5 sm:py-1 rounded-md ${isAboveMA ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}
+                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                               {isAboveMA ? `유지 ${durationText}` : `이탈 ${durationText}`}
                             </span>
                           );
                         })()}
                       </div>
                     </td>
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '380px', height: '16px' }}>
-                      {(() => {
-                        const ticker = row['티커'];
-                        if (!ticker) return '-';
-                        
-                        // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
-                        const tickerVariations = [
-                          ticker,
-                          ticker.padStart(6, '0'),
-                          ticker.replace(/^0+/, '')
-                        ];
-                        
-                        // 모든 티커 변형에 대해 대표종목 검색
-                        let stockList = null;
-                        for (const variant of tickerVariations) {
-                          if (etfStockList[variant] && etfStockList[variant].length > 0) {
-                            stockList = etfStockList[variant];
-                            break;
-                          }
-                        }
-                        
-                        // 대표종목이 없으면 '-' 반환
-                        if (!stockList || stockList.length === 0) {
-                          // console.log(`티커 ${ticker}의 대표종목 정보 없음`);
-                          return '-';
-                        }
-                        
-                        // 모든 대표종목 표시
-                        return (
-                          <div className="flex flex-wrap items-center gap-1">
-                            {stockList.map((item, index) => (
-                              <div key={index} className="flex items-center">
-                                <span className="text-xs">{item.name}</span>
-                                {item.rs && (
-                                  <span className={`text-xs ml-1 px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-lg ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable">
-                                    {item.rs}
-                                  </span>
-                                )}
+                    {['2개월 차트', '20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
+                      <td
+                        key={header}
+                        className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''} hidden md:table-cell`}
+                        style={{ 
+                          width: header === '2개월 차트' ? '180px' : header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px', 
+                          height: '16px',
+                          fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                        }}
+                      >
+                        {(() => {
+                          if (header === '2개월 차트') {
+                            // 디버깅을 위한 로그
+                            const ticker = row['티커'];
+                            if (!ticker) return null;
+                            
+                            // 티커 변형 생성 (앞에 0 추가)
+                            const normalizedTicker = ticker ? ticker.padStart(6, '0') : '';
+                            const mappedTicker = tickerMappingInfo.tickerMap[ticker] || '';
+                            const stockName = row['종목명'] || tickerMappingInfo.stockNameMap[ticker] || '';
+                            
+                            // 데이터 확인
+                            const hasData = ticker && stockPriceData[ticker] && stockPriceData[ticker].length > 0;
+                            
+                            if (hasData) {
+                              return (
+                                <div className="w-full h-full flex items-center">
+                                  <Sparklines data={stockPriceData[ticker].map(data => data.price)} width={180} height={25.2} margin={1.8}>
+                                    <SparklinesLine 
+                                      color={(() => {
+                                        const changeRate = parseFloat(row['등락율'] || '0');
+                                        if (changeRate > 0) return "#EF4444"; // 상승 - 빨강
+                                        if (changeRate < 0) return "#3B82F6"; // 하락 - 파랑
+                                        return "#000000"; // 보합 - 검정
+                                      })()} 
+                                      style={{ 
+                                        strokeWidth: 1.5, 
+                                        stroke: (() => {
+                                          const changeRate = parseFloat(row['등락율'] || '0');
+                                          if (changeRate > 0) return "#EF4444"; // 상승 - 빨강
+                                          if (changeRate < 0) return "#3B82F6"; // 하락 - 파랑
+                                          return "#000000"; // 보합 - 검정
+                                        })(), 
+                                        fill: (() => {
+                                          const changeRate = parseFloat(row['등락율'] || '0');
+                                          if (changeRate > 0) return "#FEE2E2"; // 상승 - 연한 빨강
+                                          if (changeRate < 0) return "#DBEAFE"; // 하락 - 연한 파랑
+                                          return "#F3F4F6"; // 보합 - 연한 회색
+                                        })(), 
+                                        fillOpacity: 0.5 
+                                      }} 
+                                    />
+                                  </Sparklines>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="flex items-center justify-center h-full">
+                                  <span className="text-xs text-gray-400">데이터 없음</span>
+                                </div>
+                              );
+                            }
+                          } else if (header === '20일선 이격') {
+                            // 20일선 위치 데이터 표시
+                            const ticker = row['티커'];
+                            if (!ticker) return '-';
+                            
+                            const position = calculate20DayMAPosition(ticker);
+                            const positionValue = parseFloat(position);
+                            
+                            // 색상 결정
+                            let colorClass = 'text-gray-600';
+                            if (!isNaN(positionValue)) {
+                              if (positionValue > 0) {
+                                colorClass = 'text-red-500';
+                              } else if (positionValue < 0) {
+                                colorClass = 'text-blue-500';
+                              }
+                            }
+                            
+                            return (
+                              <span className={`text-xs font-medium ${colorClass}`}>
+                                {position}
+                              </span>
+                            );
+                          } else if (header === '돌파/이탈') {
+                            // 돌파/이탈 데이터 표시
+                            return (
+                              <div className="flex items-center justify-center h-full">
+                                {renderCrossover(row['티커'])}
                               </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </td>
+                            );
+                          } else if (header === '대표종목') {
+                            // 대표종목 데이터 표시
+                            const ticker = row['티커'];
+                            if (!ticker) return '-';
+                            
+                            // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
+                            const tickerVariations = [
+                              ticker,
+                              ticker.padStart(6, '0'),
+                              ticker.replace(/^0+/, '')
+                            ];
+                            
+                            // 모든 티커 변형에 대해 대표종목 검색
+                            let stockList = null;
+                            for (const variant of tickerVariations) {
+                              if (etfStockList[variant] && etfStockList[variant].length > 0) {
+                                stockList = etfStockList[variant];
+                                break;
+                              }
+                            }
+                            
+                            // 대표종목이 없으면 '-' 반환
+                            if (!stockList || stockList.length === 0) {
+                              // console.log(`티커 ${ticker}의 대표종목 정보 없음`);
+                              return '-';
+                            }
+                            
+                            // 모든 대표종목 표시
+                            return (
+                              <div className="flex flex-wrap items-center gap-1">
+                                {stockList.map((item, index) => (
+                                  <div key={index} className="flex items-center">
+                                    <span className="text-xs" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>{item.name}</span>
+                                    {item.rs && (
+                                      <span className={`text-xs ml-1 px-1 sm:px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-lg ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable"
+                                            style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                                        {item.rs}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          }
+                        })()}
+                      </td>
+                    ))}
                   </tr>
                 );
               });

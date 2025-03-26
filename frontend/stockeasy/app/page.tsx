@@ -12,23 +12,9 @@ export default function StockEasyLandingPage() {
   return (
     <div className="stockeasy-landing-page">
       <Sidebar />
-      <main className="main-content">
-        <section className="top-section">
-          <AIChatArea />
-        </section>
-        {/* 다른 영역은 주석 처리하여 화면에서 제거하되 코드는 유지 */}
-        {/* 
-        <section className="bottom-section">
-          <div className="bottom-grid-container">
-            <BottomLeftArea />
-            <BottomCenterArea />
-            <BottomRightArea1 />
-            <BottomRightArea2 />
-          </div>
-          <TelegramSummaryArea />
-        </section>
-        */}
-      </main>
+      <div className="chat-area-wrapper">
+        <AIChatArea />
+      </div>
     </div>
   );
 }

@@ -8,21 +8,55 @@
   font-family: 'Spoqa Han Sans Neo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-/* 전체 페이지에 스크롤 허용 */
+/* 기본 스타일 */
 html, body {
   height: 100%;
-  overflow: hidden; /* 스크롤 제거 */
   margin: 0;
   padding: 0;
-  background-color: #f5f5f5; /* 연한 회색 배경 추가 */
+  background-color: #f5f5f5;
+  overflow-y: auto; /* 스크롤 허용 */
+  overflow-x: hidden;
 }
+
+/* 스크롤바 스타일 - 브라우저 전체 */
+html::-webkit-scrollbar {
+  width: 8px; /* 스크롤바 너비 */
+}
+
+html::-webkit-scrollbar-track {
+  background: #f5f5f5; /* 스크롤바 트랙 배경색 */
+}
+
+html::-webkit-scrollbar-thumb {
+  background-color: #aaa; /* 스크롤바 색상 */
+  border-radius: 4px; /* 스크롤바 모서리 둥글게 */
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background-color: #888; /* 스크롤바 호버 시 색상 */
+}
+
+/* Firefox 스크롤바 스타일 */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #aaa #f5f5f5;
+}
+
+/* 전체 페이지에 스크롤 허용 */
+/* html, body {
+  height: 100%;
+  overflow: hidden; 
+  margin: 0;
+  padding: 0;
+  background-color: #f5f5f5; 
+} */
 
 /* Stockeasy 랜딩 페이지 레이아웃 스타일 */
 .stockeasy-landing-page {
   display: flex;
   height: 100vh; /* 화면 전체 높이 */
   width: 100%;
-  overflow: hidden; /* 스크롤 제거 */
+  overflow: visible; /* 스크롤 허용 */
   padding-left: 63px; /* 사이드바 너비만큼 패딩 추가 */
   background-color: #f5f5f5; /* 연한 회색 배경 추가 */
 }
@@ -33,7 +67,7 @@ html, body {
   left: 0;
   width: 63px;
   height: 100vh;
-  background-color: #f8f9fa;
+  background-color: #e5e7eb; /* 더 진한 회색으로 변경 */
   border-right: 1px solid #e9ecef;
   z-index: 1000;
   display: flex;
@@ -41,6 +75,7 @@ html, body {
   align-items: center;
   padding-top: 1rem;
   overflow-y: auto;
+  overflow-x: hidden; /* 가로 스크롤 제거 */
   transition: width 0.3s ease;
 }
 
@@ -118,41 +153,86 @@ html, body {
   color: #555;
 }
 
+/* 메인 콘텐츠 영역 */
 .main-content {
   flex: 1;
   display: flex;
-  justify-content: center; /* 가운데 정렬 */
-  align-items: center; /* 세로 방향 가운데 정렬 */
+  flex-direction: column;
+  width: 100%;
+  height: auto;
+  min-height: 100vh;
+  overflow: visible; /* 스크롤을 html로 위임 */
+  background-color: #f5f5f5;
+}
+
+/* 채팅 영역 래퍼 스타일 */
+.chat-area-wrapper {
+  flex: 1;
   width: calc(100% - 63px); /* 사이드바 너비 제외 */
-  height: 100vh; /* 화면 전체 높이 */
+  height: 100vh;
+  overflow-y: auto; /* 스크롤 허용 */
+  overflow-x: hidden;
+  background-color: #f5f5f5;
+  display: flex;
+  justify-content: center; /* 채팅 영역 중앙 정렬 */
   padding: 0;
-  overflow: hidden;
-  background-color: #f5f5f5; /* 연한 회색 배경 추가 */
+  margin: 0;
+}
+
+/* 스크롤바 스타일 - 채팅 영역 래퍼 */
+.chat-area-wrapper::-webkit-scrollbar {
+  width: 8px; /* 스크롤바 너비 */
+}
+
+.chat-area-wrapper::-webkit-scrollbar-track {
+  background: #f5f5f5; /* 스크롤바 트랙 배경색 */
+}
+
+.chat-area-wrapper::-webkit-scrollbar-thumb {
+  background-color: #aaa; /* 스크롤바 색상 */
+  border-radius: 4px; /* 스크롤바 모서리 둥글게 */
+}
+
+.chat-area-wrapper::-webkit-scrollbar-thumb:hover {
+  background-color: #888; /* 스크롤바 호버 시 색상 */
+}
+
+/* Firefox 스크롤바 스타일 */
+.chat-area-wrapper {
+  scrollbar-width: thin;
+  scrollbar-color: #aaa #f5f5f5;
+}
+
+/* 스크롤바 스타일 */
+.main-content::-webkit-scrollbar {
+  width: 8px; /* 스크롤바 너비 */
+}
+
+.main-content::-webkit-scrollbar-track {
+  background: #f5f5f5; /* 스크롤바 트랙 배경색 */
+}
+
+.main-content::-webkit-scrollbar-thumb {
+  background-color: #aaa; /* 스크롤바 색상 */
+  border-radius: 4px; /* 스크롤바 모서리 둥글게 */
+}
+
+.main-content::-webkit-scrollbar-thumb:hover {
+  background-color: #888; /* 스크롤바 호버 시 색상 */
+}
+
+/* 메시지 컨테이너 스크롤바 숨김 */
+.messages-container::-webkit-scrollbar {
+  display: none; /* 메시지 컨테이너의 스크롤바 숨김 */
 }
 
 .top-section {
+  width: 100%;
+  height: auto; /* 높이를 자동으로 조정 */
+  min-height: 100%; /* 최소 높이는 100% 유지 */
   display: flex;
   justify-content: center; /* 가운데 정렬 */
-  height: 100vh; /* 화면 전체 높이 */
-  width: 100%;
-  max-width: 1200px; /* 최대 너비 설정 */
-  margin: 0 auto; /* 가운데 정렬 */
-  padding: 0;
-  overflow: hidden;
-  /* 구분선 제거 */
-  border: none;
-  background-color: #f5f5f5; /* 연한 회색 배경 추가 */
-}
-
-.top-section > * {
-  width: 100%;
-  height: 100%;
-  border-radius: 0; /* 모서리 둥글기 제거 */
-  overflow: hidden;
-  margin: 0;
-  /* 구분선 제거 */
-  border: none;
-  background: transparent;
+  overflow: visible; /* 스크롤 제거 */
 }
 
 .bottom-section {
@@ -388,47 +468,25 @@ html, body {
   font-size: 0.85rem;
   line-height: 1.6;
   letter-spacing: 0.01em;
-  /* 구분선 제거 */
-  border: none;
-  background: transparent;
+  width: 100%; /* 전체 너비 사용 */
 }
 
 .markdown-content p {
   margin: 0.5rem 0;
   line-height: 1.6;
-  /* 구분선 제거 */
-  border: none;
-  background: transparent;
+  width: 100%; /* 전체 너비 사용 */
 }
 
-.markdown-content h1 {
-  font-size: 1.5rem;
-  font-weight: bold;
-  margin: 1rem 0 0.5rem 0;
-  line-height: 1.6;
-  /* 구분선 제거 */
-  border: none;
-  background: transparent;
-}
-
-.markdown-content h2 {
-  font-size: 1.3rem;
-  font-weight: bold;
-  margin: 1rem 0 0.5rem 0;
-  line-height: 1.6;
-  /* 구분선 제거 */
-  border: none;
-  background: transparent;
-}
-
-.markdown-content h3 {
-  font-size: 1.1rem;
-  font-weight: bold;
-  margin: 0.8rem 0 0.4rem 0;
-  line-height: 1.6;
-  /* 구분선 제거 */
-  border: none;
-  background: transparent;
+.markdown-content h1, 
+.markdown-content h2, 
+.markdown-content h3, 
+.markdown-content h4, 
+.markdown-content h5, 
+.markdown-content h6 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  width: 100%; /* 전체 너비 사용 */
 }
 
 .markdown-content ul, .markdown-content ol {
@@ -621,4 +679,186 @@ html, body {
   color: #333;
   margin-right: auto;
   border: 1px solid #e0e0e0;
+}
+
+/* 채팅 컨테이너 스타일 */
+.chat-container {
+  width: 100%;
+  height: auto;
+  display: flex;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  overflow: visible; /* 스크롤 제거 */
+}
+
+/* 모바일 환경을 위한 미디어 쿼리 */
+@media (max-width: 768px) {
+  /* 모바일에서 페이지 레이아웃 조정 */
+  .stockeasy-landing-page {
+    padding-left: 0; /* 사이드바 패딩 제거 */
+  }
+  
+  .main-content {
+    width: 100%; /* 전체 너비 사용 */
+    padding-top: 50px; /* 모바일 헤더 높이만큼 패딩 추가 */
+  }
+  
+  /* 모바일 햄버거 메뉴 버튼 */
+  .mobile-menu-button {
+    display: flex;
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    background-color: #f5f5f5;
+    border-radius: 5px;
+    border: 1px solid #e0e0e0;
+    z-index: 1100;
+    cursor: pointer;
+  }
+  
+  /* 모바일 사이드바 */
+  .sidebar {
+    transform: translateX(-100%); /* 기본적으로 화면 밖으로 숨김 */
+    transition: transform 0.3s ease;
+    width: 180px !important; /* 모바일에서 사이드바 너비 감소 */
+  }
+  
+  .sidebar.open {
+    transform: translateX(0); /* 열린 상태에서는 보이도록 */
+  }
+  
+  /* 모바일에서 사이드바 버튼 스타일 수정 */
+  .sidebar-button {
+    width: 160px !important; /* 버튼 너비 감소 */
+    justify-content: flex-start !important; /* 왼쪽 정렬 */
+    padding-left: 10px !important; /* 왼쪽 패딩 감소 */
+    text-align: left !important; /* 텍스트 왼쪽 정렬 */
+  }
+  
+  /* 배경 오버레이 */
+  .mobile-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+  }
+  
+  .mobile-overlay.open {
+    display: block;
+  }
+  
+  /* 모바일에서 메인 컨텐츠 영역 조정 */
+  .top-section {
+    padding: 0 10px; /* 좌우 패딩 추가 */
+  }
+  
+  /* 모바일에서 입력 필드 조정 */
+  .send-message-form {
+    padding: 0 10px; /* 좌우 패딩 추가 */
+  }
+  
+  /* 모바일에서 채팅 메시지 조정 */
+  .ai-message, .user-message {
+    padding: 10px; /* 패딩 축소 */
+    margin-bottom: 8px; /* 여백 축소 */
+  }
+}
+
+/* PC 환경의 기존 요소들은 모바일에서 숨김 */
+@media (max-width: 768px) {
+  .sidebar-tooltips-container {
+    display: none;
+  }
+  
+  .sidebar-tooltip {
+    display: none;
+  }
+}
+
+/* PC 환경에서만 보이는 요소들 */
+@media (min-width: 769px) {
+  .mobile-menu-button {
+    display: none;
+  }
+  
+  .mobile-overlay {
+    display: none;
+  }
+  
+  .sidebar-button span {
+    display: none; /* PC 환경에서는 버튼 텍스트 숨김 */
+  }
+}
+
+/* 모바일 환경에서 입력창 위치 고정 */
+@media (max-width: 768px) {
+  .input-area {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    padding: 5px 10px !important;
+    background-color: #f5f5f5 !important;
+    z-index: 1000 !important;
+    margin: 0 !important;
+    border-top: 1px solid #e0e0e0 !important;
+  }
+  
+  .integrated-input {
+    width: 100% !important;
+    margin: 0 auto !important;
+    max-width: calc(100% - 20px) !important;
+  }
+  
+  /* 입력창 위의 메시지 영역이 입력창에 가려지지 않도록 패딩 추가 */
+  .messages-container {
+    padding-bottom: 70px !important;
+  }
+}
+
+/* 스크롤바 스타일 - 전역 적용 */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+/* Chrome, Safari 및 기타 WebKit 기반 브라우저용 스크롤바 스타일 */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.7);
+}
+
+/* 스크롤바 스타일 - 회색 배경 */
+.scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+  background-color: rgba(209, 213, 219, 0.7);
+}
+
+.scrollbar-thumb-gray-300::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.8);
+}
+
+.scrollbar-track-transparent::-webkit-scrollbar-track {
+  background: transparent;
 }
