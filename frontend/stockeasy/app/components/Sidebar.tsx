@@ -14,8 +14,7 @@ import {
   PieChart,
   LayoutDashboard,
   Menu, // 햄버거 메뉴 아이콘 추가
-  X, // X 아이콘 추가 (닫기 버튼용)
-  TrendingUp // 개별주 분석 아이콘 추가
+  X // X 아이콘 추가 (닫기 버튼용)
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -33,7 +32,6 @@ function SidebarContent() {
     home: useRef<HTMLButtonElement>(null),
     chart: useRef<HTMLButtonElement>(null),
     etfSector: useRef<HTMLButtonElement>(null), // ETF/섹터 버튼 참조 추가
-    indiv: useRef<HTMLButtonElement>(null), // 개별주 분석 버튼 참조 추가
     doc: useRef<HTMLButtonElement>(null),
     user: useRef<HTMLButtonElement>(null),
     settings: useRef<HTMLButtonElement>(null)
@@ -56,11 +54,6 @@ function SidebarContent() {
   
   const goToETFSectorPage = () => {
     router.push('/etf-sector');
-    if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
-  };
-  
-  const goToIndivPage = () => {
-    router.push('/indiv');
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   
@@ -161,7 +154,6 @@ function SidebarContent() {
                     {hoveredButton === 'home' && '스탁이지'}
                     {hoveredButton === 'chart' && 'RS순위'}
                     {hoveredButton === 'etfSector' && 'ETF/섹터'} {/* ETF/섹터 툴팁 추가 */}
-                    {hoveredButton === 'indiv' && '개별주 분석'} {/* 개별주 분석 툴팁 추가 */}
                     {hoveredButton === 'doc' && '닥이지'}
                     {hoveredButton === 'user' && '마이페이지'}
                     {hoveredButton === 'settings' && '설정'}
@@ -214,31 +206,16 @@ function SidebarContent() {
                 </button>
               </div>
               
-              {/* 개별주 분석 버튼 추가 */}
-              <div className="sidebar-button-container">
-                <button 
-                  ref={buttonRefs.indiv}
-                  className="sidebar-button" 
-                  onClick={goToIndivPage}
-                  onMouseEnter={() => setHoveredButton('indiv')}
-                  onMouseLeave={() => setHoveredButton(null)}
-                >
-                  <TrendingUp className="icon" />
-                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm">개별주 분석</span>}
-                </button>
-              </div>
-              
-              {/* 닥이지 버튼 - 닥이지 사이트로 이동 */}
+              {/* 문서 버튼 - DocEasy로 이동 */}
               <div className="sidebar-button-container">
                 <button 
                   ref={buttonRefs.doc}
                   className="sidebar-button" 
-                  onClick={goToDocEasy}
+                  onClick={goToDocEasy} 
                   onMouseEnter={() => setHoveredButton('doc')}
                   onMouseLeave={() => setHoveredButton(null)}
                 >
-                  <FileText className="icon" />
+                  <FileStack className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
                   {isMobile && <span className="ml-2 text-sm">닥이지</span>}
                 </button>
