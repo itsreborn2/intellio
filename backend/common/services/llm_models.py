@@ -16,6 +16,9 @@ import json
 #from loguru import logger
 from common.core.config import settings
 import logging
+from uuid import UUID
+from common.services.token_usage_service import TokenUsageQueue, track_token_usage, track_token_usage_bg, track_token_usage_sync
+from common.services.embedding_models import TokenCounter
 
 logger = logging.getLogger(__name__)
 class StreamingCallbackHandler(BaseCallbackHandler):
@@ -263,7 +266,7 @@ class LLMModels:
         return [model_info["model"] for model_info in self._llm_list]
         
 
-    def generate(self, user_query: str, prompt_context: str) -> Optional[AIMessage]:
+    def generate(self, user_query: str, prompt_context: str, user_id: Optional[UUID] = None, project_type: Optional[str] = None) -> Optional[AIMessage]:
         """동기 컨텐츠 생성"""
         try:
             #logger.info(f"LANGCHAIN_TRACING_V2[Settings]: {settings.LANGCHAIN_TRACING_V2}")
@@ -279,27 +282,34 @@ class LLMModels:
             prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
             formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
 
-            
-            # API 호출 및 전체 응답 받기
-            # 응답 타입(Google) : 'langchain_core.messages.ai.AIMessage'
-            full_response = self._llm.invoke(formatted_messages)
-            logger.info(f"응답 타입: {type(full_response)}")
-            # content='## 분석 결과 어쩌고 저쩌고..'
-            # 응답 메세지 상세.
-            #  additional_kwargs={}
-            #  response_metadata={
-            #    'prompt_feedback': {'block_reason': 0, 'safety_ratings': []}, 
-            #    'finish_reason': 'STOP', 
-            #    'safety_ratings': [
-            #           {'category': 'HARM_CATEGORY_HATE_SPEECH', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
-            #           {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
-            #           {'category': 'HARM_CATEGORY_HARASSMENT', 'probability': 'NEGLIGIBLE', 'blocked': False}, 
-            #           {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'probability': 'NEGLIGIBLE', 'blocked': False}]}
-            #  id='run-cd10c37c-c733-4607-a9e4-b543bbecbb2c-0' 
-            #  usage_metadata={'input_tokens': 1827, 'output_tokens': 818, 'total_tokens': 2645, 'input_token_details': {'cache_read': 0}}
-
-            # 여기서는 full_response를 리턴하자. 메세지를 재조립하는것은 위에서 알아서 할일.
-            logger.info(f"{self._llm_type} API 호출 완료")
+            # 토큰 사용량 추적이 필요한 경우
+            if user_id and project_type:
+                # 동기 DB 세션 팩토리
+                from common.core.database import SessionLocal
+                
+                with track_token_usage_sync(
+                    user_id=user_id,
+                    project_type=project_type,
+                    token_type="llm",
+                    model_name=self._llm.model,
+                    db_getter=SessionLocal
+                ) as tracker:
+                    # API 호출 및 전체 응답 받기
+                    full_response = self._llm.invoke(formatted_messages)
+                    
+                    # 응답에서 토큰 사용량 추출
+                    if hasattr(full_response, "usage_metadata"):
+                        usage = full_response.usage_metadata
+                        tracker.add_tokens(
+                            prompt_tokens=usage.get("input_tokens", 0),
+                            completion_tokens=usage.get("output_tokens", 0),
+                            total_tokens=usage.get("total_tokens", None)
+                        )
+                    logger.info(f"{self._llm_type} API 호출 완료 (토큰 사용량 추적됨)")
+            else:
+                # 토큰 추적 없이 실행
+                full_response = self._llm.invoke(formatted_messages)
+                logger.info(f"{self._llm_type} API 호출 완료")
         except Exception as e:
             logger.error(f"{self._llm_type} 호출 실패: {str(e)}")
             raise
@@ -433,51 +443,98 @@ class LLMModels:
             logger.error(f"{self._llm_type} 구조화된 출력 생성 실패: {str(e)}")
             raise
     
-    def generate_stream(self, user_query: str, prompt_context: str):
+    def generate_stream(self, user_query: str, prompt_context: str, user_id: Optional[UUID] = None, project_type: Optional[str] = None):
         """동기 스트리밍 컨텐츠 생성"""
         truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
-        logger.info(f"Gemini API stream[Sync] 호출 - 프롬프트: {truncated}")
-        # system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
-        # user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+        logger.info(f"{self._llm_type} API stream[Sync] 호출 - 프롬프트: {truncated}")
         system_message_prompt = SystemMessagePromptTemplate.from_template("{context}")
         user_message_prompt = HumanMessagePromptTemplate.from_template("{question}")
         prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
         formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
         
-        # 스트리밍 응답 생성
-        for chunk in self._llm_streaming.stream(formatted_messages):
-            yield chunk
+        # 토큰 사용량 추적 정보
+        token_tracking = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+        
+        try:
+            # 스트리밍 응답 생성
+            for i, chunk in enumerate(self._llm_streaming.stream(formatted_messages)):
+                if hasattr(chunk, "usage_metadata"):
+                    usage_metadata = chunk.usage_metadata
+                    token_tracking["prompt_tokens"] += usage_metadata['input_tokens']
+                    token_tracking["completion_tokens"] += usage_metadata['output_tokens']
+                    token_tracking["total_tokens"] += usage_metadata['total_tokens']
+
+                
+                # 응답의 각 청크를 반환
+                yield chunk
+        except Exception as e:
+            logger.error(f"{self._llm_type} 스트리밍 응답 생성 중 오류 발생: {str(e)}")
+            raise
+        finally:
+            # 스트리밍 완료 후 토큰 사용량 저장
+            if user_id and project_type:
+                # 비동기 코드이지만 동기 코드 내에서 호출해야 함
+                import asyncio
+                if asyncio.get_event_loop().is_running():
+                    asyncio.create_task(self._save_token_usage_bg(
+                        user_id=user_id,
+                        project_type=project_type,
+                        token_type="llm",
+                        model_name=self._llm_streaming.model,
+                        token_data={
+                            "prompt_tokens": token_tracking["prompt_tokens"],
+                            "completion_tokens": token_tracking["completion_tokens"],
+                            "total_tokens": token_tracking["total_tokens"],
+                            "total_cost": 0.0  # 실제 비용 계산 필요
+                        }
+                    ))
+                else:
+                    logger.warning("이벤트 루프가 실행 중이 아니어서 토큰 사용량을 저장할 수 없습니다.")
     
-    async def agenerate(self, user_query: str, prompt_context: str) -> Optional[AIMessage]:
-        #prompt_template = ChatPromptTemplate.from_template("{prompt}")
-        ## 프롬프트 생성
-        #messages = prompt_template.format_messages(prompt=prompt)
+    async def _save_token_usage_bg(self, user_id: UUID, project_type: str, token_type: str, model_name: str, token_data: dict):
+        """백그라운드에서 토큰 사용량 저장 (유틸리티 메서드)"""
+        try:
+            queue = TokenUsageQueue()
+            await queue.add_usage(
+                user_id=user_id,
+                project_type=project_type,
+                token_type=token_type,
+                model_name=model_name,
+                token_data=token_data
+            )
+            logger.info(f"토큰 사용량이 큐에 추가됨: {token_data}")
+        except Exception as e:
+            logger.error(f"토큰 사용량 저장 중 오류 발생: {str(e)}")
+    
+    @track_token_usage_bg(token_type="llm")
+    async def agenerate(self, user_query: str, prompt_context: str, user_id: Optional[UUID] = None, project_type: Optional[str] = None) -> Optional[AIMessage]:
         try:
             truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
             logger.info(f"{self._llm_type} API [Async] 호출 - 프롬프트: {truncated}")
-            # system_message_prompt = SystemMessagePromptTemplate.from_template(prompt_context)
-            # user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+
             system_message_prompt = SystemMessagePromptTemplate.from_template("{context}")
             user_message_prompt = HumanMessagePromptTemplate.from_template("{question}")
             prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
             formatted_messages = prompt_template.format_messages(context=prompt_context, question=user_query)
 
-            # API 호출 및 전체 응답 받기
+            # API 호출 및 전체 응답 받기 
+            # track_token_usage_bg 데코레이터로 인해 자동으로 토큰 사용량 추적됨
             full_response = await self._llm.ainvoke(formatted_messages)
         except Exception as e:
             logger.error(f"{self._llm_type}[agenerate] 호출 실패: {str(e)}")
             raise
         
-
         return full_response
     
-    async def agenerate_stream(self, user_query: str, prompt_context: str):
+    async def agenerate_stream(self, user_query: str, prompt_context: str, user_id: Optional[UUID] = None, project_type: Optional[str] = None):
         """비동기 스트리밍 컨텐츠 생성"""
         truncated = prompt_context[:100] + "..." if len(prompt_context) > 100 else prompt_context
         logger.info(f"{self._llm_type} API streaming[Async] 호출 - 프롬프트: {truncated}")
         self._should_stop = False
-        #logger.info(f"LANGCHAIN_TRACING_V2: {settings.LANGCHAIN_TRACING_V2}")
-        #logger.info(f"LANGCHAIN_PROJECT: {settings.LANGCHAIN_PROJECT}")
         
         try:
             async with self._stream_lock:  # 스트림 세션 동기화
@@ -486,18 +543,8 @@ class LLMModels:
                 # 개행 문자 정규화
                 sanitized_prompt_context = content.replace('\r\n', '\n').replace('\r', '\n')
 
-<<<<<<< HEAD
-                # system_message_prompt = SystemMessagePromptTemplate.from_template(sanitized_prompt_context)
-                # # User 메시지 템플릿
-                # user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
-
                 system_message_prompt = SystemMessagePromptTemplate.from_template("{context}")
                 user_message_prompt = HumanMessagePromptTemplate.from_template("{question}")
-=======
-                system_message_prompt = SystemMessagePromptTemplate.from_template(sanitized_prompt_context)
-                # User 메시지 템플릿
-                user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
->>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
 
                 # ChatPromptTemplate 구성
                 prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])
@@ -505,32 +552,63 @@ class LLMModels:
                 # 메시지 생성
                 formatted_messages = prompt_template.format_messages(context=sanitized_prompt_context, question=user_query)
                 
+                # 토큰 사용량 추적 정보
+                token_tracking = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                }
+                
                 # 스트리밍 시작
                 stream = self._llm_streaming.astream(formatted_messages)
                 
                 try:
                     # 현재 태스크 저장
                     self._current_task = asyncio.current_task()
+                    chunk_count = 0
                     
                     async for chunk in stream:
                         if self._should_stop:
                             logger.info("LLM 메시지 생성이 중지되었습니다.")
                             break
+
+                        if hasattr(chunk, "usage_metadata"):
+                            usage_metadata = chunk.usage_metadata
+                            token_tracking["prompt_tokens"] += usage_metadata['input_tokens']
+                            token_tracking["completion_tokens"] += usage_metadata['output_tokens']
+                            token_tracking["total_tokens"] += usage_metadata['total_tokens']
+                        
                         if chunk and chunk.content:
                             yield chunk
+                            
+                        chunk_count += 1
                             
                 except asyncio.CancelledError:
                     logger.info("스트리밍 태스크가 취소되었습니다.")
                     raise
                 finally:
                     self._current_task = None
-                    
+                
+                    logger.info(f"최종 토큰 사용량 정보: 입력={token_tracking['prompt_tokens']}, 출력={token_tracking['completion_tokens']}, 전체={token_tracking['total_tokens']}")
+                    # 토큰 사용량 저장
+                    await self._save_token_usage_bg(
+                        user_id=user_id,
+                        project_type=project_type,
+                        token_type="llm",
+                        model_name=self._llm_streaming.model,
+                        token_data={
+                            "prompt_tokens": token_tracking["prompt_tokens"],
+                            "completion_tokens": token_tracking["completion_tokens"],
+                            "total_tokens": token_tracking["total_tokens"],
+                            "total_cost": 0.0  # 실제 비용 계산 필요
+                        }
+                    )
+                
         except Exception as e:
             logger.exception(f"스트리밍 응답 생성 중 오류 발생[Async]: {str(e)}")
             raise e
         finally:
             self._should_stop = False
-
             self._current_task = None
 
     def generate_content_only(self, user_query: str, prompt_context: str) -> Optional[str]:

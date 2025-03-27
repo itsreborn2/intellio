@@ -452,24 +452,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
                 }
             })
         
-        # 모든 임베딩 생성 후 토큰 사용량 처리
-        if user_id and hasattr(embedding_service, 'last_token_usage') and embedding_service.last_token_usage:
-            with SessionLocal() as db:
-                with track_token_usage_sync(
-                    user_id=UUID(user_id), 
-                    project_type=ProjectType.DOCEASY, 
-                    token_type=TokenType.EMBEDDING, 
-                    model_name=embedding_service.get_model_name(),
-                    db_getter=db
-                ) as tracker:
-                    total_tokens = embedding_service.last_token_usage.get('total_tokens', 0)
-                    prompt_tokens = embedding_service.last_token_usage.get('prompt_tokens', total_tokens)
-                    
-                    tracker.add_tokens(
-                        prompt_tokens=prompt_tokens,
-                        total_tokens=total_tokens
-                    )
-                    logger.info(f"토큰 사용량 추적 완료: {total_tokens} tokens")
+       
         
         # 벡터 저장 (동기)
         vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(), 

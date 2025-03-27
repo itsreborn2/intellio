@@ -1,17 +1,296 @@
 from uuid import UUID, uuid4
-from typing import Optional, Dict, List, Any, ContextManager, Callable, AsyncGenerator
+from typing import Optional, Dict, List, Any, ContextManager, Callable, AsyncGenerator, Awaitable, AsyncContextManager, Union, TypeVar
 from datetime import datetime
 from sqlalchemy import select, func, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session as SQLAlchemySession
 import logging
 from contextlib import asynccontextmanager, contextmanager
+import asyncio
 
 from common.models.token_usage import TokenUsage, ProjectType, TokenType
 # 순환 참조를 방지하기 위해 get_db 임포트를 제거하고 지연 임포트를 사용
 # from common.core.deps import get_db
 
 logger = logging.getLogger(__name__)
+
+# 세션 타입을 위한 타입 변수
+T = TypeVar('T')
+# 비동기 세션 팩토리 타입 정의
+SessionFactoryType = Callable[[], AsyncGenerator[AsyncSession, None]]
+# 또는 더 유연한 타입 정의
+SessionFactoryContextType = Callable[[], Union[AsyncGenerator[AsyncSession, None], AsyncContextManager[AsyncSession]]]
+
+# 글로벌 토큰 사용량 저장 큐
+class TokenUsageQueue:
+    """
+    토큰 사용량 데이터를 저장하는 큐
+    저장 요청은 큐에 추가되고, 백그라운드 태스크에서 처리됨
+    """
+    _instance = None
+    _lock = asyncio.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._queue = asyncio.Queue()
+            cls._instance._task = None
+            cls._instance._initialized = False
+            cls._instance._session_factory = None
+        return cls._instance
+    
+    async def initialize(self, session_factory: SessionFactoryContextType):
+        """
+        큐 초기화 및 백그라운드 처리 태스크 시작
+        
+        Args:
+            session_factory: 데이터베이스 세션을 생성하는 비동기 팩토리 함수
+                            (AsyncGenerator 또는 AsyncContextManager를 반환하는 함수)
+        """
+        if not self._initialized:
+            async with self._lock:
+                if not self._initialized:
+                    self._session_factory = session_factory
+                    self._task = asyncio.create_task(self._process_queue())
+                    self._initialized = True
+                    logger.info("토큰 사용량 저장 큐 초기화 완료")
+    
+    async def add_usage(self, user_id: UUID, project_type: str, token_type: str, 
+                       model_name: str, token_data: Dict[str, Any]):
+        """
+        토큰 사용량 데이터를 큐에 추가
+        
+        Args:
+            user_id: 사용자 ID
+            project_type: 프로젝트 유형
+            token_type: 토큰 유형
+            model_name: 모델 이름
+            token_data: 토큰 사용량 데이터
+        """
+        if not self._initialized:
+            logger.warning("토큰 사용량 큐가 초기화되지 않았습니다")
+            return
+            
+        await self._queue.put({
+            "user_id": user_id,
+            "project_type": project_type,
+            "token_type": token_type,
+            "model_name": model_name,
+            "token_data": token_data
+        })
+        logger.debug(f"토큰 사용량 데이터가 큐에 추가됨 ({user_id}, {project_type}, {token_type})")
+    
+    async def _process_queue(self):
+        """큐에 있는 토큰 사용량 데이터를 처리하는 백그라운드 태스크"""
+        try:
+            logger.info("토큰 사용량 처리 태스크 시작")
+            while True:
+                try:
+                    # 큐에서 데이터 가져오기
+                    usage_data = await self._queue.get()
+                    
+                    try:
+                        # 세션 생성
+                        if self._session_factory:
+                            async for db in self._session_factory():
+                                try:
+                                    # 토큰 사용량 저장
+                                    await save_token_usage(
+                                        db=db,
+                                        user_id=usage_data["user_id"],
+                                        project_type=ProjectType(usage_data["project_type"]),
+                                        token_type=TokenType(usage_data["token_type"]),
+                                        model_name=usage_data["model_name"],
+                                        token_data=usage_data["token_data"]
+                                    )
+                                    logger.debug(f"토큰 사용량 데이터 저장 완료: {usage_data['user_id']}")
+                                except Exception as db_error:
+                                    logger.error(f"토큰 사용량 저장 중 오류 발생: {str(db_error)}")
+                                finally:
+                                    # 태스크 완료 표시
+                                    self._queue.task_done()
+                                # 세션은 한 번만 가져오면 됨
+                                break
+                        else:
+                            logger.error("세션 팩토리가 설정되지 않았습니다")
+                            self._queue.task_done()
+                    except Exception as e:
+                        logger.error(f"토큰 사용량 처리 중 오류 발생: {str(e)}")
+                        self._queue.task_done()
+                except asyncio.CancelledError:
+                    # 태스크가 취소된 경우
+                    logger.info("토큰 사용량 처리 태스크가 취소되었습니다")
+                    return
+                except Exception as e:
+                    # 예외 발생 시 로깅하고 계속 진행
+                    logger.error(f"토큰 사용량 큐 처리 중 예외 발생: {str(e)}")
+                    continue
+        except asyncio.CancelledError:
+            logger.info("토큰 사용량 처리 태스크가 취소되었습니다")
+        except Exception as e:
+            logger.error(f"토큰 사용량 처리 태스크에서 예외 발생: {str(e)}")
+    
+    async def shutdown(self):
+        """백그라운드 태스크 종료 및 남은 작업 처리"""
+        if self._task and not self._task.done():
+            # 남은 작업 처리 대기
+            await self._queue.join()
+            # 태스크 취소
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                logger.info("토큰 사용량 처리 태스크가 정상적으로 종료되었습니다")
+            finally:
+                self._task = None
+                self._initialized = False
+
+# 토큰 사용량 데코레이터
+def track_token_usage_bg(
+    user_id: Optional[UUID] = None,
+    project_type: Optional[str] = None,
+    token_type: Optional[str] = None,
+    model_name: Optional[str] = None
+):
+    """
+    토큰 사용량을 비동기적으로 백그라운드에서 추적하기 위한 데코레이터
+    
+    사용 예시:
+    
+    @track_token_usage_bg(project_type="doceasy", token_type="embedding")
+    async def create_embeddings_async(self, texts: List[str], user_id: UUID = None) -> List[List[float]]:
+        # 함수 구현...
+        # 토큰 사용량은 자동으로 수집되어 백그라운드에서 저장됨
+    """
+    def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            # 비동기 함수인 경우
+            async def wrapper(*args, **kwargs):
+                # 파라미터에서 필요한 값 추출
+                _user_id = kwargs.get('user_id', user_id)
+                _project_type = kwargs.get('project_type', project_type)
+                _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
+                _model_name = kwargs.get('model_name', None)
+                logger.info(f"[track_token_usage_bg][async] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
+                # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
+                if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
+                    _model_name = args[0].model_name
+                
+                if _user_id and _project_type:
+                    # OpenAI 토큰 콜백 핸들러 가져오기 (지연 임포트)
+                    try:
+                        # 필요할 때만 임포트
+                        from langchain_community.callbacks.manager import get_openai_callback
+                    except ImportError:
+                        try:
+                            # 이전 버전 지원
+                            from langchain.callbacks import get_openai_callback
+                        except ImportError:
+                            logger.warning("OpenAI 콜백 핸들러를 임포트할 수 없어 토큰 추적 없이 실행합니다")
+                            return await func(*args, **kwargs)
+                    
+                    # LangChain 콜백 핸들러를 사용하여 토큰 수집
+                    try:
+                        with get_openai_callback() as cb:
+                            # 원래 함수 실행
+                            result = await func(*args, **kwargs)
+                            
+                            # 토큰 사용량 데이터 수집
+                            token_data = {
+                                "prompt_tokens": cb.prompt_tokens,
+                                "completion_tokens": cb.completion_tokens if _token_type == "llm" else None,
+                                "total_tokens": cb.total_tokens,
+                                "total_cost": cb.total_cost
+                            }
+                            
+                            # 백그라운드에서 토큰 사용량 저장
+                            queue = TokenUsageQueue()
+                            await queue.add_usage(
+                                user_id=_user_id,
+                                project_type=_project_type,
+                                token_type=_token_type,
+                                model_name=_model_name,
+                                token_data=token_data
+                            )
+                            
+                            return result
+                    except Exception as e:
+                        logger.warning(f"토큰 추적 중 오류 발생: {str(e)}. 토큰 추적 없이 실행합니다.")
+                        return await func(*args, **kwargs)
+                else:
+                    # 필요한 파라미터가 없는 경우, 원래 함수만 실행
+                    return await func(*args, **kwargs)
+        else:
+            # 동기 함수인 경우
+            def wrapper(*args, **kwargs):
+                # 파라미터에서 필요한 값 추출
+                _user_id = kwargs.get('user_id', user_id)
+                _project_type = kwargs.get('project_type', project_type)
+                _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
+                _model_name = kwargs.get('model_name', None)
+                logger.info(f"[track_token_usage_bg][sync] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
+                # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
+                if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
+                    _model_name = args[0].model_name
+                
+                # 원래 함수 실행
+                result = func(*args, **kwargs)
+                
+                # 필요한 파라미터가 있고 이벤트 루프가 실행 중인 경우
+                if _user_id and _project_type:
+                    try:
+                        # 비동기 함수를 실행하기 위한 코드
+                        async def process_token_usage():
+                            # OpenAI 토큰 정보가 있는 경우
+                            if hasattr(result, "usage_metadata") or hasattr(result, "usage"):
+                                # 토큰 사용량 데이터 수집
+                                usage_attr = "usage_metadata" if hasattr(result, "usage_metadata") else "usage"
+                                usage_obj = getattr(result, usage_attr)
+                                
+                                token_data = {
+                                    "prompt_tokens": usage_obj.prompt_tokens if hasattr(usage_obj, "prompt_tokens") else 0,
+                                    "completion_tokens": usage_obj.completion_tokens if hasattr(usage_obj, "completion_tokens") else None,
+                                    "total_tokens": usage_obj.total_tokens if hasattr(usage_obj, "total_tokens") else 0,
+                                    "total_cost": 0.0  # 비용 계산 로직 필요
+                                }
+                                logger.info(f"토큰 정보: {token_data}")
+                                
+                                # 백그라운드에서 토큰 사용량 저장
+                                queue = TokenUsageQueue()
+                                await queue.add_usage(
+                                    user_id=_user_id,
+                                    project_type=_project_type,
+                                    token_type=_token_type,
+                                    model_name=_model_name,
+                                    token_data=token_data
+                                )
+                            else:
+                                logger.info("토큰 사용량 정보가 없습니다")
+                        
+                        # 이벤트 루프가 실행 중인지 확인
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                # 이벤트 루프가 실행 중이면 태스크 생성
+                                asyncio.create_task(process_token_usage())
+                            else:
+                                # 이벤트 루프가 실행 중이 아니면 별도로 실행
+                                asyncio.run(process_token_usage())
+                        except RuntimeError:
+                            logger.warning("이벤트 루프를 가져올 수 없어 토큰 사용량 저장을 건너뜁니다")
+                    except Exception as e:
+                        logger.error(f"토큰 사용량 처리 중 오류 발생: {str(e)}")
+                
+                return result
+        
+        # 래퍼 함수에 원래 함수의 메타데이터 복사
+        wrapper.__name__ = func.__name__
+        wrapper.__doc__ = func.__doc__
+        wrapper.__annotations__ = func.__annotations__
+        
+        return wrapper
+    
+    return decorator
 
 async def save_token_usage(
     db: AsyncSession,
@@ -123,7 +402,7 @@ async def track_token_usage(
     project_type: str, 
     token_type: str, 
     model_name: str,
-    db_getter = None
+    db_getter: Optional[Union[AsyncSession, SessionFactoryContextType]] = None
 ):
     """토큰 사용량을 추적하는 컨텍스트 매니저
     
@@ -134,6 +413,13 @@ async def track_token_usage(
         tracker.add_tokens(prompt_tokens=100, cost=0.01)
     # 컨텍스트 종료 시 자동으로 DB에 저장
     ```
+    
+    Args:
+        user_id: 사용자 ID
+        project_type: 프로젝트 유형
+        token_type: 토큰 유형
+        model_name: 모델 이름
+        db_getter: DB 세션 또는 세션 팩토리 함수
     """
     logger.info(f"[토큰 추적] 컨텍스트 매니저 시작: user_id={user_id}, project_type={project_type}, token_type={token_type}")
     tracker = TokenUsageTracker(
@@ -160,7 +446,7 @@ async def track_token_usage(
                     from common.core.deps import get_db
                     db_getter = get_db
                 
-                # db_getter가 제너레이터인 경우 (FastAPI Depends 함수)
+                # db_getter가 callable인 경우 (세션 팩토리 함수)
                 if callable(db_getter):
                     logger.debug(f"[토큰 추적] 콜러블 db_getter 사용")
                     async for session in db_getter():
@@ -449,7 +735,7 @@ def track_token_usage_sync(
     project_type: str, 
     token_type: str, 
     model_name: str,
-    db_getter = None
+    db_getter: Optional[Union[SQLAlchemySession, Callable[[], SQLAlchemySession]]] = None
 ):
     """토큰 사용량을 동기적으로 추적하는 컨텍스트 매니저 (Celery 워커용)
     

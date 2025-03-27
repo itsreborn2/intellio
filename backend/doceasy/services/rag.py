@@ -472,7 +472,7 @@ class RAGService:
         return filtered_chunks
 
     @measure_time_async
-    async def process_retrival(self, query: str, query_analysis: Dict[str, Any] = None, top_k: int = 5, document_ids: List[str] = None, query_type:str = "chat") -> RetrievalResult:
+    async def process_retrival(self, query: str, query_analysis: Dict[str, Any] = None, top_k: int = 5, document_ids: List[str] = None, query_type:str = "chat", user_id: str = None) -> RetrievalResult:
         """관련 문서 청크 검색 및 패턴 분석"""
         # 쿼리 정규화
         normalized_query = self._normalize_query(query)
@@ -509,7 +509,9 @@ class RAGService:
                 # 테이블 모드에서넌 top-k가 문서의 숫자의 5배로 넘어온다.
                 # 문서 20개면 k=100
                 tablemode_retriever = TableModeSemanticRetriever(config=SemanticRetrieverConfig(
-                                                                min_score=min_score
+                                                                min_score=min_score,
+                                                                user_id=user_id,
+                                                                project_type=ProjectType.DOCEASY
                                                                 ), vs_manager=vs_manager)
                 all_chunks:RetrievalResult = await tablemode_retriever.retrieve(
                     query=normalized_query, 
@@ -524,7 +526,9 @@ class RAGService:
                     logger.warning(f"요약 쿼리를 위해 top_k를 {top_k}로 증가")
                 #Chat Mode
                 semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
-                                                        min_score=min_score
+                                                        min_score=min_score,
+                                                        user_id=user_id,
+                                                        project_type=ProjectType.DOCEASY
                                                         ), vs_manager=vs_manager)
                 
                 all_chunks:RetrievalResult = await semantic_retriever.retrieve(
@@ -1183,7 +1187,12 @@ class RAGService:
             # 짧은 문서는 k=5로 충분. 그러나 매우 긴 문서는? k=5로는 턱없이 부족할텐데.
             # 사용자 입력에 따라서, 어떤 스타일로 k값을 결정하고 응답을 줄지 
             # 사용자 입력의 전처리 과정 필요. _analyze_query로는 안됨.
-            rr:RetrievalResult = await self.process_retrival(query=query, query_analysis=query_analysis, top_k=k, document_ids=document_ids, query_type="chat")
+            rr:RetrievalResult = await self.process_retrival(query=query, 
+                                                             query_analysis=query_analysis, 
+                                                             top_k=k, 
+                                                             document_ids=document_ids, 
+                                                             query_type="chat",
+                                                             user_id=user_id)
 
             #logger.info(f"[query_stream] 관련 청크 검색 완료 - 총 {len(relevant_chunks.documents)}개 청크 발견")
             doc_cnt = len(rr.documents)

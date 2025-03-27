@@ -61,7 +61,6 @@ export function useFileUpload(): UseFileUploadReturn {
     options: UseFileUploadOptions = {}
   ) => {
     try {
-<<<<<<< HEAD
       // 파일 배열이 비어있는지 먼저 확인
       if (!files.length) {
         showErrorDialog('업로드할 파일이 선택되지 않았습니다.');
@@ -83,15 +82,9 @@ export function useFileUpload(): UseFileUploadReturn {
       // 파일 MIME 타입 로깅
       files.forEach(file => {
         console.debug(`파일명: ${file.name}, MIME 타입: ${file.type}`);
-=======
-      // 파일 MIME 타입 로깅
-      files.forEach(file => {
-        console.log(`파일명: ${file.name}, MIME 타입: ${file.type}`);
->>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
       });
       
       let projectId = existingProjectId
-
       if (!projectId) {
         // 새 프로젝트 생성이 필요한 경우
         dispatch({ type: actionTypes.SET_INITIAL_STATE })

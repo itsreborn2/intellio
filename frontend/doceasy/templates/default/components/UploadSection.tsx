@@ -11,7 +11,6 @@ import { DocumentStatusBadge } from '@/components/DocumentStatusBadge'
 import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
 import { FileUploadErrorDialog } from '@/components/FileUploadErrorDialog'
 
-<<<<<<< HEAD
 // 문서 분석 진행 상태 컴포넌트
 const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => {
   const processingDocs = documents.filter(doc => 
@@ -54,8 +53,6 @@ const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => 
   );
 };
 
-=======
->>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
 // MIME 타입 매핑 객체를 accept와 동일한 형태로 수정
 const ACCEPTED_FILE_TYPES: Record<string, readonly string[]> = {
   'application/pdf': ['.pdf'],
@@ -80,22 +77,6 @@ function getMimeTypeFromExtension(extension: string): AcceptedMimeTypes | undefi
     extensions.includes(extension)
   );
   return entry ? (entry[0] as AcceptedMimeTypes) : undefined;
-<<<<<<< HEAD
-=======
-}
-
-// 파일 확장자 추출 함수는 유지
-function getFileExtension(filename: string): string {
-  return filename.toLowerCase().match(/\.[^.]*$/)?.[0] || '';
-}
-
-// 문서 상태 타입 정의
-interface DocumentStatus {
-  document_id: string
-  status: string
-  error_message?: string
-  is_accessible: boolean
->>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
 }
 
 // 파일 확장자 추출 함수는 유지
@@ -148,7 +129,6 @@ export const UploadSection = () => {
   )
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-<<<<<<< HEAD
     console.log('onDrop 호출됨, 파일 개수:', acceptedFiles.length);
     
     // 파일 개수 검증
@@ -168,8 +148,6 @@ export const UploadSection = () => {
       return;
     }
 
-=======
->>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
     // 파일 MIME 타입 처리 및 로깅
     const processedFiles = acceptedFiles.map(file => {
       let mimeType = file.type;
@@ -203,7 +181,6 @@ export const UploadSection = () => {
     });
     
     await handleFileUpload(processedFiles);
-<<<<<<< HEAD
   }, [handleFileUpload, showErrorDialog])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
@@ -255,13 +232,6 @@ export const UploadSection = () => {
         showErrorDialog(errorMessages.join('\n'));
       }
     }
-=======
-  }, [handleFileUpload])
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
-    onDrop,
-    accept: ACCEPTED_FILE_TYPES
->>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
   })
 
   return (

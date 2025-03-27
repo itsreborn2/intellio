@@ -6,7 +6,7 @@
 
 import os
 from typing import Dict, Any, List, Literal, Union, Optional, TypedDict, Tuple, Set, cast
-from common.core.config import settings
+
 from langgraph.graph import END, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
 from datetime import datetime
@@ -18,7 +18,7 @@ from stockeasy.agents.base import BaseAgent
 from stockeasy.agents.session_manager_agent import SessionManagerAgent
 from stockeasy.agents.parallel_search_agent import ParallelSearchAgent
 from sqlalchemy.ext.asyncio import AsyncSession
-from langchain.callbacks.tracers import LangChainTracer
+
 
 def should_use_telegram(state: AgentState) -> bool:
     """텔레그램 검색 에이전트를 사용해야 하는지 결정합니다."""
@@ -410,12 +410,7 @@ class StockAnalysisGraph:
             if not self.graph:
                 raise ValueError("그래프가 초기화되지 않았습니다. register_agents 메서드를 먼저 호출하세요.")
             
-            if settings.ENV == "production":
-                #os.environ["LANGCHAIN_PROJECT"] = "stockeasy_server_agents"
-                tracer = LangChainTracer(project_name="stockeasy_server_agents")
-            else:
-                #os.environ["LANGCHAIN_PROJECT"] = "stockeasy_dev"
-                tracer = LangChainTracer(project_name="stockeasy_dev")        
+                
             # 세션 ID 설정 (추적 ID로 사용)
             trace_id = session_id or datetime.now().strftime("%Y%m%d%H%M%S")
             

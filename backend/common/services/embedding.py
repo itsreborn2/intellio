@@ -37,9 +37,7 @@ class EmbeddingService:
             self.current_model_config.provider_name,
             self.current_model_config.name
         )
-        
-        # 토큰 사용량 정보 저장을 위한 속성
-        self.last_token_usage = None
+
         
         # VectorStoreManager는 필요시 외부에서 생성하여 사용
         # (관련 코드 삭제)
@@ -127,10 +125,7 @@ class EmbeddingService:
                     logger.error(f"잘못된 임베딩 차원 (인덱스 {i}): {len(emb) if emb else 0}")
                     continue
                     
-            # 토큰 사용량 정보가 있으면 저장
-            if hasattr(self.provider, 'last_token_usage') and self.provider.last_token_usage:
-                self.last_token_usage = self.provider.last_token_usage
-                logger.info(f"토큰 사용량 정보 저장: {self.last_token_usage}")
+
             
             return embeddings
             

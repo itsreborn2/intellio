@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
     
     # 토큰 사용량 추적 큐 초기화
     try:
-        from common.services.embedding_models import TokenUsageQueue
+        from common.services.token_usage_service import TokenUsageQueue
         from common.core.deps import get_db
         
         # 토큰 사용량 큐 초기화
@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
     # 종료 시 실행
     try:
         # 토큰 사용량 큐 종료
-        from common.services.embedding_models import TokenUsageQueue
+        from common.services.token_usage_service import TokenUsageQueue
         token_queue = TokenUsageQueue()
         await token_queue.shutdown()
         logger.info("토큰 사용량 추적 큐가 종료되었습니다")

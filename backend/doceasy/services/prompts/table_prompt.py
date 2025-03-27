@@ -136,7 +136,6 @@ class TablePrompt(BasePrompt):
                             prompt, 
                             user_id=user_id,
                             project_type=ProjectType.DOCEASY,
-                            db=self.db
                         ).content
                     except Exception as e:
                         logger.error(f"토큰 추적 LLM 호출 중 오류 발생: {str(e)}")

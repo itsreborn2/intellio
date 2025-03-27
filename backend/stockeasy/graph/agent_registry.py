@@ -22,7 +22,8 @@ from stockeasy.agents.report_analyzer_agent import ReportAnalyzerAgent
 from stockeasy.agents.financial_analyzer_agent import FinancialAnalyzerAgent
 from stockeasy.agents.industry_analyzer_agent import IndustryAnalyzerAgent
 from stockeasy.agents.summarizer_agent import SummarizerAgent
-
+from common.core.config import settings
+from langchain.callbacks.tracers import LangChainTracer
 
 class AgentRegistry:
     """에이전트 등록 및 관리 클래스"""
@@ -54,6 +55,12 @@ class AgentRegistry:
             db: 데이터베이스 세션 객체 (선택적)
         """
         logger.info("에이전트 초기화 시작")
+        if settings.ENV == "production":
+            #os.environ["LANGCHAIN_PROJECT"] = "stockeasy_server_agents"
+            tracer = LangChainTracer(project_name="stockeasy_server_agents")
+        else:
+            #os.environ["LANGCHAIN_PROJECT"] = "stockeasy_dev"
+            tracer = LangChainTracer(project_name="stockeasy_dev")    
         self.db_session = db
         
         # SessionManager는 DB 세션이 필요하므로 별도 처리

@@ -20,8 +20,9 @@ import tenacity
 import re
 import torch
 from uuid import UUID
-from common.services.token_usage_service import save_token_usage, ProjectType, TokenType
+from common.services.token_usage_service import save_token_usage, ProjectType, TokenType, track_token_usage_sync, track_token_usage_bg, TokenUsageQueue
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session as SQLAlchemySession
 # 임포트 추가
 import inspect
 from contextlib import asynccontextmanager, contextmanager
@@ -60,267 +61,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# 글로벌 토큰 사용량 저장 큐
-class TokenUsageQueue:
-    """
-    토큰 사용량 데이터를 저장하는 큐
-    저장 요청은 큐에 추가되고, 백그라운드 태스크에서 처리됨
-    """
-    _instance = None
-    _lock = asyncio.Lock()
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._queue = asyncio.Queue()
-            cls._instance._task = None
-            cls._instance._initialized = False
-            cls._instance._session_factory = None
-        return cls._instance
-    
-    async def initialize(self, session_factory: Callable[[], Awaitable[Any]]):
-        """
-        큐 초기화 및 백그라운드 처리 태스크 시작
-        
-        Args:
-            session_factory: 데이터베이스 세션을 생성하는 비동기 팩토리 함수
-        """
-        if not self._initialized:
-            async with self._lock:
-                if not self._initialized:
-                    self._session_factory = session_factory
-                    self._task = asyncio.create_task(self._process_queue())
-                    self._initialized = True
-                    logger.info("토큰 사용량 저장 큐 초기화 완료")
-    
-    async def add_usage(self, user_id: UUID, project_type: str, token_type: str, 
-                       model_name: str, token_data: Dict[str, Any]):
-        """
-        토큰 사용량 데이터를 큐에 추가
-        
-        Args:
-            user_id: 사용자 ID
-            project_type: 프로젝트 유형
-            token_type: 토큰 유형
-            model_name: 모델 이름
-            token_data: 토큰 사용량 데이터
-        """
-        if not self._initialized:
-            logger.warning("토큰 사용량 큐가 초기화되지 않았습니다")
-            return
-            
-        await self._queue.put({
-            "user_id": user_id,
-            "project_type": project_type,
-            "token_type": token_type,
-            "model_name": model_name,
-            "token_data": token_data
-        })
-        logger.debug(f"토큰 사용량 데이터가 큐에 추가됨 ({user_id}, {project_type}, {token_type})")
-    
-    async def _process_queue(self):
-        """큐에 있는 토큰 사용량 데이터를 처리하는 백그라운드 태스크"""
-        try:
-            logger.info("토큰 사용량 처리 태스크 시작")
-            while True:
-                try:
-                    # 큐에서 데이터 가져오기
-                    usage_data = await self._queue.get()
-                    
-                    # 지연 임포트 - 실제 사용 시점에만 임포트
-                    from common.services.token_usage_service import save_token_usage, ProjectType, TokenType
-                    
-                    try:
-                        # 세션 생성
-                        if self._session_factory:
-                            async for db in self._session_factory():
-                                try:
-                                    # 토큰 사용량 저장
-                                    await save_token_usage(
-                                        db=db,
-                                        user_id=usage_data["user_id"],
-                                        project_type=ProjectType(usage_data["project_type"]),
-                                        token_type=TokenType(usage_data["token_type"]),
-                                        model_name=usage_data["model_name"],
-                                        token_data=usage_data["token_data"]
-                                    )
-                                    logger.debug(f"토큰 사용량 데이터 저장 완료: {usage_data['user_id']}")
-                                except Exception as db_error:
-                                    logger.error(f"토큰 사용량 저장 중 오류 발생: {str(db_error)}")
-                                finally:
-                                    # 태스크 완료 표시
-                                    self._queue.task_done()
-                                # 세션은 한 번만 가져오면 됨
-                                break
-                        else:
-                            logger.error("세션 팩토리가 설정되지 않았습니다")
-                            self._queue.task_done()
-                    except Exception as e:
-                        logger.error(f"토큰 사용량 처리 중 오류 발생: {str(e)}")
-                        self._queue.task_done()
-                except asyncio.CancelledError:
-                    # 태스크가 취소된 경우
-                    logger.info("토큰 사용량 처리 태스크가 취소되었습니다")
-                    return
-                except Exception as e:
-                    # 예외 발생 시 로깅하고 계속 진행
-                    logger.error(f"토큰 사용량 큐 처리 중 예외 발생: {str(e)}")
-                    continue
-        except asyncio.CancelledError:
-            logger.info("토큰 사용량 처리 태스크가 취소되었습니다")
-        except Exception as e:
-            logger.error(f"토큰 사용량 처리 태스크에서 예외 발생: {str(e)}")
-    
-    async def shutdown(self):
-        """백그라운드 태스크 종료 및 남은 작업 처리"""
-        if self._task and not self._task.done():
-            # 남은 작업 처리 대기
-            await self._queue.join()
-            # 태스크 취소
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                logger.info("토큰 사용량 처리 태스크가 정상적으로 종료되었습니다")
-            finally:
-                self._task = None
-                self._initialized = False
-
-# 토큰 사용량 추적 헬퍼 함수
-def track_token_usage_bg(
-    user_id: Optional[UUID] = None,
-    project_type: Optional[str] = None,
-    token_type: Optional[str] = None,
-    model_name: Optional[str] = None
-):
-    """
-    토큰 사용량을 비동기적으로 백그라운드에서 추적하기 위한 데코레이터
-    
-    사용 예시:
-    
-    @track_token_usage_bg(project_type="doceasy", token_type="embedding")
-    async def create_embeddings_async(self, texts: List[str], user_id: UUID = None) -> List[List[float]]:
-        # 함수 구현...
-        # 토큰 사용량은 자동으로 수집되어 백그라운드에서 저장됨
-    
-    """
-    def decorator(func):
-        if asyncio.iscoroutinefunction(func):
-            # 비동기 함수인 경우
-            async def wrapper(*args, **kwargs):
-                # 파라미터에서 필요한 값 추출
-                _user_id = kwargs.get('user_id', user_id)
-                _project_type = kwargs.get('project_type', project_type)
-                _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
-                _model_name = kwargs.get('model_name', None)
-                logger.info(f"[track_token_usage_bg][async] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
-                # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
-                if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
-                    _model_name = args[0].model_name
-                
-                if _user_id and _project_type:
-                    # LangChain 콜백 핸들러를 사용하여 토큰 수집
-                    try:
-                        # OpenAI 포맷의 토큰 콜백
-                        with get_openai_callback() as cb:
-                            # 원래 함수 실행
-                            result = await func(*args, **kwargs)
-                            
-                            # 토큰 사용량 데이터 수집
-                            token_data = {
-                                "prompt_tokens": cb.prompt_tokens,
-                                "completion_tokens": cb.completion_tokens if _token_type == "llm" else None,
-                                "total_tokens": cb.total_tokens,
-                                "total_cost": cb.total_cost
-                            }
-                            
-                            # 백그라운드에서 토큰 사용량 저장
-                            queue = TokenUsageQueue()
-                            await queue.add_usage(
-                                user_id=_user_id,
-                                project_type=_project_type,
-                                token_type=_token_type,
-                                model_name=_model_name,
-                                token_data=token_data
-                            )
-                            
-                            return result
-                    except (NameError, ImportError):
-                        # 콜백 핸들러를 가져올 수 없는 경우, 원래 함수만 실행
-                        logger.warning("OpenAI 콜백 핸들러를 가져올 수 없어 토큰 추적 없이 실행합니다")
-                        return await func(*args, **kwargs)
-                else:
-                    # 필요한 파라미터가 없는 경우, 원래 함수만 실행
-                    return await func(*args, **kwargs)
-        else:
-            # 동기 함수인 경우
-            def wrapper(*args, **kwargs):
-                # 파라미터에서 필요한 값 추출
-                _user_id = kwargs.get('user_id', user_id)
-                _project_type = kwargs.get('project_type', project_type)
-                _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
-                _model_name = kwargs.get('model_name', None)
-                logger.info(f"[track_token_usage_bg][sync] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
-                # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
-                if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
-                    _model_name = args[0].model_name
-                
-                # 원래 함수 실행
-                result = func(*args, **kwargs)
-                logger.warning(f"임베딩 결과 객체 구조: {dir(result)}")
-                # 필요한 파라미터가 있고 이벤트 루프가 실행 중인 경우
-                if _user_id and _project_type:
-                    try:
-                        # 비동기 함수를 실행하기 위한 코드
-                        async def process_token_usage():
-                            # OpenAI 토큰 정보가 있는 경우
-                            if hasattr(result, "usage_metadata"):
-                                
-                                # 토큰 사용량 데이터 수집
-                                token_data = {
-                                    "prompt_tokens": result.usage.prompt_tokens,
-                                    "completion_tokens": result.usage.completion_tokens if hasattr(result.usage, "completion_tokens") else None,
-                                    "total_tokens": result.usage.total_tokens,
-                                    "total_cost": 0.0  # 비용 계산 로직 필요
-                                }
-                                logger.info(f"토큰 정보: {token_data}")
-                                
-                                # 백그라운드에서 토큰 사용량 저장
-                                queue = TokenUsageQueue()
-                                await queue.add_usage(
-                                    user_id=_user_id,
-                                    project_type=_project_type,
-                                    token_type=_token_type,
-                                    model_name=_model_name,
-                                    token_data=token_data
-                                )
-                            else:
-                                logger.info("토큰 사용량 정보가 없습니다, no usage_metadata")
-                        
-                        # 이벤트 루프가 실행 중인지 확인
-                        try:
-                            loop = asyncio.get_event_loop()
-                            if loop.is_running():
-                                # 이벤트 루프가 실행 중이면 태스크 생성
-                                asyncio.create_task(process_token_usage())
-                            else:
-                                # 이벤트 루프가 실행 중이 아니면 별도로 실행
-                                asyncio.run(process_token_usage())
-                        except RuntimeError:
-                            logger.warning("이벤트 루프를 가져올 수 없어 토큰 사용량 저장을 건너뜁니다")
-                    except Exception as e:
-                        logger.error(f"토큰 사용량 처리 중 오류 발생: {str(e)}")
-                
-                return result
-        
-        # 래퍼 함수에 원래 함수의 메타데이터 복사
-        wrapper.__name__ = func.__name__
-        wrapper.__doc__ = func.__doc__
-        wrapper.__annotations__ = func.__annotations__
-        
-        return wrapper
-    
-    return decorator
+# TokenUsageQueue와 track_token_usage_bg는 token_usage_service.py로 이동하였습니다.
 
 class EmbeddingModelType(str, Enum):
     #OPENAI_ADA_002 = "text-embedding-ada-002"
@@ -439,6 +180,9 @@ class EmbeddingModelManager:
 class TokenCounter:
     """토큰 카운팅을 위한 유틸리티 클래스"""
     
+    # 토크나이저 객체 캐싱
+    _upstage_tokenizer = None
+    
     @staticmethod
     def count_tokens_openai(text: str, model: str = "text-embedding-ada-002") -> int:
         """OpenAI 모델의 토큰 수 계산"""
@@ -468,12 +212,26 @@ class TokenCounter:
             return len(text.split()) * 2
 
     @staticmethod
-    def count_tokens_upstage(text:str) -> int:
-        tokenizer = Tokenizer.from_pretrained("upstage/solar-pro-tokenizer")
-        enc = tokenizer.encode(text)
-        inv_vocab = {v: k for k, v in tokenizer.get_vocab().items()}
-        tokens = [inv_vocab[token_id] for token_id in enc.ids]
-        return len(tokens)
+    def count_tokens_upstage(text: str) -> int:
+        """Upstage 모델의 토큰 수 계산 (캐싱된 토크나이저 사용)"""
+        try:
+            # 토크나이저 캐싱
+            if TokenCounter._upstage_tokenizer is None:
+                try:
+                    TokenCounter._upstage_tokenizer = Tokenizer.from_pretrained("upstage/solar-pro-tokenizer")
+                    logger.info("업스테이지 토크나이저 로드 완료")
+                except Exception as tokenizer_error:
+                    logger.error(f"업스테이지 토크나이저 로드 실패: {str(tokenizer_error)}")
+                    # 토크나이저 로드 실패 시 단순 방식 사용
+                    return len(text.split()) * 2
+            
+            # 토큰화 수행
+            enc = TokenCounter._upstage_tokenizer.encode(text)
+            return len(enc.ids)
+        except Exception as e:
+            logger.warning(f"Upstage 토큰 카운팅 실패: {str(e)}")
+            # 실패시 단어 기반으로 대략적으로 계산
+            return len(text.split()) * 2
 
 class EmbeddingProvider(ABC):
     """임베딩 제공자의 추상 기본 클래스"""
@@ -611,6 +369,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
         return self.client, self.client
     
+    @track_token_usage_bg(token_type="embedding")
     async def create_embeddings_async(
         self, 
         texts: List[str], 
@@ -632,8 +391,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         
         for batch in batches:
             try:
-                # 비동기 클라이언트 생성
-                # OpenAI API 직접 호출
+                # 비동기 클라이언트로 임베딩 생성
                 response = await self.async_client.embeddings.create(
                     model=self.model_name,
                     input=batch
@@ -643,40 +401,23 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 batch_embeddings = [item.embedding for item in response.data]
                 all_embeddings.extend(batch_embeddings)
                 
-                # 토큰 사용량 누적
-                if user_id and project_type:
-                    total_tokens += response.usage.total_tokens
-                    total_prompt_tokens += response.usage.prompt_tokens
-                    logger.info(f"OpenAI[Async] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
+                # 토큰 사용량 누적 (내부 추적용)
+                total_tokens += response.usage.total_tokens
+                total_prompt_tokens += response.usage.prompt_tokens
+                logger.info(f"OpenAI[Async] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
                 
             except Exception as e:
                 logger.error(f"OpenAI 임베딩 생성 실패: {str(e)}")
                 raise
         
-        # 모든 배치 처리 후 누적된 토큰 사용량 저장
-        if user_id and project_type and total_tokens > 0:
-            # 토큰 사용량 데이터 구성
+        # 마지막 토큰 사용량 저장 (호환성 유지)
+        if total_tokens > 0:
             self.last_token_usage = {
                 "prompt_tokens": total_prompt_tokens,
                 "completion_tokens": None,
                 "total_tokens": total_tokens,
-                "total_cost": 0.0  # 비용 계산 로직 필요시 추가
+                "total_cost": 0.0
             }
-            logger.info(f"OpenAI[Async] 임베딩 총 토큰 사용량: {total_tokens} (prompt: {total_prompt_tokens})")
-            
-            # 토큰 사용량을 큐에 추가
-            if db:
-                try:
-                    await save_token_usage(
-                        db=db,
-                        user_id=user_id,
-                        project_type=ProjectType(project_type),
-                        token_type=TokenType.EMBEDDING,
-                        model_name=self.model_name,
-                        token_data=self.last_token_usage
-                    )
-                except Exception as e:
-                    logger.error(f"토큰 사용량 저장 실패: {str(e)}")
         
         return all_embeddings
     
@@ -685,51 +426,96 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         texts: List[str], 
         embeddings_task_type: str = "RETRIEVAL_QUERY", 
         user_id: Optional[UUID] = None, 
-        project_type: Optional[str] = None,
-        db: Optional[AsyncSession] = None
+        project_type: Optional[str] = None
     ) -> List[List[float]]:
         """동기적으로 임베딩 생성"""
-        # 텍스트가 없으면 빈 배열 반환
         if not texts:
             return []
             
         all_embeddings = []
         batches = [texts[i:i + self.max_batch_size] for i in range(0, len(texts), self.max_batch_size)]
         
-        # 토큰 사용량 누적을 위한 변수들
-        total_tokens = 0
-        total_prompt_tokens = 0
-        
-        for batch in batches:
-            try:
-                response = self.client.embeddings.create(
-                    model=self.model_name,
-                    input=batch
-                )
+        # 토큰 사용량 추적을 위한 컨텍스트 매니저 사용
+        if user_id and project_type:
+            # 동기 DB 세션 팩토리
+            from common.core.database import SessionLocal
+            
+            with track_token_usage_sync(
+                user_id=user_id,
+                project_type=project_type,
+                token_type="embedding",
+                model_name=self.model_name,
+                db_getter=SessionLocal  # 동기 세션 팩토리 직접 전달
+            ) as tracker:
+                # 토큰 사용량 누적을 위한 변수들
+                total_tokens = 0
+                total_prompt_tokens = 0
                 
-                batch_embeddings = [item.embedding for item in response.data]
-                all_embeddings.extend(batch_embeddings)
+                for batch in batches:
+                    try:
+                        response = self.client.embeddings.create(
+                            model=self.model_name,
+                            input=batch
+                        )
+                        
+                        batch_embeddings = [item.embedding for item in response.data]
+                        all_embeddings.extend(batch_embeddings)
+                        
+                        # 토큰 사용량 추적기에 토큰 추가
+                        tracker.add_tokens(
+                            prompt_tokens=response.usage.prompt_tokens,
+                            total_tokens=response.usage.total_tokens
+                        )
+                        
+                        # 마지막 토큰 사용량 기록 (호환성 유지)
+                        total_tokens += response.usage.total_tokens
+                        total_prompt_tokens += response.usage.prompt_tokens
+                        logger.info(f"OpenAI[Sync] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
+                    
+                    except Exception as e:
+                        logger.error(f"OpenAI 임베딩 생성 실패: {str(e)}")
+                        raise
                 
-                # 토큰 사용량 누적
-                if user_id and project_type:
+                # 마지막 토큰 사용량 저장 (호환성 유지)
+                if total_tokens > 0:
+                    self.last_token_usage = {
+                        "prompt_tokens": total_prompt_tokens,
+                        "completion_tokens": 0,
+                        "total_tokens": total_tokens,
+                        "total_cost": 0.0
+                    }
+        else:
+            # user_id나 project_type이 없는 경우 토큰 추적 없이 실행
+            total_tokens = 0
+            total_prompt_tokens = 0
+            
+            for batch in batches:
+                try:
+                    response = self.client.embeddings.create(
+                        model=self.model_name,
+                        input=batch
+                    )
+                    
+                    batch_embeddings = [item.embedding for item in response.data]
+                    all_embeddings.extend(batch_embeddings)
+                    
+                    # 토큰 사용량 누적
                     total_tokens += response.usage.total_tokens
                     total_prompt_tokens += response.usage.prompt_tokens
                     logger.info(f"OpenAI[Sync] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
                 
-            except Exception as e:
-                logger.error(f"OpenAI 임베딩 생성 실패: {str(e)}")
-                raise
-        
-        # 모든 배치 처리 후 누적된 토큰 사용량 저장
-        if user_id and project_type and total_tokens > 0:
-            # 토큰 사용량 데이터 구성
-            self.last_token_usage = {
-                "prompt_tokens": total_prompt_tokens,
-                "completion_tokens": 0,
-                "total_tokens": total_tokens,
-                "total_cost": 0.0  # 비용 계산 로직 필요시 추가
-            }
-            logger.info(f"OpenAI[Sync] 임베딩 총 토큰 사용량: {total_tokens} (prompt: {total_prompt_tokens})")
+                except Exception as e:
+                    logger.error(f"OpenAI 임베딩 생성 실패: {str(e)}")
+                    raise
+            
+            # 토큰 사용량 저장
+            if total_tokens > 0:
+                self.last_token_usage = {
+                    "prompt_tokens": total_prompt_tokens,
+                    "completion_tokens": 0,
+                    "total_tokens": total_tokens,
+                    "total_cost": 0.0
+                }
         
         return all_embeddings
 
@@ -767,6 +553,7 @@ class UpstageEmbeddingProvider(EmbeddingProvider):
         project_type: Optional[str] = None,
         db: Optional[AsyncSession] = None
     ) -> List[List[float]]:
+        """비동기적으로 Upstage 임베딩 생성"""
         if not texts:
             return []
             
@@ -778,40 +565,60 @@ class UpstageEmbeddingProvider(EmbeddingProvider):
         
         # Text 분할 필요 시 처리
         batches = self.validate_and_split_texts(texts)
-        for batch in batches:
+        logger.info(f"Upstage 임베딩 생성 시작 (비동기): {len(batches)} 배치")
+        
+        for batch_idx, batch in enumerate(batches):
             try:
-                # 비동기 클라이언트 생성
-                # OpenAI API 직접 호출
+                logger.debug(f"Upstage 임베딩 배치 처리 (비동기) #{batch_idx+1}/{len(batches)}: {len(batch)} 텍스트")
+                
+                # 지원되는 모델: embedding-query 또는 embedding-passage
+                model_name = "embedding-query" if embeddings_task_type == "RETRIEVAL_QUERY" else "embedding-passage"
+                logger.debug(f"Upstage API 요청 (비동기) - 모델: {model_name}, 입력 텍스트 수: {len(batch)}")
+                
+                # 비동기 클라이언트로 임베딩 생성
                 response = await self.async_client.embeddings.create(
-                    model="embedding-query",
+                    model=model_name,
                     input=batch
                 )
                 
+                # 응답 구조 로깅
+                if batch_idx == 0:  # 첫 번째 배치만 상세 로깅
+                    logger.debug(f"Upstage API 응답 구조 (비동기): {dir(response)}")
+                    if hasattr(response, 'data') and response.data:
+                        logger.debug(f"응답 데이터 첫 항목 구조 (비동기): {dir(response.data[0])}")
+                
                 # 임베딩 데이터 추출
                 batch_embeddings = [item.embedding for item in response.data]
+                logger.debug(f"추출된 임베딩 수 (비동기): {len(batch_embeddings)}")
+                
+                # null 임베딩 검사
+                for i, embedding in enumerate(batch_embeddings):
+                    if embedding is None:
+                        logger.warning(f"Null 임베딩 발견 (비동기): 배치 #{batch_idx+1}, 항목 #{i}")
+                
                 all_embeddings.extend(batch_embeddings)
                 
-                # 토큰 사용량 누적
-                if user_id and project_type:
-                    total_tokens += response.usage.total_tokens
-                    total_prompt_tokens += response.usage.prompt_tokens
-                    logger.info(f"Upstage[Async] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
+                # 토큰 사용량 누적 (내부 추적용)
+                total_tokens += response.usage.total_tokens
+                total_prompt_tokens += response.usage.prompt_tokens
+                logger.info(f"Upstage[Async] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
                 
             except Exception as e:
-                logger.error(f"Upstage 임베딩 생성 실패: {str(e)}")
+                logger.error(f"Upstage 임베딩 생성 실패 (비동기, 배치 #{batch_idx+1}): {str(e)}", exc_info=True)
+                if isinstance(e, AttributeError) and "object has no attribute 'embedding'" in str(e):
+                    logger.error("응답 데이터 구조가 예상과 다릅니다. 응답 구조를 확인하세요.")
                 raise
         
-        # 모든 배치 처리 후 누적된 토큰 사용량 저장
-        if user_id and project_type and total_tokens > 0:
-            # 토큰 사용량 데이터 구성
+        # 마지막 토큰 사용량 저장 (호환성 유지)
+        if total_tokens > 0:
             self.last_token_usage = {
                 "prompt_tokens": total_prompt_tokens,
                 "completion_tokens": None,
                 "total_tokens": total_tokens,
-                "total_cost": 0.0  # 비용 계산 로직 필요시 추가
+                "total_cost": 0.0
             }
-            logger.info(f"Upstage[Async] 임베딩 총 토큰 사용량: {total_tokens} (prompt: {total_prompt_tokens})")
         
+        logger.info(f"Upstage 임베딩 생성 완료 (비동기): 총 {len(all_embeddings)}개 임베딩 생성")
         return all_embeddings
 
     def create_embeddings(
@@ -821,47 +628,146 @@ class UpstageEmbeddingProvider(EmbeddingProvider):
         user_id: Optional[UUID] = None,
         project_type: Optional[str] = None
     ) -> List[List[float]]:
+        """동기적으로 Upstage 임베딩 생성"""
+        if not texts:
+            return []
+            
         all_embeddings = []
-        
-        # 토큰 사용량 누적을 위한 변수들
-        total_tokens = 0
-        total_prompt_tokens = 0
         
         # Text 분할 필요 시 처리
         batches = self.validate_and_split_texts(texts)
-        for batch in batches:
-            try:
-                # OpenAI API 직접 호출
-                response = self.client.embeddings.create(
-                    model="embedding-query",
-                    input=batch
-                )
+        logger.info(f"Upstage 임베딩 생성 시작: {len(batches)} 배치")
+        
+        # 토큰 사용량 추적을 위한 컨텍스트 매니저 사용
+        if user_id and project_type:
+            # 동기 DB 세션 팩토리
+            from common.core.database import SessionLocal
+            
+            with track_token_usage_sync(
+                user_id=user_id,
+                project_type=project_type,
+                token_type="embedding",
+                model_name=self.model_name,
+                db_getter=SessionLocal
+            ) as tracker:
+                total_tokens = 0
+                total_prompt_tokens = 0
                 
-                # 임베딩 데이터 추출
-                batch_embeddings = [item.embedding for item in response.data]
-                all_embeddings.extend(batch_embeddings)
+                for batch_idx, batch in enumerate(batches):
+                    try:
+                        logger.debug(f"Upstage 임베딩 배치 처리 #{batch_idx+1}/{len(batches)}: {len(batch)} 텍스트")
+                        
+                        # 지원되는 모델: embedding-query 또는 embedding-passage
+                        # embedding-query: 검색 질의용 임베딩
+                        # embedding-passage: 문서 임베딩
+                        model_name = "embedding-query" if embeddings_task_type == "RETRIEVAL_QUERY" else "embedding-passage"
+                        logger.debug(f"Upstage API 요청 - 모델: {model_name}, 입력 텍스트 수: {len(batch)}")
+                        
+                        # OpenAI API 호환 형식으로 호출
+                        response = self.client.embeddings.create(
+                            model=model_name,
+                            input=batch
+                        )
+                        
+                        # 응답 구조 로깅
+                        if batch_idx == 0:  # 첫 번째 배치만 상세 로깅
+                            logger.debug(f"Upstage API 응답 구조: {dir(response)}")
+                            if hasattr(response, 'data') and response.data:
+                                logger.debug(f"응답 데이터 첫 항목 구조: {dir(response.data[0])}")
+                        
+                        # 임베딩 데이터 추출
+                        batch_embeddings = [item.embedding for item in response.data]
+                        logger.debug(f"추출된 임베딩 수: {len(batch_embeddings)}")
+                        
+                        # null 임베딩 검사
+                        for i, embedding in enumerate(batch_embeddings):
+                            if embedding is None:
+                                logger.warning(f"Null 임베딩 발견: 배치 #{batch_idx+1}, 항목 #{i}")
+                        
+                        all_embeddings.extend(batch_embeddings)
+                        
+                        # 토큰 사용량 추적기에 토큰 추가
+                        tracker.add_tokens(
+                            prompt_tokens=response.usage.prompt_tokens,
+                            total_tokens=response.usage.total_tokens
+                        )
+                        
+                        # 토큰 사용량 누적 (내부 추적용)
+                        total_tokens += response.usage.total_tokens
+                        total_prompt_tokens += response.usage.prompt_tokens
+                        logger.info(f"Upstage[Sync] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
+                    
+                    except Exception as e:
+                        logger.error(f"Upstage 임베딩 생성 실패 (배치 #{batch_idx+1}): {str(e)}", exc_info=True)
+                        if isinstance(e, AttributeError) and "object has no attribute 'embedding'" in str(e):
+                            logger.error("응답 데이터 구조가 예상과 다릅니다. 응답 구조를 확인하세요.")
+                        raise
                 
-                # 토큰 사용량 누적
-                if user_id and project_type:
+                # 마지막 토큰 사용량 저장 (호환성 유지)
+                if total_tokens > 0:
+                    self.last_token_usage = {
+                        "prompt_tokens": total_prompt_tokens,
+                        "completion_tokens": 0,
+                        "total_tokens": total_tokens,
+                        "total_cost": 0.0
+                    }
+        else:
+            # 토큰 추적 없이 실행
+            total_tokens = 0
+            total_prompt_tokens = 0
+            
+            for batch_idx, batch in enumerate(batches):
+                try:
+                    logger.debug(f"Upstage 임베딩 배치 처리 #{batch_idx+1}/{len(batches)}: {len(batch)} 텍스트")
+                    
+                    # 지원되는 모델: embedding-query 또는 embedding-passage
+                    model_name = "embedding-query" if embeddings_task_type == "RETRIEVAL_QUERY" else "embedding-passage"
+                    logger.debug(f"Upstage API 요청 - 모델: {model_name}, 입력 텍스트 수: {len(batch)}")
+                    
+                    # OpenAI API 직접 호출
+                    response = self.client.embeddings.create(
+                        model=model_name,
+                        input=batch
+                    )
+                    
+                    # 응답 구조 로깅
+                    if batch_idx == 0:  # 첫 번째 배치만 상세 로깅
+                        logger.debug(f"Upstage API 응답 구조: {dir(response)}")
+                        if hasattr(response, 'data') and response.data:
+                            logger.debug(f"응답 데이터 첫 항목 구조: {dir(response.data[0])}")
+                    
+                    # 임베딩 데이터 추출
+                    batch_embeddings = [item.embedding for item in response.data]
+                    logger.debug(f"추출된 임베딩 수: {len(batch_embeddings)}")
+                    
+                    # null 임베딩 검사
+                    for i, embedding in enumerate(batch_embeddings):
+                        if embedding is None:
+                            logger.warning(f"Null 임베딩 발견: 배치 #{batch_idx+1}, 항목 #{i}")
+                    
+                    all_embeddings.extend(batch_embeddings)
+                    
+                    # 토큰 사용량 누적
                     total_tokens += response.usage.total_tokens
                     total_prompt_tokens += response.usage.prompt_tokens
                     logger.info(f"Upstage[Sync] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
                 
-            except Exception as e:
-                logger.error(f"Upstage 임베딩 생성 실패: {str(e)}")
-                raise
+                except Exception as e:
+                    logger.error(f"Upstage 임베딩 생성 실패 (배치 #{batch_idx+1}): {str(e)}", exc_info=True)
+                    if isinstance(e, AttributeError) and "object has no attribute 'embedding'" in str(e):
+                        logger.error("응답 데이터 구조가 예상과 다릅니다. 응답 구조를 확인하세요.")
+                    raise
+            
+            # 마지막 토큰 사용량 저장 (호환성 유지)
+            if total_tokens > 0:
+                self.last_token_usage = {
+                    "prompt_tokens": total_prompt_tokens,
+                    "completion_tokens": 0,
+                    "total_tokens": total_tokens,
+                    "total_cost": 0.0
+                }
         
-        # 모든 배치 처리 후 누적된 토큰 사용량 저장
-        if user_id and project_type and total_tokens > 0:
-            # 토큰 사용량 데이터 구성
-            self.last_token_usage = {
-                "prompt_tokens": total_prompt_tokens,
-                "completion_tokens": 0,
-                "total_tokens": total_tokens,
-                "total_cost": 0.0  # 비용 계산 로직 필요시 추가
-            }
-            logger.info(f"Upstage[Sync] 임베딩 총 토큰 사용량: {total_tokens} (prompt: {total_prompt_tokens})")
-        
+        logger.info(f"Upstage 임베딩 생성 완료: 총 {len(all_embeddings)}개 임베딩 생성")
         return all_embeddings
 
 class BGE_M3_EmbeddingProvider(EmbeddingProvider):
@@ -986,22 +892,63 @@ class GoogleEmbeddingProvider(EmbeddingProvider):
         """Google Vertex AI는 현재 비동기를 직접 지원하지 않아 동기 메서드를 호출"""
         return await asyncio.to_thread(self.create_embeddings, texts, embeddings_task_type, user_id, project_type, db)
     
-    def create_embeddings(self, texts: List[str], embeddings_task_type: str = "RETRIEVAL_QUERY", user_id: Optional[UUID] = None, project_type: Optional[str] = None, db: Optional[AsyncSession] = None) -> List[List[float]]:
+    def create_embeddings(
+        self, 
+        texts: List[str], 
+        embeddings_task_type: str = "RETRIEVAL_QUERY", 
+        user_id: Optional[UUID] = None, 
+        project_type: Optional[str] = None
+    ) -> List[List[float]]:
         """텍스트 임베딩 생성"""
+        if not texts:
+            return []
+            
         all_embeddings = []
         
         # Google 임베딩은 배치 처리가 필요함
         batches = self.validate_and_split_texts(texts)
         
-        for batch in batches:
-            try:
-                # 임베딩 생성
-                embeddings_batch = self._embed_batch(batch, embeddings_task_type)
-                all_embeddings.extend(embeddings_batch)
-                
-            except Exception as e:
-                logger.error(f"Google 임베딩 생성 실패: {str(e)}")
-                raise
+        # 토큰 사용량 추적
+        if user_id and project_type:
+            # 동기 DB 세션 팩토리
+            from common.core.database import SessionLocal
+            
+            with track_token_usage_sync(
+                user_id=user_id,
+                project_type=project_type,
+                token_type="embedding",
+                model_name=self.model_name,
+                db_getter=SessionLocal
+            ) as tracker:
+                # 토큰 수 추정 및 추적
+                for batch in batches:
+                    try:
+                        # 임베딩 생성
+                        embeddings_batch = self._embed_batch(batch, embeddings_task_type)
+                        all_embeddings.extend(embeddings_batch)
+                        
+                        # 토큰 수 추정 (Google에서는 정확한 토큰 수를 제공하지 않음)
+                        estimated_tokens = sum(self.count_tokens(text) for text in batch)
+                        tracker.add_tokens(
+                            prompt_tokens=estimated_tokens,
+                            total_tokens=estimated_tokens
+                        )
+                        logger.info(f"Google[Sync] 임베딩 토큰 사용량 추정: 약 {estimated_tokens} 토큰")
+                        
+                    except Exception as e:
+                        logger.error(f"Google 임베딩 생성 실패: {str(e)}")
+                        raise
+        else:
+            # 토큰 추적 없이 실행
+            for batch in batches:
+                try:
+                    # 임베딩 생성
+                    embeddings_batch = self._embed_batch(batch, embeddings_task_type)
+                    all_embeddings.extend(embeddings_batch)
+                    
+                except Exception as e:
+                    logger.error(f"Google 임베딩 생성 실패: {str(e)}")
+                    raise
         
         return all_embeddings
 
