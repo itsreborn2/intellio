@@ -1111,6 +1111,18 @@ export default function ETFCurrentTable() {
                 </th>
               ))}
               <th
+                key="2개월 차트"
+                scope="col"
+                className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 hidden md:table-cell`}
+                style={{
+                  width: '180px',
+                  height: '35px',
+                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                }}
+              >
+                2개월 차트
+              </th>
+              <th
                 key="20일선 이격"
                 scope="col"
                 className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 hidden md:table-cell`}
@@ -1146,6 +1158,34 @@ export default function ETFCurrentTable() {
               >
                 포지션
               </th>
+<<<<<<< HEAD
+              {['20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
+                <th
+                  key={header}
+                  scope="col"
+                  className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 hidden md:table-cell`}
+                  style={{
+                    width: header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px',
+                    height: '35px',
+                    fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                  }}
+                  onClick={() => {
+                    if (header !== '52주 차트' && header !== '20일선 기준가' && header !== '돌파/이탈' && header !== '포지션' && header !== '대표종목') {
+                      handleSort(header);
+                    }
+                  }}
+                >
+                  <div className="flex justify-center items-center">
+                    {header}
+                    {header !== '52주 차트' && header !== '20일선 기준가' && header !== '돌파/이탈' && header !== '포지션' && header !== '대표종목' && sortKey === header && (
+                      <span className="ml-1">
+                        {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                      </span>
+                    )}
+                  </div>
+                </th>
+              ))}
+=======
               <th
                 key="대표종목"
                 scope="col"
@@ -1158,6 +1198,7 @@ export default function ETFCurrentTable() {
               >
                 대표종목
               </th>
+>>>>>>> b06c69498995b73650daa5a1f4bba526e06cb0f9
             </tr>
           </thead>
           <tbody className="bg-gray-50">
@@ -1328,7 +1369,7 @@ export default function ETFCurrentTable() {
                         }
                         
                         return (
-                          <div className="flex items-center justify-center h-full">
+                          <div className="flex justify-center items-center w-full">
                             <span className={`text-xs font-medium ${colorClass}`}>
                               {position}
                             </span>
@@ -1345,9 +1386,7 @@ export default function ETFCurrentTable() {
                       }}
                     >
                       {/* 돌파/이탈 */}
-                      <div className="flex items-center justify-center h-full">
-                        {renderCrossover(row['티커'])}
-                      </div>
+                      {renderCrossover(row['티커'])}
                     </td>
                     <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '80px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                       {/* 포지션 상태 표시 */}
@@ -1381,6 +1420,94 @@ export default function ETFCurrentTable() {
                         })()}
                       </div>
                     </td>
+<<<<<<< HEAD
+                    {['20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
+                      <td
+                        key={header}
+                        className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''} hidden md:table-cell`}
+                        style={{ 
+                          width: header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px', 
+                          height: '16px',
+                          fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                        }}
+                      >
+                        {(() => {
+                          if (header === '20일선 이격') {
+                            // 20일선 위치 데이터 표시
+                            const ticker = row['티커'];
+                            if (!ticker) return '-';
+                            
+                            const position = calculate20DayMAPosition(ticker);
+                            const positionValue = parseFloat(position);
+                            
+                            // 색상 결정
+                            let colorClass = 'text-gray-600';
+                            if (!isNaN(positionValue)) {
+                              if (positionValue > 0) {
+                                colorClass = 'text-red-500';
+                              } else if (positionValue < 0) {
+                                colorClass = 'text-blue-500';
+                              }
+                            }
+                            
+                            return (
+                              <div className="flex items-center justify-center h-full">
+                                <span className={`text-xs font-medium ${colorClass}`}>
+                                  {position}
+                                </span>
+                              </div>
+                            );
+                          } else if (header === '돌파/이탈') {
+                            // 돌파/이탈 데이터 표시
+                            return (
+                              <div className="flex items-center justify-center h-full">
+                                {renderCrossover(row['티커'])}
+                              </div>
+                            );
+                          } else if (header === '대표종목') {
+                            // 대표종목 데이터 표시
+                            const ticker = row['티커'];
+                            if (!ticker) return '-';
+                            
+                            // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
+                            const tickerVariations = [
+                              ticker,
+                              ticker.padStart(6, '0'),
+                              ticker.replace(/^0+/, '')
+                            ];
+                            
+                            // 모든 티커 변형에 대해 대표종목 검색
+                            let stockList = null;
+                            for (const variant of tickerVariations) {
+                              if (etfStockList[variant] && etfStockList[variant].length > 0) {
+                                stockList = etfStockList[variant];
+                                break;
+                              }
+                            }
+                            
+                            // 대표종목이 없으면 '-' 반환
+                            if (!stockList || stockList.length === 0) {
+                              // console.log(`티커 ${ticker}의 대표종목 정보 없음`);
+                              return '-';
+                            }
+                            
+                            // 모든 대표종목 표시
+                            return (
+                              <div className="flex flex-wrap items-center gap-1">
+                                {stockList.map((item, index) => (
+                                  <div key={index} className="flex items-center">
+                                    <span className="text-xs" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>{item.name}</span>
+                                    {item.rs && (
+                                      <span className={`text-xs ml-1 px-1 sm:px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-lg ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable"
+                                            style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                                        {item.rs}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+=======
                     <td
                       className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''} hidden md:table-cell`}
                       style={{ 
@@ -1407,6 +1534,7 @@ export default function ETFCurrentTable() {
                           if (etfStockList[variant] && etfStockList[variant].length > 0) {
                             stockList = etfStockList[variant];
                             break;
+>>>>>>> b06c69498995b73650daa5a1f4bba526e06cb0f9
                           }
                         }
                         
