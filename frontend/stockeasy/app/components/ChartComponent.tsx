@@ -441,6 +441,7 @@ const ChartComponent: React.FC<ChartProps> = ({
             color: '#ffffff' 
           },
           textColor: '#333',
+          fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif',
         },
         grid: {
           vertLines: {
@@ -455,11 +456,21 @@ const ChartComponent: React.FC<ChartProps> = ({
         },
         rightPriceScale: {
           borderColor: 'rgba(197, 203, 206, 0.8)',
+          entireTextOnly: true,
         },
         timeScale: {
           borderColor: 'rgba(197, 203, 206, 0.8)',
           timeVisible: true,
           secondsVisible: false,
+          rightOffset: 5,
+          barSpacing: 10,
+          minBarSpacing: 5,
+          fixLeftEdge: true,
+          fixRightEdge: true,
+          rightBarStaysOnScroll: true,
+          borderVisible: true,
+          visible: true,
+          ticksVisible: true,
           tickMarkFormatter: (time: Time, tickMarkType: TickMarkType, locale: string) => {
             const date = new Date(Number(time) * 1000);
             const year = date.getFullYear();
