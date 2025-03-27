@@ -163,7 +163,11 @@ class ParallelSearchAgent(BaseAgent):
                     # agent_results 딕셔너리 병합
                     for agent_name, agent_result in result["agent_results"].items():
                         state["agent_results"][agent_name] = agent_result
+<<<<<<< HEAD
                         #logger.info(f"에이전트 {agent_name}의 agent_results 병합 완료")
+=======
+                        logger.info(f"에이전트 {agent_name}의 agent_results 병합 완료")
+>>>>>>> a2cd9ff (feat(스탁이지): 에이전트 상태 및 오류 처리 개선, 요약 프롬프트 추가)
         
         # agent_results가 없으면 빈 딕셔너리 초기화
         if "agent_results" not in state:
