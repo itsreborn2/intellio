@@ -1224,10 +1224,15 @@ export default function RSRankPage() {
                                   style={{ 
                                     width: header === 'RS' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' || header === 'MTT' ? '60px' :
                                            header === '시가총액' || header === '거래대금' ? '74px' :
-                                           header === '업종' ? '230px' :
+                                           header === '업종' ? 'auto' :
                                            header === '종목명' ? '120px' :
                                            header === '종목코드' ? '84px' : 'auto',
-                                    fontSize: 'clamp(0.65rem, 0.8vw, 0.75rem)'
+                                    fontSize: 'clamp(0.65rem, 0.8vw, 0.75rem)',
+                                    ...(header === '업종' ? {
+                                      maxWidth: '230px',
+                                      minWidth: '80px',
+                                      width: 'auto'
+                                    } : {})
                                   }}
                                   onClick={() => requestSort(header)}
                                 >
@@ -1256,7 +1261,14 @@ export default function RSRankPage() {
                                       ''
                                     }`}
                                     style={{ 
-                                      fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                                      fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
+                                      ...(header === '업종' ? {
+                                        maxWidth: '230px',
+                                        minWidth: '80px',
+                                        width: 'auto',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                      } : {})
                                     }}
                                     title={header === '테마명' ? row[header] : ''}
                                   >
@@ -1423,8 +1435,8 @@ export default function RSRankPage() {
                               </div>
                             </th>
                             <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '55px' }}
+                              className="py-2 px-1 sm:py-2.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px' }}
                               onClick={() => requestSort('시가총액')}
                             >
                               <div className="flex items-center justify-center">
@@ -1437,7 +1449,7 @@ export default function RSRankPage() {
                               </div>
                             </th>
                             <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                              className="py-2 px-1 sm:py-2.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
                               style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '55px' }}
                               onClick={() => requestSort('거래대금')}
                             >
@@ -1454,7 +1466,7 @@ export default function RSRankPage() {
                               className="py-2 px-1 sm:py-2.5 sm:px-2 border-b border-r text-left overflow-hidden text-ellipsis whitespace-nowrap hidden md:table-cell"
                               style={{ 
                                 fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
-                                maxWidth: '100px',
+                                maxWidth: '150px',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis'
