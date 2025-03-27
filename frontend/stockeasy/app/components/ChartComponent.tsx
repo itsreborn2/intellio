@@ -114,8 +114,8 @@ const ChartComponent: React.FC<ChartProps> = ({
       
       // 시장 지수 로컬 캐시 파일 경로 설정
       const marketIndexPath = normalizedMarketType === 'KOSPI' 
-        ? '/requestfile/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv'
-        : '/requestfile/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
+        ? '/requestfile/market-index/1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c.csv'
+        : '/requestfile/market-index/1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg.csv';
       
       console.log(`시장 지수 파일 경로: ${marketIndexPath}`);
       
@@ -441,6 +441,7 @@ const ChartComponent: React.FC<ChartProps> = ({
             color: '#ffffff' 
           },
           textColor: '#333',
+          fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif',
         },
         grid: {
           vertLines: {
@@ -455,11 +456,21 @@ const ChartComponent: React.FC<ChartProps> = ({
         },
         rightPriceScale: {
           borderColor: 'rgba(197, 203, 206, 0.8)',
+          entireTextOnly: true,
         },
         timeScale: {
           borderColor: 'rgba(197, 203, 206, 0.8)',
           timeVisible: true,
           secondsVisible: false,
+          rightOffset: 5,
+          barSpacing: 10,
+          minBarSpacing: 5,
+          fixLeftEdge: true,
+          fixRightEdge: true,
+          rightBarStaysOnScroll: true,
+          borderVisible: true,
+          visible: true,
+          ticksVisible: true,
           tickMarkFormatter: (time: Time, tickMarkType: TickMarkType, locale: string) => {
             const date = new Date(Number(time) * 1000);
             const year = date.getFullYear();

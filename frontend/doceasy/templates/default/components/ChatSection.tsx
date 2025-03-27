@@ -13,6 +13,26 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import React from 'react'
 
+// 모바일 환경 감지 훅
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768); // 768px 미만을 모바일로 간주
+    };
+
+    // 초기 체크
+    checkIsMobile();
+
+    // 리사이즈 이벤트에 대응
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  return isMobile;
+};
+
 // ChatMessage 컴포넌트를 메모이제이션
 const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { message: IMessage; isStreaming?: boolean }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -142,6 +162,8 @@ export const ChatSection = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const messageCountRef = useRef(0)
+  const isMobile = useIsMobile();
+  
   // 테이블 스트리밍 상태
   const [tableStreamingState, setTableStreamingState] = useState<{
     isStreaming: boolean;
@@ -535,43 +557,67 @@ export const ChatSection = () => {
   }, [state.messages])
 
   return (
-    <div className="relative h-full pb-[68px] flex flex-col">
+    <div className="relative h-full flex flex-col">
       {/* 모드 선택 버튼 - absolute 제거하고 상단에 배치 */}
       <div className="p-2 bg-white dark:bg-gray-900">
-        <div className="flex space-x-2">
-          <Button
-            variant={state.analysis.mode === 'chat' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => dispatch({ type: actionTypes.SET_MODE, payload: 'chat' })}
-            className="text-xs"
-            disabled={isGenerating || state.isAnalyzing}
-          >
-            통합분석
-          </Button>
-          <Button
-            variant={state.analysis.mode === 'table' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => dispatch({ type: actionTypes.SET_MODE, payload: 'table' })}
-            className="text-xs"
-            disabled={isGenerating || state.isAnalyzing}
-          >
-            개별분석
-          </Button>
-        </div>
+        {!isMobile && (
+          <div className="flex space-x-2">
+            <Button
+              variant={state.analysis.mode === 'chat' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                dispatch({ type: actionTypes.SET_MODE, payload: 'chat' });
+                // 모바일 환경에서는 채팅 탭으로 전환
+                if (isMobile && window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('switchToTab', { detail: { tab: 'chat' } }));
+                }
+              }}
+              className="text-xs"
+              disabled={isGenerating || state.isAnalyzing}
+            >
+              통합분석
+            </Button>
+            <Button
+              variant={state.analysis.mode === 'table' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                dispatch({ type: actionTypes.SET_MODE, payload: 'table' });
+                // 모바일 환경에서는 테이블 탭으로 전환
+                if (isMobile && window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('switchToTab', { detail: { tab: 'table' } }));
+                }
+              }}
+              className="text-xs"
+              disabled={isGenerating || state.isAnalyzing}
+            >
+              {isMobile ? '문서목록' : '개별분석'}
+            </Button>
+          </div>
+        )}
       </div>
       
-      {/* 메시지 컨테이너 - 나머지 영역 채우도록 변경 */}
-      <div className="flex-grow overflow-y-auto p-4" id="chat-container">
-        <div className="flex flex-col space-y-2">
+      {/* 메시지 컨테이너 - 모바일에서 하단 패딩 추가 */}
+      <div 
+        className={`flex-grow overflow-y-auto p-4 ${isMobile ? 'pb-[70px]' : 'pb-[68px]'}`} 
+        id="chat-container"
+      >
+        <div className="flex flex-col space-y-2 pt-4">
           {renderMessages}
           <div ref={messagesEndRef} />
         </div>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-3">
-        <form onSubmit={handleSubmit} className="flex space-x-2">
+      {/* 입력 영역 - 모바일에서 위치 고정 및 너비 최대화 */}
+      <div 
+        className={`${
+          isMobile 
+            ? 'fixed bottom-0 left-0 right-0 z-[1000] border-t border-gray-200 dark:border-gray-800 p-2 bg-white dark:bg-gray-900' 
+            : 'absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-3'
+        }`}
+      >
+        <form onSubmit={handleSubmit} className={`flex ${isMobile ? 'space-x-1' : 'space-x-2'}`}>
           <Input
-            className="flex-1 pr-20"
+            className={`flex-1 ${isMobile ? 'text-sm' : ''}`}
             placeholder={isGenerating ? "응답 중..." : (state.analysis.mode === 'table' ? "테이블 분석을 위한 질문을 입력하세요..." : "메시지를 입력하세요...")}
             value={input}
             onChange={handleInputChange}
@@ -583,15 +629,21 @@ export const ChatSection = () => {
             <Button 
               type="button" 
               variant="destructive" 
-              size="icon"
+              size={isMobile ? "sm" : "icon"}
               onClick={handleStopGeneration}
               disabled={state.analysis.mode === 'table' && tableStreamingState.isStreaming} // 테이블 분석 중에는 중지 버튼 비활성화
+              className={isMobile ? "min-w-[36px] px-2" : ""}
             >
-              <Square className="h-4 w-4" />
+              <Square className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`} />
             </Button>
           ) : (
-            <Button type="submit" size="icon" disabled={!input.trim() || isGenerating || state.isAnalyzing}>
-              <Send className="h-4 w-4" />
+            <Button 
+              type="submit" 
+              size={isMobile ? "sm" : "icon"} 
+              disabled={!input.trim() || isGenerating || state.isAnalyzing}
+              className={isMobile ? "min-w-[36px] px-2" : ""}
+            >
+              <Send className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`} />
             </Button>
           )}
         </form>
@@ -599,26 +651,6 @@ export const ChatSection = () => {
 
       {/* 테이블 모드 분석 진행 상태 표시 */}
       <TableAnalysisProgress streamingState={tableStreamingState} />
-      
-      {/* 마크다운 스타일 적용 */}
-      <style jsx global>{`
-  .typing .cursor {
-    display: inline-block;
-    width: 13px;
-    height: 13px;
-    border-radius: 50%;
-    background-color: currentColor;
-    margin-left: 4px;
-    margin-bottom: 2px;
-    animation: pulse 1s infinite;
-    vertical-align: middle;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 0.4; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.2); }
-  }
-`}</style>
     </div>
   )
 }

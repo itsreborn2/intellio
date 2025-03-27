@@ -14,6 +14,7 @@ from loguru import logger
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import PromptTemplate
+from langchain_core.messages import AIMessage
 
 from common.core.config import settings
 # from stockeasy.services.financial.data_service import FinancialDataService
@@ -23,22 +24,25 @@ from stockeasy.prompts.financial_prompts import (
     #FINANCIAL_DATA_EXTRACTION_PROMPT
 )
 from stockeasy.models.agent_io import RetrievedAllAgentData, FinancialData
-from common.services.agent_llm import get_llm_for_agent
+from common.services.agent_llm import get_llm_for_agent, get_agent_llm
+from common.models.token_usage import ProjectType
+from stockeasy.agents.base import BaseAgent
+from sqlalchemy.ext.asyncio import AsyncSession
 
-class FinancialAnalyzerAgent:
+class FinancialAnalyzerAgent(BaseAgent):
     """금융 데이터를 분석하는 에이전트"""
 
-    def __init__(self):
+    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
-        FinancialAnalyzerAgent를 초기화합니다.
+        금융 데이터 분석 에이전트 초기화
         
         Args:
-            model_name: 사용할 LLM 모델 이름
-            temperature: 모델 온도(창의성) 설정
+            name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
+            db: 데이터베이스 세션 객체 (선택적)
         """
-        
-        #self.llm = ChatOpenAI(model=model_name, temperature=temperature)
+        super().__init__(name, db)
         self.llm, self.model_name, self.provider = get_llm_for_agent("financial_analyzer_agent")
+        self.agent_llm = get_agent_llm("financial_analyzer_agent")
         logger.info(f"FinancialAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         #self.financial_service = FinancialDataService()
         #self.stock_service = StockInfoService()
@@ -79,8 +83,8 @@ class FinancialAnalyzerAgent:
                 return state
                 
             logger.info(f"FinancialAnalyzerAgent analyzing stock: {stock_code or stock_name}")
-            logger.info(f"Classification data: {classification}")
-            logger.info(f"Data requirements: {data_requirements}")
+            #logger.info(f"Classification data: {classification}")
+            #logger.info(f"Data requirements: {data_requirements}")
             
             # 종목 코드가 없으면 종목명으로 조회
             if not stock_code and stock_name:
@@ -430,46 +434,57 @@ class FinancialAnalyzerAgent:
         return trends
     
     async def _generate_financial_analysis(self, 
-                                          financial_data: Dict[str, Any],
-                                          query: str,
-                                          classification: Dict[str, Any]) -> Dict[str, Any]:
+                                      financial_data: Dict[str, Any],
+                                      query: str,
+                                      classification: Dict[str, Any]) -> Dict[str, Any]:
         """
-        LLM을 사용하여 재무 데이터에 대한 상세 분석을 생성합니다.
+        금융 데이터에 대한 LLM 분석을 수행합니다.
         
         Args:
-            financial_data: 분석할 재무 데이터
-            query: 사용자 쿼리
-            classification: 질문 분류 정보
+            financial_data: 분석할 금융 데이터
+            query: 사용자 검색어
+            classification: 질문 분류 결과
             
         Returns:
-            분석 결과
+            LLM 분석 결과
         """
         try:
-            # 분석 프롬프트 구성
-            prompt = PromptTemplate(
-                template=FINANCIAL_ANALYSIS_PROMPT,
-                input_variables=["financial_data", "query", "primary_intent", "timeframe", "complexity"]
+            # 재무 데이터 문자열 변환
+            financial_data_str = json.dumps(financial_data, ensure_ascii=False, indent=2)
+            
+            # 프롬프트 구성
+            prompt = FINANCIAL_ANALYSIS_PROMPT.format(
+                query=query,
+                financial_data=financial_data_str,
+                primary_intent=classification.get("primary_intent", ""),
+                complexity=classification.get("complexity", "중간")
             )
             
-            # JSON 출력 파서 생성
-            parser = JsonOutputParser()
+            # LLM 호출
+            user_context = {}
+            user_id = user_context.get("user_id", None)
             
-            # 체인 구성 및 실행
-            chain = prompt | self.llm | parser
+            # 폴백 메커니즘을 사용하여 LLM 호출
+            response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
+                input=prompt,
+                user_id=user_id,
+                project_type=ProjectType.STOCKEASY,
+                db=self.db
+            )
             
-            analysis = await chain.ainvoke({
-                "financial_data": json.dumps(financial_data, ensure_ascii=False),
-                "query": query,
-                "primary_intent": classification.get("primary_intent", "일반"),
-                "timeframe": classification.get("time_frame", "현재"),
-                "complexity": classification.get("complexity", "보통")
-            })
+            # 분석 결과 추출
+            analysis_content = response.content if response else "분석 결과를 생성할 수 없습니다."
             
-            return analysis
+            return {
+                "llm_response": analysis_content,
+                "trends": financial_data.get("trends", {}),
+                "metrics": financial_data.get("processed_metrics", {})
+            }
             
         except Exception as e:
-            logger.error(f"재무 분석 생성 중 오류: {str(e)}")
+            logger.exception(f"재무 데이터 분석 중 오류: {str(e)}")
             return {
-                "summary": "재무 데이터 분석을 생성하는 중 오류가 발생했습니다.",
-                "error": str(e)
+                "llm_response": f"재무 분석 중 오류가 발생했습니다: {str(e)}",
+                "trends": {},
+                "metrics": {}
             } 

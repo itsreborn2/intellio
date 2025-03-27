@@ -1,10 +1,11 @@
-from typing import  Optional
+from typing import  Optional, TYPE_CHECKING
 from uuid import  uuid4
 
 from fastapi import Depends, HTTPException, status, Cookie, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from common.services.embedding import EmbeddingService
+# 순환 참조 방지를 위해 직접 임포트하지 않고, 실제 사용 시점에 지연 임포트
+# from common.services.embedding import EmbeddingService
 from common.core.database import get_db_async
 from common.core.database import AsyncSessionLocal
 from common.services.user import UserService
@@ -17,7 +18,19 @@ from common.core.exceptions import AuthenticationRedirectException
 from loguru import logger
 from common.core.config import settings
 
+# 타입 힌트용 조건부 임포트
+if TYPE_CHECKING:
+    from common.services.embedding import EmbeddingService
+
 #logger = logging.getLogger(__name__)
+
+async def get_db():
+    """비동기 데이터베이스 세션 프로바이더"""
+    db = AsyncSessionLocal()
+    try:
+        yield db
+    finally:
+        await db.close()
 
 async def get_current_session(
     session_id: Optional[str] = Cookie(None),
@@ -66,6 +79,9 @@ async def get_user_service(
     """사용자 서비스 의존성"""
     return UserService(db)
 
-async def get_embedding_service() -> EmbeddingService:
+async def get_embedding_service():
+    """임베딩 서비스 의존성 - 지연 임포트 사용"""
+    # 함수 내부에서 임포트하여 순환 참조 방지
+    from common.services.embedding import EmbeddingService
     return EmbeddingService()
 

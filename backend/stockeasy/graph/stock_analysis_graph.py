@@ -15,7 +15,7 @@ from loguru import logger
 
 from stockeasy.models.agent_io import AgentState
 from stockeasy.agents.base import BaseAgent
-from stockeasy.agents.session_manager import SessionManagerAgent
+from stockeasy.agents.session_manager_agent import SessionManagerAgent
 from stockeasy.agents.parallel_search_agent import ParallelSearchAgent
 from sqlalchemy.ext.asyncio import AsyncSession
 from langchain.callbacks.tracers import LangChainTracer
@@ -155,9 +155,16 @@ class StockAnalysisGraph:
         Returns:
             컴파일된 그래프
         """
+        # DB 세션을 모든 에이전트에 전달
+        if db:
+            for agent_name, agent in self.agents.items():
+                if hasattr(agent, 'db'):
+                    agent.db = db
+                    #logger.info(f"에이전트 '{agent_name}'에 DB 세션 할당됨")
+        
         # 세션 관리자 에이전트 준비
         if "session_manager" not in self.agents and db:
-            self.agents["session_manager"] = SessionManagerAgent(db)
+            self.agents["session_manager"] = SessionManagerAgent(db=db)
         
         # 병렬 검색 에이전트 생성
         parallel_search_agent = ParallelSearchAgent({
@@ -185,20 +192,101 @@ class StockAnalysisGraph:
         workflow.add_edge("session_manager", "question_analyzer")
         workflow.add_edge("question_analyzer", "orchestrator")
         
-        # 오케스트레이터 -> 병렬 검색 또는 fallback_manager
+        # 오케스트레이터 -> 병렬 검색 또는 fallback_manager (명확한 조건부 엣지)
+        def orchestrator_router(state: AgentState) -> str:
+            """오케스트레이터 이후 라우팅 결정"""
+            # 오류가 많으면 fallback으로
+            errors = state.get("errors", [])
+            if errors and len(errors) > 2:
+                logger.info("오류가 많아 fallback_manager로 라우팅합니다.")
+                return "fallback_manager"
+                
+            # 실행 계획이 없으면 fallback으로
+            execution_plan = state.get("execution_plan", {})
+            if not execution_plan or not execution_plan.get("execution_order"):
+                logger.info("실행 계획이 없어 fallback_manager로 라우팅합니다.")
+                return "fallback_manager"
+                
+            # 정상 흐름은 병렬 검색으로
+            logger.info("parallel_search로 라우팅합니다.")
+            return "parallel_search"
+        
         workflow.add_conditional_edges(
             "orchestrator",
-            lambda state: "fallback_manager" if state.get("errors") and len(state.get("errors", [])) > 2 else "parallel_search",
+            orchestrator_router,
             {
                 "parallel_search": "parallel_search",
                 "fallback_manager": "fallback_manager"
             }
         )
         
-        # 병렬 검색 -> knowledge_integrator 또는 fallback_manager
+        # 병렬 검색 -> knowledge_integrator 또는 fallback_manager (명확한 조건부 엣지)
+        def parallel_search_router(state: AgentState) -> str:
+            """병렬 검색 이후 라우팅 결정"""
+            # 로그에 전체 상태 출력 (디버깅용)
+            logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
+            logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
+            
+            # agent_results 키 확인 (중요: knowledge_integrator와 summarizer에서 사용)
+            agent_results = state.get("agent_results", {})
+            if agent_results:
+                logger.info(f"병렬 검색 이후 agent_results 키: {list(agent_results.keys())}")
+            else:
+                logger.warning("병렬 검색 이후 agent_results 키가 없습니다!")
+            
+            # 병렬 검색 실행 완료 확인 방법 1: parallel_search_executed 플래그
+            parallel_search_executed = state.get("parallel_search_executed", False)
+            
+            # 병렬 검색 실행 완료 확인 방법 2: 하위 에이전트 처리 상태
+            processing_status = state.get("processing_status", {})
+            telegram_status = processing_status.get("telegram_retriever")
+            report_status = processing_status.get("report_analyzer")
+            financial_status = processing_status.get("financial_analyzer")
+            industry_status = processing_status.get("industry_analyzer")
+            
+            # 완료 상태 목록
+            completed_statuses = ["completed", "completed_with_default_plan", "completed_no_data"]
+            
+            # 어느 하나라도 실행 완료 상태인지 확인
+            search_completed = any([
+                telegram_status in completed_statuses,
+                report_status in completed_statuses, 
+                financial_status in completed_statuses,
+                industry_status in completed_statuses
+            ])
+            
+            # 검색 에이전트가 실행되지 않았는지 확인
+            if not parallel_search_executed and not search_completed:
+                logger.warning("병렬 검색이 실행되지 않았습니다.")
+                logger.warning(f"실행 상태: telegram={telegram_status}, report={report_status}, financial={financial_status}, industry={industry_status}")
+                return "fallback_manager"
+            
+            # 모든 에이전트가 실패한 경우
+            if state.get("all_search_agents_failed", False):
+                logger.warning("모든 검색 에이전트가 실패했습니다.")
+                return "fallback_manager"
+            
+            # 검색 결과가 있는지 확인
+            retrieved_data = state.get("retrieved_data", {})
+            
+            # 실제 데이터 포함 항목만 확인
+            has_data = False
+            for key in ["telegram_messages", "report_data", "financial_data", "industry_data"]:
+                if key in retrieved_data and retrieved_data[key]:
+                    has_data = True
+                    logger.info(f"데이터가 검색됨: {key}에 {len(retrieved_data[key])}개 항목이 있습니다.")
+                    break
+            
+            if not has_data:
+                logger.warning("검색 결과가 없어 fallback_manager로 라우팅합니다.")
+                return "fallback_manager"
+            
+            logger.info("데이터가 검색되어 knowledge_integrator로 라우팅합니다.")
+            return "knowledge_integrator"
+        
         workflow.add_conditional_edges(
             "parallel_search",
-            lambda state: "fallback_manager" if not state.get("retrieved_data") else "knowledge_integrator",
+            parallel_search_router,
             {
                 "knowledge_integrator": "knowledge_integrator",
                 "fallback_manager": "fallback_manager"
@@ -248,16 +336,19 @@ class StockAnalysisGraph:
         # 오류가 있으면 fallback_manager로 라우팅
         errors = state.get("errors", [])
         if errors and len(errors) > 2:  # 2개 이상의 오류가 있으면 fallback
+            logger.info("오류가 많아 fallback_manager로 라우팅합니다.")
             return "fallback_manager"
         
         # 실행 계획 확인
         execution_plan = state.get("execution_plan", {})
         if not execution_plan:
+            logger.info("실행 계획이 없어 fallback_manager로 라우팅합니다.")
             return "fallback_manager"
         
         # 실행 순서 확인
         execution_order = execution_plan.get("execution_order", [])
         if not execution_order:
+            logger.info("실행 순서가 없어 fallback_manager로 라우팅합니다.")
             return "fallback_manager"
         
         # 현재 상태에서 마지막으로 실행된 에이전트 확인
@@ -270,13 +361,17 @@ class StockAnalysisGraph:
         # 다음 단계 결정
         if "knowledge_integrator" in executed_agents:
             if "summarizer" in execution_order and "summarizer" not in executed_agents:
+                logger.info("knowledge_integrator 이후 summarizer로 라우팅합니다.")
                 return "summarizer"
             else:
+                logger.info("knowledge_integrator 이후 response_formatter로 라우팅합니다.")
                 return "response_formatter"
         elif "summarizer" in executed_agents:
+            logger.info("summarizer 이후 response_formatter로 라우팅합니다.")
             return "response_formatter"
         
         # 여기까지 오면 END 반환
+        logger.info("더 이상 실행할 에이전트가 없어 END로 라우팅합니다.")
         return END
 
     def register_agents(self, agents: Dict[str, BaseAgent], db: AsyncSession):
@@ -287,6 +382,7 @@ class StockAnalysisGraph:
             agents: 에이전트 이름과 인스턴스의 딕셔너리
             db: 데이터베이스 세션
         """
+                   
         self.agents = agents
         # 등록된 에이전트들로 그래프 구축
         self.graph = self._build_graph(db)
@@ -332,6 +428,7 @@ class StockAnalysisGraph:
                 "errors": [],
                 "processing_status": {},
                 "retrieved_data": {},  # 검색 결과를 담을 딕셔너리
+                "parallel_search_executed": False,  # 병렬 검색 실행 여부 초기화
                 **kwargs
             }
             logger.info(f"[process_query] initial_state: {initial_state}")
@@ -340,8 +437,20 @@ class StockAnalysisGraph:
             # 그래프 실행 (thread_id 제거, config 매개변수만 사용)
             result = await self.graph.ainvoke(
                 initial_state,
-                config={"configurable": {"thread_id": trace_id}, "max_concurrency": 4}
+                config={
+                    "configurable": {"thread_id": trace_id}, 
+                    "max_concurrency": 4,  # 병렬 처리 동시성 설정
+                    "recursion_limit": 25  # 재귀 제한 설정
+                }
             )
+            
+            # 결과 확인
+            if "retrieved_data" in result:
+                data_keys = list(result["retrieved_data"].keys())
+                logger.info(f"검색 데이터 키: {data_keys}")
+            
+            if "processing_status" in result:
+                logger.info(f"처리 상태: {result['processing_status']}")
             
             # 트레이스 정보 기록
             logger.info(f"트레이스 ID: {trace_id} - 처리 완료")

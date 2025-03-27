@@ -7,29 +7,36 @@
 
 import json
 from loguru import logger
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from langchain_core.messages import HumanMessage, AIMessage
-from common.services.agent_llm import get_llm_for_agent
+from common.services.agent_llm import get_agent_llm, get_llm_for_agent
 from stockeasy.prompts.response_formatter_prompts import format_response_formatter_prompt
 from langchain_core.output_parsers import StrOutputParser
+from common.models.token_usage import ProjectType
+from stockeasy.agents.base import BaseAgent
+from sqlalchemy.ext.asyncio import AsyncSession
 
-class ResponseFormatterAgent:
+class ResponseFormatterAgent(BaseAgent):
     """
-    통합된 정보를 사용자에게 이해하기 쉬운 형태로 포맷팅하는 응답 포맷터 에이전트 클래스
+    최종 응답을 형식화하는 에이전트
+    
+    이 에이전트는 knowledge_integrator 또는 summarizer의 결과를 받아
+    사용자 친화적인 형태로 가공합니다.
     """
     
-    def __init__(self):
+    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
-        응답 포맷터 에이전트 초기화
+        응답 형식화 에이전트 초기화
         
         Args:
-            model_name: 사용할 OpenAI 모델 이름
-            temperature: 모델 출력의 다양성 조절 파라미터
+            name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
+            db: 데이터베이스 세션 객체 (선택적)
         """
-        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
-        self.llm, self.model_name, self.provider = get_llm_for_agent("response_formatter_agent")
-        logger.info(f"ResponseFormatterAgent initialized with provider: {self.provider}, model: {self.model_name}")
+        super().__init__(name, db)
+        #self.llm, self.model_name, self.provider = get_llm_for_agent("response_formatter_agent")
+        self.agent_llm = get_agent_llm("response_formatter_agent")
+        logger.info(f"ResponseFormatterAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.parser = StrOutputParser()
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -81,12 +88,16 @@ class ResponseFormatterAgent:
                 confidence_assessment=confidence_assessment,
                 uncertain_areas=uncertain_areas
             )
-            # prompt = ChatPromptTemplate.from_template(prompt_context)
             
             # # LLM 호출로 포맷팅 수행
-            # chain = prompt | self.llm | self.parser
-            # response = await chain.ainvoke({})  
-            response:AIMessage = await self.llm.ainvoke([HumanMessage(content=prompt_context)])
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
+            response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
+                input=prompt_context,
+                user_id=user_id,
+                project_type=ProjectType.STOCKEASY,
+                db=self.db
+            )
             formatted_response = response.content
             
             logger.info("Response formatting completed successfully")

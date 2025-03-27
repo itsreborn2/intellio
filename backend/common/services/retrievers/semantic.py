@@ -1,5 +1,7 @@
 from typing import List, Dict, Optional, Tuple
 import logging
+from uuid import UUID
+#from sqlalchemy import UUID
 from .base import BaseRetriever, RetrieverConfig
 from .models import DocumentWithScore, RetrievalResult
 
@@ -10,8 +12,12 @@ logger = logging.getLogger(__name__)
 
 class SemanticRetrieverConfig(RetrieverConfig):
     """시맨틱 검색 설정"""
+    model_config = {"arbitrary_types_allowed": True}
     min_score: float = 0.6  # 최소 유사도 점수
     search_multiplier: int = 1  # top_k에 곱할 배수
+    project_type: Optional[str] = None
+    user_id: Optional[UUID] = None
+    
 
 class SemanticRetriever(BaseRetriever):
     """시맨틱 검색 구현체"""
@@ -20,6 +26,9 @@ class SemanticRetriever(BaseRetriever):
         super().__init__(config)
         self.config = config
         self.vs_manager = vs_manager
+        logger.info(f"[SemanticRetriever][init] user:{config.user_id}, project_type:{config.project_type}")
+        self.vs_manager.user_id = config.user_id
+        self.vs_manager.project_type = config.project_type
         
 
     async def retrieve(
@@ -32,7 +41,7 @@ class SemanticRetriever(BaseRetriever):
         try:
             # 기본값 설정
             _top_k = top_k or self.config.top_k
-
+            
             # VectorStoreManager 사용
             search_results = self.vs_manager.search(
                 query=query,
@@ -61,7 +70,9 @@ class SemanticRetriever(BaseRetriever):
                 if i < 5:
                     if settings.ENV == "development":
                         logger.info(f"[{i}] score: {score}, min_score: {self.config.min_score}")
-                        logger.info(f"doc: {doc.page_content[:300]}")
+                        cont = doc.page_content[:100]
+                        cont = cont.replace("\n\n", "\n")
+                        logger.info(f"doc: {doc.page_content[:100].strip()}")
                     score_list.append(score)
                 if score >= self.config.min_score:
                     new_doc = DocumentWithScore(

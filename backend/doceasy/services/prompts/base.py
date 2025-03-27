@@ -3,8 +3,7 @@ from typing import Dict, Any, Optional, List, Callable
 import logging
 
 from openai import AsyncOpenAI
-import google.generativeai as genai
-from google.generativeai.types import GenerateContentResponse
+
 from common.core.config import settings
 from common.core.cache import AsyncRedisCache, RedisCache
 import json
@@ -12,7 +11,8 @@ from loguru import logger
 from common.utils.util import measure_time_async
 from common.services.llm_models import LLMModels
 from langchain_core.messages import ai
-
+from common.models.user import Session
+from common.models.token_usage import ProjectType
 
 logger = logging.getLogger(__name__)
 
@@ -20,29 +20,28 @@ class BasePrompt:
     prompt_mode = None
     """기본 프롬프트 클래스"""
     def __init__(self, 
-                 redis_url: Optional[str] = None,
-                 cache_expire: Optional[int] = None,
+                 session: Optional[Session] = None,
                  streaming_callback: Optional[Callable[[str], None]] = None,
                  **kwargs):
         """프롬프트 기본 클래스 초기화
         
         Args:
-            redis_url: Redis 서버 URL (선택)
-            cache_expire: 캐시 만료 시간 (초)
+            session: 사용자 세션 정보 (토큰 사용량 추적에 사용)
             streaming_callback: 스트리밍 응답을 처리할 콜백 함수
         """
         # 구조가 매우 이상하다.
         # 프롬프트 클래스가 왜 LLM Models를 가지고 있지?
+        self.session = session
         self.LLM = LLMModels(streaming_callback=streaming_callback)  # 싱글톤 인스턴스
        
         # 캐시 초기화
         self.async_cache = AsyncRedisCache(
-            redis_url=redis_url or settings.REDIS_URL,
-            expire_time=cache_expire or settings.REDIS_CACHE_EXPIRE
+            redis_url=settings.REDIS_URL,
+            expire_time=settings.REDIS_CACHE_EXPIRE
         )
         self.sync_cache = RedisCache(
-            redis_url=redis_url or settings.REDIS_URL,
-            expire_time=cache_expire or settings.REDIS_CACHE_EXPIRE
+            redis_url=settings.REDIS_URL,
+            expire_time=settings.REDIS_CACHE_EXPIRE
         )
 
     async def process_prompt_async(self, user_query: str, prompt_context:str) -> str:
@@ -66,7 +65,7 @@ class BasePrompt:
             #     return cached_result
             # Gemini API로 시도
             try:
-                #self.LLM.change_llm("kf-deberta", None)
+                #self.session
                 model_info = self.LLM.get_current_llm_info()
                 model_name = model_info["model"]
                 logger.info(f"[process_prompt_async] {model_name} API 호출 - 프롬프트: {user_query[:100]}...")
@@ -81,10 +80,7 @@ class BasePrompt:
                     try:
                         if text.startswith('{') and text.endswith('}'):
                             parsed = json.loads(text)
-                            #await self.async_cache.set(cache_key, prompt_context, parsed)
                             return json.dumps(parsed, ensure_ascii=False)
-
-                        #await self.async_cache.set(cache_key, prompt_context, text)
                         return text
                     except json.JSONDecodeError:
                         logger.warning(f"JSON 파싱 실패: {text[:100]}...")
@@ -146,6 +142,7 @@ class BasePrompt:
             try:
                 #logger.info(f"Gemini API 호출 - 프롬프트: {prompt[:20]}...")
                 start_time = time.time()
+                
                 content = self.generate_content(user_query, prompt_context)
                 end_time = time.time()
                 execution_time = end_time - start_time
@@ -173,7 +170,19 @@ class BasePrompt:
     def generate_content(self,  user_query: str, prompt_context: str) -> str:
         """LLM API를 사용하여 컨텐츠 생성"""
         try:
-            response: ai.AIMessage = self.LLM.generate(user_query, prompt_context)        
+            # self.user_id를 먼저 쓰고, 그 다음에 base.의 self.session.user_id를 쓴다.
+            if hasattr(self, 'user_id'):
+                user_id = self.user_id
+            else:
+                user_id = self.session.user_id if self.session else None
+
+
+            response: ai.AIMessage = self.LLM.generate(
+                user_query, 
+                prompt_context,
+                user_id=user_id,
+                project_type=ProjectType.DOCEASY
+            )        
             if response:
                 # 응답 텍스트 정리
                 text = response.content
@@ -184,7 +193,17 @@ class BasePrompt:
         except Exception as e:
             self.LLM.select_next_llm() # 다음 우선순위 llm 선택
             try:
-                response: ai.AIMessage = self.LLM.generate(user_query, prompt_context)        
+                if hasattr(self, 'user_id'):
+                    user_id = self.user_id
+                else:
+                    user_id = self.session.user_id if self.session else None
+
+                response: ai.AIMessage = self.LLM.generate(
+                    user_query, 
+                    prompt_context,
+                    user_id=user_id,
+                    project_type=ProjectType.DOCEASY
+                )        
                 if response:
                     # 응답 텍스트 정리
                     text = response.content
@@ -193,10 +212,22 @@ class BasePrompt:
             except Exception as e:
                 #여기서도 에러나면 raise
                 raise
+                
     async def generate_content_async(self, user_query: str, prompt_context: str) -> str:
         """LLM API를 사용하여 컨텐츠 생성"""
         try:
-            response: ai.AIMessage = await self.LLM.agenerate(user_query, prompt_context)        
+            # self.user_id를 먼저 쓰고, 그 다음에 base.의 self.session.user_id를 쓴다.
+            if hasattr(self, 'user_id'):
+                user_id = self.user_id
+            else:
+                user_id = self.session.user_id if self.session else None
+
+            response: ai.AIMessage = await self.LLM.agenerate(
+                user_query, 
+                prompt_context,
+                user_id=user_id,
+                project_type=ProjectType.DOCEASY
+            )        
             if response:
                 text = response.content
                 return text
@@ -204,7 +235,18 @@ class BasePrompt:
         except Exception as e:
             self.LLM.select_next_llm() # 다음 우선순위 llm 선택
             try:
-                response: ai.AIMessage = await self.LLM.agenerate(user_query, prompt_context)        
+                # self.user_id를 먼저 쓰고, 그 다음에 base.의 self.session.user_id를 쓴다.
+                if hasattr(self, 'user_id'):
+                    user_id = self.user_id
+                else:
+                    user_id = self.session.user_id if self.session else None
+                    
+                response: ai.AIMessage = await self.LLM.agenerate(
+                    user_query, 
+                    prompt_context,
+                    user_id=user_id,
+                    project_type=ProjectType.DOCEASY
+                )        
                 if response:
                     # 응답 텍스트 정리
                     text = response.content
@@ -217,13 +259,35 @@ class BasePrompt:
         """LLM API를 사용하여 streaming 컨텐츠 생성"""
         
         try:
-            async for chunk in self.LLM.agenerate_stream(user_query, prompt_context):
+            # self.user_id를 먼저 쓰고, 그 다음에 base.의 self.session.user_id를 쓴다.
+            if hasattr(self, 'user_id'):
+                user_id = self.user_id
+            else:
+                user_id = self.session.user_id if self.session else None
+                
+            async for chunk in self.LLM.agenerate_stream(
+                user_query, 
+                prompt_context,
+                user_id=user_id,
+                project_type=ProjectType.DOCEASY
+            ):
                 if hasattr(chunk, 'content'):
                     yield chunk.content
         except Exception as e:
             self.LLM.select_next_llm() # 다음 우선순위 llm 선택
             try:
-                async for chunk in self.LLM.agenerate_stream(user_query, prompt_context):
+                # self.user_id를 먼저 쓰고, 그 다음에 base.의 self.session.user_id를 쓴다.
+                if hasattr(self, 'user_id'):
+                    user_id = self.user_id
+                else:
+                    user_id = self.session.user_id if self.session else None
+                
+                async for chunk in self.LLM.agenerate_stream(
+                    user_query, 
+                    prompt_context,
+                    user_id=user_id,
+                    project_type=ProjectType.DOCEASY
+                ):
                     if hasattr(chunk, 'content'):
                         yield chunk.content
             except Exception as e:

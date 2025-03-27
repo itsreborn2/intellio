@@ -15,21 +15,27 @@ from langchain_core.prompts import ChatPromptTemplate
 from stockeasy.prompts.fallback_manager_prompts import format_fallback_manager_prompt
 from common.core.config import settings
 from common.services.agent_llm import get_llm_for_agent
+from common.models.token_usage import ProjectType
+from stockeasy.agents.base import BaseAgent
+from sqlalchemy.ext.asyncio import AsyncSession
 
-class FallbackManagerAgent:
+class FallbackManagerAgent(BaseAgent):
     """
-    오류 상황이나 응답 생성 실패 시 대체 응답을 제공하는 폴백 매니저 에이전트 클래스
+    오류 발생 시 폴백 응답을 생성하는 에이전트
+    
+    이 에이전트는 워크플로우 실행 중 오류가 발생했을 때
+    사용자에게 적절한 안내 메시지를 제공합니다.
     """
     
-    def __init__(self):
+    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
         폴백 매니저 에이전트 초기화
         
         Args:
-            model_name: 사용할 OpenAI 모델 이름
-            temperature: 모델 출력의 다양성 조절 파라미터
+            name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
+            db: 데이터베이스 세션 객체 (선택적)
         """
-        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        super().__init__(name, db)
         self.llm, self.model_name, self.provider = get_llm_for_agent("fallback_manager_agent")
         logger.info(f"FallbackManagerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         

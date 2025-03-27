@@ -88,6 +88,12 @@ def format_orchestrator_prompt(
 - 텔레그램 검색 에이전트 적극 사용합니다.
 - 답변의 상세도가 '보통' 이상이고, 기대하는 답변 유형이 추론,예측,설명형인 경우에는 텔레그램 메세지 검색 에이전트를 실행합니다.
 
+주의: 
+1. "knowledge_integrator"와 "response_formatter"는 항상 워크플로우에 포함되어야 합니다.
+2. 실행 순서는 일반적으로 검색 에이전트들(telegram_retriever, report_analyzer 등) → knowledge_integrator → summarizer → response_formatter 순으로 구성됩니다.
+3. 검색 에이전트들은 병렬로 실행될 수 있으므로, 실행 순서상 어떤 순서로 나열해도 괜찮습니다.
+4. fallback_manager는 오류 발생 시에만 사용되므로 일반적인 실행 순서에 포함하지 마세요.
+
 응답은 다음 JSON 형식으로 제공하세요:
 {{
   "agents": [
@@ -99,17 +105,11 @@ def format_orchestrator_prompt(
     }},
     // 다른 에이전트들...
   ],
-  "execution_order": ["첫번째_에이전트", "두번째_에이전트", ...],
-  "integration_strategy": "데이터 통합 전략 설명",
-  "expected_output": "예상 출력물 설명",
-  "fallback_strategy": "오류 발생 시 대응 전략"
+  "execution_order": List[str] = Field(..., description="실행 순서"),
+  "integration_strategy": str = Field(..., description="정보 통합 전략"),
+  "expected_output": str = Field(..., description="예상 출력물"),
+  "fallback_strategy": str = Field(..., description="실패 시 대응 전략")
 }}
-
-주의: 
-1. "knowledge_integrator"와 "response_formatter"는 항상 워크플로우에 포함되어야 합니다.
-2. 실행 순서는 일반적으로 검색 에이전트들(telegram_retriever, report_analyzer 등) → knowledge_integrator → summarizer → response_formatter 순으로 구성됩니다.
-3. 검색 에이전트들은 병렬로 실행될 수 있으므로, 실행 순서상 어떤 순서로 나열해도 괜찮습니다.
-4. fallback_manager는 오류 발생 시에만 사용되므로 일반적인 실행 순서에 포함하지 마세요.
 """
     
     return prompt 

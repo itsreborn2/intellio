@@ -32,8 +32,31 @@ async def lifespan(app: FastAPI):
     # 시작 시 실행
     logger = logging.getLogger("app")
     logger.info("애플리케이션 시작됨")
+    
+    # 토큰 사용량 추적 큐 초기화
+    try:
+        from common.services.embedding_models import TokenUsageQueue
+        from common.core.deps import get_db
+        
+        # 토큰 사용량 큐 초기화
+        token_queue = TokenUsageQueue()
+        await token_queue.initialize(session_factory=get_db)
+        logger.info("토큰 사용량 추적 큐가 초기화되었습니다")
+    except Exception as e:
+        logger.error(f"토큰 사용량 추적 큐 초기화 실패: {str(e)}")
+    
     yield
+    
     # 종료 시 실행
+    try:
+        # 토큰 사용량 큐 종료
+        from common.services.embedding_models import TokenUsageQueue
+        token_queue = TokenUsageQueue()
+        await token_queue.shutdown()
+        logger.info("토큰 사용량 추적 큐가 종료되었습니다")
+    except Exception as e:
+        logger.error(f"토큰 사용량 추적 큐 종료 실패: {str(e)}")
+        
     logger.info("애플리케이션 종료됨")
 
 # FastAPI 애플리케이션 인스턴스 생성

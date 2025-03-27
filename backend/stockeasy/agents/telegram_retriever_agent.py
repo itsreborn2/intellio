@@ -12,39 +12,44 @@ import hashlib
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from loguru import logger
-from typing import Dict, List, Any, Optional, Set, cast
+from typing import Dict, List, Any, Optional, Set, cast, Union
 
 
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
-
+#from sqlalchemy import UUID
+from uuid import UUID
 from stockeasy.prompts.telegram_prompts import TELEGRAM_SUMMARY_PROMPT
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
 from common.utils.util import async_retry
 from common.core.config import settings
 from stockeasy.services.telegram.embedding import TelegramEmbeddingService
+from common.models.token_usage import ProjectType
 
 from common.services.vector_store_manager import VectorStoreManager
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import RetrievalResult
 from stockeasy.models.agent_io import RetrievedAllAgentData, RetrievedTelegramMessage
 from langchain_core.messages import AIMessage
+from stockeasy.agents.base import BaseAgent
+from sqlalchemy.ext.asyncio import AsyncSession
 
-class TelegramRetrieverAgent:
+class TelegramRetrieverAgent(BaseAgent):
     """텔레그램 메시지 검색 에이전트"""
     
-    def __init__(self):
+    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
         텔레그램 메시지 검색 에이전트 초기화
         
         Args:
-            model_name: 사용할 OpenAI 모델 이름
-            temperature: 모델 출력의 다양성 조절 파라미터
+            name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
+            db: 데이터베이스 세션 객체 (선택적)
         """
+        super().__init__(name, db)
         self.retrieved_str = "telegram_messages"
         self.embedding_service = TelegramEmbeddingService()
-        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
         self.llm, self.model_name, self.provider = get_llm_for_agent("telegram_retriever_agent")
+        self.agent_llm = get_agent_llm("telegram_retriever_agent")
         self.parser = JsonOutputParser()
         logger.info(f"TelegramRetrieverAgent initialized with provider: {self.provider}, model: {self.model_name}")
     
@@ -85,10 +90,10 @@ class TelegramRetrieverAgent:
                 return state
             
             logger.info(f"TelegramRetrieverAgent processing query: {query}")
-            logger.info(f"Classification data: {classification}")
-            logger.info(f"State keys: {state.keys()}")
-            logger.info(f"Entities: {entities}")
-            logger.info(f"Data requirements: {data_requirements}")
+            #logger.info(f"Classification data: {classification}")
+            #logger.info(f"State keys: {state.keys()}")
+            #logger.info(f"Entities: {entities}")
+            #logger.info(f"Data requirements: {data_requirements}")
             
             # 동적 임계값 및 메시지 수 설정
             threshold = self._calculate_dynamic_threshold(classification)
@@ -97,15 +102,20 @@ class TelegramRetrieverAgent:
             # 검색 쿼리 생성 (보다 정확한 검색을 위해 클래스 및 의도 정보 활용)
             search_query = self._make_search_query(query, stock_code, stock_name, classification, sector)
             
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
+
             # 메시지 검색 실행
             messages:List[RetrievedTelegramMessage] = await self._search_messages(
-                search_query, 
-                message_count, 
-                threshold
+                user_id=user_id,
+                search_query= search_query,
+                k=message_count, 
+                threshold=threshold
             )
             
+            
             # 메세지 요약
-            summary = await self.summarize(query, stock_code, stock_name, messages, classification)
+            summary = await self.summarize(query, stock_code, stock_name, messages, classification, user_id)
 
             # 검색 결과가 없는 경우
             if not messages:
@@ -227,12 +237,16 @@ class TelegramRetrieverAgent:
             
             return state
     @async_retry(retries=2, delay=2.0, exceptions=(Exception,))
-    async def summarize(self, query:str, stock_code: str, stock_name: str, found_messages: List[RetrievedTelegramMessage], classification: Dict[str, Any]) -> str:
+    async def summarize(self, query:str, stock_code: str, stock_name: str, found_messages: List[RetrievedTelegramMessage], classification: Dict[str, Any], user_id: Optional[Union[str, UUID]] = None) -> str:
         """메시지 목록을 요약합니다.
         
         Args:
-            messages (List[RetrievedTelegramMessage]): 요약할 메시지 목록
-            classification (QuestionClassification): 질문 분류 결과
+            query: 사용자 질문
+            stock_code: 종목 코드
+            stock_name: 종목명
+            found_messages: 요약할 메시지 목록
+            classification: 질문 분류 결과
+            user_id: 사용자 ID (문자열 또는 UUID 객체)
             
         Returns:
             str: 요약된 내용
@@ -258,13 +272,19 @@ class TelegramRetrieverAgent:
             # 질문 분류 결과에 따라 프롬프트 생성
             prompt_context = self.MakeSummaryPrompt(classification)
             
-            agent_llm = get_agent_llm("telegram_retriever_agent")
-
             # 프롬프트와 메시지를 하나의 문자열로 결합
             combined_prompt = f"{prompt_context}\n\n내용: \n{messages_text}"
             
-            # report_analyzer_agent와 같은 방식으로 호출
-            response:AIMessage = await agent_llm.ainvoke_with_fallback(input=combined_prompt)
+            # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
+            parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            
+            # agent_llm로 호출
+            response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
+                input=combined_prompt, 
+                user_id=parsed_user_id, 
+                project_type=ProjectType.STOCKEASY, 
+                db=self.db
+            )
 
             if not response or not response.content:
                 raise Exception("LLM이 빈 응답을 반환했습니다.")
@@ -615,7 +635,7 @@ class TelegramRetrieverAgent:
         return enhanced_query
     
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
-    async def _search_messages(self, search_query: str, k: int, threshold: float) -> List[RetrievedTelegramMessage]:
+    async def _search_messages(self, search_query: str, k: int, threshold: float, user_id: Optional[Union[str, UUID]] = None) -> List[RetrievedTelegramMessage]:
         """
         텔레그램 메시지 검색을 수행합니다.
         
@@ -623,6 +643,7 @@ class TelegramRetrieverAgent:
             search_query: 검색 쿼리
             k: 검색할 메시지 수
             threshold: 유사도 임계값
+            user_id: 사용자 ID (문자열 또는 UUID 객체)
             
         Returns:
             검색된 텔레그램 메시지 목록
@@ -647,9 +668,15 @@ class TelegramRetrieverAgent:
                 namespace=settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM
             )
 
+            # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
+            parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+
             # 시맨틱 검색 설정
             semantic_retriever = SemanticRetriever(
-                config=SemanticRetrieverConfig(min_score=threshold),
+                config=SemanticRetrieverConfig(min_score=threshold,
+                                               user_id=parsed_user_id,
+                                               project_type=ProjectType.STOCKEASY
+                                               ),
                 vs_manager=vs_manager
             )
                     

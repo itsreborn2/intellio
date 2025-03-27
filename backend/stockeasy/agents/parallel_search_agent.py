@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import copy
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import time
@@ -55,6 +56,14 @@ class ParallelSearchAgent(BaseAgent):
         # 데이터 요구사항 확인
         data_requirements = state.get("data_requirements", {})
         
+        # retrieved_data가 없으면 초기화
+        if "retrieved_data" not in state:
+            state["retrieved_data"] = {}
+            
+        # processing_status가 없으면 초기화
+        if "processing_status" not in state:
+            state["processing_status"] = {}
+        
         # 실행할 검색 에이전트 목록 생성
         search_agents = []
         for agent_name in self.search_agent_names:
@@ -82,53 +91,138 @@ class ParallelSearchAgent(BaseAgent):
                     should_execute = True
             
             # 에이전트가 존재하고 실행이 필요한 경우 목록에 추가
-            if should_execute and agent_name in self.agents:
+            if should_execute and agent_name in self.agents and self.agents[agent_name]:
                 search_agents.append((agent_name, self.agents[agent_name]))
         
         logger.info(f"병렬로 실행할 에이전트: {[name for name, _ in search_agents]}")
         
+        # 실행할 에이전트가 없는 경우를 명시적으로 처리
+        if not search_agents:
+            logger.warning("병렬로 실행할 에이전트가 없습니다.")
+            # 처리 상태 표시를 위한 플래그 추가 (이 플래그는 반드시 설정되어야 함)
+            state["parallel_search_executed"] = True
+            # 빈 검색 결과 표시
+            state["retrieved_data"]["no_search_agents_executed"] = True
+            return state
+        
         # 각 에이전트를 실행할 비동기 작업 생성
         tasks = []
         for name, agent in search_agents:
-            # 처리 상태 초기화
+            # 처리 상태 초기화 - 우선 processing 상태로 설정
             state["processing_status"][name] = "processing"
             # 비동기 작업 생성
-            tasks.append(self._run_agent(name, agent, state))
+            tasks.append(self._run_agent(name, agent, copy.deepcopy(state)))
         
         # 병렬로 모든 에이전트 실행
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # 결과 처리
-            for (name, _), result in zip(search_agents, results):
-                if isinstance(result, Exception):
-                    # 오류 처리
-                    logger.error(f"에이전트 {name} 실행 중 오류 발생: {str(result)}")
-                    state["errors"].append({
-                        "agent": name,
-                        "error": str(result),
-                        "type": type(result).__name__,
-                        "timestamp": datetime.now()
-                    })
-                    state["processing_status"][name] = "failed"
-                else:
-                    # 성공적인 결과 병합
-                    logger.info(f"에이전트 {name} 실행 완료")
-                    state["processing_status"][name] = result.get("processing_status", {}).get(name, "completed")
-                    
-                    # 검색 결과 병합
-                    if "retrieved_data" in result:
-                        for key, value in result["retrieved_data"].items():
-                            if key not in state["retrieved_data"]:
-                                state["retrieved_data"][key] = value
-                            elif isinstance(state["retrieved_data"][key], list) and isinstance(value, list):
-                                state["retrieved_data"][key].extend(value)
-        else:
-            logger.info("병렬로 실행할 에이전트가 없습니다.")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
+        # 결과 처리를 위한 변수
+        success_count = 0
+        failure_count = 0
+        
+        # 결과 처리
+        for (name, _), result in zip(search_agents, results):
+            if isinstance(result, Exception):
+                # 오류 처리
+                failure_count += 1
+                logger.error(f"에이전트 {name} 실행 중 오류 발생: {str(result)}")
+                if "errors" not in state:
+                    state["errors"] = []
+                state["errors"].append({
+                    "agent": name,
+                    "error": str(result),
+                    "type": type(result).__name__,
+                    "timestamp": datetime.now()
+                })
+                state["processing_status"][name] = "failed"
+            else:
+                # 성공적인 결과 병합
+                success_count += 1
+                logger.info(f"에이전트 {name} 실행 완료")
+                
+                # 처리 상태 업데이트
+                if "processing_status" in result:
+                    for agent_name, status in result["processing_status"].items():
+                        state["processing_status"][agent_name] = status
+                else:
+                    state["processing_status"][name] = "completed"
+                
+                # 검색 결과 병합
+                if "retrieved_data" in result:
+                    for key, value in result["retrieved_data"].items():
+                        if key not in state["retrieved_data"]:
+                            state["retrieved_data"][key] = value
+                        elif isinstance(state["retrieved_data"][key], list) and isinstance(value, list):
+                            state["retrieved_data"][key].extend(value)
+                
+                # agent_results 병합 (중요: 이 키가 knowledge_integrator와 summarizer에서 사용됨)
+                if "agent_results" in result:
+                    if "agent_results" not in state:
+                        state["agent_results"] = {}
+                    
+                    # agent_results 딕셔너리 병합
+                    for agent_name, agent_result in result["agent_results"].items():
+                        state["agent_results"][agent_name] = agent_result
+                        #logger.info(f"에이전트 {agent_name}의 agent_results 병합 완료")
+        
+        # agent_results가 없으면 빈 딕셔너리 초기화
+        if "agent_results" not in state:
+            state["agent_results"] = {}
+            logger.warning("agent_results가 없어 빈 딕셔너리로 초기화합니다.")
+        else:
+            logger.info(f"병합된 agent_results 키: {list(state['agent_results'].keys())}")
+        
+        # 모든 에이전트가 실패했는지 확인
+        if search_agents and failure_count == len(search_agents):
+            logger.warning("모든 검색 에이전트 실행이 실패했습니다.")
+            state["all_search_agents_failed"] = True
+        
+        # 검색 결과가 비어있는지 확인
+        has_data = False
+        for key, value in state["retrieved_data"].items():
+            if key in ["telegram_messages", "report_data", "financial_data", "industry_data"] and value:
+                has_data = True
+                logger.info(f"검색 결과 있음: {key}에 {len(value)}개 항목")
+                break
+        
+        if not has_data:
+            logger.warning("검색 결과가 없습니다.")
+            # 빈 검색 결과 표시
+            state["retrieved_data"]["no_data_found"] = True
+        
+        # 각 에이전트의 상태 로깅
+        logger.info(f"에이전트 처리 상태: {state['processing_status']}")
+        
+        # 검색 데이터 키 로깅
+        logger.info(f"검색 데이터 키: {list(state['retrieved_data'].keys())}")
+        
+        # 처리 완료 플래그 설정 (중요: 이 플래그가 라우팅 결정에 사용됨)
+        state["parallel_search_executed"] = True
+        
+        # 실행 시간 계산
         end_time = time.time()
         execution_time = end_time - start_time
-        logger.info(f"ParallelSearchAgent 병렬 처리 완료. 실행 시간: {execution_time:.2f}초")
+        
+        # 병렬 검색 에이전트 자체의 결과도 agent_results에 추가
+        if "agent_results" not in state:
+            state["agent_results"] = {}
+            
+        # 병렬 검색 에이전트의 결과 정보 저장
+        state["agent_results"]["parallel_search"] = {
+            "data": {
+                "executed_agents": [name for name, _ in search_agents],
+                "success_count": success_count,
+                "failure_count": failure_count,
+                "execution_time": execution_time,
+                "has_data": has_data
+            },
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0"
+            }
+        }
+        
+        logger.info(f"ParallelSearchAgent 병렬 처리 완료. 실행 시간: {execution_time:.2f}초, 성공: {success_count}, 실패: {failure_count}")
         
         return state
     
@@ -139,18 +233,15 @@ class ParallelSearchAgent(BaseAgent):
         Args:
             name: 에이전트 이름
             agent: 에이전트 인스턴스
-            state: 현재 상태의 복사본
+            state: 상태의 복사본(깊은 복사)
             
         Returns:
             에이전트 실행 결과
         """
-        # 각 에이전트용 상태 복사 (깊은 복사를 사용하지 않고 필요한 부분만 복사)
-        agent_state = state.copy()
-        
         try:
             logger.info(f"에이전트 {name} 실행 시작")
             start_time = time.time()
-            result = await agent.process(agent_state)
+            result = await agent.process(state)
             end_time = time.time()
             logger.info(f"에이전트 {name} 실행 완료. 시간: {end_time - start_time:.2f}초")
             return result

@@ -59,11 +59,12 @@ def format_telegram_messages(telegram_data: List[RetrievedTelegramMessage]):
     summary = telegram_data.get("summary", "")
     messages: List[RetrievedTelegramMessage] = telegram_data.get("messages", [])
     
-    formatted_msgs = []
-    for msg in messages:
-        created_at = msg["message_created_at"].strftime("%Y-%m-%d %H:%M")
-        formatted_msgs.append(f"[{created_at}] {msg['content']}")
-    content = "\n\n".join(formatted_msgs)
     if summary:
-        content = f"내용: \n{content}\n\n요약: \n{summary}"
+        content = f"\n종합결과: \n{summary}"
+    else:
+        formatted_msgs = []
+        for msg in messages:
+            created_at = msg["message_created_at"].strftime("%Y-%m-%d %H:%M")
+            formatted_msgs.append(f"[{created_at}] {msg['content']}")
+        content = "\n\n".join(formatted_msgs)
     return content if content else "내부DB 검색 결과 없음"

@@ -486,12 +486,18 @@ class LLMModels:
                 # 개행 문자 정규화
                 sanitized_prompt_context = content.replace('\r\n', '\n').replace('\r', '\n')
 
+<<<<<<< HEAD
                 # system_message_prompt = SystemMessagePromptTemplate.from_template(sanitized_prompt_context)
                 # # User 메시지 템플릿
                 # user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
 
                 system_message_prompt = SystemMessagePromptTemplate.from_template("{context}")
                 user_message_prompt = HumanMessagePromptTemplate.from_template("{question}")
+=======
+                system_message_prompt = SystemMessagePromptTemplate.from_template(sanitized_prompt_context)
+                # User 메시지 템플릿
+                user_message_prompt = HumanMessagePromptTemplate.from_template(f"{user_query}")
+>>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
 
                 # ChatPromptTemplate 구성
                 prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, user_message_prompt])

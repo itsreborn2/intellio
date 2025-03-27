@@ -3,6 +3,8 @@ from langchain_community.vectorstores import Pinecone as PineconeLangchain
 from langchain_core.documents import Document as LangchainDocument
 from pinecone import Pinecone as PineconeClient, PodSpec, ServerlessSpec
 import pinecone
+from sqlalchemy import UUID
+from common.models.token_usage import ProjectType
 from common.core.config import settings
 from common.services.embedding_models import EmbeddingModelType
 import logging
@@ -30,7 +32,7 @@ class VectorStoreManager:
     _initialized = False
     _initialization_error = None
 
-    def __init__(self, embedding_model_type: EmbeddingModelType = None, namespace: str = None, project_name:str = None):
+    def __init__(self, embedding_model_type: EmbeddingModelType = None, namespace: str = None, project_name:str = None, user_id:str = None, project_type:ProjectType = None):
         """
         VectorStoreManager 초기화
         Args:
@@ -39,7 +41,17 @@ class VectorStoreManager:
         """
         if embedding_model_type is None:
             raise ValueError("초기화 시에는 embedding_model_type이 필요합니다.")
-            
+        
+        # user_id가 문자열인 경우 UUID 객체로 변환
+        if isinstance(user_id, str) and user_id:
+            from uuid import UUID
+            try:
+                user_id = UUID(user_id)
+            except ValueError:
+                logger.warning(f"유효하지 않은 UUID 문자열: {user_id}")
+        
+        self.user_id = user_id
+        self.project_type = project_type
         self.project_name = project_name
         self.embedding_model_type = embedding_model_type
         self.namespace = namespace
@@ -164,7 +176,7 @@ class VectorStoreManager:
         # 3. 검색 결과를 반환
         ####################################
         # 사용자 쿼리 임베딩
-
+        
         embedding = self.create_embeddings_single_query(query)
 
         # results = self.vector_store.similarity_search_by_vector_with_score(embedding=embedding, k=top_k, filter=filters)
@@ -239,7 +251,12 @@ class VectorStoreManager:
 
     def create_embeddings_single_query(self, query: str) -> List[float]:
         """문자열을 임베딩"""
-        embeddings = self.embedding_model_provider.create_embeddings([query])
+        logger.info(f"[create_embeddings_single_query][sync] user:{self.user_id}, project_type:{self.project_type}")
+        
+        # user_id가 문자열이면 UUID 객체로 변환
+        user_id = UUID(self.user_id) if isinstance(self.user_id, str) else self.user_id
+        
+        embeddings = self.embedding_model_provider.create_embeddings(texts=[query], user_id=user_id, project_type=self.project_type)
             
         # 임베딩 결과 검증
         if not embeddings or len(embeddings) == 0:
@@ -257,7 +274,10 @@ class VectorStoreManager:
     
     async def create_embeddings_single_query_async(self, query: str) -> List[float]:
         """문자열을 임베딩"""
-        embeddings = await self.embedding_model_provider.create_embeddings_async([query])
+        # user_id가 문자열이면 UUID 객체로 변환
+        user_id = UUID(self.user_id) if isinstance(self.user_id, str) else self.user_id
+        
+        embeddings = await self.embedding_model_provider.create_embeddings_async(texts=[query], user_id=user_id, project_type=self.project_type)
             
         # 임베딩 결과 검증
         if not embeddings or len(embeddings) == 0:

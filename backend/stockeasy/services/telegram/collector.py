@@ -338,7 +338,7 @@ class CollectorService:
         """
         try:
             
-            limit = 70
+            limit = 200
             channel_name = channel_info['name']
             channel_id = channel_info['channel_id']
             channel_username = channel_info['channel_name']

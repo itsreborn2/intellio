@@ -9,7 +9,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stockeasy.agents.base import BaseAgent
-from stockeasy.agents.session_manager import SessionManagerAgent
+from stockeasy.agents.session_manager_agent import SessionManagerAgent
 # 새로 구현한 에이전트들 임포트
 from stockeasy.agents.orchestrator_agent import OrchestratorAgent
 from stockeasy.agents.question_analyzer_agent import QuestionAnalyzerAgent
@@ -21,7 +21,7 @@ from stockeasy.agents.report_analyzer_agent import ReportAnalyzerAgent
 # 기존 에이전트들 임포트
 from stockeasy.agents.financial_analyzer_agent import FinancialAnalyzerAgent
 from stockeasy.agents.industry_analyzer_agent import IndustryAnalyzerAgent
-from stockeasy.agents.summarizer import SummarizerAgent
+from stockeasy.agents.summarizer_agent import SummarizerAgent
 
 
 class AgentRegistry:
@@ -59,7 +59,7 @@ class AgentRegistry:
         # SessionManager는 DB 세션이 필요하므로 별도 처리
         if db is not None:
             try:
-                self.agents["session_manager"] = SessionManagerAgent(db)
+                self.agents["session_manager"] = SessionManagerAgent(db=db)
                 logger.info("세션 관리자 에이전트가 DB 세션과 함께 초기화되었습니다.")
             except Exception as e:
                 logger.error(f"세션 관리자 에이전트 초기화 중 오류 발생: {e}", exc_info=True)
@@ -69,25 +69,25 @@ class AgentRegistry:
             # 테스트 모드 또는 임시 사용을 위한 더미 SessionManager 처리 방법 구현 필요
             logger.warning("DB 세션 없이 에이전트 초기화 - 세션 관리자는 초기화되지 않습니다.")
         
-        # 기타 에이전트 초기화 - 새로 구현한 클래스 사용
-        self.agents["orchestrator"] = OrchestratorAgent()
-        self.agents["question_analyzer"] = QuestionAnalyzerAgent()
+        # 기타 에이전트 초기화 - 모든 에이전트에 DB 세션 전달
+        self.agents["orchestrator"] = OrchestratorAgent(db=db)
+        self.agents["question_analyzer"] = QuestionAnalyzerAgent(db=db)
         
-        # 검색 및 분석 에이전트 초기화 - 새로 구현한 클래스 사용
-        self.agents["telegram_retriever"] = TelegramRetrieverAgent()
-        self.agents["report_analyzer"] = ReportAnalyzerAgent()
+        # 검색 및 분석 에이전트 초기화
+        self.agents["telegram_retriever"] = TelegramRetrieverAgent(db=db)
+        self.agents["report_analyzer"] = ReportAnalyzerAgent(db=db)
         
         # 기존 검색 및 분석 에이전트 초기화
-        self.agents["financial_analyzer"] = FinancialAnalyzerAgent()
-        self.agents["industry_analyzer"] = IndustryAnalyzerAgent()
+        self.agents["financial_analyzer"] = FinancialAnalyzerAgent(db=db)
+        self.agents["industry_analyzer"] = IndustryAnalyzerAgent(db=db)
         
-        # 통합 및 요약 에이전트 초기화 - 새로 구현한 통합기 클래스 사용 
-        self.agents["knowledge_integrator"] = KnowledgeIntegratorAgent()
-        self.agents["summarizer"] = SummarizerAgent()
+        # 통합 및 요약 에이전트 초기화
+        self.agents["knowledge_integrator"] = KnowledgeIntegratorAgent(db=db)
+        self.agents["summarizer"] = SummarizerAgent(db=db)
         
-        # 응답 및 오류 처리 에이전트 초기화 - 새로 구현한 클래스 사용
-        self.agents["response_formatter"] = ResponseFormatterAgent()
-        self.agents["fallback_manager"] = FallbackManagerAgent()
+        # 응답 및 오류 처리 에이전트 초기화
+        self.agents["response_formatter"] = ResponseFormatterAgent(db=db)
+        self.agents["fallback_manager"] = FallbackManagerAgent(db=db)
         
         logger.info(f"총 {len(self.agents)} 개의 에이전트가 초기화되었습니다.")
     
@@ -156,11 +156,8 @@ class AgentRegistry:
         if agent_name in self.agent_classes:
             logger.info(f"에이전트 '{agent_name}' 자동 생성 시도")
             try:
-                # SessionManager는 별도 처리 필요
-                if agent_name == "session_manager" and self.db_session:
-                    agent = self.agent_classes[agent_name](self.db_session)
-                else:
-                    agent = self.agent_classes[agent_name]()
+                # DB 세션을 모든 에이전트에 전달
+                agent = self.agent_classes[agent_name](db=self.db_session)
                 self.agents[agent_name] = agent
                 return agent
             except Exception as e:

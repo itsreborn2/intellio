@@ -22,6 +22,7 @@ class User(Base):
     # Relationships
     sessions = relationship("Session", back_populates="user", foreign_keys="[Session.user_id]", cascade="all, delete-orphan")
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
+    token_usages = relationship("TokenUsage", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email='{self.email}')>"

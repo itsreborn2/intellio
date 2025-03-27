@@ -171,7 +171,7 @@ class CommonSettings(BaseSettings):
     CHUNK_SIZE:int
     CHUNK_OVERLAP:int
     # 임베딩 설정. 아직 안씀
-    KAKAO_EMBEDDING_MODEL_PATH:str = "common/external/kf-deberta"
+    KAKAO_EMBEDDING_MODEL_PATH:str = "/backend/common/external/kf-deberta"
 
 
     # STOCKEASY
@@ -240,4 +240,10 @@ logger.info(f"POSTGRES_SERVER: {settings.POSTGRES_SERVER}")
 # logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
 # logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
 #logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
+
+logger.info(f"POSTGRES_SERVER: {settings.POSTGRES_SERVER}")
+logger.info(f"POSTGRES_USER: {settings.POSTGRES_USER}")
+logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
+logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
+logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
 

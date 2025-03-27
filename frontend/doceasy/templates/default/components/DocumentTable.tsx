@@ -1026,7 +1026,6 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           
           // Document 칼럼 내 파일명 컨테이너
           '& .filename-container': {
-            width: '100%',
             padding: '2px 0',      // 패딩 줄임
           },
           
@@ -1129,12 +1128,12 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           align-items: center !important;
           height: 36px !important;
           padding: 0 10px !important;
-          border-right: 2px solid #e2e8f0 !important;
+          borderRight: '2px solid #e2e8f0' !important;
         }
         
         /* 마지막 헤더 셀은 오른쪽 테두리 제외 */
         .MuiTableHead-root .MuiTableCell-root:last-child {
-          border-right: none !important;
+          borderRight: none !important;
         }
         
         /* 헤더 셀 호버 상태 */
@@ -1147,7 +1146,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           .MuiTableHead-root .MuiTableCell-root {
             height: 30px !important;
             padding: 0 5px !important;
-            font-size: 0.7rem !important;
+            font-size: 0.6rem !important;
           }
         }
         
@@ -1277,12 +1276,12 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         
         /* 테이블 본문 셀의 우측 테두리 강화 */
         .MuiTableBody-root .MuiTableCell-root {
-          border-right: 1px solid #e2e8f0 !important;
+          borderRight: '1px solid #e2e8f0' !important;
         }
         
         /* 마지막 칼럼은 오른쪽 테두리 제외 */
         .MuiTableBody-root .MuiTableCell-root:last-child {
-          border-right: none !important;
+          borderRight: none !important;
         }
         
         /* 테이블 행 높이 자동 조정 */
@@ -1792,6 +1791,15 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         .MuiTableContainer-root:focus + .horizontal-scroll-indicator,
         .MuiTableContainer-root:hover + .horizontal-scroll-indicator {
           opacity: 0 !important;
+        }
+        
+        /* 모바일 버전에서 문서 파일명 셀의 너비를 250px에서 300px로 늘립니다. */
+        @media (max-width: 768px) {
+          .MuiTableCell-root[data-index="1"] {
+            min-width: 350px !important;
+            max-width: 350px !important;
+            width: 350px !important;
+          }
         }
       `}</style>
       <MaterialReactTable table={table} />

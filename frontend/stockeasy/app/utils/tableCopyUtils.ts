@@ -55,7 +55,7 @@ export const copyTableAsImage = async (
       marginTop: '10px',
       paddingTop: '5px',
       textAlign: 'center',
-      fontSize: '12px',
+      fontSize: '8px',
       color: '#718096'
     },
     scale: 2,
@@ -69,17 +69,43 @@ export const copyTableAsImage = async (
     // 임시 컨테이너 생성 (테이블 헤더, 테이블, 저작권 정보를 포함)
     const container = document.createElement('div');
     container.style.backgroundColor = mergedOptions.backgroundColor || '#ffffff';
-    container.style.padding = '10px';
-    container.style.width = tableRef.current.offsetWidth + 'px';
+    container.style.padding = '5px'; // 전체 패딩 축소
+    
+    // 모바일 사이즈로 고정 (너비 360px)
+    container.style.width = '360px';
+    
+    // 전체 컨테이너에 폰트 크기 조정 적용
+    container.style.fontSize = '12px';
     
     // 헤더 복제
     const headerClone = headerRef.current.cloneNode(true) as HTMLElement;
+    
+    // 헤더 너비 조정
+    headerClone.style.width = '100%';
+    headerClone.style.marginBottom = '0'; // 헤더 아래 여백 제거
+    headerClone.style.paddingBottom = '0'; // 헤더 아래 패딩 제거
+    
+    // 헤더 내 제목 텍스트 크기 조정
+    const headerTitles = headerClone.querySelectorAll('h2');
+    headerTitles.forEach(title => {
+      (title as HTMLElement).style.fontSize = '11px';
+      (title as HTMLElement).style.fontWeight = 'bold';
+    });
+
+    // 테이블 행의 텍스트 상하 가운데 정렬
+    const tableRows = headerClone.querySelectorAll('tr');
+    tableRows.forEach(row => {
+      const cells = row.querySelectorAll('td, th');
+      cells.forEach(cell => {
+        (cell as HTMLElement).style.verticalAlign = 'middle';
+      });
+    });
     
     // 버튼 제거
     const buttons = headerClone.querySelectorAll('button');
     buttons.forEach(button => button.remove());
     
-    // 날짜 정보 추가
+    // 날짜 정보 추가 (제목 우측에 표시)
     const titleElements = headerClone.querySelectorAll('h2');
     if (titleElements.length > 0) {
       const titleElement = titleElements[0];
@@ -89,7 +115,7 @@ export const copyTableAsImage = async (
       // 날짜 텍스트 요소 생성
       const dateSpan = document.createElement('span');
       dateSpan.textContent = ` (${formattedDate})`;
-      dateSpan.style.fontSize = '0.75rem';
+      dateSpan.style.fontSize = '9px';
       dateSpan.style.fontWeight = 'normal';
       dateSpan.style.color = '#718096';
       dateSpan.style.marginLeft = '5px';
@@ -98,10 +124,98 @@ export const copyTableAsImage = async (
       titleElement.appendChild(dateSpan);
     }
     
+    // 헤더 내 기존 설명 텍스트 제거 (중복 방지)
+    const headerDescriptions = headerClone.querySelectorAll('span.text-xs, span.text-gray-600');
+    headerDescriptions.forEach(desc => {
+      const parent = desc.parentElement;
+      if (parent) {
+        parent.removeChild(desc);
+      }
+    });
+    
+    // 헤더를 컨테이너에 추가
     container.appendChild(headerClone);
+    
+    // 설명 텍스트를 별도로 생성하여 헤더 다음에 직접 추가
+    const descriptionDiv = document.createElement('div');
+    
+    // 테이블 이름에 따라 설명 텍스트 설정
+    if (tableName.includes('52주 신고가')) {
+      descriptionDiv.textContent = '당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.';
+    } else {
+      descriptionDiv.textContent = '상대강도(RS) 기준으로 정렬된 주도 종목 리스트입니다.';
+    }
+    
+    // 설명 텍스트 스타일 설정
+    descriptionDiv.style.fontSize = '8px';
+    descriptionDiv.style.color = '#718096';
+    descriptionDiv.style.padding = '2px 0 4px 0'; // 패딩 축소
+    descriptionDiv.style.borderBottom = '1px solid #edf2f7';
+    descriptionDiv.style.marginBottom = '4px'; // 여백 축소
+    descriptionDiv.style.textAlign = 'left';
+    
+    // 설명 텍스트를 컨테이너에 추가 (헤더와 테이블 사이)
+    container.appendChild(descriptionDiv);
     
     // 테이블 복제
     const tableClone = tableRef.current.cloneNode(true) as HTMLElement;
+    
+    // 테이블 너비 조정
+    tableClone.style.width = '100%';
+    tableClone.style.marginTop = '0'; // 테이블 위 여백 제거
+    
+    // 테이블 내 모든 텍스트 요소 크기 조정
+    const allTextElements = tableClone.querySelectorAll('th, td, span, div');
+    allTextElements.forEach(el => {
+      // clamp 함수를 사용하는 인라인 스타일 제거 (고정 크기로 대체)
+      if ((el as HTMLElement).style.fontSize && (el as HTMLElement).style.fontSize.includes('clamp')) {
+        (el as HTMLElement).style.fontSize = '';
+      }
+      
+      // 요소 유형에 따라 적절한 폰트 크기 적용
+      if (el.tagName === 'TH') {
+        (el as HTMLElement).style.fontSize = '11px';
+        (el as HTMLElement).style.fontWeight = 'bold';
+        (el as HTMLElement).style.padding = '4px';
+      } else if (el.tagName === 'TD') {
+        (el as HTMLElement).style.fontSize = '10px';
+        (el as HTMLElement).style.padding = '3px';
+      } else if ((el as HTMLElement).classList.contains('text-xs')) {
+        (el as HTMLElement).style.fontSize = '10px';
+      }
+    });
+    
+    // 모바일 환경에서 숨겨진 컬럼 처리
+    const hiddenCells = tableClone.querySelectorAll('.hidden.md\\:table-cell');
+    hiddenCells.forEach(cell => {
+      (cell as HTMLElement).style.display = 'none';
+    });
+    
+    // 테이블 셀 정렬 스타일 적용
+    // 2개월 차트 가운데 정렬
+    const chartCells = tableClone.querySelectorAll('td div.w-full.h-full.flex.items-center');
+    chartCells.forEach(cell => {
+      (cell as HTMLElement).style.display = 'flex';
+      (cell as HTMLElement).style.justifyContent = 'center';
+      (cell as HTMLElement).style.alignItems = 'center';
+      (cell as HTMLElement).style.height = '100%';
+    });
+    
+    // 20일선 이격 컬럼 가운데 정렬
+    const positionCells = tableClone.querySelectorAll('td div.flex.justify-center.items-center.w-full');
+    positionCells.forEach(cell => {
+      (cell as HTMLElement).style.display = 'flex';
+      (cell as HTMLElement).style.justifyContent = 'center';
+      (cell as HTMLElement).style.alignItems = 'center';
+      (cell as HTMLElement).style.height = '100%';
+    });
+    
+    // 모든 td 요소에 수직 정렬 스타일 적용
+    const allCells = tableClone.querySelectorAll('td');
+    allCells.forEach(cell => {
+      (cell as HTMLElement).style.verticalAlign = 'middle';
+    });
+    
     container.appendChild(tableClone);
     
     // 구분선 및 저작권 정보 추가
@@ -117,6 +231,10 @@ export const copyTableAsImage = async (
           }
         });
       }
+      
+      // 저작권 텍스트 크기 추가 조정
+      footer.style.fontSize = '8px';
+      footer.style.color = '#999999';
       
       footer.innerHTML = mergedOptions.copyrightText;
       container.appendChild(footer);

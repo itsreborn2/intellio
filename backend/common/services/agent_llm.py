@@ -6,9 +6,10 @@
 """
 
 import time
-from typing import Dict, Any, Optional, Callable, List, Tuple, Union
+from typing import Dict, Any, Optional, Callable, List, Tuple, Union, Awaitable
 from loguru import logger
 from functools import lru_cache
+import asyncio
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.callbacks import BaseCallbackHandler
@@ -196,7 +197,7 @@ class AgentLLM:
     
     def invoke_with_fallback(self, *args, **kwargs) -> Any:
         """
-        폴백 메커니즘을 사용하여 LLM 호출
+        폴백 메커니즘을 사용하여 LLM 동기 호출
         
         주 LLM이 실패하면 폴백 LLM을 차례로 시도합니다.
         
@@ -210,49 +211,157 @@ class AgentLLM:
         Raises:
             Exception: 모든 폴백이 실패하면 마지막 예외 발생
         """
+        # 토큰 사용량 추적을 위한 매개변수 추출
+        user_id = kwargs.pop("user_id", None)
+        project_type = kwargs.pop("project_type", None)
+        db = kwargs.pop("db", None)
+        
+        # 토큰 추적 설정
+        use_token_tracking = user_id is not None and project_type is not None and db is not None
+        
+        if use_token_tracking:
+            from common.services.token_usage_service import track_token_usage
+            
+            logger.info(f"[토큰 추적][동기] invoke_with_fallback 토큰 추적 활성화: user_id={user_id}, project_type={project_type}")
+        
         # 폴백이 비활성화되어 있으면 그냥 호출
         if not self.fallback_settings.get("enabled", False):
-            return self.get_llm().invoke(*args, **kwargs)
+            if use_token_tracking:
+                # 토큰 추적 컨텍스트 생성
+                with track_token_usage(
+                    user_id=user_id,
+                    project_type=project_type,
+                    token_type="llm",
+                    model_name=self.get_model_name(),
+                    db_getter=db
+                ) as tracker:
+                    # LLM 호출
+                    result = self.get_llm().invoke(*args, **kwargs)
+                    
+                    # API 응답에서 토큰 사용량 추출 시도
+                    usage_info = None
+                    if hasattr(result, 'usage_metadata'):
+                        usage_info = {
+                            "prompt_tokens": result.usage_metadata.get('input_tokens', 0),
+                            "completion_tokens": result.usage_metadata.get('output_tokens', 0),
+                            "total_tokens": result.usage_metadata.get('total_tokens', 0)
+                        }
+                    
+                    if usage_info:
+                        # 추출된 토큰 정보 사용
+                        tracker.add_tokens(
+                                prompt_tokens=usage_info['prompt_tokens'],
+                                completion_tokens=usage_info['completion_tokens'],
+                                total_tokens=usage_info['total_tokens']
+                            )
+                    
+                    return result
+            else:
+                # 추적 없이 호출
+                return self.get_llm().invoke(*args, **kwargs)
         
-        # 원래 LLM으로 먼저 시도
-        try:
-            return self.get_llm().invoke(*args, **kwargs)
-        except Exception as e:
-            # 원래 LLM 실패 로그
-            logger.warning(f"기본 LLM 호출 실패: {self.agent_name}, provider={self.llm_config.get('provider')}, 오류: {str(e)}")
-            logger.info(f"폴백 호출 시도 중: {self.agent_name}")
-            
-            # 마지막 예외 기록
-            last_exception = e
-            
-            # 폴백 제공자 시도
-            fallback_providers = self.fallback_settings.get("providers", [])
-            max_retries = self.fallback_settings.get("max_retries", 3)
-            
-            for retry in range(min(max_retries, len(fallback_providers))):
-                try:
-                    # 재시도 간격
-                    if retry > 0:
-                        time.sleep(1.0)  # 1초 대기
+        # 폴백 활성화 시 재시도 로직
+        last_exception = None
+        base_providers = [None]  # None은 원래 설정
+        fallback_providers = self.fallback_settings.get("providers", [])
+        max_retries = self.fallback_settings.get("max_retries", 3)
+        providers_to_try = base_providers + fallback_providers[:max_retries-1]
+        
+        for provider_idx, provider_config in enumerate(providers_to_try):
+            try:
+                # 재시도 간격
+                if provider_idx > 0:
+                    time.sleep(1.0)
+                
+                # 로깅
+                if provider_idx == 0:
+                    logger.info(f"기본 LLM으로 호출 시도: {self.agent_name}, provider={self.llm_config.get('provider')}")
+                else:
+                    logger.info(f"폴백 LLM으로 호출 시도 ({provider_idx}/{max_retries}): provider={provider_config.get('provider')}")
+                
+                # 토큰 추적 필요시
+                if use_token_tracking:
+                    # 현재 설정에 맞는 모델 이름 가져오기
+                    model_name = self.get_model_name() if provider_idx == 0 else provider_config.get("model_name")
                     
-                    # 폴백 제공자 설정
-                    fallback_config = fallback_providers[retry]
+                    with track_token_usage(
+                        user_id=user_id,
+                        project_type=project_type,
+                        token_type="llm",
+                        model_name=model_name,
+                        db_getter=db
+                    ) as tracker:
+                        # 필요시 LLM 설정 변경
+                        if provider_idx > 0:
+                            # 임시 폴백 LLM 설정
+                            self.llm_config = provider_config
+                            self.llm = None  # 다음 get_llm()에서 새로 생성하게 함
+                        
+                        # LLM 호출
+                        result = self.get_llm().invoke(*args, **kwargs)
+                        
+                        # API 응답에서 토큰 사용량 추출 시도
+                        usage_info = None
+                        if hasattr(result, 'usage_metadata'):
+                            usage_info = {
+                                "prompt_tokens": result.usage_metadata.get('input_tokens', 0),
+                                "completion_tokens": result.usage_metadata.get('output_tokens', 0),
+                                "total_tokens": result.usage_metadata.get('total_tokens', 0)
+                            }
+                        
+                        if usage_info:
+                            # 추출된 토큰 정보 사용
+                            tracker.add_tokens(
+                                prompt_tokens=usage_info['prompt_tokens'],
+                                completion_tokens=usage_info['completion_tokens'],
+                                total_tokens=usage_info['total_tokens']
+                            )
+                        
+                        # 원래 LLM 설정 복원 (폴백 사용 후)
+                        if provider_idx > 0:
+                            self.llm_config = get_agent_llm_config(self.agent_name)
+                            self.llm = None  # 다음 get_llm()에서 새로 생성하게 함
+                        
+                        return result
+                else:
+                    # 토큰 추적 없이 호출
+                    # 필요시 LLM 설정 변경
+                    if provider_idx > 0:
+                        # 임시 폴백 LLM 설정
+                        self.llm_config = provider_config
+                        self.llm = None  # 다음 get_llm()에서 새로 생성하게 함
                     
-                    logger.info(f"폴백 호출 시도 {retry+1}/{max_retries}: {self.agent_name}, provider={fallback_config.get('provider')}, model={fallback_config.get('model_name')}")
+                    # LLM 호출
+                    result = self.get_llm().invoke(*args, **kwargs)
                     
-                    # 폴백 LLM 생성
-                    fallback_llm = LLMFactory.create_llm_from_config(fallback_config)
+                    # 원래 LLM 설정 복원 (폴백 사용 후)
+                    if provider_idx > 0:
+                        self.llm_config = get_agent_llm_config(self.agent_name)
+                        self.llm = None  # 다음 get_llm()에서 새로 생성하게 함
                     
-                    # 폴백 LLM으로 호출
-                    return fallback_llm.invoke(*args, **kwargs)
-                except Exception as e:
-                    # 폴백 실패 로그
-                    logger.warning(f"폴백 LLM 호출 실패 ({retry+1}/{max_retries}): provider={fallback_config.get('provider')}, 오류: {str(e)}")
-                    last_exception = e
-            
-            # 모든 폴백 실패
-            logger.error(f"모든 폴백 호출 시도 실패: {self.agent_name}")
+                    return result
+                    
+            except Exception as e:
+                # 에러 로깅
+                if provider_idx == 0:
+                    logger.warning(f"기본 LLM 호출 실패: {self.agent_name}, provider={self.llm_config.get('provider')}, 오류: {str(e)}")
+                else:
+                    logger.warning(f"폴백 LLM 호출 실패 ({provider_idx}/{max_retries}): provider={provider_config.get('provider')}, 오류: {str(e)}")
+                
+                # 마지막 예외 저장 및 설정 복원
+                last_exception = e
+                
+                # 폴백 호출 후 원래 설정 복원
+                if provider_idx > 0:
+                    self.llm_config = get_agent_llm_config(self.agent_name)
+                    self.llm = None
+                
+        # 모든 시도 실패
+        logger.error(f"모든 LLM 호출 시도 실패: {self.agent_name}")
+        if last_exception:
             raise last_exception
+        else:
+            raise RuntimeError(f"모든 LLM 호출 시도가 알 수 없는 이유로 실패했습니다.")
     
     async def ainvoke_with_fallback(self, *args, **kwargs) -> Any:
         """
@@ -270,50 +379,220 @@ class AgentLLM:
         Raises:
             Exception: 모든 폴백이 실패하면 마지막 예외 발생
         """
+        # 토큰 사용량 추적을 위한 매개변수 추출
+        user_id = kwargs.pop("user_id", None)
+        project_type = kwargs.pop("project_type", None)
+        db = kwargs.pop("db", None)
+        
+        # 토큰 추적 설정
+        use_token_tracking = user_id is not None and project_type is not None and db is not None
+        
+        if use_token_tracking:
+            from common.services.token_usage_service import track_token_usage
+            
+            logger.info(f"[토큰 추적][비동기] ainvoke_with_fallback 토큰 추적 활성화: agent:{self.agent_name}, user_id={user_id}, project_type={project_type}")
+        
         # 폴백이 비활성화되어 있으면 그냥 호출
         if not self.fallback_settings.get("enabled", False):
-            return await self.get_llm().ainvoke(*args, **kwargs)
+            if use_token_tracking:
+                # 토큰 추적 컨텍스트 생성
+                async with track_token_usage(
+                    user_id=user_id,
+                    project_type=project_type,
+                    token_type="llm",
+                    model_name=self.get_model_name(),
+                    db_getter=db
+                ) as tracker:
+                    # 비동기 LLM 호출
+                    result = await self.get_llm().ainvoke(*args, **kwargs)
+                    
+                    # API 응답에서 토큰 사용량 추출 시도
+                    usage_info = None
+                    if hasattr(result, 'usage_metadata'):
+                        usage_info = {
+                            "prompt_tokens": result.usage_metadata.get('input_tokens', 0),
+                            "completion_tokens": result.usage_metadata.get('output_tokens', 0),
+                            "total_tokens": result.usage_metadata.get('total_tokens', 0)
+                        }
+                    
+                    if usage_info:
+                        # 추출된 토큰 정보 사용
+                        tracker.add_tokens(
+                                prompt_tokens=usage_info['prompt_tokens'],
+                                completion_tokens=usage_info['completion_tokens'],
+                                total_tokens=usage_info['total_tokens']
+                            )
+                    
+                    return result
+            else:
+                # 추적 없이 호출
+                return await self.get_llm().ainvoke(*args, **kwargs)
+
+        # 폴백 활성화 시 재시도 로직
+        last_exception = None
+        base_providers = [None]  # None은 원래 설정
+        fallback_providers = self.fallback_settings.get("providers", [])
+        max_retries = self.fallback_settings.get("max_retries", 3)
+        providers_to_try = base_providers + fallback_providers[:max_retries-1]
         
-        # 원래 LLM으로 먼저 시도
-        try:
-            return await self.get_llm().ainvoke(*args, **kwargs)
-        except Exception as e:
-            # 원래 LLM 실패 로그
-            logger.warning(f"기본 LLM 비동기 호출 실패: {self.agent_name}, provider={self.llm_config.get('provider')}, 오류: {str(e)}")
-            logger.info(f"폴백 비동기 호출 시도 중: {self.agent_name}")
-            
-            # 마지막 예외 기록
-            last_exception = e
-            
-            # 폴백 제공자 시도
-            fallback_providers = self.fallback_settings.get("providers", [])
-            max_retries = self.fallback_settings.get("max_retries", 3)
-            
-            for retry in range(min(max_retries, len(fallback_providers))):
-                try:
-                    # 재시도 간격
-                    if retry > 0:
-                        import asyncio
-                        await asyncio.sleep(1.0)  # 1초 대기
+        for provider_idx, provider_config in enumerate(providers_to_try):
+            try:
+                # 재시도 간격
+                if provider_idx > 0:
+                    await asyncio.sleep(1.0)  # 비동기 대기
+                
+                # 로깅
+                if provider_idx == 0:
+                    logger.info(f"기본 LLM으로 비동기 호출: {self.agent_name}, provider={self.llm_config.get('provider')}, userid={user_id}, project_type={project_type}")
+                else:
+                    logger.info(f"폴백 LLM으로 비동기 호출 시도 ({provider_idx}/{max_retries}): provider={provider_config.get('provider')}")
+                
+                # 토큰 추적 필요시
+                if use_token_tracking:
+                    # 현재 설정에 맞는 모델 이름 가져오기
+                    model_name = self.get_model_name() if provider_idx == 0 else provider_config.get("model_name")
                     
-                    # 폴백 제공자 설정
-                    fallback_config = fallback_providers[retry]
+                    async with track_token_usage(
+                        user_id=user_id,
+                        project_type=project_type,
+                        token_type="llm",
+                        model_name=model_name,
+                        db_getter=db
+                    ) as tracker:
+                        # 필요시 LLM 설정 변경
+                        if provider_idx > 0:
+                            # 임시 폴백 LLM 설정
+                            self.llm_config = provider_config
+                            self.llm = None  # 다음 get_llm()에서 새로 생성하게 함
+                        
+                        # 비동기 LLM 호출
+                        current_llm = self.get_llm()
+                        #logger.info(f"[토큰 추적][비동기] agens: {current_llm.name}")
+                        result = await current_llm.ainvoke(*args, **kwargs)
+                        
+                        result_dict = result.model_dump() if hasattr(result, 'dict') else vars(result)
+                        logger.info(f"[토큰 추적][비동기] agent result[{self.agent_name}] keys: {result_dict.keys()}")
+                        
+                        # API 응답에서 토큰 사용량 추출 시도
+                        usage_info = None
+                        
+                        # 1. 직접 usage_metadata 속성 확인
+                        if hasattr(result, 'usage_metadata'):
+                            usage_info = {
+                                "prompt_tokens": result.usage_metadata.get('input_tokens', 0),
+                                "completion_tokens": result.usage_metadata.get('output_tokens', 0),
+                                "total_tokens": result.usage_metadata.get('total_tokens', 0)
+                            }
+                        # 2. _message 속성에서 확인 (구조화된 출력의 경우)
+                        elif hasattr(result, '_message') and hasattr(result._message, 'usage_metadata'):
+                            logger.info(f"[토큰 추적][비동기] _message 속성에서 usage_metadata 찾음")
+                            usage_info = {
+                                "prompt_tokens": result._message.usage_metadata.get('input_tokens', 0),
+                                "completion_tokens": result._message.usage_metadata.get('output_tokens', 0),
+                                "total_tokens": result._message.usage_metadata.get('total_tokens', 0)
+                            }
+                        # 3. underlying_response 속성에서 확인
+                        elif hasattr(result, 'underlying_response') and hasattr(result.underlying_response, 'usage_metadata'):
+                            logger.info(f"[토큰 추적][비동기] underlying_response 속성에서 usage_metadata 찾음")
+                            usage_info = {
+                                "prompt_tokens": result.underlying_response.usage_metadata.get('input_tokens', 0),
+                                "completion_tokens": result.underlying_response.usage_metadata.get('output_tokens', 0),
+                                "total_tokens": result.underlying_response.usage_metadata.get('total_tokens', 0)
+                            }
+                        # 4. _raw_response 속성에서 확인
+                        elif hasattr(result, '_raw_response') and hasattr(result._raw_response, 'usage_metadata'):
+                            logger.info(f"[토큰 추적][비동기] _raw_response 속성에서 usage_metadata 찾음")
+                            usage_info = {
+                                "prompt_tokens": result._raw_response.usage_metadata.get('input_tokens', 0),
+                                "completion_tokens": result._raw_response.usage_metadata.get('output_tokens', 0),
+                                "total_tokens": result._raw_response.usage_metadata.get('total_tokens', 0)
+                            }
+                        # 5. _original_message 속성에서 확인 (구조화된 출력 개선)
+                        elif hasattr(result, '_original_message') and hasattr(result._original_message, 'usage_metadata'):
+                            logger.info(f"[토큰 추적][비동기] _original_message 속성에서 usage_metadata 찾음")
+                            usage_info = {
+                                "prompt_tokens": result._original_message.usage_metadata.get('input_tokens', 0),
+                                "completion_tokens": result._original_message.usage_metadata.get('output_tokens', 0),
+                                "total_tokens": result._original_message.usage_metadata.get('total_tokens', 0)
+                            }
+                        # 6. 마지막으로 모든 속성을 검사하여 usage_metadata 찾기
+                        else:
+                            # 디버깅을 위해 모든 속성 로깅
+                            all_attrs = dir(result)
+                            logger.info(f"[토큰 추적][비동기] result의 모든 속성: {all_attrs}")
+                            
+                            # 특정 속성들이 있는지 확인하고 로깅
+                            for attr_name in all_attrs:
+                                if attr_name.startswith('_') and not attr_name.startswith('__'):
+                                    attr_value = getattr(result, attr_name, None)
+                                    if attr_value is not None:
+                                        logger.info(f"[토큰 추적][비동기] 속성 {attr_name}의 타입: {type(attr_value)}")
+                                        
+                                        # 숨겨진 속성에서 usage_metadata 확인
+                                        if hasattr(attr_value, 'usage_metadata'):
+                                            logger.info(f"[토큰 추적][비동기] {attr_name}.usage_metadata 찾음!")
+                                            usage_info = {
+                                                "prompt_tokens": attr_value.usage_metadata.get('input_tokens', 0),
+                                                "completion_tokens": attr_value.usage_metadata.get('output_tokens', 0),
+                                                "total_tokens": attr_value.usage_metadata.get('total_tokens', 0)
+                                            }
+                                            break
+                        
+                        if usage_info:
+                            # 추출된 토큰 정보 사용
+                            tracker.add_tokens(
+                                prompt_tokens=usage_info['prompt_tokens'],
+                                completion_tokens=usage_info['completion_tokens'],
+                                total_tokens=usage_info['total_tokens']
+                            )
+                        else:
+                            logger.warning("[토큰 추적][비동기] usage_metadata를 찾을 수 없습니다.")
+                        
+                        # 원래 LLM 설정 복원 (폴백 사용 후)
+                        if provider_idx > 0:
+                            self.llm_config = get_agent_llm_config(self.agent_name)
+                            self.llm = None  # 다음 get_llm()에서 새로 생성하게 함
+                        
+                        return result
+                else:
+                    # 토큰 추적 없이 호출
+                    # 필요시 LLM 설정 변경
+                    if provider_idx > 0:
+                        # 임시 폴백 LLM 설정
+                        self.llm_config = provider_config
+                        self.llm = None  # 다음 get_llm()에서 새로 생성하게 함
                     
-                    logger.info(f"폴백 비동기 호출 시도 {retry+1}/{max_retries}: {self.agent_name}, provider={fallback_config.get('provider')}, model={fallback_config.get('model_name')}")
+                    # 비동기 LLM 호출
+                    result = await self.get_llm().ainvoke(*args, **kwargs)
                     
-                    # 폴백 LLM 생성
-                    fallback_llm = LLMFactory.create_llm_from_config(fallback_config)
+                    # 원래 LLM 설정 복원 (폴백 사용 후)
+                    if provider_idx > 0:
+                        self.llm_config = get_agent_llm_config(self.agent_name)
+                        self.llm = None  # 다음 get_llm()에서 새로 생성하게 함
                     
-                    # 폴백 LLM으로 호출
-                    return await fallback_llm.ainvoke(*args, **kwargs)
-                except Exception as e:
-                    # 폴백 실패 로그
-                    logger.warning(f"폴백 LLM 비동기 호출 실패 ({retry+1}/{max_retries}): provider={fallback_config.get('provider')}, 오류: {str(e)}")
-                    last_exception = e
-            
-            # 모든 폴백 실패
-            logger.error(f"모든 폴백 비동기 호출 시도 실패: {self.agent_name}")
+                    return result
+                    
+            except Exception as e:
+                # 에러 로깅
+                if provider_idx == 0:
+                    logger.warning(f"기본 LLM 비동기 호출 실패: {self.agent_name}, provider={self.llm_config.get('provider')}, 오류: {str(e)}")
+                else:
+                    logger.warning(f"폴백 LLM 비동기 호출 실패 ({provider_idx}/{max_retries}): provider={provider_config.get('provider')}, 오류: {str(e)}")
+                
+                # 마지막 예외 저장 및 설정 복원
+                last_exception = e
+                
+                # 폴백 호출 후 원래 설정 복원
+                if provider_idx > 0:
+                    self.llm_config = get_agent_llm_config(self.agent_name)
+                    self.llm = None
+                
+        # 모든 시도 실패
+        logger.error(f"모든 LLM 비동기 호출 시도 실패: {self.agent_name}")
+        if last_exception:
             raise last_exception
+        else:
+            raise RuntimeError(f"모든 비동기 LLM 호출 시도가 알 수 없는 이유로 실패했습니다.")
     
     def get_config(self) -> Dict[str, Any]:
         """
@@ -347,18 +626,159 @@ class AgentLLM:
 
     def validate_config(self) -> bool:
         """
-        현재 설정이 유효한지 확인
+        현재 설정의 유효성을 검사
         
         Returns:
-            설정 유효성 여부
+            설정이 유효하면 True, 그렇지 않으면 False
         """
-        try:
-            # LLM 생성해보기
-            llm = LLMFactory.create_llm_from_config(self.llm_config)
-            return True
-        except Exception as e:
-            logger.error(f"LLM 설정 검증 실패: {self.agent_name}, 오류: {str(e)}")
-            return False
+        # 필수 필드 확인
+        required_fields = ["provider", "model_name"]
+        return all(field in self.llm_config for field in required_fields)
+        
+    def with_structured_output(self, schema, **kwargs):
+        """
+        구조화된 출력을 반환하는 LLM 생성
+        
+        Args:
+            schema: 출력 스키마 (Pydantic 모델 또는 타입힌트)
+            **kwargs: with_structured_output에 전달할 추가 인자
+            
+        Returns:
+            구조화된 출력을 지원하는 AgentLLM 래퍼
+        """
+        from langchain_core.runnables import RunnableSerializable
+        
+        class StructuredOutputAgentLLM:
+            def __init__(self, agent_llm: 'AgentLLM', schema, **kwargs):
+                self.agent_llm = agent_llm
+                self.schema = schema
+                self.kwargs = kwargs
+            
+            async def ainvoke(self, *args, **kwargs):
+                llm = self.agent_llm.get_llm()
+                
+                # 토큰 사용량 추적을 위한 매개변수 분리
+                user_id = kwargs.pop("user_id", None)
+                project_type = kwargs.pop("project_type", None)
+                db = kwargs.pop("db", None)
+                
+                # 1단계: 일반 LLM으로 호출하여 AIMessage 응답 받기
+                # LLM에게 schema에 맞는 JSON 반환하도록 요청
+                from langchain_core.messages import HumanMessage
+                
+                # 입력이 리스트가 아니면 (즉, 그냥 문자열이나 다른 형식이면) 메시지로 변환
+                if args and not isinstance(args[0], list):
+                    # LLM에게 JSON 형식으로 응답하도록 요청하는 프리픽스 추가
+                    schema_str = self.schema.model_json_schema() if hasattr(self.schema, 'model_json_schema') else str(self.schema)
+                    json_instruction = f"다음 JSON 스키마에 맞는 형식으로 응답해주세요: {schema_str}\n\n중요: Markdown 코드 블록(```)을 사용하지 말고 순수한 JSON 형식으로만 응답해주세요.\n\n"
+                    
+                    if isinstance(args[0], str):
+                        args = ([HumanMessage(content=json_instruction + args[0])],) + args[1:]
+                
+                logger.info(f"[구조화된 출력] 원본 응답 획득을 위한 LLM 호출")
+                raw_response = await self.agent_llm.ainvoke_with_fallback(
+                    *args,
+                    user_id=user_id,
+                    project_type=project_type,
+                    db=db,
+                    **kwargs
+                )
+                
+                # 2단계: 응답 내용을 수동으로 Pydantic 모델로 파싱
+                try:
+                    content = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
+                    
+                    # Markdown 코드 블록 제거 (```json...``` 또는 ```...```)
+                    import re
+                    content = re.sub(r'^```(?:json)?\s*\n(.*)\n```\s*$', r'\1', content, flags=re.DOTALL)
+                    
+                    logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}")
+                    
+                    # Pydantic 모델로 파싱
+                    if hasattr(self.schema, 'model_validate_json'):
+                        parsed_response = self.schema.model_validate_json(content)
+                    elif hasattr(self.schema, 'parse_raw'):  # Pydantic v1 지원
+                        parsed_response = self.schema.parse_raw(content)
+                    else:
+                        # JSON으로 파싱한 후 객체 생성
+                        import json
+                        data = json.loads(content)
+                        parsed_response = self.schema(**data)
+                    
+                    # 원본 메타데이터 보존을 위해 Pydantic 모델에 _original_message 속성 추가
+                    setattr(parsed_response, '_original_message', raw_response)
+                    
+                    logger.info(f"[구조화된 출력] 파싱 성공: {type(parsed_response)}")
+                    return parsed_response
+                    
+                except Exception as e:
+                    logger.error(f"[구조화된 출력] 파싱 오류: {str(e)}")
+                    # 파싱 실패 시 원본 응답 반환
+                    return raw_response
+            
+            def invoke(self, *args, **kwargs):
+                llm = self.agent_llm.get_llm()
+                
+                # 토큰 사용량 추적을 위한 매개변수 분리
+                user_id = kwargs.pop("user_id", None)
+                project_type = kwargs.pop("project_type", None)
+                db = kwargs.pop("db", None)
+                
+                # 1단계: 일반 LLM으로 호출하여 응답 받기
+                # LLM에게 schema에 맞는 JSON 반환하도록 요청
+                from langchain_core.messages import HumanMessage
+                
+                # 입력이 리스트가 아니면 (즉, 그냥 문자열이나 다른 형식이면) 메시지로 변환
+                if args and not isinstance(args[0], list):
+                    # LLM에게 JSON 형식으로 응답하도록 요청하는 프리픽스 추가
+                    schema_str = self.schema.model_json_schema() if hasattr(self.schema, 'model_json_schema') else str(self.schema)
+                    json_instruction = f"다음 JSON 스키마에 맞는 형식으로 응답해주세요: {schema_str}\n\n중요: Markdown 코드 블록(```)을 사용하지 말고 순수한 JSON 형식으로만 응답해주세요.\n\n"
+                    
+                    if isinstance(args[0], str):
+                        args = ([HumanMessage(content=json_instruction + args[0])],) + args[1:]
+                
+                logger.info(f"[구조화된 출력] 원본 응답 획득을 위한 LLM 호출")
+                raw_response = self.agent_llm.invoke_with_fallback(
+                    *args,
+                    user_id=user_id,
+                    project_type=project_type,
+                    db=db,
+                    **kwargs
+                )
+                
+                # 2단계: 응답 내용을 수동으로 Pydantic 모델로 파싱
+                try:
+                    content = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
+                    
+                    # Markdown 코드 블록 제거 (```json...``` 또는 ```...```)
+                    import re
+                    content = re.sub(r'^```(?:json)?\s*\n(.*)\n```\s*$', r'\1', content, flags=re.DOTALL)
+                    
+                    logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}")
+                    
+                    # Pydantic 모델로 파싱
+                    if hasattr(self.schema, 'model_validate_json'):
+                        parsed_response = self.schema.model_validate_json(content)
+                    elif hasattr(self.schema, 'parse_raw'):  # Pydantic v1 지원
+                        parsed_response = self.schema.parse_raw(content)
+                    else:
+                        # JSON으로 파싱한 후 객체 생성
+                        import json
+                        data = json.loads(content)
+                        parsed_response = self.schema(**data)
+                    
+                    # 원본 메타데이터 보존을 위해 Pydantic 모델에 _original_message 속성 추가
+                    setattr(parsed_response, '_original_message', raw_response)
+                    
+                    logger.info(f"[구조화된 출력] 파싱 성공: {type(parsed_response)}")
+                    return parsed_response
+                    
+                except Exception as e:
+                    logger.error(f"[구조화된 출력] 파싱 오류: {str(e)}")
+                    # 파싱 실패 시 원본 응답 반환
+                    return raw_response
+        
+        return StructuredOutputAgentLLM(self, schema, **kwargs)
 
 # 에이전트별 LLM 캐시
 agent_llm_cache: Dict[str, AgentLLM] = {}

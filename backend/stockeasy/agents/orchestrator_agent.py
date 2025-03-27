@@ -14,12 +14,14 @@ from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
-from pydantic import BaseModel, Field
-from common.services.agent_llm import get_llm_for_agent
+from pydantic import BaseModel, Field, field_validator
+from common.services.agent_llm import get_llm_for_agent, get_agent_llm
 from stockeasy.models.agent_io import QuestionAnalysisResult
 from stockeasy.prompts.orchestrator_prompts import format_orchestrator_prompt
 from common.core.config import settings
-
+from stockeasy.agents.base import BaseAgent
+from sqlalchemy.ext.asyncio import AsyncSession
+from common.models.token_usage import ProjectType
 
 class AgentConfigModel(BaseModel):
     """에이전트 실행 설정"""
@@ -27,6 +29,24 @@ class AgentConfigModel(BaseModel):
     enabled: bool = Field(..., description="활성화 여부")
     priority: int = Field(..., description="우선순위 (1-10)")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="에이전트별 매개변수")
+
+    @field_validator('parameters', mode='before')
+    @classmethod
+    def validate_parameters(cls, v):
+        """
+        parameters 필드가 문자열 형태로 들어왔을 경우 딕셔너리로 변환합니다.
+        """
+        if isinstance(v, str):
+            # 빈 문자열이나 "{}" 문자열인 경우 빈 딕셔너리로 변환
+            if v == "{}" or not v:
+                return {}
+            # JSON 문자열을 파싱하여 딕셔너리로 변환 시도
+            try:
+                return json.loads(v)
+            except Exception:
+                # 파싱 실패 시 빈 딕셔너리로 대체
+                return {}
+        return v
 
 
 class ExecutionPlanModel(BaseModel):
@@ -38,7 +58,7 @@ class ExecutionPlanModel(BaseModel):
     fallback_strategy: str = Field(..., description="실패 시 대응 전략")
 
 
-class OrchestratorAgent:
+class OrchestratorAgent(BaseAgent):
     """
     워크플로우 설계 및 조율을 담당하는 오케스트레이터 에이전트
     
@@ -49,21 +69,17 @@ class OrchestratorAgent:
     4. 예외 상황 대응 계획 마련
     """
     
-    def __init__(self):
+    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
         오케스트레이터 에이전트 초기화
         
         Args:
-            model_name: 사용할 OpenAI 모델 이름
-            temperature: 모델 출력의 다양성 조절 파라미터
+            name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
+            db: 데이터베이스 세션 객체 (선택적)
         """
-        # self.llm = ChatOpenAI(
-        #     model_name=model_name, 
-        #     temperature=temperature, 
-        #     api_key=settings.OPENAI_API_KEY
-        # )
+        super().__init__(name, db)
         self.llm, self.model_name, self.provider = get_llm_for_agent("orchestrator_agent")
-        #self.model_name = model_name
+        self.agent_llm = get_agent_llm("orchestrator_agent")
         logger.info(f"OrchestratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
         # 사용 가능한 에이전트 목록
@@ -121,10 +137,17 @@ class OrchestratorAgent:
                 available_agents=self.available_agents
             )
             
+            # user_id 추출
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
+            
             # LLM 호출로 계획 수립
             #execution_plan = await self.llm.with_structured_output(ExecutionPlanModel,method="function_calling").ainvoke(
-            execution_plan = await self.llm.with_structured_output(ExecutionPlanModel).ainvoke(
-                [HumanMessage(content=prompt)]
+            execution_plan = await self.agent_llm.with_structured_output(ExecutionPlanModel).ainvoke(
+                input=prompt,
+                user_id=user_id,
+                project_type=ProjectType.STOCKEASY,
+                db=self.db
             )
             
             # 실행 계획 로깅
@@ -135,7 +158,15 @@ class OrchestratorAgent:
             final_plan = {
                 "plan_id": plan_id,
                 "created_at": datetime.now(),
-                "agents": [agent.dict() for agent in execution_plan.agents],
+                "agents": [
+                    {
+                        "agent_name": agent.agent_name,
+                        "enabled": agent.enabled,
+                        "priority": agent.priority,
+                        "parameters": agent.parameters or {}
+                    } 
+                    for agent in execution_plan.agents
+                ],
                 "execution_order": execution_plan.execution_order,
                 "integration_strategy": execution_plan.integration_strategy,
                 "expected_output": execution_plan.expected_output,

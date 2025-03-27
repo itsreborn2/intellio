@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from common.api.v1 import  session, auth,  admin
+from common.api.v1 import  session, auth,  admin, token_usage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,6 +13,9 @@ api_router_common.include_router(session.router) #prefix가 없다. 나중에 �
 logger.info("세션 라우터 등록 완료")
 
 api_router_common.include_router(auth.router) #  prefix="/auth", tags=["auth"]
+logger.info("인증 라우터 등록 완료")
+
+api_router_common.include_router(token_usage.router) 
 logger.info("인증 라우터 등록 완료")
 
 api_router_common.include_router(admin.router) # prefix="/admin", tags=["admin"]

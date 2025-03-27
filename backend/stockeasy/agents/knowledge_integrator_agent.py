@@ -10,12 +10,16 @@ from loguru import logger
 from typing import Dict, List, Any, Optional, cast, Union
 from datetime import datetime
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
+from common.models.token_usage import ProjectType
+from stockeasy.models.agent_io import RetrievedAllAgentData
+from stockeasy.agents.base import BaseAgent
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from langchain_core.output_parsers import JsonOutputParser
 #from pydantic.v1 import BaseModel, Field
 from pydantic import BaseModel, Field
-from common.services.agent_llm import get_llm_for_agent
+from common.services.agent_llm import get_llm_for_agent, get_agent_llm
 from stockeasy.prompts.knowledge_integrator_prompts import format_knowledge_integrator_prompt
 from stockeasy.models.agent_io import IntegratedKnowledge, RetrievedTelegramMessage
 
@@ -39,21 +43,19 @@ class KnowledgeIntegratorOutput(BaseModel):
     통합_응답: str = Field(..., description="사용자 질문에 대한 종합적인 답변")
 
 
-class KnowledgeIntegratorAgent:
-    """
-    여러 검색 에이전트에서 수집된 정보를 통합하는 지식 통합기 에이전트 클래스
-    """
+class KnowledgeIntegratorAgent(BaseAgent):
+    """여러 검색 에이전트에서 수집된 정보를 통합하는 에이전트"""
     
-    def __init__(self):
+    def __init__(self, db: AsyncSession = None):
         """
-        지식 통합기 에이전트 초기화
+        지식 통합 에이전트의 초기화 메서드
         
         Args:
-            model_name: 사용할 OpenAI 모델 이름
-            temperature: 모델 출력의 다양성 조절 파라미터
+            db: 데이터베이스 세션
         """
-        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        super().__init__(db=db)
         self.llm, self.model_name, self.provider = get_llm_for_agent("knowledge_integrator_agent")
+        self.agent_llm = get_agent_llm("knowledge_integrator_agent")
         self.parser = JsonOutputParser(pydantic_object=KnowledgeIntegratorOutput)
         logger.info(f"KnowledgeIntegratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
@@ -151,10 +153,17 @@ class KnowledgeIntegratorAgent:
                 industry_importance=industry_importance
             )
             
+            # user_id 추출
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
+            
             # LLM 호출로 통합 수행
             #integration_result = await self.chain.ainvoke(prompt)
-            integration_result = await self.llm.with_structured_output(KnowledgeIntegratorOutput).ainvoke(
-                [HumanMessage(content=prompt)]
+            integration_result = await self.agent_llm.with_structured_output(KnowledgeIntegratorOutput).ainvoke(
+                input=prompt,
+                user_id=user_id,
+                project_type=ProjectType.STOCKEASY,
+                db=self.db
             )
             logger.info("Knowledge integration completed successfully")
             
@@ -289,15 +298,18 @@ class KnowledgeIntegratorAgent:
         formatted = ""
         if summary:
             formatted += f"내부DB 검색 결과 요약:\n{summary}\n"
-        if messages:
-            formatted += "내부DB 검색 결과 상세:\n"
-            for i, msg in enumerate(messages):
-                # 채널명 삭제.
-                #formatted += f"[{i+1}] 출처: {msg.get('channel_name', '알 수 없음')}\n"
-                formatted += f"내용: {msg.get('content', '내용 없음')}\n"
-                if msg.get('message_created_at'):
-                    formatted += f"작성일: {msg.get('message_created_at')}\n"
-                formatted += "---\n"
+        else:
+            if messages:
+                formatted += "내부DB 검색 결과 상세:\n"
+                for i, msg in enumerate(messages):
+                    # 채널명 삭제.
+                    #formatted += f"[{i+1}] 출처: {msg.get('channel_name', '알 수 없음')}\n"
+                    formatted += f"내용: {msg.get('content', '내용 없음')}\n"
+                    if msg.get('message_created_at'):
+                        formatted += f"작성일: {msg.get('message_created_at')}\n"
+                    formatted += "---\n"
+            else:
+                formatted += "내부DB 검색 결과 없음\n"
             
         return formatted
     

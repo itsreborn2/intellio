@@ -24,7 +24,13 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir wheel setuptools && \
-    pip install --no-cache-dir -r requirements.txt
+    if [ "$ENV" = "development" ] ; then \
+        echo "Installing with cache for development" && \
+        pip install -r requirements.txt ; \
+    else \
+        echo "Installing without cache for production" && \
+        pip install --no-cache-dir -r requirements.txt ; \
+    fi
 
 # 백엔드 코드 복사
 COPY backend/ .

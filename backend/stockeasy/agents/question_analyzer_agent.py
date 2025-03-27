@@ -15,20 +15,23 @@ from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import List, Optional as PydanticOptional
-from common.services.agent_llm import get_llm_for_agent
+from common.models.token_usage import ProjectType
+from common.services.agent_llm import get_llm_for_agent, get_agent_llm
 from stockeasy.prompts.question_analyzer_prompts import format_question_analyzer_prompt
 from common.core.config import settings
 from stockeasy.models.agent_io import (
     QuestionAnalysisResult, ExtractedEntity, QuestionClassification, 
     DataRequirement, pydantic_to_typeddict
 )
+from stockeasy.agents.base import BaseAgent
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class Entities(BaseModel):
     """추출된 엔티티 정보"""
     stock_name: PydanticOptional[str] = Field(None, description="종목명 또는 null")
     stock_code: PydanticOptional[str] = Field(None, description="종목코드 또는 null")
-    sector: PydanticOptional[str] = Field(None, description="산업/섹터 또는 null")
+    sector: PydanticOptional[str] = Field(None, description="종목이 속한 산업/섹터 또는 null")
     time_range: PydanticOptional[str] = Field(None, description="시간범위 또는 null")
     financial_metric: PydanticOptional[str] = Field(None, description="재무지표 또는 null")
     competitor: PydanticOptional[str] = Field(None, description="경쟁사 또는 null")
@@ -65,24 +68,28 @@ class QuestionAnalysis(BaseModel):
     detail_level: Literal["간략", "보통", "상세"] = Field(..., description="요구되는 상세도")
 
 
-class QuestionAnalyzerAgent:
+class QuestionAnalyzerAgent(BaseAgent):
     """
-    사용자 질문을 분석하여 의도, 엔티티, 키워드 등의 중요 정보를 추출하는 질문 분석기 에이전트
+    사용자 질문을 분석하는 에이전트
     
-    이 에이전트는 워크플로우의 초기 단계에서 실행되어 질문의 '내용'을 분석하고,
-    오케스트레이터가 워크플로우를 설계하는 데 필요한 정보를 제공합니다.
+    이 에이전트는 사용자의 질문을 분석하여 다음을 수행합니다:
+    1. 종목코드/종목명 등 엔티티 추출
+    2. 질문의 의도 분류
+    3. 필요한 데이터 유형 식별
+    4. 키워드 추출
     """
     
-    def __init__(self):
+    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
-        질문 분석기 에이전트 초기화
+        질문 분석 에이전트 초기화
         
         Args:
-            model_name: 사용할 OpenAI 모델 이름
-            temperature: 모델 출력의 다양성 조절 파라미터
+            name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
+            db: 데이터베이스 세션 객체 (선택적)
         """
-        #self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=settings.OPENAI_API_KEY)
+        super().__init__(name, db)
         self.llm, self.model_name, self.provider = get_llm_for_agent("question_analyzer_agent")
+        self.agent_llm = get_agent_llm("question_analyzer_agent")
         logger.info(f"QuestionAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,9 +122,16 @@ class QuestionAnalyzerAgent:
             # 프롬프트 준비
             prompt = format_question_analyzer_prompt(query=query, stock_name=stock_name, stock_code=stock_code)
             
+            # user_id 추출
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
+            
             # LLM 호출로 분석 수행 - structured output 사용
-            response:QuestionAnalysis = await self.llm.with_structured_output(QuestionAnalysis).ainvoke(
-                [HumanMessage(content=prompt)]
+            response:QuestionAnalysis = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
+                input=prompt,
+                user_id=user_id,
+                project_type=ProjectType.STOCKEASY,
+                db=self.db
             )
             response.entities.stock_name = stock_name
             response.entities.stock_code = stock_code

@@ -24,7 +24,7 @@ export function TemplateSection({
         onClick={() => toggleSection('templates')}
       >
         <FileType className="h-4 w-4 flex-shrink-0" />
-        <span className="text-left flex-grow font-medium">닥이지 템플릿</span>
+        <span className="text-left flex-grow font-medium truncate max-w-[120px]">닥이지 템플릿</span>
         {expandedSections.includes('templates') ? (
           <ChevronDown className="h-4 w-4" />
         ) : (

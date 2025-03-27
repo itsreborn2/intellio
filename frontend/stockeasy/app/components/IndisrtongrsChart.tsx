@@ -199,7 +199,7 @@ export default function IndustryCharts() {
       
       try {
         // 폴더 내의 CSV 파일들을 직접 읽는 방식으로 변경
-        // 파일 이름 패턴: 000250_삼천당제약.csv (종목코드_종목명.csv)
+        // 파일 이름 패턴: 036930_주성엔지니어링_91.csv (종목코드_종목명_RS값.csv)
         const folderPath = '/requestfile/etf_indiestocklist';
         
         // 폴더 내 모든 CSV 파일 목록 가져오기 시도
@@ -208,50 +208,24 @@ export default function IndustryCharts() {
         
         // 각 파일에서 종목코드, 종목명, RS 값 추출
         for (const fileName of files) {
-          // 파일명에서 종목코드와 종목명 추출 (RS 값은 파일 내용에서 가져올 예정)
-          const match = fileName.match(/(\d+)_(.+)\.csv/);
+          console.log(`처리 중인 파일: ${fileName}`);
+          
+          // 정규식 패턴 수정: 종목코드_종목명_RS값.csv 형식에 맞게 조정
+          const match = fileName.match(/^(\d+)_(.+)_(\d+)\.csv$/);
+          
           if (match) {
-            const [_, code, name] = match;
+            const [_, code, name, rsValueStr] = match;
+            const rsValue = parseInt(rsValueStr);
             
-            try {
-              // 파일 내용 읽기
-              const response = await fetch(`${folderPath}/${fileName}`);
-              const csvText = await response.text();
-              
-              // 첫 두 줄만 추출 (헤더와 첫 번째 데이터 행)
-              const lines = csvText.split('\n').slice(0, 2);
-              if (lines.length < 2) {
-                console.warn(`${fileName} 파일에 충분한 데이터가 없습니다.`);
-                continue;
-              }
-              
-              // 헤더 행과 데이터 행 분리
-              const headerLine = lines[0];
-              const dataLine = lines[1];
-              
-              // 헤더에서 RS 컬럼의 인덱스 찾기
-              const headers = headerLine.split(',');
-              const rsIndex = headers.findIndex(h => h.trim() === 'RS');
-              
-              if (rsIndex === -1) {
-                console.warn(`${fileName} 파일에 RS 컬럼이 없습니다.`);
-                continue;
-              }
-              
-              // 데이터 행에서 RS 값 추출
-              const values = dataLine.split(',');
-              const rsValue = values[rsIndex] ? parseInt(values[rsIndex].trim()) : 0;
-              
-              stocksData.push({
-                code,
-                name, // 원래 이름 그대로 사용
-                rsValue: rsValue
-              });
-              
-              console.log(`종목 ${name}(${code})의 RS 값을 파일 내용에서 추출: ${rsValue}`);
-            } catch (error) {
-              console.error(`${fileName} 파일 읽기 오류:`, error);
-            }
+            stocksData.push({
+              code,
+              name,
+              rsValue
+            });
+            
+            console.log(`종목 ${name}(${code})의 RS 값을 파일 이름에서 추출: ${rsValue}`);
+          } else {
+            console.warn(`파일 이름 형식이 일치하지 않습니다: ${fileName}`);
           }
         }
       } catch (error) {
@@ -316,10 +290,16 @@ export default function IndustryCharts() {
     try {
       // file_list.json 파일에서 파일 목록 가져오기
       const response = await fetch(`${folderPath}/file_list.json`);
+      
+      if (!response.ok) {
+        throw new Error(`파일 목록을 가져오는데 실패했습니다: ${response.status} ${response.statusText}`);
+      }
+      
       const fileList = await response.json();
       
       console.log('file_list.json에서 가져온 파일 목록:', fileList.files);
       
+      // file_list.json에 있는 파일 목록 반환 (files 배열)
       return fileList.files || [];
     } catch (error) {
       console.error('파일 목록을 가져오는데 실패했습니다:', error);
@@ -479,7 +459,8 @@ export default function IndustryCharts() {
       
       // 각 종목별로 차트 데이터 로드
       for (const stock of topStocks) {
-        const csvFilePath = `/requestfile/etf_indiestocklist/${stock.code}_${stock.name}.csv`;
+        // 파일 경로 수정: 종목코드_종목명_RS값.csv 형식에 맞게 변경
+        const csvFilePath = `/requestfile/etf_indiestocklist/${stock.code}_${stock.name}_${stock.rsValue}.csv`;
         console.log(`종목 ${stock.name}에 대한 파일 경로: ${csvFilePath}`);
         
         try {
@@ -574,7 +555,8 @@ export default function IndustryCharts() {
           isLoading: false,
           error: '',
           changePercent,
-          selectedStocks: loadedStocksData, // 로드된 종목 정보 저장 (차트 데이터 포함)
+          etfChangePercent: `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`,
+          selectedStocks: loadedStocksData, // 로드된 주식 데이터 설정
           selectedStock: loadedStocksData.length > 0 ? { // 첫 번째 종목 정보 저장 (호환성 유지)
             code: loadedStocksData[0].code,
             name: loadedStocksData[0].name,
@@ -895,14 +877,8 @@ export default function IndustryCharts() {
       console.log(`선택된 ETF: ${etf.종목명}, 섹터: ${etf.섹터}, 지속일: ${etf.지속일}, 대표종목 수: ${etf.selectedStocks?.length || 0}`);
     });
     
-    // 4개씩 ETF를 행으로 나누기
-    const rows: ETFInfo[][] = [];
-    for (let i = 0; i < sortedETFs.length; i += 4) {
-      const row = sortedETFs.slice(i, i + 4);
-      rows.push(row);
-    }
-    
-    return rows;
+    // 데스크톱에서는 4개씩, 모바일에서는 1개씩 ETF를 행으로 나누기 위해 모든 ETF를 반환
+    return sortedETFs;
   }, [etfInfoList]);
   
   // 종목명 우측에 등락률 표시
@@ -1002,7 +978,7 @@ export default function IndustryCharts() {
   return (
     <div className="p-4">
       <div className="mb-4">
-        <h2 className="text-xl font-bold">섹터별 주도종목 차트</h2>
+        <h2 className="text-xl font-bold" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>섹터별 주도종목 차트</h2>
         <p className="text-sm text-gray-500">20일 이동평균선 위에 10일 이상 유지중인 섹터별 ETF중 단기 RS_1M(한달)의 값이 90 이상의 대표종목 차트. 유지일이 긴 섹터 우선 정렬.</p>
       </div>
       
@@ -1012,69 +988,57 @@ export default function IndustryCharts() {
         </div>
       ) : (
         <div className="flex flex-col gap-8">
-          {etfGrid.map((row, rowIndex) => (
-            <div key={rowIndex} className="flex gap-4">
-              {row.map((etf, etfIndex) => (
-                <div key={etfIndex} className="flex-1">
-                  <div className="flex flex-col gap-4">
-                    <div>
-                      <div className="bg-green-100 px-3 py-1 border border-green-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">{etf.섹터 || ''}</span>
-                          <span className="font-medium text-sm">{etf.종목명}</span>
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${parseFloat(etf.etfChangePercent) >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                            {etf.etfChangePercent}
-                          </span>
-                        </div>
-                        <span className={`text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-800`}>
-                          {getStatusText(etf)}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {etfGrid.map((etf, etfIndex) => (
+              <div key={etfIndex}>
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <div className="bg-green-100 px-3 py-1 border border-green-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">{etf.섹터 || ''}</span>
+                        <span className="font-medium text-sm">{etf.종목명}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${parseFloat(etf.etfChangePercent) >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                          {etf.etfChangePercent}
                         </span>
                       </div>
-                      
-                      {etf.selectedStocks && etf.selectedStocks.slice(0, 2).map((stock, stockIndex) => (
-                        <div key={stockIndex}>
-                          {/* 종목 헤더 */}
-                          <div className="bg-gray-100 px-3 py-1 border border-t-0 border-gray-200 flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm">{stock.name}</span>
-                              <span className={`text-xs px-1.5 py-0.5 rounded ${calculateStockChangePercent(stock) >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                                {calculateStockChangePercent(stock) >= 0 ? '+' : ''}{calculateStockChangePercent(stock).toFixed(2)}%
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500">RS</span>
-                              <span className="font-medium text-sm text-blue-600">{stock.rsValue}</span>
-                            </div>
+                      <span className={`text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-800`}>
+                        {getStatusText(etf)}
+                      </span>
+                    </div>
+                    
+                    {etf.selectedStocks && etf.selectedStocks.slice(0, 2).map((stock, stockIndex) => (
+                      <div key={stockIndex}>
+                        {/* 종목 헤더 */}
+                        <div className="bg-gray-100 px-3 py-1 border border-t-0 border-gray-200 flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{stock.name}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${calculateStockChangePercent(stock) >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                              {calculateStockChangePercent(stock) >= 0 ? '+' : ''}{calculateStockChangePercent(stock).toFixed(2)}%
+                            </span>
                           </div>
-                          <div className="border border-t-0 border-gray-200" style={{ borderRadius: stockIndex === Math.min((etf.selectedStocks?.length || 0) - 1, 1) ? '0 0 0.375rem 0.375rem' : '0', overflow: 'hidden' }}>
-                            <ChartComponent
-                              data={stock.chartData || []}
-                              height={300}
-                              width="100%"
-                              showVolume={true}
-                              showMA20={true}
-                              title={`${stock.name}`}
-                              parentComponent="IndisrtongrsChart"
-                            />
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">RS</span>
+                            <span className="font-medium text-sm text-blue-600">{stock.rsValue}</span>
                           </div>
                         </div>
-                      ))}
-                      
-                      {/* 빈 공간 추가 (종목이 1개만 있는 경우) */}
-                      {etf.selectedStocks && etf.selectedStocks.length === 1 && (
-                        <div className="h-[350px]"></div> // 차트 높이 + 헤더 높이에 맞춰 빈 공간 추가
-                      )}
-                    </div>
+                        <div className="border border-t-0 border-gray-200" style={{ borderRadius: stockIndex === Math.min((etf.selectedStocks?.length || 0) - 1, 1) ? '0 0 0.375rem 0.375rem' : '0', overflow: 'hidden' }}>
+                          <ChartComponent
+                            data={stock.chartData || []}
+                            height={300}
+                            width="100%"
+                            showVolume={true}
+                            showMA20={true}
+                            title={`${stock.name}`}
+                            parentComponent="IndisrtongrsChart"
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-              
-              {/* 빈 열 추가 (행에 ETF가 4개 미만인 경우) */}
-              {Array.from({ length: 4 - row.length }).map((_, i) => (
-                <div key={`empty-${i}`} className="flex-1"></div>
-              ))}
-            </div>
-          ))}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

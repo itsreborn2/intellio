@@ -5,60 +5,6 @@
 지식 통합기 에이전트에서 사용하는 프롬프트 템플릿을 정의합니다.
 """
 
-# 지식 통합기 프롬프트
-KNOWLEDGE_INTEGRATOR_PROMPT = """
-당신은 금융 도메인 지식 통합 전문가입니다. 다양한 정보 소스에서 수집된 정보를 분석하고, 
-사용자 질문에 대한 종합적이고 일관된 답변을 생성하기 위해 이 정보를 통합해야 합니다.
-
-사용자 질문: {query}
-
-수집된 정보:
-1. 내부DB 검색 결과: {telegram_results}
-2. 기업 리포트 검색 결과: {report_results}
-3. 재무제표 분석 결과: {financial_results}
-4. 산업 동향 분석 결과: {industry_results}
-
-각 정보 소스의 중요도:
-- 내부DB 검색: {telegram_importance}/10
-- 기업 리포트: {report_importance}/10
-- 재무제표 분석: {financial_importance}/10
-- 산업 동향 분석: {industry_importance}/10
-
-당신의 목표는 다음과 같습니다:
-1. 각 소스의 정보를 종합적으로 평가하여 일관된 관점을 형성합니다.
-2. 각 소스의 중요도에 비례하여 정보의 가중치를 부여합니다.
-3. 충돌하는 정보가 있는 경우 신뢰도가 더 높은 소스를 우선시합니다.
-4. 사용자 질문에 직접적으로 관련된 정보를 우선적으로 통합합니다.
-5. 통합된 정보를 바탕으로 사용자 질문에 대한 명확하고 일관된 응답을 구성합니다.
-
-정보 통합 프레임워크:
-1. 핵심 사실 식별: 각 소스에서 가장 중요한 사실과 인사이트를 추출하세요.
-2. 정보 일치 분석: 여러 소스에서 일치하는 정보를 식별하세요.
-3. 정보 충돌 해결: 상충되는 정보가 있을 경우 더 신뢰할 수 있는 소스를 기반으로 결정하세요.
-4. 정보 격차 식별: 특정 질문 영역에 대한 정보가 부족한 경우 이를 명시하세요.
-5. 종합 응답 구성: 통합된 정보를 바탕으로 사용자 질문에 대한 종합적인 응답을 작성하세요.
-
-출력 형식:
-```json
-{
-  "integrated_information": {
-    "핵심_사실1": "통합된 내용",
-    "핵심_사실2": "통합된 내용",
-    ...
-  },
-  "information_conflicts": [
-    {
-      "topic": "충돌 주제",
-      "sources": ["소스1", "소스2"],
-      "resolution": "결정된 결론과 근거"
-    },
-    ...
-  ],
-  "information_gaps": ["부족한 정보 영역1", "부족한 정보 영역2", ...],
-  "integrated_answer": "사용자 질문에 대한 종합적인 답변"
-}
-```
-"""
 
 # 최적화된 지식 통합기 프롬프트
 OPTIMIZED_KNOWLEDGE_INTEGRATOR_PROMPT = """
@@ -86,6 +32,23 @@ keyword: {keywords}
 - 신뢰도_평가: 각 정보 영역의 신뢰도 평가 결과
 - 불확실_영역: 부족하거나 불확실한 정보 영역의 목록
 - 통합_응답: 사용자 질문에 대한 충분히 상세하고 근거가 있는 종합적인 답변
+
+중요: 반드시 다음 JSON 구조에 맞추어 응답해야 합니다. 마크다운 형식(##, ** 등)이나 코드 블록(```)을 사용하지 마세요. 순수한 JSON 형식으로만 응답하세요.
+
+{{
+  "핵심_결론": {{
+    "주요_인사이트1": Optional[str] = Field(default=None, description="통합된 첫 번째 주요 인사이트"),
+    "주요_인사이트2": Optional[str] = Field(default=None, description="통합된 두 번째 주요 인사이트"),
+    "주요_인사이트3": Optional[str] = Field(default=None, description="통합된 세 번째 주요 인사이트")
+  }},
+  "신뢰도_평가": {{
+    "정보_영역1": Optional[str] = Field(default=None, description="첫 번째 정보 영역의 신뢰도 (높음/중간/낮음)"),
+    "정보_영역2": Optional[str] = Field(default=None, description="두 번째 정보 영역의 신뢰도 (높음/중간/낮음)"),
+    "정보_영역3": Optional[str] = Field(default=None, description="세 번째 정보 영역의 신뢰도 (높음/중간/낮음)")
+  }},
+  "불확실_영역": List[str] = Field(..., description="부족하거나 불확실한 정보 영역 목록"),
+  "통합_응답": "사용자 질문에 대한 종합적인 응답 텍스트"
+}}
 """
 
 def format_knowledge_integrator_prompt(

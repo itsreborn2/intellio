@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from .base import BasePrompt
 import asyncio
 import logging
@@ -10,7 +10,9 @@ logger = logging.getLogger(__name__)
 
 class TablePrompt(BasePrompt):
     prompt_mode = "table"
-    def __init__(self, *args, **kwargs):
+    def __init__(self, user_id: Optional[str] = None, db = None, *args, **kwargs):
+        self.user_id = user_id
+        self.db = db
         # patterns 파라미터가 있다면 제거
         if 'patterns' in kwargs:
             del kwargs['patterns']
@@ -116,26 +118,33 @@ class TablePrompt(BasePrompt):
             if not isinstance(query_analysis, dict):
                 return "쿼리 분석 결과가 올바르지 않은 형식입니다."
             
-            # # 컨텍스트 준비 및 검증
-            # context = {
-            #     "content": chunk_content[:1000],  # 컨텍스트 크기 제한
-            #     "query": user_query,
-            #     "keywords": {k: v for k, v in keywords.items() if v},  # 빈 값 제거
-            #     "query_analysis": {
-            #         "doc_type": query_analysis.get("doc_type", "general"),
-            #         "focus_area": query_analysis.get("focus_area", "general"),
-            #         "analysis_type": query_analysis.get("analysis_type", "basic")
-            #     }
-            # }
-            
             # 프롬프트 생성 및 처리
             try:
                 # chunk_content 바탕으로 프롬프트 생성
                 prompt = self._generate_prompt(chunk_content, user_query, keywords, query_analysis)
 
-                # 생성형AI에게 수집한 context를 바탕으로 query를 질문
-                # process_prompt()는 캐시 and generate_content()를 호출함.
-                result = self.process_prompt(user_query, prompt)
+                # user_id가 있는 경우 토큰 추적 기능을 사용
+                if self.user_id:
+                    from uuid import UUID
+                    from common.models.token_usage import ProjectType
+                    
+                    try:
+                        user_id = UUID(self.user_id) if isinstance(self.user_id, str) else self.user_id
+                        # db 파라미터 전달하여 동기적 토큰 추적 활성화
+                        result = self.LLM.generate(
+                            user_query, 
+                            prompt, 
+                            user_id=user_id,
+                            project_type=ProjectType.DOCEASY,
+                            db=self.db
+                        ).content
+                    except Exception as e:
+                        logger.error(f"토큰 추적 LLM 호출 중 오류 발생: {str(e)}")
+                        # 토큰 추적 없이 기본 호출로 폴백
+                        result = self.process_prompt(user_query, prompt)
+                else:
+                    # 토큰 추적 없이 기본 호출
+                    result = self.process_prompt(user_query, prompt)
                 
                 if not result:
                     return "문서에서 관련 내용을 찾을 수 없습니다."

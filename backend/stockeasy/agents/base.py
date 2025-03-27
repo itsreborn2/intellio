@@ -7,18 +7,20 @@
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
-
+from sqlalchemy.ext.asyncio import AsyncSession
 
 class BaseAgent(ABC):
     """모든 에이전트의 기본 인터페이스를 정의하는 추상 클래스"""
     
-    def __init__(self, name: Optional[str] = None):
+    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """에이전트 초기화
         
         Args:
             name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
+            db: 데이터베이스 세션 객체 (선택적)
         """
         self._name = name or self.__class__.__name__
+        self.db = db
     
     @abstractmethod
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -73,3 +75,19 @@ class BaseAgent(ABC):
                 **state,
                 "errors": errors
             } 
+    
+    def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
+        """상태에 오류 정보를 추가
+        
+        Args:
+            state: 현재 상태
+            error_message: 오류 메시지
+        """
+        errors = state.get("errors", [])
+        errors.append({
+            "agent": self.get_name(),
+            "error": error_message,
+            "type": "ProcessingError",
+            "timestamp": None  # 호출자가 필요시 타임스탬프 추가
+        })
+        state["errors"] = errors 

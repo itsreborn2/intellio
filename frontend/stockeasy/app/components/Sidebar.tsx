@@ -11,8 +11,10 @@ import {
   User,
   Users,
   Settings,
-  PieChart, // ETF/섹터 아이콘으로 PieChart 추가
-  LayoutDashboard // 로고 대신 LayoutDashboard 아이콘 사용 (V와 유사)
+  PieChart,
+  LayoutDashboard,
+  Menu, // 햄버거 메뉴 아이콘 추가
+  X // X 아이콘 추가 (닫기 버튼용)
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -22,6 +24,8 @@ function SidebarContent() {
   // 호버 상태를 관리하는 state
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ [key: string]: number }>({});
+  const [isMenuOpen, setIsMenuOpen] = useState(false); // 모바일 메뉴 상태 추가
+  const [isMobile, setIsMobile] = useState(false); // 모바일 감지 상태 추가
   
   // 버튼 참조 객체
   const buttonRefs = {
@@ -38,10 +42,25 @@ function SidebarContent() {
   const docEasyUrl = process.env.NEXT_PUBLIC_DOCEASY_URL || 'https://doceasy.intellio.kr';
   
   // 페이지 이동 함수
-  const goToHomePage = () => router.push('/');
-  const goToRSRankPage = () => router.push('/rs-rank');
-  const goToETFSectorPage = () => router.push('/etf-sector'); // ETF/섹터 페이지 이동 함수 추가
-  const goToDocEasy = () => window.open(docEasyUrl, '_blank');
+  const goToHomePage = () => {
+    router.push('/');
+    if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+  };
+  
+  const goToRSRankPage = () => {
+    router.push('/rs-rank');
+    if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+  };
+  
+  const goToETFSectorPage = () => {
+    router.push('/etf-sector');
+    if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+  };
+  
+  const goToDocEasy = () => {
+    window.open(docEasyUrl, '_blank');
+    if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+  };
 
   // 버튼 위치에 따라 툴팁 위치 계산
   useEffect(() => {
@@ -56,113 +75,189 @@ function SidebarContent() {
     
     setTooltipPosition(positions);
   }, []);
+  
+  // 모바일 환경 감지
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    // 초기 실행
+    checkIfMobile();
+    
+    // 화면 크기 변경 시 감지
+    window.addEventListener('resize', checkIfMobile);
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('resize', checkIfMobile);
+    };
+  }, []);
+  
+  // 모바일 메뉴 토글 함수
+  const toggleMenu = () => {
+    const newIsOpen = !isMenuOpen;
+    setIsMenuOpen(newIsOpen);
+    
+    // 사이드바 상태 변경 이벤트 발생
+    const event = new CustomEvent('sidebarToggle', { 
+      detail: { isOpen: newIsOpen } 
+    });
+    window.dispatchEvent(event);
+  };
+  
+  // 모바일 메뉴 닫기 함수
+  const closeMenu = () => {
+    setIsMenuOpen(false);
+    
+    // 사이드바 닫힘 이벤트 발생
+    const event = new CustomEvent('sidebarToggle', { 
+      detail: { isOpen: false } 
+    });
+    window.dispatchEvent(event);
+  };
 
   return (
-    <div className="w-[59px] border-r bg-gray-200 flex flex-col h-full relative">
-      <div className="flex-1 overflow-hidden">
-        <div className="pt-4">
-          <div className="w-full flex flex-col items-center">
-            {/* 툴팁을 사이드바 외부에 표시하기 위한 컨테이너 */}
-            <div className="sidebar-tooltips-container">
-              {hoveredButton && tooltipPosition[hoveredButton] && (
-                <span 
-                  className="sidebar-tooltip" 
-                  style={{ top: `${tooltipPosition[hoveredButton] - 10}px` }}
-                >
-                  {hoveredButton === 'home' && '스탁이지'}
-                  {hoveredButton === 'chart' && 'RS순위'}
-                  {hoveredButton === 'etfSector' && 'ETF/섹터'} {/* ETF/섹터 툴팁 추가 */}
-                  {hoveredButton === 'doc' && '닥이지'}
-                  {hoveredButton === 'user' && '마이페이지'}
-                  {hoveredButton === 'settings' && '설정'}
-                </span>
-              )}
-            </div>
-            
-            {/* 홈 버튼 - 스탁이지 메인 페이지로 이동 */}
-            <div className="sidebar-button-container">
-              <button 
-                ref={buttonRefs.home}
-                className="sidebar-button" 
-                onClick={goToHomePage} 
-                onMouseEnter={() => setHoveredButton('home')}
-                onMouseLeave={() => setHoveredButton(null)}
-              >
-                <Home className="icon" />
-              </button>
-            </div>
-            
-            {/* 차트 버튼 - RS순위 페이지로 이동 */}
-            <div className="sidebar-button-container">
-              <button 
-                ref={buttonRefs.chart}
-                className="sidebar-button" 
-                onClick={goToRSRankPage}
-                onMouseEnter={() => setHoveredButton('chart')}
-                onMouseLeave={() => setHoveredButton(null)}
-              >
-                <ChartColumn className="icon" />
-              </button>
-            </div>
-            
-            {/* ETF/섹터 버튼 추가 */}
-            <div className="sidebar-button-container">
-              <button 
-                ref={buttonRefs.etfSector}
-                className="sidebar-button" 
-                onClick={goToETFSectorPage} // ETF/섹터 페이지로 이동하는 함수 연결
-                onMouseEnter={() => setHoveredButton('etfSector')}
-                onMouseLeave={() => setHoveredButton(null)}
-              >
-                <PieChart className="icon" />
-              </button>
-            </div>
-            
-            {/* 문서 버튼 - DocEasy로 이동 */}
-            <div className="sidebar-button-container">
-              <button 
-                ref={buttonRefs.doc}
-                className="sidebar-button" 
-                onClick={goToDocEasy} 
-                onMouseEnter={() => setHoveredButton('doc')}
-                onMouseLeave={() => setHoveredButton(null)}
-              >
-                <FileStack className="icon" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <>
+      {/* 모바일 햄버거 메뉴 버튼 */}
+      {isMobile && (
+        <button 
+          className="mobile-menu-button" 
+          onClick={toggleMenu}
+          style={{ zIndex: 1200 }} // 사이드바보다 높은 z-index 설정
+        >
+          {isMenuOpen ? <X size={24} /> : <Menu size={24} />} {/* 사이드바 상태에 따라 아이콘 변경 */}
+        </button>
+      )}
       
-      {/* 하단 영역 - 마이페이지와 설정 버튼을 맨 아래로 이동 */}
-      <div className="mt-auto pb-4">
-        <div className="w-full flex flex-col items-center">
-          {/* 사용자 버튼 */}
-          <div className="sidebar-button-container">
-            <button 
-              ref={buttonRefs.user}
-              className="sidebar-button" 
-              onMouseEnter={() => setHoveredButton('user')}
-              onMouseLeave={() => setHoveredButton(null)}
-            >
-              <User className="icon" />
-            </button>
+      {/* 모바일 오버레이 (메뉴 열릴 때만 표시) */}
+      {isMobile && (
+        <div 
+          className={`mobile-overlay ${isMenuOpen ? 'open' : ''}`} 
+          onClick={closeMenu}
+        />
+      )}
+      
+      {/* 사이드바 컨텐츠 */}
+      <div className={`w-[59px] border-r bg-gray-200 flex flex-col h-full relative sidebar ${isMenuOpen ? 'open' : ''}`}>
+        
+        <div className="flex-1 overflow-hidden">
+          <div className="pt-4">
+            <div className="w-full flex flex-col items-center">
+              {/* 툴팁을 사이드바 외부에 표시하기 위한 컨테이너 */}
+              <div className="sidebar-tooltips-container">
+                {hoveredButton && tooltipPosition[hoveredButton] && (
+                  <span 
+                    className="sidebar-tooltip" 
+                    style={{ top: `${tooltipPosition[hoveredButton] - 10}px` }}
+                  >
+                    {hoveredButton === 'home' && '스탁이지'}
+                    {hoveredButton === 'chart' && 'RS순위'}
+                    {hoveredButton === 'etfSector' && 'ETF/섹터'} {/* ETF/섹터 툴팁 추가 */}
+                    {hoveredButton === 'doc' && '닥이지'}
+                    {hoveredButton === 'user' && '마이페이지'}
+                    {hoveredButton === 'settings' && '설정'}
+                  </span>
+                )}
+              </div>
+              
+              {/* 홈 버튼 - 스탁이지 메인 페이지로 이동 */}
+              <div className="sidebar-button-container">
+                <button 
+                  ref={buttonRefs.home}
+                  className="sidebar-button" 
+                  onClick={goToHomePage} 
+                  onMouseEnter={() => setHoveredButton('home')}
+                  onMouseLeave={() => setHoveredButton(null)}
+                >
+                  <Home className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm">스탁이지</span>}
+                </button>
+              </div>
+              
+              {/* 차트 버튼 - RS순위 페이지로 이동 */}
+              <div className="sidebar-button-container">
+                <button 
+                  ref={buttonRefs.chart}
+                  className="sidebar-button" 
+                  onClick={goToRSRankPage}
+                  onMouseEnter={() => setHoveredButton('chart')}
+                  onMouseLeave={() => setHoveredButton(null)}
+                >
+                  <ChartColumn className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm">RS순위</span>}
+                </button>
+              </div>
+              
+              {/* ETF/섹터 버튼 추가 */}
+              <div className="sidebar-button-container">
+                <button 
+                  ref={buttonRefs.etfSector}
+                  className="sidebar-button" 
+                  onClick={goToETFSectorPage} // ETF/섹터 페이지로 이동하는 함수 연결
+                  onMouseEnter={() => setHoveredButton('etfSector')}
+                  onMouseLeave={() => setHoveredButton(null)}
+                >
+                  <PieChart className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm">ETF/섹터</span>}
+                </button>
+              </div>
+              
+              {/* 문서 버튼 - DocEasy로 이동 */}
+              <div className="sidebar-button-container">
+                <button 
+                  ref={buttonRefs.doc}
+                  className="sidebar-button" 
+                  onClick={goToDocEasy} 
+                  onMouseEnter={() => setHoveredButton('doc')}
+                  onMouseLeave={() => setHoveredButton(null)}
+                >
+                  <FileStack className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm">닥이지</span>}
+                </button>
+              </div>
+            </div>
           </div>
-          
-          {/* 설정 버튼 */}
-          <div className="sidebar-button-container">
-            <button 
-              ref={buttonRefs.settings}
-              className="sidebar-button" 
-              onMouseEnter={() => setHoveredButton('settings')}
-              onMouseLeave={() => setHoveredButton(null)}
-            >
-              <Settings className="icon" />
-            </button>
+        </div>
+        
+        {/* 하단 영역 - 마이페이지와 설정 버튼을 맨 아래로 이동 */}
+        <div className="mt-auto pb-4">
+          <div className="w-full flex flex-col items-center">
+            {/* 사용자 버튼 */}
+            <div className="sidebar-button-container">
+              <button 
+                ref={buttonRefs.user}
+                className="sidebar-button" 
+                onMouseEnter={() => setHoveredButton('user')}
+                onMouseLeave={() => setHoveredButton(null)}
+              >
+                <User className="icon" />
+                {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                {isMobile && <span className="ml-2 text-sm">마이페이지</span>}
+              </button>
+            </div>
+            
+            {/* 설정 버튼 */}
+            <div className="sidebar-button-container">
+              <button 
+                ref={buttonRefs.settings}
+                className="sidebar-button" 
+                onMouseEnter={() => setHoveredButton('settings')}
+                onMouseLeave={() => setHoveredButton(null)}
+              >
+                <Settings className="icon" />
+                {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                {isMobile && <span className="ml-2 text-sm">설정</span>}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 

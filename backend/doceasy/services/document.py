@@ -56,16 +56,19 @@ class DocumentService:
         """파일 타입 검증"""
         return content_type in self.allowed_mime_types
 
-    def process_document_sync(self, doc_id: UUID) -> None:
+    def process_document_sync(self, doc_id: UUID, user_id: UUID = None) -> None:
         """문서 처리 Celery 태스크 실행"""
         try:
+            # user_id가 None이 아닌 경우에만 전달
+            args = [str(doc_id)] if user_id is None else [str(doc_id), str(user_id)]
+            
             # Celery 태스크 이름으로 태스크 실행
             celery.send_task(
                 'doceasy.workers.document.process_document_chucking',
-                args=[str(doc_id)],
+                args=args,
                 queue='document-processing'
             )
-            logger.info(f"문서 처리 태스크 시작됨[sync]: {doc_id}")
+            logger.info(f"문서 처리 태스크 시작됨[sync]: {doc_id}, user_id: {user_id}")
         except Exception as e:
             logger.error(f"문서 처리 태스크 시작 실패: {doc_id}, error: {str(e)}")
             raise
@@ -476,7 +479,7 @@ class DocumentService:
             )
             
             # 11. 문서 처리 태스크 등록
-            self.process_document_sync(doc_id)
+            self.process_document_sync(doc_id, user_id)
             
             return document
             

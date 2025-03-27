@@ -100,7 +100,7 @@
     height: 4px;
     background: #666;
     border-radius: 50%;
-    animation: wave 1.5s infinite ease-in-out;
+    animation: bounce 1.5s infinite;
   }
 
   .typing-indicator span:nth-child(2) {
@@ -111,31 +111,79 @@
     animation-delay: 0.4s;
   }
 
-  @keyframes wave {
-    0%, 60%, 100% {
+  @keyframes bounce {
+    0%, 100% {
       transform: translateY(0);
     }
-    30% {
+    50% {
       transform: translateY(-4px);
     }
   }
-
-  .pulse {
-    animation: pulse 2s infinite;
+  
+  /* 커서 애니메이션 스타일 */
+  .typing .cursor {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background-color: currentColor;
+    margin-left: 4px;
+    margin-bottom: 2px;
+    animation: pulse 1s infinite;
+    vertical-align: middle;
   }
 
   @keyframes pulse {
-    0% {
-      transform: scale(0.95);
-      opacity: 0.5;
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+  
+  /* 모바일 환경 최적화 스타일 */
+  @media (max-width: 767px) {
+    /* 채팅 입력창 최적화 */
+    #chat-container {
+      padding-bottom: 70px !important;
     }
-    50% {
-      transform: scale(1);
-      opacity: 1;
+    
+    /* 입력창 컨테이너 최적화 */
+    .fixed.bottom-0.left-0.right-0 {
+      position: fixed !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      z-index: 1000 !important;
+      padding: 5px 2px !important;
+      background-color: white !important;
+      border-top: 1px solid #e5e7eb !important;
     }
-    100% {
-      transform: scale(0.95);
-      opacity: 0.5;
+    
+    /* 다크 모드 대응 */
+    .dark .fixed.bottom-0.left-0.right-0 {
+      background-color: hsl(222.2 84% 4.9%) !important;
+      border-top: 1px solid hsl(217.2 32.6% 17.5%) !important;
+    }
+    
+    /* 입력창 폼 최적화 */
+    .fixed.bottom-0.left-0.right-0 form {
+      display: flex !important;
+      justify-content: center !important;
+      width: 99% !important;
+      margin: 0 auto !important;
+    }
+    
+    /* 입력 필드 최적화 */
+    .fixed.bottom-0.left-0.right-0 input {
+      flex: 1 1 auto !important;
+      padding-left: 6px !important;
+      padding-right: 6px !important;
+      font-size: 14px !important;
+    }
+    
+    /* 버튼 최적화 */
+    .fixed.bottom-0.left-0.right-0 button {
+      min-width: 30px !important;
+      padding: 0 !important;
+      margin-left: 2px !important;
     }
   }
 }

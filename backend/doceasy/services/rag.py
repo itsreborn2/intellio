@@ -9,6 +9,7 @@ import asyncio
 import time
 import json
 from loguru import logger
+from requests import Session as RequestsSession
 from common.services.vector_store_manager import VectorStoreManager
 from common.core.config import settings
 from common.services.retrievers.tablemode_semantic import TableModeSemanticRetriever
@@ -24,6 +25,8 @@ from sqlalchemy import select
 from common.utils.util import measure_time_async
 from doceasy.workers.rag import analyze_table_mode_task
 from celery import group
+from common.models.user import Session
+from common.models.token_usage import ProjectType
 
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import DocumentWithScore, RetrievalResult
@@ -45,21 +48,13 @@ DOCUMENT_STATUS_DELETED = 'DELETED'
 class RAGService:
     """RAG 서비스"""
 
-    def __init__(self, streaming_callback: Optional[Callable[[str], None]] = None):
+    def __init__(self):
         """RAG 서비스 초기화"""
         self.embedding_service = EmbeddingService()
         
-        if streaming_callback:
-            logger.warning(f"RAG Init with callback")
-            self.chat_prompt = ChatPrompt(streaming_callback=streaming_callback)
-        else:
-            logger.warning(f"RAG Init without callback")
-            self.chat_prompt = ChatPrompt()
-        self._streaming_callback = streaming_callback
         
-        self.table_header_prompt = TableHeaderPrompt()
-        self.table_prompt = TablePrompt()  # 테이블 분석을 위한 프롬프트 추가
         self.db = None
+        self.session = None  # 세션 정보 추가
         
         self._should_stop = False  # 생성 중지 플래그 추가
         # 동시 처리할 최대 문서 수 (rate limit 고려)
@@ -194,9 +189,26 @@ class RAGService:
             'min_similarity_score': 0.6  # 최소 유사도 점수
         }
 
-    async def initialize(self, db, streaming_callback: Optional[Callable[[str], None]] = None):
-        """DB 세션 초기화"""
+    async def initialize(self, db, session: Optional[Session] = None, streaming_callback: Optional[Callable[[str], None]] = None):
+        """DB 세션 및 유저 세션 초기화"""
         self.db = db
+        self.session = session
+        
+        if session:
+            logger.info(f"RAG 서비스 세션 정보 설정: user_id={session.user_id}, user_email={session.user_email}")
+        
+        if streaming_callback:
+            logger.warning(f"RAG Init with callback")
+            self.chat_prompt = ChatPrompt(session=session, streaming_callback=streaming_callback)
+            self.set_streaming_callback(streaming_callback)
+        else:
+            logger.warning(f"RAG Init without callback")
+            self.chat_prompt = ChatPrompt(session=session)
+        self._streaming_callback = streaming_callback
+        
+        self.table_header_prompt = TableHeaderPrompt(session=session)
+        self.table_prompt = TablePrompt(session=session)  # 테이블 분석을 위한 프롬프트 추가
+
     async def set_streaming_callback(self, streaming_callback: Optional[Callable[[str], None]] = None):
         """스트리밍 콜백 설정"""
         if self._streaming_callback is None:
@@ -301,7 +313,7 @@ class RAGService:
         # VectorStoreManager 인스턴스 생성
         vs_manager = VectorStoreManager(
             embedding_model_type=self.embedding_service.get_model_type(),
-            project_name="doceasy",
+            project_name=ProjectType.DOCEASY,
             namespace=settings.PINECONE_NAMESPACE_DOCEASY
         )
         
@@ -483,7 +495,7 @@ class RAGService:
             filtersMetadata = { "document_id": {"$in": document_ids} } if document_ids else None
             
             vs_manager = VectorStoreManager(embedding_model_type=self.embedding_service.get_model_type(),
-                                            project_name="doceasy",
+                                            project_name=ProjectType.DOCEASY,
                                             namespace=settings.PINECONE_NAMESPACE_DOCEASY)
 
             # 요약 관련 쿼리인지 확인
@@ -492,13 +504,10 @@ class RAGService:
             # 검색 전략 조정
             min_score = 0.15 if is_summary_query else 0.22  # 요약 쿼리면 더 낮은 임계값 사용
             
-            if is_summary_query:
-                logger.warning(f"요약 의도 감지: '{normalized_query}' - min_score를 {min_score}로 설정")
-                # 요약 쿼리의 경우 검색 범위 확대
-                top_k = max(top_k * 3, 15)  # 최소 15개 이상 결과 확보 (기존 2배에서 3배로 증가)
-                logger.warning(f"요약 쿼리를 위해 top_k를 {top_k}로 증가")
 
             if query_type == "table":
+                # 테이블 모드에서넌 top-k가 문서의 숫자의 5배로 넘어온다.
+                # 문서 20개면 k=100
                 tablemode_retriever = TableModeSemanticRetriever(config=SemanticRetrieverConfig(
                                                                 min_score=min_score
                                                                 ), vs_manager=vs_manager)
@@ -508,6 +517,11 @@ class RAGService:
                     filters=filtersMetadata
                 )
             else:
+                if is_summary_query:
+                    logger.warning(f"요약 의도 감지: '{normalized_query}' - min_score를 {min_score}로 설정")
+                    # 요약 쿼리의 경우 검색 범위 확대
+                    top_k = max(top_k * 3, 15)  # 최소 15개 이상 결과 확보 (기존 2배에서 3배로 증가)
+                    logger.warning(f"요약 쿼리를 위해 top_k를 {top_k}로 증가")
                 #Chat Mode
                 semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
                                                         min_score=min_score
@@ -611,165 +625,168 @@ class RAGService:
     
     @measure_time_async
     async def handle_table_mode(self, query: str, document_ids: List[str] = None, user_id: str = None, project_id: str = None) -> TableResponse:
-        """테이블 모드 처리"""
+        """테이블 모드로 문서 처리
+        
+        아직 기존 문서의 쿼리 처리와 동일하게 동작 - 평문형 문서와 동일하게 청크로 나누어 조회
+        
+        Args:
+            query: 분석 요청
+            document_ids: 문서 ID 목록 (선택사항) - 지정하지 않으면 모든 문서 대상
+            user_id: 사용자 ID (선택사항)
+            project_id: 프로젝트 ID (선택사항)
+            
+        Returns:
+            TableResponse: 테이블 응답
+        """
         try:
-            logger.warning("테이블 모드 처리 시작")
-            # 테이블 제목 생성
-            title = await self.table_header_prompt.generate_title(query)
-            logger.warning(f"테이블 헤더 생성 완료 : {title}")
-
-            query_analysis = self._analyze_query(query)
+            # 시작 로깅
+            logger.info(f"[테이블 모드] 시작: query={query}, docs={document_ids}")
             
-            #########################################################
-            # 관련 청크 검색
-            k = len(document_ids) * 5 # 문서당 5개. 이 옵션이 문서별로 5개를 뽑아주진 않음.
-            # 그러나 적어도 전체 문서 * 5개 정도는 기본적으로 뽑아서 데이터를 추출하도록 처리
-            rr:RetrievalResult = await self.process_retrival(query=query, top_k=k, document_ids=document_ids, query_type="table")
-            logger.warning(f"청크 추출 완료 : {len(rr.documents)} 개")
-
-            if not rr.documents:
-                return TableResponse(columns=[TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="empty", content="관련 문서를 찾을 수 없습니다.")]) ])
+            # 쿼리 및 키워드 분석
+            query_clean = self._normalize_query(query)  # 정규화된 쿼리
+            response = TableResponse()
             
-
-            # 여기부터는 키워드 검색인데, 이 부분도 retrival 안으로 들어가야하는 부분.
-            # 문서별로 청크 그룹화 및 키워드 추출
-            docs_data = {}
-            for doc in rr.documents:
-                # 디버그 로깅 추가
-                logger.debug(f"청크 데이터: {doc}")
-                
-                doc_id = doc.metadata.get("document_id")
-                if not doc_id:
-                    continue
-
-                chunk_text = doc.page_content
-                if not chunk_text:
-                    continue
-                    
-                if doc_id not in docs_data:
-                    docs_data[doc_id] = {
-                        "content": chunk_text,
-                        "keywords": {}  # 딕셔너리로 변경하여 빈도수 저장
-                    }
-                else:
-                    docs_data[doc_id]["content"] += "\n" + chunk_text
-                
-                # 키워드 빈도수 업데이트
-                chunk_keywords = self._extract_keywords(chunk_text)
-                for keyword in chunk_keywords:
-                    if keyword in docs_data[doc_id]["keywords"]:
-                        docs_data[doc_id]["keywords"][keyword] += 1
-                    else:
-                        docs_data[doc_id]["keywords"][keyword] = 1
-
-            # 각 문서별로 테이블 분석 수행
-            start_time = time.time()
-            task_results = []  # 태스크 결과를 저장할 리스트
+            # 쿼리 의도 분석
+            query_analysis = self._analyze_query(query_clean)
             
-            tasks = []
-            doc_id_map = {}  # task ID와 doc_id 매핑을 위한 딕셔너리
+            # 키워드 추출
+            keywords = self._extract_keywords(query_clean)
+            keywords_dict = {"type": "extracted", "source": "query", "keywords": [{"text": k, "frequency": 1} for k in keywords]}
             
-            for doc_id, data in docs_data.items():
-                # 빈도수 기반으로 상위 키워드 선택
-                sorted_keywords = sorted(
-                    data["keywords"].items(), 
-                    key=lambda x: x[1], 
-                    reverse=True
-                )[:10]
-                
-                keywords = {
-                    "keywords": [
-                        {
-                            "text": kw[0],
-                            "frequency": kw[1]
-                        } for kw in sorted_keywords
-                    ],
-                    "type": "extracted",
-                    "source": "document_content"
-                }
-                
-                # task 생성
-                task = analyze_table_mode_task.s(
-                    chunk_content=data["content"],
-                    query=query,
-                    keywords=keywords,
-                    query_analysis=query_analysis
-                )
-                tasks.append(task)
-                
-                logger.info("="*50)
-                logger.info(f"테이블 분석Task 준비 - 문서 ID: {doc_id}")
-                logger.info(f"Content length: {len(data['content'])}")
-                logger.info(f"Keywords count: {len(keywords['keywords'])}")
-                logger.info("="*50)
+            # 타임아웃 시간 계산 (문서당 최대 5초, 최소 10초, 최대 60초)
+            doc_count = len(document_ids) if document_ids else 10
+            timeout_seconds = min(60, max(10, doc_count * 5))
+            logger.info(f"[테이블 모드] 타임아웃 설정: {timeout_seconds}초 (문서 {doc_count}개)")
             
-            # 병렬로 태스크 실행
-            try:
-                job = group(tasks)
-                result_group = job.apply_async()
-                
-                # 모든 결과 대기 (timeout 30초)
-                results = result_group.get(timeout=30)
-                
-                # 결과 처리
-                columns = []
-                #result_content 는 그냥 text다.
-                for doc_id, rr in zip(docs_data.keys(), results):
-                    try:
-                        if not rr:
-                            result_content = "분석 결과가 없습니다."
-
-                        result_content = rr
-                    except Exception as e: 
-                        logger.error(f"결과 처리 중 오류: {str(e)}")
-                        result_content = f"분석 중 오류가 발생했습니다: {str(e)}"
-                    
-                    # 셀 추가
-                    columns.append(TableColumn(
-                        header=TableHeader(name=title, prompt=query),
-                        cells=[TableCell(doc_id=doc_id, content=result_content)]
-                    ))
-                
-            except TimeoutError:
-                logger.error("태스크 그룹 실행 시간 초과")
-                columns = [TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="empty", content="분석 시간이 초과되었습니다.")]                )]
-            except Exception as e:
-                logger.error(f"태스크 그룹 실행 중 오류: {str(e)}")
-                logger.error(f"title: {title}")
-                columns = [TableColumn(header=TableHeader(name=title, prompt=query),cells=[TableCell(doc_id="empty", content=f"분석 중 오류가 발생했습니다: {str(e)}")]
-                )]
+            # 첫 번째 청크 가져오기
+            doc_chunks = await self._get_first_chunks_parallel(document_ids)
+            chunk_count = len(doc_chunks)
             
-            end_time = time.time()
-            execution_time = end_time - start_time
-            logger.warning(f"테이블 분석 수행시간 : {execution_time:.2f} sec")
-
-            # 히스토리 저장 (기존 코드와 동일)
-            if user_id and project_id:
+            if not doc_chunks:
+                response.add_error("분석할 문서를 찾을 수 없습니다.")
+                return response
+            
+            # 테이블 분석 실행
+            all_tasks = []
+            completed_count = 0
+            
+            # 진행 상황 업데이트
+            response.add_progress(0, f"테이블 분석 작업 시작: {chunk_count}개의 테이블 분석 예정")
+            
+            # 동시 실행할 작업 수 조절
+            concurrent_tasks = min(3, chunk_count)
+            logger.info(f"[테이블 모드] 분석 작업 생성: 동시성={concurrent_tasks}, 청크={chunk_count}개")
+            
+            # 셀러리 태스크 큐
+            from doceasy.workers.rag import analyze_table_mode_task
+            
+            for i, chunk in enumerate(doc_chunks):
+                chunk_id = chunk.get("id", f"chunk_{i}")
+                doc_id = chunk.get("document_id", "unknown")
+                content = chunk.get("content", "")
+                
+                # 작업 진행 메시지
+                progress_msg = f"테이블 분석 작업 {i+1}/{chunk_count} 시작: 문서 ID {doc_id}의 테이블 분석 중"
+                response.add_progress(int((i / chunk_count) * 50), progress_msg)
+                
+                # 비동기 작업 생성
                 try:
-                    logger.warning(f"히스토리 저장 시작 : {project_id}, {doc_id}")
-                    history_service = TableHistoryService(db=self.db)
-                    await history_service.create_many([
-                        TableHistoryCreate(
-                            project_id=str(project_id),
-                            document_id=str(cell.doc_id),
-                            user_id=str(user_id),
-                            prompt=query,
-                            title=title,
-                            result=str(cell.content)
-                        ) for column in columns for cell in column.cells
-                    ])
+                    # 셀러리 태스크 호출 (비동기)
+                    # 여러 인자를 전달할 때는 순서대로 나열 (user_id가 맨 앞으로)
+                    task = analyze_table_mode_task.delay(user_id, content, query_clean, keywords_dict, query_analysis)
+                    
+                    # 작업 추적용 정보 저장
+                    task_info = {
+                        "task": task,
+                        "task_id": task.id,
+                        "chunk_id": chunk_id,
+                        "doc_id": doc_id,
+                        "content": content[:100] + "..." if len(content) > 100 else content
+                    }
+                    all_tasks.append(task_info)
+                    
+                    logger.info(f"[테이블 모드] 작업 생성 완료: task_id={task.id}, chunk_id={chunk_id}")
                 except Exception as e:
-                    logger.exception(f"히스토리 저장 실패: {str(e)}")
-
-            return TableResponse(columns=columns)
+                    # 작업 생성 실패
+                    logger.error(f"[테이블 모드] 작업 생성 실패: {str(e)}")
+                    response.add_error(f"문서 ID {doc_id}의 테이블 분석 작업 생성 실패: {str(e)}")
+            
+            # 작업 처리 완료 대기
+            logger.info(f"[테이블 모드] 모든 작업 생성 완료, 결과 대기 중...")
+            start_time = time()
+            
+            # 모든 작업의 결과 수집
+            for task_info in all_tasks:
+                try:
+                    task = task_info["task"]
+                    doc_id = task_info["doc_id"]
+                    chunk_id = task_info["chunk_id"]
+                    
+                    # 작업 완료 대기 (타임아웃 적용)
+                    elapsed = time() - start_time
+                    remaining = max(1, timeout_seconds - elapsed)  # 최소 1초
+                    
+                    logger.info(f"[테이블 모드] 작업 결과 대기: task_id={task.id}, 남은 시간={remaining:.1f}초")
+                    
+                    try:
+                        # 작업 결과 가져오기 (타임아웃 적용)
+                        result = task.get(timeout=remaining)
+                        completed_count += 1
+                        
+                        # 진행률 업데이트
+                        progress = 50 + int((completed_count / chunk_count) * 50)
+                        response.add_progress(
+                            progress, 
+                            f"테이블 분석 {completed_count}/{chunk_count} 완료: 문서 ID {doc_id}의 분석 결과 수신"
+                        )
+                        
+                        # 결과 추가
+                        if result:
+                            response.add_result(chunk_id, doc_id, result)
+                            logger.info(f"[테이블 모드] 작업 결과 수신: task_id={task.id}, 길이={len(result)}")
+                        else:
+                            logger.warning(f"[테이블 모드] 작업 결과 없음: task_id={task.id}")
+                    
+                    except TimeoutError:
+                        # 타임아웃 발생
+                        logger.warning(f"[테이블 모드] 작업 타임아웃: task_id={task.id}")
+                        response.add_error(f"문서 ID {doc_id}의 테이블 분석 시간 초과")
+                        task.revoke(terminate=True)  # 작업 강제 종료
+                        
+                except Exception as e:
+                    # 작업 처리 중 오류
+                    logger.error(f"[테이블 모드] 작업 처리 오류: {str(e)}")
+                    response.add_error(f"테이블 분석 작업 처리 중 오류 발생: {str(e)}")
+            
+            # 최종 메시지
+            if completed_count > 0:
+                response.add_completion("테이블 분석 완료")
+            else:
+                response.add_error("모든 테이블 분석 작업이 실패했습니다.")
+            
+            # 총 소요 시간
+            total_time = time() - start_time
+            logger.info(f"[테이블 모드] 모든 작업 완료: 총 {completed_count}/{chunk_count} 완료, 소요 시간={total_time:.1f}초")
+            
+            return response
+            
         except Exception as e:
-            logger.exception(f"테이블 모드 처리 실패: {str(e)}")
-            raise
+            # 전체 처리 오류
+            logger.error(f"[테이블 모드] 처리 오류: {str(e)}")
+            response = TableResponse()
+            response.add_error(f"테이블 분석 중 오류 발생: {str(e)}")
+            return response
 
     async def handle_table_mode_stream(self, query: str, document_ids: List[str] = None, user_id: str = None, project_id: str = None):
         """테이블 모드 처리 (스트리밍 방식)"""
         try:
             logger.warning("테이블 모드 스트리밍 처리 시작")
+            
+            # 세션에서 사용자 정보 활용
+            if self.session and not user_id:
+                user_id = str(self.session.user_id) if self.session.user_id else None
+                logger.info(f"테이블 모드 스트리밍에서 세션 사용자 정보 활용: user_id={user_id}")
+                
             # 테이블 헤더 생성
             title = await self.table_header_prompt.generate_title(query)
             logger.warning(f"테이블 헤더 생성 완료 : {title}")
@@ -901,10 +918,11 @@ class RAGService:
                 
                 # 태스크 생성
                 task = analyze_table_mode_task.s(
-                    chunk_content=data["content"],
-                    query=query,
-                    keywords=keywords,
-                    query_analysis=query_analysis
+                    user_id,  # 위치 인자로 수정
+                    data["content"],
+                    query,
+                    keywords,
+                    query_analysis
                 )
                 tasks.append((doc_id, task))
             
@@ -1110,6 +1128,11 @@ class RAGService:
             - chat 모드: {"answer": str, "context": List[Dict]}
             - table 모드: TableResponse 객체
         """
+        # 세션에서 사용자 정보 활용
+        if self.session and not user_id:
+            user_id = str(self.session.user_id) if self.session.user_id else None
+            logger.info(f"세션에서 사용자 정보 활용: user_id={user_id}")
+            
         if mode == "table":
             # UUID로 변환하여 전달
             #doc_ids = [UUID(doc_id) for doc_id in document_ids]
@@ -1128,10 +1151,26 @@ class RAGService:
         query: str,
         mode: str = "chat",
         document_ids: List[str] = None,
+        user_id: str = None,
         **kwargs
     ):
         """스트리밍 응답을 위한 쿼리 처리"""
         try:
+            # 세션에서 사용자 정보 활용
+            if self.session and not user_id:
+                user_id = str(self.session.user_id) if self.session.user_id else None
+                logger.info(f"스트리밍 응답에서 세션 사용자 정보 활용: user_id={user_id}")
+                
+            # 테이블 모드인 경우 별도 처리
+            if mode == "table":
+                async for event in self.handle_table_mode_stream(
+                    query=query,
+                    document_ids=document_ids,
+                    user_id=user_id,
+                ):
+                    yield event
+                return
+                
             # 쿼리 타입 분석
             # retrival후 결과에 딸려오는 RetrievalResult.query_analysis 랑 헷갈리면 안됨.
             query_analysis = self._analyze_query(query)

@@ -9,6 +9,7 @@ import json
 from uuid import UUID
 from typing import List, Optional
 
+from common.models.token_usage import ProjectType, TokenType
 from common.app import LoadEnvGlobal
 from common.core.database import SessionLocal, get_db_async, AsyncSessionLocal
 from common.core.redis import RedisClient
@@ -44,6 +45,22 @@ def init_worker(sender=None, **kwargs):
         logger.info(f"Document Worker 초기화 [ProcessID: {os.getpid()}]")
         global redis_client_for_document
         redis_client_for_document = RedisClient()
+
+        # 토큰 사용량 추적 초기화
+        try:
+            from common.services.embedding_models import TokenUsageQueue
+            from common.core.deps import get_db
+            
+            # 세션 팩토리 함수 (비동기)
+            async def session_factory():
+                async for db in get_db():
+                    yield db
+            
+            # 토큰 사용량 큐 초기화 - 비동기 함수이므로 실행 불가
+            # 대신 동기적 토큰 사용량 추적 방식을 사용함
+            logger.info("Celery 워커에서는 비동기 토큰 사용량 큐 대신 동기적 토큰 추적을 사용합니다")
+        except Exception as e:
+            logger.error(f"토큰 사용량 추적 초기화 중 오류: {str(e)}")
 
     except Exception as e:
         logger.error(f"Worker 초기화 중 오류 발생: {str(e)}")
@@ -167,13 +184,14 @@ def validate_document_text(doc: Document, document_id: str) -> str:
     queue="document-processing",
     max_retries=3
 )
-def process_document_chucking(self, document_id: str):
+def process_document_chucking(self, document_id: str, user_id: str = None):
     """업로드 후 문서 처리 작업
         1. 텍스트 추출
         2. 청킹
         3. 임베딩(make_embedding_data_batch, 배치 처리)
     """
     try:
+        logger.info(f"문서 처리 작업 시작: document_id={document_id}, user_id={user_id}")
         with SessionLocal() as db:
             # DB 매니저 초기화
             db_manager = DocumentDatabaseManager(db)
@@ -216,7 +234,11 @@ def process_document_chucking(self, document_id: str):
             chunk_tasks = []
             for i in range(0, len(chunks), batch_size):
                 batch = chunks[i:i + batch_size]
-                task = make_embedding_data_batch.delay(document_id, batch, i)
+                # user_id가 None이 아닌 경우에만 전달
+                if user_id is not None:
+                    task = make_embedding_data_batch.delay(document_id, batch, i, user_id)
+                else:
+                    task = make_embedding_data_batch.delay(document_id, batch, i)
                 chunk_tasks.append(task.id)
 
             # 상태 업데이트
@@ -381,15 +403,17 @@ def process_document_task(self, document_id: str):
     return loop.run_until_complete(async_process())
 
 @celery.task(bind=True, max_retries=3, acks_late=True)
-def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_start_idx: int):
+def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_start_idx: int, user_id: str = None):
     """
     문서의 청크들을 임베딩하고 벡터 스토어에 저장하는 배치 작업
     Args:
         document_id: 문서 ID
         chunks: 청크 텍스트 리스트
         batch_start_idx: 배치 시작 인덱스
+        user_id: 사용자 ID
     """
     try:
+        logger.info(f"청크 배치 처리 시작: document_id={document_id}, batch_start_idx={batch_start_idx}, user_id={user_id}")
         # Redis에서 배치 처리 상태 확인
         key = f"chunk_batch:{document_id}:{batch_start_idx}"
         if redis_client_for_document.get_key(key):
@@ -400,12 +424,16 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
         redis_client_for_document.set_key(key, "1", expire=1800)  # 30분 후 만료
         embedding_service = EmbeddingService()
         
-        bApplyAsync = True
-        # 현재는 청크가 List[str]이네.
-        # 청크의 데이터 타입을 바꿔야하는게 우선.
-        #embeddings = await embedding_service.create_embeddings_batch(chunks)
-
-        embeddings = embedding_service.create_embeddings_batch_sync(chunks)
+        # 임포트
+        from common.services.token_usage_service import track_token_usage_sync
+        from common.core.database import SessionLocal
+        
+        # 먼저 모든 청크의 임베딩을 생성
+        embeddings = embedding_service.create_embeddings_batch_sync(
+            texts=chunks, 
+            user_id=UUID(user_id) if user_id else None, 
+            project_type=ProjectType.DOCEASY
+        )
 
         if not embeddings:
             raise ValueError("임베딩 생성 실패")
@@ -423,6 +451,25 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
                     "text": chunk
                 }
             })
+        
+        # 모든 임베딩 생성 후 토큰 사용량 처리
+        if user_id and hasattr(embedding_service, 'last_token_usage') and embedding_service.last_token_usage:
+            with SessionLocal() as db:
+                with track_token_usage_sync(
+                    user_id=UUID(user_id), 
+                    project_type=ProjectType.DOCEASY, 
+                    token_type=TokenType.EMBEDDING, 
+                    model_name=embedding_service.get_model_name(),
+                    db_getter=db
+                ) as tracker:
+                    total_tokens = embedding_service.last_token_usage.get('total_tokens', 0)
+                    prompt_tokens = embedding_service.last_token_usage.get('prompt_tokens', total_tokens)
+                    
+                    tracker.add_tokens(
+                        prompt_tokens=prompt_tokens,
+                        total_tokens=total_tokens
+                    )
+                    logger.info(f"토큰 사용량 추적 완료: {total_tokens} tokens")
         
         # 벡터 저장 (동기)
         vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(), 
@@ -538,32 +585,6 @@ def process_documents_batch(document_ids: List[str]):
     except Exception as e:
         logger.error(f"일괄 처리 실패: {str(e)}")
         raise
-
-def process_chunk(embedding_service, chunk: str, chunk_index: int, document_id: str) -> Optional[str]:
-    """단일 청크 처리 함수"""
-    try:
-        # 임베딩 생성
-        embedding = embedding_service.create_embedding_with_retry(chunk)
-        
-        if embedding and len(embedding) > 0:
-            chunk_id = f"{document_id}_chunk_{chunk_index}"
-            # Pinecone에 저장
-            embedding_service.index.upsert(
-                vectors=[(
-                    chunk_id,
-                    embedding,
-                    {
-                        "document_id": document_id,
-                        "chunk_index": chunk_index,
-                        "text": chunk
-                    }
-                )]
-            )
-            return chunk_id
-    except Exception as e:
-        raise e
-    
-    return None
 
 def split_text(text: str, chunk_size: int = 1500):
     """텍스트를 일정 크기의 청크로 분할합니다.

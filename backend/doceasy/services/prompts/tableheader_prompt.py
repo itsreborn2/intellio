@@ -1,4 +1,6 @@
 from typing import Dict, Any
+
+from common.models.user import Session
 from .base import BasePrompt
 from common.utils.util import measure_time_async
 

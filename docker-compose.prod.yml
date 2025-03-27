@@ -23,7 +23,6 @@ services:
       - ENV=production
     volumes:
       - ./backend:/backend
-    
 
   celery-doceasy:
     build:

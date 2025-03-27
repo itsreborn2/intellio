@@ -292,7 +292,8 @@ async def chat_search(
     request: ChatRequest,
     db: AsyncSession = Depends(get_db_async),
     session: Session = Depends(get_current_session),
-    project_service: ProjectService = Depends(deps.get_project_service)
+    project_service: ProjectService = Depends(deps.get_project_service),
+    rag_service: RAGService = Depends(deps.get_rag_service)
 ):
     """채팅 모드 검색 및 질의응답"""
     try:
@@ -322,8 +323,8 @@ async def chat_search(
 
             try:
                 # RAG 서비스 초기화
-                rag_service = RAGService()
-                await rag_service.initialize(db)
+                #ag_service = RAGService()
+                #await rag_service.initialize(db)
                 
                 logger.info(f"채팅 검색 요청 - 메시지: {request.message}, 문서 ID: {request.document_ids}")
                 

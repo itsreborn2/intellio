@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { Upload, FileText, Loader2, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { useApp } from '@/contexts/AppContext'
@@ -11,6 +11,7 @@ import { DocumentStatusBadge } from '@/components/DocumentStatusBadge'
 import { UploadProgressDialog } from "intellio-common/components/ui/upload-progress-dialog"
 import { FileUploadErrorDialog } from '@/components/FileUploadErrorDialog'
 
+<<<<<<< HEAD
 // 문서 분석 진행 상태 컴포넌트
 const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => {
   const processingDocs = documents.filter(doc => 
@@ -53,6 +54,8 @@ const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => 
   );
 };
 
+=======
+>>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
 // MIME 타입 매핑 객체를 accept와 동일한 형태로 수정
 const ACCEPTED_FILE_TYPES: Record<string, readonly string[]> = {
   'application/pdf': ['.pdf'],
@@ -77,6 +80,8 @@ function getMimeTypeFromExtension(extension: string): AcceptedMimeTypes | undefi
     extensions.includes(extension)
   );
   return entry ? (entry[0] as AcceptedMimeTypes) : undefined;
+<<<<<<< HEAD
+=======
 }
 
 // 파일 확장자 추출 함수는 유지
@@ -84,8 +89,43 @@ function getFileExtension(filename: string): string {
   return filename.toLowerCase().match(/\.[^.]*$/)?.[0] || '';
 }
 
+// 문서 상태 타입 정의
+interface DocumentStatus {
+  document_id: string
+  status: string
+  error_message?: string
+  is_accessible: boolean
+>>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
+}
+
+// 파일 확장자 추출 함수는 유지
+function getFileExtension(filename: string): string {
+  return filename.toLowerCase().match(/\.[^.]*$/)?.[0] || '';
+}
+
+// 모바일 환경 감지 훅
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768); // 768px 미만을 모바일로 간주
+    };
+
+    // 초기 체크
+    checkIsMobile();
+
+    // 리사이즈 이벤트에 대응
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  return isMobile;
+};
+
 export const UploadSection = () => {
   const { state, dispatch } = useApp()
+  const isMobile = useIsMobile(); // 모바일 환경 감지 훅 사용
   const [uploadStatus, setUploadStatus] = useState({
     total: 0,
     error: 0,
@@ -108,6 +148,7 @@ export const UploadSection = () => {
   )
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
+<<<<<<< HEAD
     console.log('onDrop 호출됨, 파일 개수:', acceptedFiles.length);
     
     // 파일 개수 검증
@@ -127,6 +168,8 @@ export const UploadSection = () => {
       return;
     }
 
+=======
+>>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
     // 파일 MIME 타입 처리 및 로깅
     const processedFiles = acceptedFiles.map(file => {
       let mimeType = file.type;
@@ -160,6 +203,7 @@ export const UploadSection = () => {
     });
     
     await handleFileUpload(processedFiles);
+<<<<<<< HEAD
   }, [handleFileUpload, showErrorDialog])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
@@ -211,6 +255,13 @@ export const UploadSection = () => {
         showErrorDialog(errorMessages.join('\n'));
       }
     }
+=======
+  }, [handleFileUpload])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
+    onDrop,
+    accept: ACCEPTED_FILE_TYPES
+>>>>>>> b9e3d93 (feat(frontend, backend): 파일 업로드 및 프롬프트 처리 개선)
   })
 
   return (
@@ -248,7 +299,9 @@ export const UploadSection = () => {
               <div className="mt-6">
                 <Button
                   variant="outline"
-                  className="border-primary text-primary hover:bg-primary/10"
+                  // Added inline-flex, items-center, justify-center and gap for better alignment and spacing
+                  // Further increased horizontal padding (px-4 sm:px-8)
+                  className={`inline-flex items-center justify-center border-primary text-primary hover:bg-primary/10 px-4 py-1 text-xs sm:px-8 sm:py-2 sm:text-sm gap-1 sm:gap-2 ${isMobile ? 'hidden' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation(); // 이벤트 버블링 방지
                     const input = document.querySelector('input[type="file"]');
@@ -257,8 +310,9 @@ export const UploadSection = () => {
                     }
                   }}
                 >
-                  <FileText className="w-4 h-4 mr-2" />
-                  파일 선택하기
+                  {/* Responsive icon size, removed margin */}
+                  <FileText className="w-3 h-3 sm:w-4 sm:h-4" />
+                  파일 선택
                 </Button>
               </div>
             </div>

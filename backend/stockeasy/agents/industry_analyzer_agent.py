@@ -22,25 +22,29 @@ from stockeasy.prompts.industry_prompts import INDUSTRY_ANALYSIS_PROMPT
 # from stockeasy.services.industry.industry_data_service import IndustryDataService
 # from stockeasy.services.stock.stock_info_service import StockInfoService
 from stockeasy.models.agent_io import IndustryReportData, RetrievedAllAgentData, IndustryData
-from common.services.agent_llm import get_llm_for_agent
+from common.services.agent_llm import get_agent_llm, get_llm_for_agent
 from common.core.config import settings
+from langchain_core.messages import AIMessage, HumanMessage
+from common.models.token_usage import ProjectType
+from stockeasy.agents.base import BaseAgent
+from sqlalchemy.ext.asyncio import AsyncSession
 
-class IndustryAnalyzerAgent:
+class IndustryAnalyzerAgent(BaseAgent):
     """산업 및 시장 동향 분석 에이전트"""
 
-    def __init__(self):
+    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
-        IndustryAnalyzerAgent를 초기화합니다.
+        산업 및 시장 동향 분석 에이전트 초기화
         
         Args:
-            model_name: 사용할 LLM 모델 이름
-            temperature: 모델 온도(창의성) 설정
+            name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
+            db: 데이터베이스 세션 객체 (선택적)
         """
-        #self.model_name = model_name
-        #self.temperature = temperature
-        #self.llm = ChatOpenAI(model=model_name, temperature=temperature)
-        self.retrieved_str = "industry_reports"
+        super().__init__(name, db)
+        self.retrieved_str = "industry_report"
         self.llm, self.model_name, self.provider = get_llm_for_agent("industry_analyzer_agent")
+        self.agent_llm = get_agent_llm("industry_analyzer_agent")
+        self.parser = JsonOutputParser()
         logger.info(f"IndustryAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
         # 서비스 초기화
@@ -80,8 +84,8 @@ class IndustryAnalyzerAgent:
             
             logger.info(f"IndustryAnalyzerAgent analyzing: {stock_code or stock_name}")
             logger.info(f"sector: {sector}, keywords: {keywords}")
-            logger.info(f"Classification data: {classification}")
-            logger.info(f"Data requirements: {data_requirements}")
+            #logger.info(f"Classification data: {classification}")
+            #logger.info(f"Data requirements: {data_requirements}")
             
             # 종목 코드 또는 종목명이 없는 경우 처리
             if not stock_code and not stock_name:
@@ -112,17 +116,26 @@ class IndustryAnalyzerAgent:
 
                 k = self._get_report_count(classification)
                 threshold = self._calculate_dynamic_threshold(classification)
+
+                # 제거하고 싶은 특정 문자열 목록
+                exclude_keywords = ["실적", "주가", "전망", "투자", "기업", "회사", "산업", "설명"]
+                
+                # keywords에서 제외할 키워드 필터링
+                filtered_keywords = [kw for kw in keywords if kw not in exclude_keywords]
+                keywords_list = keywords
                 if sector:
-                    keywords_list = keywords + [sector]
-                else:
-                    keywords_list = keywords
-                searched_industry_data = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"keywords": {"$in":keywords_list}})
+                    sector_splits = sector.split("/")
+                    sector_list = [x.strip() for x in sector_splits] # 제약/바이오 같은 패턴 분리.
+                    keywords_list += sector_list
                 
-                # 임시 샘플 데이터 사용
-                #industry_data_raw = self._get_dummy_industry_data(stock_name, sector)
-                #industry_data_raw = None
+
+                searched_industry_data = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"subgroup_list": {"$in":sector_list}})
+                searched_industry_data2 = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"keywords": {"$in":keywords_list}})
                 
-                if not searched_industry_data:
+                # 두 검색 결과 병합 및 중복 제거
+                merged_industry_data = self._merge_and_remove_duplicates(searched_industry_data, searched_industry_data2)
+                
+                if not merged_industry_data:
                     logger.warning(f"No industry data found for sector: {sector}")
                     
                     # 실행 시간 계산
@@ -168,7 +181,7 @@ class IndustryAnalyzerAgent:
                     return state
                 
                 # 검색 결과 가공
-                processed_industry_data:List[IndustryReportData] = self._process_reports(searched_industry_data)
+                processed_industry_data:List[IndustryReportData] = self._process_reports(merged_industry_data)
                 
                 analysis = await self._generate_report_analysis(
                         processed_industry_data, 
@@ -199,7 +212,7 @@ class IndustryAnalyzerAgent:
                     "status": "success",
                     "data": {
                         "analysis": analysis,
-                        "searched_reports": searched_industry_data
+                        "searched_reports": merged_industry_data
                     },
                     "error": None,
                     "execution_time": duration,
@@ -214,7 +227,7 @@ class IndustryAnalyzerAgent:
                     state["retrieved_data"] = {}
                 retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
                 industry_data_result: List[IndustryReportData] = {
-                    "searched_reports": searched_industry_data,
+                    "searched_reports": merged_industry_data,
                     "analysis": analysis
                 }
                 retrieved_data[self.retrieved_str] = industry_data_result
@@ -353,27 +366,29 @@ class IndustryAnalyzerAgent:
                 input_variables=["query", "stock_code", "stock_name", "sector", "classification", "industry_data"]
             )
             
-            # 분석 결과를 파싱할 파서 설정
-            #parser = JsonOutputParser()
+            # user_id 추출
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
+
+            # 프롬프트 포맷팅
+            formatted_prompt = prompt.format(
+                query=query,
+                stock_code=stock_code or "",
+                stock_name=stock_name or "",
+                sector=sector,
+                classification=classification,
+                industry_data=formatted_industry_data
+            )
             
-            # LLM 체인 설정 및 실행
-            chain = prompt | self.llm
-            
-            # 체인 실행
-            analysis_result = await chain.ainvoke({
-                "query": query,
-                "stock_code": stock_code or "",
-                "stock_name": stock_name or "",
-                "sector": sector,
-                "classification": classification,
-                "industry_data": formatted_industry_data
-            })
+            # LLM 호출
+            analysis_result = await self.agent_llm.ainvoke_with_fallback(
+                input=formatted_prompt,
+                user_id=user_id,
+                project_type=ProjectType.STOCKEASY,
+                db=self.db
+            )
             
             logger.info(f"산업 리포트 분석 완료: {len(reports)} 개의 리포트")
-            
-            # 분석 결과를 각 리포트에 추가
-            # for report in reports:
-            #     report["analysis"] = analysis_result
             
             return {
                 "llm_response": analysis_result.content,
@@ -657,26 +672,85 @@ class IndustryAnalyzerAgent:
                 input_variables=["industry_data", "query", "stock_name", "stock_code", "sector", "classification"]
             )
             
-            # JSON 파서 생성
-            parser = JsonOutputParser()
+            # 프롬프트 포맷팅
+            formatted_prompt = prompt.format(
+                industry_data=industry_data,
+                query=query,
+                stock_name=stock_name,
+                stock_code=stock_code,
+                sector=sector_name,
+                classification=classification
+            )
             
-            # 체인 구성 및 실행
-            chain = prompt | self.llm | parser
+            # LLM 호출
+            analysis_result = await ainvoke_with_fallback(
+                [HumanMessage(content=formatted_prompt)],
+                user_id=None,  # 상태 객체에서 유저 ID를 전달받아야 함
+                project_type=ProjectType.STOCKEASY,
+                db=self.db
+            )
             
-            analysis = await chain.ainvoke({
-                "industry_data": industry_data,
-                "query": query,
-                "stock_name": stock_name,
-                "stock_code": stock_code,
-                "sector": sector_name,
-                "classification": classification
-            })
-            
-            return analysis
+            # 응답을 JSON으로 파싱
+            try:
+                # JSON 응답 파싱 시도
+                import json
+                from json import JSONDecodeError
+                
+                # 문자열 응답 추출
+                response_content = analysis_result.content
+                
+                # JSON 파싱
+                analysis_json = json.loads(response_content)
+                return analysis_json
+            except JSONDecodeError:
+                # JSON 파싱 실패 시 텍스트 응답 반환
+                return {
+                    "summary": analysis_result.content,
+                    "format_error": "JSON 변환에 실패했습니다."
+                }
             
         except Exception as e:
             logger.error(f"산업 데이터 분석 중 오류 발생: {str(e)}")
             return {
                 "summary": "산업 데이터 분석 중 오류가 발생했습니다.",
                 "error": str(e)
-            } 
+            }
+
+    def _merge_and_remove_duplicates(self, data1: List[IndustryReportData], data2: List[IndustryReportData]) -> List[IndustryReportData]:
+        """
+        두 검색 결과를 병합하고 중복을 제거합니다.
+        
+        Args:
+            data1: 첫 번째 검색 결과 리스트
+            data2: 두 번째 검색 결과 리스트
+            
+        Returns:
+            중복이 제거된 병합 리스트
+        """
+        # 내용 기준으로 중복 확인을 위한 해시 집합
+        content_hashes = set()
+        merged_results = []
+        
+        # 첫 번째 데이터 추가
+        for item in data1:
+            # 내용 기반 해시 생성 (앞부분 100자 기준)
+            content = item.get("content", "")
+            content_hash = hash(content[:100])
+            
+            if content_hash not in content_hashes:
+                content_hashes.add(content_hash)
+                merged_results.append(item)
+        
+        # 두 번째 데이터에서 중복되지 않는 항목만 추가
+        for item in data2:
+            content = item.get("content", "")
+            content_hash = hash(content[:100])
+            
+            if content_hash not in content_hashes:
+                content_hashes.add(content_hash)
+                merged_results.append(item)
+        
+        # 스코어 기준 정렬
+        merged_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        
+        return merged_results 

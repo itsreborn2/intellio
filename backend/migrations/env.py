@@ -33,6 +33,7 @@ from common.models.user import User
 from doceasy.models.project import Project
 from doceasy.models.category import Category
 from stockeasy.models.telegram_message import TelegramMessage
+from common.models.token_usage import TokenUsage
 
 
 # this is the Alembic Config object, which provides

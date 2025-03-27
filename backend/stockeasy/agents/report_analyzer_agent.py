@@ -9,14 +9,16 @@ import json
 import re
 import asyncio
 from datetime import datetime, timedelta
+from uuid import UUID
 from loguru import logger
-from typing import Dict, List, Any, Optional, cast, Tuple
+from typing import Dict, List, Any, Optional, Union, cast, Tuple
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.language_models import BaseChatModel
 
+from common.models.token_usage import ProjectType
 from common.services.embedding_models import EmbeddingModelType
 from stockeasy.prompts.report_prompts import (
     REPORT_ANALYSIS_PROMPT, 
@@ -30,6 +32,9 @@ from common.utils.util import async_retry
 from stockeasy.models.agent_io import RetrievedAllAgentData, CompanyReportData
 from langchain_core.messages import AIMessage
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
+from common.models.token_usage import ProjectType
+from stockeasy.agents.base import BaseAgent
+from sqlalchemy.ext.asyncio import AsyncSession
 
 def format_report_contents(reports: List[CompanyReportData]) -> str:
     """
@@ -63,16 +68,22 @@ def format_report_contents(reports: List[CompanyReportData]) -> str:
     return formatted
 
 
-class ReportAnalyzerAgent:
+class ReportAnalyzerAgent(BaseAgent):
     """기업리포트 검색 및 분석 에이전트"""
     
-    def __init__(self):
+    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
         기업리포트 검색 및 분석 에이전트 초기화
+        
+        Args:
+            name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
+            db: 데이터베이스 세션 객체 (선택적)
         """
+        super().__init__(name, db)
         # 설정 파일에서 LLM 생성 및 모델 정보 가져오기
         self.retrieved_str = "company_report"
         self.llm, self.model_name, self.provider = get_llm_for_agent("report_analyzer_agent")
+        self.agent_llm = get_agent_llm("report_analyzer_agent")
         self.parser = JsonOutputParser()
         logger.info(f"ReportAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
     
@@ -112,13 +123,17 @@ class ReportAnalyzerAgent:
                 return state
             
             logger.info(f"ReportAnalyzerAgent processing query: {query}")
-            logger.info(f"Classification data: {classification}")
+            #logger.info(f"Classification data: {classification}")
             #logger.info(f"State keys: {state.keys()}")
             logger.info(f"Entities: {entities}")
             #logger.info(f"Data requirements: {data_requirements}")
             #logger.info(f"stock_code: {state.get('stock_code')}")
             #logger.info(f"type(state): {type(state)}")
             
+            
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
+
             # 벡터DB 검색 쿼리 생성 - question_classification 활용
             search_query = self._make_search_query(query, stock_code, stock_name, classification, state)
             
@@ -132,7 +147,8 @@ class ReportAnalyzerAgent:
                 search_query, 
                 k, 
                 threshold, 
-                metadata_filter
+                metadata_filter,
+                user_id=user_id
             )
             
             # 검색 결과가 없는 경우
@@ -534,7 +550,8 @@ class ReportAnalyzerAgent:
     
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
     async def _search_reports(self, query: str, k: int = 5, threshold: float = 0.3,
-                             metadata_filter: Optional[Dict[str, Any]] = None) -> List[CompanyReportData]:
+                             metadata_filter: Optional[Dict[str, Any]] = None,
+                             user_id: Optional[Union[str, UUID]] = None) -> List[CompanyReportData]:
         """
         파인콘 DB에서 기업리포트 검색
         
@@ -555,9 +572,14 @@ class ReportAnalyzerAgent:
                 namespace=settings.PINECONE_NAMESPACE_STOCKEASY
             )
 
+            # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
+            parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+
             # 시맨틱 검색 설정
             semantic_retriever = SemanticRetriever(
-                config=SemanticRetrieverConfig(min_score=threshold),
+                config=SemanticRetrieverConfig(min_score=threshold,
+                                               user_id=parsed_user_id,
+                                               project_type=ProjectType.STOCKEASY),
                 vs_manager=vs_manager
             )
             
@@ -577,11 +599,11 @@ class ReportAnalyzerAgent:
                 metadata = doc.metadata
                 score = doc.score or 0.0
                 if i < 2:
-                    short_content = (content[:50] if len(content) > 50 else content).strip()
-                    logger.info(f"문서 {i} 점수: {score:.3f}, 내용({len(content)}): {short_content}")
+                    short_content = (content[:50] if len(content) > 50 else content).strip().replace("\n\n", "\n")
+                    logger.debug(f"문서 {i} 점수: {score:.3f}, 내용({len(content)}): {short_content}")
                     short_metadata = {k: v for k, v in metadata.items() if k in ["stock_code", "stock_name", "sector_code", "sector_name", "document_date", "report_provider", "file_name", "page", "category"]}
-                    logger.info(f"문서 {i} 메타데이터: {short_metadata}")
-                    logger.info(f"---------------------------------------------------------------")
+                    logger.debug(f"문서 {i} 메타데이터: {short_metadata}")
+                    logger.debug(f"---------------------------------------------------------------")
                 
                 # 내용 기반 중복 제거 (문서 일부가 중복되는 경우가 많음)
                 content_hash = hash(content[:100])  # 앞부분을 기준으로
@@ -593,7 +615,7 @@ class ReportAnalyzerAgent:
                 report_info:CompanyReportData = {
                     "content": content,
                     "score": score,
-                    "source": metadata.get("report_provider", "미상"),
+                    "source": metadata.get("provider_code", "미상"),
                     "publish_date": self._format_date(metadata.get("document_date", "")),
                     "file_name": metadata.get("file_name", ""),
                     "page": metadata.get("page", 0),
@@ -747,19 +769,21 @@ class ReportAnalyzerAgent:
             report_contents=formatted_reports
         )
         
-        # 폴백을 지원하는 AgentLLM 객체 가져오기
-        agent_llm = get_agent_llm("report_analyzer_agent")
+        # 폴백을 지원하는 AgentLLM 객체 사용
         
         # 병렬로 분석 실행 (폴백 메커니즘 사용)
         try:
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
+            
             # 프롬프트 형식화
             formatted_analysis_prompt = analysis_prompt.format_prompt()
             formatted_opinion_prompt = opinion_prompt.format_prompt()
             
             # 병렬 실행
             results = await asyncio.gather(
-                agent_llm.ainvoke_with_fallback(formatted_analysis_prompt, {}),
-                agent_llm.ainvoke_with_fallback(formatted_opinion_prompt, {}),
+                self.agent_llm.ainvoke_with_fallback(formatted_analysis_prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db),
+                self.agent_llm.ainvoke_with_fallback(formatted_opinion_prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db),
                 return_exceptions=True
             )
             

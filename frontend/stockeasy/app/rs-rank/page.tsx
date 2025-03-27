@@ -12,63 +12,34 @@ import TableCopyButton from '../components/TableCopyButton';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
-  console.log('CSV 파싱 시작...');
-  console.log('CSV 원본 데이터 길이:', csvText.length);
-  console.log('CSV 원본 데이터 처음 부분:', csvText.substring(0, 500));
-  
-  try {
-    if (!csvText || typeof csvText !== 'string') {
-      console.error('유효하지 않은 CSV 텍스트:', csvText);
-      // 기본 데이터 반환
-      return {
-        headers: ['날짜', '시가', '고가', '저가', '종가', '거래량'],
-        rows: [],
-        errors: [],
-      };
-    }
-    
-    // Papa Parse 옵션
-    const results = Papa.parse(csvText, {
-      header: true,       // 첫 번째 행을 헤더로 사용
-      skipEmptyLines: true, // 빈 줄 건너뛰기
-      dynamicTyping: false,  // 문자열 그대로 유지 (수동 변환)
-    });
-    
-    console.log('파싱 결과 오류:', results.errors);
-    console.log('파싱된 데이터 행 수:', results.data.length);
-    
-    // 컬럼 이름 확인 및 데이터 구조 디버깅
-    if (results.data.length > 0) {
-      const firstRow = results.data[0] as Record<string, any>;
-      console.log('컬럼 확인:');
-      for (const key in firstRow) {
-        console.log(`- '${key}': ${firstRow[key]}`);
-      }
-      
-      // 첫 번째 행 전체 데이터 출력
-      console.log('첫 번째 행 전체 데이터:', JSON.stringify(firstRow));
-      
-      // 두 번째 행 데이터 (있는 경우)
-      if (results.data.length > 1) {
-        const secondRow = results.data[1] as Record<string, any>;
-        console.log('두 번째 행 전체 데이터:', JSON.stringify(secondRow));
-      }
-    }
-    
-    return {
-      headers: results.meta.fields || [],
-      rows: results.data || [],
-      errors: results.errors || [],
-    };
-  } catch (error) {
-    console.error('CSV 파싱 오류:', error);
-    // 오류 발생 시 빈 데이터 반환
+  // 중요 로그만 유지
+  if (!csvText || typeof csvText !== 'string') {
+    console.error('유효하지 않은 CSV 텍스트:', csvText);
+    // 기본 데이터 반환
     return {
       headers: ['날짜', '시가', '고가', '저가', '종가', '거래량'],
       rows: [],
       errors: [],
     };
   }
+  
+  // Papa Parse 옵션
+  const results = Papa.parse(csvText, {
+    header: true,       // 첫 번째 행을 헤더로 사용
+    skipEmptyLines: true, // 빈 줄 건너뛰기
+    dynamicTyping: false,  // 문자열 그대로 유지 (수동 변환)
+  });
+  
+  // 중요 오류 로그만 유지
+  if (results.errors && results.errors.length > 0) {
+    console.log('파싱 결과 오류:', results.errors);
+  }
+  
+  return {
+    headers: results.meta.fields || [],
+    rows: results.data || [],
+    errors: results.errors || [],
+  };
 };
 
 // 정렬 타입 정의
@@ -143,11 +114,9 @@ export default function RSRankPage() {
         }
         
         const csvText = await response.text();
-        console.log(`RS 순위 데이터 로드 완료: ${csvText.length}자`);
         
         // CSV 파싱 및 데이터 처리
         const parsedData = parseCSV(csvText);
-        console.log(`파싱 완료: ${parsedData.rows.length}개 데이터 로드됨`);
         
         setCsvData(parsedData);
         
@@ -167,15 +136,10 @@ export default function RSRankPage() {
       
       try {
         // 로컬 캐시 파일에서 직접 로드
-        console.log('서버 캐시 파일에서 52주 신고가 데이터 로드 중...');
-        
         try {
           // 로컬 캐시 파일 경로
           const cacheFilePath = '/requestfile/stock-data/stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv';
           const rsDataFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
-          
-          console.log('캐시 파일 경로:', cacheFilePath);
-          console.log('RS 데이터 파일 경로:', rsDataFilePath);
           
           // 로컬 캐시 파일 로드
           const response = await fetch(cacheFilePath, { cache: 'no-store' });
@@ -185,8 +149,6 @@ export default function RSRankPage() {
           }
           
           const csvText = await response.text();
-          console.log(`52주 신고가 데이터 로드 완료: ${csvText.length}자`);
-          console.log('52주 신고가 데이터 샘플:', csvText.substring(0, 200));
           
           // RS 데이터 파일 로드
           const rsResponse = await fetch(rsDataFilePath, { cache: 'no-store' });
@@ -197,17 +159,10 @@ export default function RSRankPage() {
           }
           
           const rsCsvText = await rsResponse.text();
-          console.log(`RS 데이터 로드 완료: ${rsCsvText.length}자`);
-          console.log('RS 데이터 샘플:', rsCsvText.substring(0, 200));
           
           // CSV 파싱 및 데이터 처리
           const parsedData = parseCSV(csvText);
           const rsParsedData = parseCSV(rsCsvText);
-          
-          console.log(`파싱 완료: ${parsedData.rows.length}개 데이터 로드됨`);
-          console.log(`RS 데이터 파싱 완료: ${rsParsedData.rows.length}개 데이터 로드됨`);
-          console.log('파싱된 데이터 샘플:', JSON.stringify(parsedData.rows.slice(0, 2)));
-          console.log('파싱된 RS 데이터 샘플:', JSON.stringify(rsParsedData.rows.slice(0, 2)));
           
           // RS 데이터를 종목명으로 매핑하여 빠르게 검색할 수 있도록 Map 생성
           const rsDataMap = new Map();
@@ -228,19 +183,14 @@ export default function RSRankPage() {
             }
           });
           
-          console.log('RS 데이터 맵 크기:', rsDataMap.size);
-          console.log('RS 데이터 맵 샘플:', Array.from(rsDataMap.entries()).slice(0, 2));
-          
           // 데이터 변환 - 컬럼명 매핑 (종목명 -> stockName, RS -> rs)
           const transformedData = {
             headers: parsedData.headers,
             rows: parsedData.rows.map(row => {
               // 종목명으로 RS 데이터 매핑
               const stockName = row['종목명'];
-              console.log('처리 중인 종목명:', stockName);
               
               const rsData = rsDataMap.get(stockName) || { RS: '', 시가총액: '', 테마명: '' }; // 테마명 추가
-              console.log('매핑된 RS 데이터:', rsData);
               
               return {
                 stockName: stockName,
@@ -252,9 +202,6 @@ export default function RSRankPage() {
             }),
             errors: parsedData.errors
           };
-          
-          console.log('변환된 데이터 샘플:', JSON.stringify(transformedData.rows.slice(0, 2)));
-          console.log('변환된 데이터 행 수:', transformedData.rows.length);
           
           setHighData(transformedData);
         } catch (error) {
@@ -314,7 +261,6 @@ export default function RSRankPage() {
         
         // 상태 업데이트
         setStockPriceData(priceDataMap);
-        console.log(`종목 가격 데이터 로드 완료: ${Object.keys(priceDataMap).length}개 종목`);
         
       } catch (error) {
         console.error('종목 가격 데이터 로드 오류:', error);
@@ -329,8 +275,6 @@ export default function RSRankPage() {
   // 차트 데이터 로드 함수
   const loadAllChartData = async (rsData?: CSVData) => {
     try {
-      console.log('차트 데이터 로드 시작...');
-      
       // RS 랭크 데이터가 없으면 리턴
       if (!rsData || !rsData.rows || rsData.rows.length === 0) {
         console.log('RS 랭크 데이터가 없어 차트 데이터를 로드하지 않습니다.');
@@ -434,8 +378,6 @@ export default function RSRankPage() {
                 volume: parseFloat(row['거래량'] || 0),
               };
             });
-          
-          console.log(`KOSPI 지수 데이터 로드 완료: ${kospiIndexData.length}개 항목`);
         }
         
         // KOSDAQ 지수 데이터 로드
@@ -483,8 +425,6 @@ export default function RSRankPage() {
                 volume: parseFloat(row['거래량'] || 0),
               };
             });
-          
-          console.log(`KOSDAQ 지수 데이터 로드 완료: ${kosdaqIndexData.length}개 항목`);
         }
       } catch (error) {
         console.error('시장 지수 데이터 로드 오류:', error);
@@ -492,27 +432,18 @@ export default function RSRankPage() {
       
       // 실제 데이터 로드 (최대 20개)
       const loadLimit = Math.min(20, top20Stocks.length);
-      console.log(`로드할 차트 데이터 수: ${loadLimit}`);
       
       // 모든 차트 데이터를 로드하기 위한 Promise 배열 생성
       const loadPromises = [];
       
       // 각 차트 데이터 로드를 위한 Promise 생성
       for (let i = 0; i < loadLimit; i++) {
-        // 임시로 종목 정보 저장 (나중에 CSV에서 가져온 정보로 덮어씌워짐)
-        // newStockNames[i] = top20Stocks[i]['종목명'] || `종목 ${i+1}`;
-        // 종목코드로 차트 데이터 파일 경로 생성
-        const stockCode = top20Stocks[i]['종목코드'] || '';
-        console.log(`${i+1}번째 차트 데이터 요청 - 종목코드: ${stockCode}, 임시 종목명: ${newStockNames[i]}`);
-        
         // 순서에 맞는 차트 데이터 파일 경로 사용
         const cacheFilePath = chartFilePaths[i];
-        console.log(`차트 데이터 파일 경로: ${cacheFilePath}`);
         
         // 차트 데이터 로드 Promise 생성
         const loadPromise = (async (index) => {
           try {
-            console.log(`${index+1}번째 차트 데이터 파일 로드 시작: ${chartFilePaths[index]}`);
             const response = await fetch(chartFilePaths[index], { cache: 'no-store' });
             
             if (!response.ok) {
@@ -523,7 +454,6 @@ export default function RSRankPage() {
             }
             
             const csvText = await response.text();
-            console.log(`${index+1}번째 차트 데이터 CSV 응답 길이: ${csvText.length}`);
             
             if (csvText.length === 0) {
               throw new Error('CSV 응답이 비어 있습니다.');
@@ -536,15 +466,13 @@ export default function RSRankPage() {
               dynamicTyping: true,
             });
             
-            // 파싱 결과 확인
-            console.log(`${index+1}번째 차트 데이터 파싱 결과 - 행 수: ${parsedData.data.length}, 에러: ${parsedData.errors.length}`);
-            
             // 차트 데이터 형식으로 변환
             const chartData: CandleData[] = parsedData.data
               .filter((row: any) => {
                 const isValid = row && row['날짜'] && row['시가'] && row['고가'] && row['저가'] && row['종가'];
-                if (!isValid) {
-                  console.warn(`유효하지 않은 데이터 행:`, row);
+                if (!isValid && row) {
+                  // 중요 경고만 유지
+                  console.warn(`유효하지 않은 데이터 행 발견`);
                 }
                 return isValid;
               })
@@ -572,9 +500,6 @@ export default function RSRankPage() {
                 };
               });
             
-            // 데이터 유효성 검사 로그 추가
-            console.log(`${index+1}번째 차트 데이터 변환 결과 - ${chartData.length}개 항목`);
-            
             // 시장 구분 및 종목명 확인 - 타입 안전하게 처리
             if (parsedData.data.length > 0 && parsedData.data[0]) {
               const firstRow = parsedData.data[0] as Record<string, any>;
@@ -582,25 +507,17 @@ export default function RSRankPage() {
               // CSV 파일에서 종목명 가져오기
               if ('종목명' in firstRow) {
                 const stockName = String(firstRow['종목명']);
-                console.log(`${index+1}번째 차트 데이터의 종목명: ${stockName}`);
                 // 종목명 정보 업데이트
                 newStockNames[index] = stockName;
-              } else {
-                console.warn(`${index+1}번째 차트 데이터에 종목명 컬럼이 없습니다.`);
               }
               
               // CSV 파일에서 시장구분 가져오기
               if ('시장구분' in firstRow) {
                 // 시장 구분 정보를 대문자로 정규화하여 저장
                 const marketType = String(firstRow['시장구분']).toUpperCase();
-                console.log(`${index+1}번째 차트 데이터의 시장 구분: ${marketType} (원본: ${firstRow['시장구분']})`);
                 // 시장 구분 정보 업데이트
                 newMarketTypes[index] = marketType;
-              } else {
-                console.warn(`${index+1}번째 차트 데이터에 시장구분 컬럼이 없습니다.`);
               }
-            } else {
-              console.warn(`${index+1}번째 차트 데이터가 비어있습니다.`);
             }
             
             // 데이터 저장
@@ -625,16 +542,6 @@ export default function RSRankPage() {
         newChartLoadingArray[i] = false;
       }
       
-      // 시장 지수 데이터 추가
-      for (let i = 0; i < loadLimit; i++) {
-        // 시장 구분 정보는 변경하지 않고 로그만 출력
-        console.log(`${i+1}번째 차트(${newStockNames[i]})의 최종 시장 구분: ${newMarketTypes[i]}`);
-        
-        // 시장 구분에 따라 적절한 시장 지수 데이터 선택
-        const marketIndexData = newMarketTypes[i] === 'KOSPI' ? kospiIndexData : kosdaqIndexData;
-        console.log(`${i+1}번째 차트에 사용할 시장 지수 데이터: ${newMarketTypes[i]}, 데이터 수: ${marketIndexData.length}`);
-      }
-      
       // 상태 업데이트 (한 번에 모든 차트 데이터 업데이트)
       setChartDataArray(newChartDataArray);
       setChartStockNames(newStockNames);
@@ -646,9 +553,6 @@ export default function RSRankPage() {
       // 시장 지수 데이터 상태 업데이트
       setKospiIndexData(kospiIndexData);
       setKosdaqIndexData(kosdaqIndexData);
-      
-      console.log('모든 차트 데이터 로드 완료');
-      console.log('차트 데이터 배열 상태:', newChartDataArray.map(data => data.length));
       
     } catch (error) {
       console.error('차트 데이터 로드 오류:', error);
@@ -893,6 +797,19 @@ export default function RSRankPage() {
       }
     }
     
+    // 거래대금 컬럼인 경우 억 단위로 포맷팅
+    if (header === '거래대금') {
+      // 숫자가 아니면 그대로 반환
+      if (isNaN(Number(value))) return value;
+      
+      // 숫자로 변환 후 억 단위로 나누고 소수점 없이 표시
+      const valueStr = typeof value === 'number' ? String(value) : value;
+      const tradeAmountInBillions = Number(valueStr.replace(/[^0-9.]/g, ''));
+      
+      // 천 단위 구분 쉼표(,) 추가
+      return Math.floor(tradeAmountInBillions).toLocaleString('ko-KR');
+    }
+    
     // 종목코드가 아닌 숫자인 경우에만 천 단위 구분 쉼표(,) 추가
     if (!isNaN(Number(value)) && value !== '') {
       return Number(value).toLocaleString('ko-KR');
@@ -997,22 +914,22 @@ export default function RSRankPage() {
         <div>
           <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
             <div className="flex items-center">
-              <span className="font-medium text-sm">{chartStockNames[index] || '로딩 중...'}</span>
+              <span className="font-medium text-xs" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartStockNames[index] || '로딩 중...'}</span>
               <span className={`ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-300 text-gray-700`}>
                 {chartMarketTypes[index] || '...'}
               </span>
             </div>
             {chartRsValues[index] && (
               <div className="flex items-center">
-                <span className="text-xs text-gray-500 mr-1">RS</span>
-                <span className="font-medium text-sm text-blue-600">{chartRsValues[index]}</span>
+                <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+                <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartRsValues[index]}</span>
               </div>
             )}
           </div>
           <div className="h-72 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
             <div className="flex flex-col items-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-2"></div>
-              <span className="text-gray-500">차트 데이터 로딩 중...</span>
+              <span className="text-gray-500" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>차트 데이터 로딩 중...</span>
             </div>
           </div>
         </div>
@@ -1024,20 +941,20 @@ export default function RSRankPage() {
         <div>
           <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
             <div className="flex items-center">
-              <span className="font-medium text-sm">{chartStockNames[index] || '오류'}</span>
+              <span className="font-medium text-xs" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartStockNames[index] || '오류'}</span>
               <span className={`ml-2 text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-800`}>
                 오류
               </span>
             </div>
             {chartRsValues[index] && (
               <div className="flex items-center">
-                <span className="text-xs text-gray-500 mr-1">RS</span>
-                <span className="font-medium text-sm text-blue-600">{chartRsValues[index]}</span>
+                <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+                <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartRsValues[index]}</span>
               </div>
             )}
           </div>
           <div className="h-72 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
-            <span className="text-red-500">{chartErrorArray[index]}</span>
+            <span className="text-red-500" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>{chartErrorArray[index]}</span>
           </div>
         </div>
       );
@@ -1048,21 +965,21 @@ export default function RSRankPage() {
         <div>
           <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
             <div className="flex items-center">
-              <span className="font-medium text-sm">{chartStockNames[index] || '데이터 없음'}</span>
+              <span className="font-medium text-xs" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartStockNames[index] || '데이터 없음'}</span>
               <span className={`ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-300 text-gray-700`}>
                 {chartMarketTypes[index] || '...'}
               </span>
             </div>
             {chartRsValues[index] && (
               <div className="flex items-center">
-                <span className="text-xs text-gray-500 mr-1">RS</span>
-                <span className="font-medium text-sm text-blue-600">{chartRsValues[index]}</span>
+                <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+                <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartRsValues[index]}</span>
               </div>
             )}
           </div>
           <div className="h-72 flex items-center justify-center border border-gray-200 border-t-0" style={{ borderRadius: '0 0 0.375rem 0.375rem' }}>
             <div className="flex flex-col items-center">
-              <span className="text-gray-400">표시할 차트 데이터가 없습니다.</span>
+              <span className="text-gray-400" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>표시할 차트 데이터가 없습니다.</span>
             </div>
           </div>
         </div>
@@ -1078,15 +995,15 @@ export default function RSRankPage() {
       <div>
         <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
           <div className="flex items-center">
-            <span className="font-medium text-sm">{chartStockNames[index]}</span>
+            <span className="font-medium text-xs" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartStockNames[index]}</span>
             <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${bgColorClass}`}>
               {marketType}
             </span>
           </div>
           {chartRsValues[index] && (
             <div className="flex items-center">
-              <span className="text-xs text-gray-500 mr-1">RS</span>
-              <span className="font-medium text-sm text-blue-600">{chartRsValues[index]}</span>
+              <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+              <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartRsValues[index]}</span>
             </div>
           )}
         </div>
@@ -1183,8 +1100,6 @@ export default function RSRankPage() {
                 volume: parseFloat(row['거래량'] || 0),
               };
             });
-          
-          console.log(`KOSPI 지수 데이터 로드 완료: ${kospiIndexData.length}개 항목`);
         }
         
         // KOSDAQ 지수 데이터 로드
@@ -1232,8 +1147,6 @@ export default function RSRankPage() {
                 volume: parseFloat(row['거래량'] || 0),
               };
             });
-          
-          console.log(`KOSDAQ 지수 데이터 로드 완료: ${kosdaqIndexData.length}개 항목`);
         }
       } catch (error) {
         console.error('시장 지수 데이터 로드 오류:', error);
@@ -1248,360 +1161,420 @@ export default function RSRankPage() {
   };
 
   return (
-    <div className="flex h-screen bg-white">
+    <div className="flex h-screen bg-gray-50">
       {/* 사이드바 */}
-      <Suspense fallback={<div>로딩 중...</div>}>
-        <Sidebar />
-      </Suspense>
+      <Sidebar />
       
-      {/* 메인 콘텐츠 - 왼쪽 여백을 추가하여 고정된 사이드바와 겹치지 않도록 함 */}
-      <div className="flex-1 p-3 ml-[59px] flex flex-col">
-        {/* 상단 헤더 - 브랜드 표시 */}
-        <div className="flex justify-between items-center mb-1 bg-white rounded-lg p-2">
-          <div className="flex items-center">
-            <h1 className="text-lg font-bold">StockEasy</h1>
-          </div>
-          <div className="text-xs text-gray-600">(주)인텔리오</div>
-        </div>
-        
-        {/* 상단 여백 추가 - 여백 조정 */}
-        <div className="mb-2"></div>
-        
-        {/* 7:3 비율의 레이아웃 구성 */}
-        <div className="flex flex-1 gap-1 flex-col">
-          {/* 상단 영역 - 테이블 및 우측 정보 */}
-          <div className="flex gap-1">
-            {/* 메인 테이블 영역 (70%) */}
-            <div className="w-[70%] bg-white rounded-lg shadow p-4">
-              {loading ? (
-                <div className="text-center py-4">데이터를 불러오는 중입니다...</div>
-              ) : error ? (
-                <div className="text-red-500 text-center py-4">{error}</div>
-              ) : csvData ? (
-                <div className="flex flex-col h-full">
-                  <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
-                    <h2 className="text-lg font-semibold">RS순위</h2>
+      {/* 메인 콘텐츠 영역 - 반응형으로 여백 조정 */}
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ marginLeft: 'var(--sidebar-margin, 0px)' }}>
+        {/* 반응형 여백을 위한 스타일 */}
+        <style jsx global>{`
+          @media (min-width: 768px) {
+            :root {
+              --sidebar-margin: 63px;
+            }
+          }
+          @media (max-width: 767px) {
+            :root {
+              --sidebar-margin: 0px;
+            }
+          }
+        `}</style>
+        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+          {/* 메인 콘텐츠 영역 - 화면 크기에 따라 너비 조정 */}
+          <div className="w-full md:w-[90%] lg:w-[95%] xl:w-full mx-auto p-4">
+            {/* 상단 영역 - RS 순위 및 52주 신고가 */}
+            <div className="flex flex-col lg:flex-row gap-4 mb-4">
+              {/* 좌측 영역 - RS 순위 테이블 */}
+              <div className="w-full lg:w-[70%] bg-white rounded-lg shadow p-4">
+                {loading ? (
+                  <div className="text-center py-4" style={{ fontSize: 'clamp(0.7rem, 0.8vw, 0.8rem)' }}>데이터를 불러오는 중입니다...</div>
+                ) : error ? (
+                  <div className="text-red-500 text-center py-4" style={{ fontSize: 'clamp(0.7rem, 0.8vw, 0.8rem)' }}>{error}</div>
+                ) : csvData ? (
+                  <div className="flex flex-col h-full">
+                    <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
+                      <h2 className="text-lg font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
+                      <div className="flex items-center justify-end">
+                        <span className="text-xs text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                        <TableCopyButton
+                          tableRef={rsTableRef}
+                          headerRef={rsHeaderRef}
+                          tableName="RS순위 테이블"
+                          buttonText="이미지 복사"
+                        />
+                      </div>
+                    </div>
+                    <div className="relative">
+                      {/* 스크롤 힌트 제거 - 하단으로 이동 */}
+                      
+                      <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={rsTableRef}>
+                        <table className="w-full bg-white border border-gray-200 table-auto">
+                          <thead>
+                            <tr className="bg-gray-100">
+                              {csvData.headers.map((header, index) => (
+                                <th 
+                                  key={index} 
+                                  className={`py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200 ${
+                                    // 모바일 화면에서 중요하지 않은 컬럼 숨기기
+                                    (header === 'RS_2M' || header === 'RS_3M' || header === '시가총액' || header === '테마명' || header === '종목코드') ? 'hidden md:table-cell' : 
+                                    // RS_1M은 모바일에서도 표시
+                                    ''
+                                  }`}
+                                  style={{
+                                    width: header === 'RS' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' || header === 'MTT' ? '44px' :
+                                           header === '시가총액' || header === '거래대금' ? '70px' :
+                                           header === '업종' ? '120px' :
+                                           header === '종목명' ? '126px' :
+                                           header === '종목코드' ? '80px' : 
+                                           header === '등락률' ? '64px' : 'auto'
+                                  }}
+                                  onClick={() => requestSort(header)}
+                                >
+                                  <div className="flex items-center justify-center">
+                                    <span>{formatHeaderName(header)}</span>
+                                    {sortKey === header && (
+                                      <span className="ml-1">
+                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {currentPageData.map((row, rowIndex) => (
+                              <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                {csvData.headers.map((header, colIndex) => (
+                                  <td 
+                                    key={colIndex} 
+                                    className={`py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis
+                                      ${// 모바일 화면에서 중요하지 않은 컬럼 숨기기
+                                      (header === 'RS_2M' || header === 'RS_3M' || header === '시가총액' || header === '테마명' || header === '종목코드') ? 'hidden md:table-cell' : 
+                                      // RS_1M은 모바일에서도 표시
+                                      ''
+                                    }`}
+                                    style={{ 
+                                      fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                                    }}
+                                    title={header === '테마명' ? row[header] : ''}
+                                  >
+                                    {formatCellValue(header, row[header])}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* 스크롤 힌트 - 하단에 표시 */}
+                      <div className="hidden sm:hidden md:flex lg:hidden justify-center items-center mt-1 py-1 bg-gray-50 border border-gray-200 rounded-md">
+                        <span className="text-gray-700 text-xs flex items-center" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.75rem)' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                          </svg>
+                          좌우로 스크롤하여 더 많은 정보를 확인하세요
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                          </svg>
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* 페이지네이션 */}
+                    <div className="mt-4 flex justify-center">
+                      <div className="flex items-center space-x-1">
+                        <button
+                          className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm" 
+                          style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                          onClick={() => setCurrentPage(1)}
+                          disabled={currentPage === 1}
+                        >
+                          <span className="hidden sm:inline">처음</span>
+                          <span className="sm:hidden">«</span>
+                        </button>
+                        <button
+                          className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm" 
+                          style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                          onClick={() => setCurrentPage(currentPage - 1)}
+                          disabled={currentPage === 1}
+                        >
+                          <span className="hidden sm:inline">이전</span>
+                          <span className="sm:hidden">‹</span>
+                        </button>
+                        
+                        {/* 페이지 번호 버튼 - 모바일에서는 줄이고 PC에서는 더 많이 표시 */}
+                        {Array.from({ length: totalPages }).map((_, index) => {
+                          const pageNumber = index + 1;
+                          // 모바일에서는 현재 페이지 주변 1개만 표시, PC에서는 2개 표시
+                          const visibleOnMobile = Math.abs(pageNumber - currentPage) <= 1;
+                          const visibleOnDesktop = Math.abs(pageNumber - currentPage) <= 2;
+                          
+                          if (visibleOnDesktop) {
+                            return (
+                              <button
+                                key={index}
+                                className={`${
+                                  pageNumber === currentPage
+                                    ? 'px-3 py-1 bg-blue-500 text-white rounded'
+                                    : 'px-3 py-1 bg-gray-200 rounded hover:bg-gray-300'
+                                } text-sm ${!visibleOnMobile ? 'hidden sm:inline-block' : ''}`}
+                                style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                                onClick={() => setCurrentPage(pageNumber)}
+                              >
+                                {pageNumber}
+                              </button>
+                            );
+                          }
+                          return null;
+                        })}
+                        
+                        <button
+                          className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm" 
+                          style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                          onClick={() => setCurrentPage(currentPage + 1)}
+                          disabled={currentPage === totalPages}
+                        >
+                          <span className="hidden sm:inline">다음</span>
+                          <span className="sm:hidden">›</span>
+                        </button>
+                        <button
+                          className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm" 
+                          style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                          onClick={() => setCurrentPage(totalPages)}
+                          disabled={currentPage === totalPages}
+                        >
+                          <span className="hidden sm:inline">마지막</span>
+                          <span className="sm:hidden">»</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-gray-700" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.75rem)' }}>데이터가 없습니다.</p>
+                )}
+              </div>
+              
+              {/* 우측 영역 - 52주 신고가 섹션 */}
+              <div className="w-full lg:w-[30%] bg-white rounded-lg shadow p-4">
+                {/* 금주 52주 신고가 정보 영역 */}
+                <div className="flex flex-col">
+                  <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
+                    <h2 className="text-lg font-semibold" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>오늘의 주도종목</h2>
                     <div className="flex items-center justify-end">
-                      <span className="text-xs text-gray-600 mr-2">RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                      <span className="text-xs text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
                       <TableCopyButton
-                        tableRef={rsTableRef}
-                        headerRef={rsHeaderRef}
-                        tableName="RS순위 테이블"
+                        tableRef={highTableRef}
+                        headerRef={highHeaderRef}
+                        tableName="52주 신고가 테이블"
                         buttonText="이미지 복사"
                       />
                     </div>
                   </div>
-                  <div className="flex-1" style={{ overflowX: 'hidden' }} ref={rsTableRef}>
-                    <table className="w-full bg-white border border-gray-200 table-fixed">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          {csvData.headers.map((header, index) => (
+                  <div className="relative">
+                    {/* 스크롤 힌트 제거 - 하단으로 이동 */}
+                    
+                    <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={highTableRef}>
+                      <table className="w-full bg-white border border-gray-200 table-fixed">
+                        <thead>
+                          <tr className="bg-gray-100">
                             <th 
-                              key={index} 
-                              className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                              style={{ 
-                                width: header === '종목명' ? '100px' : 
-                                       header === '테마명' ? '300px' :
-                                       header === '시가총액' ? '70px' : 
-                                       header === '종목코드' ? '60px' : 
-                                       header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MTT' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '45px' :
-                                       header === '업종' ? '220px' : '70px',
-                                fontSize: '0.875rem'
+                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
+                              style={{
+                                width: '126px', // 종목명 컬럼 너비 증가
+                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                               }}
-                              onClick={() => requestSort(header)}
+                              onClick={() => requestSort('종목명')}
                             >
                               <div className="flex items-center justify-center">
-                                <span>{formatHeaderName(header)}</span>
-                                {sortKey === header && (
+                                <span>종목명</span>
+                                {sortKey === '종목명' && (
                                   <span className="ml-1">
                                     {sortDirection === 'asc' ? '▲' : '▼'}
                                   </span>
                                 )}
                               </div>
                             </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentPageData.map((row, rowIndex) => (
-                          <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                            {csvData.headers.map((header, colIndex) => (
+                            <th 
+                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
+                              style={{
+                                width: '40px', // RS 컬럼 너비 감소
+                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                              }}
+                              onClick={() => requestSort('RS')}
+                            >
+                              <div className="flex items-center justify-center">
+                                <span>RS</span>
+                                {sortKey === 'RS' && (
+                                  <span className="ml-1">
+                                    {sortDirection === 'asc' ? '▲' : '▼'}
+                                  </span>
+                                )}
+                              </div>
+                            </th>
+                            <th 
+                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
+                              style={{
+                                width: '64px', // 등락률 컬럼 너비 증가
+                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                              }}
+                              onClick={() => requestSort('등락률')}
+                            >
+                              <div className="flex items-center justify-center">
+                                <span>등락률</span>
+                                {sortKey === '등락률' && (
+                                  <span className="ml-1">
+                                    {sortDirection === 'asc' ? '▲' : '▼'}
+                                  </span>
+                                )}
+                              </div>
+                            </th>
+                            <th 
+                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                              style={{
+                                width: '60px', // 시가총액 컬럼 너비 감소
+                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                              }}
+                              onClick={() => requestSort('시가총액')}
+                            >
+                              <div className="flex items-center justify-center">
+                                <span>시가총액</span>
+                                {sortKey === '시가총액' && (
+                                  <span className="ml-1">
+                                    {sortDirection === 'asc' ? '▲' : '▼'}
+                                  </span>
+                                )}
+                              </div>
+                            </th>
+                            <th 
+                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                              style={{
+                                width: '60px', // 거래대금 컬럼 너비 감소
+                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                              }}
+                              onClick={() => requestSort('거래대금')}
+                            >
+                              <div className="flex items-center justify-center">
+                                <span>거래대금</span>
+                                {sortKey === '거래대금' && (
+                                  <span className="ml-1">
+                                    {sortDirection === 'asc' ? '▲' : '▼'}
+                                  </span>
+                                )}
+                              </div>
+                            </th>
+                            <th 
+                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-left overflow-hidden text-ellipsis hidden md:table-cell"
+                              style={{
+                                maxWidth: '150px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                              }}
+                              title={sortKey === '테마명' ? '테마명' : ''}
+                              onClick={() => requestSort('테마명')}
+                            >
+                              <div className="flex items-center justify-center">
+                                <span>테마명</span>
+                                {sortKey === '테마명' && (
+                                  <span className="ml-1">
+                                    {sortDirection === 'asc' ? '▲' : '▼'}
+                                  </span>
+                                )}
+                              </div>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {combinedHighData.slice(0, 20).map((row: any, rowIndex: number) => (
+                            <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                               <td 
-                                key={colIndex} 
-                                className={`py-1.5 px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis`}
-                                style={{ 
-                                  width: header === '종목명' ? '100px' : 
-                                          header === '테마명' ? '300px' :
-                                          header === '시가총액' ? '70px' :
-                                          header === '종목코드' ? '60px' : 
-                                          header === 'RS' || header === 'RS 1W' || header === 'RS 4W' || header === 'RS 12W' || header === 'MTT' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' ? '45px' :
-                                          header === '업종' ? '220px' : '70px',
-                                  fontSize: '0.875rem',
-                                  maxWidth: header === '테마명' ? '300px' : 'auto',
+                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-left whitespace-nowrap overflow-hidden text-ellipsis"
+                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                              >
+                                {row['종목명']}
+                              </td>
+                              <td 
+                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis"
+                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                              >
+                                {row['RS']}
+                              </td>
+                              <td 
+                                className={`py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis ${getPriceChangeColor(row['등락률'])}`}
+                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                              >
+                                <div className="flex items-center justify-end">
+                                  {formatPriceChange(row['등락률'])}
+                                </div>
+                              </td>
+                              <td 
+                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                              >
+                                {formatMarketCap(row['시가총액'])}
+                              </td>
+                              <td 
+                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                              >
+                                {formatMarketCap(row['거래대금'])}
+                              </td>
+                              <td 
+                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-left overflow-hidden text-ellipsis hidden md:table-cell"
+                                style={{
+                                  maxWidth: '150px',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
-                                  textOverflow: 'ellipsis'
+                                  textOverflow: 'ellipsis',
+                                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                                 }}
-                                title={header === '테마명' ? row[header] : ''}
+                                title={row['테마명']}
                               >
-                                {formatCellValue(header, row[header])}
+                                {row['테마명']}
                               </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  {/* 페이지네이션 */}
-                  <div className="flex flex-col items-center pt-4 pb-0 mt-0 mb-0">
-                    <nav className="flex items-center justify-center">
-                      <button
-                        onClick={() => handlePageChange(1)}
-                        disabled={currentPage === 1}
-                        className={`px-1.5 py-0.5 mx-0.5 rounded text-sm ${
-                          currentPage === 1 ? 'bg-gray-200 text-gray-500' : 'bg-blue-500 text-white hover:bg-blue-600'
-                        }`}
-                      >
-                        {'<<'}
-                      </button>
-                      <button
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className={`px-2 py-0.5 mx-0.5 rounded text-sm ${
-                          currentPage === 1 ? 'bg-gray-200 text-gray-500' : 'bg-blue-500 text-white hover:bg-blue-600'
-                        }`}
-                      >
-                        이전
-                      </button>
-                      <div className="px-3 text-sm">
-                        {currentPage} / {totalPages}
-                      </div>
-                      <button
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className={`px-2 py-0.5 mx-0.5 rounded text-sm ${
-                          currentPage === totalPages ? 'bg-gray-200 text-gray-500' : 'bg-blue-500 text-white hover:bg-blue-600'
-                        }`}
-                      >
-                        다음
-                      </button>
-                      <button
-                        onClick={() => handlePageChange(totalPages)}
-                        disabled={currentPage === totalPages}
-                        className={`px-1.5 py-0.5 mx-0.5 rounded text-sm ${
-                          currentPage === totalPages ? 'bg-gray-200 text-gray-500' : 'bg-blue-500 text-white hover:bg-blue-600'
-                        }`}
-                      >
-                        {'>>'}
-                      </button>
-                    </nav>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-gray-700">데이터가 없습니다.</p>
-              )}
-            </div>
-            
-            {/* 우측 영역 - 52주 신고가 섹션 */}
-            <div className="w-[30%] bg-white rounded-lg shadow p-4">
-              {/* 금주 52주 신고가 정보 영역 */}
-              <div className="flex flex-col">
-                <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
-                  <h2 className="text-lg font-semibold">52주 신고가</h2>
-                  <div className="flex items-center justify-end">
-                    <span className="text-xs text-gray-600 mr-2">당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
-                    <TableCopyButton
-                      tableRef={highTableRef}
-                      headerRef={highHeaderRef}
-                      tableName="52주 신고가 테이블"
-                      buttonText="이미지 복사"
-                    />
-                  </div>
-                </div>
-                <div className="flex-1" style={{ overflowX: 'hidden' }}>
-                  {/* 신고가 데이터 테이블 */}
-                  {highDataLoading ? (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                    </div>
-                  ) : highDataError ? (
-                    <div className="text-red-500">{highDataError}</div>
-                  ) : (
-                    (highData && highData.rows && highData.rows.length > 0) ? (
-                      <div className="overflow-x-auto" style={{ overflowX: 'hidden' }} ref={highTableRef}>
-                        <table className="w-full bg-white border border-gray-200 table-fixed">
-                          <thead>
-                            <tr className="bg-gray-100">
-                              <th 
-                                className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '100px', fontSize: '0.875rem' }}
-                                onClick={() => requestSort('종목명')}
-                              >
-                                <div className="flex items-center justify-center">
-                                  <span>종목명</span>
-                                  {sortKey === '종목명' && (
-                                    <span className="ml-1">
-                                      {sortDirection === 'asc' ? '▲' : '▼'}
-                                    </span>
-                                  )}
-                                </div>
-                              </th>
-                              <th 
-                                className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '45px', fontSize: '0.875rem' }}
-                                onClick={() => requestSort('RS')}
-                              >
-                                <div className="flex items-center justify-center">
-                                  <span>RS</span>
-                                  {sortKey === 'RS' && (
-                                    <span className="ml-1">
-                                      {sortDirection === 'asc' ? '▲' : '▼'}
-                                    </span>
-                                  )}
-                                </div>
-                              </th>
-                              <th 
-                                className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '75px', fontSize: '0.875rem' }}
-                                onClick={() => requestSort('등락률')}
-                              >
-                                <div className="flex items-center justify-center">
-                                  <span>등락률</span>
-                                  {sortKey === '등락률' && (
-                                    <span className="ml-1">
-                                      {sortDirection === 'asc' ? '▲' : '▼'}
-                                    </span>
-                                  )}
-                                </div>
-                              </th>
-                              <th 
-                                className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '75px', fontSize: '0.875rem' }}
-                                onClick={() => requestSort('시가총액(억)')}
-                              >
-                                <div className="flex items-center justify-center">
-                                  <span>시가총액(억)</span>
-                                  {sortKey === '시가총액(억)' && (
-                                    <span className="ml-1">
-                                      {sortDirection === 'asc' ? '▲' : '▼'}
-                                    </span>
-                                  )}
-                                </div>
-                              </th>
-                              <th 
-                                className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '75px', fontSize: '0.875rem' }}
-                                onClick={() => requestSort('거래대금(억)')}
-                              >
-                                <div className="flex items-center justify-center">
-                                  <span>거래대금(억)</span>
-                                  {sortKey === '거래대금(억)' && (
-                                    <span className="ml-1">
-                                      {sortDirection === 'asc' ? '▲' : '▼'}
-                                    </span>
-                                  )}
-                                </div>
-                              </th>
-                              <th 
-                                className="py-2.5 px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                                style={{ width: '130px', fontSize: '0.875rem' }}
-                                onClick={() => requestSort('테마명')}
-                              >
-                                <div className="flex items-center justify-center">
-                                  <span>테마명</span>
-                                  {sortKey === '테마명' && (
-                                    <span className="ml-1">
-                                      {sortDirection === 'asc' ? '▲' : '▼'}
-                                    </span>
-                                  )}
-                                </div>
-                              </th>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {combinedHighData.slice(0, 20).map((row: any, rowIndex: number) => (
-                              <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                <td 
-                                  className="py-1.5 px-2 border-b border-r text-left whitespace-nowrap overflow-hidden text-ellipsis"
-                                  style={{ width: '100px', fontSize: '0.875rem' }}
-                                >
-                                  {row['종목명']}
-                                </td>
-                                <td 
-                                  className="py-1.5 px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis"
-                                  style={{ width: '45px', fontSize: '0.875rem' }}
-                                >
-                                  {row['RS']}
-                                </td>
-                                <td 
-                                  className={`py-1.5 px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis ${getPriceChangeColor(row['등락률'])}`}
-                                  style={{ width: '75px', fontSize: '0.875rem' }}
-                                >
-                                  <div className="flex items-center justify-end">
-                                    {formatPriceChange(row['등락률'])}
-                                  </div>
-                                </td>
-                                <td 
-                                  className="py-1.5 px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                                  style={{ width: '85px', fontSize: '0.875rem' }}
-                                >
-                                  {formatMarketCap(row['시가총액(억)'])}
-                                </td>
-                                <td 
-                                  className="py-1.5 px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                                  style={{ width: '75px', fontSize: '0.875rem' }}
-                                >
-                                  {formatMarketCap(row['거래대금(억)'])}
-                                </td>
-                                <td 
-                                  className="py-1.5 px-2 border-b border-r text-left overflow-hidden text-ellipsis"
-                                  style={{ 
-                                    width: '120px', 
-                                    fontSize: '0.875rem',
-                                    maxWidth: '120px',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis'
-                                  }}
-                                  title={row['테마명']}
-                                >
-                                  {row['테마명']}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="text-gray-500">데이터가 없습니다.</div>
-                    )
-                  )}
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    {/* 스크롤 힌트 - 하단에 표시 */}
+                    <div className="hidden sm:hidden md:flex lg:hidden justify-center items-center mt-1 py-1 bg-gray-50 border border-gray-200 rounded-md">
+                      <span className="text-gray-700 text-xs flex items-center" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.75rem)' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                        </svg>
+                        좌우로 스크롤하여 더 많은 정보를 확인하세요
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                        </svg>
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          
-          {/* RS상위 시장 비교차트 영역 */}
-          <div className="bg-white rounded-lg shadow p-4 mt-1">
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="text-lg font-semibold">RS상위 시장 비교차트</h2>
-              <span className="text-xs text-gray-600">RS상위와 시가총액 순서로 해당 종목이 속한 시장 지수를 비교합니다.</span>
-            </div>
             
-            {/* 5줄에 4개의 차트를 가로로 배치 */}
-            {Array.from({length: 5}).map((_, rowIndex) => (
-              <div key={rowIndex} className="flex flex-row gap-2 mb-4">
-                {Array.from({length: 4}).map((_, colIndex) => {
-                  const index = rowIndex * 4 + colIndex;
-                  return (
-                    <div key={colIndex} className="flex-1 rounded-md">
-                      {renderChartComponent(index)}
-                    </div>
-                  );
-                })}
+            {/* RS상위 시장 비교차트 영역 */}
+            <div className="bg-white rounded-lg shadow p-4 mt-1">
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-lg font-semibold" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS상위 시장 비교차트</h2>
+                <span className="text-xs text-gray-600 hidden md:inline" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>RS상위와 시가총액 순서로 해당 종목이 속한 시장 지수를 비교합니다.</span>
               </div>
-            ))}
+              
+              {/* 반응형 차트 그리드 - 화면 크기에 따라 컬럼 수 조정 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {Array.from({length: 20}).map((_, index) => (
+                  <div key={index} className="rounded-md">
+                    {renderChartComponent(index)}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>

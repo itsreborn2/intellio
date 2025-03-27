@@ -16,8 +16,8 @@ engine = create_engine(
     DATABASE_URL_SYNC,
     pool_pre_ping=True,
     #echo=True, # 쿼리 로깅
-    pool_size=30,
-    max_overflow=45,
+    pool_size=20,
+    max_overflow=25,
     pool_timeout=30,
     pool_recycle=1800   # 30분마다 연결 재사용 (세션 누적 방지
 )
