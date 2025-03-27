@@ -854,21 +854,23 @@ function AIChatAreaContent() {
           {showTitle && isInputCentered && (
             <div style={{
               textAlign: 'center',
-              marginBottom: '0',
+              marginBottom: '20px',
               padding: '0',
               width: '100%',
-              position: 'absolute',
-              top: '-70px',
+              position: 'relative',
+              marginTop: isMobile ? '-80px' : '-100px',
               left: '0',
-              right: '0'
+              right: '0',
+              transition: 'all 0.3s ease-in-out'
             }}>
               <h1 style={{
-                fontSize: '1.3rem',
+                fontSize: isMobile ? '1rem' : '1.3rem',
                 fontWeight: 'bold',
                 color: '#333',
                 lineHeight: '1.3',
                 wordBreak: 'keep-all',
-                letterSpacing: '-0.02em'
+                letterSpacing: '-0.02em',
+                transition: 'all 0.3s ease-in-out'
               }}>
                 기업,산업 리포트부터 SNS, 그리고 스탁이지가 보유한 비공개 자료들까지<br />
                 한번에 분석해드려요.
