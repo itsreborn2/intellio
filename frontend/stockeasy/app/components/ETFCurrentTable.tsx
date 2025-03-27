@@ -1066,6 +1066,26 @@ export default function ETFCurrentTable() {
                   )}
                 </div>
               </th>
+              <th
+                key="종목명"
+                scope="col"
+                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                style={{
+                  width: '140px',
+                  height: '35px',
+                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                }}
+                onClick={() => handleSort('종목명')}
+              >
+                <div className="flex justify-center items-center">
+                  ETF 종목명
+                  {sortKey === '종목명' && (
+                    <span className="ml-1">
+                      {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                    </span>
+                  )}
+                </div>
+              </th>
               {filteredHeaders.filter(header => header === '등락율').map((header) => (
                 <th
                   key={header}
@@ -1100,13 +1120,13 @@ export default function ETFCurrentTable() {
               >
                 포지션
               </th>
-              {['2개월 차트', '20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
+              {['20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
                 <th
                   key={header}
                   scope="col"
                   className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 hidden md:table-cell`}
                   style={{
-                    width: header === '2개월 차트' ? '180px' : header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px',
+                    width: header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px',
                     height: '35px',
                     fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                   }}
@@ -1181,6 +1201,9 @@ export default function ETFCurrentTable() {
                     >
                       {row['섹터']}
                     </td>
+                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '140px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                      {row['종목명'] || tickerMappingInfo.stockNameMap[row['티커']] || ''}
+                    </td>
                     {filteredHeaders.filter(header => header === '등락율').map((header) => {
                       const isChangeColumn = header === '등락율' || header === '전일대비';
                       const isTickerColumn = false; // 티커 컬럼은 이 필터에 포함되지 않으므로 항상 false
@@ -1235,69 +1258,18 @@ export default function ETFCurrentTable() {
                         })()}
                       </div>
                     </td>
-                    {['2개월 차트', '20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
+                    {['20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
                       <td
                         key={header}
                         className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''} hidden md:table-cell`}
                         style={{ 
-                          width: header === '2개월 차트' ? '180px' : header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px', 
+                          width: header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px', 
                           height: '16px',
                           fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                         }}
                       >
                         {(() => {
-                          if (header === '2개월 차트') {
-                            // 디버깅을 위한 로그
-                            const ticker = row['티커'];
-                            if (!ticker) return null;
-                            
-                            // 티커 변형 생성 (앞에 0 추가)
-                            const normalizedTicker = ticker ? ticker.padStart(6, '0') : '';
-                            const mappedTicker = tickerMappingInfo.tickerMap[ticker] || '';
-                            const stockName = row['종목명'] || tickerMappingInfo.stockNameMap[ticker] || '';
-                            
-                            // 데이터 확인
-                            const hasData = ticker && stockPriceData[ticker] && stockPriceData[ticker].length > 0;
-                            
-                            if (hasData) {
-                              return (
-                                <div className="w-full h-full flex items-center">
-                                  <Sparklines data={stockPriceData[ticker].map(data => data.price)} width={180} height={25.2} margin={1.8}>
-                                    <SparklinesLine 
-                                      color={(() => {
-                                        const changeRate = parseFloat(row['등락율'] || '0');
-                                        if (changeRate > 0) return "#EF4444"; // 상승 - 빨강
-                                        if (changeRate < 0) return "#3B82F6"; // 하락 - 파랑
-                                        return "#000000"; // 보합 - 검정
-                                      })()} 
-                                      style={{ 
-                                        strokeWidth: 1.5, 
-                                        stroke: (() => {
-                                          const changeRate = parseFloat(row['등락율'] || '0');
-                                          if (changeRate > 0) return "#EF4444"; // 상승 - 빨강
-                                          if (changeRate < 0) return "#3B82F6"; // 하락 - 파랑
-                                          return "#000000"; // 보합 - 검정
-                                        })(), 
-                                        fill: (() => {
-                                          const changeRate = parseFloat(row['등락율'] || '0');
-                                          if (changeRate > 0) return "#FEE2E2"; // 상승 - 연한 빨강
-                                          if (changeRate < 0) return "#DBEAFE"; // 하락 - 연한 파랑
-                                          return "#F3F4F6"; // 보합 - 연한 회색
-                                        })(), 
-                                        fillOpacity: 0.5 
-                                      }} 
-                                    />
-                                  </Sparklines>
-                                </div>
-                              );
-                            } else {
-                              return (
-                                <div className="flex items-center justify-center h-full">
-                                  <span className="text-xs text-gray-400">데이터 없음</span>
-                                </div>
-                              );
-                            }
-                          } else if (header === '20일선 이격') {
+                          if (header === '20일선 이격') {
                             // 20일선 위치 데이터 표시
                             const ticker = row['티커'];
                             if (!ticker) return '-';
@@ -1316,9 +1288,11 @@ export default function ETFCurrentTable() {
                             }
                             
                             return (
-                              <span className={`text-xs font-medium ${colorClass}`}>
-                                {position}
-                              </span>
+                              <div className="flex items-center justify-center h-full">
+                                <span className={`text-xs font-medium ${colorClass}`}>
+                                  {position}
+                                </span>
+                              </div>
                             );
                           } else if (header === '돌파/이탈') {
                             // 돌파/이탈 데이터 표시

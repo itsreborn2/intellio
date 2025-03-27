@@ -64,18 +64,51 @@ function SidebarContent() {
 
   // 버튼 위치에 따라 툴팁 위치 계산
   useEffect(() => {
-    const positions: { [key: string]: number } = {};
+    const updateTooltipPositions = () => {
+      const positions: { [key: string]: number } = {};
+      
+      Object.entries(buttonRefs).forEach(([key, ref]) => {
+        if (ref.current) {
+          const rect = ref.current.getBoundingClientRect();
+          positions[key] = rect.top;
+        }
+      });
+      
+      setTooltipPosition(positions);
+      console.log('툴팁 위치 업데이트됨:', positions);
+    };
     
-    Object.entries(buttonRefs).forEach(([key, ref]) => {
-      if (ref.current) {
-        const rect = ref.current.getBoundingClientRect();
-        positions[key] = rect.top;
-      }
-    });
+    // 초기 실행
+    updateTooltipPositions();
     
-    setTooltipPosition(positions);
+    // resize 이벤트에 대한 핸들러 추가
+    window.addEventListener('resize', updateTooltipPositions);
+    
+    // 사이드바 상태 변경 이벤트에 대한 핸들러 추가
+    window.addEventListener('sidebarToggle', updateTooltipPositions);
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('resize', updateTooltipPositions);
+      window.removeEventListener('sidebarToggle', updateTooltipPositions);
+    };
   }, []);
   
+  // 호버 이벤트 핸들러
+  const handleMouseEnter = (key: string) => {
+    if (!isMobile) {
+      console.log('마우스 엔터:', key);
+      setHoveredButton(key);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (!isMobile) {
+      console.log('마우스 리브');
+      setHoveredButton(null);
+    }
+  };
+
   // 모바일 환경 감지
   useEffect(() => {
     const checkIfMobile = () => {
@@ -138,28 +171,31 @@ function SidebarContent() {
         />
       )}
       
+      {/* 데스크탑 환경에서 사용할 툴팁 (모바일 환경과 완전히 분리) */}
+      {!isMobile && hoveredButton && (
+        <div 
+          className="fixed left-[63px] bg-gray-100 text-gray-800 py-0.5 px-2 rounded-lg text-xs shadow-md z-[2000] border border-gray-200"
+          style={{ 
+            top: tooltipPosition[hoveredButton] ? `${tooltipPosition[hoveredButton] + 10}px` : '0px',
+            transition: 'opacity 0.2s',
+            opacity: 1
+          }}
+        >
+          {hoveredButton === 'home' && '스탁이지'}
+          {hoveredButton === 'chart' && 'RS순위'}
+          {hoveredButton === 'etfSector' && 'ETF/섹터'}
+          {hoveredButton === 'doc' && '닥이지'}
+          {hoveredButton === 'user' && '마이페이지'}
+          {hoveredButton === 'settings' && '설정'}
+        </div>
+      )}
+      
       {/* 사이드바 컨텐츠 */}
       <div className={`w-[59px] border-r bg-gray-200 flex flex-col h-full relative sidebar ${isMenuOpen ? 'open' : ''}`}>
         
         <div className="flex-1 overflow-hidden">
           <div className="pt-4">
             <div className="w-full flex flex-col items-center">
-              {/* 툴팁을 사이드바 외부에 표시하기 위한 컨테이너 */}
-              <div className="sidebar-tooltips-container">
-                {hoveredButton && tooltipPosition[hoveredButton] && (
-                  <span 
-                    className="sidebar-tooltip" 
-                    style={{ top: `${tooltipPosition[hoveredButton] - 10}px` }}
-                  >
-                    {hoveredButton === 'home' && '스탁이지'}
-                    {hoveredButton === 'chart' && 'RS순위'}
-                    {hoveredButton === 'etfSector' && 'ETF/섹터'} {/* ETF/섹터 툴팁 추가 */}
-                    {hoveredButton === 'doc' && '닥이지'}
-                    {hoveredButton === 'user' && '마이페이지'}
-                    {hoveredButton === 'settings' && '설정'}
-                  </span>
-                )}
-              </div>
               
               {/* 홈 버튼 - 스탁이지 메인 페이지로 이동 */}
               <div className="sidebar-button-container">
@@ -167,8 +203,8 @@ function SidebarContent() {
                   ref={buttonRefs.home}
                   className="sidebar-button" 
                   onClick={goToHomePage} 
-                  onMouseEnter={() => setHoveredButton('home')}
-                  onMouseLeave={() => setHoveredButton(null)}
+                  onMouseEnter={() => handleMouseEnter('home')}
+                  onMouseLeave={handleMouseLeave}
                 >
                   <Home className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
@@ -182,8 +218,8 @@ function SidebarContent() {
                   ref={buttonRefs.chart}
                   className="sidebar-button" 
                   onClick={goToRSRankPage}
-                  onMouseEnter={() => setHoveredButton('chart')}
-                  onMouseLeave={() => setHoveredButton(null)}
+                  onMouseEnter={() => handleMouseEnter('chart')}
+                  onMouseLeave={handleMouseLeave}
                 >
                   <ChartColumn className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
@@ -197,8 +233,8 @@ function SidebarContent() {
                   ref={buttonRefs.etfSector}
                   className="sidebar-button" 
                   onClick={goToETFSectorPage} // ETF/섹터 페이지로 이동하는 함수 연결
-                  onMouseEnter={() => setHoveredButton('etfSector')}
-                  onMouseLeave={() => setHoveredButton(null)}
+                  onMouseEnter={() => handleMouseEnter('etfSector')}
+                  onMouseLeave={handleMouseLeave}
                 >
                   <PieChart className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
@@ -212,8 +248,8 @@ function SidebarContent() {
                   ref={buttonRefs.doc}
                   className="sidebar-button" 
                   onClick={goToDocEasy} 
-                  onMouseEnter={() => setHoveredButton('doc')}
-                  onMouseLeave={() => setHoveredButton(null)}
+                  onMouseEnter={() => handleMouseEnter('doc')}
+                  onMouseLeave={handleMouseLeave}
                 >
                   <FileStack className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
@@ -232,8 +268,8 @@ function SidebarContent() {
               <button 
                 ref={buttonRefs.user}
                 className="sidebar-button" 
-                onMouseEnter={() => setHoveredButton('user')}
-                onMouseLeave={() => setHoveredButton(null)}
+                onMouseEnter={() => handleMouseEnter('user')}
+                onMouseLeave={handleMouseLeave}
               >
                 <User className="icon" />
                 {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
@@ -246,8 +282,8 @@ function SidebarContent() {
               <button 
                 ref={buttonRefs.settings}
                 className="sidebar-button" 
-                onMouseEnter={() => setHoveredButton('settings')}
-                onMouseLeave={() => setHoveredButton(null)}
+                onMouseEnter={() => handleMouseEnter('settings')}
+                onMouseLeave={handleMouseLeave}
               >
                 <Settings className="icon" />
                 {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
