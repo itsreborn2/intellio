@@ -872,7 +872,7 @@ function AIChatAreaContent() {
                 letterSpacing: '-0.02em',
                 transition: 'all 0.3s ease-in-out'
               }}>
-                기업,산업 리포트부터 SNS, 그리고 스탁이지가 보유한 비공개 자료들까지<br />
+                기업,산업 리포트부터 SNS, 스탁이지가 보유한 비공개 자료들까지<br />
                 한번에 분석해드려요.
               </h1>
             </div>
