@@ -4,10 +4,11 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 from uuid import UUID
 from common.api.v1.auth import get_current_user
-from common.core.deps import get_db
-from common.models.user import User
+from common.core.deps import get_current_session, get_db
+from common.models.user import Session, User
 from common.services.token_usage_service import get_token_usage
 from common.models.token_usage import ProjectType, TokenType
+from loguru import logger
 
 router = APIRouter(prefix="/token-usage", tags=["token-usage"])
 
@@ -19,10 +20,14 @@ async def read_token_usage(
     end_date: Optional[str] = Query(None, description="종료 날짜 (YYYY-MM-DD)"),
     group_by: Optional[List[str]] = Query(None, description="그룹화 기준 (project_type, token_type, model_name, day, month)"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    session: Session = Depends(get_current_session)
 ):
     """사용자의 토큰 사용량 조회"""
     try:
+        # 세션에서 사용자 ID 가져오기
+        if not session or not session.user:
+            raise HTTPException(status_code=401, detail="인증되지 않은 사용자입니다.")
+
         # 날짜 변환
         start_date_obj = None
         end_date_obj = None
@@ -53,7 +58,7 @@ async def read_token_usage(
         # 슈퍼유저는 모든 사용자의 토큰 사용량을 조회할 수 있는 기능 추가 가능
         token_usage_data = await get_token_usage(
             db=db,
-            user_id=current_user.id,
+            user_id=session.user.id,
             project_type=project_type_enum,
             token_type=token_type_enum,
             start_date=start_date_obj,
@@ -71,12 +76,16 @@ async def read_token_usage_summary(
     project_type: Optional[str] = Query(None, description="프로젝트 유형 (doceasy, stockeasy)"),
     period: str = Query("month", description="기간 (day, week, month, year)"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    session: Session = Depends(get_current_session)
 ):
     """사용자의 토큰 사용량 요약 조회"""
     try:
+        # 세션에서 사용자 ID 가져오기
+        if not session or not session.user:
+            raise HTTPException(status_code=401, detail="인증되지 않은 사용자입니다.")
         # 현재 날짜
         now = datetime.now()
+        logger.info(f"summary")
         
         # 기간에 따른 시작 날짜 계산
         if period == "day":
@@ -94,6 +103,7 @@ async def read_token_usage_summary(
         else:
             raise HTTPException(status_code=400, detail="유효하지 않은 기간입니다.")
         
+        logger.info(f"start_date_obj : {start_date_obj}")
         # 프로젝트 유형 변환
         project_type_enum = None
         if project_type:
@@ -105,12 +115,13 @@ async def read_token_usage_summary(
         # 토큰 사용량 조회
         token_usage_data = await get_token_usage(
             db=db,
-            user_id=current_user.id,
+            user_id=session.user.id,
             project_type=project_type_enum,
             start_date=start_date_obj,
             end_date=now,
             group_by=["token_type"]
         )
+        logger.info(f"token_usage_data : {token_usage_data}")
         
         return {
             "period": period,
