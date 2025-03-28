@@ -657,7 +657,7 @@ function AIChatAreaContent() {
     height: 'auto', // 자동 높이로 변경하여 컨텐츠에 따라 늘어나도록 함
     width: '100%', // 전체 너비를 사용
     position: 'relative',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F4F4F4', // Figma 디자인에 맞게 배경색 변경
     overflow: 'visible', // 오버플로우를 visible로 변경하여 브라우저 기본 스크롤 사용
     padding: isMobile ? '0' : '10px', // 모바일에서는 패딩 제거
   };
@@ -675,13 +675,13 @@ function AIChatAreaContent() {
     position: isMobile ? 'unset' : 'relative',  // sticky 대신 relative로 변경
     bottom: isInputCentered ? 'auto' : '20px', // 중앙 배치가 아닐 때 저작권 텍스트 위에 위치하도록 조정
     zIndex: isMobile ? 'unset' : 10,          // 다른 요소보다 위에 표시
-    backgroundColor: isMobile ? '#f5f5f5' : 'transparent', // 모바일에서 배경색 추가
+    backgroundColor: 'transparent', // 모바일에서도 배경색 투명하게 변경하여 구분선 제거
     transition: 'all 0.3s ease-in-out' // 부드러운 전환 효과 추가
   };
 
   const integratedInputStyle: React.CSSProperties = {
     position: 'relative',
-    width: isInputCentered ? '56%' : '56%', // 기존 70%에서 20% 줄임
+    width: isInputCentered ? '48%' : '48%', // 56%에서 48%로 줄임
     margin: '0 auto',
     transition: 'all 0.3s ease-in-out',
   };
@@ -700,22 +700,23 @@ function AIChatAreaContent() {
     overflow: 'hidden' // 오버플로우 숨김
   };
 
-  const stockSuggestionsStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: '100%',
-    left: '0',
-    width: '100%',
-    maxHeight: '200px',
-    overflowY: 'visible', // 세로 스크롤 제거
-    backgroundColor: 'white',
-    border: '1px solid #ccc',
-    borderRadius: '8px', // 모서리를 더 둥글게 수정
-    boxShadow: '0 -2px 4px rgba(0, 0, 0, 0.1)', // 그림자 방향 변경
-    zIndex: 1000,
-    marginBottom: '4px', // 하단 마진 추가
-    display: showStockSuggestions ? 'block' : 'none',
-    padding: '8px' // 좌우 여백 절반으로 감소
-  };
+  // 종목 제안 팝업 스타일 제거 (인라인 스타일로 대체)
+  // const stockSuggestionsStyle: React.CSSProperties = {
+  //   position: 'absolute',
+  //   bottom: 'calc(100% + 5px)', // 항상 입력 필드 위 5px에 위치
+  //   left: '0',
+  //   width: '100%',
+  //   maxHeight: '200px',
+  //   overflowY: 'auto', // 내용이 많을 경우 스크롤 가능하도록 수정
+  //   backgroundColor: 'white',
+  //   border: '1px solid #ccc',
+  //   borderRadius: '8px',
+  //   boxShadow: '0 -2px 4px rgba(0, 0, 0, 0.1)',
+  //   zIndex: 1000,
+  //   marginBottom: '0px',
+  //   display: showStockSuggestions ? 'block' : 'none',
+  //   padding: '8px'
+  // };
 
   const messagesContainerStyle: React.CSSProperties = {
     overflowY: 'visible', // 스크롤을 브라우저로 위임
@@ -724,8 +725,8 @@ function AIChatAreaContent() {
     margin: '0 auto', // 중앙 정렬
     border: 'none', 
     borderRadius: '0', 
-    backgroundColor: '#f5f5f5', 
-    width: isMobile ? '100%' : '80%', // 모바일에서는 전체 너비, 데스크탑에서는 80%
+    backgroundColor: '#F4F4F4', // Figma 디자인에 맞게 배경색 변경
+    width: isMobile ? '100%' : '65%', // 모바일에서는 전체 너비, 데스크탑에서는 65%로 변경
     height: 'auto', // 높이를 자동으로 조정
     minHeight: 'calc(100% - 60px)', // 최소 높이 설정
     boxSizing: 'border-box',
@@ -848,667 +849,946 @@ function AIChatAreaContent() {
       </div>
       
       {/* 입력 영역 */}
-      <div className="input-area" style={inputAreaStyle}>
-        <div className="integrated-input" style={integratedInputStyle}>
-          {/* 텍스트 박스 바로 위 안내 문구 */}
-          {showTitle && isInputCentered && (
-            <div style={{
-              textAlign: 'center',
-              marginBottom: '20px',
-              padding: '0',
-              width: '100%',
-              position: 'relative',
-              marginTop: isMobile ? '-80px' : '-100px',
-              left: '0',
-              right: '0',
-              transition: 'all 0.3s ease-in-out'
-            }}>
-              <h1 style={{
-                fontSize: isMobile ? '1rem' : '1.3rem',
-                fontWeight: 'bold',
-                color: '#333',
-                lineHeight: '1.3',
-                wordBreak: 'keep-all',
-                letterSpacing: '-0.02em',
+      {!(isMobile && isSidebarOpen) && (
+        <div className="input-area" style={inputAreaStyle}>
+          <div className="integrated-input" style={integratedInputStyle}>
+            {/* 텍스트 박스 바로 위 안내 문구 */}
+            {showTitle && isInputCentered && !isMobile && (
+              <div style={{
+                textAlign: 'center',
+                marginBottom: '20px',
+                padding: '0',
+                width: '100%',
+                position: 'relative',
+                marginTop: isMobile ? '-80px' : '-100px',
+                left: '0',
+                right: '0',
                 transition: 'all 0.3s ease-in-out'
               }}>
-                기업,산업 리포트부터 SNS, 스탁이지가 보유한 비공개 자료들까지<br />
-                한번에 분석해드려요.
-              </h1>
-            </div>
-          )}
-          
-          <div style={{
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            width: '100%',
-            backgroundColor: 'white',
-            borderRadius: '30px',
-            border: '1px solid #e0e0e0',
-            padding: '0',
-            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.05)'
-          }}>
-            {selectedStock && (
-              <div 
-                style={{
-                  padding: '4px 10px',
-                  margin: '0 0 0 8px',
-                  height: '28px',
-                  borderRadius: '6px',
-                  border: '1px solid #ddd',
-                  backgroundColor: '#f5f5f5',
+                <h1 style={{
+                  fontSize: isMobile ? '1rem' : '1.3rem',
+                  fontWeight: 'bold',
                   color: '#333',
-                  fontSize: '0.7rem',
-                  fontWeight: 'normal',
-                  whiteSpace: 'nowrap',
-                  display: 'flex',
-                  alignItems: 'center',
-                  cursor: 'pointer'
-                }}
-                onClick={() => {
-                  setShowStockSuggestions(true); // 종목 선택 팝업 표시
-                  if (searchInputRef.current) {
-                    setTimeout(() => {
-                      if (searchInputRef.current) {
-                        searchInputRef.current.focus();
-                      }
-                    }, 100);
-                  }
-                }}
-                title="클릭하여 종목 변경"
-              >
-                {selectedStock.stockName}
+                  lineHeight: '1.3',
+                  wordBreak: 'keep-all',
+                  letterSpacing: '-0.02em',
+                  transition: 'all 0.3s ease-in-out',
+                  display: isMobile ? 'none' : 'block' // 모바일에서는 숨김 처리
+                }}>
+                  기업,산업 리포트부터 SNS, 스탁이지가 보유한 비공개 자료들까지<br />
+                  한번에 분석해드려요.
+                </h1>
               </div>
             )}
-            <input
-              ref={inputRef}
-              placeholder={selectedStock ? "종목에 대해 궁굼한걸 물어보세요" : "먼저 종목을 입력하거나 선택하세요"}
-              className="integrated-input-field"
-              type="text"
-              value={inputMessage}
-              onChange={handleInputChange}
-              onFocus={handleInputFocus}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  if (!selectedStock && filteredStocks.length > 0) {
-                    // 종목이 선택되지 않고 검색 결과가 있는 경우, 첫 번째 종목 선택
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleStockSelect(filteredStocks[0]);
-                  } else if (selectedStock && inputMessage.trim()) {
-                    // 종목이 선택된 상태에서 메시지가 있으면 전송
-                    handleSendMessage();
-                  }
-                }
-              }}
-              style={{
-                ...inputStyle,
-                border: 'none',
-                boxShadow: 'none',
-                padding: '12px 16px',
-                marginLeft: selectedStock ? '8px' : '0',
-                flex: 1,
-                borderRadius: '30px'
-              }}
-            />
             
-            {/* 전송 아이콘 */}
-            <button
-              onClick={handleSendMessage}
-              disabled={!selectedStock || !inputMessage.trim()}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                border: 'none',
-                backgroundColor: 'transparent',
-                cursor: selectedStock && inputMessage.trim() ? 'pointer' : 'not-allowed',
-                opacity: selectedStock && inputMessage.trim() ? 1 : 0.5,
-                marginRight: '8px'
-              }}
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
+            <div style={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              width: '100%',
+              backgroundColor: 'white',
+              borderRadius: '30px',
+              border: '1px solid #e0e0e0',
+              padding: '0',
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.05)'
+            }}>
+              {selectedStock && (
+                <div 
+                  style={{
+                    padding: '4px 10px',
+                    margin: '0 0 0 8px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    border: '1px solid #ddd',
+                    backgroundColor: isMobile ? '#ffffff' : '#f5f5f5',
+                    color: '#333',
+                    fontSize: '0.7rem',
+                    fontWeight: 'normal',
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => {
+                    setShowStockSuggestions(true); // 종목 선택 팝업 표시
+                    if (searchInputRef.current) {
+                      setTimeout(() => {
+                        if (searchInputRef.current) {
+                          searchInputRef.current.focus();
+                        }
+                      }, 100);
+                    }
+                  }}
+                  title="클릭하여 종목 변경"
+                >
+                  {selectedStock.stockName}
+                </div>
+              )}
+              <input
+                ref={inputRef}
+                placeholder={selectedStock ? "종목에 대해 궁굼한걸 물어보세요" : "먼저 종목을 입력하거나 선택하세요"}
+                className="integrated-input-field"
+                type="text"
+                value={inputMessage}
+                onChange={handleInputChange}
+                onFocus={handleInputFocus}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (!selectedStock && filteredStocks.length > 0) {
+                      // 종목이 선택되지 않고 검색 결과가 있는 경우, 첫 번째 종목 선택
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleStockSelect(filteredStocks[0]);
+                    } else if (selectedStock && inputMessage.trim()) {
+                      // 종목이 선택된 상태에서 메시지가 있으면 전송
+                      handleSendMessage();
+                    }
+                  }
+                }}
+                style={{
+                  ...inputStyle,
+                  border: 'none',
+                  boxShadow: 'none',
+                  padding: '12px 16px',
+                  marginLeft: selectedStock ? '8px' : '0',
+                  flex: 1,
+                  borderRadius: '30px'
+                }}
+              />
+              
+              {/* 전송 아이콘 */}
+              <button
+                onClick={handleSendMessage}
+                disabled={!selectedStock || !inputMessage.trim()}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  cursor: selectedStock && inputMessage.trim() ? 'pointer' : 'not-allowed',
+                  opacity: selectedStock && inputMessage.trim() ? 1 : 0.5,
+                  marginRight: '8px'
+                }}
               >
-                <path
-                  d="M22 2L11 13"
-                  stroke="#333333"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M22 2L15 22L11 13L2 9L22 2Z"
-                  stroke="#333333"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          </div>
-          
-          {/* 종목 추천 목록 */}
-          {isMounted && showStockSuggestions && (
-            <div ref={stockSuggestionsRef} style={stockSuggestionsStyle}>
-              {/* 검색 입력 필드 제거 - 기본 텍스트 입력창만 사용 */}
-              
-              {isLoading ? (
-                <div style={{ padding: '8px', textAlign: 'center' }}>종목 로딩 중...</div>
-              ) : error ? (
-                <div style={{ padding: '8px', color: 'red' }}>{error}</div>
-              ) : filteredStocks.length === 0 ? (
-                <div style={{ padding: '8px', textAlign: 'center', color: '#666' }}>
-                  검색 결과가 없습니다
-                </div>
-              ) : (
-                <div style={{ padding: '0 5px' }}>
-                  <div style={{ 
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '6px'
-                  }}>
-                    <div style={{ 
-                      fontSize: '0.7rem', 
-                      fontWeight: 'normal',
-                      color: '#666'
-                    }}>
-                      최근 유저들이 선택한 종목 TOP10 종목
-                    </div>
-                  </div>
-                  <div style={{ 
-                    display: 'flex',
-                    flexDirection: 'row',
-                    flexWrap: 'nowrap',
-                    overflowX: 'auto',
-                    gap: '8px',
-                    paddingBottom: '4px',
-                    msOverflowStyle: 'none', // IE, Edge 스크롤바 숨김
-                    scrollbarWidth: 'none' // Firefox 스크롤바 숨김
-                  }}>
-                    {filteredStocks.map((stock) => (
-                      <button 
-                        key={stock.value} 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setShowStockSuggestions(false); // 즉시 팝업 닫기
-                          handleStockSelect(stock);
-                        }}
-                        style={{ 
-                          padding: '4px 10px', // 기존 6px 12px에서 20% 줄임
-                          height: '28px', // 기존 36px에서 20% 줄임
-                          cursor: 'pointer',
-                          fontSize: '0.7rem', // 글자 크기도 약간 줄임
-                          whiteSpace: 'nowrap',
-                          borderRadius: '6px',
-                          border: '1px solid #ddd',
-                          backgroundColor: '#f5f5f5',
-                          color: '#333',
-                          display: 'flex',
-                          alignItems: 'center',
-                          minWidth: 'fit-content',
-                          flexShrink: 0,
-                          transition: 'background-color 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#e0e0e0';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = '#f5f5f5';
-                        }}
-                      >
-                        <span style={{ fontWeight: 'bold' }}>
-                          {stock.stockName || stock.display || stock.label.split('(')[0]}
-                        </span>
-                        <span style={{ color: '#666', marginLeft: '6px', fontSize: '0.7rem' }}>
-                          ({stock.value})
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* 최근 조회 종목 목록 */}
-              {!isLoading && !error && recentStocks.length > 0 && (
-                <div style={{ 
-                  marginTop: '12px',
-                  borderTop: '1px solid #eee',
-                  paddingTop: '12px',
-                  padding: '0 8px'
-                }}>
-                  <div style={{ 
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '6px'
-                  }}>
-                    <div style={{ 
-                      fontSize: '0.7rem', 
-                      fontWeight: 'normal',
-                      color: '#666'
-                    }}>
-                      최근 조회 종목
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setShowStockSuggestions(false); // 팝업 즉시 닫기
-                        setRecentStocks([]);
-                        localStorage.removeItem('recentStocks');
-                      }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        fontSize: '0.7rem',
-                        color: '#999',
-                        cursor: 'pointer',
-                        padding: '4px 10px', // 기존 6px 12px에서 20% 줄임
-                        height: '28px' // 기존 36px에서 20% 줄임
-                      }}
-                    >
-                      지우기
-                    </button>
-                  </div>
-                  <div style={{ 
-                    display: 'flex',
-                    flexDirection: 'row',
-                    flexWrap: 'nowrap',
-                    overflowX: 'auto',
-                    gap: '8px',
-                    paddingBottom: '4px',
-                    msOverflowStyle: 'none', // IE, Edge 스크롤바 숨김
-                    scrollbarWidth: 'none' // Firefox 스크롤바 숨김
-                  }}>
-                    {recentStocks.map((stock) => (
-                      <button 
-                        key={stock.value} 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setShowStockSuggestions(false); // 즉시 팝업 닫기
-                          handleStockSelect(stock);
-                        }}
-                        style={{ 
-                          padding: '4px 10px', // 기존 6px 12px에서 20% 줄임
-                          height: '28px', // 기존 36px에서 20% 줄임
-                          cursor: 'pointer',
-                          fontSize: '0.7rem', // 글자 크기도 약간 줄임
-                          whiteSpace: 'nowrap',
-                          borderRadius: '6px',
-                          border: '1px solid #ddd',
-                          backgroundColor: '#f5f5f5',
-                          color: '#333',
-                          display: 'flex',
-                          alignItems: 'center',
-                          minWidth: 'fit-content',
-                          flexShrink: 0,
-                          transition: 'background-color 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#e0e0e0';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = '#f5f5f5';
-                        }}
-                      >
-                        <span style={{ fontWeight: 'bold' }}>
-                          {stock.stockName || stock.display || stock.label.split('(')[0]}
-                        </span>
-                        <span style={{ color: '#666', marginLeft: '6px', fontSize: '0.7rem' }}>
-                          ({stock.value})
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M22 2L11 13"
+                    stroke="#333333"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M22 2L15 22L11 13L2 9L22 2Z"
+                    stroke="#333333"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
             </div>
-          )}
+            
+            {/* 종목 추천 목록 */}
+            {isMounted && showStockSuggestions && (
+              <div ref={stockSuggestionsRef} style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 5px)', 
+                left: '0',
+                width: '100%',
+                maxHeight: '200px',
+                overflowY: 'auto', 
+                backgroundColor: 'white',
+                border: '1px solid #ddd',
+                borderRadius: '10px',
+                boxShadow: '0 -2px 4px rgba(0, 0, 0, 0.1)',
+                zIndex: 1000,
+                marginBottom: '0px',
+                padding: '10px',
+                display: showStockSuggestions ? 'block' : 'none',
+                transform: isMobile ? 'none' : (isInputCentered ? 'translateY(-25px)' : 'none') // 모바일에서는 transform 제거
+              }}>
+                {/* 검색 입력 필드 제거 - 기본 텍스트 입력창만 사용 */}
+                
+                {isLoading ? (
+                  <div style={{ padding: '8px', textAlign: 'center' }}>종목 로딩 중...</div>
+                ) : error ? (
+                  <div style={{ padding: '8px', color: 'red' }}>{error}</div>
+                ) : filteredStocks.length === 0 ? (
+                  <div style={{ padding: '8px', textAlign: 'center', color: '#666' }}>
+                    검색 결과가 없습니다
+                  </div>
+                ) : (
+                  <div style={{ padding: '0 5px' }}>
+                    <div style={{ 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0' // 여백 완전 제거
+                    }}>
+                      <div style={{ 
+                        fontSize: '0.7rem', 
+                        fontWeight: 'normal',
+                        color: '#666'
+                      }}>
+                        유저들의 TOP10
+                      </div>
+                    </div>
+                    <div style={{ 
+                      display: 'flex',
+                      flexDirection: 'row',
+                      flexWrap: 'nowrap',
+                      overflowX: 'auto',
+                      gap: '8px',
+                      paddingBottom: '4px',
+                      paddingTop: '4px', // 최근 조회 종목과 동일하게 수정
+                      marginTop: '4px', // 최근 조회 종목과 동일하게 수정
+                      msOverflowStyle: 'none', 
+                      scrollbarWidth: 'none' 
+                    }}>
+                      {filteredStocks.map((stock) => (
+                        <button 
+                          key={stock.value} 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowStockSuggestions(false); 
+                            handleStockSelect(stock);
+                          }}
+                          style={{
+                            width: 'auto',
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            border: '1px solid #ddd',
+                            backgroundColor: '#f5f5f5',
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s',
+                            fontSize: '0.75rem',
+                            color: '#333',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            whiteSpace: 'nowrap',
+                            minWidth: 'fit-content',
+                            flexShrink: 0
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#ffffff';
+                            e.currentTarget.style.backgroundColor = '#40414F';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#333';
+                            e.currentTarget.style.backgroundColor = '#f5f5f5';
+                          }}
+                        >
+                          <span style={{
+                            padding: '3px 8px',
+                            height: '24px',
+                            borderRadius: '6px',
+                            border: '1px solid #ddd',
+                            backgroundColor: '#f5f5f5',
+                            color: '#333',
+                            fontSize: '0.65rem',
+                            fontWeight: 'normal',
+                            whiteSpace: 'nowrap',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}>
+                            {stock.stockName || stock.display || stock.label.split('(')[0]}
+                          </span>
+                          <span style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            maxWidth: '100%'
+                          }}>({stock.value})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* 최근 조회 종목 목록 */}
+                {!isLoading && !error && recentStocks.length > 0 && (
+                  <div style={{ 
+                    marginTop: '4px', // 여백 완전 제거
+                    borderTop: '1px solid #eee',
+                    paddingTop: '4px',
+                    padding: '0 5px' // TOP10 종목과 동일한 패딩으로 통일
+                  }}>
+                    <div style={{ 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0' // 여백 완전 제거
+                    }}>
+                      <div style={{ 
+                        fontSize: '0.7rem', 
+                        fontWeight: 'normal',
+                        color: '#666'
+                      }}>
+                        최근 조회 종목
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setShowStockSuggestions(false); 
+                          setRecentStocks([]);
+                          localStorage.removeItem('recentStocks');
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          fontSize: '0.7rem',
+                          color: '#999',
+                          cursor: 'pointer',
+                          padding: '4px 10px', 
+                          height: '28px' 
+                        }}
+                      >
+                        지우기
+                      </button>
+                    </div>
+                    <div style={{ 
+                      display: 'flex',
+                      flexDirection: 'row',
+                      flexWrap: 'nowrap',
+                      overflowX: 'auto',
+                      gap: '8px',
+                      paddingBottom: '4px',
+                      paddingTop: '0',
+                      marginTop: '2px', // 최소한의 여백만 남김
+                      msOverflowStyle: 'none', 
+                      scrollbarWidth: 'none'
+                    }}>
+                      {recentStocks.map((stock) => (
+                        <button 
+                          key={stock.value} 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowStockSuggestions(false); 
+                            handleStockSelect(stock);
+                          }}
+                          style={{
+                            width: 'auto',
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            border: '1px solid #ddd',
+                            backgroundColor: '#f5f5f5',
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s',
+                            fontSize: '0.75rem',
+                            color: '#333',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            whiteSpace: 'nowrap',
+                            minWidth: 'fit-content',
+                            flexShrink: 0
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#ffffff';
+                            e.currentTarget.style.backgroundColor = '#40414F';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#333';
+                            e.currentTarget.style.backgroundColor = '#f5f5f5';
+                          }}
+                        >
+                          <span style={{
+                            padding: '3px 8px',
+                            height: '24px',
+                            borderRadius: '6px',
+                            border: '1px solid #ddd',
+                            backgroundColor: '#f5f5f5',
+                            color: '#333',
+                            fontSize: '0.65rem',
+                            fontWeight: 'normal',
+                            whiteSpace: 'nowrap',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}>
+                            {stock.stockName || stock.display || stock.label.split('(')[0]}
+                          </span>
+                          <span style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            maxWidth: '100%'
+                          }}>({stock.value})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       
       {/* 추천 질문 버튼 */}
       {isInputCentered && messages.length === 0 && (
         <div style={{
-          width: '56%',
-          margin: '12px auto 0',
+          width: isMobile ? '90%' : '57.6%', 
+          margin: isMobile ? '50px auto 0' : '12px auto 0',
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: isMobile ? 'column' : 'row',
           gap: '8px'
         }}>
-          <button
-            onClick={() => {
-              // 삼성전자 종목 정보
-              const samsungStock = { 
-                value: '005930', 
-                label: '삼성전자', 
-                stockName: '삼성전자',
-                stockCode: '005930',
-                display: '삼성전자 (005930)'
-              };
-              setSelectedStock(samsungStock);
-              setInputMessage('최근 HBM 개발 상황 및 경쟁사와의 비교');
-              
-              // 최근 조회 종목에 추가
-              const updatedRecentStocks = [samsungStock, ...recentStocks.filter(s => s.value !== samsungStock.value)].slice(0, 5);
-              setRecentStocks(updatedRecentStocks);
-              try {
-                localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
-              } catch (error) {
-                console.error('Failed to save recent stocks to localStorage:', error);
-              }
-              
-              // 메시지 전송
-              setTimeout(() => handleSendMessage(), 100);
-            }}
-            style={{
-              width: '100%',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              border: '1px solid #e0e0e0',
-              backgroundColor: '#f9f9f9',
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-              fontSize: '0.8rem',
-              color: '#333',
+          <div style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? '6px' : '8px',
+            width: '100%'
+          }}>
+            {/* 추천 질문 그룹 */}
+            <div className="recommendation-buttons-group" style={{
               display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#f9f9f9';
-            }}
-          >
-            <span style={{
-              padding: '4px 10px',
-              height: '28px',
-              borderRadius: '6px',
+              flexDirection: 'column',
+              gap: isMobile ? '6px' : '8px',
               border: '1px solid #ddd',
-              backgroundColor: '#f5f5f5',
-              color: '#333',
-              fontSize: '0.7rem',
-              fontWeight: 'normal',
-              whiteSpace: 'nowrap'
+              borderRadius: '10px',
+              padding: isMobile ? '10px' : '12px',
+              backgroundColor: '#ffffff',
+              flex: '1',
+              width: isMobile ? '100%' : '50%',  
             }}>
-              삼성전자
-            </span>
-            <span>최근 HBM 개발 상황 및 경쟁사와의 비교</span>
-          </button>
-          
-          <button
-            onClick={() => {
-              // SK하이닉스 종목 정보
-              const skStock = { 
-                value: '000660', 
-                label: 'SK하이닉스', 
-                stockName: 'SK하이닉스',
-                stockCode: '000660',
-                display: 'SK하이닉스 (000660)'
-              };
-              setSelectedStock(skStock);
-              setInputMessage('AI 반도체 시장 진출 전략과 향후 전망');
+              <div style={{ 
+                fontSize: isMobile ? '0.75rem' : '0.8rem', 
+                color: '#333', 
+                marginBottom: isMobile ? '6px' : '8px', 
+                fontWeight: '500' 
+              }}>
+                추천 질문
+              </div>
+              <button
+                onClick={() => {
+                  const samsungStock = { 
+                    value: '005930', 
+                    label: '삼성전자', 
+                    stockName: '삼성전자',
+                    stockCode: '005930',
+                    display: '삼성전자 (005930)'
+                  };
+                  setSelectedStock(samsungStock);
+                  setInputMessage('최근 HBM 개발 상황 및 경쟁사와의 비교');
+                  
+                  const updatedRecentStocks = [samsungStock, ...recentStocks.filter(s => s.value !== samsungStock.value)].slice(0, 5);
+                  setRecentStocks(updatedRecentStocks);
+                  try {
+                    localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+                  } catch (error) {
+                    console.error('Failed to save recent stocks to localStorage:', error);
+                  }
+                  
+                  setTimeout(() => handleSendMessage(), 100);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  fontSize: '0.75rem',
+                  color: '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#ffffff';
+                  e.currentTarget.style.backgroundColor = '#40414F';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#333';
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+              >
+                <span style={{
+                  padding: '3px 8px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                  fontSize: '0.65rem',
+                  fontWeight: 'normal',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  삼성전자
+                </span>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}>최근 HBM 개발 상황 및 경쟁사와의 비교</span>
+              </button>
               
-              // 최근 조회 종목에 추가
-              const updatedRecentStocks = [skStock, ...recentStocks.filter(s => s.value !== skStock.value)].slice(0, 5);
-              setRecentStocks(updatedRecentStocks);
-              try {
-                localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
-              } catch (error) {
-                console.error('Failed to save recent stocks to localStorage:', error);
-              }
+              <button
+                onClick={() => {
+                  const skStock = { 
+                    value: '000660', 
+                    label: 'SK하이닉스', 
+                    stockName: 'SK하이닉스',
+                    stockCode: '000660',
+                    display: 'SK하이닉스 (000660)'
+                  };
+                  setSelectedStock(skStock);
+                  setInputMessage('AI 반도체 시장 진출 전략과 향후 전망');
+                  
+                  const updatedRecentStocks = [skStock, ...recentStocks.filter(s => s.value !== skStock.value)].slice(0, 5);
+                  setRecentStocks(updatedRecentStocks);
+                  try {
+                    localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+                  } catch (error) {
+                    console.error('Failed to save recent stocks to localStorage:', error);
+                  }
+                  
+                  setTimeout(() => handleSendMessage(), 100);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  fontSize: '0.75rem',
+                  color: '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#ffffff';
+                  e.currentTarget.style.backgroundColor = '#40414F';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#333';
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+              >
+                <span style={{
+                  padding: '3px 8px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                  fontSize: '0.65rem',
+                  fontWeight: 'normal',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  SK하이닉스
+                </span>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}>AI 반도체 시장 진출 전략과 향후 전망</span>
+              </button>
               
-              // 메시지 전송
-              setTimeout(() => handleSendMessage(), 100);
-            }}
-            style={{
-              width: '100%',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              border: '1px solid #e0e0e0',
-              backgroundColor: '#f9f9f9',
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-              fontSize: '0.8rem',
-              color: '#333',
+              <button
+                onClick={() => {
+                  const hyundaiStock = { 
+                    value: '005380', 
+                    label: '현대차', 
+                    stockName: '현대차',
+                    stockCode: '005380',
+                    display: '현대차 (005380)'
+                  };
+                  setSelectedStock(hyundaiStock);
+                  setInputMessage('전기차 시장에서의 경쟁력과 최근 실적 분석');
+                  
+                  const updatedRecentStocks = [hyundaiStock, ...recentStocks.filter(s => s.value !== hyundaiStock.value)].slice(0, 5);
+                  setRecentStocks(updatedRecentStocks);
+                  try {
+                    localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+                  } catch (error) {
+                    console.error('Failed to save recent stocks to localStorage:', error);
+                  }
+                  
+                  setTimeout(() => handleSendMessage(), 100);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  fontSize: '0.75rem',
+                  color: '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#ffffff';
+                  e.currentTarget.style.backgroundColor = '#40414F';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#333';
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+              >
+                <span style={{
+                  padding: '3px 8px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                  fontSize: '0.65rem',
+                  fontWeight: 'normal',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  현대차
+                </span>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}>전기차 시장에서의 경쟁력과 최근 실적 분석</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  const lgStock = { 
+                    value: '373220', 
+                    label: 'LG에너지솔루션', 
+                    stockName: 'LG에너지솔루션',
+                    stockCode: '373220',
+                    display: 'LG에너지솔루션 (373220)'
+                  };
+                  setSelectedStock(lgStock);
+                  setInputMessage('배터리 기술 개발 현황 및 글로벌 시장 점유율');
+                  
+                  const updatedRecentStocks = [lgStock, ...recentStocks.filter(s => s.value !== lgStock.value)].slice(0, 5);
+                  setRecentStocks(updatedRecentStocks);
+                  try {
+                    localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+                  } catch (error) {
+                    console.error('Failed to save recent stocks to localStorage:', error);
+                  }
+                  
+                  setTimeout(() => handleSendMessage(), 100);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  fontSize: '0.75rem',
+                  color: '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#ffffff';
+                  e.currentTarget.style.backgroundColor = '#40414F';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#333';
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+              >
+                <span style={{
+                  padding: '3px 8px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                  fontSize: '0.65rem',
+                  fontWeight: 'normal',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  LG에너지솔루션
+                </span>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}>배터리 기술 개발 현황 및 글로벌 시장 점유율</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  const naverStock = { 
+                    value: '035420', 
+                    label: 'NAVER', 
+                    stockName: 'NAVER',
+                    stockCode: '035420',
+                    display: 'NAVER (035420)'
+                  };
+                  setSelectedStock(naverStock);
+                  setInputMessage('인공지능 사업 확장과 해외 시장 진출 전략');
+                  
+                  const updatedRecentStocks = [naverStock, ...recentStocks.filter(s => s.value !== naverStock.value)].slice(0, 5);
+                  setRecentStocks(updatedRecentStocks);
+                  try {
+                    localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+                  } catch (error) {
+                    console.error('Failed to save recent stocks to localStorage:', error);
+                  }
+                  
+                  setTimeout(() => handleSendMessage(), 100);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  fontSize: '0.75rem',
+                  color: '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#ffffff';
+                  e.currentTarget.style.backgroundColor = '#40414F';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#333';
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+              >
+                <span style={{
+                  padding: '3px 8px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                  fontSize: '0.65rem',
+                  fontWeight: 'normal',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  NAVER
+                </span>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}>인공지능 사업 확장과 해외 시장 진출 전략</span>
+              </button>
+            </div>
+            
+            {/* 최신 업데이트 종목 그룹 */}
+            <div className="latest-updates-group" style={{
               display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#f9f9f9';
-            }}
-          >
-            <span style={{
-              padding: '4px 10px',
-              height: '28px',
-              borderRadius: '6px',
+              flexDirection: 'column',
+              gap: isMobile ? '6px' : '8px',
               border: '1px solid #ddd',
-              backgroundColor: '#f5f5f5',
-              color: '#333',
-              fontSize: '0.7rem',
-              fontWeight: 'normal',
-              whiteSpace: 'nowrap'
+              borderRadius: '10px',
+              padding: isMobile ? '10px' : '12px',
+              backgroundColor: '#ffffff',
+              flex: '1',
+              width: isMobile ? '100%' : '50%',  
+              marginTop: isMobile ? '12px' : '0'
             }}>
-              SK하이닉스
-            </span>
-            <span>AI 반도체 시장 진출 전략과 향후 전망</span>
-          </button>
-          
-          <button
-            onClick={() => {
-              // 현대차 종목 정보
-              const hyundaiStock = { 
-                value: '005380', 
-                label: '현대차', 
-                stockName: '현대차',
-                stockCode: '005380',
-                display: '현대차 (005380)'
-              };
-              setSelectedStock(hyundaiStock);
-              setInputMessage('전기차 시장에서의 경쟁력과 최근 실적 분석');
+              <div style={{ 
+                fontSize: isMobile ? '0.75rem' : '0.8rem', 
+                color: '#333', 
+                marginBottom: isMobile ? '6px' : '8px', 
+                fontWeight: '500' 
+              }}>
+                최신 업데이트 종목
+              </div>
+              <button
+                onClick={() => {
+                  const lgStock = { 
+                    value: '373220', 
+                    label: 'LG에너지솔루션', 
+                    stockName: 'LG에너지솔루션',
+                    stockCode: '373220',
+                    display: 'LG에너지솔루션 (373220)'
+                  };
+                  setSelectedStock(lgStock);
+                  setInputMessage('배터리 기술 개발 현황 및 미래 전망 분석');
+                  
+                  const updatedRecentStocks = [lgStock, ...recentStocks.filter(s => s.value !== lgStock.value)].slice(0, 5);
+                  setRecentStocks(updatedRecentStocks);
+                  try {
+                    localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+                  } catch (error) {
+                    console.error('Failed to save recent stocks to localStorage:', error);
+                  }
+                  
+                  setTimeout(() => handleSendMessage(), 100);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  fontSize: '0.75rem',
+                  color: '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#ffffff';
+                  e.currentTarget.style.backgroundColor = '#40414F';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#333';
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+              >
+                <span style={{
+                  padding: '3px 8px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                  fontSize: '0.65rem',
+                  fontWeight: 'normal',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  LG에너지솔루션
+                </span>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}>배터리 생산량 1분기 32% 증가, 전기차 시장 확대로 실적 개선 전망</span>
+              </button>
               
-              // 최근 조회 종목에 추가
-              const updatedRecentStocks = [hyundaiStock, ...recentStocks.filter(s => s.value !== hyundaiStock.value)].slice(0, 5);
-              setRecentStocks(updatedRecentStocks);
-              try {
-                localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
-              } catch (error) {
-                console.error('Failed to save recent stocks to localStorage:', error);
-              }
-              
-              // 메시지 전송
-              setTimeout(() => handleSendMessage(), 100);
-            }}
-            style={{
-              width: '100%',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              border: '1px solid #e0e0e0',
-              backgroundColor: '#f9f9f9',
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-              fontSize: '0.8rem',
-              color: '#333',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#f9f9f9';
-            }}
-          >
-            <span style={{
-              padding: '4px 10px',
-              height: '28px',
-              borderRadius: '6px',
-              border: '1px solid #ddd',
-              backgroundColor: '#f5f5f5',
-              color: '#333',
-              fontSize: '0.7rem',
-              fontWeight: 'normal',
-              whiteSpace: 'nowrap'
-            }}>
-              현대차
-            </span>
-            <span>전기차 시장에서의 경쟁력과 최근 실적 분석</span>
-          </button>
-          
-          <button
-            onClick={() => {
-              // LG에너지솔루션 종목 정보
-              const lgStock = { 
-                value: '373220', 
-                label: 'LG에너지솔루션', 
-                stockName: 'LG에너지솔루션',
-                stockCode: '373220',
-                display: 'LG에너지솔루션 (373220)'
-              };
-              setSelectedStock(lgStock);
-              setInputMessage('배터리 기술 개발 현황 및 글로벌 시장 점유율');
-              
-              // 최근 조회 종목에 추가
-              const updatedRecentStocks = [lgStock, ...recentStocks.filter(s => s.value !== lgStock.value)].slice(0, 5);
-              setRecentStocks(updatedRecentStocks);
-              try {
-                localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
-              } catch (error) {
-                console.error('Failed to save recent stocks to localStorage:', error);
-              }
-              
-              // 메시지 전송
-              setTimeout(() => handleSendMessage(), 100);
-            }}
-            style={{
-              width: '100%',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              border: '1px solid #e0e0e0',
-              backgroundColor: '#f9f9f9',
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-              fontSize: '0.8rem',
-              color: '#333',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#f9f9f9';
-            }}
-          >
-            <span style={{
-              padding: '4px 10px',
-              height: '28px',
-              borderRadius: '6px',
-              border: '1px solid #ddd',
-              backgroundColor: '#f5f5f5',
-              color: '#333',
-              fontSize: '0.7rem',
-              fontWeight: 'normal',
-              whiteSpace: 'nowrap'
-            }}>
-              LG에너지솔루션
-            </span>
-            <span>배터리 기술 개발 현황 및 글로벌 시장 점유율</span>
-          </button>
-          
-          <button
-            onClick={() => {
-              // NAVER 종목 정보
-              const naverStock = { 
-                value: '035420', 
-                label: 'NAVER', 
-                stockName: 'NAVER',
-                stockCode: '035420',
-                display: 'NAVER (035420)'
-              };
-              setSelectedStock(naverStock);
-              setInputMessage('인공지능 사업 확장과 해외 시장 진출 전략');
-              
-              // 최근 조회 종목에 추가
-              const updatedRecentStocks = [naverStock, ...recentStocks.filter(s => s.value !== naverStock.value)].slice(0, 5);
-              setRecentStocks(updatedRecentStocks);
-              try {
-                localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
-              } catch (error) {
-                console.error('Failed to save recent stocks to localStorage:', error);
-              }
-              
-              // 메시지 전송
-              setTimeout(() => handleSendMessage(), 100);
-            }}
-            style={{
-              width: '100%',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              border: '1px solid #e0e0e0',
-              backgroundColor: '#f9f9f9',
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-              fontSize: '0.8rem',
-              color: '#333',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#f0f0f0';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#f9f9f9';
-            }}
-          >
-            <span style={{
-              padding: '4px 10px',
-              height: '28px',
-              borderRadius: '6px',
-              border: '1px solid #ddd',
-              backgroundColor: '#f5f5f5',
-              color: '#333',
-              fontSize: '0.7rem',
-              fontWeight: 'normal',
-              whiteSpace: 'nowrap'
-            }}>
-              NAVER
-            </span>
-            <span>인공지능 사업 확장과 해외 시장 진출 전략</span>
-          </button>
+              <button
+                onClick={() => {
+                  const kakaoStock = { 
+                    value: '035720', 
+                    label: '카카오', 
+                    stockName: '카카오',
+                    stockCode: '035720',
+                    display: '카카오 (035720)'
+                  };
+                  setSelectedStock(kakaoStock);
+                  setInputMessage('AI 기술 투자 현황과 미래 사업 전략');
+                  
+                  const updatedRecentStocks = [kakaoStock, ...recentStocks.filter(s => s.value !== kakaoStock.value)].slice(0, 5);
+                  setRecentStocks(updatedRecentStocks);
+                  try {
+                    localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+                  } catch (error) {
+                    console.error('Failed to save recent stocks to localStorage:', error);
+                  }
+                  
+                  setTimeout(() => handleSendMessage(), 100);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  fontSize: '0.75rem',
+                  color: '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#ffffff';
+                  e.currentTarget.style.backgroundColor = '#40414F';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#333';
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+              >
+                <span style={{
+                  padding: '3px 8px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                  fontSize: '0.65rem',
+                  fontWeight: 'normal',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  카카오
+                </span>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}>글로벌 AI 기업과 협력 발표, 생성형 AI 기술 통합으로 시장 점유율 확대 계획</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
       
       {/* 저작권 정보 */}
       {!isMobile && (
         <div style={{
-          width: isMobile ? '100%' : '80%', // 모바일에서는 전체 너비, 데스크탑에서는 80%
+          width: isMobile ? '100%' : '65%', 
           textAlign: 'center',
           padding: '10px 0', 
           margin: '0 auto',
@@ -1516,13 +1796,12 @@ function AIChatAreaContent() {
           justifyContent: 'center',
           alignItems: 'center', 
           height: '20px',
-          position: 'fixed', // 고정 위치로 변경
-          bottom: '10px', // 하단에서 10px 위에 배치
-          left: '0',
+          position: 'fixed', 
+          bottom: '5px', 
+          left: '63px', 
           right: '0',
-          zIndex: 5, // 다른 요소보다 위에 표시
-          backgroundColor: 'rgba(245, 245, 245, 0.8)', // 약간 투명한 배경색
-          borderTop: '1px solid #eee', // 상단 경계선 추가
+          zIndex: 5, 
+          backgroundColor: 'rgba(244, 244, 244, 0.8)', 
         }}>
           <div style={{
             fontSize: '0.75rem',

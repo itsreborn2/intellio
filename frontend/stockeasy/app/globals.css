@@ -67,8 +67,8 @@ html {
   left: 0;
   width: 63px;
   height: 100vh;
-  background-color: #e5e7eb; /* 더 진한 회색으로 변경 */
-  border-right: 1px solid #e9ecef;
+  background-color: #202123; /* 어두운 배경색으로 변경 (Figma 디자인 참고) */
+  border-right: 1px solid #2e2f33; /* 테두리 색상 변경 */
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -89,13 +89,13 @@ html {
 }
 
 .sidebar-button {
-  width: 40px; /* 44px에서 10% 줄임 */
-  height: 40px; /* 44px에서 10% 줄임 */
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 7px; /* 8px에서 10% 줄임 */
-  transition: background-color 0.2s;
+  border-radius: 7px;
+  transition: background-color 0.2s, color 0.2s;
   cursor: pointer;
   border: none;
   background: transparent;
@@ -103,17 +103,17 @@ html {
 }
 
 .sidebar-button:hover {
-  background-color: #d1d5db;
+  background-color: #10A37F; /* ChatGPT 브랜드 색상 */
 }
 
 .sidebar-button .icon {
-  width: 22px; /* 24px에서 10% 줄임 */
-  height: 22px; /* 24px에서 10% 줄임 */
-  color: #4b5563;
+  width: 22px;
+  height: 22px;
+  color: #ececf1; /* 아이콘 색상을 밝은 색으로 변경 */
 }
 
 .sidebar-button:hover .icon {
-  color: #1f2937;
+  color: #ffffff; /* 호버 시 아이콘 색상 */
 }
 
 .sidebar-tooltips-container {
@@ -123,24 +123,24 @@ html {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 1000; /* z-index 값 증가 */
+  z-index: 1000;
 }
 
 .sidebar-tooltip {
   position: absolute;
-  left: 63px; /* 사이드바 너비와 일치시킴 */
-  font-size: 12px; /* 폰트 크기 약간 증가 */
-  background-color: #ffffff; /* 배경색 흰색으로 변경 */
-  color: #333333; /* 글자색 더 진하게 */
-  padding: 4px 8px; /* 패딩 증가 */
-  border-radius: 4px;
+  left: 63px;
+  font-size: 12px;
+  background-color: #10A37F; /* ChatGPT 브랜드 색상 */
+  color: #ffffff;
+  padding: 6px 10px;
+  border-radius: 6px;
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); /* 그림자 강화 */
-  z-index: 1100; /* z-index 값 증가 */
-  pointer-events: none; /* 툴팁 위에 마우스가 올라가도 이벤트가 발생하지 않도록 함 */
-  display: block; /* 명시적으로 display 속성 설정 */
-  opacity: 1; /* 명시적으로 opacity 설정 */
-  border: 1px solid #e5e7eb; /* 경계선 추가 */
+  box-shadow: 0 2px 10px rgba(16, 163, 127, 0.3); /* 브랜드 색상의 그림자 */
+  z-index: 1100;
+  pointer-events: none;
+  display: block;
+  opacity: 1;
+  border: 1px solid #0f8c6c; /* 테두리 색상 약간 어둡게 조정 */
 }
 
 .sidebar-buttons {
