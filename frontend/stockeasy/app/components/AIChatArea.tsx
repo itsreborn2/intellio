@@ -57,6 +57,8 @@ function AIChatAreaContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false); // 사이드바 상태 추가
   const [isInputCentered, setIsInputCentered] = useState<boolean>(true); // 입력 필드 중앙 배치 상태 추가
   const [showTitle, setShowTitle] = useState<boolean>(true); // 제목 표시 여부
+  const [transitionInProgress, setTransitionInProgress] = useState(false);
+  const [searchMode, setSearchMode] = useState(false); // 종목 검색 모드 상태 추가
 
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -235,6 +237,7 @@ function AIChatAreaContent() {
     // 중앙 배치 해제 - 메시지 전송 시에만 화면을 아래로 내림
     if (isInputCentered) {
       setIsInputCentered(false);
+      setTransitionInProgress(true);
     }
 
     // 메시지 ID 생성
@@ -321,10 +324,29 @@ function AIChatAreaContent() {
 
   // 메시지 영역 자동 스크롤
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    // 입력 위치가 중앙에서 하단으로 변경될 때는 스크롤 동작을 지연시켜 레이아웃 변화가 완료된 후 작동하도록 함
+    if (messagesEndRef.current && messages.length > 0) {
+      // 최초 메시지 추가 또는 isInputCentered가 false인 상태에서 메시지 추가 시 스크롤 동작
+      if (messages.length === 1 || !transitionInProgress) {
+        setTimeout(() => {
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+          }
+        }, 300); // 레이아웃 전환 애니메이션(0.3s)보다 약간 더 길게 설정
+      }
     }
-  }, [messages]);
+  }, [messages, transitionInProgress]);
+
+  // 입력 필드 위치 전환 상태 관리
+  useEffect(() => {
+    if (!isInputCentered) {
+      setTransitionInProgress(true);
+      // transition 시간(0.3s) 이후에 전환 완료 상태로 변경
+      setTimeout(() => {
+        setTransitionInProgress(false);
+      }, 400); // transition duration + 약간의 여유
+    }
+  }, [isInputCentered]);
 
   // 로컬 스토리지에서 메시지 불러오기
   useEffect(() => {
@@ -368,15 +390,38 @@ function AIChatAreaContent() {
 
   // 입력 필드에 텍스트 입력 시 중앙 배치에서 일반 배치로 전환
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value;
-    setInputMessage(inputValue);
+    const value = e.target.value;
+    setInputMessage(value);
     
-    // 종목이 선택되지 않은 상태에서 입력 시 종목 검색 기능 활성화
+    // searchMode가 활성화되어 있으면 종목 검색 수행
+    if (searchMode) {
+      // 종목 검색 로직
+      const searchValue = value.trim();
+      if (searchValue.length > 0) {
+        // 종목 검색 로직
+        const filtered = stockOptions.filter(stock => {
+          const stockName = stock.stockName || stock.display || stock.label || '';
+          const stockCode = stock.value || '';
+          return stockName.toLowerCase().includes(searchValue.toLowerCase()) || 
+                 stockCode.includes(searchValue);
+        }).slice(0, 10);
+        
+        setFilteredStocks(filtered);
+        
+        // 검색 결과가 있으면 종목 추천 목록 표시
+        setShowStockSuggestions(true);
+      } else {
+        // 입력값이 없으면 최근 조회 종목 표시
+        setShowStockSuggestions(recentStocks.length > 0);
+        setFilteredStocks([]);
+      }
+      return; // 종목 검색 모드일 때는 여기서 함수 종료
+    }
+    
+    // 일반 채팅 모드 - 기존 로직 유지
     if (!selectedStock) {
-      // 입력값에 따라 종목 검색
-      const searchValue = inputValue.trim();
-      setSearchTerm(searchValue);
-      
+      // 종목이 선택되지 않은 경우, 입력된 텍스트로 종목 검색
+      const searchValue = value.trim();
       if (searchValue.length > 0) {
         // 종목 검색 로직
         const filtered = stockOptions.filter(stock => {
@@ -418,6 +463,9 @@ function AIChatAreaContent() {
     
     // 즉시 팝업 닫기 (최우선 처리)
     setShowStockSuggestions(false);
+    
+    // 종목 검색 모드 종료
+    setSearchMode(false);
     
     // 선택된 종목 설정
     setSelectedStock(stock);
@@ -470,7 +518,7 @@ function AIChatAreaContent() {
         height: '36px',
         borderRadius: '50%',
         border: '3px solid #f3f3f3',
-        borderTop: '3px solid #3498db',
+        borderTop: '3px solid #10A37F', // #3498db에서 #10A37F로 변경
         animation: 'spin 1s linear infinite',
       }}></div>
       <style jsx>{`
@@ -489,7 +537,7 @@ function AIChatAreaContent() {
       alignItems: 'center',
       justifyContent: 'center',
       gap: '8px',
-      backgroundColor: '#f5f9ff',
+      backgroundColor: '#D8EFE9', // #f5f9ff에서 #D8EFE9로 변경
       padding: '8px 12px',
       borderRadius: '8px',
       boxShadow: '0 2px 5px rgba(0, 0, 0, 0.05)',
@@ -520,7 +568,7 @@ function AIChatAreaContent() {
             position: 'absolute',
             width: '8px',
             height: '2px',
-            backgroundColor: '#3498db',
+            backgroundColor: '#10A37F', // #3498db에서 #10A37F로 변경
             animation: 'stopwatch-sec 60s steps(60, end) infinite',
             transformOrigin: 'left center'
           }}></div>
@@ -528,7 +576,7 @@ function AIChatAreaContent() {
         <div style={{
           width: '6px',
           height: '6px',
-          backgroundColor: '#3498db',
+          backgroundColor: '#10A37F', // #3498db에서 #10A37F로 변경
           borderRadius: '50%',
           zIndex: 3
         }}></div>
@@ -557,7 +605,7 @@ function AIChatAreaContent() {
       flexDirection: 'column',
       alignItems: 'flex-start',
       padding: '10px 14px',
-      backgroundColor: '#ffffff',
+      backgroundColor: '#D8EFE9', // #ffffff에서 #D8EFE9로 변경
       borderRadius: '12px',
       boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
       maxWidth: '95%',
@@ -576,7 +624,7 @@ function AIChatAreaContent() {
           height: '16px',
           borderRadius: '50%',
           border: '2px solid #f3f3f3',
-          borderTop: '2px solid #3498db',
+          borderTop: '2px solid #10A37F', // #3498db에서 #10A37F로 변경
           animation: 'spin 1s linear infinite',
         }}></div>
         <span>정보를 검색 중입니다...</span>
@@ -662,85 +710,74 @@ function AIChatAreaContent() {
     padding: isMobile ? '0' : '10px', // 모바일에서는 패딩 제거
   };
 
+  // 컨테이너 너비를 위한 변수 (일관성 유지를 위해)
+  const contentWidth = isMobile ? '100%' : '65%';
+  
   const inputAreaStyle: React.CSSProperties = {
     display: 'flex',
-    alignItems: 'center', // 중앙 정렬로 변경
-    width: isMobile ? '100%' : '96%', // 모바일에서는 전체 너비, 데스크탑에서는 96%로 증가
-    margin: '0 auto', // 중앙 정렬
+    alignItems: 'center',
+    justifyContent: 'center', // 중앙 정렬 강화
+    width: '100%', // 전체 너비로 변경
+    margin: '0 auto',
     paddingLeft: '0',
     boxSizing: 'border-box',
-    marginTop: isInputCentered ? (isMobile ? '30vh' : '35vh') : '0px', // 중앙 배치 시 상단 여백 추가
-    marginBottom: isMobile ? '5px' : '10px', // 여백 증가
-    paddingBottom: isMobile ? '5px' : '0',   // 여백 증가
-    position: isMobile ? 'unset' : 'relative',  // sticky 대신 relative로 변경
-    bottom: isInputCentered ? 'auto' : '20px', // 중앙 배치가 아닐 때 저작권 텍스트 위에 위치하도록 조정
-    zIndex: isMobile ? 'unset' : 10,          // 다른 요소보다 위에 표시
-    backgroundColor: 'transparent', // 모바일에서도 배경색 투명하게 변경하여 구분선 제거
-    transition: 'all 0.3s ease-in-out' // 부드러운 전환 효과 추가
+    marginTop: isInputCentered ? (isMobile ? '30vh' : '35vh') : '0px',
+    marginBottom: isMobile ? '5px' : '10px',
+    paddingBottom: isMobile ? '5px' : '0',
+    position: isMobile ? 'unset' : 'relative',
+    bottom: isInputCentered ? 'auto' : '20px',
+    zIndex: isMobile ? 'unset' : 10,
+    backgroundColor: 'transparent',
+    transition: 'margin 0.3s ease-in-out' // 전체가 아닌 margin만 transition
   };
 
   const integratedInputStyle: React.CSSProperties = {
     position: 'relative',
-    width: isInputCentered ? '48%' : '48%', // 56%에서 48%로 줄임
+    width: contentWidth, // 메시지 컨테이너와 동일한 너비 사용
+    maxWidth: isMobile ? '100%' : '65%', // 최대 너비 제한
     margin: '0 auto',
-    transition: 'all 0.3s ease-in-out',
+    transition: 'width 0.3s ease-in-out', // 전체가 아닌 width만 transition
   };
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    minHeight: '2.97rem', // 최소 높이 20% 증가 (2.475rem * 1.2 ≈ 2.97rem)
-    height: 'auto', // 높이를 자동으로 조정
+    minHeight: '2.97rem',
+    height: 'auto',
     border: '1px solid #ccc',
-    borderRadius: '8px', // 모서리를 더 둥글게 수정
+    borderRadius: '8px',
     padding: selectedStock ? '0 40px 0 85px' : '0 40px 0 8px', 
     fontSize: '0.81rem',
     outline: 'none',
     boxSizing: 'border-box',
-    resize: 'none', // 사용자가 크기 조절 불가능
-    overflow: 'hidden' // 오버플로우 숨김
+    resize: 'none',
+    overflow: 'hidden'
   };
 
-  // 종목 제안 팝업 스타일 제거 (인라인 스타일로 대체)
-  // const stockSuggestionsStyle: React.CSSProperties = {
-  //   position: 'absolute',
-  //   bottom: 'calc(100% + 5px)', // 항상 입력 필드 위 5px에 위치
-  //   left: '0',
-  //   width: '100%',
-  //   maxHeight: '200px',
-  //   overflowY: 'auto', // 내용이 많을 경우 스크롤 가능하도록 수정
-  //   backgroundColor: 'white',
-  //   border: '1px solid #ccc',
-  //   borderRadius: '8px',
-  //   boxShadow: '0 -2px 4px rgba(0, 0, 0, 0.1)',
-  //   zIndex: 1000,
-  //   marginBottom: '0px',
-  //   display: showStockSuggestions ? 'block' : 'none',
-  //   padding: '8px'
-  // };
-
   const messagesContainerStyle: React.CSSProperties = {
-    overflowY: 'visible', // 스크롤을 브라우저로 위임
+    overflowY: 'visible',
     overflowX: 'hidden',
-    padding: isMobile ? '5px' : '10px', // 모바일에서는 패딩 축소
+    padding: isMobile ? '5px' : '10px',
     margin: '0 auto', // 중앙 정렬
     border: 'none', 
     borderRadius: '0', 
-    backgroundColor: '#F4F4F4', // Figma 디자인에 맞게 배경색 변경
-    width: isMobile ? '100%' : '65%', // 모바일에서는 전체 너비, 데스크탑에서는 65%로 변경
-    height: 'auto', // 높이를 자동으로 조정
-    minHeight: 'calc(100% - 60px)', // 최소 높이 설정
+    backgroundColor: '#F4F4F4',
+    width: contentWidth, // 일관된 너비 사용
+    height: 'auto',
+    minHeight: 'calc(100% - 60px)',
     boxSizing: 'border-box',
     position: 'relative',
-    display: isInputCentered ? 'none' : 'block' // 입력 필드가 중앙에 있을 때는 메시지 영역 숨김
+    display: isInputCentered ? 'none' : 'block',
+    opacity: transitionInProgress ? 0 : 1, // 트랜지션 중에는 투명하게 처리
+    transition: 'opacity 0.3s ease-in-out' // 오직 opacity만 transition
   };
 
   const aiMessageStyle: React.CSSProperties = {
-    backgroundColor: '#ffffff',
-    borderRadius: '8px',
+    backgroundColor: 'transparent', // 박스 배경 제거
+    borderRadius: '0', // 테두리 둥글기 제거
     padding: '10px 15px',
     marginBottom: '12px',
     width: isMobile ? '100%' : '100%', // 모바일에서도 전체 너비 사용
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+    boxShadow: 'none', // 그림자 제거
     lineHeight: '1.5',
     fontSize: '0.9rem',
     whiteSpace: 'pre-wrap',
@@ -794,7 +831,7 @@ function AIChatAreaContent() {
                   <div style={{
                     fontSize: '0.75rem',
                     fontWeight: 'bold',
-                    color: '#0066cc',
+                    color: '#10A37F', // 파란색(#0066cc)에서 초록색(#10A37F)으로 변경
                     marginBottom: '4px'
                   }}>
                     {message.stockInfo.stockName} ({message.stockInfo.stockCode})
@@ -909,13 +946,13 @@ function AIChatAreaContent() {
                   }}
                   onClick={() => {
                     setShowStockSuggestions(true); // 종목 선택 팝업 표시
-                    if (searchInputRef.current) {
-                      setTimeout(() => {
-                        if (searchInputRef.current) {
-                          searchInputRef.current.focus();
-                        }
-                      }, 100);
-                    }
+                    setSearchMode(true); // 종목 검색 모드로 변경
+                    setInputMessage(''); // 입력 필드를 비워서 종목 검색을 할 수 있도록 함
+                    setTimeout(() => {
+                      if (inputRef.current) {
+                        inputRef.current.focus();
+                      }
+                    }, 100);
                   }}
                   title="클릭하여 종목 변경"
                 >
@@ -1295,8 +1332,6 @@ function AIChatAreaContent() {
                   } catch (error) {
                     console.error('Failed to save recent stocks to localStorage:', error);
                   }
-                  
-                  setTimeout(() => handleSendMessage(), 100);
                 }}
                 style={{
                   width: '100%',
@@ -1364,8 +1399,6 @@ function AIChatAreaContent() {
                   } catch (error) {
                     console.error('Failed to save recent stocks to localStorage:', error);
                   }
-                  
-                  setTimeout(() => handleSendMessage(), 100);
                 }}
                 style={{
                   width: '100%',
@@ -1433,8 +1466,6 @@ function AIChatAreaContent() {
                   } catch (error) {
                     console.error('Failed to save recent stocks to localStorage:', error);
                   }
-                  
-                  setTimeout(() => handleSendMessage(), 100);
                 }}
                 style={{
                   width: '100%',
@@ -1502,8 +1533,6 @@ function AIChatAreaContent() {
                   } catch (error) {
                     console.error('Failed to save recent stocks to localStorage:', error);
                   }
-                  
-                  setTimeout(() => handleSendMessage(), 100);
                 }}
                 style={{
                   width: '100%',
@@ -1571,8 +1600,6 @@ function AIChatAreaContent() {
                   } catch (error) {
                     console.error('Failed to save recent stocks to localStorage:', error);
                   }
-                  
-                  setTimeout(() => handleSendMessage(), 100);
                 }}
                 style={{
                   width: '100%',
@@ -1662,8 +1689,6 @@ function AIChatAreaContent() {
                   } catch (error) {
                     console.error('Failed to save recent stocks to localStorage:', error);
                   }
-                  
-                  setTimeout(() => handleSendMessage(), 100);
                 }}
                 style={{
                   width: '100%',
@@ -1731,8 +1756,6 @@ function AIChatAreaContent() {
                   } catch (error) {
                     console.error('Failed to save recent stocks to localStorage:', error);
                   }
-                  
-                  setTimeout(() => handleSendMessage(), 100);
                 }}
                 style={{
                   width: '100%',

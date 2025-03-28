@@ -208,7 +208,7 @@ function SidebarContent() {
                 >
                   <Home className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm">스탁이지</span>}
+                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">스탁이지</span>}
                 </button>
               </div>
               
@@ -223,7 +223,7 @@ function SidebarContent() {
                 >
                   <ChartColumn className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm">RS순위</span>}
+                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">RS순위</span>}
                 </button>
               </div>
               
@@ -238,7 +238,7 @@ function SidebarContent() {
                 >
                   <PieChart className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm">ETF/섹터</span>}
+                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">ETF/섹터</span>}
                 </button>
               </div>
               
@@ -253,7 +253,7 @@ function SidebarContent() {
                 >
                   <FileStack className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm">닥이지</span>}
+                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">닥이지</span>}
                 </button>
               </div>
             </div>
@@ -273,7 +273,7 @@ function SidebarContent() {
               >
                 <User className="icon" />
                 {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                {isMobile && <span className="ml-2 text-sm">마이페이지</span>}
+                {isMobile && <span className="ml-2 text-sm text-[#ececf1]">마이페이지</span>}
               </button>
             </div>
             
@@ -287,7 +287,7 @@ function SidebarContent() {
               >
                 <Settings className="icon" />
                 {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                {isMobile && <span className="ml-2 text-sm">설정</span>}
+                {isMobile && <span className="ml-2 text-sm text-[#ececf1]">설정</span>}
               </button>
             </div>
           </div>
