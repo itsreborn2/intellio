@@ -5,6 +5,15 @@ from uuid import  UUID
 from typing import Optional, List
 from common.models.base import Base
 from common.core.config import settings
+import logging
+
+# TokenUsage 모델에 대한 순환 참조 문제를 방지하기 위해 직접 임포트하지 않음
+# 대신 클래스 초기화 완료 후 SQLAlchemy가 관계를 해석할 수 있도록 문자열 참조 사용
+
+# 순환 참조를 해결하기 위한 필요한 클래스 임포트
+from doceasy.models.project import Project  # Project 모델 명시적 임포트 추가
+
+# 이제 모든 관계 설정은 common/models/__init__.py에서 중앙화하여 관리합니다.
 
 class User(Base):
     """사용자 모델"""
@@ -19,14 +28,19 @@ class User(Base):
     oauth_provider: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # google, naver, kakao
     oauth_provider_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
-    # Relationships
-    sessions = relationship("Session", back_populates="user", foreign_keys="[Session.user_id]", cascade="all, delete-orphan")
-    projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
-    token_usages = relationship("TokenUsage", back_populates="user", cascade="all, delete-orphan")
+    # 관계 설정은 __init__.py에서 중앙화하여 처리합니다
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email='{self.email}')>"
 
+# 모든 모델 정의 후 명시적으로 관계 로드를 위한 코드
+try:
+    # 모듈 로딩 시점에서 TokenUsage 로드 시도
+    from common.models.token_usage import TokenUsage
+    logging.info("TokenUsage 모델 로드 성공")
+except ImportError:
+    logging.warning("TokenUsage 모델 로드 실패 - 순환 참조 가능성 있음")
+    pass  # 무시하고 계속 진행
 
 class Session(Base):
     """사용자 세션 모델"""
@@ -41,8 +55,7 @@ class Session(Base):
                                                     server_default=text("TIMEZONE('Asia/Seoul', CURRENT_TIMESTAMP)"),
                                                     nullable=False
                                                 )
-    # Relationships
-    user = relationship("User", back_populates="sessions", foreign_keys=[user_id], lazy="joined")
+    # 관계 설정은 __init__.py에서 중앙화하여 처리합니다
 
     @property
     def is_expired(self) -> bool:

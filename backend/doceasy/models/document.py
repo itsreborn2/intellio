@@ -8,6 +8,8 @@ import json
 
 from common.models.base import Base
 
+# 이제 모든 관계 설정은 common/models/__init__.py에서 중앙화하여 관리합니다.
+
 class Document(Base):
     """문서 모델"""
     __tablename__ = "documents"
@@ -24,9 +26,7 @@ class Document(Base):
     extracted_text: Mapped[str | None] = mapped_column(Text)
     embedding_ids: Mapped[str | None] = mapped_column(String)  # JSON string of list
 
-    # Relationships
-    project = relationship("Project", back_populates="documents")
-    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+    # 관계 설정은 __init__.py에서 중앙화하여 처리합니다
 
     def __repr__(self):
         return f"<Document(id={self.id}, filename='{self.filename}', status='{self.status}')>"
@@ -81,8 +81,7 @@ class DocumentChunk(Base):
     chunk_metadata: Mapped[str | None] = mapped_column(String)  # JSON string
     embedding: Mapped[str | None] = mapped_column(String)
 
-    # Relationships
-    document = relationship("Document", back_populates="chunks")
+    # 관계 설정은 __init__.py에서 중앙화하여 처리합니다
 
     __table_args__ = (
         # document_id와 chunk_index의 unique 제약조건 추가

@@ -4,6 +4,7 @@ from celery.schedules import crontab
 from kombu import Queue, Exchange
 from celery.signals import task_success, task_failure
 import logging
+import common.models  # 추가: 모든 모델 관계를 로드
 
 logger = logging.getLogger(__name__)
 

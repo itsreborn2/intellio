@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional
+from uuid import UUID
 from .base import BaseRetriever, RetrieverConfig
 from .models import DocumentWithScore, RetrievalResult
 from .semantic import SemanticRetriever, SemanticRetrieverConfig
@@ -7,13 +8,19 @@ from pydantic import BaseModel, Field
 import asyncio
 from loguru import logger
 from common.services.vector_store_manager import VectorStoreManager
+from langchain_community.retrievers import BM25Retriever as LangchainBM25Retriever
+from ..reranker import Reranker, RerankerConfig, RerankerType, PineconeRerankerConfig
+from common.core.config import settings
 
 class HybridRetrieverConfig(RetrieverConfig):
     """하이브리드 검색 설정"""
     semantic_config: SemanticRetrieverConfig = Field(..., description="시맨틱 검색 설정")
     contextual_bm25_config: ContextualBM25Config = Field(..., description="Contextual BM25 검색 설정")
-    semantic_weight: float = Field(default=0.6, description="시맨틱 검색 결과의 가중치")
     contextual_bm25_weight: float = Field(default=0.4, description="Contextual BM25 검색 결과의 가중치")
+    semantic_weight: float = Field(default=0.6, description="벡터-BM25 순차 검색에서 벡터 검색 결과의 가중치")
+    vector_multiplier: int = Field(default=10, description="벡터-BM25 순차 검색에서 벡터 검색 결과 수에 곱할 배수")
+    project_type: Optional[str] = None
+    user_id: Optional[UUID] = None
 
 class HybridRetriever(BaseRetriever):
     """시맨틱 검색과 Contextual BM25를 결합한 하이브리드 검색 구현체"""
@@ -21,8 +28,13 @@ class HybridRetriever(BaseRetriever):
     def __init__(self, config: HybridRetrieverConfig, vs_manager: VectorStoreManager):
         super().__init__(config)
         self.config = config
-        self.semantic_retriever = SemanticRetriever(config.semantic_config, vs_manager=vs_manager)
-        self.contextual_bm25_retriever = ContextualBM25Retriever(config.contextual_bm25_config)
+        self.semantic_retriever = SemanticRetriever(
+            config=self.config.semantic_config,
+            vs_manager=vs_manager
+        )
+        self.contextual_bm25_retriever = ContextualBM25Retriever(
+            config=self.config.contextual_bm25_config
+        )
         
     async def retrieve(
         self,
@@ -66,6 +78,151 @@ class HybridRetriever(BaseRetriever):
         except Exception as e:
             logger.error(f"하이브리드 검색 중 오류 발생: {str(e)}")
             raise
+    
+    async def retrieve_vector_then_bm25(
+        self,
+        query: str,
+        top_k: Optional[int] = None,
+        filters: Optional[Dict] = None
+    ) -> RetrievalResult:
+        """벡터 검색 후 BM25 재랭킹 수행"""
+        try:
+            logger.info(f"벡터-BM25 순차 검색 시작 - 쿼리: {query}")
+            _top_k = top_k or self.config.top_k
+            
+            # 1. 벡터 검색으로 후보군 확보 (더 많은 결과)
+            vector_top_k = _top_k * self.config.vector_multiplier
+            logger.info(f"벡터 검색 요청 - top_k: {_top_k}, vector_top_k: {vector_top_k}")
+            vector_results = await self.semantic_retriever.retrieve(
+                query=query, 
+                top_k=vector_top_k, 
+                filters=filters
+            )
+            
+            if not vector_results.documents:
+                logger.warning("벡터 검색 결과가 없습니다.")
+                return RetrievalResult(documents=[])
+            
+            logger.info(f"벡터 검색 결과: {len(vector_results.documents)} 문서 (요청: {vector_top_k})")
+            if len(vector_results.documents) < vector_top_k:
+                logger.warning(f"벡터 검색 결과가 요청한 수({vector_top_k})보다 적습니다: {len(vector_results.documents)}")
+            
+            # 2. 벡터 검색 결과로 Contextual BM25 검색 수행
+            # temp_bm25 = ContextualBM25Retriever(
+            #     config=self.config.contextual_bm25_config
+            # )
+            await self.contextual_bm25_retriever.add_documents(vector_results.documents)
+            #await self.contextual_bm25_retriever.add_documents_llama(vector_results.documents)
+            bm25_results = await self.contextual_bm25_retriever.retrieve(query, top_k=_top_k)
+            
+            # 3. 결과 변환 및 점수 계산
+            result_documents = []
+            for doc in bm25_results.documents:
+                # 원래 벡터 점수 찾기
+                orig_idx = next(
+                    (i for i, vdoc in enumerate(vector_results.documents)
+                     if vdoc.page_content == doc.page_content),
+                    None
+                )
+                
+                if orig_idx is not None:
+                    vector_score = vector_results.documents[orig_idx].score
+                    bm25_score = doc.score
+                    
+                    # 결합 점수
+                    combined_score = (
+                        self.config.semantic_weight * vector_score +
+                        self.config.contextual_bm25_weight * bm25_score
+                    )
+                    
+                    # 메타데이터에 각 점수 추가
+                    metadata = doc.metadata.copy()
+                    metadata.update({
+                        "vector_score": float(vector_score),
+                        "bm25_score": float(bm25_score),
+                        "contextual_score": float(doc.metadata.get("context_score", 0.0))
+                    })
+                    
+                    result_documents.append(DocumentWithScore(
+                        page_content=doc.page_content,
+                        metadata=metadata,
+                        score=float(combined_score)
+                    ))
+            
+            # 쿼리 분석 정보 추가
+            query_analysis = {
+                "type": "vector_then_contextual_bm25",
+                "vector_top_k": vector_top_k,
+                "final_top_k": _top_k,
+                "vector_weight": self.config.semantic_weight,
+                "keyword_weight": self.config.contextual_bm25_weight,
+                "total_vector_results": len(vector_results.documents),
+                "total_bm25_results": len(bm25_results.documents),
+                "returned": len(result_documents),
+                "bm25_analysis": bm25_results.query_analysis
+            }
+            
+            logger.info(f"벡터-Contextual BM25 순차 검색 완료 - 결과: {len(result_documents)} 문서")
+            
+            return RetrievalResult(
+                documents=result_documents,
+                query_analysis=query_analysis
+            )
+            
+        except Exception as e:
+            logger.error(f"벡터-Contextual BM25 순차 검색 중 오류 발생: {str(e)}")
+            raise
+    
+    async def retrieve_vector_then_rerank(
+        self,
+        query: str,
+        top_k: Optional[int] = None,
+        filters: Optional[Dict] = None
+    ) -> RetrievalResult:
+        """벡터 검색 후 리랭킹(Cross-Encoder) 수행"""
+        _top_k = top_k or self.config.top_k
+        
+        # 1. 벡터 검색으로 후보군 확보 (더 많은 결과)
+        vector_top_k = _top_k * self.config.vector_multiplier
+        logger.info(f"벡터 검색 요청 - 쿼리: {query}, top_k: {_top_k}, vector_top_k: {vector_top_k}")
+        vector_results = await self.semantic_retriever.retrieve(
+            query=query, 
+            top_k=vector_top_k, 
+            filters=filters
+        )
+        
+        if not vector_results.documents:
+            logger.warning("벡터 검색 결과가 없습니다.")
+            return RetrievalResult(documents=[])
+        
+        logger.info(f"벡터 검색 결과: {len(vector_results.documents)} 문서")
+        
+        # 2. 리랭킹 수행
+        reranker = Reranker(
+            RerankerConfig(
+                reranker_type=RerankerType.PINECONE,
+                pinecone_config=PineconeRerankerConfig(
+                    api_key=settings.PINECONE_API_KEY_STOCKEASY,
+                    min_score=0.1  # 낮은 임계값으로 더 많은 결과 포함
+                )
+            )
+        )
+        
+        reranked_results = await reranker.rerank(
+            query=query,
+            documents=vector_results.documents,
+            top_k=_top_k
+        )
+        
+        logger.info(f"리랭킹 완료 - 결과: {len(reranked_results.documents)} 문서")
+        
+        # 결과에 리랭킹 정보 추가
+        reranked_results.query_analysis.update({
+            "type": "vector_then_rerank",
+            "vector_search_count": len(vector_results.documents)
+        })
+        
+        return reranked_results
     
     def _merge_results(
         self,

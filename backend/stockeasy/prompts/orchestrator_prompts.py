@@ -94,22 +94,24 @@ def format_orchestrator_prompt(
 3. 검색 에이전트들은 병렬로 실행될 수 있으므로, 실행 순서상 어떤 순서로 나열해도 괜찮습니다.
 4. fallback_manager는 오류 발생 시에만 사용되므로 일반적인 실행 순서에 포함하지 마세요.
 
-응답은 다음 JSON 형식으로 제공하세요:
-{{
-  "agents": [
-    {{
-      "agent_name": "에이전트 이름",
-      "enabled": true/false,
-      "priority": 1-10 사이의 정수,
-      "parameters": {{}} // 필요한 경우 에이전트별 특수 매개변수
-    }},
-    // 다른 에이전트들...
-  ],
-  "execution_order": List[str] = Field(..., description="실행 순서"),
-  "integration_strategy": str = Field(..., description="정보 통합 전략"),
-  "expected_output": str = Field(..., description="예상 출력물"),
-  "fallback_strategy": str = Field(..., description="실패 시 대응 전략")
-}}
+
 """
     
+# 응답은 다음 JSON 형식으로 제공하세요:
+# {{
+#   "agents": [
+#     {{
+#       "agent_name": "에이전트 이름",
+#       "enabled": true/false,
+#       "priority": 1-10 사이의 정수,
+#       "parameters": {{}} // 필요한 경우 에이전트별 특수 매개변수
+#     }},
+#     // 다른 에이전트들...
+#   ],
+#   "execution_order": List[str] = Field(..., description="실행 순서"),
+#   "integration_strategy": str = Field(..., description="정보 통합 전략"),
+#   "expected_output": str = Field(..., description="예상 출력물"),
+#   "fallback_strategy": str = Field(..., description="실패 시 대응 전략")
+# }}
+
     return prompt 

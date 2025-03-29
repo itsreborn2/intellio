@@ -29,10 +29,14 @@ class TelegramMessageMetadata:
     has_media: bool             # 미디어 첨부 여부
     has_document: bool          # 문서 첨부 여부
     document_name: Optional[str] # 문서 이름 (있는 경우)
-    document_gcs_path: Optional[str] # GCS 경로 (있는 경우)
+    document_gcs_path: Optional[str]
+    is_forwarded: bool           # 전달된 메시지 여부
+    forward_from_name: Optional[str]  # 원본 메시지 발신자 이름
+    forward_from_id: Optional[str]    # 원본 메시지 발신자 ID
+    keywords: Optional[List[str]] = None  # 추출된 키워드 리스트
 
     @classmethod
-    def from_telegram_message(cls, message: TelegramMessage) -> 'TelegramMessageMetadata':
+    def from_telegram_message(cls, message: TelegramMessage, keywords: Optional[List[str]] = None) -> 'TelegramMessageMetadata':
         """TelegramMessage로부터 메타데이터 객체를 생성합니다."""
         return cls(
             message_id=message.message_id,
@@ -47,6 +51,10 @@ class TelegramMessageMetadata:
             has_document=message.has_document,
             document_name=message.document_name if message.has_document else None,
             document_gcs_path=message.document_gcs_path if message.has_document else None,
+            is_forwarded=message.is_forwarded,
+            forward_from_name=message.forward_from_name,
+            forward_from_id=message.forward_from_id,
+            keywords=keywords
         )
 
 class TelegramEmbeddingService(CommonEmbeddingService):
@@ -65,16 +73,75 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             namespace=self.namespace,
         )
 
-    def _create_telegram_metadata(self, message: TelegramMessage) -> dict:
+    def _extract_keywords_from_text(self, text: str) -> List[str]:
+        """텍스트에서 키워드를 추출합니다.
+        
+        LLM을 사용하여 텍스트에서 1~5개의 키워드를 추출합니다.
+        종목명, 섹터 등의 정보가 발견되면 반드시 키워드에 포함합니다.
+        
+        Args:
+            text: 키워드를 추출할 텍스트
+            
+        Returns:
+            추출된 키워드 리스트
+        """
+        # 키워드를 추출할 텍스트가 너무 짧으면 건너뜀
+        MIN_TEXT_LENGTH = 100  # 텍스트 최소 길이 설정
+        if len(text) < MIN_TEXT_LENGTH:
+            logger.debug(f"텍스트가 너무 짧아 키워드 추출을 건너뜁니다 (길이: {len(text)})")
+            return []
+        
+        try:
+            # agent_llm을 이용하여 키워드 추출
+            from common.services.agent_llm import get_agent_llm
+            from langchain_core.messages import HumanMessage
+            
+            agent_llm = get_agent_llm("default")
+            
+            # 프롬프트 작성
+            prompt = f"""
+            다음 텍스트에서 1~5개의 중요 키워드를 추출해주세요. 
+            종목명, 주식 심볼, 섹터, 산업 등의 중요 정보가 있다면 반드시 포함해주세요.
+            키워드만 쉼표로 구분하여 답변해주세요. 다른 설명은 포함하지 마세요.
+            
+            텍스트:
+            {text}
+            """
+            
+            # LLM 호출
+            response = agent_llm.get_llm().invoke([HumanMessage(content=prompt)])
+            
+            # 결과 처리
+            keywords_text = response.content.strip()
+            
+            # 쉼표로 구분된 키워드 리스트로 변환
+            keywords = [kw.strip() for kw in keywords_text.split(',')]
+            
+            # 빈 문자열 제거 및 중복 제거
+            keywords = [kw for kw in keywords if kw]
+            keywords = list(dict.fromkeys(keywords))  # 중복 제거
+            
+            # 최대 5개로 제한
+            keywords = keywords[:5] if len(keywords) > 5 else keywords
+            
+            logger.info(f"추출된 키워드: {keywords}")
+            return keywords
+            
+        except Exception as e:
+            logger.error(f"키워드 추출 중 오류 발생: {str(e)}")
+            return []
+
+    def _create_telegram_metadata(self, message: TelegramMessage, keywords: Optional[List[str]] = None) -> dict:
         """텔레그램 메시지의 메타데이터를 생성합니다.
         
         Args:
             message (TelegramMessage): 텔레그램 메시지
+            keywords (Optional[List[str]]): 추출된 키워드 리스트
             
         Returns:
             dict: 메타데이터 딕셔너리
         """
-        metadata = TelegramMessageMetadata.from_telegram_message(message)
+        metadata = TelegramMessageMetadata.from_telegram_message(message, keywords)
         metadata_dict = asdict(metadata)
         
         # 모든 값을 직렬화 가능한 형식으로 변환
@@ -87,6 +154,14 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                 metadata_dict[key] = str(value)  # 숫자를 문자열로 변환
             elif isinstance(value, datetime):
                 metadata_dict[key] = value.isoformat()  # datetime을 ISO 형식 문자열로 변환
+            elif key == 'keywords':
+                # 키워드는 배열 형태로 유지
+                if value is None:
+                    metadata_dict[key] = []
+                # value가 이미 list이므로 그대로 유지
+            elif isinstance(value, list):
+                # 다른 리스트 형태의 필드는 쉼표로 구분된 문자열로 변환
+                metadata_dict[key] = ",".join(value) if value else ""
         
         return metadata_dict
         
@@ -184,13 +259,18 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             bool: 성공 여부
         """
         try:
-            # 메타데이터 생성
-            metadata = self._create_telegram_metadata(message)
-            
             # 임베딩할 텍스트 준비
             text = self._prepare_text_for_embedding(message)
             if not text:
                 return False
+            
+            # 텍스트 길이에 따라 키워드 추출
+            keywords = []
+            if len(text) >= 100:  # 최소 길이 설정
+                keywords = self._extract_keywords_from_text(text)
+            
+            # 메타데이터 생성 (키워드 포함)
+            metadata = self._create_telegram_metadata(message, keywords)
             
             # 임베딩 생성
             embeddings = self.create_single_embedding(text)
@@ -283,9 +363,18 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                 try:
                     logger.info(f"배치 처리 중 ({batch_idx + 1}/{len(batches)}): {len(batch)}개 메시지")
                     
+                    # 각 메시지에 대해 키워드 추출
+                    batch_with_keywords = []
+                    for msg, text in batch:
+                        # 텍스트 길이에 따라 키워드 추출
+                        keywords = []
+                        if len(text) >= 100:  # 최소 길이 설정
+                            keywords = self._extract_keywords_from_text(text)
+                        batch_with_keywords.append((msg, text, keywords))
+                    
                     # 메타데이터 생성
-                    metadatas = [self._create_telegram_metadata(msg) for msg, _ in batch]
-                    texts = [text for _, text in batch]
+                    metadatas = [self._create_telegram_metadata(msg, keywords) for msg, _, keywords in batch_with_keywords]
+                    texts = [text for _, text, _ in batch_with_keywords]
                     
                     # 임베딩 생성
                     embeddings = self.create_embeddings_batch_sync(texts)
@@ -308,7 +397,7 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                             "values": emb,
                             "metadata": meta
                         }
-                        for (msg, _), emb, meta in zip(batch, embedding_vectors, metadatas)
+                        for (msg, _, _), emb, meta in zip(batch_with_keywords, embedding_vectors, metadatas)
                     ]
                     
                     # 벡터 데이터 유효성 검사

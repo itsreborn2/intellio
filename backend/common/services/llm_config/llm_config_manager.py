@@ -108,6 +108,35 @@ class LLMConfigManager:
         self._config = self._load_config()
         logger.info("LLM 설정 파일 새로고침 완료")
     
+    def get_llm_config(self, llm_name: str) -> Dict[str, Any]:
+        """
+        에이전트별 LLM 설정 반환
+        
+        Args:
+            agent_name: 에이전트 이름
+            
+        Returns:
+            에이전트별 LLM 설정
+        """
+        # 설정 파일 상태 확인 및 필요 시 재로드
+        modified_time = self._get_file_modified_time()
+        if modified_time > self._last_modified_time:
+            self.refresh()
+        
+        # 에이전트 설정 확인
+        llm_config = self._config.get(llm_name, {})
+        
+        # 에이전트 설정이 없으면 기본 설정 사용
+        if llm_config is None:
+            logger.info(f"에이전트 {llm_name}의 설정이 없습니다. 기본 설정을 사용합니다.")
+            return self._config.get("default", {})
+        
+        # 기본 설정과 에이전트 설정 병합
+        default_config = self._config.get("default", {}).copy()
+        default_config.update(llm_config)
+        
+        return default_config
+    
     def get_agent_config(self, agent_name: str) -> Dict[str, Any]:
         """
         에이전트별 LLM 설정 반환

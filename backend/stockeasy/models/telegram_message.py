@@ -26,7 +26,7 @@
 
 from sqlalchemy import String, Integer, Text, Boolean, Index, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
-from datetime import datetime
+from datetime import datetime, timezone
 from common.models.base import Base
 
 class TelegramMessage(Base):
@@ -50,6 +50,9 @@ class TelegramMessage(Base):
         document_gcs_path (str): GCS에 저장된 파일 경로
         document_mime_type (str): 파일의 MIME 타입
         document_size (int): 파일 크기 (바이트)
+        is_forwarded (bool): 전달된 메시지인지 여부
+        forward_from_name (str): 원본 메시지 발신자 이름
+        forward_from_id (str): 원본 메시지 발신자 ID
     """
     __tablename__ = 'telegram_messages'
 
@@ -69,9 +72,18 @@ class TelegramMessage(Base):
     # 문서 관련 필드
     has_document: Mapped[bool] = mapped_column(default=False)
     document_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    document_gcs_path: Mapped[str | None] = mapped_column(String, nullable=True)  # GCS에 저장된 파일 경로
-    document_mime_type: Mapped[str | None] = mapped_column(String, nullable=True)  # 파일의 MIME 타입
-    document_size: Mapped[int | None] = mapped_column(Integer, nullable=True)      # 파일 크기 (바이트)
+    document_gcs_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    document_mime_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    document_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    
+    # 전달된 메시지 관련 필드
+    is_forwarded: Mapped[bool] = mapped_column(default=False)
+    forward_from_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    forward_from_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    
+    # 공통 필드
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(tz=timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(tz=timezone.utc), onupdate=lambda: datetime.now(tz=timezone.utc))
 
     __table_args__ = (
         # 메시지 ID와 채널 ID의 조합으로 유니크 제약

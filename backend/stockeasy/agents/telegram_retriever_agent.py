@@ -19,6 +19,9 @@ from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
 #from sqlalchemy import UUID
 from uuid import UUID
+from common.services.reranker import PineconeRerankerConfig, Reranker, RerankerConfig, RerankerType
+from common.services.retrievers.contextual_bm25 import ContextualBM25Config
+from common.services.retrievers.hybrid import HybridRetriever, HybridRetrieverConfig
 from stockeasy.prompts.telegram_prompts import TELEGRAM_SUMMARY_PROMPT
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
 from common.utils.util import async_retry
@@ -28,7 +31,7 @@ from common.models.token_usage import ProjectType
 
 from common.services.vector_store_manager import VectorStoreManager
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
-from common.services.retrievers.models import RetrievalResult
+from common.services.retrievers.models import DocumentWithScore, RetrievalResult
 from stockeasy.models.agent_io import RetrievedAllAgentData, RetrievedTelegramMessage
 from langchain_core.messages import AIMessage
 from stockeasy.agents.base import BaseAgent
@@ -652,11 +655,6 @@ class TelegramRetrieverAgent(BaseAgent):
             logger.info(f"Generated search query: {search_query}")
             
             # 임베딩 모델을 사용하여 쿼리 벡터 생성
-            # embeddings = TelegramEmbeddingModel(model_type="remote")
-            
-            # # 텔레그램 검색 인덱스에서 검색 수행
-            # retriever = TelegramRetriever(embeddings)
-            # retriever.filter_by_threshold(threshold)
             
             # 초기 검색은 더 많은 결과를 가져온 후 필터링
             initial_k = min(k * 3, 30)  # 적어도 원하는 k의 3배, 최대 30개까지
@@ -671,15 +669,15 @@ class TelegramRetrieverAgent(BaseAgent):
             # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
             parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
 
+            semantic_retriever_config = SemanticRetrieverConfig(min_score=threshold,
+                                               user_id=parsed_user_id,
+                                               project_type=ProjectType.STOCKEASY    )
             # 시맨틱 검색 설정
             semantic_retriever = SemanticRetriever(
-                config=SemanticRetrieverConfig(min_score=threshold,
-                                               user_id=parsed_user_id,
-                                               project_type=ProjectType.STOCKEASY
-                                               ),
+                config=semantic_retriever_config,
                 vs_manager=vs_manager
             )
-                    
+            
             # 검색 수행
             result: RetrievalResult = await semantic_retriever.retrieve(
                 query=search_query, 
@@ -689,22 +687,12 @@ class TelegramRetrieverAgent(BaseAgent):
             if len(result.documents) == 0:
                 logger.warning(f"No telegram messages found for query: {search_query}")
                 return []
-                
-            # 결과가 너무 적은 경우 임계값 낮춰서 다시 시도
-            # if len(result) < 3 and threshold > 0.3:
-            #     logger.info(f"Few results ({len(result)}), lowering threshold to 0.3")
-            #     retriever.filter_by_threshold(0.3)
-            #     result = await retriever.get_relevant_messages(search_query, k=initial_k)
-                
-            # if not result:
-            #     logger.warning("Still no telegram messages found after lowering threshold")
-            #     return []
-                
             logger.info(f"Found {len(result.documents)} telegram messages")
             
             # 중복 메시지 필터링 및 점수 계산
             processed_messages = []
             seen_messages = set()  # 중복 확인용
+            remove_duplicated_result = []
             
             for doc in result.documents:
                 doc_metadata = doc.metadata
@@ -719,11 +707,34 @@ class TelegramRetrieverAgent(BaseAgent):
                 if self._is_duplicate(normalized_content, seen_messages):
                     logger.info(f"중복 메시지 제외: {normalized_content[:50]}")
                     continue
-
-                
                     
                 seen_messages.add(self._get_message_hash(normalized_content))
-                
+                remove_duplicated_result.append(doc)
+            # 중복 제거된 청크로. 리랭킹 수행
+
+            # 2. 리랭킹 수행
+            reranker = Reranker(
+                RerankerConfig(
+                    reranker_type=RerankerType.PINECONE,
+                    pinecone_config=PineconeRerankerConfig(
+                        api_key=settings.PINECONE_API_KEY_STOCKEASY,
+                        min_score=0.1  # 낮은 임계값으로 더 많은 결과 포함
+                    )
+                )
+            )
+            
+            reranked_results = await reranker.rerank(
+                query=search_query,
+                documents=remove_duplicated_result,
+                top_k=k
+            )
+
+            logger.info(f"리랭킹 완료 - 결과: {len(result.documents)} -> {len(reranked_results.documents)} 문서")
+
+            # 종복 제거된 것으로
+            for doc in reranked_results.documents:
+                doc_metadata = doc.metadata
+                content = doc.page_content
                 # 메시지 중요도 계산
                 importance_score = self._calculate_message_importance(content)
                 

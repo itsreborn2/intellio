@@ -1,3 +1,5 @@
+import common.models  # 추가: 모든 모델 관계를 로드
+
 from celery import Celery
 from celery.schedules import crontab
 from kombu import Queue, Exchange
@@ -9,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 # Celery 앱 초기화
 celery = Celery(
-    "app",
+    "stockeasy_worker",
     broker=stockeasy_settings.REDIS_URL,
     backend=stockeasy_settings.REDIS_URL,
     include=[

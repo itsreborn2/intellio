@@ -29,31 +29,6 @@ OPTIMIZED_QUESTION_ANALYZER_PROMPT = """
 - 한국 주식 시장 맥락에서 분석할 것
 - 확실하지 않은 정보는 추측하지 말 것
 
-응답은 다음 JSON 형식으로 제공하세요:
-{{
-  "entities": {{
-    "stock_name": "종목명 또는 null",
-    "stock_code": "종목코드 또는 null",
-    "sector": "종목이 속한 산업/섹터 또는 null",
-    "time_range": "시간범위 또는 null",
-    "financial_metric": "재무 지표 또는 null",
-    "competitor": "경쟁사 또는 null",
-    "product": "제품/서비스 또는 null"
-  }},
-  "classification": {{
-    "primary_intent": Literal["종목기본정보", "성과전망", "재무분석", "산업동향", "기타"],
-    "complexity": Literal["단순", "중간", "복합", "전문가급"],
-    "expected_answer_type": Literal["사실형", "추론형", "비교형", "예측형", "설명형"]
-  }},
-  "data_requirements": {{
-    "telegram_needed": true/false,
-    "reports_needed": true/false,
-    "financial_statements_needed": true/false,
-    "industry_data_needed": true/false
-  }},
-  "keywords": ["키워드1", "키워드2", "키워드3"],
-  "detail_level": "간략/보통/상세 중 하나"
-}}
 """
 
 def format_question_analyzer_prompt(query: str, stock_name: str, stock_code: str) -> str:
