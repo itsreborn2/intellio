@@ -125,13 +125,14 @@ class IndustryAnalyzerAgent(BaseAgent):
                 # keywords에서 제외할 키워드 필터링
                 filtered_keywords = [kw for kw in keywords if kw not in exclude_keywords]
                 keywords_list = keywords
+                sector_list = []  # 기본값으로 빈 리스트 초기화
                 if sector:
                     sector_splits = sector.split("/")
                     sector_list = [x.strip() for x in sector_splits] # 제약/바이오 같은 패턴 분리.
                     keywords_list += sector_list
                 
 
-                searched_industry_data = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"subgroup_list": {"$in":sector_list}}, user_id=user_id)
+                searched_industry_data = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"subgroup_list": {"$in":sector_list}} if sector_list else {}, user_id=user_id)
                 searched_industry_data2 = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"keywords": {"$in":keywords_list}}, user_id=user_id)
                 
                 # 두 검색 결과 병합 및 중복 제거

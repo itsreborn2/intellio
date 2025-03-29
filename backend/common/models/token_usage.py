@@ -4,6 +4,7 @@ from typing import Optional
 from uuid import UUID
 from enum import Enum
 from common.models.base import Base
+from common.models.user import User
 
 class ProjectType(str, Enum):
     """프로젝트 유형"""
@@ -29,8 +30,7 @@ class TokenUsage(Base):
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cost: Mapped[float] = mapped_column(Float, default=0.0)
 
-    # Relationships
-    user = relationship("User", back_populates="token_usages")
+    # 관계 설정은 __init__.py에서 중앙화하여 처리합니다
 
     def __repr__(self) -> str:
         return f"<TokenUsage(id={self.id}, user_id={self.user_id}, project_type={self.project_type}, token_type={self.token_type})>" 

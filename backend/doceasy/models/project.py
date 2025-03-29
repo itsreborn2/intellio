@@ -5,6 +5,7 @@ from sqlalchemy import String, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from common.models.base import Base
 
+# 이제 모든 관계 설정은 common/models/__init__.py에서 중앙화하여 관리합니다.
 
 class Project(Base):
     """프로젝트 모델"""
@@ -22,6 +23,4 @@ class Project(Base):
     content_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     embedding_refs: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # 관계 설정
-    user = relationship("User", back_populates="projects")
-    documents = relationship("Document", back_populates="project", cascade="all, delete-orphan")
+    # 관계 설정은 __init__.py에서 중앙화하여 처리합니다

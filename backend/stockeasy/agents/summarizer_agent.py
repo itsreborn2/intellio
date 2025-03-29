@@ -113,7 +113,7 @@ class SummarizerAgent(BaseAgent):
             )
             
             # 상태 업데이트
-            state["summary"] = summary
+            state["summary"] = summary.content
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["summarizer"] = "completed"
             
