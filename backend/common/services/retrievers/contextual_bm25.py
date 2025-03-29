@@ -1,9 +1,12 @@
 from typing import List, Dict, Optional
+from uuid import UUID
 import numpy as np
+from rank_bm25 import BM25Okapi
 from llama_index.retrievers.bm25 import BM25Retriever as LlamaBM25Retriever
 from langchain_community.retrievers import BM25Retriever as LangchainBM25Retriever
 from llama_index.core.schema import Document as LlamaDocument, NodeWithScore, BaseNode, TextNode
 from transformers import AutoTokenizer, AutoModel
+from common.services.embedding_models import EmbeddingModelType
 from common.core.config import settings
 from sklearn.metrics.pairwise import cosine_similarity
 from loguru import logger
@@ -16,15 +19,18 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 
 class ContextualBM25Config(RetrieverConfig):
     """Contextual BM25 검색 설정"""
-    min_score: float = Field(default=0.3, description="최소 점수")
+    min_score: float = Field(default=0.1, description="최소 점수")
     bm25_weight: float = Field(default=0.6, description="BM25 점수 가중치")
     context_weight: float = Field(default=0.4, description="문맥 점수 가중치")
     context_window_size: int = Field(default=3, description="문맥 윈도우 크기")
     model_name: str = Field(
         #default="jhgan/ko-sroberta-multitask",
-        default=settings.KAKAO_EMBEDDING_MODEL_PATH,
+        default=EmbeddingModelType.BGE_M3, # dragonkue/bge-m3-ko
         description="문맥 임베딩 모델"
     )
+    project_type: Optional[str] = None
+    user_id: Optional[UUID] = None
+
 
     @field_validator('bm25_weight', 'context_weight')
     @classmethod
@@ -51,15 +57,14 @@ class ContextualBM25Retriever(BaseRetriever):
         self.documents = []
         self.document_embeddings = None
         self.embedding_cache = {}
+        self.bm25 = None  # BM25Okapi 인스턴스
         
         # 문맥 임베딩을 위한 모델 초기화
         logger.info(f"문맥 임베딩 모델 초기화: {config.model_name}")
-        self.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
-        self.model = AutoModel.from_pretrained(config.model_name)
-        self.model.eval()
+        model_name = config.model_name.value if hasattr(config.model_name, 'value') else config.model_name
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         
-        # LlamaIndex BM25 초기화
-        self.bm25_retriever = None
+        self.embedding_service = EmbeddingService(EmbeddingModelType.OPENAI_3_LARGE)
         
     def _tokenize_text(self, text: str) -> List[str]:
         """DeBERTa 토크나이저를 사용하여 텍스트 토큰화"""
@@ -69,65 +74,26 @@ class ContextualBM25Retriever(BaseRetriever):
     def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """텍스트 리스트의 임베딩 생성"""
 
-        embedding_service = EmbeddingService()
-        embeddings = embedding_service.create_embeddings_batch_sync(texts)
         
-        # for text in texts:
-        #     cache_key = hash(text)
-        #     if cache_key in self.embedding_cache:
-        #         embeddings.append(self.embedding_cache[cache_key])
-        #         continue
-            
-        #     with torch.no_grad():
-        #         inputs = self.tokenizer(
-        #             text,
-        #             max_length=512,
-        #             padding=True,
-        #             truncation=True,
-        #             return_tensors="pt"
-        #         )
-                
-        #         outputs = self.model(**inputs)
-        #         embedding = outputs.last_hidden_state[:, 0, :].numpy()
-        #         embeddings.append(embedding[0])
-        #         self.embedding_cache[cache_key] = embedding[0]
-                
-        #return np.array(embeddings)
+        embeddings = self.embedding_service.create_embeddings_batch_sync(texts, user_id=self.config.user_id, project_type=self.config.project_type)
+        
+        
         return embeddings
         
-    async def add_documents_llama(self, documents: List[DocumentWithScore]) -> bool:
-        """문서를 검색 인덱스에 추가"""
-        try:
-            logger.info(f"Contextual BM25 인덱스 생성 시작: {len(documents)} 청크")
-            self.documents = documents
-            
-            llama_nodes = [
-                TextNode(text=doc.page_content, metadata=doc.metadata)
-                for doc in documents
-            ]
-
-            # BM25 인덱스 생성
-            self.bm25_retriever = LlamaBM25Retriever.from_defaults(
-                nodes=llama_nodes,
-                language="kr",
-                tokenizer_fn=lambda x: self.tokenizer.tokenize(x)  # DeBERTa 토크나이저 사용
-            )
-            # 문맥 임베딩 생성
-            self.document_embeddings = self._get_embeddings([doc.page_content for doc in documents])
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Contextual BM25 인덱스 생성 중 오류: {str(e)}")
-            return False
     async def add_documents(self, documents: List[DocumentWithScore]) -> bool:
         """문서를 검색 인덱스에 추가"""
         try:
             logger.info(f"Contextual BM25 인덱스 생성 시작: {len(documents)} 청크")
             self.documents = documents
 
+            # 문서 텍스트 토큰화
+            tokenized_corpus = [
+                self.tokenizer.tokenize(doc.page_content)
+                for doc in documents
+            ]
+            
             # BM25 인덱스 생성
-            self.bm25_retriever = LangchainBM25Retriever.from_documents(documents)
+            self.bm25 = BM25Okapi(tokenized_corpus)
                 
             # 문맥 임베딩 생성
             self.document_embeddings = self._get_embeddings([doc.page_content for doc in documents])
@@ -149,12 +115,6 @@ class ContextualBM25Retriever(BaseRetriever):
             for doc_id in document_ids:
                 chunks = await db_manager.get_document_chunks(doc_id)
 
-                # id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-                # document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
-                # chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
-                # chunk_content: Mapped[str] = mapped_column(Text, nullable=False)
-                # chunk_metadata: Mapped[str | None] = mapped_column(String)  # JSON string
-                # embedding: Mapped[str | None] = mapped_column(String)
 
                 # 각 청크를 Document 형식으로 변환
                 converted_docs = [
@@ -183,70 +143,60 @@ class ContextualBM25Retriever(BaseRetriever):
     ) -> RetrievalResult:
         """Contextual BM25 검색 수행"""
         try:
-            # 여기 Documentchunk Table을 읽어와서 Document 형식으로 변환
-            # add_documents() 함수에 전달
-            # 문서 추가
-            documents = await self.make_document_from_chunk_table(filters)
-            await self.add_documents(documents)
+            if self.db:
+                documents = await self.make_document_from_chunk_table(filters)
+                await self.add_documents(documents)
 
-            if not self.bm25_retriever or not self.document_embeddings:
+            if not self.bm25 or not self.document_embeddings:
                 logger.warning("검색 인덱스가 초기화되지 않았습니다.")
                 return RetrievalResult(documents=[])
                 
             _top_k = top_k or self.config.top_k
             logger.info(f"검색 시작 - 쿼리: {query}, top_k: {_top_k}")
             
-            # BM25 검색 수행 (Langchain)
-            bm25_results = self.bm25_retriever.invoke(query)
+            # BM25 검색 수행
+            tokenized_query = self.tokenizer.tokenize(query)
+            bm25_scores = self.bm25.get_scores(tokenized_query)
             
-            logger.info(f"BM25 검색 결과 : {len(bm25_results)} 청크")
-            # BM25 점수 계산 (Langchain은 기본적으로 점수를 제공하지 않으므로, 순서에 따른 정규화된 점수 부여)
-            num_results = len(bm25_results)
-            if num_results == 0:
-                return RetrievalResult(documents=[])
-                
-            bm25_scores = np.linspace(1.0, 0.1, num_results)  # 선형적으로 감소하는 점수 부여
+            # BM25 점수 정규화
+            bm25_scores = (bm25_scores - bm25_scores.min()) / (bm25_scores.max() - bm25_scores.min() + 1e-6)
             
-            # 문맥 유사도 계산
+            # 문맥 유사도 계산 및 정규화
             query_embedding = self._get_embeddings([query])[0]
             context_scores = cosine_similarity([query_embedding], self.document_embeddings)[0]
+            context_scores = (context_scores - context_scores.min()) / (context_scores.max() - context_scores.min() + 1e-6)
             
             # 점수 결합 및 상위 K개 문서 선택
             final_scores = []
             result_documents = []
             
-            for idx, (doc, bm25_score) in enumerate(zip(bm25_results, bm25_scores)):
-                # 원본 문서에서 해당 문서의 인덱스 찾기
-                doc_idx = next(
-                    (i for i, orig_doc in enumerate(self.documents) 
-                     if orig_doc.page_content == doc.page_content),
-                    None
+            for idx, (doc, bm25_score, context_score) in enumerate(zip(self.documents, bm25_scores, context_scores)):
+                # 정규화된 점수로 최종 점수 계산
+                final_score = (
+                    self.config.bm25_weight * bm25_score +
+                    self.config.context_weight * context_score
                 )
                 
-                if doc_idx is not None:
-                    context_score = context_scores[doc_idx]
-                    final_score = (
-                        self.config.bm25_weight * bm25_score +
-                        self.config.context_weight * context_score
+                logger.debug(f"문서 {idx} 점수 - BM25: {bm25_score:.3f}, 문맥: {context_score:.3f}, 최종: {final_score:.3f}")
+                
+                if final_score >= self.config.min_score:
+                    new_doc = DocumentWithScore(
+                        page_content=doc.page_content,
+                        metadata={
+                            **doc.metadata,
+                            "bm25_score": float(bm25_score),
+                            "context_score": float(context_score),
+                            "normalized_score": float(final_score)
+                        },
+                        score=float(final_score)
                     )
-                    
-                    if final_score >= self.config.min_score:
-                        new_doc = DocumentWithScore(
-                            page_content=doc.page_content,
-                            metadata={
-                                **doc.metadata,
-                                "bm25_score": float(bm25_score),
-                                "context_score": float(context_score)
-                            },
-                            score=float(final_score)
-                        )
-                        result_documents.append(new_doc)
-                        final_scores.append(final_score)
+                    result_documents.append(new_doc)
+                    final_scores.append(final_score)
             
-            # top_k 적용
-            if _top_k and len(result_documents) > _top_k:
-                top_indices = np.argsort(final_scores)[-_top_k:][::-1]
-                result_documents = [result_documents[i] for i in top_indices]
+            # top_k 적용 (점수 기준 내림차순 정렬)
+            if result_documents:
+                sorted_indices = np.argsort(final_scores)[::-1]
+                result_documents = [result_documents[i] for i in sorted_indices[:_top_k]]
             
             logger.info(f"검색 완료 - 결과: {len(result_documents)} 문서")
             
@@ -257,7 +207,7 @@ class ContextualBM25Retriever(BaseRetriever):
                     "min_score": self.config.min_score,
                     "bm25_weight": self.config.bm25_weight,
                     "context_weight": self.config.context_weight,
-                    "total_found": len(bm25_results),
+                    "total_found": len(self.documents),
                     "returned": len(result_documents)
                 }
             )

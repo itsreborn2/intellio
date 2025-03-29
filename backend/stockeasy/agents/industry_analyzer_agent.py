@@ -7,6 +7,7 @@
 import re
 from typing import Dict, List, Any, Optional, cast
 from datetime import datetime
+from uuid import UUID
 from loguru import logger
 
 from langchain_openai import ChatOpenAI
@@ -76,6 +77,7 @@ class IndustryAnalyzerAgent(BaseAgent):
             data_requirements = question_analysis.get("data_requirements", {})
             keywords = question_analysis.get("keywords", [])
             detail_level = question_analysis.get("detail_level", "보통")
+            user_id = state.get("user_context", {}).get("user_id", None)
             
             # 엔티티에서 종목 정보 추출
             stock_code = entities.get("stock_code", state.get("stock_code"))
@@ -129,8 +131,8 @@ class IndustryAnalyzerAgent(BaseAgent):
                     keywords_list += sector_list
                 
 
-                searched_industry_data = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"subgroup_list": {"$in":sector_list}})
-                searched_industry_data2 = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"keywords": {"$in":keywords_list}})
+                searched_industry_data = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"subgroup_list": {"$in":sector_list}}, user_id=user_id)
+                searched_industry_data2 = await self._search_reports(query, k=k, threshold=threshold, metadata_filter={"keywords": {"$in":keywords_list}}, user_id=user_id)
                 
                 # 두 검색 결과 병합 및 중복 제거
                 merged_industry_data = self._merge_and_remove_duplicates(searched_industry_data, searched_industry_data2)
@@ -447,7 +449,8 @@ class IndustryAnalyzerAgent(BaseAgent):
         
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
     async def _search_reports(self, query: str, k: int = 5, threshold: float = 0.22,
-                             metadata_filter: Optional[Dict[str, Any]] = None) -> List[IndustryReportData]:
+                             metadata_filter: Optional[Dict[str, Any]] = None,
+                             user_id: Optional[UUID] = None) -> List[IndustryReportData]:
         """
         파인콘 DB에서 기업리포트 검색
         
@@ -470,7 +473,7 @@ class IndustryAnalyzerAgent(BaseAgent):
 
             # 시맨틱 검색 설정
             semantic_retriever = SemanticRetriever(
-                config=SemanticRetrieverConfig(min_score=threshold),
+                config=SemanticRetrieverConfig(min_score=threshold, user_id=user_id, project_type=ProjectType.STOCKEASY),
                 vs_manager=vs_manager
             )
             
@@ -683,8 +686,8 @@ class IndustryAnalyzerAgent(BaseAgent):
             )
             
             # LLM 호출
-            analysis_result = await ainvoke_with_fallback(
-                [HumanMessage(content=formatted_prompt)],
+            analysis_result = await self.agent_llm.ainvoke_with_fallback(
+                input=[HumanMessage(content=formatted_prompt)],
                 user_id=None,  # 상태 객체에서 유저 ID를 전달받아야 함
                 project_type=ProjectType.STOCKEASY,
                 db=self.db

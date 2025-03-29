@@ -31,6 +31,7 @@ from common.models.token_usage import ProjectType
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import DocumentWithScore, RetrievalResult
 from common.services.retrievers.hybrid import HybridRetriever, HybridRetrieverConfig, ContextualBM25Config
+from common.services.retrievers.contextual_bm25 import ContextualBM25Retriever, ContextualBM25Config
 
 # logging 설정
 
@@ -531,12 +532,44 @@ class RAGService:
                                                         project_type=ProjectType.DOCEASY
                                                         ), vs_manager=vs_manager)
                 
+                # 기본 시맨틱 검색 (벡터 검색)
                 all_chunks:RetrievalResult = await semantic_retriever.retrieve(
                     query=normalized_query, 
                     top_k=top_k,
                     filters=filtersMetadata
                 )
-                # # Chat Mode - 하이브리드 검색 사용
+                
+                # # 벡터-BM25 순차 검색 (새로운 방식) - 실험 중이므로 주석 처리
+                # hybrid_config = HybridRetrieverConfig(
+                #     semantic_config=SemanticRetrieverConfig(
+                #         min_score=min_score,
+                #         user_id=user_id, 
+                #         project_type=ProjectType.DOCEASY
+                #     ),
+                #     contextual_bm25_config=ContextualBM25Config(
+                #         min_score=0.3,
+                #         bm25_weight=0.6,
+                #         context_weight=0.4,
+                #         context_window_size=3,
+                #         user_id=user_id,
+                #         project_type=ProjectType.DOCEASY
+                #     ),
+                #     semantic_weight=0.6,
+                #     contextual_bm25_weight=0.4,
+                #     vector_weight=0.7,
+                #     keyword_weight=0.3,
+                #     vector_multiplier=3,
+                #     user_id=user_id,
+                #     project_type=ProjectType.DOCEASY
+                # )
+                # hybrid_retriever = HybridRetriever(config=hybrid_config, vs_manager=vs_manager)
+                # all_chunks = await hybrid_retriever.retrieve_vector_then_bm25(
+                #     query=normalized_query, 
+                #     top_k=top_k,
+                #     filters=filtersMetadata
+                # )
+                
+                # # 기존 병렬 하이브리드 검색 방식 (현재 주석 처리됨)
                 # hybrid_config = HybridRetrieverConfig(
                 #     semantic_config=SemanticRetrieverConfig(min_score=0.6),
                 #     contextual_bm25_config=ContextualBM25Config(

@@ -8,11 +8,6 @@ from typing import List, Dict, Any
 # 산업 분석 프롬프트
 INDUSTRY_ANALYSIS_PROMPT = """당신은 산업 및 시장 동향 분석 전문가입니다. 제공된 산업 리포트 데이터를 분석하여 심층적인 산업 인사이트를 도출하세요:
 
-질문: {query}
-종목코드: {stock_code}
-종목명: {stock_name}
-산업/섹터: {sector}
-질문분류: {classification}
 
 분석 가이드라인:
 1. 제공된 산업 리포트의 핵심 내용을 파악하고 종합하세요.
@@ -49,6 +44,13 @@ INDUSTRY_ANALYSIS_PROMPT = """당신은 산업 및 시장 동향 분석 전문�
 
 산업 데이터:
 {industry_data}
+
+----------------------
+질문: {query}
+종목코드: {stock_code}
+종목명: {stock_name}
+산업/섹터: {sector}
+질문분류: {classification}
 """
 
 def format_industry_data(industry_data: List[Dict[str, Any]]) -> str:
@@ -93,7 +95,7 @@ def format_industry_data(industry_data: List[Dict[str, Any]]) -> str:
             data_str += "\n정책 변화:\n"
             for policy in policy_changes:
                 data_str += f"- {policy}\n"
-        
+        data_str += '--------------------------\n'
         formatted_data.append(data_str)
     
     return "\n\n".join(formatted_data) 

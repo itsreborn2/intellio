@@ -160,7 +160,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
             # LLM 호출로 통합 수행
             #integration_result = await self.chain.ainvoke(prompt)
             integration_result = await self.agent_llm.with_structured_output(KnowledgeIntegratorOutput).ainvoke(
-                input=prompt,
+                prompt,
                 user_id=user_id,
                 project_type=ProjectType.STOCKEASY,
                 db=self.db

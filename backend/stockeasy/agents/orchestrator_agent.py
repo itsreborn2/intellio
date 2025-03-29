@@ -144,7 +144,7 @@ class OrchestratorAgent(BaseAgent):
             # LLM 호출로 계획 수립
             #execution_plan = await self.llm.with_structured_output(ExecutionPlanModel,method="function_calling").ainvoke(
             execution_plan = await self.agent_llm.with_structured_output(ExecutionPlanModel).ainvoke(
-                input=prompt,
+                prompt,
                 user_id=user_id,
                 project_type=ProjectType.STOCKEASY,
                 db=self.db

@@ -128,7 +128,7 @@ class QuestionAnalyzerAgent(BaseAgent):
             
             # LLM 호출로 분석 수행 - structured output 사용
             response:QuestionAnalysis = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
-                input=prompt,
+                prompt, # input=prompt 하면 안됨. 그냥 prompt 전달
                 user_id=user_id,
                 project_type=ProjectType.STOCKEASY,
                 db=self.db

@@ -15,7 +15,7 @@ SUMMARY_PROMPT_GEMINI= """
 질문 복잡도: {complexity}
 기대 답변 유형: {expected_answer_type}
 
-출처: {sources_info}
+{sources_info}
 
 메세지 통합 전략:
 - 메시지의 시간 순서를 고려하여 사건의 흐름을 파악하세요.
@@ -103,7 +103,6 @@ SUMMARY_PROMPT_DEFAULT = """
 질문 복잡도: {complexity}
 기대 답변 유형: {expected_answer_type}
 
-출처: 
 {sources_info}
 
 요약 전략:
@@ -147,12 +146,12 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
         # 텔레그램 메시지
         if telegram_data:
             formatted_msgs = format_telegram_messages(telegram_data)
-            sources_info += f"\n내부DB :\n{formatted_msgs}\n\n"
+            sources_info += f"\n출처 - 내부DB :\n{formatted_msgs}\n\n"
         
         # 기업 리포트
         if report_data:
             analysis = report_data.get("analysis", {})
-            sources_info += "\n기업 리포트:\n"
+            sources_info += "\n출처 - 기업 리포트:\n"
             if analysis:
                 # 전체 소스를 다 줄게 아니라, 기업리포트 에이전트가 출력한 결과만 전달.
                 # 아.. 인용처리가 애매해지네.
@@ -166,13 +165,13 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                     report_info = report.get("content", "")
                     report_source = report.get("source", "미상")
                     report_date = report.get("published_date", "날짜 미상")
-                    report_page = f"report.get('page', '페이지 미상') page"
+                    report_page = f"{report.get('page', '페이지 미상')} p"
                     sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
 
         # 산업 동향(일단 미구현. 산업리포트 에이전트 추가 후에 풀것)
         if industry_data:
             analysis = industry_data.get("analysis", {})
-            sources_info += "\n산업 동향:\n"
+            sources_info += "\n출처 - 산업 동향:\n"
             if analysis:
                 sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
             else:
@@ -181,7 +180,7 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                     report_info = report.get("content", "")
                     report_source = report.get("source", "미상")
                     report_date = report.get("published_date", "날짜 미상")
-                    report_page = f"{report.get('page', '페이지 미상')} page"
+                    report_page = f"{report.get('page', '페이지 미상')} p"
                     sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
                 # industry_info = item.get("content", "")
                 # industry_source = item.get("source", "미상")

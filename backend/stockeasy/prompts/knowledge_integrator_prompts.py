@@ -33,24 +33,24 @@ keyword: {keywords}
 - 불확실_영역: 부족하거나 불확실한 정보 영역의 목록
 - 통합_응답: 사용자 질문에 대한 충분히 상세하고 근거가 있는 종합적인 답변
 
-중요: 반드시 다음 JSON 구조에 맞추어 응답해야 합니다. 마크다운 형식(##, ** 등)이나 코드 블록(```)을 사용하지 마세요. 순수한 JSON 형식으로만 응답하세요.
 
-{{
-  "핵심_결론": {{
-    "주요_인사이트1": Optional[str] = Field(default=None, description="통합된 첫 번째 주요 인사이트"),
-    "주요_인사이트2": Optional[str] = Field(default=None, description="통합된 두 번째 주요 인사이트"),
-    "주요_인사이트3": Optional[str] = Field(default=None, description="통합된 세 번째 주요 인사이트")
-  }},
-  "신뢰도_평가": {{
-    "정보_영역1": Optional[str] = Field(default=None, description="첫 번째 정보 영역의 신뢰도 (높음/중간/낮음)"),
-    "정보_영역2": Optional[str] = Field(default=None, description="두 번째 정보 영역의 신뢰도 (높음/중간/낮음)"),
-    "정보_영역3": Optional[str] = Field(default=None, description="세 번째 정보 영역의 신뢰도 (높음/중간/낮음)")
-  }},
-  "불확실_영역": List[str] = Field(..., description="부족하거나 불확실한 정보 영역 목록"),
-  "통합_응답": "사용자 질문에 대한 종합적인 응답 텍스트"
-}}
 """
+# 중요: 반드시 다음 JSON 구조에 맞추어 응답해야 합니다. 마크다운 형식(##, ** 등)이나 코드 블록(```)을 사용하지 마세요. 순수한 JSON 형식으로만 응답하세요.
 
+# {{
+#   "핵심_결론": {{
+#     "주요_인사이트1": Optional[str] = Field(default=None, description="통합된 첫 번째 주요 인사이트"),
+#     "주요_인사이트2": Optional[str] = Field(default=None, description="통합된 두 번째 주요 인사이트"),
+#     "주요_인사이트3": Optional[str] = Field(default=None, description="통합된 세 번째 주요 인사이트")
+#   }},
+#   "신뢰도_평가": {{
+#     "정보_영역1": Optional[str] = Field(default=None, description="첫 번째 정보 영역의 신뢰도 (높음/중간/낮음)"),
+#     "정보_영역2": Optional[str] = Field(default=None, description="두 번째 정보 영역의 신뢰도 (높음/중간/낮음)"),
+#     "정보_영역3": Optional[str] = Field(default=None, description="세 번째 정보 영역의 신뢰도 (높음/중간/낮음)")
+#   }},
+#   "불확실_영역": List[str] = Field(..., description="부족하거나 불확실한 정보 영역 목록"),
+#   "통합_응답": "사용자 질문에 대한 종합적인 응답 텍스트"
+# }}
 def format_knowledge_integrator_prompt(
     query: str,
     stock_name: str = None,

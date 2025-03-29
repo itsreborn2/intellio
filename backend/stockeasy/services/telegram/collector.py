@@ -190,6 +190,45 @@ class CollectorService:
             #logger.info(f"message.raw_text: {message.raw_text!r}")
             #logger.info(f"message.media: {message.media!r}")
             
+            # 전달된 메시지 확인
+            is_forwarded = False
+            forward_from_name = None
+            forward_from_id = None
+            if hasattr(message, 'fwd_from') and message.fwd_from:
+                is_forwarded = True
+                # 전달된 메시지의 원본 발신자 정보 추출
+                if hasattr(message.fwd_from, 'from_name') and message.fwd_from.from_name:
+                    forward_from_name = message.fwd_from.from_name
+                
+                if hasattr(message.fwd_from, 'from_id') and message.fwd_from.from_id:
+                    # 원본이 채널인 경우 (channel_id 속성이 있는 경우)
+                    if hasattr(message.fwd_from.from_id, 'channel_id'):
+                        channel_id_from_msg = message.fwd_from.from_id.channel_id
+                        forward_from_id = str(channel_id_from_msg)
+                        
+                        # 이 채널이 우리가 수집하는 채널 목록에 있는지 확인
+                        # 채널 ID를 정규화(normalization)하여 비교
+                        normalized_channel_id_from_msg = abs(int(channel_id_from_msg))
+                        
+                        for channel_info in settings.TELEGRAM_CHANNEL_IDS:
+                            # settings의 channel_id도 정규화
+                            try:
+                                normalized_channel_id = abs(int(channel_info['channel_id']))
+                                if normalized_channel_id == normalized_channel_id_from_msg:
+                                    logger.info(f"수집 대상 채널({channel_info['name']})에서 전달된 메시지는 건너뜁니다.")
+                                    return None  # 이 메시지는 건너뜁니다
+                            except (ValueError, TypeError):
+                                continue  # channel_id가 정수로 변환될 수 없는 경우 무시
+                    
+                    # 원본이 사용자인 경우 (user_id 속성이 있는 경우)
+                    elif hasattr(message.fwd_from.from_id, 'user_id'):
+                        forward_from_id = str(message.fwd_from.from_id.user_id)
+                    # 기타 다른 경우
+                    else:
+                        forward_from_id = str(message.fwd_from.from_id)
+                
+                logger.info(f"전달된 메시지 감지: {forward_from_name or '알 수 없음'}({forward_from_id or '알 수 없음'})")
+            
             # 메시지 텍스트 추출
             message_text = ""
             if message.text:
@@ -319,7 +358,10 @@ class CollectorService:
                 "document_name": document_name,
                 "document_gcs_path": document_gcs_path,
                 "document_mime_type": document_mime_type,
-                "document_size": document_size
+                "document_size": document_size,
+                "is_forwarded": is_forwarded,
+                "forward_from_name": forward_from_name,
+                "forward_from_id": forward_from_id
             }
             
         except Exception as e:
