@@ -1209,25 +1209,30 @@ export default function RSRankPage() {
                       {/* 스크롤 힌트 제거 - 하단으로 이동 */}
                       
                       <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={rsTableRef}>
-                        <table className="w-full bg-white border border-gray-200 table-auto">
+                        <table className="w-full bg-white border border-gray-200 table-fixed">
                           <thead>
                             <tr className="bg-gray-100">
                               {csvData.headers.map((header, index) => (
                                 <th 
                                   key={index} 
-                                  className={`py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200 ${
-                                    // 모바일 화면에서 중요하지 않은 컬럼 숨기기
+                                  className={`py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200
+                                    ${// 모바일 화면에서 중요하지 않은 컬럼 숨기기
                                     (header === 'RS_2M' || header === 'RS_3M' || header === '시가총액' || header === '테마명' || header === '종목코드') ? 'hidden md:table-cell' : 
                                     // RS_1M은 모바일에서도 표시
                                     ''
                                   }`}
-                                  style={{
-                                    width: header === 'RS' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' || header === 'MTT' ? '44px' :
-                                           header === '시가총액' || header === '거래대금' ? '70px' :
-                                           header === '업종' ? '120px' :
-                                           header === '종목명' ? '126px' :
-                                           header === '종목코드' ? '80px' : 
-                                           header === '등락률' ? '64px' : 'auto'
+                                  style={{ 
+                                    width: header === 'RS' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' || header === 'MTT' ? '60px' :
+                                           header === '시가총액' || header === '거래대금' ? '74px' :
+                                           header === '업종' ? 'auto' :
+                                           header === '종목명' ? '120px' :
+                                           header === '종목코드' ? '84px' : 'auto',
+                                    fontSize: 'clamp(0.65rem, 0.8vw, 0.75rem)',
+                                    ...(header === '업종' ? {
+                                      maxWidth: '230px',
+                                      minWidth: '80px',
+                                      width: 'auto'
+                                    } : {})
                                   }}
                                   onClick={() => requestSort(header)}
                                 >
@@ -1256,7 +1261,14 @@ export default function RSRankPage() {
                                       ''
                                     }`}
                                     style={{ 
-                                      fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                                      fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
+                                      ...(header === '업종' ? {
+                                        maxWidth: '230px',
+                                        minWidth: '80px',
+                                        width: 'auto',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                      } : {})
                                     }}
                                     title={header === '테마명' ? row[header] : ''}
                                   >
@@ -1362,7 +1374,7 @@ export default function RSRankPage() {
                 {/* 금주 52주 신고가 정보 영역 */}
                 <div className="flex flex-col">
                   <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
-                    <h2 className="text-lg font-semibold" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>오늘의 주도종목</h2>
+                    <h2 className="text-lg font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
                     <div className="flex items-center justify-end">
                       <span className="text-xs text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
                       <TableCopyButton
@@ -1382,10 +1394,7 @@ export default function RSRankPage() {
                           <tr className="bg-gray-100">
                             <th 
                               className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                              style={{
-                                width: '126px', // 종목명 컬럼 너비 증가
-                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
-                              }}
+                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '100px' }}
                               onClick={() => requestSort('종목명')}
                             >
                               <div className="flex items-center justify-center">
@@ -1399,10 +1408,7 @@ export default function RSRankPage() {
                             </th>
                             <th 
                               className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                              style={{
-                                width: '40px', // RS 컬럼 너비 감소
-                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
-                              }}
+                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '45px' }}
                               onClick={() => requestSort('RS')}
                             >
                               <div className="flex items-center justify-center">
@@ -1416,10 +1422,7 @@ export default function RSRankPage() {
                             </th>
                             <th 
                               className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                              style={{
-                                width: '64px', // 등락률 컬럼 너비 증가
-                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
-                              }}
+                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px' }}
                               onClick={() => requestSort('등락률')}
                             >
                               <div className="flex items-center justify-center">
@@ -1432,11 +1435,8 @@ export default function RSRankPage() {
                               </div>
                             </th>
                             <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                              style={{
-                                width: '60px', // 시가총액 컬럼 너비 감소
-                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
-                              }}
+                              className="py-2 px-1 sm:py-2.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px' }}
                               onClick={() => requestSort('시가총액')}
                             >
                               <div className="flex items-center justify-center">
@@ -1449,11 +1449,8 @@ export default function RSRankPage() {
                               </div>
                             </th>
                             <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                              style={{
-                                width: '60px', // 거래대금 컬럼 너비 감소
-                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
-                              }}
+                              className="py-2 px-1 sm:py-2.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '55px' }}
                               onClick={() => requestSort('거래대금')}
                             >
                               <div className="flex items-center justify-center">
@@ -1466,13 +1463,13 @@ export default function RSRankPage() {
                               </div>
                             </th>
                             <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-left overflow-hidden text-ellipsis hidden md:table-cell"
-                              style={{
+                              className="py-2 px-1 sm:py-2.5 sm:px-2 border-b border-r text-left overflow-hidden text-ellipsis whitespace-nowrap hidden md:table-cell"
+                              style={{ 
+                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
                                 maxWidth: '150px',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                                textOverflow: 'ellipsis'
                               }}
                               title={sortKey === '테마명' ? '테마명' : ''}
                               onClick={() => requestSort('테마명')}
@@ -1524,13 +1521,13 @@ export default function RSRankPage() {
                                 {formatMarketCap(row['거래대금'])}
                               </td>
                               <td 
-                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-left overflow-hidden text-ellipsis hidden md:table-cell"
-                                style={{
+                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-left overflow-hidden text-ellipsis whitespace-nowrap hidden md:table-cell"
+                                style={{ 
+                                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
                                   maxWidth: '150px',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                                  textOverflow: 'ellipsis'
                                 }}
                                 title={row['테마명']}
                               >

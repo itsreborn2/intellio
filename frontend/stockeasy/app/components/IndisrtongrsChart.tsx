@@ -173,11 +173,13 @@ export default function IndustryCharts() {
       // 각 ETF에 대해 차트 데이터 로드 (순차 처리로 변경)
       // 이미 선택된 종목을 추적하기 위한 변수
       const selectedCodes: string[] = [];
+      // 섹터별로 이미 선택된 종목명을 추적하기 위한 맵
+      const sectorToSelectedStocks: Record<string, string[]> = {};
       
       for (let i = 0; i < initialETFInfoList.length; i++) {
         const etf = initialETFInfoList[i];
         try {
-          await loadETFChartData(etf.code, i, etf, selectedCodes);
+          await loadETFChartData(etf.code, i, etf, selectedCodes, sectorToSelectedStocks);
         } catch (error) {
           console.error(`ETF 차트 데이터 로드 오류 (${etf.code}):`, error);
         }
@@ -314,17 +316,17 @@ export default function IndustryCharts() {
       const representativeStocks: RepresentativeStock[] = [];
       
       // 대표 주식 목록 가져오기
-      const stockNames = etf.대표종목.split(',').map(name => {
+      const representativeStockNames = etf.대표종목?.split(',').map(name => {
         // 괄호와 숫자 제거 (예: "파마리서치 (85)" -> "파마리서치")
         return name.trim().replace(/\s*\(\d+\)/g, '');
       }) || [];
       
-      if (stockNames.length === 0) {
+      if (representativeStockNames.length === 0) {
         console.log(`대표종목이 없습니다: ${etf.종목명}`);
       }
       
       // 각 대표 주식에 대해 RS 값 찾기
-      for (const stockName of stockNames) {
+      for (const stockName of representativeStockNames) {
         // 현재 종목명과 일치하는 주식 찾기 (대소문자 무시 및 공백 처리)
         const normalizedStockName = stockName.replace(/\s+/g, '').toLowerCase();
         
@@ -363,7 +365,7 @@ export default function IndustryCharts() {
   };
   
   // ETF 차트 데이터 로드 함수
-  const loadETFChartData = async (code: string, index: number, etfInfo: ETFInfo, selectedCodes: string[] = []) => {
+  const loadETFChartData = async (code: string, index: number, etfInfo: ETFInfo, selectedCodes: string[] = [], sectorToSelectedStocks: Record<string, string[]> = {}) => {
     try {
       // 로딩 상태 설정
       setEtfInfoList(prev => {
@@ -377,12 +379,12 @@ export default function IndustryCharts() {
       });
       
       // 대표종목 목록 가져오기
-      const stockNames = etfInfo.대표종목?.split(',').map(name => {
+      const representativeStockNames = etfInfo.대표종목?.split(',').map(name => {
         // 괄호와 숫자 제거 (예: "파마리서치 (85)" -> "파마리서치")
         return name.trim().replace(/\s*\(\d+\)/g, '');
       }) || [];
       
-      if (stockNames.length === 0) {
+      if (representativeStockNames.length === 0) {
         console.log(`대표종목이 없습니다: ${etfInfo.종목명}`);
       }
       
@@ -393,7 +395,7 @@ export default function IndustryCharts() {
       const allMatchingStocks: RepresentativeStock[] = [];
       
       // 각 대표종목에 대해 개별적으로 검색
-      for (const stockName of stockNames) {
+      for (const stockName of representativeStockNames) {
         // 현재 종목명과 일치하는 주식 찾기 (대소문자 무시 및 공백 처리)
         const normalizedStockName = stockName.replace(/\s+/g, '').toLowerCase();
         
@@ -417,10 +419,31 @@ export default function IndustryCharts() {
       
       console.log(`ETF ${etfInfo.종목명}의 중복 제거 후 대표종목 수: ${uniqueStocks.length}`);
       
+      // 현재 섹터
+      const currentSector = etfInfo.섹터;
+      
       // 이미 선택된 종목 제외하고 RS 값 기준으로 내림차순 정렬
       const availableStocks = uniqueStocks
-        .filter(stock => !selectedCodes.includes(stock.code))
+        .filter(stock => {
+          // 이미 같은 종목코드가 선택된 경우 제외
+          if (selectedCodes.includes(stock.code)) {
+            return false;
+          }
+          
+          // 같은 섹터에 이미 선택된 종목명인 경우 제외
+          const sectorSelectedStocks = sectorToSelectedStocks[currentSector] || [];
+          if (sectorSelectedStocks.some(selectedName => 
+            selectedName.replace(/\s+/g, '').toLowerCase() === stock.name.replace(/\s+/g, '').toLowerCase()
+          )) {
+            console.log(`종목 ${stock.name}은(는) 같은 섹터 ${currentSector}에 이미 선택되어 있습니다.`);
+            return false;
+          }
+          
+          return true;
+        })
         .sort((a, b) => b.rsValue - a.rsValue);
+      
+      console.log(`ETF ${etfInfo.종목명}의 사용 가능한 대표종목 수: ${availableStocks.length}`);
       
       // 사용 가능한 종목이 없는 경우, 모든 종목 중에서 선택
       let topStocks = availableStocks.length > 0 
@@ -428,6 +451,12 @@ export default function IndustryCharts() {
         : uniqueStocks.sort((a, b) => b.rsValue - a.rsValue).slice(0, 2);
       
       console.log(`ETF ${etfInfo.종목명}의 상위 종목:`, topStocks.map(s => `${s.name} (RS: ${s.rsValue})`));
+      
+      // 섹터별로 이미 선택된 종목명을 추적
+      const sector = etfInfo.섹터;
+      if (!sectorToSelectedStocks[sector]) {
+        sectorToSelectedStocks[sector] = [];
+      }
       
       // 대표종목이 없는 경우 처리
       if (topStocks.length === 0) {
@@ -446,6 +475,14 @@ export default function IndustryCharts() {
         
         return [];
       }
+      
+      // 선택된 종목들의 이름을 섹터 맵에 추가
+      const selectedStockNames = topStocks.map(stock => stock.name);
+      console.log(`섹터 ${sector}에 새로 추가되는 종목들: ${selectedStockNames.join(', ')}`);
+      sectorToSelectedStocks[sector].push(...selectedStockNames);
+      
+      // 섹터별 선택된 종목 로그
+      console.log(`섹터 ${sector}의 현재까지 선택된 종목들: ${sectorToSelectedStocks[sector].join(', ')}`);
       
       // 선택된 종목 코드 추가
       for (const stock of topStocks) {
