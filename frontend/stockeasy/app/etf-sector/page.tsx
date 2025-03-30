@@ -28,7 +28,7 @@ export default function ETFSectorPage() {
 
         {/* 하단 섹션: 산업 차트 */}
         <div className="mb-2 md:mb-4 mt-4 md:mt-8">
-          <div className="flex mb-0">
+          <div className="flex mb-0" style={{ marginLeft: '3px' }}>
             <button
               className={`px-2 sm:px-4 py-1 sm:py-2 rounded-t-xl rounded-l-xl font-medium text-xs transition-all ${
                 activeTab === 'leading' 
