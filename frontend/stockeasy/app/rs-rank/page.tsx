@@ -1194,9 +1194,9 @@ export default function RSRankPage() {
                 ) : csvData ? (
                   <div className="flex flex-col h-full">
                     <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
-                      <h2 className="text-lg font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
+                      <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
                       <div className="flex items-center justify-end">
-                        <span className="text-xs text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                        <span className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
                         <TableCopyButton
                           tableRef={rsTableRef}
                           headerRef={rsHeaderRef}
@@ -1374,9 +1374,9 @@ export default function RSRankPage() {
                 {/* 금주 52주 신고가 정보 영역 */}
                 <div className="flex flex-col">
                   <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
-                    <h2 className="text-lg font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
+                    <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
                     <div className="flex items-center justify-end">
-                      <span className="text-xs text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                      <span className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
                       <TableCopyButton
                         tableRef={highTableRef}
                         headerRef={highHeaderRef}
@@ -1559,8 +1559,8 @@ export default function RSRankPage() {
             {/* RS상위 시장 비교차트 영역 */}
             <div className="bg-white rounded-lg shadow p-4 mt-1">
               <div className="flex justify-between items-center mb-3">
-                <h2 className="text-lg font-semibold" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS상위 시장 비교차트</h2>
-                <span className="text-xs text-gray-600 hidden md:inline" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>RS상위와 시가총액 순서로 해당 종목이 속한 시장 지수를 비교합니다.</span>
+                <h2 className="font-semibold" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS상위 시장 비교차트</h2>
+                <span className="text-gray-600 hidden md:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>RS상위와 시가총액 순서로 해당 종목이 속한 시장 지수를 비교합니다.</span>
               </div>
               
               {/* 반응형 차트 그리드 - 화면 크기에 따라 컬럼 수 조정 */}

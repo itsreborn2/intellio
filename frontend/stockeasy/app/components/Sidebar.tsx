@@ -43,7 +43,19 @@ function SidebarContent() {
   
   // 페이지 이동 함수
   const goToHomePage = () => {
-    router.push('/');
+    // 현재 경로가 홈페이지(루트)인 경우 페이지 새로고침 및 채팅 영역 초기화
+    if (window.location.pathname === '/') {
+      // 홈버튼 클릭 이벤트 발생 (채팅 영역 초기화용)
+      const event = new CustomEvent('homeButtonClick');
+      window.dispatchEvent(event);
+      
+      // 약간의 지연 후 페이지 새로고침 (이벤트가 처리될 시간 확보)
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    } else {
+      router.push('/');
+    }
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   

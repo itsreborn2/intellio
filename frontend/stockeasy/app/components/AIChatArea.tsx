@@ -100,9 +100,18 @@ function AIChatAreaContent() {
 
     document.addEventListener('mousedown', handleClickOutside);
 
+    // 홈 버튼 클릭 이벤트 리스너 추가 (페이지 초기화용)
+    const handleHomeButtonClick = () => {
+      resetChatArea();
+    };
+
+    // 커스텀 이벤트 리스너 등록
+    window.addEventListener('homeButtonClick' as any, handleHomeButtonClick);
+
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('homeButtonClick' as any, handleHomeButtonClick);
 
       // 타이머 정리
       if (timerRef.current) {
@@ -111,6 +120,27 @@ function AIChatAreaContent() {
       }
     };
   }, []);
+
+  // 채팅 영역 초기화 함수
+  const resetChatArea = () => {
+    
+    // 상태 초기화
+    setSelectedStock(null);
+    setInputMessage('');
+    setMessages([]);
+    setIsProcessing(false);
+    setElapsedTime(0);
+    setIsInputCentered(true);
+    setShowTitle(true);
+    setSearchMode(false);
+    setShowStockSuggestions(false);
+    setTransitionInProgress(false);
+    setSearchTerm('');
+    setFilteredStocks([]);
+
+    
+    console.log('채팅 영역이 초기화되었습니다.');
+  };
 
   // 모바일 환경 감지
   useEffect(() => {
@@ -708,6 +738,7 @@ function AIChatAreaContent() {
     backgroundColor: '#F4F4F4', // Figma 디자인에 맞게 배경색 변경
     overflow: 'visible', // 오버플로우를 visible로 변경하여 브라우저 기본 스크롤 사용
     padding: isMobile ? '0' : '10px', // 모바일에서는 패딩 제거
+    opacity: 1
   };
 
   // 컨테이너 너비를 위한 변수 (일관성 유지를 위해)
@@ -728,7 +759,8 @@ function AIChatAreaContent() {
     bottom: isInputCentered ? 'auto' : '20px',
     zIndex: isMobile ? 'unset' : 10,
     backgroundColor: 'transparent',
-    transition: 'margin 0.3s ease-in-out' // 전체가 아닌 margin만 transition
+    //transition: 'margin 0.3s ease-in-out', // 전체가 아닌 margin만 transition
+    borderTop: '0px solid #e0e0e0 !important'   
   };
 
   const integratedInputStyle: React.CSSProperties = {
@@ -736,7 +768,7 @@ function AIChatAreaContent() {
     width: contentWidth, // 메시지 컨테이너와 동일한 너비 사용
     maxWidth: isMobile ? '100%' : '65%', // 최대 너비 제한
     margin: '0 auto',
-    transition: 'width 0.3s ease-in-out', // 전체가 아닌 width만 transition
+    //transition: 'width 0.3s ease-in-out', // 전체가 아닌 width만 transition
   };
 
   const inputStyle: React.CSSProperties = {
@@ -767,8 +799,8 @@ function AIChatAreaContent() {
     boxSizing: 'border-box',
     position: 'relative',
     display: isInputCentered ? 'none' : 'block',
-    opacity: transitionInProgress ? 0 : 1, // 트랜지션 중에는 투명하게 처리
-    transition: 'opacity 0.3s ease-in-out' // 오직 opacity만 transition
+    //opacity: transitionInProgress ? 0 : 1, // 트랜지션 중에는 투명하게 처리
+    //transition: 'opacity 0.3s ease-in-out' // 오직 opacity만 transition
   };
 
   const aiMessageStyle: React.CSSProperties = {
@@ -900,7 +932,7 @@ function AIChatAreaContent() {
                 marginTop: isMobile ? '-80px' : '-100px',
                 left: '0',
                 right: '0',
-                transition: 'all 0.3s ease-in-out'
+                //transition: 'all 0.3s ease-in-out'
               }}>
                 <h1 style={{
                   fontSize: isMobile ? '1rem' : '1.3rem',
@@ -909,7 +941,7 @@ function AIChatAreaContent() {
                   lineHeight: '1.3',
                   wordBreak: 'keep-all',
                   letterSpacing: '-0.02em',
-                  transition: 'all 0.3s ease-in-out',
+                  //transition: 'all 0.3s ease-in-out',
                   display: isMobile ? 'none' : 'block' // 모바일에서는 숨김 처리
                 }}>
                   기업,산업 리포트부터 SNS, 스탁이지가 보유한 비공개 자료들까지<br />
