@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { TableCopyButtonProps, copyTableAsImage } from '../utils/tableCopyUtils';
+import { ClipboardCopy } from 'lucide-react'; // ClipboardCopy 아이콘 import
 
 /**
  * 테이블 복사 버튼 컴포넌트
@@ -13,7 +14,7 @@ export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
   headerRef,
   tableName,
   options,
-  className = "bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded",
+  className = "",
   buttonText = "이미지복사"
 }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -45,15 +46,13 @@ export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
   return (
     <button 
       onClick={handleCopyImage}
-      className={isLoading 
-        ? "bg-gray-400 text-white text-xs px-2 py-1 rounded cursor-not-allowed" 
-        : className}
+      className={`text-gray-700 text-xs px-2 py-1 rounded ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'} bg-[#D8EFE9]`}
       type="button"
       aria-label={`${tableName} 이미지로 복사`}
       disabled={isLoading}
       style={buttonStyle}
     >
-      {isLoading ? "생성 중..." : buttonText}
+      {isLoading ? "생성 중..." : <ClipboardCopy className="h-3.5 w-3.5" />}
     </button>
   );
 };

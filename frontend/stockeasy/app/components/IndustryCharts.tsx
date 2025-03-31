@@ -25,6 +25,7 @@ interface ETFInfo {
   isAboveMA20: boolean;  // null 타입 제거
   durationDays: number;  // null 타입 제거
   changePercent: number;
+  섹터?: string;
 }
 
 // 산업 차트 컴포넌트
@@ -42,34 +43,34 @@ export default function IndustryCharts() {
   
   // 산업-ETF 매핑 데이터
   const industryETFMapping = [
-    { name: '반도체', code: '091160' },
-    { name: '반도체 전공정', code: '475300' },
-    { name: '반도체 후공정', code: '475310' },
-    { name: '2차전지', code: '364980' },
-    { name: '전력기기', code: '487240' },
-    { name: '에너지', code: '433500' },
-    { name: '태양광/ESS', code: '457990' },
-    { name: '2차전지 소부장', code: '455860' },
-    { name: '조선', code: '466920' },
-    { name: '운송', code: '140710' },
-    { name: '자동차', code: '091180' },
-    { name: '자동차 소부장', code: '464600' },
-    { name: '로봇', code: '445290' },
-    { name: '바이오', code: '463050' },
-    { name: '바이오(코스닥)', code: '227540' },
-    { name: '의료기기', code: '464610' },
-    { name: '인터넷', code: '365000' },
-    { name: '엔터', code: '475050' },
-    { name: '여행레저', code: '228800' },
-    { name: '게임', code: '364990' },
-    { name: '방산/우주', code: '463250' },
-    { name: '철강', code: '139240' },
-    { name: '석유', code: '139250' },
-    { name: '은행', code: '091170' },
-    { name: '증권', code: '102970' },
-    { name: '보험', code: '140700' },
-    { name: '화장품', code: '479850' },
-    { name: '음식료', code: '438900' }
+    { name: '반도체', code: '091160', 섹터: 'IT' },
+    { name: '반도체 전공정', code: '475300', 섹터: 'IT' },
+    { name: '반도체 후공정', code: '475310', 섹터: 'IT' },
+    { name: '2차전지', code: '364980', 섹터: '에너지' },
+    { name: '전력기기', code: '487240', 섹터: '에너지' },
+    { name: '에너지', code: '433500', 섹터: '에너지' },
+    { name: '태양광/ESS', code: '457990', 섹터: '에너지' },
+    { name: '2차전지 소부장', code: '455860', 섹터: '에너지' },
+    { name: '조선', code: '466920', 섹터: '산업재' },
+    { name: '운송', code: '140710', 섹터: '산업재' },
+    { name: '자동차', code: '091180', 섹터: '산업재' },
+    { name: '자동차 소부장', code: '464600', 섹터: '산업재' },
+    { name: '로봇', code: '445290', 섹터: '산업재' },
+    { name: '바이오', code: '463050', 섹터: '의료' },
+    { name: '바이오(코스닥)', code: '227540', 섹터: '의료' },
+    { name: '의료기기', code: '464610', 섹터: '의료' },
+    { name: '인터넷', code: '365000', 섹터: 'IT' },
+    { name: '엔터', code: '475050', 섹터: '서비스' },
+    { name: '여행레저', code: '228800', 섹터: '서비스' },
+    { name: '게임', code: '364990', 섹터: '서비스' },
+    { name: '방산/우주', code: '463250', 섹터: '산업재' },
+    { name: '철강', code: '139240', 섹터: '재료' },
+    { name: '석유', code: '139250', 섹터: '에너지' },
+    { name: '은행', code: '091170', 섹터: '금융' },
+    { name: '증권', code: '102970', 섹터: '금융' },
+    { name: '보험', code: '140700', 섹터: '금융' },
+    { name: '화장품', code: '479850', 섹터: '소비재' },
+    { name: '음식료', code: '438900', 섹터: '소비재' }
   ];
   
   useEffect(() => {
@@ -82,7 +83,8 @@ export default function IndustryCharts() {
       error: '',
       isAboveMA20: false, // 기본값 false
       durationDays: 0, // 기본값 0
-      changePercent: 0
+      changePercent: 0,
+      섹터: item.섹터
     }));
     
     setEtfInfoList(initialETFInfoList);
@@ -418,9 +420,9 @@ export default function IndustryCharts() {
   // 헤더 배경색 결정 함수
   const getHeaderBackgroundColor = (etf: ETFInfo): string => {
     if (etf.isAboveMA20 === true) {
-      return 'bg-green-100 border-green-200'; // 20일선 위에 있는 경우 (유지)
+      return 'bg-[#D8EFE9] border-[#BBDCD3]'; // 20일선 위에 있는 경우 (유지)
     } else if (etf.isAboveMA20 === false) {
-      return 'bg-yellow-100 border-yellow-200'; // 20일선 아래에 있는 경우 (이탈)
+      return 'bg-gray-100 border-gray-200'; // 20일선 아래에 있는 경우 (이탈)
     }
     return 'bg-gray-100 border-gray-200'; // 상태를 알 수 없는 경우
   };
@@ -437,37 +439,51 @@ export default function IndustryCharts() {
   }, [etfInfoList]);
   
   return (
-    <div className="p-4">
+    <div>
       {/* 차트 제목 및 설명 추가 */}
       <div className="mb-4">
-        <h2 className="text-xl font-bold mb-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>산업별 주도ETF 차트</h2>
-        <p className="text-sm text-gray-600">
+        <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>산업별 주도ETF 차트</h2>
+        <p className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
           각 산업별 ETF의 20일 이동평균선 기준 상태와 등락률을 확인할 수 있습니다. 
-          녹색 배경은 20일선 위에 있는 ETF, 노란색 배경은 20일선 아래에 있는 ETF를 나타냅니다.
+          연한 녹색 배경은 20일선 위에 있는 ETF, 회색 배경은 20일선 아래에 있는 ETF를 나타냅니다.
           각 ETF는 당일 등락률 기준으로 내림차순 정렬되어 있습니다.
         </p>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
         {[...etfInfoList]
           .sort((a, b) => b.changePercent - a.changePercent)
           .map((etf, index) => (
           <div key={index} className="flex-1 rounded-md p-1">
             <div>
-              <div className={`px-3 py-1 border flex justify-between items-center ${getHeaderBackgroundColor(etf)}`} style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{etf.name}</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${etf.changePercent >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
+              <div className={`px-3 py-1 border flex justify-between items-baseline ${getHeaderBackgroundColor(etf)}`} style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
+                <div className="flex items-baseline gap-2">
+                  {etf.섹터 && (
+                    <span 
+                      className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1" 
+                      style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                    >
+                      {etf.섹터}
+                    </span>
+                  )}
+                  <span className="font-medium" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{etf.name}</span>
+                  <span 
+                    className={`px-1.5 py-0.5 rounded ${etf.changePercent >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                    style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                  >
                     {etf.changePercent >= 0 ? '+' : ''}{etf.changePercent.toFixed(2)}%
                   </span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-baseline gap-1">
                   {etf.isLoading ? (
                     <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
                       로딩 중...
                     </span>
                   ) : (
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${etf.isAboveMA20 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                    <span 
+                      className={`px-1.5 py-0.5 rounded ${etf.isAboveMA20 ? 'bg-[#D8EFE9] text-teal-800' : 'bg-gray-100 text-gray-800'}`}
+                      style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                    >
                       {getStatusText(etf)}
                     </span>
                   )}

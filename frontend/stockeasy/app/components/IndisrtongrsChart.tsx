@@ -348,6 +348,8 @@ export default function IndustryCharts() {
         new Map(representativeStocks.map(stock => [stock.code, stock])).values()
       );
       
+      console.log(`ETF ${etf.종목명}의 중복 제거 후 대표종목 수: ${uniqueStocks.length}`);
+      
       // RS 값 기준으로 내림차순 정렬
       uniqueStocks.sort((a, b) => b.rsValue - a.rsValue);
       
@@ -462,17 +464,15 @@ export default function IndustryCharts() {
       if (topStocks.length === 0) {
         console.log(`ETF ${etfInfo.종목명}에 대한 대표종목을 찾을 수 없습니다.`);
         
-        // 오류 상태 업데이트
         setEtfInfoList(prev => {
           const newList = [...prev];
           newList[index] = {
             ...newList[index],
             isLoading: false,
-            error: '대표종목을 찾을 수 없습니다.'
+            error: `대표종목을 찾을 수 없습니다.`
           };
           return newList;
         });
-        
         return [];
       }
       
@@ -586,13 +586,14 @@ export default function IndustryCharts() {
       // 상태 업데이트
       setEtfInfoList(prev => {
         const newList = [...prev];
+        const prevEtfInfo = newList[index]; // 이전 상태 가져오기
         newList[index] = {
-          ...newList[index],
+          ...prevEtfInfo, // 이전 상태 값 유지
           chartData: etfChartData,
           isLoading: false,
           error: '',
-          changePercent,
-          etfChangePercent: `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`,
+          changePercent, // 계산된 숫자 값은 필요 시 유지
+          etfChangePercent: prevEtfInfo.etfChangePercent, // CSV 원본 값을 유지 (명시적 업데이트 제거)
           selectedStocks: loadedStocksData, // 로드된 주식 데이터 설정
           selectedStock: loadedStocksData.length > 0 ? { // 첫 번째 종목 정보 저장 (호환성 유지)
             code: loadedStocksData[0].code,
@@ -860,30 +861,26 @@ export default function IndustryCharts() {
   
   // 헤더 배경색 결정 함수
   const getHeaderBackgroundColor = (etf: ETFInfo): string => {
-    // 항상 초록색 배경 사용 (유지 상태)
-    return 'bg-green-100 border-green-200';
+    // 항상 초록색 계열 배경 사용
+    return 'bg-[#D8EFE9] border-[#BBDCD3]';
   };
   
   // 상태 텍스트 가져오기
   const getStatusText = (etf: ETFInfo) => {
-    // 지속일 정보가 있는 경우
-    if (etf.지속일) {
-      // 변동일 정보 추가 (연도 제거하고 월-일만 표시)
-      let 변동일Text = '';
-      if (etf.변동일) {
-        // YYYY-MM-DD 형식에서 MM-DD만 추출
-        const dateParts = etf.변동일.split('-');
-        if (dateParts.length === 3) {
-          변동일Text = `(${dateParts[1]}-${dateParts[2]})`;
-        } else {
-          변동일Text = `(${etf.변동일})`;
-        }
-      }
-      return `${etf.지속일} ${변동일Text}`;
+    if (etf.isLoading) return '상태 확인 중';
+
+    let statusText = '';
+    const durationText = etf.지속일 || '';
+
+    // '유지 +X일' 또는 '이탈 Y일' 형식 추출
+    const match = durationText.match(/(유지\s+\+\d+일|이탈\s+\d+일)/);
+    if (match) {
+      statusText = match[0]; // '유지 +X일' 또는 '이탈 Y일' 부분만 사용
+    } else {
+      statusText = durationText; // 매칭되지 않으면 원본 텍스트 사용
     }
-    
-    // 기본값
-    return '정보 없음';
+
+    return statusText;
   };
   
   // ETF를 행과 열로 분배
@@ -1013,10 +1010,10 @@ export default function IndustryCharts() {
   };
   
   return (
-    <div className="p-4">
+    <div>
       <div className="mb-4">
-        <h2 className="text-xl font-bold" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>섹터별 주도종목 차트</h2>
-        <p className="text-sm text-gray-500">20일 이동평균선 위에 10일 이상 유지중인 섹터별 ETF중 단기 RS_1M(한달)의 값이 90 이상의 대표종목 차트. 유지일이 긴 섹터 우선 정렬.</p>
+        <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>섹터별 주도종목 차트</h2>
+        <p className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)'}}>20일 이동평균선 위에 10일 이상 유지중인 섹터별 ETF중 단기 RS_1M(한달)의 값이 90 이상의 대표종목 차트. 유지일이 긴 섹터 우선 정렬.</p>
       </div>
       
       {etfInfoList.length === 0 ? (
@@ -1025,20 +1022,31 @@ export default function IndustryCharts() {
         </div>
       ) : (
         <div className="flex flex-col gap-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {etfGrid.map((etf, etfIndex) => (
               <div key={etfIndex}>
                 <div className="flex flex-col gap-4">
                   <div>
-                    <div className="bg-green-100 px-3 py-1 border border-green-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">{etf.섹터 || ''}</span>
-                        <span className="font-medium text-sm">{etf.종목명}</span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${parseFloat(etf.etfChangePercent) >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                          {etf.etfChangePercent}
+                    <div className="bg-[#D8EFE9] px-3 py-1 border border-[#BBDCD3] flex justify-between items-baseline" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
+                      <div className="flex items-baseline">
+                        <span 
+                          className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1"
+                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                        >
+                          {etf.섹터 || ''}
+                        </span>
+                        <span className="font-medium mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{etf.종목명}</span>
+                        <span 
+                          className={`px-1.5 py-0.5 rounded ${parseFloat(etf.etfChangePercent.replace('%', '')) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                        >
+                          {etf.etfChangePercent} {/* CSV 원본 값 직접 표시 */}
                         </span>
                       </div>
-                      <span className={`text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-800`}>
+                      <span 
+                        className={`px-1.5 py-0.5 rounded bg-[#D8EFE9] text-teal-800`}
+                        style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                      >
                         {getStatusText(etf)}
                       </span>
                     </div>
@@ -1046,16 +1054,19 @@ export default function IndustryCharts() {
                     {etf.selectedStocks && etf.selectedStocks.slice(0, 2).map((stock, stockIndex) => (
                       <div key={stockIndex}>
                         {/* 종목 헤더 */}
-                        <div className="bg-gray-100 px-3 py-1 border border-t-0 border-gray-200 flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">{stock.name}</span>
-                            <span className={`text-xs px-1.5 py-0.5 rounded ${calculateStockChangePercent(stock) >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                        <div className="bg-gray-100 px-3 py-1 border border-t-0 border-gray-200 flex justify-between items-baseline">
+                          <div className="flex items-baseline">
+                            <span className="font-medium mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{stock.name}</span>
+                            <span 
+                              className={`px-1.5 py-0.5 rounded ${calculateStockChangePercent(stock) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                              style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                            >
                               {calculateStockChangePercent(stock) >= 0 ? '+' : ''}{calculateStockChangePercent(stock).toFixed(2)}%
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500">RS</span>
-                            <span className="font-medium text-sm text-blue-600">{stock.rsValue}</span>
+                          <div className="flex items-baseline">
+                            <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+                            <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{stock.rsValue}</span>
                           </div>
                         </div>
                         <div className="border border-t-0 border-gray-200" style={{ borderRadius: stockIndex === Math.min((etf.selectedStocks?.length || 0) - 1, 1) ? '0 0 0.375rem 0.375rem' : '0', overflow: 'hidden' }}>

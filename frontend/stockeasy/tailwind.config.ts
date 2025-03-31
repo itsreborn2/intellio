@@ -15,7 +15,27 @@ const config: Config = {
   presets: [commonConfig],
   theme: {
     extend: {
-      // 프로젝트 특정 추가 설정이 필요한 경우 여기에 작성
+      // ChatGPT 스타일 폰트 설정 추가
+      fontFamily: {
+        sans: ['Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+      },
+      fontSize: {
+        // ChatGPT 스타일 폰트 크기 설정
+        'xs': '0.75rem',     // 12px
+        'sm': '0.875rem',    // 14px
+        'base': '1rem',      // 16px (기본)
+        'lg': '1.125rem',    // 18px
+        'xl': '1.25rem',     // 20px
+        '2xl': '1.5rem',     // 24px
+        '3xl': '1.875rem',   // 30px
+        '4xl': '2.25rem',    // 36px
+      },
+      lineHeight: {
+        // ChatGPT 스타일 줄 간격 설정
+        'tight': '1.25',
+        'normal': '1.5',
+        'relaxed': '1.625',
+      }
     }
   },
   plugins: [require("tailwindcss-animate")],

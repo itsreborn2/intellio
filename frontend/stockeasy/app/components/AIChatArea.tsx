@@ -59,6 +59,7 @@ function AIChatAreaContent() {
   const [showTitle, setShowTitle] = useState<boolean>(true); // 제목 표시 여부
   const [transitionInProgress, setTransitionInProgress] = useState(false);
   const [searchMode, setSearchMode] = useState(false); // 종목 검색 모드 상태 추가
+  const [popupHovered, setPopupHovered] = useState(false); // 팝업 호버 상태 추가
 
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -402,8 +403,34 @@ function AIChatAreaContent() {
     // 초기 메시지 설정 로직은 위의 fetchMessages 함수에서 처리
   }, [isMounted, messages.length]);
 
+  // URL에서 initialStockCode 가져오기
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialStockCode = urlParams.get('initialStockCode');
+    if (initialStockCode) {
+      const stock = stockOptions.find(stock => stock.value === initialStockCode);
+      if (stock) {
+        setSelectedStock(stock);
+      }
+    }
+  }, [isMounted, stockOptions]);
+
   // 입력 필드 포커스 시 종목 추천 목록 표시
   const handleInputFocus = () => {
+    // 종목 선택 팝업이 열려 있으면 검색 모드 활성화
+    if (showStockSuggestions) {
+      setSearchMode(true);
+      
+      // 최근 종목이 있으면 표시
+      if (recentStocks.length > 0) {
+        setFilteredStocks(recentStocks);
+      } else {
+        // 최근 조회 종목이 없으면 기본 종목 추천 표시 (상위 5개)
+        setFilteredStocks(stockOptions.slice(0, 5));
+      }
+      return;
+    }
+    
     // 종목이 선택되어 있지 않은 경우, 최근 종목 목록 및 기본 종목 추천 표시
     if (!selectedStock) {
       // 최근 조회 종목이 있으면 표시
@@ -419,9 +446,35 @@ function AIChatAreaContent() {
   };
 
   // 입력 필드에 텍스트 입력 시 중앙 배치에서 일반 배치로 전환
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const value = e.target.value;
     setInputMessage(value);
+    
+    // 종목 선택 팝업이 열려 있으면 항상 종목 검색 모드로 동작
+    if (showStockSuggestions) {
+      setSearchMode(true);
+      // 종목 검색 로직
+      const searchValue = value.trim();
+      if (searchValue.length > 0) {
+        // 종목 검색 로직
+        const filtered = stockOptions.filter(stock => {
+          const stockName = stock.stockName || stock.display || stock.label || '';
+          const stockCode = stock.value || '';
+          return stockName.toLowerCase().includes(searchValue.toLowerCase()) || 
+                 stockCode.includes(searchValue);
+        }).slice(0, 10);
+        
+        setFilteredStocks(filtered);
+      } else {
+        // 입력값이 없으면 최근 조회 종목 표시
+        if (recentStocks.length > 0) {
+          setFilteredStocks(recentStocks);
+        } else {
+          setFilteredStocks(stockOptions.slice(0, 5));
+        }
+      }
+      return; // 종목 검색 모드일 때는 여기서 함수 종료
+    }
     
     // searchMode가 활성화되어 있으면 종목 검색 수행
     if (searchMode) {
@@ -476,14 +529,12 @@ function AIChatAreaContent() {
       }
     }
     
-    // 기존 높이 조정 로직 유지
-    const target = e.target;
-    const textLength = target.value.length;
-    if (textLength > 0) {
-      const newHeight = Math.min(100, Math.max(40, 40 + Math.floor(textLength / 50) * 20));
+    // 기존 높이 조정 로직 유지 (TextArea일 경우에만 적용)
+    if (e.target instanceof HTMLTextAreaElement) {
+      const target = e.target;
+      target.style.height = 'auto'; // 높이를 auto로 초기화하여 정확한 scrollHeight 계산
+      const newHeight = Math.min(150, Math.max(target.scrollHeight, 40)); // 최소 40px, 최대 150px
       target.style.height = `${newHeight}px`;
-    } else {
-      target.style.height = '2.97rem';
     }
   };
 
@@ -613,7 +664,7 @@ function AIChatAreaContent() {
       </div>
       <div style={{
         fontFamily: 'monospace',
-        fontSize: '0.9rem',
+        fontSize: '16px', // 0.9rem에서 16px로 변경
         fontWeight: 'bold',
         color: '#555'
       }}>
@@ -642,7 +693,7 @@ function AIChatAreaContent() {
       marginBottom: '16px'
     }}>
       <div style={{ 
-        fontSize: '0.85rem',
+        fontSize: '16px', // 0.85rem에서 16px로 변경
         marginBottom: '8px',
         color: '#555',
         display: 'flex',
@@ -664,7 +715,7 @@ function AIChatAreaContent() {
         alignItems: 'center',
         gap: '6px',
         margin: '4px 0',
-        fontSize: '0.75rem',
+        fontSize: '16px', // 0.75rem에서 16px로 변경
         color: '#888'
       }}>
         <div className="dot" style={{
@@ -682,7 +733,7 @@ function AIChatAreaContent() {
         alignItems: 'center',
         gap: '6px',
         margin: '4px 0',
-        fontSize: '0.75rem',
+        fontSize: '16px', // 0.75rem에서 16px로 변경
         color: '#888'
       }}>
         <div className="dot" style={{
@@ -701,7 +752,7 @@ function AIChatAreaContent() {
         alignItems: 'center',
         gap: '6px',
         margin: '4px 0',
-        fontSize: '0.75rem',
+        fontSize: '16px', // 0.75rem에서 16px로 변경
         color: '#888'
       }}>
         <div className="dot" style={{
@@ -737,8 +788,12 @@ function AIChatAreaContent() {
     position: 'relative',
     backgroundColor: '#F4F4F4', // Figma 디자인에 맞게 배경색 변경
     overflow: 'visible', // 오버플로우를 visible로 변경하여 브라우저 기본 스크롤 사용
-    padding: isMobile ? '0' : '10px', // 모바일에서는 패딩 제거
-    opacity: 1
+    paddingTop: isMobile ? '0' : '10px',
+    paddingRight: isMobile ? '0' : '10px',
+    paddingBottom: isMobile ? '0' : '10px',
+    paddingLeft: isMobile ? '0' : '10px',
+    opacity: 1,
+    fontSize: isMobile ? '14px' : undefined, // 모바일 기본 폰트 크기 14px
   };
 
   // 컨테이너 너비를 위한 변수 (일관성 유지를 위해)
@@ -750,17 +805,18 @@ function AIChatAreaContent() {
     justifyContent: 'center', // 중앙 정렬 강화
     width: '100%', // 전체 너비로 변경
     margin: '0 auto',
+    paddingTop: '0',
+    paddingRight: '0',
+    paddingBottom: '0',
     paddingLeft: '0',
     boxSizing: 'border-box',
     marginTop: isInputCentered ? (isMobile ? '30vh' : '35vh') : '0px',
     marginBottom: isMobile ? '5px' : '10px',
-    paddingBottom: isMobile ? '5px' : '0',
     position: isMobile ? 'unset' : 'relative',
     bottom: isInputCentered ? 'auto' : '20px',
     zIndex: isMobile ? 'unset' : 10,
     backgroundColor: 'transparent',
-    //transition: 'margin 0.3s ease-in-out', // 전체가 아닌 margin만 transition
-    borderTop: '0px solid #e0e0e0 !important'   
+    transition: 'all 0.3s ease-in-out',
   };
 
   const integratedInputStyle: React.CSSProperties = {
@@ -768,17 +824,20 @@ function AIChatAreaContent() {
     width: contentWidth, // 메시지 컨테이너와 동일한 너비 사용
     maxWidth: isMobile ? '100%' : '65%', // 최대 너비 제한
     margin: '0 auto',
-    //transition: 'width 0.3s ease-in-out', // 전체가 아닌 width만 transition
+    transition: 'width 0.3s ease-in-out', // 전체가 아닌 width만 transition
   };
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    minHeight: '2.97rem',
+    minHeight: isMobile ? '2.97rem' : '5.94rem', // 모바일은 한 줄, 데스크톱은 두 줄 크기로 설정
     height: 'auto',
     border: '1px solid #ccc',
     borderRadius: '8px',
-    padding: selectedStock ? '0 40px 0 85px' : '0 40px 0 8px', 
-    fontSize: '0.81rem',
+    paddingTop: '0',
+    paddingRight: '40px',
+    paddingBottom: '0',
+    paddingLeft: selectedStock ? '85px' : '8px', 
+    fontSize: isMobile ? '14px' : '16px', // 모바일 14px, 데스크탑 16px
     outline: 'none',
     boxSizing: 'border-box',
     resize: 'none',
@@ -788,7 +847,10 @@ function AIChatAreaContent() {
   const messagesContainerStyle: React.CSSProperties = {
     overflowY: 'visible',
     overflowX: 'hidden',
-    padding: isMobile ? '5px' : '10px',
+    paddingTop: isMobile ? '5px' : '10px',
+    paddingRight: isMobile ? '5px' : '10px',
+    paddingBottom: isMobile ? '5px' : '10px',
+    paddingLeft: isMobile ? '5px' : '10px',
     margin: '0 auto', // 중앙 정렬
     border: 'none', 
     borderRadius: '0', 
@@ -799,8 +861,8 @@ function AIChatAreaContent() {
     boxSizing: 'border-box',
     position: 'relative',
     display: isInputCentered ? 'none' : 'block',
-    //opacity: transitionInProgress ? 0 : 1, // 트랜지션 중에는 투명하게 처리
-    //transition: 'opacity 0.3s ease-in-out' // 오직 opacity만 transition
+    opacity: transitionInProgress ? 0 : 1, // 트랜지션 중에는 투명하게 처리
+    transition: 'opacity 0.3s ease-in-out' // 오직 opacity만 transition
   };
 
   const aiMessageStyle: React.CSSProperties = {
@@ -811,10 +873,31 @@ function AIChatAreaContent() {
     width: isMobile ? '100%' : '100%', // 모바일에서도 전체 너비 사용
     boxShadow: 'none', // 그림자 제거
     lineHeight: '1.5',
-    fontSize: '0.9rem',
+    fontSize: '16px', // 0.9rem에서 16px로 변경
     whiteSpace: 'pre-wrap',
     overflowWrap: 'break-word',
     boxSizing: 'border-box'
+  };
+
+  const stockSuggestionsStyle: React.CSSProperties = {
+    position: 'absolute',
+    bottom: `calc(100% + ${isMobile ? 5 : 5}px)`, // 모바일/데스크톱 모두 5px 간격
+    left: 0,
+    right: 0,
+    width: isMobile ? '90%' : '100%', // 모바일 환경에서 너비 조정
+    margin: isMobile ? '0 auto' : '0', // 모바일 환경에서 중앙 정렬
+    maxHeight: isMobile ? '180px' : '200px', // 모바일 환경에서 최대 높이 조정
+    overflowY: 'auto',
+    backgroundColor: 'white',
+    border: '1px solid #ccc',
+    borderRadius: '8px',
+    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
+    zIndex: 100,
+    paddingTop: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
+    paddingRight: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
+    paddingBottom: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
+    paddingLeft: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
+    transform: isMobile ? 'none' : (isInputCentered ? 'translateY(-30px)' : 'none'), // 데스크톱 + 중앙 정렬 시에만 적용
   };
 
   return (
@@ -829,8 +912,9 @@ function AIChatAreaContent() {
           <div style={{ 
             textAlign: 'center', 
             color: '#888', 
-            padding: '20px',
-            fontSize: '0.9rem', 
+            paddingTop: '20px',
+            paddingBottom: '20px',
+            fontSize: '16px', // 0.9rem에서 16px로 변경
             display: 'none' // 안내 텍스트 숨기기
           }}>
             종목을 선택하고 질문을 입력하세요.
@@ -861,7 +945,7 @@ function AIChatAreaContent() {
               }}>
                 {message.stockInfo && (
                   <div style={{
-                    fontSize: '0.75rem',
+                    fontSize: '16px', // 0.75rem에서 16px로 변경
                     fontWeight: 'bold',
                     color: '#10A37F', // 파란색(#0066cc)에서 초록색(#10A37F)으로 변경
                     marginBottom: '4px'
@@ -880,7 +964,7 @@ function AIChatAreaContent() {
                     // 사용자 메시지는 일반 텍스트로 표시
                     <div style={{
                       whiteSpace: 'nowrap',
-                      fontSize: '0.75rem',
+                      fontSize: '16px', // 0.75rem에서 16px로 변경
                       lineHeight: '1.6',
                       letterSpacing: 'normal'
                     }}>
@@ -919,7 +1003,9 @@ function AIChatAreaContent() {
       
       {/* 입력 영역 */}
       {!(isMobile && isSidebarOpen) && (
-        <div className="input-area" style={inputAreaStyle}>
+        <div className="input-area" style={{ 
+          ...inputAreaStyle
+        }}>
           <div className="integrated-input" style={integratedInputStyle}>
             {/* 텍스트 박스 바로 위 안내 문구 */}
             {showTitle && isInputCentered && !isMobile && (
@@ -932,20 +1018,19 @@ function AIChatAreaContent() {
                 marginTop: isMobile ? '-80px' : '-100px',
                 left: '0',
                 right: '0',
-                //transition: 'all 0.3s ease-in-out'
+                transition: 'all 0.3s ease-in-out'
               }}>
                 <h1 style={{
-                  fontSize: isMobile ? '1rem' : '1.3rem',
+                  fontSize: '25px', // 요청에 따라 30px로 변경
                   fontWeight: 'bold',
                   color: '#333',
                   lineHeight: '1.3',
                   wordBreak: 'keep-all',
                   letterSpacing: '-0.02em',
-                  //transition: 'all 0.3s ease-in-out',
+                  transition: 'all 0.3s ease-in-out',
                   display: isMobile ? 'none' : 'block' // 모바일에서는 숨김 처리
                 }}>
-                  기업,산업 리포트부터 SNS, 스탁이지가 보유한 비공개 자료들까지<br />
-                  한번에 분석해드려요.
+                  종목을 선택 후 분석을 요청하세요.
                 </h1>
               </div>
             )}
@@ -954,24 +1039,40 @@ function AIChatAreaContent() {
               position: 'relative',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center', // 가운데 정렬 추가
               width: '100%',
               backgroundColor: 'white',
               borderRadius: '30px',
-              border: '1px solid #e0e0e0',
-              padding: '0',
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.05)'
-            }}>
+              paddingTop: '0',
+              paddingRight: '0',
+              paddingBottom: '0',
+              paddingLeft: '0',
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.05)',
+              border: '2px solid #282A2E', // 테두리선 추가
+              transition: 'border-color 0.3s ease' // 부드러운 색상 전환 효과
+            }}
+              onMouseEnter={(e) => {
+                // 마우스 오버 시 테두리 색상 변경
+                e.currentTarget.style.borderColor = '#10A37F';
+              }}
+              onMouseLeave={(e) => {
+                // 마우스가 벗어날 때 테두리 색상 복원
+                e.currentTarget.style.borderColor = '#282A2E';
+              }}
+            >
               {selectedStock && (
                 <div 
                   style={{
-                    padding: '4px 10px',
+                    display: 'flex', // Flexbox 활성화
+                    alignItems: 'center', // 수직 가운데 정렬
+                    padding: '4px 10px', // 패딩 유지
                     margin: '0 0 0 8px',
-                    height: '28px',
+                    height: '26px', // 높이 28px -> 26px로 줄임
                     borderRadius: '6px',
                     border: '1px solid #ddd',
                     backgroundColor: isMobile ? '#ffffff' : '#f5f5f5',
                     color: '#333',
-                    fontSize: '0.7rem',
+                    fontSize: '13px', // 텍스트 크기 16px -> 13px로 줄임
                     fontWeight: 'normal',
                     whiteSpace: 'nowrap',
                     cursor: 'pointer'
@@ -980,6 +1081,14 @@ function AIChatAreaContent() {
                     setShowStockSuggestions(true); // 종목 선택 팝업 표시
                     setSearchMode(true); // 종목 검색 모드로 변경
                     setInputMessage(''); // 입력 필드를 비워서 종목 검색을 할 수 있도록 함
+                    
+                    // 최근 종목이 있으면 표시, 없으면 기본 종목 추천 표시
+                    if (recentStocks.length > 0) {
+                      setFilteredStocks(recentStocks);
+                    } else {
+                      setFilteredStocks(stockOptions.slice(0, 5));
+                    }
+                    
                     setTimeout(() => {
                       if (inputRef.current) {
                         inputRef.current.focus();
@@ -993,7 +1102,7 @@ function AIChatAreaContent() {
               )}
               <input
                 ref={inputRef}
-                placeholder={selectedStock ? "종목에 대해 궁굼한걸 물어보세요" : "먼저 종목을 입력하거나 선택하세요"}
+                placeholder={showStockSuggestions || searchMode ? "종목명 또는 종목코드 검색" : (selectedStock ? "종목에 대해 궁굼한걸 물어보세요" : "먼저 종목을 입력하거나 선택하세요")}
                 className="integrated-input-field"
                 type="text"
                 value={inputMessage}
@@ -1001,13 +1110,13 @@ function AIChatAreaContent() {
                 onFocus={handleInputFocus}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    if (!selectedStock && filteredStocks.length > 0) {
-                      // 종목이 선택되지 않고 검색 결과가 있는 경우, 첫 번째 종목 선택
+                    if (showStockSuggestions && filteredStocks.length > 0) {
+                      // 종목 선택 팝업이 열려 있고 검색 결과가 있는 경우, 첫 번째 종목 선택
                       e.preventDefault();
                       e.stopPropagation();
                       handleStockSelect(filteredStocks[0]);
-                    } else if (selectedStock && inputMessage.trim()) {
-                      // 종목이 선택된 상태에서 메시지가 있으면 전송
+                    } else if (selectedStock && inputMessage.trim() && !searchMode) {
+                      // 종목이 선택된 상태에서 메시지가 있고 검색 모드가 아니면 전송
                       handleSendMessage();
                     }
                   }
@@ -1016,7 +1125,10 @@ function AIChatAreaContent() {
                   ...inputStyle,
                   border: 'none',
                   boxShadow: 'none',
-                  padding: '12px 16px',
+                  paddingTop: '12px',
+                  paddingRight: '16px',
+                  paddingBottom: '12px',
+                  paddingLeft: '16px',
                   marginLeft: selectedStock ? '8px' : '0',
                   flex: 1,
                   borderRadius: '30px'
@@ -1068,23 +1180,10 @@ function AIChatAreaContent() {
             
             {/* 종목 추천 목록 */}
             {isMounted && showStockSuggestions && (
-              <div ref={stockSuggestionsRef} style={{
-                position: 'absolute',
-                bottom: 'calc(100% + 5px)', 
-                left: '0',
-                width: '100%',
-                maxHeight: '200px',
-                overflowY: 'auto', 
-                backgroundColor: 'white',
-                border: '1px solid #ddd',
-                borderRadius: '10px',
-                boxShadow: '0 -2px 4px rgba(0, 0, 0, 0.1)',
-                zIndex: 1000,
-                marginBottom: '0px',
-                padding: '10px',
-                display: showStockSuggestions ? 'block' : 'none',
-                transform: isMobile ? 'none' : (isInputCentered ? 'translateY(-25px)' : 'none') // 모바일에서는 transform 제거
-              }}>
+              <div
+                style={stockSuggestionsStyle}
+                ref={stockSuggestionsRef}
+              >
                 {/* 검색 입력 필드 제거 - 기본 텍스트 입력창만 사용 */}
                 
                 {isLoading ? (
@@ -1096,7 +1195,12 @@ function AIChatAreaContent() {
                     검색 결과가 없습니다
                   </div>
                 ) : (
-                  <div style={{ padding: '0 5px' }}>
+                  <div style={{ 
+                    paddingLeft: '5px', 
+                    paddingRight: '5px', 
+                    paddingTop: '0', 
+                    paddingBottom: '4px' 
+                  }}>
                     <div style={{ 
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -1104,7 +1208,7 @@ function AIChatAreaContent() {
                       marginBottom: '0' // 여백 완전 제거
                     }}>
                       <div style={{ 
-                        fontSize: '0.7rem', 
+                        fontSize: '13px', // 16px에서 13px로 변경
                         fontWeight: 'normal',
                         color: '#666'
                       }}>
@@ -1141,7 +1245,7 @@ function AIChatAreaContent() {
                             textAlign: 'center',
                             cursor: 'pointer',
                             transition: 'background-color 0.2s',
-                            fontSize: '0.75rem',
+                            fontSize: '13px', // 16px에서 13px로 변경
                             color: '#333',
                             display: 'flex',
                             alignItems: 'center',
@@ -1167,7 +1271,7 @@ function AIChatAreaContent() {
                             border: '1px solid #ddd',
                             backgroundColor: '#f5f5f5',
                             color: '#333',
-                            fontSize: '0.65rem',
+                            fontSize: '13px', // 16px에서 13px로 변경
                             fontWeight: 'normal',
                             whiteSpace: 'nowrap',
                             display: 'flex',
@@ -1193,7 +1297,9 @@ function AIChatAreaContent() {
                     marginTop: '4px', // 여백 완전 제거
                     borderTop: '1px solid #eee',
                     paddingTop: '4px',
-                    padding: '0 5px' // TOP10 종목과 동일한 패딩으로 통일
+                    paddingLeft: '5px', 
+                    paddingRight: '5px', 
+                    paddingBottom: '0' 
                   }}>
                     <div style={{ 
                       display: 'flex',
@@ -1202,7 +1308,7 @@ function AIChatAreaContent() {
                       marginBottom: '0' // 여백 완전 제거
                     }}>
                       <div style={{ 
-                        fontSize: '0.7rem', 
+                        fontSize: '13px', // 16px에서 13px로 변경
                         fontWeight: 'normal',
                         color: '#666'
                       }}>
@@ -1219,7 +1325,7 @@ function AIChatAreaContent() {
                         style={{
                           background: 'none',
                           border: 'none',
-                          fontSize: '0.7rem',
+                          fontSize: '13px', // 16px에서 13px로 변경
                           color: '#999',
                           cursor: 'pointer',
                           padding: '4px 10px', 
@@ -1259,7 +1365,7 @@ function AIChatAreaContent() {
                             textAlign: 'center',
                             cursor: 'pointer',
                             transition: 'background-color 0.2s',
-                            fontSize: '0.75rem',
+                            fontSize: '13px', // 16px에서 13px로 변경
                             color: '#333',
                             display: 'flex',
                             alignItems: 'center',
@@ -1285,7 +1391,7 @@ function AIChatAreaContent() {
                             border: '1px solid #ddd',
                             backgroundColor: '#f5f5f5',
                             color: '#333',
-                            fontSize: '0.65rem',
+                            fontSize: '13px', // 16px에서 13px로 변경
                             fontWeight: 'normal',
                             whiteSpace: 'nowrap',
                             display: 'flex',
@@ -1338,9 +1444,9 @@ function AIChatAreaContent() {
               width: isMobile ? '100%' : '50%',  
             }}>
               <div style={{ 
-                fontSize: isMobile ? '0.75rem' : '0.8rem', 
+                fontSize: '13px', // 16px에서 13px로 변경
+                marginBottom: '8px',
                 color: '#333', 
-                marginBottom: isMobile ? '6px' : '8px', 
                 fontWeight: '500' 
               }}>
                 추천 질문
@@ -1374,7 +1480,7 @@ function AIChatAreaContent() {
                   textAlign: 'left',
                   cursor: 'pointer',
                   transition: 'background-color 0.2s',
-                  fontSize: '0.75rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   color: '#333',
                   display: 'flex',
                   alignItems: 'center',
@@ -1396,7 +1502,7 @@ function AIChatAreaContent() {
                   border: '1px solid #ddd',
                   backgroundColor: '#f5f5f5',
                   color: '#333',
-                  fontSize: '0.65rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   fontWeight: 'normal',
                   whiteSpace: 'nowrap',
                   display: 'flex',
@@ -1441,7 +1547,7 @@ function AIChatAreaContent() {
                   textAlign: 'left',
                   cursor: 'pointer',
                   transition: 'background-color 0.2s',
-                  fontSize: '0.75rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   color: '#333',
                   display: 'flex',
                   alignItems: 'center',
@@ -1463,7 +1569,7 @@ function AIChatAreaContent() {
                   border: '1px solid #ddd',
                   backgroundColor: '#f5f5f5',
                   color: '#333',
-                  fontSize: '0.65rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   fontWeight: 'normal',
                   whiteSpace: 'nowrap',
                   display: 'flex',
@@ -1508,7 +1614,7 @@ function AIChatAreaContent() {
                   textAlign: 'left',
                   cursor: 'pointer',
                   transition: 'background-color 0.2s',
-                  fontSize: '0.75rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   color: '#333',
                   display: 'flex',
                   alignItems: 'center',
@@ -1530,7 +1636,7 @@ function AIChatAreaContent() {
                   border: '1px solid #ddd',
                   backgroundColor: '#f5f5f5',
                   color: '#333',
-                  fontSize: '0.65rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   fontWeight: 'normal',
                   whiteSpace: 'nowrap',
                   display: 'flex',
@@ -1575,7 +1681,7 @@ function AIChatAreaContent() {
                   textAlign: 'left',
                   cursor: 'pointer',
                   transition: 'background-color 0.2s',
-                  fontSize: '0.75rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   color: '#333',
                   display: 'flex',
                   alignItems: 'center',
@@ -1597,7 +1703,7 @@ function AIChatAreaContent() {
                   border: '1px solid #ddd',
                   backgroundColor: '#f5f5f5',
                   color: '#333',
-                  fontSize: '0.65rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   fontWeight: 'normal',
                   whiteSpace: 'nowrap',
                   display: 'flex',
@@ -1642,7 +1748,7 @@ function AIChatAreaContent() {
                   textAlign: 'left',
                   cursor: 'pointer',
                   transition: 'background-color 0.2s',
-                  fontSize: '0.75rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   color: '#333',
                   display: 'flex',
                   alignItems: 'center',
@@ -1664,7 +1770,7 @@ function AIChatAreaContent() {
                   border: '1px solid #ddd',
                   backgroundColor: '#f5f5f5',
                   color: '#333',
-                  fontSize: '0.65rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   fontWeight: 'normal',
                   whiteSpace: 'nowrap',
                   display: 'flex',
@@ -1695,9 +1801,9 @@ function AIChatAreaContent() {
               marginTop: isMobile ? '12px' : '0'
             }}>
               <div style={{ 
-                fontSize: isMobile ? '0.75rem' : '0.8rem', 
+                fontSize: '13px', // 16px에서 13px로 변경
+                marginBottom: '8px',
                 color: '#333', 
-                marginBottom: isMobile ? '6px' : '8px', 
                 fontWeight: '500' 
               }}>
                 최신 업데이트 종목
@@ -1731,7 +1837,7 @@ function AIChatAreaContent() {
                   textAlign: 'left',
                   cursor: 'pointer',
                   transition: 'background-color 0.2s',
-                  fontSize: '0.75rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   color: '#333',
                   display: 'flex',
                   alignItems: 'center',
@@ -1753,7 +1859,7 @@ function AIChatAreaContent() {
                   border: '1px solid #ddd',
                   backgroundColor: '#f5f5f5',
                   color: '#333',
-                  fontSize: '0.65rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   fontWeight: 'normal',
                   whiteSpace: 'nowrap',
                   display: 'flex',
@@ -1798,7 +1904,7 @@ function AIChatAreaContent() {
                   textAlign: 'left',
                   cursor: 'pointer',
                   transition: 'background-color 0.2s',
-                  fontSize: '0.75rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   color: '#333',
                   display: 'flex',
                   alignItems: 'center',
@@ -1820,7 +1926,7 @@ function AIChatAreaContent() {
                   border: '1px solid #ddd',
                   backgroundColor: '#f5f5f5',
                   color: '#333',
-                  fontSize: '0.65rem',
+                  fontSize: '13px', // 16px에서 13px로 변경
                   fontWeight: 'normal',
                   whiteSpace: 'nowrap',
                   display: 'flex',
@@ -1845,7 +1951,8 @@ function AIChatAreaContent() {
         <div style={{
           width: isMobile ? '100%' : '65%', 
           textAlign: 'center',
-          padding: '10px 0', 
+          paddingTop: '10px',
+          paddingBottom: '10px',
           margin: '0 auto',
           display: 'flex',
           justifyContent: 'center',
@@ -1859,7 +1966,7 @@ function AIChatAreaContent() {
           backgroundColor: 'rgba(244, 244, 244, 0.8)', 
         }}>
           <div style={{
-            fontSize: '0.75rem',
+            fontSize: '13px', // 0.75rem에서 16px로 변경
             color: '#888',
             fontWeight: '300'
           }}>

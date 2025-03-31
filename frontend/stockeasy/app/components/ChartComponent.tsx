@@ -507,12 +507,12 @@ const ChartComponent: React.FC<ChartProps> = ({
           minMove: 1, // 최소 이동 단위
         },
         // 한국식 캔들 색상 설정 (상승 시 빨간색, 하락 시 파란색)
-        upColor: '#ef5350',       // 상승 시 빨간색
-        downColor: '#2962FF',     // 하락 시 파란색
-        borderUpColor: '#ef5350', // 상승 시 테두리 색상
-        borderDownColor: '#2962FF', // 하락 시 테두리 색상
-        wickUpColor: '#ef5350',   // 상승 시 꼬리 색상
-        wickDownColor: '#2962FF'  // 하락 시 꼬리 색상
+        upColor: '#F87171',       // 상승 시 Tailwind Red 400
+        downColor: '#60A5FA',     // 하락 시 Tailwind Blue 400
+        borderUpColor: '#F87171', // 상승 시 테두리 색상
+        borderDownColor: '#60A5FA', // 하락 시 테두리 색상
+        wickUpColor: '#F87171',   // 상승 시 꼬리 색상
+        wickDownColor: '#60A5FA'  // 하락 시 꼬리 색상
       });
       candlestickSeriesRef.current = candleSeries;
 
@@ -601,8 +601,15 @@ const ChartComponent: React.FC<ChartProps> = ({
             volume = 0;
           }
           
-          // 한국식 볼륨 색상 설정 (상승 시 빨간색, 하락 시 파란색)
-          const color = (candle.close >= candle.open) ? '#ef5350' : '#2962FF';
+          // 캔들 색상과 일치하는 볼륨 막대 색상 설정
+          const candleOpen = extractNumberField(candle, ['open', 'Open', '시가']);
+          const candleClose = extractNumberField(candle, ['close', 'Close', '종가']);
+          let barColor = 'rgba(156, 163, 175, 0.8)'; // 기본(동일) 색상: Tailwind Gray 400
+          if (candleClose > candleOpen) {
+            barColor = 'rgba(248, 113, 113, 0.8)'; // 상승 시: Tailwind Red 400 (#F87171)
+          } else if (candleClose < candleOpen) {
+            barColor = 'rgba(96, 165, 250, 0.8)'; // 하락 시: Tailwind Blue 400 (#60A5FA)
+          }
           
           if (volume > 0) {
             console.log(`볼륨 데이터 생성 성공: 시간=${candle.time}, 볼륨=${volume}`);
@@ -611,7 +618,7 @@ const ChartComponent: React.FC<ChartProps> = ({
           return {
             time: candle.time, 
             value: volume,
-            color: color
+            color: barColor
           } as HistogramData<Time>;
         });
         
@@ -658,7 +665,7 @@ const ChartComponent: React.FC<ChartProps> = ({
                   return {
                     time: candle.time,
                     value: sampleVolume,
-                    color: (candle.close >= candle.open) ? '#ef5350' : '#2962FF'
+                    color: (candle.close >= candle.open) ? 'rgba(248, 113, 113, 0.8)' : 'rgba(96, 165, 250, 0.8)'
                   } as HistogramData<Time>;
                 });
                 
@@ -683,27 +690,21 @@ const ChartComponent: React.FC<ChartProps> = ({
         console.log(`시장 지수 라인 시리즈 추가: ${marketType}, 데이터 ${marketIndexData.length}개`);
         
         // 시장 구분에 따라 색상 설정
-        const marketColor = marketType === 'KOSPI' ? '#2962FF' : '#00C853'; // KOSPI는 파란색, KOSDAQ은 녹색
+        const marketColor = '#14B8A6'; // 변경
         
         const marketIndexSeries = chart.addSeries(LineSeries, {
-          color: marketColor, // 시장 구분에 따른 색상 적용
+          priceScaleId: 'market-index', // 오른쪽에 시장 지수 가격 스케일 사용
+          color: marketColor, // 변경
           lineWidth: 2,
-          crosshairMarkerVisible: true,
-          lastValueVisible: true, // 마지막 값 표시 활성화
-          priceLineVisible: true, // 가격선 표시 활성화
-          priceScaleId: 'market-index',
-          title: marketType,
-          priceFormat: {
-            type: 'price',
-            precision: 0, // 소수점 제거
-            minMove: 1, // 최소 이동 단위
-          }
+          lastValueVisible: false,
+          priceLineVisible: false,
+          title: '', // 시장 지수 라벨(KOSPI, KOSDAQ) 제거
         });
         
         chart.priceScale('market-index').applyOptions({
           visible: true,
           borderVisible: true,
-          borderColor: marketColor, // 시장 구분에 따른 색상 적용
+          borderColor: marketColor, // 변경
           scaleMargins: {
             top: 0.1,
             bottom: showVolume ? 0.2 : 0,
@@ -728,7 +729,7 @@ const ChartComponent: React.FC<ChartProps> = ({
         if (ma20Data.length > 0) {
           // 20일 이동평균선 시리즈 추가
           const ma20Series = chart.addSeries(LineSeries, {
-            color: '#000080', // 남색(navy)
+            color: '#14B8A6', // 남색(navy)에서 teal-500 (#14B8A6)으로 변경
             lineWidth: 2,
             crosshairMarkerVisible: true,
             lastValueVisible: false, // 마지막 값 표시 비활성화
@@ -758,7 +759,7 @@ const ChartComponent: React.FC<ChartProps> = ({
             legendDiv.style.padding = '2px 5px';
             legendDiv.style.borderRadius = '3px';
             legendDiv.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
-            legendDiv.innerHTML = '<span style="color: #000080; font-weight: bold;">MA20</span>';
+            legendDiv.innerHTML = '<span style="color: #14B8A6; font-weight: bold;">MA20</span>'; // 색상 변경
             container.appendChild(legendDiv);
           }
           

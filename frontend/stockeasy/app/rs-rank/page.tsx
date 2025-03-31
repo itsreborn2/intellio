@@ -196,7 +196,6 @@ export default function RSRankPage() {
                 stockName: stockName,
                 rs: rsData.RS || row['거래대금'], // RS 데이터가 있으면 사용, 없으면 거래대금 사용
                 시가총액: rsData.시가총액,
-                테마명: rsData.테마명, // 테마명 추가
                 ...row
               };
             }),
@@ -708,7 +707,7 @@ export default function RSRankPage() {
   // 등락률에 따른 색상 결정 함수
   const getPriceChangeColor = (change: number): string => {
     if (change >= 5) return 'text-red-500'; // 5% 이상 상승은 빨간색
-    if (change < 0) return 'text-blue-500'; // 하락은 파란색
+    if (change < 0) return 'text-blue-400'; // 하락은 파란색
     return 'text-gray-900'; // 그 외는 검정색
   };
 
@@ -878,11 +877,6 @@ export default function RSRankPage() {
         
         // 등락률 추가
         '등락률': priceChange,
-        
-        // 테마명 추가
-        '테마명': matchingRSRow && matchingRSRow['테마명'] ? matchingRSRow['테마명'] : '-',
-        
-        'MTT': matchingRSRow ? matchingRSRow['MTT'] : '-'
       };
     });
     
@@ -988,15 +982,17 @@ export default function RSRankPage() {
 
     // 시장 구분에 따라 배경색 설정
     const marketType = chartMarketTypes[index];
-    const isKospi = marketType === 'KOSPI';
-    const bgColorClass = isKospi ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800';
+    const bgColorClass = 'bg-gray-200 text-gray-700'; // 회색 버튼 스타일로 고정
 
     return (
       <div>
         <div className="bg-gray-100 px-3 py-1 border border-gray-200 flex justify-between items-center" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
           <div className="flex items-center">
             <span className="font-medium text-xs" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartStockNames[index]}</span>
-            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${bgColorClass}`}>
+            <span 
+              className={`ml-2 px-1.5 py-0.5 rounded ${bgColorClass}`}
+              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+            >
               {marketType}
             </span>
           </div>
@@ -1161,420 +1157,360 @@ export default function RSRankPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex">
       {/* 사이드바 */}
       <Sidebar />
       
-      {/* 메인 콘텐츠 영역 - 반응형으로 여백 조정 */}
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ marginLeft: 'var(--sidebar-margin, 0px)' }}>
-        {/* 반응형 여백을 위한 스타일 */}
-        <style jsx global>{`
-          @media (min-width: 768px) {
-            :root {
-              --sidebar-margin: 63px;
-            }
-          }
-          @media (max-width: 767px) {
-            :root {
-              --sidebar-margin: 0px;
-            }
-          }
-        `}</style>
-        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-          {/* 메인 콘텐츠 영역 - 화면 크기에 따라 너비 조정 */}
-          <div className="w-full md:w-[90%] lg:w-[95%] xl:w-full mx-auto p-4">
-            {/* 상단 영역 - RS 순위 및 52주 신고가 */}
-            <div className="flex flex-col lg:flex-row gap-4 mb-4">
-              {/* 좌측 영역 - RS 순위 테이블 */}
-              <div className="w-full lg:w-[70%] bg-white rounded-lg shadow p-4">
-                {loading ? (
-                  <div className="text-center py-4" style={{ fontSize: 'clamp(0.7rem, 0.8vw, 0.8rem)' }}>데이터를 불러오는 중입니다...</div>
-                ) : error ? (
-                  <div className="text-red-500 text-center py-4" style={{ fontSize: 'clamp(0.7rem, 0.8vw, 0.8rem)' }}>{error}</div>
-                ) : csvData ? (
-                  <div className="flex flex-col h-full">
-                    <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
-                      <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
-                      <div className="flex items-center justify-end">
-                        <span className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
-                        <TableCopyButton
-                          tableRef={rsTableRef}
-                          headerRef={rsHeaderRef}
-                          tableName="RS순위 테이블"
-                          buttonText="이미지 복사"
-                        />
+      {/* 메인 콘텐츠 영역 - 모바일 최적화 */}
+      <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto ml-0 md:ml-16 w-full">
+        {/* Inner container for width limit and centering */}
+        <div className="max-w-6xl mx-auto"> 
+          {/* RS 순위 테이블 & 52주 신고가 */}
+          <div className="mb-2 md:mb-4">
+            <div className="bg-[#f5f5f5] rounded-md shadow p-2 md:p-4">
+              <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
+                {/* RS 순위 및 52주 신고가 테이블 영역 */}
+                <div className="flex flex-col lg:flex-row gap-4">
+                  {/* 좌측 영역 - RS 순위 테이블 */}
+                  <div className="w-full lg:w-[60%]">
+                    {loading ? (
+                      <div className="text-center py-4" style={{ fontSize: 'clamp(0.7rem, 0.8vw, 0.8rem)' }}>데이터를 불러오는 중입니다...</div>
+                    ) : error ? (
+                      <div className="text-red-500 text-center py-4" style={{ fontSize: 'clamp(0.7rem, 0.8vw, 0.8rem)' }}>{error}</div>
+                    ) : csvData ? (
+                      <div className="flex flex-col h-full">
+                        <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
+                          <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
+                          <div className="flex items-center justify-end">
+                            <span className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                            <TableCopyButton
+                              tableRef={rsTableRef}
+                              headerRef={rsHeaderRef}
+                              tableName="RS순위 테이블"
+                              buttonText="이미지 복사"
+                            />
+                          </div>
+                        </div>
+                        <div className="relative">
+                          <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={rsTableRef}>
+                            <table className="w-full bg-white border border-gray-200 table-fixed">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  {csvData.headers
+                                    .filter(header => header !== '테마명' && header !== '업종') // 테마명과 업종 컬럼 제외
+                                    .map((header, index) => (
+                                    <th 
+                                      key={header} // key를 header 이름으로 변경 (더 안정적)
+                                      className={`px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200
+                                        ${
+                                        // 모바일 화면에서 중요하지 않은 컬럼 숨기기
+                                        (header === 'RS_2M' || header === 'RS_3M' || header === '시가총액' || header === '종목코드') ? 'hidden md:table-cell' : 
+                                        // RS_1M은 모바일에서도 표시
+                                        ''
+                                      }`}
+                                      style={{ 
+                                        width: header === 'RS' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' || header === 'MTT' ? '55px' :
+                                               header === '시가총액' || header === '거래대금' ? '94px' :
+                                               header === '종목명' ? '130px' :
+                                               header === '종목코드' ? '80px' : 'auto',
+                                        height: '35px', // 높이 적용
+                                        fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', // 폰트 크기 적용
+                                        ...(header === '업종' ? {
+                                          maxWidth: '230px',
+                                          minWidth: '80px',
+                                          width: 'auto'
+                                        } : {})
+                                      }}
+                                      onClick={() => requestSort(header)}
+                                    >
+                                      <div className="flex items-center justify-center">
+                                        <span>{formatHeaderName(header)}</span>
+                                        {sortKey === header && (
+                                          <span className="ml-1">
+                                            {sortDirection === 'asc' ? '▲' : '▼'}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {currentPageData.map((row, rowIndex) => (
+                                  <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                    {csvData.headers
+                                      .filter(header => header !== '테마명' && header !== '업종') // 테마명과 업종 컬럼 제외
+                                      .map((header, colIndex) => (
+                                      <td 
+                                        key={header} // key를 header 이름으로 변경
+                                        className={`py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis
+                                          ${
+                                          // 모바일 화면에서 중요하지 않은 컬럼 숨기기
+                                          (header === 'RS_2M' || header === 'RS_3M' || header === '시가총액' || header === '종목코드') ? 'hidden md:table-cell' : 
+                                          // RS_1M은 모바일에서도 표시
+                                          ''
+                                        }`}
+                                        style={{ 
+                                          fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
+                                          ...(header === '업종' ? {
+                                            maxWidth: '230px',
+                                            minWidth: '80px',
+                                            width: 'auto',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis'
+                                          } : {})
+                                        }}
+                                        title={header === '테마명' ? row[header] : ''}
+                                      >
+                                        {formatCellValue(header, row[header])}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        
+                        {/* 페이지네이션 */}
+                        <div className="mt-4 flex justify-center">
+                          <div className="flex items-center space-x-1">
+                            <button
+                              // h-8, flex, items-center 제거하고 py-1 추가하여 이전 높이로 복원
+                              className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                              style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                              onClick={() => setCurrentPage(1)}
+                              disabled={currentPage === 1}
+                            >
+                              <span className="hidden sm:inline">처음</span>
+                              <span className="sm:hidden">«</span>
+                            </button>
+                            <button
+                              // h-8, flex, items-center 제거하고 py-1 추가하여 이전 높이로 복원
+                              className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                              style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                              onClick={() => setCurrentPage(currentPage - 1)}
+                              disabled={currentPage === 1}
+                            >
+                              <span className="hidden sm:inline">이전</span>
+                              <span className="sm:hidden">‹</span>
+                            </button>
+                            
+                            {/* 페이지 번호 버튼 - 모바일에서는 줄이고 PC에서는 더 많이 표시 */}
+                            {Array.from({ length: totalPages }).map((_, index) => {
+                              const pageNumber = index + 1;
+                              // 모바일에서는 현재 페이지 주변 1개만 표시, PC에서는 2개 표시
+                              const visibleOnMobile = Math.abs(pageNumber - currentPage) <= 1;
+                              const visibleOnDesktop = Math.abs(pageNumber - currentPage) <= 2;
+                              
+                              if (visibleOnDesktop) {
+                                return (
+                                  <button
+                                    key={index}
+                                    // w-8 고정 너비 및 중앙 정렬은 유지, h-8 제거하고 py-1 추가하여 높이 복원
+                                    className={`w-8 py-1 flex justify-center ${
+                                      pageNumber === currentPage
+                                        ? 'bg-[#D8EFE9] text-gray-700 rounded'
+                                        : 'bg-gray-200 rounded hover:bg-gray-300'
+                                    } text-sm ${!visibleOnMobile ? 'hidden sm:inline-block' : ''}`}
+                                    style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                                    onClick={() => setCurrentPage(pageNumber)}
+                                  >
+                                    {pageNumber}
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })}
+                            
+                            <button
+                              // h-8, flex, items-center 제거하고 py-1 추가하여 이전 높이로 복원
+                              className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                              style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                              onClick={() => setCurrentPage(currentPage + 1)}
+                              disabled={currentPage === totalPages}
+                            >
+                              <span className="hidden sm:inline">다음</span>
+                              <span className="sm:hidden">›</span>
+                            </button>
+                            <button
+                              // h-8, flex, items-center 제거하고 py-1 추가하여 이전 높이로 복원
+                              className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                              style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                              onClick={() => setCurrentPage(totalPages)}
+                              disabled={currentPage === totalPages}
+                            >
+                              <span className="hidden sm:inline">마지막</span>
+                              <span className="sm:hidden">»</span>
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="relative">
-                      {/* 스크롤 힌트 제거 - 하단으로 이동 */}
-                      
-                      <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={rsTableRef}>
-                        <table className="w-full bg-white border border-gray-200 table-fixed">
-                          <thead>
-                            <tr className="bg-gray-100">
-                              {csvData.headers.map((header, index) => (
+                    ) : (
+                      <p className="text-gray-700" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.75rem)' }}>데이터가 없습니다.</p>
+                    )}
+                  </div>
+                  
+                  {/* 우측 영역 - 52주 신고가 섹션 */}
+                  <div className="w-full lg:w-[40%]">
+                    {/* 금주 52주 신고가 정보 영역 */}
+                    <div className="flex flex-col">
+                      <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
+                        <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
+                        <div className="flex items-center justify-end">
+                          <span className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                          <TableCopyButton
+                            tableRef={highTableRef}
+                            headerRef={highHeaderRef}
+                            tableName="52주 신고가 테이블"
+                            buttonText="이미지 복사"
+                          />
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={highTableRef}>
+                          <table className="w-full bg-white border border-gray-200 table-fixed">
+                            <thead>
+                              <tr className="bg-gray-100">
                                 <th 
-                                  key={index} 
-                                  className={`py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200
-                                    ${// 모바일 화면에서 중요하지 않은 컬럼 숨기기
-                                    (header === 'RS_2M' || header === 'RS_3M' || header === '시가총액' || header === '테마명' || header === '종목코드') ? 'hidden md:table-cell' : 
-                                    // RS_1M은 모바일에서도 표시
-                                    ''
-                                  }`}
-                                  style={{ 
-                                    width: header === 'RS' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' || header === 'MTT' ? '60px' :
-                                           header === '시가총액' || header === '거래대금' ? '74px' :
-                                           header === '업종' ? 'auto' :
-                                           header === '종목명' ? '120px' :
-                                           header === '종목코드' ? '84px' : 'auto',
-                                    fontSize: 'clamp(0.65rem, 0.8vw, 0.75rem)',
-                                    ...(header === '업종' ? {
-                                      maxWidth: '230px',
-                                      minWidth: '80px',
-                                      width: 'auto'
-                                    } : {})
-                                  }}
-                                  onClick={() => requestSort(header)}
+                                  className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '90px', height: '35px' }}
+                                  onClick={() => requestSort('종목명')}
                                 >
                                   <div className="flex items-center justify-center">
-                                    <span>{formatHeaderName(header)}</span>
-                                    {sortKey === header && (
+                                    <span>종목명</span>
+                                    {sortKey === '종목명' && (
                                       <span className="ml-1">
                                         {sortDirection === 'asc' ? '▲' : '▼'}
                                       </span>
                                     )}
                                   </div>
                                 </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {currentPageData.map((row, rowIndex) => (
-                              <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                {csvData.headers.map((header, colIndex) => (
-                                  <td 
-                                    key={colIndex} 
-                                    className={`py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis
-                                      ${// 모바일 화면에서 중요하지 않은 컬럼 숨기기
-                                      (header === 'RS_2M' || header === 'RS_3M' || header === '시가총액' || header === '테마명' || header === '종목코드') ? 'hidden md:table-cell' : 
-                                      // RS_1M은 모바일에서도 표시
-                                      ''
-                                    }`}
-                                    style={{ 
-                                      fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
-                                      ...(header === '업종' ? {
-                                        maxWidth: '230px',
-                                        minWidth: '80px',
-                                        width: 'auto',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis'
-                                      } : {})
-                                    }}
-                                    title={header === '테마명' ? row[header] : ''}
-                                  >
-                                    {formatCellValue(header, row[header])}
-                                  </td>
-                                ))}
+                                <th 
+                                  className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '45px', height: '35px' }}
+                                  onClick={() => requestSort('RS')}
+                                >
+                                  <div className="flex items-center justify-center">
+                                    <span>RS</span>
+                                    {sortKey === 'RS' && (
+                                      <span className="ml-1">
+                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </th>
+                                <th 
+                                  className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '55px', height: '35px' }} // 너비 늘림 (예: 55px -> 60px)
+                                  onClick={() => requestSort('등락률')}
+                                >
+                                  <div className="flex items-center justify-center">
+                                    <span>등락률</span>
+                                    {sortKey === '등락률' && (
+                                      <span className="ml-1">
+                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </th>
+                                <th 
+                                  className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px', height: '35px' }}
+                                  onClick={() => requestSort('시가총액')}
+                                >
+                                  <div className="flex items-center justify-center">
+                                    <span>시가총액</span>
+                                    {sortKey === '시가총액' && (
+                                      <span className="ml-1">
+                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </th>
+                                <th 
+                                  className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px', height: '35px' }}
+                                  onClick={() => requestSort('거래대금')}
+                                >
+                                  <div className="flex items-center justify-center">
+                                    <span>거래대금</span>
+                                    {sortKey === '거래대금' && (
+                                      <span className="ml-1">
+                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {combinedHighData.slice(0, 20).map((row: any, rowIndex: number) => (
+                                <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                  <td 
+                                    className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-left whitespace-nowrap overflow-hidden text-ellipsis"
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                  >
+                                    {row['종목명']}
+                                  </td>
+                                  <td 
+                                    className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis"
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                  >
+                                    {row['RS']}
+                                  </td>
+                                  <td 
+                                    className={`py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis ${getPriceChangeColor(row['등락률'])}`}
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                  >
+                                    {(row['등락률'] > 0 ? '+' : '') + row['등락률'].toFixed(2)}%
+                                  </td>
+                                  <td 
+                                    className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis"
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                  >
+                                    {row['시가총액(억)']}억
+                                  </td>
+                                  <td 
+                                    className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis"
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                  >
+                                    {row['거래대금(억)']}억
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                      
-                      {/* 스크롤 힌트 - 하단에 표시 */}
-                      <div className="hidden sm:hidden md:flex lg:hidden justify-center items-center mt-1 py-1 bg-gray-50 border border-gray-200 rounded-md">
-                        <span className="text-gray-700 text-xs flex items-center" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.75rem)' }}>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-                          </svg>
-                          좌우로 스크롤하여 더 많은 정보를 확인하세요
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                          </svg>
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {/* 페이지네이션 */}
-                    <div className="mt-4 flex justify-center">
-                      <div className="flex items-center space-x-1">
-                        <button
-                          className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm" 
-                          style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
-                          onClick={() => setCurrentPage(1)}
-                          disabled={currentPage === 1}
-                        >
-                          <span className="hidden sm:inline">처음</span>
-                          <span className="sm:hidden">«</span>
-                        </button>
-                        <button
-                          className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm" 
-                          style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
-                          onClick={() => setCurrentPage(currentPage - 1)}
-                          disabled={currentPage === 1}
-                        >
-                          <span className="hidden sm:inline">이전</span>
-                          <span className="sm:hidden">‹</span>
-                        </button>
-                        
-                        {/* 페이지 번호 버튼 - 모바일에서는 줄이고 PC에서는 더 많이 표시 */}
-                        {Array.from({ length: totalPages }).map((_, index) => {
-                          const pageNumber = index + 1;
-                          // 모바일에서는 현재 페이지 주변 1개만 표시, PC에서는 2개 표시
-                          const visibleOnMobile = Math.abs(pageNumber - currentPage) <= 1;
-                          const visibleOnDesktop = Math.abs(pageNumber - currentPage) <= 2;
-                          
-                          if (visibleOnDesktop) {
-                            return (
-                              <button
-                                key={index}
-                                className={`${
-                                  pageNumber === currentPage
-                                    ? 'px-3 py-1 bg-blue-500 text-white rounded'
-                                    : 'px-3 py-1 bg-gray-200 rounded hover:bg-gray-300'
-                                } text-sm ${!visibleOnMobile ? 'hidden sm:inline-block' : ''}`}
-                                style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
-                                onClick={() => setCurrentPage(pageNumber)}
-                              >
-                                {pageNumber}
-                              </button>
-                            );
-                          }
-                          return null;
-                        })}
-                        
-                        <button
-                          className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm" 
-                          style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
-                          onClick={() => setCurrentPage(currentPage + 1)}
-                          disabled={currentPage === totalPages}
-                        >
-                          <span className="hidden sm:inline">다음</span>
-                          <span className="sm:hidden">›</span>
-                        </button>
-                        <button
-                          className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm" 
-                          style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
-                          onClick={() => setCurrentPage(totalPages)}
-                          disabled={currentPage === totalPages}
-                        >
-                          <span className="hidden sm:inline">마지막</span>
-                          <span className="sm:hidden">»</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-gray-700" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.75rem)' }}>데이터가 없습니다.</p>
-                )}
-              </div>
-              
-              {/* 우측 영역 - 52주 신고가 섹션 */}
-              <div className="w-full lg:w-[30%] bg-white rounded-lg shadow p-4">
-                {/* 금주 52주 신고가 정보 영역 */}
-                <div className="flex flex-col">
-                  <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
-                    <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
-                    <div className="flex items-center justify-end">
-                      <span className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
-                      <TableCopyButton
-                        tableRef={highTableRef}
-                        headerRef={highHeaderRef}
-                        tableName="52주 신고가 테이블"
-                        buttonText="이미지 복사"
-                      />
-                    </div>
-                  </div>
-                  <div className="relative">
-                    {/* 스크롤 힌트 제거 - 하단으로 이동 */}
-                    
-                    <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={highTableRef}>
-                      <table className="w-full bg-white border border-gray-200 table-fixed">
-                        <thead>
-                          <tr className="bg-gray-100">
-                            <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '100px' }}
-                              onClick={() => requestSort('종목명')}
-                            >
-                              <div className="flex items-center justify-center">
-                                <span>종목명</span>
-                                {sortKey === '종목명' && (
-                                  <span className="ml-1">
-                                    {sortDirection === 'asc' ? '▲' : '▼'}
-                                  </span>
-                                )}
-                              </div>
-                            </th>
-                            <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '45px' }}
-                              onClick={() => requestSort('RS')}
-                            >
-                              <div className="flex items-center justify-center">
-                                <span>RS</span>
-                                {sortKey === 'RS' && (
-                                  <span className="ml-1">
-                                    {sortDirection === 'asc' ? '▲' : '▼'}
-                                  </span>
-                                )}
-                              </div>
-                            </th>
-                            <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-3 border-b border-r text-center whitespace-nowrap cursor-pointer hover:bg-gray-200"
-                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px' }}
-                              onClick={() => requestSort('등락률')}
-                            >
-                              <div className="flex items-center justify-center">
-                                <span>등락률</span>
-                                {sortKey === '등락률' && (
-                                  <span className="ml-1">
-                                    {sortDirection === 'asc' ? '▲' : '▼'}
-                                  </span>
-                                )}
-                              </div>
-                            </th>
-                            <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px' }}
-                              onClick={() => requestSort('시가총액')}
-                            >
-                              <div className="flex items-center justify-center">
-                                <span>시가총액</span>
-                                {sortKey === '시가총액' && (
-                                  <span className="ml-1">
-                                    {sortDirection === 'asc' ? '▲' : '▼'}
-                                  </span>
-                                )}
-                              </div>
-                            </th>
-                            <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                              style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '55px' }}
-                              onClick={() => requestSort('거래대금')}
-                            >
-                              <div className="flex items-center justify-center">
-                                <span>거래대금</span>
-                                {sortKey === '거래대금' && (
-                                  <span className="ml-1">
-                                    {sortDirection === 'asc' ? '▲' : '▼'}
-                                  </span>
-                                )}
-                              </div>
-                            </th>
-                            <th 
-                              className="py-2 px-1 sm:py-2.5 sm:px-2 border-b border-r text-left overflow-hidden text-ellipsis whitespace-nowrap hidden md:table-cell"
-                              style={{ 
-                                fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
-                                maxWidth: '150px',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}
-                              title={sortKey === '테마명' ? '테마명' : ''}
-                              onClick={() => requestSort('테마명')}
-                            >
-                              <div className="flex items-center justify-center">
-                                <span>테마명</span>
-                                {sortKey === '테마명' && (
-                                  <span className="ml-1">
-                                    {sortDirection === 'asc' ? '▲' : '▼'}
-                                  </span>
-                                )}
-                              </div>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {combinedHighData.slice(0, 20).map((row: any, rowIndex: number) => (
-                            <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                              <td 
-                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-left whitespace-nowrap overflow-hidden text-ellipsis"
-                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
-                              >
-                                {row['종목명']}
-                              </td>
-                              <td 
-                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis"
-                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
-                              >
-                                {row['RS']}
-                              </td>
-                              <td 
-                                className={`py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis ${getPriceChangeColor(row['등락률'])}`}
-                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
-                              >
-                                <div className="flex items-center justify-end">
-                                  {formatPriceChange(row['등락률'])}
-                                </div>
-                              </td>
-                              <td 
-                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
-                              >
-                                {formatMarketCap(row['시가총액'])}
-                              </td>
-                              <td 
-                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                                style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
-                              >
-                                {formatMarketCap(row['거래대금'])}
-                              </td>
-                              <td 
-                                className="py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r text-left overflow-hidden text-ellipsis whitespace-nowrap hidden md:table-cell"
-                                style={{ 
-                                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
-                                  maxWidth: '150px',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis'
-                                }}
-                                title={row['테마명']}
-                              >
-                                {row['테마명']}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    
-                    {/* 스크롤 힌트 - 하단에 표시 */}
-                    <div className="hidden sm:hidden md:flex lg:hidden justify-center items-center mt-1 py-1 bg-gray-50 border border-gray-200 rounded-md">
-                      <span className="text-gray-700 text-xs flex items-center" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.75rem)' }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-                        </svg>
-                        좌우로 스크롤하여 더 많은 정보를 확인하세요
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                        </svg>
-                      </span>
                     </div>
                   </div>
                 </div>
-              </div>
+              </Suspense>
             </div>
-            
-            {/* RS상위 시장 비교차트 영역 */}
-            <div className="bg-white rounded-lg shadow p-4 mt-1">
-              <div className="flex justify-between items-center mb-3">
-                <h2 className="font-semibold" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS상위 시장 비교차트</h2>
-                <span className="text-gray-600 hidden md:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>RS상위와 시가총액 순서로 해당 종목이 속한 시장 지수를 비교합니다.</span>
-              </div>
-              
-              {/* 반응형 차트 그리드 - 화면 크기에 따라 컬럼 수 조정 */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {Array.from({length: 20}).map((_, index) => (
-                  <div key={index} className="rounded-md">
-                    {renderChartComponent(index)}
+          </div>
+
+          {/* 하단 섹션: RS상위 시장 비교차트 */}
+          <div className="mb-2 md:mb-4 mt-4 md:mt-8">
+            <div className="bg-[#f5f5f5] rounded-md shadow">
+              <div className="p-2 md:p-4">
+                <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
+                  <div className="mb-3">
+                    <h2 className="font-semibold" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS상위 시장 비교차트</h2>
                   </div>
-                ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Array.from({length: 20}).map((_, index) => (
+                      <div key={index} className="rounded-md">
+                        {renderChartComponent(index)}
+                      </div>
+                    ))}
+                  </div>
+                </Suspense>
               </div>
             </div>
           </div>
-        </div>
+        </div> {/* End of inner centering container */}
       </div>
     </div>
-  )
+  );
 }
