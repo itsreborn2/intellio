@@ -14,7 +14,9 @@ import {
   PieChart,
   LayoutDashboard,
   Menu, // 햄버거 메뉴 아이콘 추가
-  X // X 아이콘 추가 (닫기 버튼용)
+  X, // X 아이콘 추가 (닫기 버튼용)
+  Scale, // 벨류에이션 추가
+  LineChart, // AI 애널리스트 추가
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -30,8 +32,10 @@ function SidebarContent() {
   // 버튼 참조 객체
   const buttonRefs = {
     home: useRef<HTMLButtonElement>(null),
+    analyst: useRef<HTMLButtonElement>(null), // AI 애널리스트 버튼 참조 추가
     chart: useRef<HTMLButtonElement>(null),
     etfSector: useRef<HTMLButtonElement>(null), // ETF/섹터 버튼 참조 추가
+    value: useRef<HTMLButtonElement>(null), // 벨류에이션 버튼 참조 추가
     doc: useRef<HTMLButtonElement>(null),
     user: useRef<HTMLButtonElement>(null),
     settings: useRef<HTMLButtonElement>(null)
@@ -59,6 +63,12 @@ function SidebarContent() {
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   
+  // AI 애널리스트 페이지로 이동하는 함수 추가
+  const goToAnalystPage = () => {
+    router.push('/analyst');
+    if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+  };
+  
   const goToRSRankPage = () => {
     router.push('/rs-rank');
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
@@ -66,6 +76,11 @@ function SidebarContent() {
   
   const goToETFSectorPage = () => {
     router.push('/etf-sector');
+    if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+  };
+  
+  const goToValuePage = () => {
+    router.push('/value');
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   
@@ -194,8 +209,10 @@ function SidebarContent() {
           }}
         >
           {hoveredButton === 'home' && '스탁이지'}
+          {hoveredButton === 'analyst' && 'AI 애널리스트'} {/* AI 애널리스트 툴팁 추가 */}
           {hoveredButton === 'chart' && 'RS순위'}
           {hoveredButton === 'etfSector' && 'ETF/섹터'}
+          {hoveredButton === 'value' && '벨류에이션'}
           {hoveredButton === 'doc' && '닥이지'}
           {hoveredButton === 'user' && '마이페이지'}
           {hoveredButton === 'settings' && '설정'}
@@ -221,6 +238,21 @@ function SidebarContent() {
                   <Home className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
                   {isMobile && <span className="ml-2 text-sm text-[#ececf1]">스탁이지</span>}
+                </button>
+              </div>
+              
+              {/* AI 애널리스트 버튼 추가 */}
+              <div className="sidebar-button-container">
+                <button 
+                  ref={buttonRefs.analyst}
+                  className="sidebar-button" 
+                  onClick={goToAnalystPage}
+                  onMouseEnter={() => handleMouseEnter('analyst')}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <LineChart className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">AI 애널리스트</span>}
                 </button>
               </div>
               
@@ -251,6 +283,21 @@ function SidebarContent() {
                   <PieChart className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
                   {isMobile && <span className="ml-2 text-sm text-[#ececf1]">ETF/섹터</span>}
+                </button>
+              </div>
+              
+              {/* 벨류에이션 버튼 추가 */}
+              <div className="sidebar-button-container">
+                <button 
+                  ref={buttonRefs.value}
+                  className="sidebar-button" 
+                  onClick={goToValuePage} // 벨류에이션 페이지로 이동하는 함수 연결
+                  onMouseEnter={() => handleMouseEnter('value')}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <Scale className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">벨류에이션</span>}
                 </button>
               </div>
               

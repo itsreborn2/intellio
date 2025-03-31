@@ -1092,7 +1092,7 @@ export default function ETFCurrentTable() {
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
-                    width: '40px',
+                    width: '38px',
                     height: '35px',
                     fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                   }}
@@ -1113,7 +1113,7 @@ export default function ETFCurrentTable() {
                 scope="col"
                 className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
-                  width: '80px',
+                  width: '78px',
                   height: '35px',
                   fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                 }}
@@ -1148,7 +1148,7 @@ export default function ETFCurrentTable() {
               ))}
             </tr>
           </thead>
-          <tbody className="bg-gray-50">
+          <tbody className="bg-white">
             {(() => {
               // 산업별로 데이터를 그룹화하고 각 산업의 첫 번째 행 인덱스를 저장
               const industryGroups: { [industry: string]: { rows: Record<string, any>[], firstRowIndex: number } } = {};
@@ -1218,7 +1218,7 @@ export default function ETFCurrentTable() {
                           key={header}
                           className={`px-4 py-1 whitespace-nowrap text-xs ${colorClass} border border-gray-200 ${isChangeColumn || isTickerColumn ? 'text-center' : ''} ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`}
                           style={{ 
-                            width: '40px', 
+                            width: '38px', 
                             height: '16px',
                             fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                           }}
@@ -1228,34 +1228,14 @@ export default function ETFCurrentTable() {
                         </td>
                       );
                     })}
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '80px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '78px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                       {/* 포지션 상태 표시 */}
-                      <div className="flex items-center justify-center h-full">
-                        {(() => {
-                          const ticker = row['티커'];
-                          if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) return '-';
-                          
-                          // 현재가와 20일 이동평균선 데이터 가져오기
-                          const priceData = stockPriceData[ticker];
-                          if (!priceData || priceData.length < 20) return '-';
-                          
-                          const currentPrice = priceData[priceData.length - 1].price;
-                          const ma20 = priceData.slice(-20).reduce((acc, val) => acc + val.price, 0) / 20;
-                          
-                          // 현재 상태 (20일선 위 또는 아래)
-                          const isAboveMA = currentPrice > ma20;
-                          
-                          // 유지 기간 계산
-                          const duration = calculatePositionDuration(ticker);
-                          const durationText = duration !== null ? `+${duration}일` : '';
-                          
-                          return (
-                            <span className={`text-xs font-medium px-1 sm:px-2 py-0.5 sm:py-1 rounded-md ${isAboveMA ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}`}
-                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
-                              {isAboveMA ? `유지 ${durationText}` : `이탈 ${durationText}`}
-                            </span>
-                          );
-                        })()}
+                      <div className="flex items-center justify-center">
+                        <div className={`flex items-center justify-center w-20 h-6 rounded-full ${getPositionStatusText(row['티커']).startsWith('유지') ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}`}>
+                          <span className="text-xs font-medium" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                            {getPositionStatusText(row['티커'])}
+                          </span>
+                        </div>
                       </div>
                     </td>
                     {['20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
