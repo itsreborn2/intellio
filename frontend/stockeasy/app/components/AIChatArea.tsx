@@ -881,7 +881,7 @@ function AIChatAreaContent() {
 
   const stockSuggestionsStyle: React.CSSProperties = {
     position: 'absolute',
-    bottom: `calc(100% + ${isMobile ? 5 : 5}px)`, // 모바일/데스크톱 모두 5px 간격
+    bottom: `calc(100% + ${isMobile ? 5 : 30}px)`, // 모바일 5px, 데스크톱 30px로 간격 확대
     left: 0,
     right: 0,
     width: isMobile ? '90%' : '100%', // 모바일 환경에서 너비 조정

@@ -15,9 +15,9 @@ const config: Config = {
   presets: [commonConfig],
   theme: {
     extend: {
-      // ChatGPT 스타일 폰트 설정 추가
+      // 폰트 설정 업데이트
       fontFamily: {
-        sans: ['Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+        sans: ['ui-sans-serif', '-apple-system', 'system-ui', 'Segoe UI', 'Helvetica', 'Apple Color Emoji', 'Arial', 'sans-serif', 'Segoe UI Emoji', 'Segoe UI Symbol'],
       },
       fontSize: {
         // ChatGPT 스타일 폰트 크기 설정
