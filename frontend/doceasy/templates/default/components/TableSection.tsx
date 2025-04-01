@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useRef, useState, useEffect } from "react"
+import React, { useRef, useState, useEffect, useCallback } from "react"
 import { Button } from "intellio-common/components/ui/button"
-import { Plus } from "lucide-react"
+import { Plus, X, Trash2 } from "lucide-react"
 import { useApp } from "@/contexts/AppContext"
 import { useAuth } from "@/hooks/useAuth"
 import * as actionTypes from '@/types/actions'
@@ -228,6 +228,7 @@ export const TableSection = () => {
   const tableRef = useRef<ITableUtils>(null);
   const { uploadProgress, uploadError, handleFileUpload, closeErrorDialog, showErrorDialog } = useFileUpload()
   const isMobile = useIsMobile();
+  const [selectedHeader, setSelectedHeader] = useState<string | null>(null);
 
   // 컬럼 상태 동기화
   useEffect(() => {
@@ -430,6 +431,11 @@ export const TableSection = () => {
     }
   }
 
+  // 헤더 선택 콜백 함수
+  const handleHeaderSelect = useCallback((header: string | null) => {
+    setSelectedHeader(header);
+  }, []);
+
   return (
     <div className={`h-full flex-1 overflow-hidden flex flex-col ${isMobile ? 'pt-9' : ''}`}>
       <UploadProgressDialog {...uploadProgress} />
@@ -452,8 +458,9 @@ export const TableSection = () => {
         multiple
         accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.ppt"
       />
-      <div className={`flex-shrink-0 bg-background border-b ${isMobile ? 'p-1' : 'p-2'}`}>
-        <div className={`flex items-center justify-between gap-2 ${isMobile ? 'flex-wrap' : ''}`}>
+      
+      <div>
+        <div className={`flex items-center justify-between gap-2 p-1 ${isMobile ? 'flex-wrap' : ''}`}>
           {isAuthenticated && (
             <Button
               variant="outline"
@@ -467,9 +474,14 @@ export const TableSection = () => {
           )}
         </div>
       </div>
+      
       <div className="flex-1 overflow-hidden">
         <div className="h-full overflow-auto">
-          <DocumentTable ref={tableRef} />
+          <DocumentTable 
+            ref={tableRef} 
+            onHeaderSelect={handleHeaderSelect}
+            selectedHeader={selectedHeader}
+          />
         </div>
       </div>
       <DocumentAnalysisProgress documents={Object.values(state.documents)} />

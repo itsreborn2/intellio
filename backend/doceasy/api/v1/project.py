@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Response
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Body
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 from datetime import datetime, timedelta
@@ -20,6 +20,8 @@ from doceasy.core.deps import get_project_service
 from doceasy.models.project import Project
 from doceasy.models.category import Category
 from doceasy.services.project import ProjectService
+from doceasy.models.document import Document
+from doceasy.models.table_history import TableHistory
 
 router = APIRouter() # 상위에서 등록 prefix="/projects", tags=["projects"]
 
@@ -274,3 +276,83 @@ async def delete_project(
     except Exception as e:
         logger.error(f"프로젝트 삭제 중 오류 발생: {str(e)}", exc_info=True)
         raise
+
+@router.delete("/{project_id}/delete_column")
+async def delete_column(
+    project_id: UUID,
+    column_data: dict = Body(...),
+    db: AsyncSession = Depends(get_db_async),
+    session: Session = Depends(get_current_session)
+):
+    """
+    프로젝트의 특정 컬럼 삭제
+    
+    column_data:
+        - column_name: 삭제할 컬럼 이름
+    """
+    try:
+        # 요청 데이터 검증
+        column_name = column_data.get("column_name")
+        if not column_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="컬럼 이름이 필요합니다."
+            )
+        
+        logger.info(f"컬럼 삭제 시도: 프로젝트 {project_id}, 컬럼 {column_name}")
+        
+        # 1. 프로젝트 존재 확인
+        stmt = select(Project).where(Project.id == project_id)
+        result = await db.execute(stmt)
+        project = result.scalar_one_or_none()
+        
+        if not project:
+            logger.warning(f"프로젝트를 찾을 수 없음: {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="프로젝트를 찾을 수 없습니다."
+            )
+        
+        # 2. 프로젝트 소유자 확인
+        if str(project.user_id) != str(session.user_id):
+            logger.warning(f"권한 없음: 사용자 {session.user_id}가 프로젝트 {project_id}의 컬럼을 삭제할 수 없습니다.")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="이 프로젝트의 컬럼을 삭제할 권한이 없습니다."
+            )
+        
+        # 3. 프로젝트의 모든 문서 조회
+        stmt = select(Document).where(Document.project_id == project_id)
+        result = await db.execute(stmt)
+        documents = result.scalars().all()
+        
+        # 5. table_histories 테이블에서 해당 컬럼 제목과 일치하는 레코드 삭제
+        delete_stmt = delete(TableHistory).where(
+            (TableHistory.project_id == project_id) & 
+            (TableHistory.title == column_name)
+        )
+        result = await db.execute(delete_stmt)
+        table_history_deleted_count = result.rowcount
+        logger.info(f"table_histories 테이블에서 {table_history_deleted_count}개 레코드 삭제됨")
+        
+        # 6. 변경사항 저장
+        await db.commit()
+        
+        logger.info(f"컬럼 삭제 완료: 프로젝트 {project_id}, 컬럼 {column_name}, {table_history_deleted_count}개 문서에서 삭제됨")
+        return {
+            "success": True,
+            "message": f"컬럼 '{column_name}'이(가) 성공적으로 삭제되었습니다.",
+            "deleted_count": table_history_deleted_count,
+            "table_history_deleted_count": table_history_deleted_count
+        }
+        
+    except HTTPException:
+        # HTTP 예외는 그대로 전달
+        raise
+    except Exception as e:
+        logger.error(f"컬럼 삭제 중 오류 발생: {str(e)}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"컬럼 삭제 중 오류가 발생했습니다: {str(e)}"
+        )

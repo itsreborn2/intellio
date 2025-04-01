@@ -96,13 +96,15 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             from common.services.agent_llm import get_agent_llm
             from langchain_core.messages import HumanMessage
             
-            agent_llm = get_agent_llm("default")
+            agent_llm = get_agent_llm("telegram_collector")
             
             # 프롬프트 작성
             prompt = f"""
             다음 텍스트에서 1~5개의 중요 키워드를 추출해주세요. 
-            종목명, 주식 심볼, 섹터, 산업 등의 중요 정보가 있다면 반드시 포함해주세요.
-            키워드만 쉼표로 구분하여 답변해주세요. 다른 설명은 포함하지 마세요.
+            종목명, 주식 심볼, 섹터, 산업, 국내 증권사 이름, 외국계증권사 이름(골드만삭스, JP모건, 시티) 등의 중요 정보가 있다면 반드시 포함해주세요.
+            각각의 키워드는 빈칸,띄워쓰기 없이 모두 붙여서 추출해.
+            키워드끼리는 쉼표로 구분하여 답변해주세요. 
+            다른 설명은 포함하지 마세요.
             
             텍스트:
             {text}
@@ -155,10 +157,9 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             elif isinstance(value, datetime):
                 metadata_dict[key] = value.isoformat()  # datetime을 ISO 형식 문자열로 변환
             elif key == 'keywords':
-                # 키워드는 배열 형태로 유지
+                # 키워드 리스트를 JSON 문자열로 변환
                 if value is None:
-                    metadata_dict[key] = []
-                # value가 이미 list이므로 그대로 유지
+                    metadata_dict[key] = "[]"
             elif isinstance(value, list):
                 # 다른 리스트 형태의 필드는 쉼표로 구분된 문자열로 변환
                 metadata_dict[key] = ",".join(value) if value else ""
@@ -237,9 +238,14 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                 logger.error(f"metadata가 딕셔너리가 아닙니다: {type(vector['metadata'])}")
                 return False
             
-            # metadata 값 검사
+            # metadata 값 검사 - keywords 필드 예외 처리
             for key, value in vector["metadata"].items():
-                if not isinstance(value, str):
+                # 키워드 필드가 아닌 경우에만 문자열 검사
+                if key == "keywords":
+                    if not isinstance(value, list):
+                        logger.error(f"metadata[keywords]의 값이 list이 아닙니다: {key}={type(value)}")
+                        return False
+                elif not isinstance(value, str):
                     logger.error(f"metadata의 값이 문자열이 아닙니다: {key}={type(value)}")
                     return False
             
@@ -376,6 +382,8 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                     metadatas = [self._create_telegram_metadata(msg, keywords) for msg, _, keywords in batch_with_keywords]
                     texts = [text for _, text, _ in batch_with_keywords]
                     
+                     
+                   
                     # 임베딩 생성
                     embeddings = self.create_embeddings_batch_sync(texts)
                     

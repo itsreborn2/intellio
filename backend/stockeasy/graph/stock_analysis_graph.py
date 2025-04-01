@@ -5,7 +5,7 @@
 """
 
 import os
-from typing import Dict, Any, List, Literal, Union, Optional, TypedDict, Tuple, Set, cast
+from typing import Dict, Any, List, Literal, Union, Optional, TypedDict, Tuple, Set, cast, Callable
 
 from langgraph.graph import END, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
@@ -144,6 +144,46 @@ class StockAnalysisGraph:
         self.graph = None
         # 메모리 저장소 초기화
         self.memory_saver = MemorySaver()
+        # 콜백 함수 저장을 위한 딕셔너리 추가
+        self.callbacks = {
+            'agent_start': [],
+            'agent_end': []
+        }
+    
+    # 콜백 등록 메서드 추가
+    def register_callback(self, event_type: str, callback_fn: Callable):
+        """
+        에이전트 이벤트에 대한 콜백 함수를 등록합니다.
+        
+        Args:
+            event_type: 이벤트 유형 ('agent_start' 또는 'agent_end')
+            callback_fn: 콜백 함수. 에이전트 이름과 상태를 인자로 받습니다.
+        """
+        if event_type not in self.callbacks:
+            logger.warning(f"알 수 없는 이벤트 유형: {event_type}. 지원되는 이벤트: {list(self.callbacks.keys())}")
+            return
+            
+        self.callbacks[event_type].append(callback_fn)
+        logger.info(f"{event_type} 이벤트에 콜백 함수 등록됨")
+    
+    # 콜백 실행 메서드 추가
+    def _execute_callbacks(self, event_type: str, agent_name: str, state: Dict[str, Any]):
+        """
+        등록된 콜백 함수들을 실행합니다.
+        
+        Args:
+            event_type: 이벤트 유형
+            agent_name: 에이전트 이름
+            state: 현재 상태
+        """
+        if event_type not in self.callbacks:
+            return
+            
+        for callback_fn in self.callbacks[event_type]:
+            try:
+                callback_fn(agent_name, state)
+            except Exception as e:
+                logger.error(f"{event_type} 콜백 실행 중 오류 발생: {str(e)}")
     
     def _build_graph(self, db: AsyncSession = None):
         """
@@ -171,7 +211,8 @@ class StockAnalysisGraph:
             "telegram_retriever": self.agents.get("telegram_retriever"),
             "report_analyzer": self.agents.get("report_analyzer"),
             "financial_analyzer": self.agents.get("financial_analyzer"),
-            "industry_analyzer": self.agents.get("industry_analyzer")
+            "industry_analyzer": self.agents.get("industry_analyzer"),
+            "confidential_analyzer": self.agents.get("confidential_analyzer")
         })
         
         # 그래프 초기화
@@ -181,12 +222,15 @@ class StockAnalysisGraph:
         for node_name, agent in self.agents.items():
             # 존재하는 에이전트만 추가
             if agent:
-                workflow.add_node(node_name, agent.process)
+                # 콜백 래핑 함수 생성
+                wrapped_process = self._create_wrapped_process(node_name, agent.process)
+                workflow.add_node(node_name, wrapped_process)
             else:
                 workflow.add_node(node_name, {})  # 빈 노드
         
-        # 병렬 검색 노드 추가
-        workflow.add_node("parallel_search", parallel_search_agent.process)
+        # 병렬 검색 노드 추가 - 콜백 래핑
+        wrapped_parallel_search = self._create_wrapped_process("parallel_search", parallel_search_agent.process)
+        workflow.add_node("parallel_search", wrapped_parallel_search)
         
         # 새로운 흐름 정의: 질문분류기 -> 오케스트레이터 -> 병렬 검색 -> 지식 통합
         workflow.add_edge("session_manager", "question_analyzer")
@@ -243,6 +287,7 @@ class StockAnalysisGraph:
             report_status = processing_status.get("report_analyzer")
             financial_status = processing_status.get("financial_analyzer")
             industry_status = processing_status.get("industry_analyzer")
+            confidential_status = processing_status.get("confidential_analyzer")
             
             # 완료 상태 목록
             completed_statuses = ["completed", "completed_with_default_plan", "completed_no_data"]
@@ -252,13 +297,14 @@ class StockAnalysisGraph:
                 telegram_status in completed_statuses,
                 report_status in completed_statuses, 
                 financial_status in completed_statuses,
-                industry_status in completed_statuses
+                industry_status in completed_statuses,
+                confidential_status in completed_statuses
             ])
             
             # 검색 에이전트가 실행되지 않았는지 확인
             if not parallel_search_executed and not search_completed:
                 logger.warning("병렬 검색이 실행되지 않았습니다.")
-                logger.warning(f"실행 상태: telegram={telegram_status}, report={report_status}, financial={financial_status}, industry={industry_status}")
+                logger.warning(f"실행 상태: telegram={telegram_status}, report={report_status}, financial={financial_status}, industry={industry_status}, confidential={confidential_status}")
                 return "fallback_manager"
             
             # 모든 에이전트가 실패한 경우
@@ -322,6 +368,31 @@ class StockAnalysisGraph:
         
         # 그래프 컴파일 (체크포인트 저장소 설정)
         return workflow.compile(checkpointer=self.memory_saver)
+
+    def _create_wrapped_process(self, agent_name: str, original_process):
+        """
+        에이전트 프로세스 함수를 래핑하여 콜백을 추가합니다.
+        
+        Args:
+            agent_name: 에이전트 이름
+            original_process: 원래 프로세스 함수
+            
+        Returns:
+            래핑된 프로세스 함수
+        """
+        async def wrapped_process(state: Dict[str, Any]) -> Dict[str, Any]:
+            # 에이전트 시작 콜백 실행
+            self._execute_callbacks('agent_start', agent_name, state)
+            
+            # 원래 프로세스 실행
+            result = await original_process(state)
+            
+            # 에이전트 종료 콜백 실행
+            self._execute_callbacks('agent_end', agent_name, result)
+            
+            return result
+            
+        return wrapped_process
 
     def _determine_next_agent(self, state: AgentState) -> str:
         """
@@ -423,6 +494,7 @@ class StockAnalysisGraph:
                 "errors": [],
                 "processing_status": {},
                 "retrieved_data": {},  # 검색 결과를 담을 딕셔너리
+                "agent_results": {},   # 명시적으로 agent_results 초기화
                 "parallel_search_executed": False,  # 병렬 검색 실행 여부 초기화
                 **kwargs
             }

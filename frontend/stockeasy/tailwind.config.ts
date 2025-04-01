@@ -15,7 +15,27 @@ const config: Config = {
   presets: [commonConfig],
   theme: {
     extend: {
-      // 프로젝트 특정 추가 설정이 필요한 경우 여기에 작성
+      // 폰트 설정 업데이트
+      fontFamily: {
+        sans: ['ui-sans-serif', '-apple-system', 'system-ui', 'Segoe UI', 'Helvetica', 'Apple Color Emoji', 'Arial', 'sans-serif', 'Segoe UI Emoji', 'Segoe UI Symbol'],
+      },
+      fontSize: {
+        // ChatGPT 스타일 폰트 크기 설정
+        'xs': '0.75rem',     // 12px
+        'sm': '0.875rem',    // 14px
+        'base': '1rem',      // 16px (기본)
+        'lg': '1.125rem',    // 18px
+        'xl': '1.25rem',     // 20px
+        '2xl': '1.5rem',     // 24px
+        '3xl': '1.875rem',   // 30px
+        '4xl': '2.25rem',    // 36px
+      },
+      lineHeight: {
+        // ChatGPT 스타일 줄 간격 설정
+        'tight': '1.25',
+        'normal': '1.5',
+        'relaxed': '1.625',
+      }
     }
   },
   plugins: [require("tailwindcss-animate")],

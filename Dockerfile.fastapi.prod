@@ -3,5 +3,9 @@ FROM intellio-base-prod:latest
 # Expose port
 EXPOSE 8000
 
+# 프로덕션 환경에서는 리로드 옵션 비활성화
+ENV RELOAD=false
+ENV LOG_LEVEL=info
+
 # Command to run the application
 CMD ["./start-fastapi.sh"] 

@@ -124,6 +124,28 @@ class CompanyReportData(TypedDict, total=False):
     page: int                       # 페이지 번호
     source: str                     # 출처
     sector_name: str                # 산업명
+    keyword_list: List[str]         # 키워드 목록
+
+
+class ConfidentialData(TypedDict, total=False):
+    """비공개 자료 데이터
+    내부 비공개 문서 및 자료의 분석 결과
+    """
+    title: str                      # 제목
+    publish_date: datetime          # 발행일
+    author: str                     # 작성자/증권사
+    content: str                    # 내용
+    stock_name: str                 # 종목명
+    stock_code: str                 # 종목코드
+    score: float                    # 유사도 점수
+    analysis: Dict[str, Any]        # 추가 분석 정보
+    page: int                       # 페이지 번호
+    source: str                     # 출처
+    sector_name: str                # 산업명
+    keyword_list: List[str]         # 키워드 목록
+    access_level: str               # 접근 권한 레벨
+    confidentiality: str            # 기밀성 등급
+    document_type: str              # 문서 유형
 
 class IndustryReportData(TypedDict, total=False):
     """분석된 산업 리포트 데이터
@@ -162,12 +184,15 @@ class IndustryData(TypedDict, total=False):
     market_share: Dict[str, float]  # 시장 점유율
 
 
+
+
 class RetrievedAllAgentData(TypedDict, total=False):
     """검색 및 분석된 모든 데이터"""
     telegram_messages: List[RetrievedTelegramMessage] # 텔레그램 메시지
-    reports: List[CompanyReportData]       # 기업 리포트
+    company_report: List[CompanyReportData]       # 기업 리포트
     financials: List[FinancialData] # 재무 데이터
-    industry: List[IndustryData]    # 산업 정보
+    industry_report: List[IndustryData]    # 산업 정보
+    confidential: List[ConfidentialData]   # 비공개 자료
 
 
 class IntegratedKnowledge(TypedDict, total=False):

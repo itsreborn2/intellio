@@ -14,15 +14,18 @@ from loguru import logger
 from typing import Dict, List, Any, Optional, Union, cast, Tuple
 
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.language_models import BaseChatModel
 
 from common.models.token_usage import ProjectType
 from common.services.embedding_models import EmbeddingModelType
 from stockeasy.prompts.report_prompts import (
-    REPORT_ANALYSIS_PROMPT, 
-    INVESTMENT_OPINION_PROMPT
+    REPORT_ANALYSIS_PROMPT,
+    REPORT_ANALYSIS_SYSTEM_PROMPT,
+    REPORT_ANALYSIS_USER_PROMPT,
+    INVESTMENT_OPINION_PROMPT,
+    format_report_contents
 )
 from common.core.config import settings
 from common.services.vector_store_manager import VectorStoreManager
@@ -81,10 +84,11 @@ class ReportAnalyzerAgent(BaseAgent):
         """
         super().__init__(name, db)
         # 설정 파일에서 LLM 생성 및 모델 정보 가져오기
-        self.retrieved_str = "company_report"
+        self.retrieved_str = "report_data"
         self.llm, self.model_name, self.provider = get_llm_for_agent("report_analyzer_agent")
         self.agent_llm = get_agent_llm("report_analyzer_agent")
         self.parser = JsonOutputParser()
+        self.prompt_template = REPORT_ANALYSIS_SYSTEM_PROMPT
         logger.info(f"ReportAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -221,12 +225,27 @@ class ReportAnalyzerAgent(BaseAgent):
             if need_detailed_analysis:
                 # 리포트 내용에서 핵심 정보 추출 및 분석
                 try:
+                    # 커스텀 프롬프트 템플릿 확인
+                    # 1. 상태에서 커스텀 프롬프트 템플릿 확인
+                    custom_prompt_from_state = state.get("custom_prompt_template")
+                    # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
+                    custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
+                    # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
+                    system_prompt = None
+                    if custom_prompt_from_state:
+                        system_prompt = custom_prompt_from_state
+                        logger.info(f"ReportAnalyzerAgent using custom prompt from state : {custom_prompt_from_state}")
+                    elif custom_prompt_from_attr:
+                        system_prompt = custom_prompt_from_attr
+                        logger.info(f"ReportAnalyzerAgent using custom prompt from attribute")
+                        
                     analysis = await self._generate_report_analysis(
                         processed_reports, 
                         query, 
                         stock_code, 
                         stock_name,
-                        state
+                        state,
+                        system_prompt=system_prompt
                     )
                     
                     # 핵심 정보가 추출된 경우, 이를 포함
@@ -394,13 +413,13 @@ class ReportAnalyzerAgent(BaseAgent):
         complexity = classification.get("complexity", "중간")
         
         if complexity == "단순":
-            return 3
+            return 6
         elif complexity == "중간":
-            return 5
+            return 12
         elif complexity == "복합":
-            return 8
+            return 18
         else:  # "전문가급"
-            return 10
+            return 25
     
     def _calculate_dynamic_threshold(self, classification: Dict[str, Any]) -> float:
         """
@@ -573,7 +592,10 @@ class ReportAnalyzerAgent(BaseAgent):
             )
 
             # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
-            parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            if user_id != "test_user":
+                parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            else:
+                parsed_user_id = None
 
             # 시맨틱 검색 설정
             semantic_retriever = SemanticRetriever(
@@ -729,7 +751,8 @@ class ReportAnalyzerAgent(BaseAgent):
     async def _generate_report_analysis(self, reports: List[CompanyReportData], query: str, 
                                        stock_code: Optional[str] = None, 
                                        stock_name: Optional[str] = None,
-                                       state: Dict[str, Any] = {}) -> List[CompanyReportData]:
+                                       state: Dict[str, Any] = {},
+                                       system_prompt: Optional[str] = None) -> List[CompanyReportData]:
         """
         검색된 리포트의 투자 의견 및 목표가 정보 추출
         
@@ -754,7 +777,19 @@ class ReportAnalyzerAgent(BaseAgent):
         keywords = qa.get("keywords", [])
         if keywords:
             important_keywords = ", ".join(keywords[:3])  # 상위 3개 키워드 사용
-        analysis_prompt = ChatPromptTemplate.from_template(REPORT_ANALYSIS_PROMPT).partial(
+        
+        # 시스템 메시지와 사용자 메시지 분리 구성
+        if system_prompt:
+            system_message = SystemMessagePromptTemplate.from_template(system_prompt)
+        else:
+            system_message = SystemMessagePromptTemplate.from_template(REPORT_ANALYSIS_SYSTEM_PROMPT)
+        user_message = HumanMessagePromptTemplate.from_template(REPORT_ANALYSIS_USER_PROMPT)
+        
+        # ChatPromptTemplate 구성
+        analysis_prompt = ChatPromptTemplate.from_messages([
+            system_message,
+            user_message
+        ]).partial(
             query=query_with_date,
             stock_code=stock_code or "정보 없음",
             stock_name=stock_name or "정보 없음",

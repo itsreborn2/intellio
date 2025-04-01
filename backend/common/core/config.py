@@ -128,6 +128,7 @@ class CommonSettings(BaseSettings):
     PINECONE_NAMESPACE_STOCKEASY:str
     PINECONE_NAMESPACE_STOCKEASY_TELEGRAM:str
     PINECONE_NAMESPACE_STOCKEASY_INDUSTRY:str
+    PINECONE_NAMESPACE_STOCKEASY_CONFIDENTIAL_NOTE:str
 
     # Admin Test
     ADMIN_TEST_USER_ID: str = "admin_test"
@@ -173,6 +174,7 @@ class CommonSettings(BaseSettings):
     # 임베딩 설정. 아직 안씀
     KAKAO_EMBEDDING_MODEL_PATH:str = "common/external/kf-deberta"
 
+    # STOCKEASY
 
     # STOCKEASY
     TELEGRAM_CHANNEL_IDS: List[Dict[str, Any]] = []

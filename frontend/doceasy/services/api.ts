@@ -1125,3 +1125,28 @@ export async function getDocumentUploadStatus(documentIds: string[]): Promise<Do
   return statuses
 }
 
+// 컬럼 삭제 함수
+export async function deleteColumn(projectId: string, columnName: string): Promise<{success: boolean; message: string}> {
+  try {
+    const response = await apiFetch(`${API_ENDPOINT}/projects/${projectId}/delete_column`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        column_name: columnName,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || '컬럼 삭제 실패');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('컬럼 삭제 중 오류 발생:', error);
+    throw error;
+  }
+}
+

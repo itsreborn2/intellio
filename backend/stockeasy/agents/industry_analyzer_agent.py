@@ -13,13 +13,17 @@ from loguru import logger
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
 from common.services.embedding_models import EmbeddingModelType
 from common.services.retrievers.models import RetrievalResult
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.vector_store_manager import VectorStoreManager
 from common.utils.util import async_retry
-from stockeasy.prompts.industry_prompts import INDUSTRY_ANALYSIS_PROMPT
+from stockeasy.prompts.industry_prompts import (
+    INDUSTRY_ANALYSIS_SYSTEM_PROMPT,
+    INDUSTRY_ANALYSIS_USER_PROMPT
+)
 # from stockeasy.services.industry.industry_data_service import IndustryDataService
 # from stockeasy.services.stock.stock_info_service import StockInfoService
 from stockeasy.models.agent_io import IndustryReportData, RetrievedAllAgentData, IndustryData
@@ -42,12 +46,12 @@ class IndustryAnalyzerAgent(BaseAgent):
             db: 데이터베이스 세션 객체 (선택적)
         """
         super().__init__(name, db)
-        self.retrieved_str = "industry_report"
+        self.retrieved_str = "industry_data"
         self.llm, self.model_name, self.provider = get_llm_for_agent("industry_analyzer_agent")
         self.agent_llm = get_agent_llm("industry_analyzer_agent")
         self.parser = JsonOutputParser()
         logger.info(f"IndustryAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
-        
+        self.prompt_template = INDUSTRY_ANALYSIS_SYSTEM_PROMPT
         # 서비스 초기화
         #self.industry_service = IndustryDataService()
         #self.stock_service = StockInfoService()
@@ -362,12 +366,30 @@ class IndustryAnalyzerAgent(BaseAgent):
             from stockeasy.prompts.industry_prompts import format_industry_data
             formatted_industry_data = format_industry_data(reports)
             
+            # 1. 상태에서 커스텀 프롬프트 템플릿 확인
+            custom_prompt_from_state = state.get("custom_prompt_template")
+            # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
+            custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
+            # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
+            system_prompt = None
+            if custom_prompt_from_state:
+                system_prompt = custom_prompt_from_state
+                logger.info(f"IndustryAnalyzerAgent using custom prompt from state : {custom_prompt_from_state}")
+            elif custom_prompt_from_attr:
+                system_prompt = custom_prompt_from_attr
+                logger.info(f"IndustryAnalyzerAgent using custom prompt from attribute")
+            else:
+                system_prompt = INDUSTRY_ANALYSIS_SYSTEM_PROMPT
             # 산업 분석 프롬프트 생성
-            from stockeasy.prompts.industry_prompts import INDUSTRY_ANALYSIS_PROMPT
-            prompt = PromptTemplate(
-                template=INDUSTRY_ANALYSIS_PROMPT,
-                input_variables=["query", "stock_code", "stock_name", "sector", "classification", "industry_data"]
-            )
+            # 시스템 메시지와 사용자 메시지 분리 구성
+            system_message = SystemMessagePromptTemplate.from_template(system_prompt)
+            user_message = HumanMessagePromptTemplate.from_template(INDUSTRY_ANALYSIS_USER_PROMPT)
+
+            # ChatPromptTemplate 구성
+            prompt = ChatPromptTemplate.from_messages([
+                system_message,
+                user_message
+            ])
             
             # user_id 추출
             user_context = state.get("user_context", {})
@@ -472,9 +494,16 @@ class IndustryAnalyzerAgent(BaseAgent):
                 namespace=settings.PINECONE_NAMESPACE_STOCKEASY_INDUSTRY
             )
 
+            if user_id != "test_user":
+                parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            else:
+                parsed_user_id = None
+            
             # 시맨틱 검색 설정
             semantic_retriever = SemanticRetriever(
-                config=SemanticRetrieverConfig(min_score=threshold, user_id=user_id, project_type=ProjectType.STOCKEASY),
+                config=SemanticRetrieverConfig(min_score=threshold, 
+                                               user_id=parsed_user_id, 
+                                               project_type=ProjectType.STOCKEASY),
                 vs_manager=vs_manager
             )
             

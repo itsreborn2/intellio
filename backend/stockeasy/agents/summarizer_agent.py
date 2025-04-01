@@ -12,7 +12,7 @@ from loguru import logger
 from langchain_core.output_parsers import StrOutputParser
 
 from common.models.token_usage import ProjectType
-from stockeasy.prompts.summarizer_prompt import create_prompt
+from stockeasy.prompts.summarizer_prompt import DEEP_RESEARCH_PROMPT, DEEP_RESEARCH_SYSTEM_PROMPT, create_prompt
 from stockeasy.agents.base import BaseAgent
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.core.config import settings
@@ -30,6 +30,7 @@ class SummarizerAgent(BaseAgent):
         self.agent_llm = get_agent_llm("summarizer_agent")
         logger.info(f"SummarizerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.parser = StrOutputParser()
+        self.prompt_template = DEEP_RESEARCH_SYSTEM_PROMPT
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -52,6 +53,7 @@ class SummarizerAgent(BaseAgent):
             report_data = agent_results.get("report_analyzer", {}).get("data", [])
             financial_data = agent_results.get("financial_analyzer", {}).get("data", {})
             industry_data = agent_results.get("industry_analyzer", {}).get("data", [])
+            confidential_data = agent_results.get("confidential_analyzer", {}).get("data", {})
             
             # 통합된 지식이 있으면 사용
             integrated_knowledge = agent_results.get("knowledge_integrator", {}).get("data", {})
@@ -91,11 +93,24 @@ class SummarizerAgent(BaseAgent):
             }]
 
         try:
+            # 1. 상태에서 커스텀 프롬프트 템플릿 확인
+            custom_prompt_from_state = state.get("custom_prompt_template")
+            # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
+            custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
+            # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
+            system_prompt = None
+            if custom_prompt_from_state:
+                system_prompt = custom_prompt_from_state
+                logger.info(f"SummarizerAgent using custom prompt from state : {custom_prompt_from_state}")
+            elif custom_prompt_from_attr:
+                system_prompt = custom_prompt_from_attr
+                logger.info(f"SummarizerAgent using custom prompt from attribute")
             # 요약 프롬프트 생성
             prompt = create_prompt(
                 query=query, stock_code=stock_code, stock_name=stock_name, classification=classification,
-                telegram_data=telegram_data, report_data=report_data, financial_data=financial_data, industry_data=industry_data,
-                integrated_knowledge=integrated_knowledge
+                telegram_data=telegram_data, report_data=report_data, confidential_data=confidential_data,
+                financial_data=financial_data, industry_data=industry_data,
+                integrated_knowledge=integrated_knowledge, system_prompt=system_prompt
             )
             
             # LLM으로 요약 생성

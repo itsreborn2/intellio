@@ -13,6 +13,10 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DocumentStatusBadge } from '@/components/DocumentStatusBadge';
 import { createPortal } from 'react-dom';
+import * as api from '@/services/api';
+import { DELETE_COLUMN } from '@/types/actions';
+import { X, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 // 테이블 조작을 위한 유틸리티 함수들
 export interface ITableUtils {
@@ -22,6 +26,12 @@ export interface ITableUtils {
   removeColumn: (columnId: string) => void;
   // getTableData: () => IDocument[];
   // getColumnCount: () => number;
+}
+
+// DocumentTable 컴포넌트 props 정의
+interface DocumentTableProps {
+  onHeaderSelect?: (header: string | null) => void;
+  selectedHeader?: string | null;
 }
 
 // 마크다운 스타일 상수 정의
@@ -428,12 +438,29 @@ function MarkdownCell({ content }: { content: string }) {
   );
 }
 
-const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
+const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) => {
   const { state, dispatch } = useApp()
   const [showAgeColumn, setShowAgeColumn] = useState(true);
   const [countCol, setCountCol] = useState(0);
   const [countRow, setCountRow] = useState(0);
-  
+  const [selectedHeader, setSelectedHeader] = useState<string | null>(null);
+
+  // 부모로부터 받은 헤더 선택 상태와 동기화
+  useEffect(() => {
+    if (props.selectedHeader !== undefined) {
+      setSelectedHeader(props.selectedHeader);
+    }
+  }, [props.selectedHeader]);
+
+  // 헤더 선택 시 부모에게 알림
+  const handleHeaderSelection = useCallback((headerId: string) => {
+    const newHeaderState = selectedHeader === headerId ? null : headerId;
+    setSelectedHeader(newHeaderState);
+    if (props.onHeaderSelect) {
+      props.onHeaderSelect(newHeaderState);
+    }
+  }, [props.onHeaderSelect, selectedHeader]);
+
   const tableData = useMemo(() => {
     // 기본 데이터
     const baseData: IDocument[] = []
@@ -698,6 +725,71 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
   // 칼럼이 5개를 초과하는지 여부 계산 (체크박스 열 포함하여 체크)
   const hasHorizontalScroll = useMemo(() => columns.length > 5, [columns.length]);
   
+  // 칼럼 삭제 핸들러
+  const handleDeleteColumn = async () => {
+    if (!selectedHeader || selectedHeader === 'filename') return;
+    
+    try {
+      // 프로젝트 ID 가져오기
+      const projectId = state.currentProjectId;
+      if (!projectId) return;
+      
+      // 백엔드 API 호출
+      const response = await api.deleteColumn(projectId, selectedHeader);
+      
+      if (response.success) {
+        // 성공 시 Context에 반영
+        dispatch({
+          type: DELETE_COLUMN,
+          payload: selectedHeader
+        });
+        
+        // 성공 메시지 표시
+        toast.success(`${selectedHeader} 컬럼이 삭제되었습니다.`);
+
+        // 부모에게 선택 해제 알림 (이 부분 추가)
+        if (props.onHeaderSelect) {
+          props.onHeaderSelect(null);
+        }
+        
+        // 선택 상태 초기화
+        setSelectedHeader(null);
+      } else {
+        toast.error("컬럼 삭제에 실패했습니다.");
+      }
+    } catch (error) {
+      console.error("컬럼 삭제 중 오류가 발생했습니다:", error);
+      toast.error("컬럼 삭제 중 오류가 발생했습니다.");
+    }
+  };
+  
+  // 헤더 위치 계산을 위한 함수
+  const getHeaderPosition = useCallback(() => {
+    if (!selectedHeader) return { left: '0px' };
+    
+    // 문서이름 컬럼 너비 (체크박스 포함)
+    const baseWidth = 40 + 250; // 체크박스(30~40px) + 문서이름 컬럼(~250px)
+    
+    // 선택된 컬럼 인덱스 찾기 (0부터 시작, 문서이름 컬럼 = 0)
+    const selectedIndex = columns.findIndex(col => col.accessorKey === selectedHeader);
+    
+    // 버튼 위치 계산
+    if (selectedIndex <= 0) return { left: '40px' }; // 첫 번째 컬럼인 경우
+    
+    // 평균 컬럼 너비 (200px로 가정)
+    const avgColumnWidth = 200;
+    
+    // 컬럼 인덱스를 기반으로 대략적인 위치 계산
+    const estimatedLeft = baseWidth + ((selectedIndex - 1) * avgColumnWidth);
+    
+    // 너무 오른쪽으로 가지 않도록 제한
+    const maxLeft = typeof window !== 'undefined' ? window.innerWidth - 200 : 1000;
+    
+    return {
+      left: `${Math.min(estimatedLeft, maxLeft)}px`
+    };
+  }, [selectedHeader, columns]);
+
   const table = useMaterialReactTable({
     columns,
     data: tableData,
@@ -727,6 +819,109 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
       minSize: 30,  // 최소 크기 조정
       maxSize: 500, // 최대 크기 제한 (800 -> 500)
       size: 30,    // 기본 크기 조정
+    },
+    // 헤더 셀 클릭 처리 및 스타일링
+    muiTableHeadCellProps: ({ column }) => {
+      const props: any = {
+        sx: {
+          padding: '0px 10px',
+          backgroundColor: 'rgb(219, 227, 228) !important',
+          borderRight: '1px solid #e2e8f0',
+          borderBottom: '2px solid #e2e8f0',
+          fontWeight: 600,
+          color: '#1e293b',
+          fontSize: '0.8rem',
+          whiteSpace: 'nowrap',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between', // 변경: flex-start에서 space-between으로
+          height: '36px',
+          '@media (max-width: 640px)': {
+            padding: '0px 5px',
+            fontSize: '0.7rem',
+            height: '30px',
+          },
+          // .MuiBox-root 스타일 통합
+          '& .MuiBox-root': {
+            display: 'flex',
+            alignItems: 'center',
+            height: '100%'
+          },
+          '& .Mui-TableHeadCell-Content': {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            height: '100%'
+          },
+          '& .Mui-TableHeadCell-Content-Labels': {
+            display: 'flex',
+            alignItems: 'center',
+            height: '100%'
+          },
+          '& .Mui-TableHeadCell-Content-Wrapper': {
+            display: 'flex',
+            alignItems: 'center',
+            height: '100%'
+          }
+        }
+      };
+      
+      // mrt-row-select 컬럼 특별 처리
+      if (column.id === 'mrt-row-select') {
+        props.sx.padding = '0 !important';
+        props.sx.display = 'flex !important';
+        props.sx.alignItems = 'center !important';
+        props.sx.justifyContent = 'center !important';
+        return props;
+      }
+      
+      // 선택 가능한 헤더 처리 (filename 제외)
+      if (column.id !== 'filename') {
+        props.onClick = () => {
+          handleHeaderSelection(column.id);
+        };
+        
+        // 헤더 콘텐츠 커스터마이징
+        props.children = (
+          <div 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              width: '100%' 
+            }}
+          >
+            <span>{column.columnDef.header}</span>
+            {/* 휴지통 아이콘 - 선택된 헤더에만 표시 */}
+            {selectedHeader === column.id && (
+              <Trash2 
+                size={14} 
+                className="text-gray-500 hover:text-red-500 ml-2 cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation(); // 헤더 클릭 이벤트 전파 방지
+                  handleDeleteColumn();
+                }}
+              />
+            )}
+          </div>
+        );
+        
+        props.sx.cursor = 'pointer';
+        props.sx.backgroundColor = selectedHeader === column.id 
+          ? 'rgb(186, 230, 253) !important' 
+          : 'rgb(219, 227, 228) !important';
+        props.sx['&:hover'] = {
+          backgroundColor: selectedHeader === column.id 
+            ? 'rgb(186, 230, 253) !important' 
+            : 'rgb(200, 226, 228) !important'
+        };
+      } else {
+        // filename 컬럼 처리
+        props.sx['&:hover'] = {
+          backgroundColor: 'rgb(200, 226, 228) !important'
+        };
+      }
+      
+      return props;
     },
     displayColumnDefOptions: {
       'mrt-row-select': {
@@ -909,58 +1104,6 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
         }
       }
     },
-    muiTableHeadCellProps: {
-      sx: {
-        padding: '0px 10px',  // 상하 패딩 제거, 좌우 패딩 유지
-        backgroundColor: 'rgb(219, 227, 228) !important',
-        borderRight: '1px solid #e2e8f0',
-        borderBottom: '2px solid #e2e8f0',
-        fontWeight: 600,
-        color: '#1e293b',
-        fontSize: '0.8rem',
-        whiteSpace: 'nowrap',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-start',
-        height: '36px',
-        '&:hover': {
-          backgroundColor: 'rgb(200, 226, 228) !important'
-        },
-        // 모바일 환경에서 헤더 셀 조정
-        '@media (max-width: 640px)': {
-          padding: '0px 5px',
-          fontSize: '0.7rem',
-          height: '30px',
-        },
-        '&.mrt-row-select-head-cell': {
-          padding: '0 !important',
-          display: 'flex !important',
-          alignItems: 'center !important',
-          justifyContent: 'center !important',
-        },
-        '& .MuiBox-root': {  // Material UI Box 컴포넌트 스타일링
-          display: 'flex',
-          alignItems: 'center',
-          height: '100%'
-        },
-        '& .Mui-TableHeadCell-Content': {
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          height: '100%'
-        },
-        '& .Mui-TableHeadCell-Content-Labels': {
-          display: 'flex',
-          alignItems: 'center',
-          height: '100%'
-        },
-        '& .Mui-TableHeadCell-Content-Wrapper': {
-          display: 'flex',
-          alignItems: 'center',
-          height: '100%'
-        }
-      },
-    },
     muiTableBodyCellProps: {
       sx: {
         padding: '0.25rem',        // 기존 0.5rem에서 줄임
@@ -1094,6 +1237,8 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
 
   return (
     <div className="w-full h-full overflow-hidden relative">
+      {/* 삭제 버튼 제거 */}
+      
       <style jsx global>{`
         /* 헤더 셀 스타일 직접 조정 */
         .MuiTableHead-root {
@@ -1369,7 +1514,7 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
           padding: 3px !important;
         }
         
-        /* 셀 내부의 p 태그 패딩/마진 제거 */
+        /* 셀 내부의 p 태그 패딩 제거 */
         .MuiTableBody-root .MuiTableCell-root p {
           margin: 0 !important;
           padding: 0 !important;
@@ -1801,9 +1946,18 @@ const DocumentTable = forwardRef<ITableUtils>((props, ref) => {
             width: 350px !important;
           }
         }
+        
+        /* 선택된 헤더 스타일 */
+        .MuiTableHead-root .MuiTableCell-root.selected-header {
+          background-color: rgb(186, 230, 253) !important;
+        }
+        
+        /* 헤더 셀 선택 가능 표시 - filename과 체크박스 열 제외 */
+        .MuiTableHead-root .MuiTableCell-root:not([data-column-id="filename"]):not(.mrt-row-select-head-cell) {
+          cursor: pointer !important;
+        }
       `}</style>
       <MaterialReactTable table={table} />
-      
     </div>
   );
 });

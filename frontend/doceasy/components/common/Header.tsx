@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, Suspense } from "react"
-import { Settings, User, X, Loader2 } from "lucide-react"
+import { User, X, Loader2 } from "lucide-react"
 import { Button } from "intellio-common/components/ui/button"
 import { Input } from "intellio-common/components/ui/input"
 import { useApp } from "@/contexts/AppContext"
@@ -18,11 +18,27 @@ import {
   DialogDescription,
   DialogPortal,
 } from "intellio-common/components/ui/dialog"
-import { FontSettings } from "@/components/settings/FontSettings"
-import { LoginButton } from "@/components/auth/LoginButton"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "intellio-common/components/ui/dropdown-menu"
-import { Popover, PopoverContent, PopoverTrigger } from "intellio-common/components/ui/popover"
 import { useRouter } from "next/navigation"
+
+// 모바일 환경 감지 훅
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768); // 768px 미만을 모바일로 간주
+    };
+
+    // 초기 체크
+    checkIsMobile();
+
+    // 리사이즈 이벤트에 대응
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  return isMobile;
+};
 
 // 헤더 컨텐츠 컴포넌트
 function HeaderContent({ className }: { className?: string }) {
@@ -34,6 +50,7 @@ function HeaderContent({ className }: { className?: string }) {
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)  // Dialog 상태 추가
   const [isAuthLoading, setIsAuthLoading] = useState(true) // 인증 상태 로딩 상태 추가
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const isMobile = useIsMobile();
   
   // 쿠키 기반 인증 상태 확인
   useAuthCheck();
@@ -101,25 +118,12 @@ function HeaderContent({ className }: { className?: string }) {
     }
   }
 
-  const handleLogout = async () => {
-    await logout();
-    // AppContext 상태 초기화
-    dispatch({ type: actionTypes.SET_INITIAL_STATE });
-    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: '' });
-    console.log('[Header] 로그아웃 및 상태 초기화 완료');
-  }
-
   useEffect(() => {
-    console.debug('[Header1] Auth State Updated:', {
-      isAuthenticated,
-      user,
-    })
     // 인증 상태가 확인되면 로딩 상태를 false로 설정
     setIsAuthLoading(false)
   }, [isAuthenticated, user])
 
   useEffect(() => {
-    console.log("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     if (isEditingTitle && titleInputRef.current) {
       titleInputRef.current.focus()
       titleInputRef.current.select() // 텍스트 전체 선택
@@ -128,7 +132,7 @@ function HeaderContent({ className }: { className?: string }) {
 
   return (
     // header 태그로 변경하고 className 통합
-    <header className={`border-b p-4 flex items-center justify-between ${className || ''}`}>
+    <header className={`p-4 flex items-center justify-between ${className || ''}`}>
       <div className="flex items-center gap-2">
         {isAuthenticated ? (
           isEditingTitle ? (
@@ -147,75 +151,92 @@ function HeaderContent({ className }: { className?: string }) {
           )
         ) : null}
       </div>
+      
+      {/* 모드 선택 버튼 - ChatSection에서 이동 */}
       <div className="flex items-center gap-2">
-        {/* 인증 상태 로딩 중일 때 로딩 인디케이터 표시 */}
-        {isAuthLoading ? (
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-          </div>
-        ) : isAuthenticated && user ? (
-          <>
-            <span className="text-sm text-gray-600">{user.email}</span>
-            <DropdownMenu>
-              <DropdownMenuTrigger>
-                <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
-                  <User className="h-4 w-4" />
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleLogout}>
-                  로그아웃
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">로그인이 필요합니다</span>
-            <Dialog open={isLoginDialogOpen} onOpenChange={setIsLoginDialogOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-md hover:bg-gray-100"
-                >
-                  <User className="h-4 w-4" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>로그인 선택</DialogTitle>
-                  <DialogDescription>
-                    소셜 계정으로 로그인하세요
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="flex flex-col space-y-2">
-                    <LoginButton provider="google" redirectTo="doceasy" />
-                    <LoginButton provider="naver" redirectTo="doceasy" />
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+        {!isMobile && (
+          <div className="flex space-x-2">
+            <Button
+              variant={state.analysis.mode === 'chat' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                dispatch({ type: actionTypes.SET_MODE, payload: 'chat' });
+                // 모바일 환경에서는 채팅 탭으로 전환
+                if (isMobile && window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('switchToTab', { detail: { tab: 'chat' } }));
+                }
+              }}
+              className={`rounded-full text-xs font-medium px-4 ${
+                state.analysis.mode === 'chat' 
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                  : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              disabled={state.isAnalyzing}
+            >
+              통합분석
+            </Button>
+            <Button
+              variant={state.analysis.mode === 'table' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                dispatch({ type: actionTypes.SET_MODE, payload: 'table' });
+                // 모바일 환경에서는 테이블 탭으로 전환
+                if (isMobile && window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('switchToTab', { detail: { tab: 'table' } }));
+                }
+              }}
+              className={`rounded-full text-xs font-medium px-4 ${
+                state.analysis.mode === 'table' 
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                  : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              disabled={state.isAnalyzing}
+            >
+              {isMobile ? '문서목록' : '개별분석'}
+            </Button>
           </div>
         )}
-
-        <Dialog>
-          <DialogTrigger asChild>
-            <div className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 cursor-pointer">
-              <Settings className="h-4 w-4" />
-            </div>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>설정</DialogTitle>
-              <DialogDescription>
-                애플리케이션 설정을 변경할 수 있습니다
-              </DialogDescription>
-            </DialogHeader>
-            <FontSettings />
-          </DialogContent>
-        </Dialog>
+        
+        {isMobile && (
+          <div className="flex justify-center space-x-4">
+            <Button
+              variant={state.analysis.mode === 'chat' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                dispatch({ type: actionTypes.SET_MODE, payload: 'chat' });
+                if (window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('switchToTab', { detail: { tab: 'chat' } }));
+                }
+              }}
+              className={`rounded-full text-xs font-medium py-1.5 px-5 ${
+                state.analysis.mode === 'chat' 
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                  : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              disabled={state.isAnalyzing}
+            >
+              통합분석
+            </Button>
+            <Button
+              variant={state.analysis.mode === 'table' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                dispatch({ type: actionTypes.SET_MODE, payload: 'table' });
+                if (window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('switchToTab', { detail: { tab: 'table' } }));
+                }
+              }}
+              className={`rounded-full text-xs font-medium py-1.5 px-5 ${
+                state.analysis.mode === 'table' 
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                  : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              disabled={state.isAnalyzing}
+            >
+              문서목록
+            </Button>
+          </div>
+        )}
       </div>
     </header>
   )
@@ -224,7 +245,7 @@ function HeaderContent({ className }: { className?: string }) {
 // 헤더 컴포넌트
 export const Header = ({ className }: { className?: string }) => {
   return (
-    <Suspense fallback={<div className="h-[56px] bg-background border-b"></div>}>
+    <Suspense fallback={<div className="h-[56px] bg-background"></div>}>
       <HeaderContent className={className} />
     </Suspense>
   )

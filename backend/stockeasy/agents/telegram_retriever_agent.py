@@ -54,6 +54,7 @@ class TelegramRetrieverAgent(BaseAgent):
         self.llm, self.model_name, self.provider = get_llm_for_agent("telegram_retriever_agent")
         self.agent_llm = get_agent_llm("telegram_retriever_agent")
         self.parser = JsonOutputParser()
+        self.prompt_template = TELEGRAM_SUMMARY_PROMPT
         logger.info(f"TelegramRetrieverAgent initialized with provider: {self.provider}, model: {self.model_name}")
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -117,8 +118,21 @@ class TelegramRetrieverAgent(BaseAgent):
             )
             
             
+            # 1. 상태에서 커스텀 프롬프트 템플릿 확인
+            custom_prompt_from_state = state.get("custom_prompt_template")
+            # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
+            custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
+            # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
+            system_prompt = None
+            if custom_prompt_from_state:
+                system_prompt = custom_prompt_from_state
+                logger.info(f"TelegramRetrieverAgent using custom prompt from state : {custom_prompt_from_state}")
+            elif custom_prompt_from_attr:
+                system_prompt = custom_prompt_from_attr
+                logger.info(f"TelegramRetrieverAgent using custom prompt from attribute")
+                
             # 메세지 요약
-            summary = await self.summarize(query, stock_code, stock_name, messages, classification, user_id)
+            summary = await self.summarize(query, stock_code, stock_name, messages, classification, user_id, system_prompt)
 
             # 검색 결과가 없는 경우
             if not messages:
@@ -240,7 +254,11 @@ class TelegramRetrieverAgent(BaseAgent):
             
             return state
     @async_retry(retries=2, delay=2.0, exceptions=(Exception,))
-    async def summarize(self, query:str, stock_code: str, stock_name: str, found_messages: List[RetrievedTelegramMessage], classification: Dict[str, Any], user_id: Optional[Union[str, UUID]] = None) -> str:
+    async def summarize(self, query:str, stock_code: str, stock_name: str, 
+                        found_messages: List[RetrievedTelegramMessage], 
+                        classification: Dict[str, Any], 
+                        user_id: Optional[Union[str, UUID]] = None, 
+                        system_prompt: Optional[str] = None) -> str:
         """메시지 목록을 요약합니다.
         
         Args:
@@ -273,13 +291,19 @@ class TelegramRetrieverAgent(BaseAgent):
             messages_text += f"\n\n-------\n사용자 질문: {query}\n종목코드:{stock_code}\n종목명:{stock_name}"
             
             # 질문 분류 결과에 따라 프롬프트 생성
-            prompt_context = self.MakeSummaryPrompt(classification)
+            if system_prompt:
+                prompt_context = system_prompt
+            else:
+                prompt_context = self.MakeSummaryPrompt(classification)
             
             # 프롬프트와 메시지를 하나의 문자열로 결합
             combined_prompt = f"{prompt_context}\n\n내용: \n{messages_text}"
             
             # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
-            parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            if user_id != "test_user":
+                parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            else:
+                parsed_user_id = None
             
             # agent_llm로 호출
             response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
@@ -667,7 +691,10 @@ class TelegramRetrieverAgent(BaseAgent):
             )
 
             # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
-            parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            if user_id != "test_user":
+                parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            else:
+                parsed_user_id = None
 
             semantic_retriever_config = SemanticRetrieverConfig(min_score=threshold,
                                                user_id=parsed_user_id,

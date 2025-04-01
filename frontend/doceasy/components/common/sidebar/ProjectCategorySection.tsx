@@ -17,12 +17,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from 'intellio-common/components/ui/popover'
-import { Folder, FolderOpen, Plus, Trash2, ChevronDown, ChevronRight, History, AlertCircle, FileText, X } from 'lucide-react'
+import { Folder, FolderOpen, Plus, Trash2, ChevronDown, ChevronRight, History, AlertCircle, FileText, X, MessageSquare, Check } from 'lucide-react'
 import * as api from '@/services/api'  // 최상단에 추가
 import { IRecentProjectsResponse, IProject, Category, ProjectDetail, TableResponse,  } from '@/types/index'
 import { getRecentProjects, } from '@/services/api'
 import { useRouter } from 'next/navigation'
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, MutableRefObject } from 'react'
 
 import { useApp } from '@/contexts/AppContext'
 import { cn } from '@/lib/utils'
@@ -39,7 +39,133 @@ interface ProjectCategorySectionProps {
   categoryProjects: { [key: string]: IProject[] }  // 추가: 각 카테고리의 프로젝트 목록
   setCategoryProjects: React.Dispatch<React.SetStateAction<{ [key: string]: IProject[] }>>
   closeMenuOnProjectSelect: () => void  // 추가: 프로젝트 선택 시 메뉴 닫기 함수
+  handleProjectClickRef?: MutableRefObject<((project: IProject) => Promise<void>) | null> // 추가: handleProjectClick 함수 ref
 }
+
+// 개별 카테고리 컴포넌트
+const CategoryItem = ({ 
+  category, 
+  isExpanded, 
+  toggleSection, 
+  handleCategoryNameSubmit,
+  setCategoryToDelete,
+  projects,
+  renderProjects
+}: { 
+  category: Category; 
+  isExpanded: boolean; 
+  toggleSection: (section: string) => void;
+  handleCategoryNameSubmit: (categoryId: string, categoryName: string) => Promise<void>;
+  setCategoryToDelete: React.Dispatch<React.SetStateAction<Category | null>>;
+  projects: IProject[];
+  renderProjects: (projects: IProject[], categoryId: string) => React.ReactNode;
+}) => {
+  const [isEditingLocal, setIsEditingLocal] = useState(false);
+  const [localEditingName, setLocalEditingName] = useState(category.name);
+
+  return (
+    <div className="rounded-md overflow-hidden">
+      <Droppable
+        droppableId={`category-${category.id}`}
+        type="PROJECT"
+      >
+        {(provided, snapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+            className={cn(
+              "transition-colors",
+              snapshot.isDraggingOver && "bg-gray-50"
+            )}
+          >
+            <div 
+              className={cn(
+                "flex items-center justify-between py-2 px-2 cursor-pointer hover:bg-gray-100 group"
+              )}
+              onClick={() => toggleSection(category.id)}
+              onDoubleClick={() => !isEditingLocal && setIsEditingLocal(true)}
+            >
+              <div className="flex items-center flex-grow gap-2">
+                {isExpanded ? 
+                  <ChevronDown className="h-4 w-4 text-gray-500 flex-shrink-0" /> : 
+                  <ChevronRight className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                }
+                {isExpanded ? 
+                  <FolderOpen className="h-4 w-4 text-amber-500 flex-shrink-0" /> : 
+                  <Folder className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                }
+                {isEditingLocal ? (
+                  <Input
+                    value={localEditingName}
+                    onChange={(e) => setLocalEditingName(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleCategoryNameSubmit(category.id, localEditingName);
+                        setIsEditingLocal(false);
+                      }
+                    }}
+                    className="h-7 text-sm py-0 px-2"
+                    autoFocus
+                  />
+                ) : (
+                  <span className="font-medium text-sm text-gray-700">{category.name}</span>
+                )}
+              </div>
+              
+              <div className="flex items-center">
+                {isEditingLocal ? (
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCategoryNameSubmit(category.id, localEditingName);
+                        setIsEditingLocal(false);
+                      }}
+                    >
+                      <Check className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLocalEditingName(category.name);
+                        setIsEditingLocal(false);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCategoryToDelete(category);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            
+            {isExpanded && renderProjects(projects, category.id)}
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
+    </div>
+  );
+};
 
 // 프로젝트 카테고리 섹션 컨텐츠 컴포넌트
 function ProjectCategorySectionContent({
@@ -51,7 +177,8 @@ function ProjectCategorySectionContent({
   onDragEnd,
   categoryProjects,
   setCategoryProjects,
-  closeMenuOnProjectSelect
+  closeMenuOnProjectSelect,
+  handleProjectClickRef
 }: ProjectCategorySectionProps) {
   const router = useRouter()
   const { state } = useApp()
@@ -60,6 +187,7 @@ function ProjectCategorySectionContent({
   const [categoryError, setCategoryError] = useState('')
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null)
   const { isAuthenticated } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
 
   // 카테고리 이름 중복 체크
   const isCategoryNameDuplicate = (name: string) => {
@@ -183,44 +311,63 @@ function ProjectCategorySectionContent({
     loadCategoriesAndProjects()
   }, [setCategories, dispatch, isAuthenticated, setCategoryProjects])
 
+  // 프로젝트 클릭 처리 함수를 ref에 등록
+  useEffect(() => {
+    if (handleProjectClickRef) {
+      handleProjectClickRef.current = handleProjectClick;
+    }
+  }, [handleProjectClickRef]);
+
   const handleProjectClick = async (project: IProject) => {
-    if(state.currentProjectId === project.id)
-      return;
-
-    console.log(`Current project:${state.currentProjectId}, Project UUID: ${project.id}, is_temp:${project.is_temporary}`);
-    
-    // 프로젝트 기본정보 요청
-    const projectInfo:ProjectDetail = await api.getProjectInfo(project.id)
-    console.log(`Change Project To ${projectInfo.name}`)
-    
-    console.log(`handleProjectClick current view: ${state.currentView}`)
-    
-    // 현재 view가 upload인 경우에만 chat으로 변경, 나머지는 유지
-    if (state.currentView === 'upload') {
-      dispatch({ type: actionTypes.SET_VIEW, payload: 'chat' })
-    }
-
-    dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: projectInfo })
-    dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: projectInfo.name })
-
-    // 채팅 메시지 초기화
-    dispatch({ type: actionTypes.CLEAR_CHAT_MESSAGE })
-    
-    // 문서 목록 요청
-    const documents = await api.getDocumentList(project.id)
-    dispatch({ type: actionTypes.SET_DOCUMENT_LIST, payload: documents })
-
-    // 테이블 히스토리 요청
+    setIsLoading(true);
     try {
-      const tableHistory:TableResponse = await api.getTableHistory(project.id)
-      console.log('테이블 히스토리 로드 결과:', tableHistory)
-      dispatch({ type: actionTypes.UPDATE_TABLE_DATA, payload: tableHistory })
+      // 프로젝트 정보 가져오기
+      const projectInfo = await api.getProjectInfo(project.id)
+      console.log(`handleProjectClick current view: ${state.currentView}`)
+      
+      // 현재 view가 upload인 경우에만 chat으로 변경, 나머지는 유지
+      if (state.currentView === 'upload') {
+        dispatch({ type: actionTypes.SET_VIEW, payload: 'chat' })
+      }
+
+      dispatch({ type: actionTypes.SET_CURRENT_PROJECT, payload: projectInfo })
+      dispatch({ type: actionTypes.SET_PROJECT_TITLE, payload: projectInfo.name })
+
+      // 채팅 메시지 초기화
+      dispatch({ type: actionTypes.CLEAR_CHAT_MESSAGE })
+      
+      // 문서 목록 요청
+      const documents = await api.getDocumentList(project.id)
+      dispatch({ type: actionTypes.SET_DOCUMENT_LIST, payload: documents })
+
+      // 테이블 히스토리 요청
+      try {
+        const tableHistory:TableResponse = await api.getTableHistory(project.id)
+        console.log('테이블 히스토리 로드 결과:', tableHistory)
+        dispatch({ type: actionTypes.UPDATE_TABLE_DATA, payload: tableHistory })
+      } catch (error) {
+        console.error('테이블 히스토리 로드 실패:', error)
+      }
+      
+      // 문서 목록 로드 후, 현재 모드에 맞게 문서 선택 상태 설정
+      if (state.analysis.mode === 'table') {
+        const documentIds = Object.values(documents)
+          .filter(doc => doc.project_id === project.id)
+          .map(doc => doc.id);
+          
+        dispatch({ 
+          type: actionTypes.SELECT_DOCUMENTS, 
+          payload: documentIds 
+        });
+      }
+      
+      // 모바일에서 메뉴 닫기
+      closeMenuOnProjectSelect();
     } catch (error) {
-      console.error('테이블 히스토리 로드 실패:', error)
+      console.error('프로젝트 로드 실패:', error);
+    } finally {
+      setIsLoading(false);
     }
-    
-    // 모바일에서 메뉴 닫기
-    closeMenuOnProjectSelect();
   }
 
   const handleDeleteCategory = async () => {
@@ -299,407 +446,115 @@ function ProjectCategorySectionContent({
     return title.length > maxLength ? `${title.slice(0, maxLength)}...` : title;
   };
 
-  const renderProjectList = (sectionTitle: string, projects: IProject[]) => {
-    if (!projects || projects.length === 0) return null;
-
-    return (
-      <div key={sectionTitle} className="mb-2">
-        <div className="flex items-center mb-1 text-xs font-medium text-gray-500 px-2">
-          {sectionTitle}
-          <span className="ml-1 text-xs">({projects.length})</span>
-        </div>
-        <div className="space-y-0.5">
-          {projects.map((project, index) => (
-            <Draggable
-              key={project.id}
-              draggableId={project.id}
-              index={index}
-            >
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.draggableProps}
-                  {...provided.dragHandleProps}
-                  className={cn(
-                    "flex items-center px-3 py-1 text-sm rounded-md cursor-pointer group w-full",
-                    state.currentProject?.id === project.id
-                      ? "bg-gray-50 text-gray-700"
-                      : "text-gray-600 hover:bg-gray-50",
-                    snapshot.isDragging && "bg-blue-50 shadow-sm"
-                  )}
-                  onClick={() => handleProjectClick(project)}
-                >
-                  <span className="truncate flex-1 min-w-0">{project.name}</span>
-                  <button
-                    className="opacity-0 group-hover:opacity-100 hover:text-red-500 p-1 rounded-sm flex-shrink-0 ml-2"
-                    onClick={(e) => handleDeleteProject(project.id, e)}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-            </Draggable>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderRecentProjects = () => {
-    return (
-      <div className="mb-4">
-        <div className="flex items-center px-2 mb-1">
-          <History className="w-4 h-4 mr-1 text-gray-400" />
-          <span className="text-xs text-gray-500">최근 프로젝트</span>
-        </div>
-        <div className="space-y-0.5">
-          {state.recentProjects?.today?.map((project, index) => (
-            <Draggable
-              key={project.id}
-              draggableId={project.id}
-              index={index}
-            >
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.draggableProps}
-                  {...provided.dragHandleProps}
-                  className={cn(
-                    "flex items-center px-3 py-1 text-sm rounded-md cursor-pointer group w-full",
-                    state.currentProject?.id === project.id
-                      ? "bg-gray-50 text-gray-700"
-                      : "text-gray-600 hover:bg-gray-50",
-                    snapshot.isDragging && "bg-blue-50 shadow-sm"
-                  )}
-                  onClick={() => handleProjectClick(project)}
-                >
-                  <span className="truncate flex-1 min-w-0">{project.name}</span>
-                  <button
-                    className="opacity-0 group-hover:opacity-100 hover:text-red-500 p-1 rounded-sm flex-shrink-0 ml-2"
-                    onClick={(e) => handleDeleteProject(project.id, e)}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-            </Draggable>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderProjectSection = () => {
-    const recentProjects = state.recentProjects;
-    if (!recentProjects) return null;
-
-    return (
-      <div className="overflow-y-auto overflow-x-hidden max-h-[calc(100vh-16rem)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
-        {renderProjectList("오늘", recentProjects.today)}
-        {renderProjectList("지난 7일", recentProjects.last_7_days)}
-        {renderProjectList("지난 30일", recentProjects.last_30_days)}
-      </div>
-    );
-  };
-
-  const renderCategoryProjects = (categoryId: string) => {
-    const projects = categoryProjects[categoryId] || []
-    
-    return projects.map((project, index) => (
-      <Draggable
-        key={project.id}
-        draggableId={project.id}
-        index={index}
-      >
-        {(provided, snapshot) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.draggableProps}
-            {...provided.dragHandleProps}
-            className={cn(
-              "flex items-center px-3 py-1 text-sm rounded-md cursor-pointer group w-full",
-              state.currentProject?.id === project.id
-                ? "bg-gray-50 text-gray-700"
-                : "text-gray-600 hover:bg-gray-50",
-              snapshot.isDragging && "bg-blue-50 shadow-sm"
-            )}
-            onClick={() => handleProjectClick(project)}
-          >
-            <span className="truncate flex-1 min-w-0">{project.name}</span>
-            <button
-              className="opacity-0 group-hover:opacity-100 hover:text-red-500 p-1 rounded-sm flex-shrink-0 ml-2"
-              onClick={(e) => handleDeleteProject(project.id, e)}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-      </Draggable>
-    ))
-  }
-
-  const renderProjects = (projects: IProject[], sectionTitle: string) => {
-    if (!Array.isArray(projects) || !projects?.length) return null;
-
-    return (
-      <div className="space-y-0.4">
-        <div className="text-xs text-gray-500 px-2">{sectionTitle}</div>
-        {projects.map((project, index) => {
-          if (!project?.id) return null;
-          
-          return (
-            <Draggable
-              key={project.id}
-              draggableId={project.id}
-              index={index}
-            >
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.draggableProps}
-                  {...provided.dragHandleProps}
-                  className={cn(
-                    "relative flex items-center cursor-move",
-                    snapshot.isDragging && "shadow-lg border-2 border-gray-200",
-                    "rounded-md transition-all duration-200 ease-in-out"
-                  )}
-                >
-                  <div className="flex-1 px-2 py-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className={cn(
-                        "w-full justify-start gap-2 px-2 max-w-full",
-                        state.currentProjectId === project.id && "bg-gray-50",
-                        !snapshot.isDragging && "hover:bg-gray-50"
-                      )}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleProjectClick(project);
-                      }}
-                    >
-                      <span className="truncate text-left" title={project.name}>
-                        {truncateTitle(project.name, 15)}
-                      </span>
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </Draggable>
-          );
-        })}
-      </div>
-    );
-  };
-
-  // 상태 추가
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState<string>("");
-
   // 카테고리 이름 수정 시작
   const handleCategoryDoubleClick = (category: Category) => {
-    setEditingCategoryId(category.id);
-    setEditingName(category.name);  // 원래 이름을 상태에 저장
+    setIsAddingCategory(true);
   };
 
   // 카테고리 이름 수정 취소
   const handleCategoryEditCancel = (category: Category) => {
-    setEditingCategoryId(null);
-    setEditingName(category.name);  // 원래 이름으로 복원
+    setIsAddingCategory(false);
   };
 
   // 카테고리 이름 수정 완료
-  const handleCategoryNameSubmit = async (categoryId: string, category: Category) => {
+  const handleCategoryNameSubmit = async (categoryId: string, categoryName: string) => {
     try {
-      if (!editingName.trim()) {
-        handleCategoryEditCancel(category);  // 빈 문자열이면 원래 이름으로 복원
-        return;
-      }
-
-      // 이름이 변경되지 않았다면 수정 취소
-      if (editingName === category.name) {
-        handleCategoryEditCancel(category);
-        return;
-      }
-
-      await api.updateCategory(categoryId, { name: editingName });
-
-      setCategories(prev => 
-        prev.map(cat => 
-          cat.id === categoryId ? { ...cat, name: editingName } : cat
-        )
-      );
+      // 수정된 카테고리 업데이트
+      await api.updateCategory(categoryId, { name: categoryName });
+      
+      // 성공적으로 업데이트된 경우 카테고리 목록 업데이트
+      setCategories(prev => prev.map(c => 
+        c.id === categoryId ? { ...c, name: categoryName } : c
+      ));
     } catch (error) {
       console.error('카테고리 이름 수정 실패:', error);
-      handleCategoryEditCancel(category);  // 에러 발생 시 원래 이름으로 복원
     } finally {
-      setEditingCategoryId(null);
+      setIsAddingCategory(false);
     }
   };
 
-  return (
-    <div className="flex flex-col space-y-2">
-      {/* 프로젝트 폴더 섹션 */}
-      <div className="flex flex-col">
-        <div className="flex items-center justify-between px-2 py-1">
-          <span className="text-sm font-semibold text-gray-700">프로젝트 폴더</span>
-        </div>
-        {isAuthenticated ? (
-          <>
-            {categories.map(category => (
-              <Droppable key={category.id} droppableId={`category-${category.id}`} type="PROJECT">
-                {(provided, snapshot) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className={cn(
-                      "rounded-md border-2 border-transparent",
-                      snapshot.isDraggingOver && "border-gray-200 bg-gray-50",
-                      "transition-all duration-200 ease-in-out"
-                    )}
-                  >
-                    <div className="relative flex items-center group">
-                      <Button
-                        variant="ghost"
-                        className={cn(
-                          "w-full justify-start text-sm h-8 pl-4",
-                          snapshot.isDraggingOver && "bg-gray-50"
-                        )}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          handleCategoryDoubleClick(category);
-                        }}
-                      >
-                        <div 
-                          className="mr-1 relative group/folder" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleSection(`category-${category.id}`);
-                          }}
-                        >
-                          {expandedSections.includes(`category-${category.id}`) ? (
-                            <FolderOpen className={cn(
-                              "h-4 w-4 transform transition-all duration-200",
-                              snapshot.isDraggingOver && "text-gray-600"
-                            )} />
-                          ) : (
-                            <>
-                              <Folder className={cn(
-                                "h-4 w-4 transform transition-all duration-200",
-                                snapshot.isDraggingOver && "text-gray-600",
-                                "group-hover/folder:opacity-0 group-hover/folder:scale-90"
-                              )} />
-                              <FolderOpen className={cn(
-                                "h-4 w-4 absolute top-0 left-0 opacity-0 transform scale-110 transition-all duration-200",
-                                snapshot.isDraggingOver && "text-gray-600",
-                                "group-hover/folder:opacity-100 group-hover/folder:scale-100"
-                              )} />
-                            </>
-                          )}
-                        </div>
-                        {editingCategoryId === category.id ? (
-                          <Input
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            onBlur={() => handleCategoryNameSubmit(category.id, category)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleCategoryNameSubmit(category.id, category);
-                              } else if (e.key === 'Escape') {
-                                handleCategoryEditCancel(category);
-                              }
-                            }}
-                            className="h-6 px-1 py-0 text-sm"
-                            autoFocus
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        ) : (
-                          <span className="flex-1 text-left truncate">{category.name}({category.projects_count})</span>
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 absolute right-0 hover:bg-red-100"
-                        onClick={() => setCategoryToDelete(category)}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                    {/* 카테고리 내의 프로젝트 목록 */}
-                    {expandedSections.includes(`category-${category.id}`) && (
-                      <div className="pl-3">
-                        {renderCategoryProjects(category.id)}
-                      </div>
-                    )}
-                    {provided.placeholder}
-                  </div>
+  // 프로젝트 렌더링 함수
+  const renderProjects = (projects: IProject[], categoryId: string) => {
+    return (
+      <div className="space-y-1 pl-2 pr-1 py-1">
+        {projects.map((project, index) => (
+          <Draggable key={project.id} draggableId={project.id} index={index}>
+            {(provided, snapshot) => (
+              <div
+                ref={provided.innerRef}
+                {...provided.draggableProps}
+                {...provided.dragHandleProps}
+                className={cn(
+                  "flex items-center gap-2 w-full text-left px-3 py-2 rounded-md transition-colors group",
+                  snapshot.isDragging ? "bg-blue-100" : "hover:bg-gray-100"
                 )}
-              </Droppable>
-            ))}
-            
-            <Popover open={isAddingCategory} onOpenChange={setIsAddingCategory}>
-              <PopoverTrigger asChild>
+                onClick={() => handleProjectClick(project)}
+              >
+                <MessageSquare className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                <span className="text-sm truncate flex-grow">{project.name}</span>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start text-sm h-8 pl-4 text-gray-500 hover:text-gray-900"
+                  size="sm"
+                  className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 ml-auto"
+                  onClick={(e) => handleDeleteProject(project.id, e)}
                 >
-                  <div className="relative group/folder mr-0.5">
-                    <Plus className="h-4 w-4 absolute top-0 left-0 opacity-100 group-hover/folder:opacity-0 transform transition-all duration-200 group-hover/folder:scale-90" />
-                    <Folder className="h-4 w-4 opacity-0 group-hover/folder:opacity-100 transform scale-110 transition-all duration-200 group-hover/folder:scale-100" />
-                  </div>
-                  <span className="flex-1 text-left">새 폴더</span>
+                  <Trash2 className="h-4 w-4 text-gray-500" />
+                </Button>
+              </div>
+            )}
+          </Draggable>
+        ))}
+        {projects.length === 0 && (
+          <div className="text-xs text-gray-400 italic py-1 px-3">저장된 프로젝트 없음</div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* 카테고리 헤더 */}
+      <div className="flex items-center justify-between px-2 py-1">
+        <span className="text-xs font-semibold text-gray-600 uppercase">폴더 목록</span>
+        
+        {isAuthenticated ? (
+          <>
+            <Popover open={isAddingCategory} onOpenChange={setIsAddingCategory}>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="px-2 h-7"
+                >
+                  <Plus className="h-4 w-4" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-72 p-4" align="start">
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-sm leading-none">새 폴더 만들기</h4>
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Input
-                        type="text"
-                        placeholder="폴더 이름을 입력하세요"
-                        value={newCategoryName}
-                        onChange={(e) => {
-                          setNewCategoryName(e.target.value)
-                          setCategoryError('')
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && newCategoryName.trim()) {
-                            e.preventDefault()
-                            handleAddCategory()
-                          }
-                        }}
-                        className="pl-8"
-                      />
-                      <Folder className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-                    </div>
+              <PopoverContent className="w-72 p-3" align="end">
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-sm font-medium mb-2">새 폴더 추가</div>
+                    <Input
+                      placeholder="폴더 이름 입력"
+                      value={newCategoryName}
+                      onChange={(e) => {
+                        setNewCategoryName(e.target.value);
+                        setCategoryError('');
+                      }}
+                      className="w-full"
+                    />
                     {categoryError && (
-                      <div className="text-xs text-destructive flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
+                      <div className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
                         {categoryError}
                       </div>
                     )}
                   </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setIsAddingCategory(false)
-                        setNewCategoryName('')
-                        setCategoryError('')
-                      }}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      취소
-                    </Button>
+                  <div className="flex justify-end">
                     <Button
                       size="sm"
                       onClick={handleAddCategory}
                       disabled={!newCategoryName.trim()}
-                      className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-sm"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white"
                     >
                       생성
                     </Button>
@@ -714,34 +569,23 @@ function ProjectCategorySectionContent({
           </div>
         )}
       </div>
+      
+      {/* 카테고리 목록 */}
+      <div className="space-y-1">
+        {categories.map(category => (
+          <CategoryItem
+            key={category.id}
+            category={category}
+            isExpanded={expandedSections.includes(category.id)}
+            toggleSection={toggleSection}
+            handleCategoryNameSubmit={handleCategoryNameSubmit}
+            setCategoryToDelete={setCategoryToDelete}
+            projects={categoryProjects[category.id] || []}
+            renderProjects={renderProjects}
+          />
+        ))}
+      </div>
 
-      {/* 최근 프로젝트 섹션 */}
-      {isAuthenticated && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-2 py-1">
-            <span className="text-sm font-semibold text-gray-700">최근 프로젝트</span>
-          </div>
-          <Droppable droppableId="recent-projects" type="PROJECT">
-            {(provided, snapshot) => (
-              <div
-                ref={provided.innerRef}
-                {...provided.droppableProps}
-                className={cn(
-                  "flex-1 overflow-hidden",
-                  snapshot.isDraggingOver && "bg-gray-100/50"
-                )}
-              >
-                <div className="space-y-2">
-                  {state.recentProjects?.today && renderProjectList('오늘', state.recentProjects.today)}
-                  {state.recentProjects?.last_7_days && renderProjectList('지난 7일', state.recentProjects.last_7_days)}
-                  {state.recentProjects?.last_30_days && renderProjectList('지난 30일', state.recentProjects.last_30_days)}
-                </div>
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-        </div>
-      )}
       {/* 삭제 확인 다이얼로그 */}
       <Dialog open={!!categoryToDelete} onOpenChange={() => setCategoryToDelete(null)}>
         <DialogContent>

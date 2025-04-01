@@ -21,6 +21,8 @@ class BaseAgent(ABC):
         """
         self._name = name or self.__class__.__name__
         self.db = db
+        self.prompt_template = None
+        self.prompt_template_test = None
     
     @abstractmethod
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:

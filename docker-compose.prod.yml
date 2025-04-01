@@ -34,6 +34,11 @@ services:
       - ENV=production
     volumes:
       - ./backend:/backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   celery-stockeasy:
     build:
@@ -45,4 +50,9 @@ services:
       - ENV=production
     volumes:
       - ./backend:/backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
 

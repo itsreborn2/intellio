@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional as PydanticOptional
 from common.models.token_usage import ProjectType
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
-from stockeasy.prompts.question_analyzer_prompts import format_question_analyzer_prompt
+from stockeasy.prompts.question_analyzer_prompts import SYSTEM_PROMPT, format_question_analyzer_prompt
 from common.core.config import settings
 from stockeasy.models.agent_io import (
     QuestionAnalysisResult, ExtractedEntity, QuestionClassification, 
@@ -57,6 +57,7 @@ class DataRequirements(BaseModel):
     reports_needed: bool = Field(..., description="리포트 데이터 필요 여부")
     financial_statements_needed: bool = Field(..., description="재무제표 데이터 필요 여부")
     industry_data_needed: bool = Field(..., description="산업 데이터 필요 여부")
+    confidential_data_needed: bool = Field(..., description="비공개 자료 필요 여부")
 
 
 class QuestionAnalysis(BaseModel):
@@ -91,6 +92,7 @@ class QuestionAnalyzerAgent(BaseAgent):
         self.llm, self.model_name, self.provider = get_llm_for_agent("question_analyzer_agent")
         self.agent_llm = get_agent_llm("question_analyzer_agent")
         logger.info(f"QuestionAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
+        self.prompt_template = SYSTEM_PROMPT
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -119,8 +121,23 @@ class QuestionAnalyzerAgent(BaseAgent):
             
             logger.info(f"QuestionAnalyzerAgent analyzing query: {query}")
             
+            # 커스텀 프롬프트 템플릿 확인
+            # 1. 상태에서 커스텀 프롬프트 템플릿 확인
+            custom_prompt_from_state = state.get("custom_prompt_template")
+            # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
+            custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
+            
+            # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
+            system_prompt = None
+            if custom_prompt_from_state:
+                system_prompt = custom_prompt_from_state
+                logger.info(f"QuestionAnalyzerAgent using custom prompt from state : {custom_prompt_from_state}")
+            elif custom_prompt_from_attr:
+                system_prompt = custom_prompt_from_attr
+                logger.info(f"QuestionAnalyzerAgent using custom prompt from attribute")
+            
             # 프롬프트 준비
-            prompt = format_question_analyzer_prompt(query=query, stock_name=stock_name, stock_code=stock_code)
+            prompt = format_question_analyzer_prompt(query=query, stock_name=stock_name, stock_code=stock_code, system_prompt=system_prompt)
             
             # user_id 추출
             user_context = state.get("user_context", {})
@@ -135,6 +152,7 @@ class QuestionAnalyzerAgent(BaseAgent):
             )
             response.entities.stock_name = stock_name
             response.entities.stock_code = stock_code
+            response.data_requirements.confidential_data_needed = True
             # 분석 결과 로깅
             logger.info(f"Analysis result: {response}")
             
@@ -151,7 +169,7 @@ class QuestionAnalyzerAgent(BaseAgent):
             
             # 상태에 저장
             state["question_analysis"] = question_analysis
-            
+            state["agent_results"]["question_analysis"] = question_analysis
             # 성능 지표 업데이트
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -178,6 +196,8 @@ class QuestionAnalyzerAgent(BaseAgent):
             logger.exception(f"Error in QuestionAnalyzerAgent: {str(e)}")
             self._add_error(state, f"질문 분석기 에이전트 오류: {str(e)}")
             return state 
+    def get_system_prompt(self) -> str:
+        return SYSTEM_PROMPT
     
     def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
         """

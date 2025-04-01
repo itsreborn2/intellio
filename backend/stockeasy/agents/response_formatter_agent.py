@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 from langchain_core.messages import HumanMessage, AIMessage
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
-from stockeasy.prompts.response_formatter_prompts import format_response_formatter_prompt
+from stockeasy.prompts.response_formatter_prompts import OPTIMIZED_RESPONSE_FORMATTER_SYSTEM_PROMPT, format_response_formatter_prompt
 from langchain_core.output_parsers import StrOutputParser
 from common.models.token_usage import ProjectType
 from stockeasy.agents.base import BaseAgent
@@ -38,6 +38,7 @@ class ResponseFormatterAgent(BaseAgent):
         self.agent_llm = get_agent_llm("response_formatter_agent")
         logger.info(f"ResponseFormatterAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.parser = StrOutputParser()
+        self.prompt_template = OPTIMIZED_RESPONSE_FORMATTER_SYSTEM_PROMPT
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -78,22 +79,36 @@ class ResponseFormatterAgent(BaseAgent):
                 state["formatted_response"] = "죄송합니다. 현재 요청에 대한 정보를 찾을 수 없습니다. 다른 질문을 해 주시거나 나중에 다시 시도해 주세요."
                 return state
             
+            # 1. 상태에서 커스텀 프롬프트 템플릿 확인
+            custom_prompt_from_state = state.get("custom_prompt_template")
+            # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
+            custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
+            # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
+            system_prompt = None
+            if custom_prompt_from_state:
+                system_prompt = custom_prompt_from_state
+                logger.info(f"ResponseFormatterAgent using custom prompt from state : {custom_prompt_from_state}")
+            elif custom_prompt_from_attr:
+                system_prompt = custom_prompt_from_attr
+                logger.info(f"ResponseFormatterAgent using custom prompt from attribute")
+
             # 프롬프트 준비
-            prompt_context = format_response_formatter_prompt(
+            prompt = format_response_formatter_prompt(
                 query=query,
                 stock_name=stock_name,
                 stock_code=stock_code,
                 integrated_response=summary,
                 core_insights=core_insights,
                 confidence_assessment=confidence_assessment,
-                uncertain_areas=uncertain_areas
+                uncertain_areas=uncertain_areas,
+                system_prompt=system_prompt
             )
             
             # # LLM 호출로 포맷팅 수행
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
             response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
-                input=prompt_context,
+                input=prompt.format_prompt(),
                 user_id=user_id,
                 project_type=ProjectType.STOCKEASY,
                 db=self.db

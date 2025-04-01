@@ -8,6 +8,7 @@ from typing import Dict, Type, Any, Optional
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from stockeasy.agents.confidential_analyzer_agent import ConfidentialAnalyzerAgent
 from stockeasy.agents.base import BaseAgent
 from stockeasy.agents.session_manager_agent import SessionManagerAgent
 # 새로 구현한 에이전트들 임포트
@@ -87,7 +88,8 @@ class AgentRegistry:
         # 기존 검색 및 분석 에이전트 초기화
         self.agents["financial_analyzer"] = FinancialAnalyzerAgent(db=db)
         self.agents["industry_analyzer"] = IndustryAnalyzerAgent(db=db)
-        
+        self.agents["confidential_analyzer"] = ConfidentialAnalyzerAgent(db=db)
+
         # 통합 및 요약 에이전트 초기화
         self.agents["knowledge_integrator"] = KnowledgeIntegratorAgent(db=db)
         self.agents["summarizer"] = SummarizerAgent(db=db)

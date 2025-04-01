@@ -7,7 +7,7 @@
 
 from datetime import datetime
 from typing import Dict, List, Union, Any
-
+from langchain_core.prompts import ChatPromptTemplate
 # 응답 포맷터 프롬프트
 RESPONSE_FORMATTER_PROMPT = """
 당신은 금융 정보 시스템의 응답 포맷팅 전문가입니다. 통합된 정보를 사용자에게 이해하기 쉽고
@@ -89,6 +89,53 @@ OPTIMIZED_RESPONSE_FORMATTER_PROMPT = """
    - 직관적이고 읽기 쉬운 구조
 """
 
+OPTIMIZED_RESPONSE_FORMATTER_SYSTEM_PROMPT = """
+당신은 금융 정보를 사용자 친화적인 형식으로 변환하는 전문가입니다.
+통합된 종합결론을 사용자에게 이해하기 쉽고 읽기 좋은 형식으로 변환하는 역할을 합니다.
+
+포맷팅 지침:
+1. 명확한 구조로 정보를 체계화하세요:
+   - 핵심 요약 (1-2문장)
+   - 주요 요점 (글머리 기호)
+   - 세부 설명 (필요시)
+   - 한계점 (있는 경우)
+
+2. 다음 포맷팅 요소를 활용하세요:
+   - 중요 정보는 **굵게** 표시
+   - 목록과 구분점으로 정보 분류
+   - 주요 숫자 데이터는 표 형식으로 제시
+   - 섹션은 제목(###)으로 구분
+
+3. 다음 내용을 포함하세요:
+   - 날짜/시간 정보 (데이터 최신성)
+   - 불확실한 영역에 대한 명시적 언급
+   - 신뢰도 수준이 낮은 정보 표시
+   - 맨 마지막에 "추가 질문이 있으시면 언제든지 물어보세요."
+
+4. 응답 스타일:
+   - 전문적이면서 접근하기 쉬운 톤
+   - 불필요한 금융 전문용어 최소화
+   - 중요한 인사이트 강조
+   - 직관적이고 읽기 쉬운 구조
+
+"""
+
+# 사용자 질문: {query}
+# 종목명: {stock_name}
+# 종목코드: {stock_code}
+# 오늘 날짜: {today}
+OPTIMIZED_RESPONSE_FORMATTER_USER_PROMPT = """
+
+통합된 종합결론: 
+{integrated_response}
+
+신뢰도 평가:
+{confidence_assessment}
+
+불확실한 영역:
+{uncertain_areas}
+"""
+
 def format_response_formatter_prompt(
     query: str,
     stock_name: str = None,
@@ -96,8 +143,9 @@ def format_response_formatter_prompt(
     integrated_response: str = None,
     core_insights: Union[Dict[str, Any], List[str]] = None,
     confidence_assessment: Union[Dict[str, Any], List[str]] = None,
-    uncertain_areas: list = None
-) -> str:
+    uncertain_areas: list = None,
+    system_prompt: str = None
+) -> ChatPromptTemplate:
     """
     응답 포맷터 프롬프트를 포맷팅합니다.
     
@@ -109,9 +157,10 @@ def format_response_formatter_prompt(
         core_insights: 핵심 인사이트 (딕셔너리 또는 리스트)
         confidence_assessment: 신뢰도 평가 (딕셔너리 또는 리스트)
         uncertain_areas: 불확실한 영역
+        system_prompt: 시스템 프롬프트 커스텀 설정 (선택적)
         
     Returns:
-        포맷팅된 프롬프트 문자열
+        포맷팅된 ChatPromptTemplate 객체
     """
     # 핵심 인사이트 포맷팅
     core_insights_str = ""
@@ -144,13 +193,34 @@ def format_response_formatter_prompt(
             uncertain_areas_str += f"- {area}\n"
     
     today = datetime.now().strftime("%Y-%m-%d")
-    return OPTIMIZED_RESPONSE_FORMATTER_PROMPT.format(
-        query=query,
-        stock_name=stock_name or "알 수 없음",
-        stock_code=stock_code or "알 수 없음",
-        today=today,
-        integrated_response=integrated_response or "최종 요약 응답이 없습니다.",
-        core_insights=core_insights_str or "핵심 인사이트가 없습니다.",
-        confidence_assessment=confidence_assessment_str or "신뢰도 평가가 없습니다.",
-        uncertain_areas=uncertain_areas_str or "불확실한 영역이 없습니다."
-    ) 
+    
+    # ChatPromptTemplate을 생성하여 시스템 메시지와 사용자 메시지를 합치기
+    from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+    
+    # 시스템 프롬프트 - 커스텀 프롬프트가 있으면 사용, 없으면 기본값
+    system_prompt_template = system_prompt if system_prompt else OPTIMIZED_RESPONSE_FORMATTER_SYSTEM_PROMPT
+    system_message = SystemMessagePromptTemplate.from_template(system_prompt_template)
+    
+    # 사용자 프롬프트 포맷팅
+    user_message = HumanMessagePromptTemplate.from_template(OPTIMIZED_RESPONSE_FORMATTER_USER_PROMPT)
+    
+    # ChatPromptTemplate 구성
+    chat_prompt = ChatPromptTemplate.from_messages([
+        system_message,
+        user_message
+    ])
+    
+    # 변수를 템플릿에 적용할 값들 준비
+    values = {
+        "query": query,
+        "stock_name": stock_name or "알 수 없음",
+        "stock_code": stock_code or "알 수 없음",
+        "today": today,
+        "integrated_response": integrated_response or "최종 요약 응답이 없습니다.",
+        "core_insights": core_insights_str or "핵심 인사이트가 없습니다.",
+        "confidence_assessment": confidence_assessment_str or "신뢰도 평가가 없습니다.",
+        "uncertain_areas": uncertain_areas_str or "불확실한 영역이 없습니다."
+    }
+    
+    # ChatPromptTemplate 객체 자체를 반환
+    return chat_prompt.partial(**values) 

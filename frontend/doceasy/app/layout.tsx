@@ -67,18 +67,22 @@ export default function RootLayout({
             <Sidebar className="fixed left-0 top-0 h-full z-50" />
             
             {/* 메인 컨테이너 */}
-            <div className={`flex-1 transition-all duration-300 ease-in-out ${isMobile ? 'ml-0' : (isSidebarCollapsed ? 'ml-[50px]' : 'ml-[250px]')}`}>
+            <div className={`flex-1 transition-all duration-300 ease-in-out ${
+              isMobile ? 'ml-0' : (isSidebarCollapsed ? 'ml-[60px]' : 'ml-[300px]')
+            }`}>
               {/* 헤더 - 모바일 환경에서는 숨김 */}
               {!isMobile && (
-                <Header className={`fixed top-0 right-0 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'left-[50px]' : 'left-[250px]'} h-[56px] z-40 bg-background border-b`} />
+                <Header className={`fixed top-0 right-0 transition-all duration-300 ease-in-out ${
+                  isSidebarCollapsed ? 'left-[60px]' : 'left-[300px]'
+                } h-[56px] z-40 bg-background`} />
               )}
               
               {/* 메인 콘텐츠 영역 */}
-              <main className={`fixed right-0 bottom-0 overflow-hidden transition-all duration-300 ease-in-out ${
+              <main className={`fixed right-0 bottom-0 overflow-auto transition-all duration-300 ease-in-out ${
                 isMobile 
                   ? 'left-0 top-0' 
-                  : `${isSidebarCollapsed ? 'left-[50px]' : 'left-[250px]'} top-[56px]`
-              }`}>
+                  : `${isSidebarCollapsed ? 'left-[60px]' : 'left-[300px]'} top-[56px]`
+              } h-[calc(100vh-56px)]`}>
                 {children}
               </main>
             </div>

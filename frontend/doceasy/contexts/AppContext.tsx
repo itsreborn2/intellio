@@ -45,6 +45,7 @@ type Action =
   // Sidebar, ProjectCategory에서 사용하는 action
   | { type: typeof actionTypes.UPDATE_RECENT_PROJECTS; payload: IRecentProjectsResponse }
   | { type: typeof actionTypes.UPDATE_CATEGORY_PROJECTS; payload: { [key: string]: IProject[] } }
+  | { type: typeof actionTypes.DELETE_PROJECT; payload: string }
 
   // TableSection에서 사용하는 action
   | { type: typeof actionTypes.ADD_DOCUMENTS; payload: IDocument[] }
@@ -76,7 +77,7 @@ const initialState: AppState = {
   documents: {},
   messages: [],
   analysis: {
-    mode: 'chat',  // 기본값을 chat으로 설정
+    mode: 'table',  // 기본값을 table로 변경
     columns: ['Document'],
     columnPrompts: {},
     columnOriginalPrompts: {},
@@ -149,12 +150,15 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case actionTypes.SET_VIEW:
+
+
       return {
         ...state,
         currentView: action.payload,
         analysis: {
           ...state.analysis,
-          mode: action.payload === 'chat' ? 'chat' : 'table'  // 뷰 변경 시 모드만 변경하고 다른 상태는 유지
+          mode: action.payload === 'chat' ? 'chat' : 'table',  // 뷰 변경 시 모드만 변경하고 다른 상태는 유지
+
         }
       }
 
@@ -220,11 +224,19 @@ const appReducer = (state: AppState, action: Action): AppState => {
             .map(doc => doc.id)
         : state.analysis.selectedDocumentIds;  // 테이블 모드가 아닐 때는 기존 선택 유지
 
+      // 테이블 모드인데 선택된 문서가 없으면 현재 프로젝트의 모든 문서를 선택
+      const finalSelectedIds = (action.payload === 'table' && selectedIds.length === 0)
+        ? Object.values(state.documents)
+            .filter(doc => doc.project_id === state.currentProjectId)
+            .map(doc => doc.id)
+        : selectedIds;
+
       console.log('SET_MODE 상태:', {
         mode: action.payload,
         currentProjectId: state.currentProjectId,
         documentsCount: Object.keys(state.documents).length,
-        selectedIds
+        selectedIds: finalSelectedIds,
+        documentsInProject: Object.values(state.documents).filter(doc => doc.project_id === state.currentProjectId).length
       });
 
       return {
@@ -232,7 +244,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         analysis: {
           ...state.analysis,
           mode: action.payload,
-          selectedDocumentIds: selectedIds
+          selectedDocumentIds: finalSelectedIds
         }
       }
 
@@ -250,14 +262,37 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
       }
 
-    
-
     case actionTypes.DELETE_COLUMN:
+      // 문서의 added_col_context에서 삭제된 컬럼을 제거
+      const deletedColumnName = action.payload;
+      const updatedDocsAfterDelete = { ...state.documents };
+      
+      // 모든 문서를 순회하며 added_col_context 업데이트
+      Object.keys(updatedDocsAfterDelete).forEach(docId => {
+        const doc = updatedDocsAfterDelete[docId];
+        if (doc.added_col_context && doc.added_col_context.length > 0) {
+          // 해당 컬럼명을 제외한 새로운 배열 생성
+          doc.added_col_context = doc.added_col_context.filter(
+            col => col.header !== deletedColumnName
+          );
+        }
+      });
+      
+      console.log(`컬럼 삭제: ${deletedColumnName}`);
+      
       return {
         ...state,
+        documents: updatedDocsAfterDelete,
         analysis: {
           ...state.analysis,
-          columns: state.analysis.columns.filter(col => col !== action.payload)
+          columns: state.analysis.columns.filter(col => col !== deletedColumnName),
+          // 컬럼 프롬프트도 함께 제거
+          columnPrompts: Object.fromEntries(
+            Object.entries(state.analysis.columnPrompts).filter(([key]) => key !== deletedColumnName)
+          ),
+          columnOriginalPrompts: Object.fromEntries(
+            Object.entries(state.analysis.columnOriginalPrompts).filter(([key]) => key !== deletedColumnName)
+          )
         }
       }
 
@@ -556,9 +591,27 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
 
     case actionTypes.SET_DOCUMENT_LIST:
+      // 테이블 모드인 경우 자동으로 모든 문서 선택
+      const documentList = action.payload;
+      const documentsArray = Object.values(documentList);
+      
+      // 현재 프로젝트의 문서들만 필터링
+      const currentProjectDocIds = documentsArray
+        .filter(doc => doc.project_id === state.currentProjectId)
+        .map(doc => doc.id);
+        
+      // 테이블 모드일 때만 문서 선택
+      const updatedSelectedDocIds = state.analysis.mode === 'table' 
+        ? currentProjectDocIds 
+        : state.analysis.selectedDocumentIds;
+        
       return {
         ...state,
-        documents: action.payload
+        documents: documentList,
+        analysis: {
+          ...state.analysis,
+          selectedDocumentIds: updatedSelectedDocIds
+        }
       };
 
     case actionTypes.UPDATE_CATEGORY_PROJECTS:
@@ -623,6 +676,28 @@ const appReducer = (state: AppState, action: Action): AppState => {
         ...state,
         documents: docsWithUpdatedColumn
       }
+
+    case actionTypes.DELETE_PROJECT:
+      // 프로젝트 ID로 최근 프로젝트 목록에서 삭제
+      const projectId = action.payload;
+      const updatedRecentProjects = {
+        today: state.recentProjects.today.filter(p => p.id !== projectId),
+        last_7_days: state.recentProjects.last_7_days.filter(p => p.id !== projectId),
+        last_30_days: state.recentProjects.last_30_days ? state.recentProjects.last_30_days.filter(p => p.id !== projectId) : []
+      };
+      
+      // 현재 선택된 프로젝트가 삭제된 프로젝트인 경우 초기 상태로 리셋
+      if (state.currentProjectId === projectId) {
+        return {
+          ...initialState,
+          recentProjects: updatedRecentProjects
+        };
+      }
+      
+      return {
+        ...state,
+        recentProjects: updatedRecentProjects
+      };
 
     default:
       newState = state;

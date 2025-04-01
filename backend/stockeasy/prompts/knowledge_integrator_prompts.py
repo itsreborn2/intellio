@@ -58,10 +58,12 @@ def format_knowledge_integrator_prompt(
     keywords: str = None,
     telegram_results: str = None,
     report_results: str = None,
+    confidential_results: str = None,
     financial_results: str = None,
     industry_results: str = None,
     telegram_importance: int = 5,
     report_importance: int = 5,
+    confidential_importance: int = 5,
     financial_importance: int = 5,
     industry_importance: int = 5
 ) -> str:
@@ -98,6 +100,9 @@ def format_knowledge_integrator_prompt(
     
     if industry_results:
         collected_information += f"산업 동향 분석 결과 (중요도: {industry_importance}/10):\n{industry_results}\n\n"
+    
+    if confidential_results:
+        collected_information += f"비공개 자료 검색 결과 (중요도: {confidential_importance}/10):\n{confidential_results}\n\n"
     
     if not collected_information:
         collected_information = "수집된 정보가 없습니다."

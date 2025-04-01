@@ -33,7 +33,8 @@ class ParallelSearchAgent(BaseAgent):
             "telegram_retriever", 
             "report_analyzer", 
             "financial_analyzer", 
-            "industry_analyzer"
+            "industry_analyzer",
+            "confidential_analyzer"
         ]
     
     async def process(self, state: AgentState) -> AgentState:
@@ -63,6 +64,19 @@ class ParallelSearchAgent(BaseAgent):
         # processing_status가 없으면 초기화
         if "processing_status" not in state:
             state["processing_status"] = {}
+            
+        # 커스텀 프롬프트 템플릿 정보 확인 및 복사
+        custom_prompt_templates = {}
+        if "custom_prompt_template" in state:
+            # 현재 에이전트에 적용된 템플릿이 있으면 모든 하위 에이전트에 전달
+            for agent_name in self.search_agent_names:
+                custom_prompt_templates[agent_name] = state["custom_prompt_template"]
+            logger.info(f"현재 커스텀 프롬프트 템플릿을 모든 검색 에이전트에 적용합니다.")
+        
+        # 이미 custom_prompt_templates가 있으면 병합
+        if "custom_prompt_templates" in state:
+            custom_prompt_templates.update(state["custom_prompt_templates"])
+            logger.info(f"기존 커스텀 프롬프트 템플릿 병합 완료. 적용 에이전트: {list(custom_prompt_templates.keys())}")
         
         # 실행할 검색 에이전트 목록 생성
         search_agents = []
@@ -78,9 +92,10 @@ class ParallelSearchAgent(BaseAgent):
             # 실행 계획 기반 확인
             if agent_name in execution_order:
                 should_execute = True
-                
+            
             # 데이터 요구사항 기반 확인
             if data_requirements:
+                
                 if agent_name == "telegram_retriever" and data_requirements.get("telegram_needed", False):
                     should_execute = True
                 elif agent_name == "report_analyzer" and data_requirements.get("reports_needed", False):
@@ -89,7 +104,10 @@ class ParallelSearchAgent(BaseAgent):
                     should_execute = True
                 elif agent_name == "industry_analyzer" and data_requirements.get("industry_data_needed", False):
                     should_execute = True
-            
+                elif agent_name == "confidential_analyzer" and data_requirements.get("confidential_data_needed", False):
+                    logger.info(f"비공개 자료 필요: {agent_name}, {data_requirements}")
+                    should_execute = True
+            #logger.info(f"데이터 요구사항: {should_execute} {agent_name}, {data_requirements}")
             # 에이전트가 존재하고 실행이 필요한 경우 목록에 추가
             if should_execute and agent_name in self.agents and self.agents[agent_name]:
                 search_agents.append((agent_name, self.agents[agent_name]))
@@ -110,8 +128,13 @@ class ParallelSearchAgent(BaseAgent):
         for name, agent in search_agents:
             # 처리 상태 초기화 - 우선 processing 상태로 설정
             state["processing_status"][name] = "processing"
+            # 복사본 생성 및 커스텀 템플릿 정보 추가
+            agent_state = copy.deepcopy(state)
+            # 커스텀 프롬프트 템플릿 정보 추가
+            if custom_prompt_templates:
+                agent_state["custom_prompt_templates"] = custom_prompt_templates
             # 비동기 작업 생성
-            tasks.append(self._run_agent(name, agent, copy.deepcopy(state)))
+            tasks.append(self._run_agent(name, agent, agent_state))
         
         # 병렬로 모든 에이전트 실행
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -180,7 +203,7 @@ class ParallelSearchAgent(BaseAgent):
         # 검색 결과가 비어있는지 확인
         has_data = False
         for key, value in state["retrieved_data"].items():
-            if key in ["telegram_messages", "report_data", "financial_data", "industry_data"] and value:
+            if key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data"] and value:
                 has_data = True
                 logger.info(f"검색 결과 있음: {key}에 {len(value)}개 항목")
                 break
@@ -241,7 +264,40 @@ class ParallelSearchAgent(BaseAgent):
         try:
             logger.info(f"에이전트 {name} 실행 시작")
             start_time = time.time()
+            
+            # 콜백 처리 - custom_prompt_template 적용
+            # 커스텀 프롬프트 템플릿 확인
+            custom_prompt_templates = state.get("custom_prompt_templates", {})
+            
+            # 에이전트별 커스텀 프롬프트가 있으면 상태에 추가
+            if name in custom_prompt_templates:
+                # 상태에 커스텀 프롬프트 템플릿 추가
+                state["custom_prompt_template"] = custom_prompt_templates[name]
+                logger.info(f"병렬 실행 - 에이전트 {name}의 상태에 커스텀 프롬프트 템플릿 추가됨")
+            
+            # 그래프의 콜백을 직접 호출하기 위한 시도
+            try:
+                from stockeasy.graph.agent_registry import get_graph
+                graph = get_graph()
+                if graph and hasattr(graph, "_execute_callbacks"):
+                    # on_agent_start 콜백 수동 실행
+                    graph._execute_callbacks('agent_start', name, state)
+                    logger.info(f"병렬 실행 - 에이전트 {name}에 대한 on_agent_start 콜백 수동 실행")
+            except Exception as callback_error:
+                logger.warning(f"병렬 실행 - 에이전트 {name}의 콜백 실행 중 오류: {str(callback_error)}")
+            
+            # 에이전트 처리 실행
             result = await agent.process(state)
+            
+            # 처리 완료 후 콜백 실행 시도
+            try:
+                if graph and hasattr(graph, "_execute_callbacks"):
+                    # on_agent_end 콜백 수동 실행
+                    graph._execute_callbacks('agent_end', name, result)
+                    logger.info(f"병렬 실행 - 에이전트 {name}에 대한 on_agent_end 콜백 수동 실행")
+            except Exception as callback_error:
+                logger.warning(f"병렬 실행 - 에이전트 {name}의 종료 콜백 실행 중 오류: {str(callback_error)}")
+            
             end_time = time.time()
             logger.info(f"에이전트 {name} 실행 완료. 시간: {end_time - start_time:.2f}초")
             return result

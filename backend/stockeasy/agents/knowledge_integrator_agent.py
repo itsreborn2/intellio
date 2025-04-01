@@ -87,8 +87,45 @@ class KnowledgeIntegratorAgent(BaseAgent):
             stock_code = entities.get("stock_code", state.get("stock_code"))
             stock_name = entities.get("stock_name", state.get("stock_name"))
             
-            # 새로운 구조에서 각 에이전트 결과 추출
+            # 새로운 구조에서 각 에이전트 결과 추출 및 검증
             agent_results = state.get("agent_results", {})
+            
+            # 중요: 현재 세션이 초기화되었는지 확인 - 세션 ID와 함께 로깅
+            session_id = state.get("session_id", "unknown_session")
+            if "knowledge_integrator" in agent_results and session_id:
+                logger.warning(f"세션 {session_id}에서 knowledge_integrator 에이전트 결과가 이미 존재합니다. 이전 결과를 유지하지 않고 새로운 결과를 생성합니다.")
+                # 기존 knowledge_integrator 결과 제거 (다른 에이전트 결과는 유지)
+                agent_results.pop("knowledge_integrator", None)
+            
+            # agent_results에 있는 각 에이전트 결과가 유효한지 검증
+            # 1. 관련 없는 종목 정보가 포함된 결과 필터링
+            # 2. 이전 세션에서 잘못 포함된 결과 필터링
+            validated_agent_results = {}
+            
+            for agent_name, agent_result in agent_results.items():
+                # 기본적인 유효성 검사
+                if not agent_result or agent_result.get("status") != "success" or not agent_result.get("data"):
+                    continue
+                
+                # 에이전트 메타데이터 검증 (가능한 경우)
+                metadata = agent_result.get("metadata", {})
+                result_stock_name = metadata.get("stock_name")
+                result_stock_code = metadata.get("stock_code")
+                
+                # 종목 정보가 있는 경우 현재 종목과 일치하는지 확인
+                if (result_stock_name and stock_name and result_stock_name != stock_name) or \
+                   (result_stock_code and stock_code and result_stock_code != stock_code):
+                    logger.warning(f"에이전트 {agent_name}의 결과가 현재 쿼리의 종목과 일치하지 않습니다. 건너뜁니다.")
+                    continue
+                
+                # 에이전트 결과 검증 통과 - 유효한 결과로 저장
+                validated_agent_results[agent_name] = agent_result
+            
+            # 검증된 에이전트 결과로 원래 agent_results 업데이트
+            agent_results = validated_agent_results
+            
+            # 검증된 agent_results를 상태에 다시 저장 (중요: 이후 다른 에이전트들이 사용할 수 있게)
+            state["agent_results"] = agent_results
             
             # 텔레그램 검색 결과 추출
             telegram_results = "정보 없음"
@@ -126,6 +163,16 @@ class KnowledgeIntegratorAgent(BaseAgent):
                             industry_results = self._format_industry_results(analysis)
                     else:
                         industry_results = self._format_industry_results(industry_agent["data"])
+
+            confidential_results = "정보 없음"
+            if "confidential_analyzer" in agent_results:
+                confidential_agent = agent_results["confidential_analyzer"]
+                if confidential_agent.get("status") == "success" and confidential_agent.get("data"):
+                    confidential_results = self._format_confidential_results(confidential_agent)
+
+            
+            # 검증 결과 로깅
+            logger.info(f"쿼리 '{query}'에 대한 검증된 에이전트 결과: {list(agent_results.keys())}")
             
             # 데이터 중요도 설정 (기본값: 5/10)
             data_importance = state.get("data_importance", {})
@@ -133,7 +180,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
             report_importance = data_importance.get("report_analyzer", 5)
             financial_importance = data_importance.get("financial_analyzer", 5)
             industry_importance = data_importance.get("industry_analyzer", 5)
-            
+            confidential_importance = data_importance.get("confidential_analyzer", 5)
                 
             logger.info(f"KnowledgeIntegratorAgent integrating results for query: {query}")
             
@@ -147,10 +194,12 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 report_results=report_results,
                 financial_results=financial_results,
                 industry_results=industry_results,
+                confidential_results=confidential_results,
                 telegram_importance=telegram_importance,
                 report_importance=report_importance,
                 financial_importance=financial_importance,
-                industry_importance=industry_importance
+                industry_importance=industry_importance,
+                confidential_importance=confidential_importance
             )
             
             # user_id 추출
@@ -347,30 +396,32 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 content = report.get('content', '내용 없음')
                 formatted += f"내용: {content}\n"
                 
-                # # 분석 정보가 있는 경우 우선적으로 사용
-                # has_analysis = False
-                # if "analysis" in report and report["analysis"]:
-                #     analysis = report["analysis"]
-                #     # llm_response 키 사용 (report_analyzer_agent의 실제 출력 키)
-                #     if "llm_response" in analysis:
-                #         formatted += f"분석 결과: {analysis.get('llm_response', '')}\n"
-                #         has_analysis = True
-                #     # 투자 의견 정보 추가
-                #     if "investment_opinions" in analysis and analysis["investment_opinions"]:
-                #         opinions = analysis["investment_opinions"]
-                #         formatted += "투자의견: "
-                #         for op in opinions[:2]:  # 처음 2개만 표시
-                #             formatted += f"{op.get('source', '')}: {op.get('opinion', '없음')} (목표가: {op.get('target_price', '없음')}), "
-                #         formatted += "\n"
-                #     # 종합 의견이 있는 경우 추가
-                #     if "opinion_summary" in analysis and analysis["opinion_summary"]:
-                #         formatted += f"종합의견: {analysis.get('opinion_summary', '')}\n"
+                   
+                formatted += "---\n"
+            
+        return formatted
+    def _format_confidential_results(self, confidential_agent: List[Dict[str, Any]]) -> str:
+        """기업 리포트 결과를 문자열로 포맷팅"""
+
+        confidential_data = confidential_agent["data"]
+        if not confidential_data:
+            return "비공개 자료 검색 결과 없음"
+        analysis = confidential_data.get("analysis", None)
+        searched_reports = confidential_data.get("searched_reports", [])
+            
+        formatted = f"비공개 자료 검색 결과[{len(searched_reports)}개]:\n"
+        if analysis: # 분석결과가 있으면 결과만 리턴.
+            if "llm_response" in analysis:
+                formatted += f"분석 결과: {analysis.get('llm_response', '')}\n"
+        else:
+            # 분석결과가 없다면, 찾은 문서 내용을 리턴.
+            for i, report in enumerate(searched_reports):
+                formatted += f"[{i+1}] 제목: {report.get('title', '제목 없음')}\n"
+                formatted += f"출처: 미상\n"
+                formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
+                content = report.get('content', '내용 없음')
+                formatted += f"내용: {content}\n"
                 
-                # # 분석 정보가 없는 경우에만 원본 내용 추가 
-                # if not has_analysis:
-                #     content = report.get('content', '내용 없음')
-                #     formatted += f"내용: {content}\n"
-                    
                 formatted += "---\n"
             
         return formatted

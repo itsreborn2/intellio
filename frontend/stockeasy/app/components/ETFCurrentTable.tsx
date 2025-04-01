@@ -796,8 +796,8 @@ export default function ETFCurrentTable() {
   
   // 변동률에 따른 색상 클래스 반환 함수
   const getChangeColorClass = (change: number) => {
-    if (change > 0) return 'text-red-500';
-    if (change < 0) return 'text-blue-500';
+    if (change > 0) return 'text-red-400';
+    if (change < 0) return 'text-blue-400';
     return '';
   };
 
@@ -841,8 +841,8 @@ export default function ETFCurrentTable() {
   // 변동률에 따른 색상 클래스 반환 함수 (평균용)
   const getAverageColorClass = (change: string) => {
     const numValue = parseFloat(change.replace('%', ''));
-    if (numValue > 0) return 'text-red-500';
-    if (numValue < 0) return 'text-blue-500';
+    if (numValue > 0) return 'text-red-400';
+    if (numValue < 0) return 'text-blue-400';
     return 'text-gray-500';
   };
 
@@ -862,8 +862,8 @@ export default function ETFCurrentTable() {
         <span 
           className={`text-xs font-medium ${
             crossover.type === 'cross_above' 
-              ? 'text-red-500' 
-              : 'text-blue-500'
+              ? 'text-red-400' 
+              : 'text-blue-400'
           }`}
           style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
         >
@@ -1006,12 +1006,12 @@ export default function ETFCurrentTable() {
 
   return (
     <div className="bg-white rounded-md shadow">
-      <div ref={headerRef} className="p-4 border-b border-gray-200 font-medium flex justify-between items-center">
+      <div ref={headerRef} className="p-4 border-b border-gray-200 flex justify-between items-center">
         <div className="flex items-center space-x-4">
-          <div style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>ETF 현재가</div>
+          <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>ETF 현재가</h2>
         </div>
         <div className="flex items-center space-x-2">
-          <span className="text-xs text-gray-600">당일 섹터/ETF 등락율</span>
+          <span className="text-xs text-gray-600" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 섹터/ETF 등락율</span>
           <TableCopyButton
             tableRef={tableRef}
             headerRef={headerRef}
@@ -1092,7 +1092,7 @@ export default function ETFCurrentTable() {
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
-                    width: '40px',
+                    width: '38px',
                     height: '35px',
                     fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                   }}
@@ -1113,14 +1113,14 @@ export default function ETFCurrentTable() {
                 scope="col"
                 className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
-                  width: '80px',
+                  width: '78px',
                   height: '35px',
                   fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                 }}
               >
                 포지션
               </th>
-              {['20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
+              {['20일선 이격', '돌파/이탈', '대표종목(RS)'].map((header) => (
                 <th
                   key={header}
                   scope="col"
@@ -1148,7 +1148,7 @@ export default function ETFCurrentTable() {
               ))}
             </tr>
           </thead>
-          <tbody className="bg-gray-50">
+          <tbody className="bg-white">
             {(() => {
               // 산업별로 데이터를 그룹화하고 각 산업의 첫 번째 행 인덱스를 저장
               const industryGroups: { [industry: string]: { rows: Record<string, any>[], firstRowIndex: number } } = {};
@@ -1189,7 +1189,7 @@ export default function ETFCurrentTable() {
                           <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-md bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                             {industry === '소비재/음식료' ? '소비재/음식료' : industry}
                           </span>
-                          <span className={`mt-1 ml-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`} style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`} style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                             {calculateIndustryAverage(industry, sortedData)}
                           </span>
                         </div>
@@ -1210,7 +1210,7 @@ export default function ETFCurrentTable() {
                       const value = row[header];
                       const numericValue = isChangeColumn ? parseFloat(value) : null;
                       const colorClass = isChangeColumn
-                        ? numericValue! > 0 ? 'text-red-500' : numericValue! < 0 ? 'text-blue-500' : 'text-gray-600'
+                        ? numericValue! > 0 ? 'text-red-400' : numericValue! < 0 ? 'text-blue-400' : 'text-gray-600'
                         : '';
                       
                       return (
@@ -1218,7 +1218,7 @@ export default function ETFCurrentTable() {
                           key={header}
                           className={`px-4 py-1 whitespace-nowrap text-xs ${colorClass} border border-gray-200 ${isChangeColumn || isTickerColumn ? 'text-center' : ''} ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`}
                           style={{ 
-                            width: '40px', 
+                            width: '38px', 
                             height: '16px',
                             fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                           }}
@@ -1228,34 +1228,14 @@ export default function ETFCurrentTable() {
                         </td>
                       );
                     })}
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '80px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '78px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                       {/* 포지션 상태 표시 */}
-                      <div className="flex items-center justify-center h-full">
-                        {(() => {
-                          const ticker = row['티커'];
-                          if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) return '-';
-                          
-                          // 현재가와 20일 이동평균선 데이터 가져오기
-                          const priceData = stockPriceData[ticker];
-                          if (!priceData || priceData.length < 20) return '-';
-                          
-                          const currentPrice = priceData[priceData.length - 1].price;
-                          const ma20 = priceData.slice(-20).reduce((acc, val) => acc + val.price, 0) / 20;
-                          
-                          // 현재 상태 (20일선 위 또는 아래)
-                          const isAboveMA = currentPrice > ma20;
-                          
-                          // 유지 기간 계산
-                          const duration = calculatePositionDuration(ticker);
-                          const durationText = duration !== null ? `+${duration}일` : '';
-                          
-                          return (
-                            <span className={`text-xs font-medium px-1 sm:px-2 py-0.5 sm:py-1 rounded-md ${isAboveMA ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}
-                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
-                              {isAboveMA ? `유지 ${durationText}` : `이탈 ${durationText}`}
-                            </span>
-                          );
-                        })()}
+                      <div className="flex items-center justify-center">
+                        <div className={`flex items-center justify-center w-20 h-6 rounded-full ${getPositionStatusText(row['티커']).startsWith('유지') ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}`}>
+                          <span className="text-xs font-medium" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                            {getPositionStatusText(row['티커'])}
+                          </span>
+                        </div>
                       </div>
                     </td>
                     {['20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
@@ -1281,15 +1261,15 @@ export default function ETFCurrentTable() {
                             let colorClass = 'text-gray-600';
                             if (!isNaN(positionValue)) {
                               if (positionValue > 0) {
-                                colorClass = 'text-red-500';
+                                colorClass = 'text-red-400';
                               } else if (positionValue < 0) {
-                                colorClass = 'text-blue-500';
+                                colorClass = 'text-blue-400';
                               }
                             }
                             
                             return (
                               <div className="flex items-center justify-center h-full">
-                                <span className={`text-xs font-medium ${colorClass}`}>
+                                <span className={`text-xs font-medium ${colorClass}`} style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                                   {position}
                                 </span>
                               </div>
@@ -1335,9 +1315,9 @@ export default function ETFCurrentTable() {
                                   <div key={index} className="flex items-center">
                                     <span className="text-xs" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>{item.name}</span>
                                     {item.rs && (
-                                      <span className={`text-xs ml-1 px-1 sm:px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-lg ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable"
+                                      <span className={`text-xs ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable"
                                             style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
-                                        {item.rs}
+                                        ({item.rs})
                                       </span>
                                     )}
                                   </div>

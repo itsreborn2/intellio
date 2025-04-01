@@ -39,6 +39,7 @@ export interface IApiProject {
 export interface IProject {
   id: string
   name: string
+  title?: string
   description?: string
   is_temporary: boolean
   retention_period: string

@@ -88,6 +88,7 @@ class OrchestratorAgent(BaseAgent):
             "report_analyzer": "기업 리포트 검색 및 분석 에이전트",
             "financial_analyzer": "재무제표 분석 에이전트",
             "industry_analyzer": "산업 동향 분석 에이전트",
+            "confidential_analyzer": "비공개 자료 검색 및 분석 에이전트",
             "knowledge_integrator": "정보 통합 에이전트",
             "summarizer": "요약 에이전트",
             "response_formatter": "응답 형식화 에이전트",

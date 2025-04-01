@@ -164,7 +164,7 @@ export function useFileUpload(): UseFileUploadReturn {
 
       if (!existingProjectId && !options.skipChatMessages) {
         // 새 프로젝트인 경우에만 채팅 모드로 전환
-        dispatch({ type: actionTypes.SET_VIEW, payload: 'chat' })
+        dispatch({ type: actionTypes.SET_VIEW, payload: 'table' })
       }
 
     } catch (error) {

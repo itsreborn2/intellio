@@ -46,8 +46,8 @@ export const DefaultTemplate = () => {
   const { state, dispatch } = useApp()
   const { isAuthenticated } = useAuth()
   const [activeTab, setActiveTab] = useState<'chat' | 'table'>('chat')
-  const [chatExpanded, setChatExpanded] = useState(true)
-  const [tableExpanded, setTableExpanded] = useState(true)
+  const [chatExpanded, setChatExpanded] = useState(false)
+  const [tableExpanded, setTableExpanded] = useState(false)
   const isMobile = useIsMobile();
 
   // 채팅 섹션 토글 핸들러
@@ -78,8 +78,8 @@ export const DefaultTemplate = () => {
   // 화면 크기 변경 시 레이아웃 조정
   useEffect(() => {
     if (!isMobile) {
-      setChatExpanded(true);
-      setTableExpanded(true);
+      setChatExpanded(false);
+      setTableExpanded(false);
     }
   }, [isMobile]);
 
@@ -107,6 +107,13 @@ export const DefaultTemplate = () => {
     window.addEventListener('switchToTab', handleSwitchTab as EventListener);
     return () => window.removeEventListener('switchToTab', handleSwitchTab as EventListener);
   }, []);
+
+  // 버튼 텍스트와 아이콘 일치시키기
+  const chatButtonIcon = chatExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />;
+  const chatButtonText = chatExpanded ? '복원' : '채팅 영역 최대화';
+  
+  const tableButtonIcon = tableExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />;
+  const tableButtonText = tableExpanded ? '복원' : '테이블 영역 최대화';
 
   const renderContent = () => {
     switch (state.currentView) {
@@ -176,7 +183,12 @@ export const DefaultTemplate = () => {
           return (
             <div className="h-full w-full flex flex-col">
               <ResizablePanelGroup direction="vertical" className="h-full">
-                <ResizablePanel defaultSize={50} minSize={20}>
+                <ResizablePanel 
+                  defaultSize={50} 
+                  minSize={20} 
+                  className={chatExpanded ? "!flex-grow" : ""}
+                  style={{ display: tableExpanded ? 'none' : undefined }}
+                >
                   <div 
                     className="relative bg-background h-full transition-all duration-300 ease-in-out text-sm"
                     style={{
@@ -192,13 +204,18 @@ export const DefaultTemplate = () => {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 border bg-background hover:bg-accent transition-all duration-100"
-                              onClick={() => setChatExpanded(!chatExpanded)}
+                              onClick={() => {
+                                setChatExpanded(!chatExpanded);
+                                if (!chatExpanded) {
+                                  setTableExpanded(false); // 채팅 영역 최대화 시 테이블 영역 복원
+                                }
+                              }}
                             >
-                              {chatExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                              {chatButtonIcon}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" align="end">
-                            <p>{chatExpanded ? '복원' : '채팅 영역 최대화'}</p>
+                            <p>{chatButtonText}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -207,9 +224,14 @@ export const DefaultTemplate = () => {
                   </div>
                 </ResizablePanel>
                 
-                <ResizableHandle withHandle />
+                <ResizableHandle withHandle className={chatExpanded || tableExpanded ? "hidden" : ""} />
                 
-                <ResizablePanel defaultSize={50} minSize={20}>
+                <ResizablePanel 
+                  defaultSize={50} 
+                  minSize={20}
+                  className={tableExpanded ? "!flex-grow" : ""}
+                  style={{ display: chatExpanded ? 'none' : undefined }}
+                >
                   <div 
                     className="relative bg-background h-full transition-all duration-200 ease-in-out text-sm"
                     style={{
@@ -225,13 +247,18 @@ export const DefaultTemplate = () => {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 border bg-background hover:bg-accent transition-all duration-100"
-                              onClick={() => setTableExpanded(!tableExpanded)}
+                              onClick={() => {
+                                setTableExpanded(!tableExpanded);
+                                if (!tableExpanded) {
+                                  setChatExpanded(false); // 테이블 영역 최대화 시 채팅 영역 복원
+                                }
+                              }}
                             >
-                              {tableExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                              {tableButtonIcon}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" align="end">
-                            <p>{tableExpanded ? '복원' : '테이블 영역 최대화'}</p>
+                            <p>{tableButtonText}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

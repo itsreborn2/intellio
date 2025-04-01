@@ -202,7 +202,10 @@ async def _search_messages(search_query: str, k: int, threshold: float, user_id:
             )
 
             # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
-            parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            if user_id != "test_user":
+                parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+            else:
+                parsed_user_id = None
 
             semantic_retriever_config = SemanticRetrieverConfig(min_score=threshold,
                                                user_id=parsed_user_id,
