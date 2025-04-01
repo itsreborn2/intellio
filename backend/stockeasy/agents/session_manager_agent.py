@@ -57,17 +57,18 @@ class SessionManagerAgent(BaseAgent):
             if session_id:
                 logger.info(f"세션 ID로 세션 검색 중: {session_id}")
                 if "test_session" in session_id:
-                    state["user_id"] = "test_user"
-                    state["user_email"] = "test_user"
+                    state["user_id"] = None
+                    state["user_email"] = None
                     state["is_authenticated"] = True
 
                     # 새로운 컨텍스트 설정
                     state["user_context"] = {
-                        "user_id": "test_user",
-                        "user_email": "test_user",
+                        "user_id": None,
+                        "user_email": None,
                         "is_authenticated": True,
                         "last_accessed_at": datetime.now()
                     }
+                    logger.info(f"test_session 세션 찾음: {session_id}")
                     return state
                 session = await self.user_service.get_active_session(session_id)
                 

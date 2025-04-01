@@ -575,9 +575,9 @@ class AgentLLM:
             except Exception as e:
                 # 에러 로깅
                 if provider_idx == 0:
-                    logger.warning(f"기본 LLM 비동기 호출 실패: {self.agent_name}, provider={self.llm_config.get('provider')}, 오류: {str(e)}")
+                    logger.info(f"기본 LLM 비동기 호출 실패: {self.agent_name}, provider={self.llm_config.get('provider')}, 오류: {str(e)}")
                 else:
-                    logger.warning(f"폴백 LLM 비동기 호출 실패 ({provider_idx}/{max_retries}): provider={provider_config.get('provider')}, 오류: {str(e)}")
+                    logger.info(f"폴백 LLM 비동기 호출 실패 ({provider_idx}/{max_retries}): provider={provider_config.get('provider')}, 오류: {str(e)}")
                 
                 # 마지막 예외 저장 및 설정 복원
                 last_exception = e
@@ -670,12 +670,13 @@ class AgentLLM:
                 if args and not isinstance(args[0], list):
                     # LLM에게 JSON 형식으로 응답하도록 요청하는 프리픽스 추가
                     schema_str = self.schema.model_json_schema() if hasattr(self.schema, 'model_json_schema') else str(self.schema)
-                    json_instruction = f"\n다음 JSON 스키마에 맞는 형식으로 응답해주세요: {schema_str}\n\n중요: 절대로 Markdown 코드 블록(```)을 사용하지 마세요. 코드 블록 표시 없이 순수한 JSON 형식으로만 응답해주세요. 응답의 시작과 끝에 ```json이나 ``` 기호를 포함하지 마세요.\n\n"
+                    json_instruction = f"\n반드시 다음 JSON 스키마에 맞는 형식으로 응답하고, 요청하지 않은 데이터값은 응답하지 마시오. {schema_str}\n\n중요: 절대로 Markdown 코드 블록(```)을 사용하지 마세요. 코드 블록 표시 없이 순수한 JSON 형식으로만 응답해주세요. 응답의 시작과 끝에 ```json이나 ``` 기호를 포함하지 마세요.\n\n"
                     
                     if isinstance(args[0], str):
                         args = ([HumanMessage(content=args[0]+ json_instruction )],) + args[1:]
                 
-                logger.info(f"[구조화된 출력] 원본 응답 획득을 위한 LLM 호출")
+                logger.info(f"[구조화된 출력][ainvoke]  원본 응답 획득을 위한 LLM 호출")
+                
                 raw_response = await self.agent_llm.ainvoke_with_fallback(
                     *args,
                     user_id=user_id,
@@ -683,7 +684,7 @@ class AgentLLM:
                     db=db,
                     **kwargs
                 )
-                
+                logger.info(f"[구조화된 출력][ainvoke] type : {type(raw_response)}")
                 # 2단계: 응답 내용을 수동으로 Pydantic 모델로 파싱
                 try:
                     content = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
@@ -739,12 +740,13 @@ class AgentLLM:
                 if args and not isinstance(args[0], list):
                     # LLM에게 JSON 형식으로 응답하도록 요청하는 프리픽스 추가
                     schema_str = self.schema.model_json_schema() if hasattr(self.schema, 'model_json_schema') else str(self.schema)
-                    json_instruction = f"다음 JSON 스키마에 맞는 형식으로 응답해주세요: {schema_str}\n\n중요: 절대로 Markdown 코드 블록(```)을 사용하지 마세요. 코드 블록 표시 없이 순수한 JSON 형식으로만 응답해주세요. 응답의 시작과 끝에 ```json이나 ``` 기호를 포함하지 마세요.\n\n"
+                    json_instruction = f"반드시 다음 JSON 스키마에 맞는 형식으로 응답하고, 요청하지 않은 데이터값은 응답하지 마시오.\n{schema_str}\n\n중요: 절대로 Markdown 코드 블록(```)을 사용하지 마세요. 코드 블록 표시 없이 순수한 JSON 형식으로만 응답해주세요. 응답의 시작과 끝에 ```json이나 ``` 기호를 포함하지 마세요.\n\n"
                     
                     if isinstance(args[0], str):
                         args = ([HumanMessage(content=json_instruction + args[0])],) + args[1:]
                 
-                logger.info(f"[구조화된 출력] 원본 응답 획득을 위한 LLM 호출")
+                logger.info(f"[구조화된 출력][invoke] 원본 응답 획득을 위한 LLM 호출")
+
                 raw_response = self.agent_llm.invoke_with_fallback(
                     *args,
                     user_id=user_id,
@@ -752,6 +754,8 @@ class AgentLLM:
                     db=db,
                     **kwargs
                 )
+
+                
                 
                 # 2단계: 응답 내용을 수동으로 Pydantic 모델로 파싱
                 try:

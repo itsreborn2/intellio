@@ -6,10 +6,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
-export const API_ENDPOINT_COMMON = `${API_BASE_URL}/v1`;
-export const API_ENDPOINT_STOCKEASY = `${API_BASE_URL}/v1/stockeasy`;
 
+import { API_ENDPOINT_STOCKEASY } from '../../services/api/index';
 // 타입 정의
 interface AgentPromptConfig {
   agent_name: string

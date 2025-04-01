@@ -49,7 +49,7 @@ class QuestionClassification(TypedDict, total=False):
     """질문 분류 결과"""
     primary_intent: Literal["종목기본정보", "성과전망", "재무분석", "산업동향", "기타"] # 주요 질문 의도
     complexity: Literal["단순", "중간", "복합", "전문가급"]                      # 질문 복잡도
-    expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형"]  # 기대하는 답변 유형
+    expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형", "종합형"]  # 기대하는 답변 유형
 
 
 class DataRequirement(TypedDict, total=False):

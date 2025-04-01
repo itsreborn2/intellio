@@ -807,19 +807,20 @@ class ConfidentialAnalyzerAgent(BaseAgent):
             formatted_analysis_prompt = analysis_prompt.format_prompt()
            
             # 병렬 실행
-            results = await asyncio.gather(
-                self.agent_llm.ainvoke_with_fallback(formatted_analysis_prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db),
-                #self.agent_llm.ainvoke_with_fallback(formatted_opinion_prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db),
-                return_exceptions=True
-            )
+            # results = await asyncio.gather(
+            #     self.agent_llm.ainvoke_with_fallback(formatted_analysis_prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db),
+            #     #self.agent_llm.ainvoke_with_fallback(formatted_opinion_prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db),
+            #     return_exceptions=True
+            # )
+            result = await self.agent_llm.ainvoke_with_fallback(formatted_analysis_prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db)
             
             # 결과 처리
-            analysis_result:AIMessage = results[0] if not isinstance(results[0], Exception) else ""
+            #analysis_result:AIMessage = results[0] if not isinstance(results[0], Exception) else ""
             #opinion_result:AIMessage = results[1] if not isinstance(results[1], Exception) else ""
-            
+            analysis_result = result
             # 예외 로깅
-            if isinstance(results[0], Exception):
-                logger.error(f"리포트 분석 중 오류 발생: {str(results[0])}")
+            # if isinstance(results[0], Exception):
+            #     logger.error(f"리포트 분석 중 오류 발생: {str(results[0])}")
             # if isinstance(results[1], Exception):
             #     logger.error(f"투자 의견 추출 중 오류 발생: {str(results[1])}")
             
@@ -833,7 +834,7 @@ class ConfidentialAnalyzerAgent(BaseAgent):
             #for report in reports:
             analysis_content = analysis_result.content if not isinstance(analysis_result, Exception) else "분석 중 오류가 발생했습니다."
             #opinion_content = opinion_result.content if not isinstance(opinion_result, Exception) else "의견 추출 중 오류가 발생했습니다."
-                
+            analysis_content = analysis_content.strip()
             #report_analyses.append()
             logger.info(f"비공개자료 분석 결과: {analysis_content}")
             return {

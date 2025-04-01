@@ -3,23 +3,23 @@
 import { useState, useEffect } from 'react'
 import { Check, ChevronsUpDown, Plus, Trash } from 'lucide-react'
 
-import { Button } from 'intellio-common/components/ui/button'
+import { Button } from '../../components/ui/button'
 import {
   Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
-} from '../../../main/components/ui/command'
+} from '../../components/ui/command'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from 'intellio-common/components/ui/popover'
-import { Textarea } from '../../../main/components/ui/textarea'
-import { Switch } from '../../../main/components/ui/switch'
-import { Label } from '../../../main/components/ui/label'
-import { cn } from '../../../main/lib/utils'
+} from '../../components/ui/popover'
+import { Textarea } from '../../components/ui/textarea'
+import { Switch } from '../../components/ui/switch'
+import { Label } from '../../components/ui/label'
+import { cn } from '../../lib/utils'
 import { toast } from 'sonner'
 
 export interface IAgentPromptConfig {

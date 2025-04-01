@@ -41,13 +41,13 @@ class Entities(BaseModel):
 class Classification(BaseModel):
     """질문 분류 정보"""
     primary_intent: Literal["종목기본정보", "성과전망", "재무분석", "산업동향", "기타"] = Field(
-        ..., description="주요 질문 의도"
+        ..., description="주요 질문 의도, 반드시 해당 유형 중 하나만 응답해야함."
     )
     complexity: Literal["단순", "중간", "복합", "전문가급"] = Field(
-        ..., description="질문 복잡도"
+        ..., description="질문 복잡도, 반드시 해당 유형 중 하나만 응답해야함."
     )
-    expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형"] = Field(
-        ..., description="기대하는 답변 유형"
+    expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형", "종합형"] = Field(
+        ..., description="기대하는 답변 유형, 반드시 해당 유형 중 하나만 응답해야함."
     )
 
 

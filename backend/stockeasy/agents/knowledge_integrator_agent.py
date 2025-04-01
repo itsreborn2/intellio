@@ -80,6 +80,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
             question_analysis = state.get("question_analysis", {})
             entities = question_analysis.get("entities", {})
             keywords = question_analysis.get("keywords", [])
+            important_keywords = ""
             if keywords:
                 important_keywords = ", ".join(keywords[:3])  # 상위 3개 키워드 사용
 
@@ -174,6 +175,9 @@ class KnowledgeIntegratorAgent(BaseAgent):
             # 검증 결과 로깅
             logger.info(f"쿼리 '{query}'에 대한 검증된 에이전트 결과: {list(agent_results.keys())}")
             
+            # 검증 결과 로깅
+            logger.info(f"쿼리 '{query}'에 대한 검증된 에이전트 결과: {list(agent_results.keys())}")
+            
             # 데이터 중요도 설정 (기본값: 5/10)
             data_importance = state.get("data_importance", {})
             telegram_importance = data_importance.get("telegram_retriever", 5)
@@ -189,7 +193,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 query=query,
                 stock_name=stock_name,
                 stock_code=stock_code,
-                keywords=important_keywords if important_keywords else "",
+                keywords=important_keywords,
                 telegram_results=telegram_results,
                 report_results=report_results,
                 financial_results=financial_results,

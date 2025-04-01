@@ -1,12 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Input } from 'intellio-common/components/ui/input'
-import { Label } from 'intellio-common/components/ui/label'
-import { Textarea } from '../../../main/components/ui/textarea'
-import { Card, CardContent, CardHeader, CardTitle } from '../../../main/components/ui/card'
-import { Switch } from '../../../main/components/ui/switch'
-import { toast } from 'sonner'
+import { Input } from '../../components/ui/input'
+import { Label } from '../../components/ui/label'
+import { Textarea } from '../../components/ui/textarea'
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
+import { Switch } from '../../components/ui/switch'
 
 export interface IVectorDBConfig {
   namespace: string | null
