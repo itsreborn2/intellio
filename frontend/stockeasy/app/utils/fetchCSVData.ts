@@ -15,8 +15,6 @@ import Papa from 'papaparse';
  */
 export const fetchCSVData = async (filePath: string): Promise<string> => {
   try {
-    console.log(`파일 로드 시작: ${filePath}`);
-    
     // 파일 경로가 /로 시작하지 않으면 추가
     const normalizedPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
     
@@ -28,7 +26,6 @@ export const fetchCSVData = async (filePath: string): Promise<string> => {
     }
     
     const data = await response.text();
-    console.log(`파일 로드 완료: ${filePath}`);
     
     return data;
   } catch (error) {

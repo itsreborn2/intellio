@@ -1135,7 +1135,7 @@ function AIChatAreaContent() {
                     height: '26px', // 높이 28px -> 26px로 줄임
                     borderRadius: '6px',
                     border: '1px solid #ddd',
-                    backgroundColor: isMobile ? '#ffffff' : '#f5f5f5',
+                    backgroundColor: '#D8EFE9', // 연한 민트색으로 변경
                     color: '#333',
                      fontSize: '0.7rem',
                     fontWeight: 'normal',
@@ -1194,7 +1194,6 @@ function AIChatAreaContent() {
                   paddingRight: '16px',
                   paddingBottom: '12px',
                   paddingLeft: '16px',
-                  marginLeft: selectedStock ? '8px' : '0',
                   flex: 1,
                   borderRadius: '30px'
                 }}

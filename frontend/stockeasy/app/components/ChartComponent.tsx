@@ -100,7 +100,6 @@ const ChartComponent: React.FC<ChartProps> = ({
   // 시장 지수 데이터 가져오는 함수
   const fetchMarketIndexData = useCallback(async () => {
     if (!marketType) {
-      console.log('시장 구분이 없어 시장 지수 데이터를 가져오지 않습니다.');
       return;
     }
     
@@ -110,14 +109,11 @@ const ChartComponent: React.FC<ChartProps> = ({
       
       // 시장 구분 정규화 (대소문자 구분 없이 처리)
       const normalizedMarketType = marketType.toUpperCase();
-      console.log(`시장 지수 데이터 가져오기: ${normalizedMarketType} (원본: ${marketType})`);
       
       // 시장 지수 로컬 캐시 파일 경로 설정
       const marketIndexPath = normalizedMarketType === 'KOSPI' 
         ? '/requestfile/market-index/1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c.csv'
         : '/requestfile/market-index/1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg.csv';
-      
-      console.log(`시장 지수 파일 경로: ${marketIndexPath}`);
       
       // 로컬 캐시 파일에서 데이터 가져오기
       const response = await fetch(marketIndexPath);
@@ -165,7 +161,6 @@ const ChartComponent: React.FC<ChartProps> = ({
           } as LineData<Time>;
         });
       
-      console.log(`시장 지수 데이터 로드 완료: ${indexData.length}개 데이터 포인트`);
       setMarketIndexData(indexData);
       setMarketIndexLoaded(true);
     } catch (error) {
@@ -214,16 +209,9 @@ const ChartComponent: React.FC<ChartProps> = ({
       ma20SeriesRef.current = null;
     }
     
-    console.log('차트 생성 시작...');
-    console.log(`ChartComponent에 전달된 데이터 타입: ${typeof data}, 배열 여부: ${Array.isArray(data)}`);
-    console.log(`전달된 데이터 길이: ${data ? data.length : '데이터 없음'}`);
-    
     try {
-      // 데이터 유효성 로깅
-      console.log(`ChartComponent: 데이터 수신 완료 (${data.length}개 항목)`);
-      if (data.length > 0) {
-        console.log('첫 번째 데이터 항목:', JSON.stringify(data[0]));
-      } else {
+      // 데이터 유효성 검사
+      if (data.length === 0) {
         console.error('ChartComponent: 데이터가 비어 있습니다.');
         return; // 데이터가 없으면 차트 생성 중단
       }
@@ -239,8 +227,6 @@ const ChartComponent: React.FC<ChartProps> = ({
         !isNaN(item.close)
       );
       
-      console.log('유효한 데이터 개수:', validData.length);
-      
       if (validData.length === 0) {
         console.error('ChartComponent: 유효한 데이터가 없습니다.');
         return; // 유효한 데이터가 없으면 차트 생성 중단
@@ -254,10 +240,10 @@ const ChartComponent: React.FC<ChartProps> = ({
         .map((item: any, index: number) => {
           try {
             // 데이터 형식 로깅
-            console.log(`아이템 #${index} 처리 중 - 데이터 타입:`, typeof item);
-            if (typeof item === 'object' && item !== null) {
-              console.log(`아이템 #${index}의 속성들:`, Object.keys(item).join(', '));
-            }
+            // console.log(`아이템 #${index} 처리 중 - 데이터 타입:`, typeof item);
+            // if (typeof item === 'object' && item !== null) {
+            //   console.log(`아이템 #${index}의 속성들:`, Object.keys(item).join(', '));
+            // }
             
             // 시가, 고가, 저가, 종가 필드 추출
             const openField = extractNumberField(item, ['open', 'Open', 'OPEN', '시가']);
@@ -266,7 +252,7 @@ const ChartComponent: React.FC<ChartProps> = ({
             const closeField = extractNumberField(item, ['close', 'Close', 'CLOSE', '종가']);
             
             // 추출된 값 로깅
-            console.log(`아이템 #${index} 필드 추출 결과: open=${openField}, high=${highField}, low=${lowField}, close=${closeField}`);
+            // console.log(`아이템 #${index} 필드 추출 결과: open=${openField}, high=${highField}, low=${lowField}, close=${closeField}`);
             
             let timestamp: Time;
             let originalTimestamp: number = 0;
@@ -276,11 +262,11 @@ const ChartComponent: React.FC<ChartProps> = ({
               if (/^\d{4}-\d{2}-\d{2}$/.test(item.time)) {
                 try {
                   const [year, month, day] = item.time.split('-').map(Number);
-                  console.log(`날짜 파싱 (하이픈): ${year}년 ${month}월 ${day}일`);
+                  // console.log(`날짜 파싱 (하이픈): ${year}년 ${month}월 ${day}일`);
                   
                   if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
                     originalTimestamp = Math.floor(new Date(Date.UTC(year, month - 1, day)).getTime() / 1000);
-                    console.log(`${item.time}의 타임스탬프 변환 결과: ${originalTimestamp}`);
+                    // console.log(`${item.time}의 타임스탬프 변환 결과: ${originalTimestamp}`);
                   } else {
                     console.error(`유효하지 않은 날짜 범위: ${item.time}`);
                     originalTimestamp = secondsInDay * index;
@@ -294,11 +280,11 @@ const ChartComponent: React.FC<ChartProps> = ({
               else if (/^\d{4}\/\d{2}\/\d{2}$/.test(item.time)) {
                 try {
                   const [year, month, day] = item.time.split('/').map(Number);
-                  console.log(`날짜 파싱 (슬래시): ${year}년 ${month}월 ${day}일`);
+                  // console.log(`날짜 파싱 (슬래시): ${year}년 ${month}월 ${day}일`);
                   
                   if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
                     originalTimestamp = Math.floor(new Date(Date.UTC(year, month - 1, day)).getTime() / 1000);
-                    console.log(`${item.time}의 타임스탬프 변환 결과: ${originalTimestamp}`);
+                    // console.log(`${item.time}의 타임스탬프 변환 결과: ${originalTimestamp}`);
                   } else {
                     console.error(`유효하지 않은 날짜 범위: ${item.time}`);
                     originalTimestamp = secondsInDay * index;
@@ -314,11 +300,11 @@ const ChartComponent: React.FC<ChartProps> = ({
                   const year = parseInt(item.time.substring(0, 4));
                   const month = parseInt(item.time.substring(4, 6));
                   const day = parseInt(item.time.substring(6, 8));
-                  console.log(`날짜 파싱 (8자리): ${year}년 ${month}월 ${day}일`);
+                  // console.log(`날짜 파싱 (8자리): ${year}년 ${month}월 ${day}일`);
                   
                   if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
                     originalTimestamp = Math.floor(new Date(Date.UTC(year, month - 1, day)).getTime() / 1000);
-                    console.log(`${item.time}의 타임스탬프 변환 결과: ${originalTimestamp}`);
+                    // console.log(`${item.time}의 타임스탬프 변환 결과: ${originalTimestamp}`);
                   } else {
                     console.error(`유효하지 않은 날짜 범위: ${item.time}`);
                     originalTimestamp = secondsInDay * index;
@@ -339,7 +325,7 @@ const ChartComponent: React.FC<ChartProps> = ({
                 console.warn(`유효하지 않은 타임스탬프: ${originalTimestamp}, 인덱스 기반 타임스탬프로 대체`);
                 originalTimestamp = secondsInDay * index;
               } else {
-                console.log(`숫자 타임스탬프 사용: ${originalTimestamp}`);
+                // console.log(`숫자 타임스탬프 사용: ${originalTimestamp}`);
               }
             } else {
               console.error(`지원하지 않는 날짜 타입: ${typeof item.time}, 인덱스 기반 타임스탬프 생성`);
@@ -419,18 +405,18 @@ const ChartComponent: React.FC<ChartProps> = ({
         return true;
       });
       
-      console.log(`유효한 캔들 데이터 ${uniqueCandleData.length}개 생성 (중복 제거 후)`);
-      if (uniqueCandleData.length > 0) {
-        console.log('첫 번째 캔들 데이터:', uniqueCandleData[0]);
-        if (uniqueCandleData.length > 1) {
-          console.log('두 번째 캔들 데이터:', uniqueCandleData[1]);
-        }
-        if (uniqueCandleData.length > 2) {
-          console.log('세 번째 캔들 데이터:', uniqueCandleData[2]);
-        }
-      } else {
-        console.error('유효한 캔들 데이터가 없습니다!');
-      }
+      // console.log(`유효한 캔들 데이터 ${uniqueCandleData.length}개 생성 (중복 제거 후)`);
+      // if (uniqueCandleData.length > 0) {
+      //   console.log('첫 번째 캔들 데이터:', uniqueCandleData[0]);
+      //   if (uniqueCandleData.length > 1) {
+      //     console.log('두 번째 캔들 데이터:', uniqueCandleData[1]);
+      //   }
+      //   if (uniqueCandleData.length > 2) {
+      //     console.log('세 번째 캔들 데이터:', uniqueCandleData[2]);
+      //   }
+      // } else {
+      //   console.error('유효한 캔들 데이터가 없습니다!');
+      // }
       
       const chartOptions: DeepPartial<ChartOptions> = {
         width: chartContainerRef.current?.clientWidth,
@@ -517,7 +503,7 @@ const ChartComponent: React.FC<ChartProps> = ({
       candlestickSeriesRef.current = candleSeries;
 
       if (uniqueCandleData.length > 0) {
-        console.log('캔들 차트 데이터 설정 중...');
+        // console.log('캔들 차트 데이터 설정 중...');
         candleSeries.setData(uniqueCandleData);
       } else {
         console.error('캔들 데이터가 비어있습니다.');
@@ -529,7 +515,7 @@ const ChartComponent: React.FC<ChartProps> = ({
       }
 
       if (showVolume) {
-        console.log('볼륨 데이터 생성 중...');
+        // console.log('볼륨 데이터 생성 중...');
         
         const volumeData = uniqueCandleData.map((candle: any) => {
           let volume = 0;
@@ -538,7 +524,7 @@ const ChartComponent: React.FC<ChartProps> = ({
             const candleTimeStr = typeof candle.time === 'number' ? 
               new Date(candle.time * 1000).toISOString().split('T')[0] : String(candle.time);
             
-            console.log(`볼륨 데이터 찾는 중 - 캔들 시간: ${candleTimeStr}, 타입: ${typeof candle.time}`);
+            // console.log(`볼륨 데이터 찾는 중 - 캔들 시간: ${candleTimeStr}, 타입: ${typeof candle.time}`);
             
             const originalItem = data.find((item: any) => {
               const itemTimeStr = typeof item.time === 'string' ? item.time : 
@@ -555,7 +541,7 @@ const ChartComponent: React.FC<ChartProps> = ({
             });
             
             if (originalItem) {
-              console.log('매칭된 원본 데이터 항목 찾음:', originalItem);
+              // console.log('매칭된 원본 데이터 항목 찾음:', originalItem);
               
               const itemAsAny = originalItem as any;
               const volumeField = itemAsAny.volume || itemAsAny.Volume || 
@@ -586,7 +572,7 @@ const ChartComponent: React.FC<ChartProps> = ({
                     console.warn('캔들 데이터 볼륨 변환 오류:', error);
                     volume = 0;
                   }
-                  console.log(`캔들 데이터 자체의 볼륨 사용: ${volume}`);
+                  // console.log(`캔들 데이터 자체의 볼륨 사용: ${volume}`);
                 }
               } else {
                 console.warn(`${candleTimeStr} 에 해당하는 볼륨 데이터를 찾을 수 없음`);
@@ -612,7 +598,7 @@ const ChartComponent: React.FC<ChartProps> = ({
           }
           
           if (volume > 0) {
-            console.log(`볼륨 데이터 생성 성공: 시간=${candle.time}, 볼륨=${volume}`);
+            // console.log(`볼륨 데이터 생성 성공: 시간=${candle.time}, 볼륨=${volume}`);
           }
           
           return {
@@ -622,10 +608,10 @@ const ChartComponent: React.FC<ChartProps> = ({
           } as HistogramData<Time>;
         });
         
-        console.log(`유효한 볼륨 데이터 ${volumeData.length}개 생성`);
-        if (volumeData.length > 0) {
-          console.log('볼륨 데이터 샘플:', volumeData.slice(0, 3));
-        }
+        // console.log(`유효한 볼륨 데이터 ${volumeData.length}개 생성`);
+        // if (volumeData.length > 0) {
+        //   console.log('볼륨 데이터 샘플:', volumeData.slice(0, 3));
+        // }
         
         const volumeSeries = chart.addSeries(HistogramSeries, {
           color: '#26a69a',
@@ -652,14 +638,14 @@ const ChartComponent: React.FC<ChartProps> = ({
         });
 
         if (volumeData.length > 0) {
-          console.log('볼륨 차트 데이터 설정 중...');
+          // console.log('볼륨 차트 데이터 설정 중...');
           try {
             const hasNonZeroVolume = volumeData.some(item => item.value > 0);
             if (!hasNonZeroVolume) {
               console.warn('모든 볼륨 데이터가 0입니다. 차트에 표시되지 않을 수 있습니다.');
               
               if (uniqueCandleData.length > 0) {
-                console.log('샘플 볼륨 데이터를 생성합니다.');
+                // console.log('샘플 볼륨 데이터를 생성합니다.');
                 const sampleVolumeData = uniqueCandleData.map((candle, index) => {
                   const sampleVolume = Math.round((candle.close || 100) * (1 + Math.random() * 4)) * 100;
                   return {
@@ -669,14 +655,14 @@ const ChartComponent: React.FC<ChartProps> = ({
                   } as HistogramData<Time>;
                 });
                 
-                console.log('생성된 샘플 볼륨 데이터:', sampleVolumeData.slice(0, 3));
+                // console.log('생성된 샘플 볼륨 데이터:', sampleVolumeData.slice(0, 3));
                 
                 volumeSeries.setData(sampleVolumeData);
-                console.log('샘플 볼륨 데이터 설정 완료');
+                // console.log('샘플 볼륨 데이터 설정 완료');
               }
             } else {
               volumeSeries.setData(volumeData);
-              console.log('볼륨 차트 데이터 설정 완료');
+              // console.log('볼륨 차트 데이터 설정 완료');
             }
           } catch (error) {
             console.error('볼륨 데이터 설정 오류:', error);
@@ -687,7 +673,7 @@ const ChartComponent: React.FC<ChartProps> = ({
       }
 
       if (marketType && marketIndexData.length > 0) {
-        console.log(`시장 지수 라인 시리즈 추가: ${marketType}, 데이터 ${marketIndexData.length}개`);
+        // console.log(`시장 지수 라인 시리즈 추가: ${marketType}, 데이터 ${marketIndexData.length}개`);
         
         // 시장 구분에 따라 색상 설정
         const marketColor = '#14B8A6'; // 변경
@@ -716,12 +702,12 @@ const ChartComponent: React.FC<ChartProps> = ({
         marketIndexSeries.setData(marketIndexData);
         lineSeriesRef.current = marketIndexSeries;
         
-        console.log('시장 지수 라인 시리즈 추가 완료');
+        // console.log('시장 지수 라인 시리즈 추가 완료');
       }
 
       // 20일 이동평균선 추가
       if (shouldShowMA20 && uniqueCandleData.length > 0) {
-        console.log('20일 이동평균선 추가 중...');
+        // console.log('20일 이동평균선 추가 중...');
         
         // 20일 이동평균선 데이터 계산
         const ma20Data = calculateMA20(uniqueCandleData);
@@ -763,9 +749,9 @@ const ChartComponent: React.FC<ChartProps> = ({
             container.appendChild(legendDiv);
           }
           
-          console.log('20일 이동평균선 추가 완료');
+          // console.log('20일 이동평균선 추가 완료');
         } else {
-          console.log('20일 이동평균선 데이터가 충분하지 않습니다.');
+          // console.log('20일 이동평균선 데이터가 충분하지 않습니다.');
         }
       }
 
@@ -780,7 +766,7 @@ const ChartComponent: React.FC<ChartProps> = ({
       cleanupFunction = () => {
         window.removeEventListener('resize', handleResize);
         if (chartRef.current) {
-          console.log('차트 정리 중...');
+          // console.log('차트 정리 중...');
           chartRef.current.remove();
           chartRef.current = null;
           candlestickSeriesRef.current = null;
