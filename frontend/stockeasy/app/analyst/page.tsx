@@ -302,7 +302,7 @@ const AnalystPage = () => {
                                   height: '40px',
                                   width: '100%',
                                   borderRadius: '30px',
-                                  backgroundColor: isMobile ? '#ffffff' : '#f5f5f5',
+                                  backgroundColor: '#D8EFE9', // 연한 민트색으로 변경
                                   color: '#333',
                                   fontSize: '13px',
                                   fontWeight: 'normal',
@@ -820,7 +820,7 @@ const AnalystPage = () => {
                                 기업의 주요 재무 지표와 동종 업계 평균과의 비교 분석 정보를 제공합니다. 매출액, 영업이익, ROE, PER, PBR 등 주요 지표의 추이와 전망을 확인할 수 있습니다.
                               </p>
                               {/* 재무 지표 차트 추가 */}
-                              <div className="mt-4">
+                              <div className="mt-4 flex justify-center items-center">
                                 <StockAnalyticsChart stockCode={selectedStock?.stockCode} stockName={selectedStock?.stockName} />
                               </div>
                             </div>

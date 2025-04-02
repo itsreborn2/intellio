@@ -34,8 +34,8 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
   const [stockData, setStockData] = useState<StockData>({
     name: '',
     code: '',
-    values: [0, 0, 0, 0, 0],
-    labels: ['', '', '', '', '']
+    values: [0, 0, 0, 0],
+    labels: ['', '', '', '']
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,16 +63,16 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
             console.log('파싱된 데이터 샘플:', results.data.slice(0, 3));
             
             if (results.data && Array.isArray(results.data) && results.data.length > 2) {
-              // 헤더 행 가져오기 (G, H, I, J, K 컬럼에 해당하는 레이블)
+              // 헤더 행 가져오기 (J, K, L, M 컬럼에 해당하는 레이블)
               const headers = results.data[0] as string[];
               console.log('헤더:', headers);
               
+              // 레이블을 고정값으로 설정하여 한글 깨짐 문제 해결
               const labels = [
-                headers[6] || 'G컬럼', 
-                headers[7] || 'H컬럼', 
-                headers[8] || 'I컬럼', 
-                headers[9] || 'J컬럼', 
-                headers[10] || 'K컬럼'
+                '직전4분기', 
+                '2025(E)', 
+                '2026(E)', 
+                '2027(E)'
               ];
               
               console.log('라벨:', labels);
@@ -82,14 +82,14 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
               console.log('기본 선택 종목:', selectedStock);
               
               // 종목 코드/이름이 있을 경우 해당 종목 찾기
-              if (stockName) {
-                console.log('검색할 종목명:', stockName);
+              if (stockCode) {
+                console.log('검색할 종목코드:', stockCode);
                 
-                // B 컬럼이 종목명
+                // 종목코드로 찾기 (C 컬럼이 종목코드)
                 const stockIndex = results.data.findIndex((row: any, index: number) => {
-                  if (index >= 2 && row && Array.isArray(row) && row.length > 1) {
-                    console.log(`${index}번 행 종목명:`, row[1]);
-                    return row[1] === stockName;
+                  if (index >= 2 && row && Array.isArray(row) && row.length > 2) {
+                    console.log(`${index}번 행 종목코드:`, row[2]);
+                    return row[2] === stockCode;
                   }
                   return false;
                 });
@@ -102,13 +102,12 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
                 }
               }
               
-              if (selectedStock && selectedStock.length > 10) {
-                // G, H, I, J, K 컬럼 값 추출 (인덱스 6~10)
-                console.log('G컬럼 원본값:', selectedStock[6]);
-                console.log('H컬럼 원본값:', selectedStock[7]);
-                console.log('I컬럼 원본값:', selectedStock[8]);
+              if (selectedStock && selectedStock.length > 12) {
+                // J, K, L, M 컬럼 값 추출 (인덱스 9~12)
                 console.log('J컬럼 원본값:', selectedStock[9]);
                 console.log('K컬럼 원본값:', selectedStock[10]);
+                console.log('L컬럼 원본값:', selectedStock[11]);
+                console.log('M컬럼 원본값:', selectedStock[12]);
                 
                 // 숫자 변환 전 문자열 처리
                 const cleanNumber = (str: string | undefined): number => {
@@ -120,18 +119,18 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
                 };
                 
                 const values = [
-                  cleanNumber(selectedStock[6]), // G 컬럼
-                  cleanNumber(selectedStock[7]), // H 컬럼
-                  cleanNumber(selectedStock[8]), // I 컬럼
-                  cleanNumber(selectedStock[9]), // J 컬럼
-                  cleanNumber(selectedStock[10])  // K 컬럼
+                  cleanNumber(selectedStock[9]),  // J 컬럼
+                  cleanNumber(selectedStock[10]), // K 컬럼
+                  cleanNumber(selectedStock[11]), // L 컬럼
+                  cleanNumber(selectedStock[12])  // M 컬럼
                 ];
                 
                 console.log('변환된 값들:', values);
                 
+                // props에서 직접 종목명과 종목코드를 사용
                 setStockData({
-                  name: selectedStock[1] || (stockName || ''),
-                  code: selectedStock[0] || (stockCode || ''),
+                  name: stockName || '종목명 없음',
+                  code: stockCode || '종목코드 없음',
                   values,
                   labels
                 });
@@ -171,19 +170,42 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
       y: stockData.values,
       type: 'bar' as const,
       marker: {
-        color: Array(5).fill('#10A37F'), // 모든 막대를 동일한 색상(#10A37F)으로 설정
+        color: '#6366F1', // 보라색 계열로 변경
         line: {
-          color: '#1F2937',
+          color: '#4F46E5',
           width: 1
         }
       },
-      hovertemplate: '%{y:.2f}<extra></extra>' // 호버 시 소수점 두 자리까지 표시
+      text: stockData.values.map(val => val.toFixed(2)), // PER 값을 텍스트로 표시
+      textposition: 'outside', // 막대 위에 텍스트 표시
+      hovertemplate: '<b>PER: %{y:.2f}</b><extra></extra>' // 호버 시 소수점 두 자리까지 표시
+    },
+    // 선 그래프와 포인트 (막대 꼭지점 연결)
+    {
+      x: stockData.labels,
+      y: stockData.values, // 막대 꼭지점을 연결하도록 수정
+      type: 'scatter' as const,
+      mode: 'lines+markers',
+      line: {
+        color: '#F87171', // 빨간색 계열
+        width: 2
+      },
+      marker: {
+        color: '#FFFFFF', // 흰색 내부
+        size: 8,
+        line: {
+          color: '#F87171', // 빨간색 테두리
+          width: 2
+        }
+      },
+      hoverinfo: 'none',
+      showlegend: false
     }
   ];
 
   const plotLayout: Partial<PlotlyTypes.Layout> = {
     title: {
-      text: `${stockData.name} (${stockData.code}) 재무 지표`,
+      text: `${stockData.name} (${stockData.code}) PER 추이`,
       font: {
         family: 'Arial, "맑은 고딕", "Malgun Gothic", sans-serif',
         size: 18
@@ -192,9 +214,10 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
     font: {
       family: 'Arial, "맑은 고딕", "Malgun Gothic", sans-serif'
     },
+    showlegend: false, // 범례 숨기기
     xaxis: {
       title: {
-        text: '지표',
+        text: '', // '지표' 텍스트 제거
         font: {
           family: 'Arial, "맑은 고딕", "Malgun Gothic", sans-serif',
           size: 14
@@ -207,7 +230,7 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
     },
     yaxis: {
       title: {
-        text: '값',
+        text: '', // '값' 텍스트 제거
         font: {
           family: 'Arial, "맑은 고딕", "Malgun Gothic", sans-serif',
           size: 14
@@ -223,13 +246,17 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
       tickmode: 'auto',
       nticks: 8, // 적절한 Y축 눈금 수 설정
       showgrid: true, // 그리드 라인 표시
-      gridcolor: '#E5E7EB' // 그리드 색상
+      gridcolor: '#E5E7EB', // 그리드 색상
+      zeroline: true, // 0 라인 표시
+      zerolinecolor: '#9CA3AF', // 0 라인 색상
+      zerolinewidth: 1 // 0 라인 두께
     },
     margin: {
-      l: 100,  // 왼쪽 여백 더 증가
-      r: 40,
+      l: 60,  // 왼쪽 여백 감소
+      r: 60,  // 오른쪽 여백 증가
       t: 80,
-      b: 80
+      b: 80,
+      pad: 10 // 패딩 추가
     },
     autosize: true,
     height: 400,
@@ -262,13 +289,23 @@ const StockAnalyticsChart: React.FC<StockAnalyticsChartProps> = ({ stockName, st
 
   // 차트 렌더링
   return (
-    <div className="my-4 w-full">
-      <Plot
-        data={plotData}
-        layout={plotLayout}
-        config={config}
-        className="w-full h-full"
-      />
+    <div className="my-4 w-full flex justify-center items-center">
+      <div className="w-full max-w-4xl">
+        <Plot
+          data={plotData}
+          layout={{
+            ...plotLayout,
+            width: undefined, // 자동 너비 설정
+            autosize: true,   // 자동 크기 조정 활성화
+          }}
+          config={{
+            ...config,
+            responsive: true  // 반응형 설정 추가
+          }}
+          className="w-full h-full"
+          style={{ margin: '0 auto' }} // 중앙 정렬을 위한 스타일 추가
+        />
+      </div>
     </div>
   );
 };
