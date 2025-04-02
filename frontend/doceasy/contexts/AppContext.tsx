@@ -305,7 +305,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
       let finalColumns = [...initialTableColumns]; // 배열을 복제하여 참조 문제 방지
 
       if (bLog) {
-        console.debug('[UPDATE_TABLE_DATA] 시작 ----------------');
+        console.info('[UPDATE_TABLE_DATA] 시작 ----------------');
         console.debug('1. 현재 상태:', {
           currentColumns: state.analysis.tableData?.columns || [],
           documents: state.documents,
