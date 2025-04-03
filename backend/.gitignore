@@ -71,7 +71,8 @@ telegram_files/
 telegram_collector.session*
 # 채널 파일은 git에 절대 업로드하면 안됨.
 stockeasy/telegram_channels.json
-
+stockeasy/cache_financial_data/
+stockeasy/local_cache/
 # Celery
 celerybeat-schedule
 celerybeat-schedule.*

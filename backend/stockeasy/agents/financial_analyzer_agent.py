@@ -17,11 +17,12 @@ from langchain.prompts import PromptTemplate
 from langchain_core.messages import AIMessage
 
 from common.core.config import settings
-# from stockeasy.services.financial.data_service import FinancialDataService
-# from stockeasy.services.stock.stock_info_service import StockInfoService
+from stockeasy.services.financial.data_service import FinancialDataService
+from stockeasy.services.financial.stock_info_service import StockInfoService
 from stockeasy.prompts.financial_prompts import (
-    FINANCIAL_ANALYSIS_PROMPT,
-    #FINANCIAL_DATA_EXTRACTION_PROMPT
+    FINANCIAL_ANALYSIS_SYSTEM_PROMPT,
+    FINANCIAL_ANALYSIS_USER_PROMPT,
+    format_financial_data
 )
 from stockeasy.models.agent_io import RetrievedAllAgentData, FinancialData
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
@@ -41,12 +42,11 @@ class FinancialAnalyzerAgent(BaseAgent):
             db: 데이터베이스 세션 객체 (선택적)
         """
         super().__init__(name, db)
-        self.llm, self.model_name, self.provider = get_llm_for_agent("financial_analyzer_agent")
         self.agent_llm = get_agent_llm("financial_analyzer_agent")
-        logger.info(f"FinancialAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
-        #self.financial_service = FinancialDataService()
-        #self.stock_service = StockInfoService()
-        
+        logger.info(f"FinancialAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
+        self.financial_service = FinancialDataService()
+        self.stock_service = StockInfoService()
+        self.prompt_template = FINANCIAL_ANALYSIS_SYSTEM_PROMPT
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         재무 데이터 분석을 수행합니다.
@@ -65,7 +65,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             # 현재 쿼리 및 세션 정보 추출
             query = state.get("query", "")
             
-            # 질문 분석 결과 추출 (새로운 구조)
+            # 질문 분석 결과 추출
             question_analysis = state.get("question_analysis", {})
             entities = question_analysis.get("entities", {})
             classification = question_analysis.get("classification", {})
@@ -83,28 +83,38 @@ class FinancialAnalyzerAgent(BaseAgent):
                 return state
                 
             logger.info(f"FinancialAnalyzerAgent analyzing stock: {stock_code or stock_name}")
-            #logger.info(f"Classification data: {classification}")
-            #logger.info(f"Data requirements: {data_requirements}")
             
             # 종목 코드가 없으면 종목명으로 조회
             if not stock_code and stock_name:
-                # stock_info = await self.stock_service.get_stock_by_name(stock_name)
-                # if stock_info:
-                #     stock_code = stock_info.get("code")
-                #     logger.info(f"Found stock code {stock_code} for {stock_name}")
-                logger.warning("No stock_code information provided to FinancialAnalyzerAgent")
-                self._add_error(state, "재무 분석을 위한 종목 코드가 없습니다.")
-                return state
+                stock_info = await self.stock_service.get_stock_by_name(stock_name)
+                if stock_info:
+                    stock_code = stock_info.get("code")
+                    logger.info(f"Found stock code {stock_code} for {stock_name}")
                     
             if not stock_code:
                 logger.warning(f"Could not find stock code for {stock_name}")
                 self._add_error(state, f"종목 코드를 찾을 수 없습니다: {stock_name}")
                 return state
                 
-            # 재무 데이터 조회
-            #financial_data = await self.financial_service.get_financial_data(stock_code)
-            financial_data = None
-            if not financial_data:
+            # 분석 기간 파악
+            year_range = self._determine_year_range(query, data_requirements)
+            logger.info(f"year_range: {year_range}")
+            # 재무 데이터 조회 (GCS에서 PDF 파일을 가져와서 처리)
+            financial_data = await self.financial_service.get_financial_data(stock_code, year_range)
+            # content를 제외한 메타데이터만 로깅
+            log_data = {
+                "stock_code": financial_data.get("stock_code"),
+                "reports": {
+                    key: {
+                        "metadata": value.get("metadata", {})
+                    }
+                    for key, value in financial_data.get("reports", {}).items()
+                }
+            }
+            logger.info(f"financial_data metadata: {log_data}")
+
+            
+            if not financial_data or not financial_data.get("reports"):
                 logger.warning(f"No financial data found for stock {stock_code}")
                 
                 # 실행 시간 계산
@@ -148,17 +158,28 @@ class FinancialAnalyzerAgent(BaseAgent):
                 
                 logger.info(f"FinancialAnalyzerAgent completed in {duration:.2f} seconds, no data found")
                 return state
-                
-            # 분석이 필요한 재무 데이터 정보 식별 (query와 classification 활용)
+            
+            # 필요한 재무 지표 식별
             required_metrics = self._identify_required_metrics(classification, query)
+            logger.info(f"required_metrics: {required_metrics}")
+
+
+            # 추출된 재무 데이터를 LLM에 전달할 형식으로 변환
+            formatted_data = await self._prepare_financial_data_for_llm(
+                financial_data, 
+                query, 
+                required_metrics,
+                data_requirements
+            )
+            logger.info(f"formatted_data: {formatted_data}")
             
             # 재무 데이터 분석 수행
             analysis_results = await self._analyze_financial_data(
-                financial_data,
-                required_metrics,
+                formatted_data,
                 query,
-                classification,
-                detail_level
+                stock_code,
+                stock_name or "",
+                classification
             )
             
             # 실행 시간 계산
@@ -166,7 +187,18 @@ class FinancialAnalyzerAgent(BaseAgent):
             duration = (end_time - start_time).total_seconds()
             
             # 새로운 구조로 상태 업데이트
-            #state["agent_results"] = state.get("agent_results", {})
+            # analysis_results
+            # {
+            #     "llm_response": analysis_content,
+            #     "extracted_data": {
+            #         "stock_code": stock_code,
+            #         "stock_name": stock_name,
+            #         "report_count": len(formatted_data),
+            #         "years_covered": self._extract_years_covered(formatted_data)
+            #     },
+            #     "raw_financial_data": formatted_data[:3] if formatted_data else []  # 최대 2개 보고서만 포함
+            # }
+            state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["financial_analyzer"] = {
                 "agent_name": "financial_analyzer",
                 "status": "success",
@@ -176,7 +208,8 @@ class FinancialAnalyzerAgent(BaseAgent):
                 "metadata": {
                     "stock_code": stock_code,
                     "stock_name": stock_name,
-                    "required_metrics": required_metrics
+                    "required_metrics": required_metrics,
+                    "year_range": year_range
                 }
             }
             
@@ -198,7 +231,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.model_name
+                "model_name": self.agent_llm.get_model_name()
             }
             
             logger.info(f"FinancialAnalyzerAgent completed in {duration:.2f} seconds")
@@ -248,6 +281,82 @@ class FinancialAnalyzerAgent(BaseAgent):
             "context": {"query": state.get("query", "")}
         })
     
+    def _determine_year_range(self, query: str, data_requirements: Dict[str, Any]) -> int:
+        """
+        질문과 데이터 요구사항을 기반으로 분석할 연도 범위를 결정합니다.
+        
+        Args:
+            query: 사용자 쿼리
+            data_requirements: 데이터 요구사항
+            
+        Returns:
+            연도 범위 (몇 년치 데이터를 분석할지)
+        """
+        # 기본값 설정
+        default_range = 2
+        
+        # 데이터 요구사항에서 시간 범위 확인
+        time_range = data_requirements.get("time_range", "")
+        if isinstance(time_range, str) and time_range:
+            # "최근 X년" 패턴
+            recent_years_match = re.search(r'최근\s*(\d+)\s*년', time_range)
+            if recent_years_match:
+                years = int(recent_years_match.group(1))
+                return min(max(years, 1), 5)  # 1~5년 사이로 제한
+                
+            # "최근 X개월" 패턴 - 1년 이하는 1년으로, 그 이상은 올림하여 연단위로 변환
+            recent_months_match = re.search(r'최근\s*(\d+)\s*개월', time_range)
+            if recent_months_match:
+                months = int(recent_months_match.group(1))
+                years = (months + 11) // 12  # 올림 나눗셈
+                return min(max(years, 1), 5)
+                
+            # "YYYY년" 패턴 - 현재 연도와의 차이를 계산
+            year_match = re.search(r'(20\d{2})년', time_range)
+            if year_match:
+                target_year = int(year_match.group(1))
+                current_year = datetime.now().year
+                return min(max(current_year - target_year + 1, 1), 5)
+                
+            # "X분기" 패턴 - 분기 데이터는 1년치로 처리
+            quarter_match = re.search(r'(\d)분기', time_range)
+            if quarter_match:
+                return 1
+        
+        # 쿼리에서 연도 범위 파악
+        year_patterns = [
+            r"(\d+)년간",
+            r"(\d+)년\s*동안",
+            r"지난\s*(\d+)년",
+            r"최근\s*(\d+)년",
+            r"(\d+)년치",
+            r"(\d+)년\s*데이터",
+            r"(\d+)\s*년",
+            r"(\d+)\s*years"
+        ]
+        
+        for pattern in year_patterns:
+            match = re.search(pattern, query)
+            if match:
+                try:
+                    year_range = int(match.group(1))
+                    return min(max(year_range, 1), 5)  # 1~5년 사이로 제한
+                except ValueError:
+                    pass
+        
+        # 특정 키워드에 기반한 범위 결정
+        if any(keyword in query or keyword in str(time_range) 
+               for keyword in ["장기", "전체", "역대", "모든", "전부"]):
+            return 5
+        elif any(keyword in query or keyword in str(time_range)
+                for keyword in ["중장기", "3년", "삼년"]):
+            return 3
+        elif any(keyword in query or keyword in str(time_range)
+                for keyword in ["단기", "1년", "일년", "올해"]):
+            return 1
+            
+        return default_range
+    
     def _identify_required_metrics(self, classification: Dict[str, Any], query: str) -> List[str]:
         """
         질문 분류 및 쿼리 내용을 기반으로 필요한 재무 지표를 식별합니다.
@@ -260,13 +369,13 @@ class FinancialAnalyzerAgent(BaseAgent):
             필요한 재무 지표 목록
         """
         # 기본 재무 지표 정의
-        default_metrics = ["revenue", "operating_profit", "net_profit", "eps", "bps", "per", "pbr"]
+        default_metrics = ["매출액", "영업이익", "순이익", "EPS", "BPS", "PER", "PBR"]
         
         # 확장된 지표 정의
-        expanded_metrics = default_metrics + ["debt_ratio", "roe", "dividend_yield", "current_ratio"]
+        expanded_metrics = default_metrics + ["부채비율", "자기자본이익률", "배당수익률", "유동비율"]
         
         # 전체 지표 정의
-        all_metrics = expanded_metrics + ["quick_ratio", "capex", "fcf", "ebitda", "debt_to_equity"]
+        all_metrics = expanded_metrics + ["당좌비율", "자본지출", "잉여현금흐름", "EBITDA", "부채자본비율"]
         
         # 분류에 따른 지표 선택
         primary_intent = classification.get("primary_intent", "")
@@ -296,177 +405,148 @@ class FinancialAnalyzerAgent(BaseAgent):
             return expanded_metrics
         else:
             return default_metrics
+            
+    async def _prepare_financial_data_for_llm(self, 
+                                     financial_data: Dict[str, Any],
+                                     query: str,
+                                     required_metrics: List[str],
+                                     data_requirements: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        PDF에서 추출한 재무 데이터를 LLM에 전달할 형식으로 변환합니다.
+        
+        Args:
+            financial_data: PDF에서 추출한 재무 데이터
+            query: 사용자 쿼리
+            required_metrics: 필요한 재무 지표 목록
+            data_requirements: 데이터 요구사항
+            
+        Returns:
+            LLM에 전달할 형식의 재무 데이터 리스트
+        """
+        reports = financial_data.get("reports", {})
+        stock_code = financial_data.get("stock_code", "")
+        formatted_data = []
+        
+        # 보고서 기간 파악
+        specific_period = None
+        if "period" in data_requirements:
+            period_info = data_requirements.get("period", {})
+            specific_period = period_info.get("value")
+            
+        for key, report in reports.items():
+            metadata = report.get("metadata", {})
+            content = report.get("content", "")
+            
+            # 특정 기간이 요청된 경우 해당 기간 데이터만 포함
+            if specific_period and specific_period not in metadata.get("type", ""):
+                continue
+                
+            # 보고서에서 필요한 지표 식별 (이 부분은 단순화된 구현)
+            metrics = {}
+            for metric in required_metrics:
+                # 컨텐츠에서 지표 키워드 주변 텍스트 추출
+                keyword_context = self._extract_keyword_context(content, metric, 300)
+                if keyword_context:
+                    metrics[metric] = keyword_context
+            
+            # 보고서 데이터 구조화
+            formatted_report = {
+                "source": f"{metadata.get('year')}년 {metadata.get('type')} 보고서",
+                "date": metadata.get("date", ""),
+                "content": content[:3000] if len(content) > 3000 else content,  # 컨텐츠 제한
+                "financial_indicators": metrics,
+                "metadata": metadata
+            }
+            
+            formatted_data.append(formatted_report)
+            
+        return formatted_data
+        
+    def _extract_keyword_context(self, text: str, keyword: str, context_size: int = 200) -> str:
+        """
+        지정된 키워드 주변의 문맥을 추출합니다.
+        
+        Args:
+            text: 전체 텍스트
+            keyword: 찾을 키워드
+            context_size: 키워드 주변에서 추출할 문자 수
+            
+        Returns:
+            키워드 주변 문맥
+        """
+        if not text or not keyword:
+            return ""
+            
+        # 대소문자 구분 없이 검색
+        index = text.lower().find(keyword.lower())
+        if index == -1:
+            return ""
+            
+        # 문맥 범위 계산
+        start = max(0, index - context_size // 2)
+        end = min(len(text), index + len(keyword) + context_size // 2)
+        
+        # 문맥 추출
+        context = text[start:end]
+        
+        # 단어 경계에서 시작하도록 조정
+        if start > 0:
+            first_space = context.find(" ")
+            if first_space > 0:
+                context = context[first_space + 1:]
+                
+        # 단어 경계에서 끝나도록 조정
+        if end < len(text):
+            last_space = context.rfind(" ")
+            if last_space > 0:
+                context = context[:last_space]
+                
+        return context
     
     async def _analyze_financial_data(self, 
-                                     financial_data: Dict[str, Any],
-                                     required_metrics: List[str],
+                                     formatted_data: List[Dict[str, Any]],
                                      query: str,
-                                     classification: Dict[str, Any],
-                                     detail_level: str) -> Dict[str, Any]:
+                                     stock_code: str,
+                                     stock_name: str,
+                                     classification: Dict[str, Any]) -> Dict[str, Any]:
         """
         재무 데이터를 분석합니다.
         
         Args:
-            financial_data: 분석할 재무 데이터
-            required_metrics: 필요한 재무 지표 목록
+            formatted_data: 분석할 재무 데이터
             query: 사용자 쿼리
+            stock_code: 종목 코드
+            stock_name: 종목명
             classification: 질문 분류 정보
-            detail_level: 분석 세부 수준
             
         Returns:
             분석 결과
         """
         try:
-            # 필요한 지표만 추출
-            filtered_data = {}
-            for metric in required_metrics:
-                if metric in financial_data:
-                    filtered_data[metric] = financial_data[metric]
-            
-            # 분석 레벨에 따른 처리
-            if detail_level == "간단" or classification.get("complexity", "") == "단순":
-                # 간단한 처리: 최신 데이터와 YoY 변화율만 계산
-                simplified_data = self._simplify_financial_data(filtered_data)
-                return {
-                    "extracted_data": simplified_data,
-                    "analysis": {
-                        "summary": "최근 재무 데이터",
-                        "trends": self._calculate_simple_trends(simplified_data)
-                    }
-                }
-            else:
-                # 상세 분석: LLM을 사용하여 더 깊은 분석 수행
-                analysis = await self._generate_financial_analysis(filtered_data, query, classification)
-                return {
-                    "extracted_data": filtered_data,
-                    "analysis": analysis
-                }
-        
-        except Exception as e:
-            logger.error(f"재무 데이터 분석 중 오류 발생: {str(e)}")
-            return {
-                "extracted_data": financial_data,
-                "analysis": {
-                    "summary": "재무 데이터 분석 중 오류가 발생했습니다.",
-                    "error": str(e)
-                }
-            }
-    
-    def _simplify_financial_data(self, financial_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        재무 데이터를 단순화합니다.
-        
-        Args:
-            financial_data: 원본 재무 데이터
-            
-        Returns:
-            단순화된 재무 데이터
-        """
-        simplified = {}
-        
-        for metric, data in financial_data.items():
-            if isinstance(data, dict) and "quarterly" in data and "yearly" in data:
-                # 최근 분기 데이터
-                quarterly = data.get("quarterly", [])
-                latest_quarterly = quarterly[0] if quarterly else None
-                
-                # 최근 연간 데이터
-                yearly = data.get("yearly", [])
-                latest_yearly = yearly[0] if yearly else None
-                
-                # 단순화된 데이터 저장
-                simplified[metric] = {
-                    "latest_quarterly": latest_quarterly,
-                    "latest_yearly": latest_yearly
-                }
-            else:
-                simplified[metric] = data
-                
-        return simplified
-    
-    def _calculate_simple_trends(self, simplified_data: Dict[str, Any]) -> Dict[str, str]:
-        """
-        단순화된 재무 데이터의 트렌드를 계산합니다.
-        
-        Args:
-            simplified_data: 단순화된 재무 데이터
-            
-        Returns:
-            각 지표별 트렌드 설명
-        """
-        trends = {}
-        
-        for metric, data in simplified_data.items():
-            if isinstance(data, dict) and "latest_quarterly" in data and "latest_yearly" in data:
-                latest_quarterly = data.get("latest_quarterly", {})
-                latest_yearly = data.get("latest_yearly", {})
-                
-                if latest_quarterly and latest_yearly:
-                    # 분기 데이터 값과 연간 데이터 값
-                    q_value = latest_quarterly.get("value")
-                    y_value = latest_yearly.get("value")
-                    
-                    if q_value is not None and y_value is not None:
-                        # 기본 메트릭 설명
-                        if metric == "revenue":
-                            metric_name = "매출액"
-                        elif metric == "operating_profit":
-                            metric_name = "영업이익"
-                        elif metric == "net_profit":
-                            metric_name = "순이익"
-                        else:
-                            metric_name = metric
-                            
-                        # 증감율 계산
-                        if y_value != 0:
-                            change_pct = (q_value - y_value) / y_value * 100
-                            direction = "증가" if change_pct > 0 else "감소"
-                            trends[metric] = f"{metric_name}은(는) 전년 대비 {abs(change_pct):.1f}% {direction}"
-                        else:
-                            trends[metric] = f"{metric_name} 데이터 있음"
-                    else:
-                        trends[metric] = f"{metric} 데이터 불완전"
-                else:
-                    trends[metric] = f"{metric} 데이터 없음"
-            else:
-                trends[metric] = f"{metric} 데이터 형식 다름"
-                
-        return trends
-    
-    async def _generate_financial_analysis(self, 
-                                      financial_data: Dict[str, Any],
-                                      query: str,
-                                      classification: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        금융 데이터에 대한 LLM 분석을 수행합니다.
-        
-        Args:
-            financial_data: 분석할 금융 데이터
-            query: 사용자 검색어
-            classification: 질문 분류 결과
-            
-        Returns:
-            LLM 분석 결과
-        """
-        try:
             # 재무 데이터 문자열 변환
-            financial_data_str = json.dumps(financial_data, ensure_ascii=False, indent=2)
+            financial_data_str = format_financial_data(formatted_data)
             
-            # 프롬프트 구성
-            prompt = FINANCIAL_ANALYSIS_PROMPT.format(
-                query=query,
-                financial_data=financial_data_str,
-                primary_intent=classification.get("primary_intent", ""),
-                complexity=classification.get("complexity", "중간")
-            )
+            # 메시지 구성
+            from langchain_core.messages import SystemMessage, HumanMessage
+            
+            messages = [
+                SystemMessage(content=self.prompt_template),
+                HumanMessage(content=FINANCIAL_ANALYSIS_USER_PROMPT.format(
+                    query=query,
+                    financial_data=financial_data_str,
+                    stock_code=stock_code,
+                    stock_name=stock_name,
+                    classification=classification.get("primary_intent", "")
+                ))
+            ]
             
             # LLM 호출
             user_context = {}
             user_id = user_context.get("user_id", None)
             
             # 폴백 메커니즘을 사용하여 LLM 호출
-            response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
-                input=prompt,
+            response: AIMessage = await self.agent_llm.ainvoke_with_fallback(
+                messages,
                 user_id=user_id,
                 project_type=ProjectType.STOCKEASY,
                 db=self.db
@@ -477,14 +557,37 @@ class FinancialAnalyzerAgent(BaseAgent):
             
             return {
                 "llm_response": analysis_content,
-                "trends": financial_data.get("trends", {}),
-                "metrics": financial_data.get("processed_metrics", {})
+                "extracted_data": {
+                    "stock_code": stock_code,
+                    "stock_name": stock_name,
+                    "report_count": len(formatted_data),
+                    "years_covered": self._extract_years_covered(formatted_data)
+                },
+                "raw_financial_data": formatted_data[:3] if formatted_data else []  # 최대 2개 보고서만 포함
             }
             
         except Exception as e:
             logger.exception(f"재무 데이터 분석 중 오류: {str(e)}")
             return {
                 "llm_response": f"재무 분석 중 오류가 발생했습니다: {str(e)}",
-                "trends": {},
-                "metrics": {}
-            } 
+                "extracted_data": {},
+                "raw_financial_data": []
+            }
+            
+    def _extract_years_covered(self, formatted_data: List[Dict[str, Any]]) -> List[int]:
+        """
+        포맷된 데이터에서 포함된 연도 목록을 추출합니다.
+        
+        Args:
+            formatted_data: 포맷된 재무 데이터
+            
+        Returns:
+            포함된 연도 목록
+        """
+        years = set()
+        for report in formatted_data:
+            metadata = report.get("metadata", {})
+            if "year" in metadata:
+                years.add(metadata["year"])
+                
+        return sorted(list(years), reverse=True)  # 최신 연도부터 내림차순 정렬 

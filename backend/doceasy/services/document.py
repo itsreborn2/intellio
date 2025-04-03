@@ -238,12 +238,22 @@ class DocumentService:
         if len(filename) > 255:
             return False
         
-        # 파일명은 한글, 영문자, 숫자로 시작
-        # 중간에는 공백, 하이픈, 언더스코어, 점, 대괄호와 함께 특수문자도 허용
-        # 마지막도 한글, 영문자, 숫자, 대괄호, 특수문자로 끝날 수 있음
-        # 허용되지 않는 문자 검사
-        pattern = r'^[가-힣a-zA-Z0-9][가-힣a-zA-Z0-9\s\-_\.\[\]!@#$%^&()+,;={}~]*[가-힣a-zA-Z0-9\[\]!@#$%^&()+,;={}~]$'
-        return bool(re.match(pattern, filename))
+        # 파일명에 허용되지 않는 문자 검사
+        # Windows와 Linux에서 절대적으로 허용되지 않는 문자만 체크
+        not_allowed_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|', '\0']
+        for char in not_allowed_chars:
+            if char in filename:
+                return False
+        
+        # 파일명이 너무 짧은 경우
+        if len(filename.strip()) < 1:
+            return False
+            
+        # 파일명이 . 또는 .. 인 경우 
+        if filename in ['.', '..']:
+            return False
+            
+        return True
 
     async def get_document(self, document_id: UUID) -> Optional[Document]:
         """문서 상세 정보 조회"""

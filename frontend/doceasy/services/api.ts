@@ -118,11 +118,29 @@ export const getProjectList = async (): Promise<ProjectListResponse> => {
 const sanitizeFileName = (fileName: string): string => {
   // 파일 확장자 분리
   const lastDot = fileName.lastIndexOf('.');
-  const name = fileName.substring(0, lastDot);
-  const ext = fileName.substring(lastDot);
+  const name = lastDot !== -1 ? fileName.substring(0, lastDot) : fileName;
+  const ext = lastDot !== -1 ? fileName.substring(lastDot) : '';
   
-  // 특수문자를 언더스코어로 변경
-  const sanitized = name.replace(/[^a-zA-Z0-9가-힣\s-]/g, '_');
+  // Windows와 Ubuntu에서 허용하지 않는 문자 목록
+  // Windows: \ / : * ? " < > |
+  // Ubuntu: / (null byte는 JavaScript 문자열에서 자연스럽게 처리됨)
+  
+  // 특수문자 제거 (윈도우와 우분투에서 허용하지 않는 문자)
+  let sanitized = name.replace(/[\\/:*?"<>|]/g, '');
+  
+  // 파일명이 비어있거나 밑줄로 시작하면 'file'을 접두사로 추가
+  if (!sanitized.trim() || sanitized.startsWith('_')) {
+    sanitized = 'file' + (sanitized.startsWith('_') ? sanitized : '');
+  }
+  
+  // 파일명이 마침표로 시작하거나 끝나는 경우 처리 (윈도우에서 문제 발생)
+  sanitized = sanitized.replace(/^\.+/, '').replace(/\.+$/, '');
+  
+  // 최대 길이 제한 (윈도우 최대 255자)
+  const maxLength = 240; // 확장자 길이를 고려하여 240으로 제한
+  if (sanitized.length > maxLength) {
+    sanitized = sanitized.substring(0, maxLength);
+  }
   
   return sanitized + ext;
 };
