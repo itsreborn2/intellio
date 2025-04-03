@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, Suspense } from "react"
+import { useState, useRef, useEffect, memo } from "react"
 import { User, X, Loader2 } from "lucide-react"
 import { Button } from "intellio-common/components/ui/button"
 import { Input } from "intellio-common/components/ui/input"
@@ -41,19 +41,23 @@ const useIsMobile = () => {
 };
 
 // 헤더 컨텐츠 컴포넌트
-function HeaderContent({ className }: { className?: string }) {
+const HeaderContent = memo(function HeaderContent({ className }: { className?: string }) {
   const router = useRouter()
   const { state, dispatch } = useApp()
   const { user, isAuthenticated, logout } = useAuth()
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')
-  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)  // Dialog 상태 추가
   const [isAuthLoading, setIsAuthLoading] = useState(true) // 인증 상태 로딩 상태 추가
   const titleInputRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile();
   
   // 쿠키 기반 인증 상태 확인
   useAuthCheck();
+
+  // 프로젝트가 있고 문서가 업로드되었는지 확인
+  const hasProject = !!state.currentProject;
+  const hasDocuments = Object.keys(state.documents).length > 0;
+  const shouldShowProjectInfo = hasProject && hasDocuments;
 
   const handleTitleClick = () => {
     setEditingTitle(state.projectTitle || 'Untitled Project')
@@ -118,6 +122,13 @@ function HeaderContent({ className }: { className?: string }) {
     }
   }
 
+  // 프로젝트 제목이 변경될 때마다 편집 중인 제목 업데이트
+  useEffect(() => {
+    if (!isEditingTitle && state.projectTitle) {
+      setEditingTitle(state.projectTitle);
+    }
+  }, [state.projectTitle, isEditingTitle]);
+
   useEffect(() => {
     // 인증 상태가 확인되면 로딩 상태를 false로 설정
     setIsAuthLoading(false)
@@ -132,9 +143,9 @@ function HeaderContent({ className }: { className?: string }) {
 
   return (
     // header 태그로 변경하고 className 통합
-    <header className={`p-4 flex items-center justify-between ${className || ''}`}>
+    <header className={`p-4 flex items-center justify-between fixed top-0 right-0 transition-all duration-300 ease-in-out left-[300px] h-[56px] z-40 bg-background ${className || ''}`}>
       <div className="flex items-center gap-2">
-        {isAuthenticated ? (
+        {isAuthenticated && shouldShowProjectInfo ? (
           isEditingTitle ? (
             <Input
               ref={titleInputRef}
@@ -152,9 +163,9 @@ function HeaderContent({ className }: { className?: string }) {
         ) : null}
       </div>
       
-      {/* 모드 선택 버튼 - ChatSection에서 이동 */}
+      {/* 모드 선택 버튼 - ChatSection에서 이동, 문서가 업로드된 경우에만 표시 */}
       <div className="flex items-center gap-2">
-        {!isMobile && (
+        {!isMobile && shouldShowProjectInfo && (
           <div className="flex space-x-2">
             <Button
               variant={state.analysis.mode === 'chat' ? 'default' : 'outline'}
@@ -197,7 +208,7 @@ function HeaderContent({ className }: { className?: string }) {
           </div>
         )}
         
-        {isMobile && (
+        {isMobile && shouldShowProjectInfo && (
           <div className="flex justify-center space-x-4">
             <Button
               variant={state.analysis.mode === 'chat' ? 'default' : 'outline'}
@@ -240,13 +251,15 @@ function HeaderContent({ className }: { className?: string }) {
       </div>
     </header>
   )
-}
+});
 
 // 헤더 컴포넌트
-export const Header = ({ className }: { className?: string }) => {
+export const Header = memo(({ className }: { className?: string }) => {
   return (
-    <Suspense fallback={<div className="h-[56px] bg-background"></div>}>
+    <div className="h-[56px] bg-background">
       <HeaderContent className={className} />
-    </Suspense>
-  )
-}
+    </div>
+  );
+});
+
+Header.displayName = 'Header';

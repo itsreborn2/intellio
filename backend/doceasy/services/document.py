@@ -237,9 +237,12 @@ class DocumentService:
         # 파일명 길이 제한
         if len(filename) > 255:
             return False
-            
+        
+        # 파일명은 한글, 영문자, 숫자로 시작
+        # 중간에는 공백, 하이픈, 언더스코어, 점, 대괄호와 함께 특수문자도 허용
+        # 마지막도 한글, 영문자, 숫자, 대괄호, 특수문자로 끝날 수 있음
         # 허용되지 않는 문자 검사
-        pattern = r'^[가-힣a-zA-Z0-9][가-힣a-zA-Z0-9\s\-_\.]*[가-힣a-zA-Z0-9]$'
+        pattern = r'^[가-힣a-zA-Z0-9][가-힣a-zA-Z0-9\s\-_\.\[\]!@#$%^&()+,;={}~]*[가-힣a-zA-Z0-9\[\]!@#$%^&()+,;={}~]$'
         return bool(re.match(pattern, filename))
 
     async def get_document(self, document_id: UUID) -> Optional[Document]:

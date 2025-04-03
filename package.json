@@ -76,6 +76,7 @@
     "react-select": "^5.10.1",
     "react-sparklines": "^1.7.0",
     "react-toastify": "^11.0.3",
+    "react-virtuoso": "^4.12.6",
     "react-window": "^1.8.11",
     "rehype-highlight": "^7.0.2",
     "rehype-raw": "^7.0.0",
