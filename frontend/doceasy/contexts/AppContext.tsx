@@ -125,28 +125,30 @@ const appReducer = (state: AppState, action: Action): AppState => {
       if (state.currentProjectId === action.payload.id) {
         return {
           ...state,
-          currentProject: action.payload
+          currentProject: action.payload,
+          projectTitle: action.payload.name || state.projectTitle
         }
       }
       
-      // 다른 프로젝트로 변경하는 경우 상태 초기화
+      // 다른 프로젝트로 변경하는 경우 상태를 점진적으로 업데이트
+      // 먼저 프로젝트와 타이틀만 업데이트하고, 나머지는 후속 액션에서 처리
       return {
         ...state,
         currentProjectId: action.payload.id,
         currentProject: action.payload,
-        documents: {},
-        messages: [], // 메시지는 useEffect에서 로드됨
+        projectTitle: action.payload.name || '',
+        // documents와 messages는 유지하고 백그라운드에서 업데이트되게 함
         analysis: {
-          ...initialState.analysis
+          ...state.analysis,
+          // 기존 테이블 데이터 유지하며 부드럽게 전환
+          selectedDocumentIds: []
         }
       };
 
     case actionTypes.SET_PROJECT_TITLE:
-      console.log(`SET_PROJECT_TITLE: ${action.payload}`)
       return {
         ...state,
         projectTitle: action.payload
-        
       }
 
     case actionTypes.SET_VIEW:
@@ -305,7 +307,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
       let finalColumns = [...initialTableColumns]; // 배열을 복제하여 참조 문제 방지
 
       if (bLog) {
-        console.debug('[UPDATE_TABLE_DATA] 시작 ----------------');
+        console.info('[UPDATE_TABLE_DATA] 시작 ----------------');
         console.debug('1. 현재 상태:', {
           currentColumns: state.analysis.tableData?.columns || [],
           documents: state.documents,

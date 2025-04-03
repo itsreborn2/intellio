@@ -53,7 +53,7 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
           : `ml-auto max-w-[85%]`
       }`}>
         <div className={`
-          rounded-lg px-4 py-2.5 
+          rounded-2xl px-4 py-2.5 
           ${message.role === 'assistant' 
             ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 shadow-sm' 
             : 'bg-blue-500 text-white'
@@ -584,10 +584,14 @@ export const ChatSection = () => {
     <div className="relative h-full flex flex-col bg-[#f5f5fa] dark:bg-gray-900">
       {/* 메시지 컨테이너 */}
       <div 
-        className={`flex-grow overflow-y-auto ${isMobile ? 'px-3 py-4' : 'px-4 py-6'} ${isMobile ? 'pb-[80px]' : 'pb-[78px]'} 
-          scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 
+        className={`overflow-y-auto ${isMobile ? 'px-3 py-4' : 'px-4 py-6'} 
+          scrollbar-default scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 
           scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-500`} 
         id="chat-container"
+        style={{ 
+          height: `calc(100% - ${isMobile ? '56px' : '60px'})`,
+          marginBottom: `${isMobile ? '56px' : '60px'}`
+        }}
       >
         <div className="flex flex-col max-w-3xl mx-auto w-full">
           {renderMessages}
@@ -600,45 +604,50 @@ export const ChatSection = () => {
         className={`${
           isMobile 
             ? 'fixed bottom-0 left-0 right-0 z-[1000] p-2.5 bg-[#f5f5fa] dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800' 
-            : 'absolute bottom-0 left-0 right-0 bg-[#f5f5fa] dark:bg-gray-900  border-gray-200 p-3 dark:border-gray-800'
+            : 'fixed bottom-0 left-0 right-0 z-[10] bg-[#f5f5fa] dark:bg-gray-900 border-gray-200 dark:border-gray-800'
         }`}
+        style={{ height: isMobile ? '56px' : '50px' }}
       >
-        <form onSubmit={handleSubmit} className="flex space-x-2 max-w-3xl mx-auto">
-          <Input
-            className={`flex-1 rounded-2xl ${isMobile ? 'px-3 py-1.5 text-sm h-10' : 'px-4 py-2.5 h-11'} 
-              bg-white border-gray-200 dark:border-gray-700 focus-visible:ring-blue-500 shadow-sm`}
-            placeholder={isGenerating 
-              ? "응답 중..." 
-              : (state.analysis.mode === 'table' 
-                ? (isMobile ? "질문을 입력하세요..." : "개별 분석을 위한 질문을 입력하세요...") 
-                : "메시지를 입력하세요...")}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            disabled={isGenerating || state.isAnalyzing}
-            ref={inputRef}
-          />
-          {isGenerating ? (
-            <Button 
-              type="button" 
-              variant="destructive" 
-              size={isMobile ? "sm" : "default"}
-              onClick={handleStopGeneration}
-              disabled={state.analysis.mode === 'table' && tableStreamingState.isStreaming}
-              className={`rounded-full bg-red-500 hover:bg-red-600 ${isMobile ? 'h-10 w-10 p-0' : 'h-11 w-11 p-0'}`}
-            >
-              <Square className={`${isMobile ? 'h-4 w-4' : 'h-5 w-5'}`} />
-            </Button>
-          ) : (
-            <Button 
-              type="submit" 
-              size={isMobile ? "sm" : "default"} 
-              disabled={!input.trim() || isGenerating || state.isAnalyzing}
-              className={`rounded-full bg-blue-500 hover:bg-blue-600 ${isMobile ? 'h-10 w-10 p-0' : 'h-11 w-11 p-0'}`}
-            >
-              <Send className={`${isMobile ? 'h-4 w-4' : 'h-5 w-5'}`} />
-            </Button>
-          )}
+        <form onSubmit={handleSubmit} className="flex max-w-3xl mx-auto w-full px-0 relative">
+          <div className="w-full relative">
+            <Input
+              className={`flex-1 w-full rounded-2xl pr-12 ${isMobile ? 'px-3 py-1.5 text-sm h-10' : 'px-4 py-2.5 h-11'} 
+                bg-white border-gray-200 dark:border-gray-700 focus-visible:ring-blue-500 shadow-sm`}
+              placeholder={isGenerating 
+                ? "응답 중..." 
+                : (state.analysis.mode === 'table' 
+                  ? (isMobile ? "질문을 입력하세요..." : "개별 분석을 위한 질문을 입력하세요...") 
+                  : "메시지를 입력하세요...")}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              disabled={isGenerating || state.isAnalyzing}
+              ref={inputRef}
+            />
+            <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+              {isGenerating ? (
+                <Button 
+                  type="button" 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={handleStopGeneration}
+                  disabled={state.analysis.mode === 'table' && tableStreamingState.isStreaming}
+                  className={`rounded-full bg-red-500 hover:bg-red-600 ${isMobile ? 'h-8 w-8 p-0' : 'h-9 w-9 p-0'}`}
+                >
+                  <Square className={`${isMobile ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
+                </Button>
+              ) : (
+                <Button 
+                  type="submit" 
+                  size="sm"
+                  disabled={!input.trim() || isGenerating || state.isAnalyzing}
+                  className={`rounded-full bg-blue-500 hover:bg-blue-600 ${isMobile ? 'h-8 w-8 p-0' : 'h-9 w-9 p-0'}`}
+                >
+                  <Send className={`${isMobile ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
+                </Button>
+              )}
+            </div>
+          </div>
         </form>
       </div>
 

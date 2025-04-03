@@ -112,7 +112,7 @@ export const DefaultTemplate = () => {
   const chatButtonIcon = chatExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />;
   const chatButtonText = chatExpanded ? '복원' : '채팅 영역 최대화';
   
-  const tableButtonIcon = tableExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />;
+  const tableButtonIcon = tableExpanded ? <Minimize2 className="h-4 w-4 " /> : <Maximize2 className="h-4 w-4" />;
   const tableButtonText = tableExpanded ? '복원' : '테이블 영역 최대화';
 
   const renderContent = () => {
@@ -196,7 +196,7 @@ export const DefaultTemplate = () => {
                       ...(chatExpanded ? expandAnimation : collapseAnimation)
                     }}
                   >
-                    <div className="absolute right-2 top-2 z-30">
+                    <div className="absolute right-4 top-1 z-30">
                       <TooltipProvider>
                         <Tooltip delayDuration={100}>
                           <TooltipTrigger asChild>
@@ -239,7 +239,7 @@ export const DefaultTemplate = () => {
                       ...(tableExpanded ? expandAnimation : collapseAnimation)
                     }}
                   >
-                    <div className="absolute right-2 top-2 z-30">
+                    <div className="absolute right-4 top-1 z-30">
                       <TooltipProvider>
                         <Tooltip delayDuration={100}>
                           <TooltipTrigger asChild>

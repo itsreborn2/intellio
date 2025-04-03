@@ -13,6 +13,14 @@ dotenv.config({
 const nextConfig = {
   transpilePackages: ['intellio-common'], // common 폴더의 컴포넌트들을 트랜스파일하도록 설정
 
+  compiler: process.env.NODE_ENV === 'production' 
+  ? {
+      removeConsole: {
+        exclude: ['error', 'warn', 'info'],
+      },
+    } 
+  : undefined,
+
   // React의 Strict Mode 활성화 - 개발 시 잠재적인 문제를 감지하고 더 나은 개발 경험을 제공
   reactStrictMode: true,
 

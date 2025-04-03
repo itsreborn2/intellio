@@ -421,8 +421,8 @@ class KnowledgeIntegratorAgent(BaseAgent):
             # 분석결과가 없다면, 찾은 문서 내용을 리턴.
             for i, report in enumerate(searched_reports):
                 formatted += f"[{i+1}] 제목: {report.get('title', '제목 없음')}\n"
-                formatted += f"출처: 미상\n"
-                formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
+                formatted += f"출처: 비공개자료\n"
+                #formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
                 content = report.get('content', '내용 없음')
                 formatted += f"내용: {content}\n"
                 
@@ -430,30 +430,54 @@ class KnowledgeIntegratorAgent(BaseAgent):
             
         return formatted
     
-    def _format_financial_results(self, financial_data: List[Dict[str, Any]]) -> str:
-        """재무 분석 결과를 문자열로 포맷팅"""
+    def _format_financial_results(self, financial_data: Dict[str, Any]) -> str:
+        """재무 분석 결과를 문자열로 포맷팅
+        
+        Args:
+            financial_data: {
+                "llm_response": str,
+                "extracted_data": {
+                    "stock_code": str,
+                    "stock_name": str,
+                    "report_count": int,
+                    "years_covered": List[int]
+                },
+                "raw_financial_data": List[Dict]
+            }
+        """
         if not financial_data:
             return "재무 분석 결과 없음"
             
         formatted = "재무 분석 결과:\n"
-        for i, data in enumerate(financial_data):
-            formatted += f"[{i+1}] 기간: {data.get('period', '기간 정보 없음')}\n"
+        
+        # LLM 분석 결과 추가
+        llm_response = financial_data.get("llm_response", "")
+        if llm_response and llm_response != "분석 결과를 생성할 수 없습니다.":
+            formatted += f"{llm_response}\n\n"
             
-            # 재무 지표 정보
-            metrics = data.get('metrics', {})
-            if metrics:
-                formatted += "주요 지표:\n"
-                for key, value in metrics.items():
-                    formatted += f"- {key}: {value}\n"
-            
-            # 분석 정보
-            analysis = data.get('analysis', {})
-            if analysis:
-                formatted += f"분석: {str(analysis)[:300]}\n"
+        # 추출된 데이터 정보 추가
+        extracted_data = financial_data.get("extracted_data", {})
+        if extracted_data:
+            years = extracted_data.get("years_covered", [])
+            if years:
+                formatted += f"분석 기간: {min(years)}년 ~ {max(years)}년\n"
+            report_count = extracted_data.get("report_count", 0)
+            if report_count:
+                formatted += f"분석된 보고서 수: {report_count}개\n\n"
                 
-            formatted += "---\n"
-            
-        return formatted
+        # 원본 재무 데이터 추가 (최대 3개)
+        raw_data = financial_data.get("raw_financial_data", [])
+        if raw_data:
+            formatted += "상세 보고서 정보:\n"
+            for i, report in enumerate(raw_data, 1):
+                formatted += f"[{i}] {report.get('source', '보고서 정보 없음')}\n"
+                if report.get('financial_indicators'):
+                    formatted += "주요 지표:\n"
+                    for metric, value in report['financial_indicators'].items():
+                        formatted += f"- {metric}: {value[:200] if len(value) > 200 else value}\n"
+                formatted += "---\n"
+                
+        return formatted.strip()
     
     def _format_industry_results(self, industry_data: Union[List[Dict[str, Any]], Dict[str, Any], str]) -> str:
         """산업 분석 결과를 문자열로 포맷팅"""

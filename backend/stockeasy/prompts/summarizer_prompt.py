@@ -375,16 +375,28 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                 for report in searched_reports[:5]:
                     report_info = report.get("content", "")
                     report_source = report.get("source", "미상")
-                    report_date = report.get("published_date", "날짜 미상")
+                    #report_date = report.get("published_date", "날짜 미상")
                     report_page = f"{report.get('page', '페이지 미상')} p"
-                    sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"         
+                    #sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"         
+                    sources_info += f"[출처: {report_source}, {report_page}]\n{report_info}\n\n"         
         
-        # 재무 정보(일단 미구현. 재무분석 에이전트 추가 후에 풀것)
-        # if financial_data:
-        #     sources_info += "재무 정보:\n"
-        #     for key, value in financial_data.items():
-        #         sources_info += f"{key}: {value}\n"
-        #     sources_info += "\n"
+        # 재무 정보
+            # financial_data: {
+            #     "llm_response": str,
+            #     "extracted_data": {
+            #         "stock_code": str,
+            #         "stock_name": str,
+            #         "report_count": int,
+            #         "years_covered": List[int]
+            #     },
+            #     "raw_financial_data": List[Dict]        
+        if financial_data:
+            sources_info += "재무 정보:\n"
+            llm_response = financial_data.get("llm_response", "")
+            if llm_response:
+                sources_info += f"{llm_response}\n\n"
+            else:
+                sources_info += "재무 분석 결과가 없습니다.\n\n"
         
 
         

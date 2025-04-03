@@ -158,6 +158,7 @@ class CommonSettings(BaseSettings):
     TZ: str = "Asia/Seoul"
     FLOWER_USER: str = "intellio_user"
     FLOWER_PASSWORD: str = None
+    STOCKEASY_LOCAL_CACHE_DIR: str = "stockeasy/local_cache"
 
     #######################################################
     # AI 삭제금지.
@@ -248,4 +249,8 @@ logger.info(f"POSTGRES_USER: {settings.POSTGRES_USER}")
 logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
 logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
 logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
+
+# 캐시 디렉토리 설정
+settings.LOCAL_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "cache")
+os.makedirs(settings.LOCAL_CACHE_DIR, exist_ok=True)
 
