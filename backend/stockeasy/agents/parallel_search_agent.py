@@ -21,14 +21,16 @@ class ParallelSearchAgent(BaseAgent):
     여러 검색 에이전트를 병렬로 실행하는 에이전트
     """
     
-    def __init__(self, agents: Dict[str, BaseAgent]):
+    def __init__(self, agents: Dict[str, BaseAgent], graph=None):
         """
         초기화
         
         Args:
             agents: 검색 에이전트 이름과 인스턴스의 딕셔너리
+            graph: 그래프 인스턴스 (콜백 실행용)
         """
         self.agents = agents
+        self.graph = graph  # 그래프 인스턴스 저장
         self.search_agent_names = [
             "telegram_retriever", 
             "report_analyzer", 
@@ -275,28 +277,27 @@ class ParallelSearchAgent(BaseAgent):
                 state["custom_prompt_template"] = custom_prompt_templates[name]
                 logger.info(f"병렬 실행 - 에이전트 {name}의 상태에 커스텀 프롬프트 템플릿 추가됨")
             
-            # 그래프의 콜백을 직접 호출하기 위한 시도
-            try:
-                from stockeasy.graph.agent_registry import get_graph
-                graph = get_graph()
-                if graph and hasattr(graph, "_execute_callbacks"):
+            # 그래프의 콜백을 직접 호출
+            graph = self.graph  # 생성자에서 전달받은 그래프 사용
+            if graph and hasattr(graph, "_execute_callbacks"):
+                try:
                     # on_agent_start 콜백 수동 실행
                     graph._execute_callbacks('agent_start', name, state)
                     logger.info(f"병렬 실행 - 에이전트 {name}에 대한 on_agent_start 콜백 수동 실행")
-            except Exception as callback_error:
-                logger.warning(f"병렬 실행 - 에이전트 {name}의 콜백 실행 중 오류: {str(callback_error)}")
+                except Exception as callback_error:
+                    logger.warning(f"병렬 실행 - 에이전트 {name}의 콜백 실행 중 오류: {str(callback_error)}")
             
             # 에이전트 처리 실행
             result = await agent.process(state)
             
-            # 처리 완료 후 콜백 실행 시도
-            try:
-                if graph and hasattr(graph, "_execute_callbacks"):
+            # 처리 완료 후 콜백 실행
+            if graph and hasattr(graph, "_execute_callbacks"):
+                try:
                     # on_agent_end 콜백 수동 실행
                     graph._execute_callbacks('agent_end', name, result)
                     logger.info(f"병렬 실행 - 에이전트 {name}에 대한 on_agent_end 콜백 수동 실행")
-            except Exception as callback_error:
-                logger.warning(f"병렬 실행 - 에이전트 {name}의 종료 콜백 실행 중 오류: {str(callback_error)}")
+                except Exception as callback_error:
+                    logger.warning(f"병렬 실행 - 에이전트 {name}의 종료 콜백 실행 중 오류: {str(callback_error)}")
             
             end_time = time.time()
             logger.info(f"에이전트 {name} 실행 완료. 시간: {end_time - start_time:.2f}초")

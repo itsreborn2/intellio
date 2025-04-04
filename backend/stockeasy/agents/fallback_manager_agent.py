@@ -57,8 +57,42 @@ class FallbackManagerAgent(BaseAgent):
             
             # 오류 정보 추출
             error = state.get("error", "")
+            errors = state.get("errors", [])
+            if errors and not error:
+                error = " | ".join([e.get("error", "") for e in errors if "error" in e])
             
             logger.info(f"FallbackManagerAgent handling error: {error}")
+            
+            # LangSmith 타임스탬프 오류 확인
+            is_langsmith_timestamp_error = False
+            if "invalid 'dotted_order'" in error and "earlier than parent timestamp" in error:
+                logger.warning("LangSmith 타임스탬프 오류 감지됨: 상태를 재설정하고 다시 시작합니다.")
+                is_langsmith_timestamp_error = True
+                
+                # 상태를 재설정하여 그래프를 다시 시작할 수 있게 함
+                clean_state = {
+                    "query": query,
+                    "stock_code": stock_code,
+                    "stock_name": stock_name,
+                    "session_id": state.get("session_id", ""),
+                    "restart_from_error": True,
+                    "previous_error": error,
+                    "errors": [],  # 오류 목록 초기화
+                    "processing_status": {},  # 처리 상태 초기화
+                    "retrieved_data": {},  # 검색 결과 초기화
+                    "agent_results": {},  # 에이전트 결과 초기화
+                }
+                
+                # 중요: 쿼리 타입을 유지
+                if "query_type" in state:
+                    clean_state["query_type"] = state["query_type"]
+                
+                # 사용자 정보 유지
+                if "user_id" in state:
+                    clean_state["user_id"] = state["user_id"]
+                
+                logger.info("상태가 재설정되었습니다. 그래프가 처음부터 다시 시작합니다.")
+                return clean_state
             
             # 상황 및 오류 설명 결정
             situation = "요청한 정보를 처리하는 중 문제가 발생했습니다."

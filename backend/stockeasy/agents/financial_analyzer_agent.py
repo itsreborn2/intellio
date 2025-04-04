@@ -161,7 +161,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             
             # 필요한 재무 지표 식별
             required_metrics = self._identify_required_metrics(classification, query)
-            logger.info(f"required_metrics: {required_metrics}")
+            #logger.info(f"required_metrics: {required_metrics}")
 
 
             # 추출된 재무 데이터를 LLM에 전달할 형식으로 변환
@@ -171,7 +171,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 required_metrics,
                 data_requirements
             )
-            logger.info(f"formatted_data: {formatted_data}")
+            #logger.info(f"formatted_data: {formatted_data}")
             
             # 재무 데이터 분석 수행
             analysis_results = await self._analyze_financial_data(
