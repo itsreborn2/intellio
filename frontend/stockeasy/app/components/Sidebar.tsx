@@ -65,21 +65,33 @@ function SidebarContent() {
   
   // AI 애널리스트 페이지로 이동하는 함수 추가
   const goToAnalystPage = () => {
+    // 이미 애널리스트 페이지에 있는 경우 아무 작업도 수행하지 않음
+    if (window.location.pathname === '/analyst') return;
+    
     router.push('/analyst');
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   
   const goToRSRankPage = () => {
+    // 이미 RS랭크 페이지에 있는 경우 아무 작업도 수행하지 않음
+    if (window.location.pathname === '/rs-rank') return;
+    
     router.push('/rs-rank');
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   
   const goToETFSectorPage = () => {
+    // 이미 ETF/섹터 페이지에 있는 경우 아무 작업도 수행하지 않음
+    if (window.location.pathname === '/etf-sector') return;
+    
     router.push('/etf-sector');
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   
   const goToValuePage = () => {
+    // 이미 벨류에이션 페이지에 있는 경우 아무 작업도 수행하지 않음
+    if (window.location.pathname === '/value') return;
+    
     router.push('/value');
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };

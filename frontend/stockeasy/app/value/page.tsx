@@ -10,8 +10,6 @@ import {
   getSortedRowModel,
   SortingState,
 } from '@tanstack/react-table';
-import Sidebar from '../components/Sidebar'; // 사이드바 컴포넌트 import
-import TableCopyButton from '../components/TableCopyButton'; // 테이블 복사 버튼 import
 import { copyTableAsImage } from '../utils/tableCopyUtils'; // 테이블 복사 유틸리티 import
 
 // CSV 데이터 타입 정의
@@ -138,7 +136,7 @@ const TrendBarGraph: React.FC<TrendBarGraphProps> = ({ values }) => {
             <polyline
               points={linePoints}
               fill="none"
-              stroke="#F27474"
+              stroke="#0E7490" /* 막대그래프(bg-blue-300)보다 더 진한 파란색으로 변경 */
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -151,7 +149,7 @@ const TrendBarGraph: React.FC<TrendBarGraphProps> = ({ values }) => {
                 cx={point.x}
                 cy={point.y}
                 r="1.8"
-                fill="#F27474"
+                fill="#0E7490" /* 막대그래프(bg-blue-300)보다 더 진한 파란색으로 변경 */
                 stroke="white"
                 strokeWidth="0.3"
               />
@@ -173,7 +171,7 @@ const ValuationPage = () => {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [rowsPerPage, setRowsPerPage] = useState<number>(20); // 한 페이지에 표시할 행 수
+  const [rowsPerPage, setRowsPerPage] = useState<number>(21); // 한 페이지에 표시할 행 수
   
   // 필터 상태 추가
   const [searchFilter, setSearchFilter] = useState<string>('');
@@ -194,6 +192,19 @@ const ValuationPage = () => {
   const headerRef = useRef<HTMLDivElement>(null);
 
   // 컬럼 정의 - 동적으로 헤더명 사용
+  // 고정 컬럼 너비 정의
+  const fixedColumnWidths = {
+    stockCode: 80,
+    stockName: 150,
+    industry: 150,
+    marketCap: 110,
+    per2024E: 80,
+    per2025E: 80,
+    per2026E: 80,
+    per2027E: 80,
+    per2028E: 80
+  };
+  
   const columns = useMemo(() => [
     columnHelper.accessor('stockCode', {
       header: () => headers[2] || '종목코드', // C열 헤더
@@ -202,47 +213,97 @@ const ValuationPage = () => {
         const code = info.getValue();
         return code ? String(code).padStart(6, '0') : '';
       },
-      size: 80,
+      size: fixedColumnWidths.per2024E,
+      minSize: fixedColumnWidths.per2024E,
+      maxSize: fixedColumnWidths.per2024E,
     }),
     columnHelper.accessor('stockName', {
       header: () => headers[3] || '종목명', // D열 헤더
-      cell: info => info.getValue(),
-      size: 150,
+      cell: info => {
+        const stockName = info.getValue();
+        const stockCode = info.row.original.stockCode;
+        
+        return (
+          <div 
+            className="cursor-pointer hover:bg-[#e8f4f1] hover:text-blue-700 transition-colors duration-150 w-full h-full flex items-center px-1 -mx-1"
+            style={{ borderRadius: '4px' }}
+            onClick={() => handleSelectStock(stockCode, stockName)}
+            title={`${stockName} 선택하기`}
+          >
+            {stockName}
+          </div>
+        );
+      },
+      size: fixedColumnWidths.industry,
+      minSize: fixedColumnWidths.industry,
+      maxSize: fixedColumnWidths.industry,
     }),
     columnHelper.accessor('industry', {
       header: () => headers[1] || '업종', // B열 헤더
-      cell: info => info.getValue(),
-      size: 150,
+      cell: info => {
+        const industry = info.getValue();
+        
+        return (
+          <div 
+            className="cursor-pointer hover:bg-[#e8f4f1] hover:text-blue-700 transition-colors duration-150 w-full h-full flex items-center px-1 -mx-1"
+            style={{ borderRadius: '4px' }}
+            onClick={() => {
+              if (industry) {
+                setSelectedIndustry(industry);
+                setIndustryFilter(''); // 선택 후 검색어 초기화
+              }
+            }}
+            title={`${industry} 업종 선택하기`}
+          >
+            {industry}
+          </div>
+        );
+      },
+      size: fixedColumnWidths.industry,
+      minSize: fixedColumnWidths.industry,
+      maxSize: fixedColumnWidths.industry,
     }),
     columnHelper.accessor('marketCap', {
       header: () => '시가총액(백억)',
       cell: info => formatMarketCapToHundredBillion(info.getValue()),
-      size: 110,
+      size: fixedColumnWidths.marketCap,
+      minSize: fixedColumnWidths.marketCap,
+      maxSize: fixedColumnWidths.marketCap,
     }),
     columnHelper.accessor('per2024E', {
       header: () => headers[8] || '2024(E) PER', // I열 헤더
       cell: info => info.getValue(),
-      size: 80,
+      size: fixedColumnWidths.per2024E,
+      minSize: fixedColumnWidths.per2024E,
+      maxSize: fixedColumnWidths.per2024E,
     }),
     columnHelper.accessor('per2025E', {
       header: () => headers[9] || '2025(E) PER', // J열 헤더
       cell: info => info.getValue(),
-      size: 80,
+      size: fixedColumnWidths.per2024E,
+      minSize: fixedColumnWidths.per2024E,
+      maxSize: fixedColumnWidths.per2024E,
     }),
     columnHelper.accessor('per2026E', {
       header: () => headers[10] || '2026(E) PER', // K열 헤더
       cell: info => info.getValue(),
-      size: 80,
+      size: fixedColumnWidths.per2024E,
+      minSize: fixedColumnWidths.per2024E,
+      maxSize: fixedColumnWidths.per2024E,
     }),
     columnHelper.accessor('per2027E', {
       header: () => headers[11] || '2027(E) PER', // L열 헤더
       cell: info => info.getValue(),
-      size: 80,
+      size: fixedColumnWidths.per2024E,
+      minSize: fixedColumnWidths.per2024E,
+      maxSize: fixedColumnWidths.per2024E,
     }),
     columnHelper.accessor('per2028E', {
       header: () => headers[12] || '2028(E) PER', // M열 헤더
       cell: info => info.getValue(),
-      size: 80,
+      size: fixedColumnWidths.per2024E,
+      minSize: fixedColumnWidths.per2024E,
+      maxSize: fixedColumnWidths.per2024E,
     }),
     // "추이" 컬럼 추가
     columnHelper.display({
@@ -404,14 +465,14 @@ const ValuationPage = () => {
   // 화면 크기에 따라 표시할 행 수 계산
   const updateRowsPerPage = () => {
     try {
-      // 사용자 요청에 따라 고정 행 수 20개로 설정
-      const fixedRows = 20;
+      // 사용자 요청에 따라 고정 행 수 21개로 설정
+      const fixedRows = 21;
       
       setRowsPerPage(fixedRows);
     } catch (error) {
       console.error('행 수 계산 오류:', error);
       // 오류 발생 시 기본값 설정
-      setRowsPerPage(20);
+      setRowsPerPage(21);
     }
   };
   
@@ -432,23 +493,15 @@ const ValuationPage = () => {
     return Math.ceil(filteredData.length / rowsPerPage);
   }, [filteredData, rowsPerPage, showAllItems]);
 
-  // 컬럼 너비 상태 추가 - 첫 페이지 기준으로 고정
-  const [columnSizes, setColumnSizes] = useState<Record<string, number>>({});
-
-  // 첫 페이지 로드 시 컬럼 너비 저장
-  useEffect(() => {
-    if (filteredData.length > 0 && Object.keys(columnSizes).length === 0) {
-      // 초기 컬럼 너비 설정
-      const initialSizes: Record<string, number> = {};
-      columns.forEach(column => {
-        // @ts-ignore - id 속성 접근
-        const columnId = column.id || column.accessorKey || '';
-        // @ts-ignore - size 속성 접근
-        initialSizes[columnId] = column.size || 150;
-      });
-      setColumnSizes(initialSizes);
-    }
-  }, [filteredData, columns]);
+  // 컬럼 너비 상태 추가 - 고정 너비 사용
+  const [columnSizes, setColumnSizes] = useState<Record<string, number>>(() => {
+    // 초기 컬럼 너비 설정
+    const initialSizes: Record<string, number> = {};
+    Object.keys(fixedColumnWidths).forEach(columnId => {
+      initialSizes[columnId] = fixedColumnWidths[columnId as keyof typeof fixedColumnWidths];
+    });
+    return initialSizes;
+  });
 
   const table = useReactTable({
     data: showAllItems ? filteredData : currentPageData, // 전 종목 출력 여부에 따라 데이터 소스 변경
@@ -461,11 +514,20 @@ const ValuationPage = () => {
       sorting,
       columnSizing: columnSizes,
     },
+    columnResizeMode: 'onChange',
+    enableColumnResizing: false, // 컬럼 크기 조정 비활성화
+    defaultColumn: {
+      minSize: 50,
+      size: 150,
+      maxSize: 300,
+    },
   });
 
   // 컬럼 너비 가져오는 함수
   const getColumnWidth = (columnId: string) => {
-    return columnSizes[columnId] || 150; // 기본값 150px
+    // 고정된 너비 값 반환
+    const fixedWidth = fixedColumnWidths[columnId as keyof typeof fixedColumnWidths];
+    return fixedWidth || columnSizes[columnId] || 150; // 기본값 150px
   };
 
   // 검색어 입력 시 엔터키 처리 함수
@@ -513,13 +575,11 @@ const ValuationPage = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen overflow-hidden"> {/* overflow-hidden 추가 */}
-        <Sidebar />
-        <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-hidden ml-0 md:ml-16 w-full flex flex-col">
-          <div className="max-w-6xl mx-auto w-full flex-1 flex flex-col overflow-hidden"> {/* overflow-hidden 추가 */}
-            <div className="flex items-center justify-center h-screen">
-              <div className="text-xl">데이터를 불러오는 중...</div>
-            </div>
+      <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-hidden ml-0 md:ml-16 w-full flex flex-col">
+        <div className="max-w-6xl mx-auto w-full flex-1 flex flex-col overflow-hidden"> {/* overflow-hidden 추가 */}
+          <div className="flex items-center justify-center h-screen">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+            <span className="ml-3 text-gray-700">데이터 로딩 중...</span>
           </div>
         </div>
       </div>
@@ -527,357 +587,299 @@ const ValuationPage = () => {
   }
 
   return (
-    <div className="flex">
-      {/* 사이드바 */}
-      <Sidebar />
-      
+    <div className="flex-1 p-0 sm:p-2 md:p-4 ml-0 md:ml-16 w-full">
       {/* 메인 콘텐츠 영역 - 모바일 최적화 */}
-      <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto ml-0 md:ml-16 w-full">
-        {/* Inner container for width limit and centering - ETF 페이지와 정확히 동일한 너비 적용 */}
-        <div className="max-w-7xl mx-auto">
-          {/* 밸류에이션 테이블 */}
-          <div className="mb-2 md:mb-4 w-full">
-            <div className="bg-white rounded-md shadow p-2 md:p-4">
-              <div ref={headerRef} className="mb-2 md:mb-4">
-                {/* 테이블 헤더 영역 */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2">
-                  <h2 className="text-lg font-semibold mb-2 sm:mb-0">밸류에이션 테이블</h2>
-                  
-                  {/* 테이블 복사 버튼 */}
-                  <div className="flex items-center">
-                    <TableCopyButton 
-                      tableRef={tableRef}
-                      headerRef={headerRef}
-                      tableName="밸류에이션 테이블"
-                      options={{
-                        copyrightText: " StockEasy",
-                        scale: 2
-                      }}
-                      className="text-xs bg-gray-100 hover:bg-gray-200 py-1 px-2 rounded mr-2"
-                    />
-                  </div>
-                </div>
-                
-                {/* 필터 섹션 추가 */}
-                <div className="p-2 sm:p-4 border-b border-gray-200">
-                  <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
-                    {/* 종목명/종목코드 검색 필터 */}
-                    <div className="flex flex-row items-center">
-                      <label htmlFor="searchFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
-                        종목명/종목코드
-                      </label>
-                      {selectedStock ? (
-                        <button
-                          onClick={handleClearSelectedStock}
-                          className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
-                          style={{ height: '35px', borderRadius: '4px' }}
-                        >
-                          <span>{selectedStock.name} ({selectedStock.code})</span>
-                          <span className="ml-1">×</span>
-                        </button>
-                      ) : (
-                        <div className="flex items-center">
-                          <input
-                            id="searchFilter"
-                            type="text"
-                            value={searchFilter}
-                            onChange={(e) => setSearchFilter(e.target.value)}
-                            onKeyDown={handleSearchKeyDown}
-                            placeholder="종목명 또는 종목코드 검색..."
-                            className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent"
-                            style={{ 
-                              width: 'clamp(120px, 15vw, 180px)',
-                              height: '35px',
-                              borderRadius: '4px'
-                            }}
-                          />
-                          {searchFilter && (
-                            <button
-                              onClick={() => {
-                                // 검색어와 일치하는 첫 번째 종목 선택
-                                const foundStock = data.find(item => 
-                                  (item.stockName && item.stockName.toLowerCase().includes(searchFilter.toLowerCase())) || 
-                                  (item.stockCode && item.stockCode.toLowerCase().includes(searchFilter.toLowerCase()))
-                                );
-                                
-                                if (foundStock) {
-                                  handleSelectStock(foundStock.stockCode, foundStock.stockName);
-                                }
-                              }}
-                              className="ml-1 px-2 bg-[#D8EFE9] text-gray-700 text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none"
-                              style={{ 
-                                height: '35px',
-                                borderRadius: '4px'
-                              }}
-                            >
-                              선택
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* 업종 선택 필터 */}
-                    <div className="flex flex-row items-center ml-1 sm:ml-2">
-                      <label htmlFor="industryFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
-                        업종
-                      </label>
-                      {selectedIndustry ? (
-                        <button
-                          onClick={handleClearSelectedIndustry}
-                          className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
-                          style={{ height: '35px', borderRadius: '4px' }}
-                        >
-                          <span>{selectedIndustry}</span>
-                          <span className="ml-1">×</span>
-                        </button>
-                      ) : (
-                        <div className="flex items-center">
-                          <input
-                            list="industryOptions"
-                            id="industryFilter"
-                            value={industryFilter}
-                            onChange={(e) => setIndustryFilter(e.target.value)}
-                            placeholder="업종 선택 또는 입력..."
-                            className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent"
-                            style={{ 
-                              width: 'clamp(100px, 12vw, 150px)',
-                              height: '35px',
-                              borderRadius: '4px'
-                            }}
-                          />
-                          {industryFilter && (
-                            <button
-                              onClick={() => {
-                                // 정확히 일치하는 업종 찾기
-                                const foundIndustry = industries.find(industry => 
-                                  industry.toLowerCase().includes(industryFilter.toLowerCase())
-                                );
-                                
-                                if (foundIndustry) {
-                                  setSelectedIndustry(foundIndustry);
-                                  setIndustryFilter(''); // 선택 후 검색어 초기화
-                                }
-                              }}
-                              className="ml-1 px-2 bg-[#D8EFE9] text-gray-700 text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none"
-                              style={{ 
-                                height: '35px',
-                                borderRadius: '4px'
-                              }}
-                            >
-                              선택
-                            </button>
-                          )}
-                          <datalist id="industryOptions">
-                            <option value="">전체 업종</option>
-                            {industries.map((industry, index) => (
-                              <option key={index} value={industry}>
-                                {industry}
-                              </option>
-                            ))}
-                          </datalist>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* 필터 초기화 버튼 */}
-                    <div className="flex items-center ml-1 sm:ml-2">
-                      <button
-                        onClick={() => {
-                          setSearchFilter('');
-                          setIndustryFilter('');
-                          setSelectedStock(null);
-                          setSelectedIndustry(null);
-                        }}
-                        className="px-2 sm:px-3 bg-gray-200 text-gray-700 text-[10px] sm:text-xs hover:bg-gray-300 focus:outline-none"
+      <div className="max-w-6xl mx-auto"> 
+        {/* 테이블 섹션 컨테이너 (rs-rank 페이지와 유사하게) */}
+        <div className="mb-2 md:mb-4">
+          {/* 내부 컨테이너 (하단 마진 제거) */}
+          <div className="bg-white rounded-md shadow p-2 md:p-4">
+            {/* 내부 패딩 조정: 하단 패딩(pb) 제거 */}
+            <div className="bg-white rounded border border-gray-100 p-2 md:p-4 h-auto"> 
+              {/* 테이블 헤더 영역 */}
+              <div ref={headerRef} className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3"> {/* 제목 영역 + mb-3 */}
+                {/* text-lg 클래스 제거하여 RS 순위 제목과 크기 맞춤 */}
+                <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>밸류에이션</h2>
+              </div>
+              
+              {/* 필터 섹션 */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-2 md:mb-4">
+                {/* 종목명/종목코드 검색 필터 */}
+                <div className="flex items-center">
+                  <label htmlFor="searchFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+                    종목명/종목코드
+                  </label>
+                  {selectedStock ? (
+                    <button
+                      onClick={handleClearSelectedStock}
+                      className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
+                      style={{ height: '35px', borderRadius: '4px' }}
+                    >
+                      <span>{selectedStock.name} ({selectedStock.code})</span>
+                      <span className="ml-1">×</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center">
+                      <input
+                        id="searchFilter"
+                        type="text"
+                        value={searchFilter}
+                        onChange={(e) => setSearchFilter(e.target.value)}
+                        onKeyDown={handleSearchKeyDown}
+                        placeholder="종목명/종목코드 입력"
+                        className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent"
                         style={{ 
+                          width: 'clamp(120px, 15vw, 180px)',
                           height: '35px',
                           borderRadius: '4px'
                         }}
-                      >
-                        필터 초기화
-                      </button>
+                      />
                     </div>
-                    
-                    {/* 전 종목 출력 버튼 */}
-                    <div className="flex items-center ml-1 sm:ml-2">
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={showAllItems}
-                          onChange={handleShowAllItems}
-                          className="sr-only"
-                        />
-                        <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ease-in-out ${showAllItems ? 'bg-[#D8EFE9]' : 'bg-gray-300'}`}>
-                          <div className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${showAllItems ? 'translate-x-4' : ''}`}></div>
-                        </div>
-                        <span className="ml-2 text-[10px] sm:text-xs text-gray-700">전 종목 출력</span>
-                      </label>
-                      {/* 로딩 스피너 추가 */}
-                      {isAllItemsLoading && (
-                        <div className="ml-2 animate-spin h-4 w-4">
-                          <svg className="h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* 필터 결과 표시 */}
-                  <div className="mt-1 sm:mt-2 text-[9px] sm:text-xs text-gray-500">
-                    총 {filteredData.length}개 종목 (전체 {data.length}개 중)
-                  </div>
+                  )}
                 </div>
                 
-                {/* 전 종목 출력 로딩 상태 표시 */}
-                {showAllItems && isAllItemsLoading && (
-                  <div className="flex items-center justify-center h-screen">
-                    <div className="text-xl">전 종목 데이터를 불러오는 중...</div>
-                  </div>
-                )}
+                {/* 업종 선택 필터 */}
+                <div className="flex flex-row items-center ml-1 sm:ml-2">
+                  <label htmlFor="industryFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+                    업종
+                  </label>
+                  {selectedIndustry ? (
+                    <button
+                      onClick={handleClearSelectedIndustry}
+                      className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
+                      style={{ height: '35px', borderRadius: '4px' }}
+                    >
+                      <span>{selectedIndustry}</span>
+                      <span className="ml-1">×</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center">
+                      <input
+                        list="industryOptions"
+                        id="industryFilter"
+                        value={industryFilter}
+                        onChange={(e) => setIndustryFilter(e.target.value)}
+                        placeholder="업종 선택 또는 입력..."
+                        className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent"
+                        style={{ 
+                          width: 'clamp(100px, 12vw, 150px)',
+                          height: '35px',
+                          borderRadius: '4px'
+                        }}
+                      />
+                      <datalist id="industryOptions">
+                        <option value="">전체 업종</option>
+                        {industries.map((industry, index) => (
+                          <option key={index} value={industry}>
+                            {industry}
+                          </option>
+                        ))}
+                      </datalist>
+                    </div>
+                  )}
+                </div>
                 
-                {/* 테이블 */}
-                {!isAllItemsLoading && (
-                  <div 
-                    className="overflow-x-auto flex-1" 
-                    ref={tableRef}
+                {/* 필터 초기화 버튼 */}
+                <div className="flex items-center ml-1 sm:ml-2">
+                  <button
+                    onClick={() => {
+                      setSearchFilter('');
+                      setIndustryFilter('');
+                      setSelectedStock(null);
+                      setSelectedIndustry(null);
+                    }}
+                    className="px-2 sm:px-3 bg-gray-200 text-gray-700 text-[10px] sm:text-xs hover:bg-gray-300 focus:outline-none"
+                    style={{ 
+                      height: '35px',
+                      borderRadius: '4px'
+                    }}
                   >
-                    <div className="overflow-x-auto w-full">
-                      <table className="min-w-full border border-gray-200 table-fixed">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            {table.getHeaderGroups().map(headerGroup => (
-                              headerGroup.headers.map(header => (
-                                <th
-                                  key={header.id}
-                                  scope="col"
-                                  className={`px-1 sm:px-2 md:px-4 py-2 text-center text-[9px] sm:text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 ${
-                                    // 모바일에서 특정 컬럼 숨김 처리
-                                    header.id === 'stockCode' || header.id === 'marketCap' ? 'hidden sm:table-cell' : ''
-                                  }`}
-                                  style={{ 
-                                    width: getColumnWidth(header.id),
-                                    height: '35px',
-                                  }}
-                                  onClick={header.column.getToggleSortingHandler()}
-                                >
-                                  <div className="flex justify-center items-center">
-                                    {flexRender(
-                                      header.column.columnDef.header,
-                                      header.getContext()
-                                    )}
-                                    {header.column.getIsSorted() ? (
-                                      header.column.getIsSorted() === 'asc' ? (
-                                        <span className="ml-1">↑</span>
-                                      ) : (
-                                        <span className="ml-1">↓</span>
-                                      )
-                                    ) : null}
-                                  </div>
-                                </th>
-                              ))
+                    초기화
+                  </button>
+                </div>
+                
+                {/* 전 종목 출력 버튼 */}
+                <div className="flex items-center ml-1 sm:ml-2">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showAllItems}
+                      onChange={handleShowAllItems}
+                      className="sr-only"
+                    />
+                    <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ease-in-out ${showAllItems ? 'bg-[#D8EFE9]' : 'bg-gray-300'}`}>
+                      <div className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${showAllItems ? 'translate-x-4' : ''}`}></div>
+                    </div>
+                    <span className="ml-2 text-[10px] sm:text-xs text-gray-700">전 종목 출력</span>
+                  </label>
+                  {/* 로딩 스피너 추가 */}
+                  {isAllItemsLoading && (
+                    <div className="ml-2 animate-spin h-4 w-4">
+                      <svg className="h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* 전 종목 출력 로딩 상태 표시 */}
+              {showAllItems && isAllItemsLoading && (
+                <div className="flex items-center justify-center h-screen">
+                  <div className="text-xl">전 종목 데이터를 불러오는 중...</div>
+                </div>
+              )}
+              
+              {/* 테이블 */}
+              {!isAllItemsLoading && (
+                <div 
+                  // 테이블 래퍼에서 하단 마진 제거
+                  className="overflow-x-auto" 
+                  ref={tableRef}
+                >
+                  <div className="overflow-x-auto w-full">
+                    <table className="min-w-full border border-gray-200 table-fixed">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          {table.getHeaderGroups().map(headerGroup => (
+                            headerGroup.headers.map(header => (
+                              <th
+                                key={header.id}
+                                scope="col"
+                                className={`px-1 sm:px-2 md:px-4 py-2 text-center text-[9px] sm:text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 ${
+                                  // 모바일에서 특정 컬럼 숨김 처리
+                                  header.id === 'stockCode' || header.id === 'marketCap' ? 'hidden sm:table-cell' : ''
+                                }`}
+                                style={{ 
+                                  width: `${getColumnWidth(header.id)}px`,
+                                  height: '35px',
+                                  minWidth: `${getColumnWidth(header.id)}px`,
+                                  maxWidth: `${getColumnWidth(header.id)}px`
+                                }}
+                                onClick={header.column.getToggleSortingHandler()}
+                              >
+                                <div className="flex justify-center items-center">
+                                  {flexRender(
+                                    header.column.columnDef.header,
+                                    header.getContext()
+                                  )}
+                                  {header.column.getIsSorted() ? (
+                                    header.column.getIsSorted() === 'asc' ? (
+                                      <span className="ml-1">↑</span>
+                                    ) : (
+                                      <span className="ml-1">↓</span>
+                                    )
+                                  ) : null}
+                                </div>
+                              </th>
+                            ))
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white">
+                        {table.getRowModel().rows.map((row, rowIndex) => (
+                          <tr key={row.id} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                            {row.getVisibleCells().map(cell => (
+                              <td
+                                key={cell.id}
+                                className={`px-1 sm:px-2 md:px-4 py-1 whitespace-nowrap text-[9px] sm:text-[10px] md:text-xs border border-gray-200 ${
+                                  // 컬럼별 정렬 방식 적용
+                                  cell.column.id === 'stockCode' ? 'text-center' :
+                                  cell.column.id === 'stockName' || cell.column.id === 'industry' ? 'text-left' :
+                                  'text-right'
+                                } ${
+                                  // 모바일에서 특정 컬럼 숨김 처리
+                                  cell.column.id === 'stockCode' || cell.column.id === 'marketCap' ? 'hidden sm:table-cell' : ''
+                                }`}
+                                style={{ 
+                                  width: `${getColumnWidth(cell.column.id)}px`,
+                                  height: '35px',
+                                  minWidth: `${getColumnWidth(cell.column.id)}px`,
+                                  maxWidth: `${getColumnWidth(cell.column.id)}px`
+                                 }}
+                              >
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </td>
                             ))}
                           </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                          {table.getRowModel().rows.map((row, rowIndex) => (
-                            <tr key={row.id} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                              {row.getVisibleCells().map(cell => (
-                                <td
-                                  key={cell.id}
-                                  className={`px-1 sm:px-2 md:px-4 py-1 whitespace-nowrap text-[9px] sm:text-[10px] md:text-xs border border-gray-200 ${
-                                    // 컬럼별 정렬 방식 적용
-                                    cell.column.id === 'stockCode' ? 'text-center' :
-                                    cell.column.id === 'stockName' || cell.column.id === 'industry' ? 'text-left' :
-                                    'text-right'
-                                  } ${
-                                    // 모바일에서 특정 컬럼 숨김 처리
-                                    cell.column.id === 'stockCode' || cell.column.id === 'marketCap' ? 'hidden sm:table-cell' : ''
-                                  }`}
-                                  style={{ 
-                                    width: getColumnWidth(cell.column.id),
-                                    height: '35px',
-                                   }}
-                                >
-                                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-                
-                {/* 페이지네이션 추가 */}
-                {!showAllItems && (
-                  <div className="mt-2 flex justify-center mb-2">
-                    <div className="flex items-center space-x-1">
-                      <button
-                        className="px-1 sm:px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-[9px] sm:text-xs"
-                        onClick={() => setCurrentPage(1)}
-                        disabled={currentPage === 1}
-                      >
-                        <span className="hidden sm:inline">처음</span>
-                        <span className="sm:hidden">«</span>
-                      </button>
-                      <button
-                        className="px-1 sm:px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-[9px] sm:text-xs"
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                      >
-                        <span className="hidden sm:inline">이전</span>
-                        <span className="sm:hidden">‹</span>
-                      </button>
+                </div>
+              )}
+              
+              {/* 페이지네이션 추가 */}
+              {!showAllItems && (
+                <div className="mt-4 flex justify-center"> {/* RS 순위 페이지와 동일하게 상단 여백 mt-4로 변경하고 하단 여백 제거 */}
+                  <div className="flex items-center space-x-1">
+                    <button
+                      className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                      style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                    >
+                      <span className="hidden sm:inline">처음</span>
+                      <span className="sm:hidden">«</span>
+                    </button>
+                    <button
+                      className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                      style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      <span className="hidden sm:inline">이전</span>
+                      <span className="sm:hidden">‹</span>
+                    </button>
+                    
+                    {/* 페이지 번호 버튼 - 모바일에서는 줄이고 PC에서는 더 많이 표시 */}
+                    {Array.from({ length: totalPages }).map((_, index) => {
+                      const pageNumber = index + 1;
+                      // 모바일에서는 현재 페이지 주변 1개만 표시, PC에서는 2개 표시
+                      const visibleOnMobile = Math.abs(pageNumber - currentPage) <= 1;
+                      const visibleOnDesktop = Math.abs(pageNumber - currentPage) <= 2;
                       
-                      {/* 페이지 번호 버튼 - 모바일에서는 줄이고 PC에서는 더 많이 표시 */}
-                      {Array.from({ length: totalPages }).map((_, index) => {
-                        const pageNumber = index + 1;
-                        // 모바일에서는 현재 페이지 주변 1개만 표시, PC에서는 2개 표시
-                        const visibleOnMobile = Math.abs(pageNumber - currentPage) <= 1;
-                        const visibleOnDesktop = Math.abs(pageNumber - currentPage) <= 2;
-                        
-                        if (visibleOnDesktop) {
-                          return (
-                            <button
-                              key={index}
-                              className={`w-6 sm:w-8 py-1 flex justify-center ${
-                                pageNumber === currentPage
-                                  ? 'bg-[#D8EFE9] text-gray-700 rounded'
-                                  : 'bg-gray-200 rounded hover:bg-gray-300'
-                              } text-[9px] sm:text-xs ${!visibleOnMobile ? 'hidden sm:inline-block' : ''}`}
-                              onClick={() => setCurrentPage(pageNumber)}
-                            >
-                              {pageNumber}
-                            </button>
-                          );
-                        }
-                        return null;
-                      })}
-                      
-                      <button
-                        className="px-1 sm:px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-[9px] sm:text-xs"
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                      >
-                        <span className="hidden sm:inline">다음</span>
-                        <span className="sm:hidden">›</span>
-                      </button>
-                      <button
-                        className="px-1 sm:px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-[9px] sm:text-xs"
-                        onClick={() => setCurrentPage(totalPages)}
-                        disabled={currentPage === totalPages}
-                      >
-                        <span className="hidden sm:inline">마지막</span>
-                        <span className="sm:hidden">»</span>
-                      </button>
-                    </div>
+                      if (visibleOnDesktop) {
+                        return (
+                          <button
+                            key={index}
+                            className={`w-8 py-1 flex justify-center ${
+                              pageNumber === currentPage
+                                ? 'bg-[#D8EFE9] text-gray-700 rounded'
+                                : 'bg-gray-200 rounded hover:bg-gray-300'
+                            } text-sm ${!visibleOnMobile ? 'hidden sm:inline-block' : ''}`}
+                            style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                            onClick={() => setCurrentPage(pageNumber)}
+                          >
+                            {pageNumber}
+                          </button>
+                        );
+                      }
+                      return null;
+                    })}
+                    
+                    <button
+                      className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                      style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      <span className="hidden sm:inline">다음</span>
+                      <span className="sm:hidden">›</span>
+                    </button>
+                    <button
+                      className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                      style={{ fontSize: 'clamp(0.65rem, 0.7vw, 0.7rem)' }}
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                    >
+                      <span className="hidden sm:inline">마지막</span>
+                      <span className="sm:hidden">»</span>
+                    </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
