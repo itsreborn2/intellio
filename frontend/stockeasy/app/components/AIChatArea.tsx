@@ -62,7 +62,7 @@ function AIChatAreaContent() {
   const [transitionInProgress, setTransitionInProgress] = useState(false);
   const [searchMode, setSearchMode] = useState(false); // 종목 검색 모드 상태 추가
   const [popupHovered, setPopupHovered] = useState(false); // 팝업 호버 상태 추가
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
+  const [windowWidth, setWindowWidth] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -144,6 +144,9 @@ function AIChatAreaContent() {
   // 클라이언트 사이드 렌더링 확인
   useEffect(() => {
     setIsMounted(true);
+    
+    // 창 너비 초기화 (클라이언트 사이드에서만 실행)
+    setWindowWidth(window.innerWidth);
 
     // 로컬 스토리지에서 최근 조회 종목 불러오기
     try {
@@ -978,7 +981,7 @@ function AIChatAreaContent() {
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    minHeight: isMobile ? '2.2rem' : (window.innerWidth < 768 ? '2.3rem' : '2.5rem'), // 화면 크기에 따라 적응
+    minHeight: isMobile ? '2.2rem' : (windowWidth < 768 ? '2.3rem' : '2.5rem'), // 화면 크기에 따라 적응
     height: 'auto',
     border: '1px solid #ccc',
     borderRadius: isMobile ? '6px' : '8px',
@@ -986,7 +989,7 @@ function AIChatAreaContent() {
     paddingRight: isMobile ? '35px' : '40px',
     paddingBottom: '0',
     paddingLeft: selectedStock ? (isMobile ? '75px' : '85px') : (isMobile ? '6px' : '8px'), 
-    fontSize: isMobile ? '14px' : (window.innerWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
+    fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
     outline: 'none',
     boxSizing: 'border-box',
     resize: 'none',
@@ -997,10 +1000,10 @@ function AIChatAreaContent() {
   const messagesContainerStyle: React.CSSProperties = {
     overflowY: 'auto',
     overflowX: 'hidden',
-    paddingTop: isMobile ? '5px' : (window.innerWidth < 768 ? '8px' : '10px'),
-    paddingRight: isMobile ? '5px' : (window.innerWidth < 768 ? '8px' : '10px'),
-    paddingBottom: isMobile ? '5px' : (window.innerWidth < 768 ? '8px' : '10px'),
-    paddingLeft: isMobile ? '5px' : (window.innerWidth < 768 ? '8px' : '10px'),
+    paddingTop: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
+    paddingRight: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
+    paddingBottom: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
+    paddingLeft: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
     margin: '0 auto', // 중앙 정렬
     border: 'none', 
     borderRadius: '0', 
@@ -1019,13 +1022,13 @@ function AIChatAreaContent() {
   const aiMessageStyle: React.CSSProperties = {
     backgroundColor: 'transparent', // 박스 배경 제거
     borderRadius: '0', // 테두리 둥글기 제거
-    padding: isMobile ? '8px 12px' : (window.innerWidth < 768 ? '9px 14px' : '10px 15px'),
+    padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 14px' : '10px 15px'),
     marginBottom: isMobile ? '10px' : '12px',
     width: '100%', // 전체 너비 사용
     boxShadow: 'none', // 그림자 제거
     lineHeight: '1.5',
-    fontSize: isMobile ? '0.85rem' : (window.innerWidth < 768 ? '0.87rem' : '0.9rem'),
-    overflowWrap: 'break-word',
+    fontSize: isMobile ? '0.85rem' : (windowWidth < 768 ? '0.87rem' : '0.9rem'),
+    wordBreak: 'break-word',
     boxSizing: 'border-box',
     maxWidth: '100%' // 최대 너비 제한
   };
@@ -1033,7 +1036,7 @@ function AIChatAreaContent() {
   // 마크다운 글로벌 스타일 추가
   const markdownStyles = `
     .markdown-content {
-      font-size: ${isMobile ? '0.9rem' : (window.innerWidth < 768 ? '0.95rem' : '1rem')};
+      font-size: ${isMobile ? '0.9rem' : (windowWidth < 768 ? '0.95rem' : '1rem')};
       line-height: 1.6;
       max-width: 100%;
       overflow-wrap: break-word;
@@ -1140,9 +1143,9 @@ function AIChatAreaContent() {
               {/* 메시지 내용 */}
               <div style={message.role === 'assistant' ? aiMessageStyle : {
                 backgroundColor: '#f5f5f5', // 사용자 메시지 배경색
-                padding: isMobile ? '8px 12px' : (window.innerWidth < 768 ? '9px 13px' : '10px 14px'),
+                padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 13px' : '10px 14px'),
                 borderRadius: isMobile ? '10px' : '12px',
-                maxWidth: isMobile ? '95%' : (window.innerWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
+                maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
                 width: 'auto',
                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
                 position: 'relative',
@@ -1151,7 +1154,7 @@ function AIChatAreaContent() {
               }}>
                 {message.stockInfo && (
                   <div style={{
-                    fontSize: isMobile ? '14px' : (window.innerWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
+                    fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
                     fontWeight: 'bold',
                     color: '#10A37F', // 파란색(#0066cc)에서 초록색(#10A37F)으로 변경
                     marginBottom: isMobile ? '3px' : '4px'
@@ -1171,7 +1174,7 @@ function AIChatAreaContent() {
                     // 사용자 메시지는 일반 텍스트로 표시
                     <div style={{
                       whiteSpace: 'pre-wrap', // nowrap에서 pre-wrap으로 변경하여 긴 텍스트가 줄바꿈 되도록 설정
-                      fontSize: isMobile ? '14px' : (window.innerWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
+                      fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
                       lineHeight: '1.6',
                       letterSpacing: 'normal',
                       wordBreak: 'break-word' // 단어 단위로 줄바꿈 가능하도록 설정

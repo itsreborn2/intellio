@@ -227,14 +227,10 @@ class AgentRegistry:
         self.initialize_agents(self.db_session)
 
 
-# 싱글톤 인스턴스
-agent_registry = AgentRegistry()
-
-
 # 글로벌 헬퍼 함수들
 def get_agents(db: AsyncSession = None):
     """
-    초기화된 에이전트 딕셔너리 조회
+    에이전트 딕셔너리 생성 및 반환
     
     Args:
         db: 데이터베이스 세션 객체 (선택적)
@@ -242,12 +238,13 @@ def get_agents(db: AsyncSession = None):
     Returns:
         에이전트 딕셔너리
     """
-    agent_registry.initialize_agents(db)
-    return agent_registry.agents
+    registry = AgentRegistry()
+    registry.initialize_agents(db)
+    return registry.agents
 
 def get_graph(db: AsyncSession = None):
     """
-    Stock Analysis Graph 인스턴스 조회
+    새로운 Stock Analysis Graph 인스턴스 생성 및 반환
     
     Args:
         db: 데이터베이스 세션 객체 (선택적)
@@ -255,17 +252,20 @@ def get_graph(db: AsyncSession = None):
     Returns:
         StockAnalysisGraph 인스턴스
     """
-    return agent_registry.get_graph(db)
+    registry = AgentRegistry()
+    return registry.get_graph(db)
 
-
-def get_agent(agent_name: str) -> Optional[BaseAgent]:
+def get_agent(agent_name: str, db: AsyncSession = None) -> Optional[BaseAgent]:
     """
-    특정 에이전트 인스턴스 조회
+    특정 에이전트 인스턴스 생성 및 반환
     
     Args:
         agent_name: 에이전트 이름
+        db: 데이터베이스 세션 객체 (선택적)
         
     Returns:
         에이전트 인스턴스 또는 None
     """
-    return agent_registry.get_agent(agent_name) 
+    registry = AgentRegistry()
+    registry.db_session = db
+    return registry.get_agent(agent_name) 
