@@ -1,6 +1,7 @@
 ---
 description: 
 globs: 
+alwaysApply: false
 ---
 ---
 description: 데이터베이스 규칙
@@ -10,4 +11,4 @@ globs:
 # Your rule content
 - Use Pydantic V2 style
 - ORM Query는 sqlalchemy 2.0
-
+- Stockeasy는 스미카가 따로 설정되어있다.

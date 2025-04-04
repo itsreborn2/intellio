@@ -8,35 +8,130 @@ import os
 import json
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 
+import pandas as pd
+
 from common.core.config import settings
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+
 
 logger = logging.getLogger(__name__)
 
 class StockInfoService:
     """종목 정보 서비스 클래스"""
+    _instance = None
+    _stock_info_cache = None  # 메모리 캐시
+    _last_update_date = None  # 마지막 업데이트 날짜
+    _update_task = None  # 자동 업데이트 태스크
     
-    def __init__(self):
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            asyncio.create_task(cls._instance._initialize())
+        return cls._instance
+    
+    async def _initialize(self):
         """서비스 초기화"""
+        logger.info("주식 정보 서비스 초기화 시작")
+        
         # 종목 정보 캐시 경로
-        self.cache_dir = Path(settings.LOCAL_CACHE_DIR)
+        self.cache_dir = Path(settings.STOCKEASY_LOCAL_CACHE_DIR)
         self.stock_info_path = self.cache_dir / "stock_info.json"
         
         # 캐시 디렉토리 생성
         os.makedirs(self.cache_dir, exist_ok=True)
         
-        # 종목 정보 캐시
-        self._stock_info_cache = None
-        self._last_cache_update = None
+        # 초기 데이터 로드
+        try:
+            # 1. 파일 캐시 확인
+            if os.path.exists(self.stock_info_path):
+                with open(self.stock_info_path, 'r', encoding='utf-8') as f:
+                    self._stock_info_cache = json.load(f)
+                    logger.info("캐시 파일에서 초기 주식 정보 로드 완료")
+            
+            # 2. 파일 캐시가 없으면 KRX에서 조회
+            if self._stock_info_cache is None:
+                logger.info("캐시 파일이 없어 KRX에서 초기 데이터를 가져옵니다")
+                self._stock_info_cache = await self._fetch_stock_info_from_krx()
+                
+                # 파일 캐시 저장
+                with open(self.stock_info_path, 'w', encoding='utf-8') as f:
+                    json.dump(self._stock_info_cache, f, ensure_ascii=False, indent=2)
+                    logger.info("초기 주식 정보 캐시 파일 생성 완료")
+            
+            self._last_update_date = datetime.now().date()
+            
+        except Exception as e:
+            logger.error(f"초기 주식 정보 로드 실패: {str(e)}")
+            self._stock_info_cache = {"by_code": {}, "by_name": {}}
+            self._last_update_date = datetime.now().date()
         
-        # 캐시 만료 시간 (24시간)
-        self.cache_expiry_seconds = 24 * 60 * 60
+        # 자동 업데이트 태스크 시작
+        self._update_task = asyncio.create_task(self._start_auto_update())
+        logger.info("주식 정보 서비스 초기화 완료")
+        stocks = await self.search_stocks("삼성전", limit=5)
+        for i, stock in enumerate(stocks):
+            print(f"[{i+1}] 종목명: {stock['name']}, 종목코드: {stock['code']}, 업종: {stock['sector']}")
         
+    async def _start_auto_update(self):
+        """자동 업데이트 태스크를 시작합니다."""
+        logger.info("주식 정보 자동 업데이트 태스크 시작")
+        while True:
+            try:
+                now = datetime.now()
+                target_time = now.replace(hour=7, minute=30, second=0, microsecond=0)
+                
+                # 이미 7:30을 지났다면 다음 날 7:30으로 설정
+                if now >= target_time:
+                    target_time = target_time + timedelta(days=1)
+                
+                # 다음 업데이트까지 대기
+                wait_seconds = (target_time - now).total_seconds()
+                logger.info(f"다음 주식 정보 업데이트 예정 시각: {target_time}")
+                await asyncio.sleep(wait_seconds)
+                
+                # 7:30이 되면 데이터 갱신
+                logger.info("예정된 시각에 주식 정보 업데이트 시작")
+                stock_info = await self._fetch_stock_info_from_krx()
+                self._stock_info_cache = stock_info
+                self._last_update_date = datetime.now().date()
+                
+                # 파일 캐시 업데이트
+                try:
+                    with open(self.stock_info_path, 'w', encoding='utf-8') as f:
+                        json.dump(stock_info, f, ensure_ascii=False, indent=2)
+                        logger.info("주식 정보 캐시 파일 업데이트 완료")
+                except Exception as e:
+                    logger.warning(f"주식 정보 캐시 파일 저장 실패: {str(e)}")
+                    
+            except Exception as e:
+                logger.error(f"자동 업데이트 태스크 오류 발생: {str(e)}")
+                await asyncio.sleep(60)  # 에러 발생시 1분 후 재시도
+    
+    async def read_krx_code(self):
+        # 상장 종목 목록 가져오기 
+        #url = 'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download&marketType=kosdaqMkt'
+        #url = 'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download&marketType=stockMkt'
+        url = 'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download&searchType=13'
+        krx = pd.read_html(url, encoding='euc-kr', header=0)[0]
+        # 데이터 정리
+        krx = krx[['종목코드','회사명', '업종']]
+        krx = krx.rename(columns={'종목코드':'code','회사명':'name'})
+        krx.code = krx.code.map('{:06d}'.format)
+        krx = krx[~krx["name"].str.contains("스팩")]
+        #krx.to_csv(f"listed_company.csv",index=False,  encoding="utf-8-sig")
+        df1 = pd.DataFrame({'code':['KOSPI','KOSDAQ'],
+                    'name':['KOSPI','KOSDAQ'],
+                    '업종':['KOSPI','KOSDAQ']})
+        
+        krx = pd.concat([krx, df1], ignore_index=True)
+        # idx = krx["name"].isin(["스팩"])
+        # count = len(idx)
+        #sToday = dtNow.strftime('%Y%m%d')
+        #krx.to_csv(f"listed_company.csv",index=False,  encoding="utf-8-sig")
+        return krx
     async def get_stock_by_code(self, stock_code: str) -> Optional[Dict[str, Any]]:
         """
         종목 코드로 종목 정보를 조회합니다.
@@ -118,107 +213,44 @@ class StockInfoService:
         
     async def _load_stock_info(self) -> Dict[str, Any]:
         """
-        종목 정보를 로드합니다. 캐시가 있으면 캐시를 사용하고, 없으면 DB에서 조회합니다.
+        종목 정보를 로드합니다. 
+        메모리에 캐시된 데이터를 반환합니다.
         
         Returns:
             종목 정보 딕셔너리
         """
-        # 캐시가 이미 로드되었고 만료되지 않았는지 확인
-        now = datetime.now()
-        if (self._stock_info_cache is not None and 
-            self._last_cache_update is not None and 
-            (now - self._last_cache_update).total_seconds() < self.cache_expiry_seconds):
-            return self._stock_info_cache
-            
-        # 캐시 파일이 있는지 확인
-        if os.path.exists(self.stock_info_path):
-            try:
-                # 캐시 파일의 수정 시간 확인
-                mtime = os.path.getmtime(self.stock_info_path)
-                file_age = now.timestamp() - mtime
-                
-                # 캐시가 유효하면 로드
-                if file_age < self.cache_expiry_seconds:
-                    with open(self.stock_info_path, 'r', encoding='utf-8') as f:
-                        self._stock_info_cache = json.load(f)
-                        self._last_cache_update = now
-                        logger.info("Loaded stock info from cache file")
-                        return self._stock_info_cache
-            except Exception as e:
-                logger.warning(f"Failed to load stock info cache: {str(e)}")
+        return self._stock_info_cache or {"by_code": {}, "by_name": {}}
         
-        # 캐시가 없거나 만료되었으면 DB에서 조회
-        stock_info = await self._fetch_stock_info_from_db()
+    async def _fetch_stock_info_from_krx(self) -> Dict[str, Any]:
+        """
+        KRX에서 종목 정보를 조회합니다.
         
-        # 캐시 업데이트
-        self._stock_info_cache = stock_info
-        self._last_cache_update = now
-        
-        # 캐시 파일 저장
+        Returns:
+            종목 정보 딕셔너리
+        """
         try:
-            with open(self.stock_info_path, 'w', encoding='utf-8') as f:
-                json.dump(stock_info, f, ensure_ascii=False, indent=2)
-                logger.info("Updated stock info cache file")
-        except Exception as e:
-            logger.warning(f"Failed to save stock info cache: {str(e)}")
+            # KRX에서 종목 정보 조회
+            krx_data = await self.read_krx_code()
             
-        return stock_info
-        
-    async def _fetch_stock_info_from_db(self, db: Optional[AsyncSession] = None) -> Dict[str, Any]:
-        """
-        DB에서 종목 정보를 조회합니다.
-        
-        Args:
-            db: DB 세션 (없으면 새로 생성)
+            # 데이터 변환
+            by_code = {}
+            by_name = {}
             
-        Returns:
-            종목 정보 딕셔너리
-        """
-        # 여기서는 간단한 샘플 데이터를 반환
-        # 실제 구현에서는 DB에서 조회하도록 수정 필요
-        sample_data = {
-            "by_code": {
-                "005930": {
-                    "code": "005930",
-                    "name": "삼성전자",
-                    "market": "KOSPI",
-                    "sector": "전기·전자"
-                },
-                "035420": {
-                    "code": "035420",
-                    "name": "NAVER",
-                    "market": "KOSPI",
-                    "sector": "서비스업"
-                },
-                "035720": {
-                    "code": "035720",
-                    "name": "카카오",
-                    "market": "KOSPI",
-                    "sector": "서비스업"
+            for _, row in krx_data.iterrows():
+                stock_info = {
+                    "code": row["code"],
+                    "name": row["name"],
+                    "sector": row["업종"]
                 }
-            },
-            "by_name": {
-                "삼성전자": {
-                    "code": "005930",
-                    "name": "삼성전자",
-                    "market": "KOSPI",
-                    "sector": "전기·전자"
-                },
-                "NAVER": {
-                    "code": "035420",
-                    "name": "NAVER",
-                    "market": "KOSPI",
-                    "sector": "서비스업"
-                },
-                "카카오": {
-                    "code": "035720",
-                    "name": "카카오",
-                    "market": "KOSPI",
-                    "sector": "서비스업"
-                }
+                
+                by_code[row["code"]] = stock_info
+                by_name[row["name"]] = stock_info
+            
+            return {
+                "by_code": by_code,
+                "by_name": by_name
             }
-        }
-        
-        # TODO: DB에서 종목 정보 조회 구현
-        
-        return sample_data 
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch stock info from KRX: {str(e)}")
+            return {"by_code": {}, "by_name": {}}
