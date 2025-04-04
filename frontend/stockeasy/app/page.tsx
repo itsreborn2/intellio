@@ -4,8 +4,8 @@ import AIChatArea from './components/AIChatArea';
 
 export default function StockEasyLandingPage() {
   return (
-    <div>
-      <div className="max-w-6xl mx-auto">
+    <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
+      <div className="w-full max-w-[1280px] mx-auto">
         <AIChatArea />
       </div>
     </div>

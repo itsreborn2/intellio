@@ -33,6 +33,7 @@ interface ChatMessage {
     stockName: string;
     stockCode: string;
   };
+  responseId?: string; // 분석 결과의 고유 ID
 }
 
 // 컨텐츠 컴포넌트
@@ -71,6 +72,74 @@ function AIChatAreaContent() {
 
   const CACHE_DURATION = 3600000; // 캐시 유효 시간 (1시간 = 3600000ms)
   const MAX_RECENT_STOCKS = 5; // 최근 조회 종목 최대 개수
+
+  // 히스토리 분석 결과 로드 이벤트 리스너
+  useEffect(() => {
+    const handleLoadHistoryAnalysis = (e: CustomEvent) => {
+      const { stockName, stockCode, prompt, result, responseId } = e.detail;
+      
+      // 선택된 종목 설정
+      if (stockName && stockCode) {
+        const stockOption: StockOption = {
+          value: stockCode,
+          label: `${stockName} (${stockCode})`,
+          stockName,
+          stockCode,
+          display: `${stockName} (${stockCode})`
+        };
+        setSelectedStock(stockOption);
+        
+        // 최근 조회 종목에 추가
+        const updatedRecentStocks = [stockOption, ...recentStocks.filter(s => s.value !== stockCode)].slice(0, MAX_RECENT_STOCKS);
+        setRecentStocks(updatedRecentStocks);
+        try {
+          localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+        } catch (error) {
+          console.error('최근 조회 종목 저장 실패:', error);
+        }
+      }
+      
+      // 메시지 설정
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: prompt,
+        timestamp: Date.now(),
+        stockInfo: {
+          stockName,
+          stockCode
+        },
+        responseId
+      };
+      
+      const assistantMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: result,
+        timestamp: Date.now() + 1,
+        stockInfo: {
+          stockName,
+          stockCode
+        },
+        responseId
+      };
+      
+      // 메시지 설정 및 입력 필드 중앙 배치 해제
+      setMessages([userMessage, assistantMessage]);
+      setIsInputCentered(false);
+      setShowTitle(false);
+      
+      // 입력 필드 초기화
+      setInputMessage('');
+    };
+    
+    // 이벤트 리스너 등록
+    window.addEventListener('loadHistoryAnalysis', handleLoadHistoryAnalysis as EventListener);
+    
+    return () => {
+      window.removeEventListener('loadHistoryAnalysis', handleLoadHistoryAnalysis as EventListener);
+    };
+  }, [recentStocks]);
 
   // 클라이언트 사이드 렌더링 확인
   useEffect(() => {
@@ -285,6 +354,8 @@ function AIChatAreaContent() {
 
     // 메시지 ID 생성
     const messageId = `msg_${Date.now()}`;
+    // 응답 ID 생성 (실제로는 서버에서 생성해야 함)
+    const responseId = `response_${Date.now()}`;
 
     // 사용자 메시지 생성
     const userMessageContent = inputMessage;
@@ -297,7 +368,8 @@ function AIChatAreaContent() {
       stockInfo: selectedStock ? {
         stockName: selectedStock.stockName,
         stockCode: selectedStock.stockCode
-      } : undefined
+      } : undefined,
+      responseId // 응답 ID 추가
     };
 
     // 메시지 목록에 사용자 메시지 추가
@@ -335,11 +407,49 @@ function AIChatAreaContent() {
         id: `assistant-${Date.now()}`,
         role: 'assistant', 
         content: responseData || '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다.',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        stockInfo: selectedStock ? {
+          stockName: selectedStock.stockName,
+          stockCode: selectedStock.stockCode
+        } : undefined,
+        responseId // 응답 ID 추가
       };
 
       // 메시지 목록에 응답 메시지 추가
       setMessages(prevMessages => [...prevMessages, assistantMessage]);
+      
+      // 히스토리에 저장하기 위한 이벤트 발생
+      if (selectedStock) {
+        const event = new CustomEvent('stockPromptSubmitted', {
+          detail: {
+            stockName: selectedStock.stockName,
+            stockCode: selectedStock.stockCode,
+            prompt: inputMessage,
+            responseId // 응답 ID 추가
+          }
+        });
+        window.dispatchEvent(event);
+        
+        // 분석 결과 저장 API 호출
+        try {
+          await fetch('/api/analysis-result', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              id: responseId,
+              content: responseData,
+              stockName: selectedStock.stockName,
+              stockCode: selectedStock.stockCode,
+              prompt: inputMessage,
+              timestamp: Date.now()
+            })
+          });
+        } catch (saveError) {
+          console.error('분석 결과 저장 오류:', saveError);
+        }
+      }
     } catch (error) {
       console.error('메시지 전송 오류:', error);
 
@@ -819,11 +929,11 @@ function AIChatAreaContent() {
   const aiChatAreaStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    height: 'auto', // 자동 높이로 변경하여 컨텐츠에 따라 늘어나도록 함
+    height: '100%', // 전체 높이로 변경
     width: '100%', // 전체 너비를 사용
     position: 'relative',
     backgroundColor: '#F4F4F4', // Figma 디자인에 맞게 배경색 변경
-    overflow: 'visible', // 오버플로우를 visible로 변경하여 브라우저 기본 스크롤 사용
+    overflow: 'hidden', // 오버플로우를 hidden으로 변경하여 브라우저 기본 스크롤 사용 안함
     paddingTop: isMobile ? '0' : '10px',
     paddingRight: isMobile ? '0' : '10px',
     paddingBottom: isMobile ? '0' : '10px',
@@ -840,7 +950,7 @@ function AIChatAreaContent() {
     alignItems: 'center',
     justifyContent: 'center', // 중앙 정렬 강화
     width: '100%', // 전체 너비로 변경
-    margin: '0 auto',
+    margin: '0 auto', // 중앙 정렬
     paddingTop: '0',
     paddingRight: '0',
     paddingBottom: '0',
@@ -885,7 +995,7 @@ function AIChatAreaContent() {
   };
 
   const messagesContainerStyle: React.CSSProperties = {
-    overflowY: 'visible',
+    overflowY: 'auto',
     overflowX: 'hidden',
     paddingTop: isMobile ? '5px' : (window.innerWidth < 768 ? '8px' : '10px'),
     paddingRight: isMobile ? '5px' : (window.innerWidth < 768 ? '8px' : '10px'),
@@ -896,7 +1006,7 @@ function AIChatAreaContent() {
     borderRadius: '0', 
     backgroundColor: '#F4F4F4',
     width: contentWidth, // 일관된 너비 사용
-    height: 'auto',
+    height: '100%', // 전체 높이로 변경
     minHeight: 'calc(100% - 60px)',
     boxSizing: 'border-box',
     position: 'relative',
@@ -2060,8 +2170,7 @@ function AIChatAreaContent() {
         </div>
       )}
       
-
-    </div>
+    </div> // containerStyle 끝
   );
 }
 

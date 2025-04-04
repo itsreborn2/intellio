@@ -1,7 +1,7 @@
 import './globals.css';
 import Script from 'next/script';
 import Sidebar from './components/Sidebar';
-import ClientFooter from './components/ClientFooter';
+// ClientFooter 임포트 제거
 
 export default function RootLayout({
   children,
@@ -34,7 +34,7 @@ export default function RootLayout({
           <div className="content-container">
             {children}
           </div>
-          <ClientFooter />
+          {/* ClientFooter 사용 부분 제거 */}
         </main>
         {/* 페이지 로드 후 스크롤 위치를 최상단으로 설정하는 스크립트 */}
         <Script id="reset-scroll" strategy="afterInteractive">

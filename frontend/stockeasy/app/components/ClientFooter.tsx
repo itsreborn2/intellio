@@ -42,7 +42,6 @@ export default function ClientFooter() {
       position: 'relative',
       marginTop: '5px',
       marginBottom: '5px',
-      borderTop: '1px solid #eaeaea',
       zIndex: 5, 
       backgroundColor: 'rgba(244, 244, 244, 0.8)'
     }}>
