@@ -659,7 +659,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
             position: 'sticky',
             left: '30px', // 체크박스 컬럼 너비
             zIndex: 2,
-            backgroundColor: 'rgb(219, 227, 228)',
+            backgroundColor: 'rgb(238, 238, 250)',
             '&::after': {
               content: '""',
               position: 'absolute',
@@ -825,7 +825,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
       const props: any = {
         sx: {
           padding: '0px 10px',
-          backgroundColor: 'rgb(219, 227, 228) !important',
+          backgroundColor: 'rgb(238, 238, 250) !important',
           borderRight: '1px solid #e2e8f0',
           borderBottom: '2px solid #e2e8f0',
           fontWeight: 600,
@@ -936,7 +936,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
             position: hasHorizontalScroll ? 'sticky' : 'relative', // 가로 스크롤 시 고정
             left: 0,
             zIndex: 3, // 다른 셀보다 위에 표시
-            backgroundColor: 'rgb(219, 227, 228)', // 배경색 설정
+            backgroundColor: 'rgb(238, 238, 250)', // 배경색 설정
             '&::after': hasHorizontalScroll ? {
               content: '""',
               position: 'absolute',
@@ -983,6 +983,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         maxHeight: '100%',
         borderCollapse: 'separate',  // 테이블 경계선 분리
         borderSpacing: 0,  // 경계선 간격 없음
+        border: 'none',   // 테이블 테두리 제거
         // 모바일 환경에서 폰트 크기 조정
         '@media (max-width: 640px)': {
           fontSize: '0.7rem',
@@ -994,7 +995,8 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
       sx: {
         '& tr': {
           height: '36px',  // 헤더 행 높이 축소
-          backgroundColor: 'rgb(219, 227, 228) !important',
+          //backgroundColor: 'rgb(219, 227, 228) !important',
+          backgroundColor: 'rgb(238, 238, 250)!important', // 헤더 색상
           '& th': {
             verticalAlign: 'middle',  // 헤더 셀 내용 수직 중앙 정렬
             lineHeight: '1',  // 라인 높이 조정
@@ -1015,13 +1017,14 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
       sx: {
         '& tr': {
           height: 'auto',  // 본문 행 높이 자동으로 설정
-          minHeight: '60px',  // 최소 높이 설정
+          minHeight: '70px',  // 최소 높이 60px에서 70px로 증가
           maxHeight: 'none',  // 최대 높이 제한 제거
           borderBottom: '1px solid #e2e8f0',  // 행 하단 경계선 추가
+          borderTop: 'none',  // 행 상단 테두리 제거
           // 모바일 환경에서 행 높이 조정
           '@media (max-width: 640px)': {
             height: 'auto',
-            minHeight: '50px',
+            minHeight: '60px',  // 모바일 최소 높이도 50px에서 60px로 증가
           }
         }
       }
@@ -1047,6 +1050,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         flex: 1,
         width: '100%', // 너비 100% 설정
         maxWidth: '100%', // 최대 너비 제한
+        border: 'none', // 테이블 컨테이너 테두리 제거
         // 스크롤바 스타일
         '&::-webkit-scrollbar': {
           width: '4px',
@@ -1077,14 +1081,14 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           maxWidth: hasHorizontalScroll ? 'none' : '100%', // 칼럼이 5개 초과하면 최대 너비 제한 해제
           borderCollapse: 'separate',
           borderSpacing: 0,
-          border: '1px solid #e2e8f0'  // 테이블 전체 테두리 추가
+          border: 'none !important'  // 테이블 전체 테두리 제거
         },
         // 헤더 스타일링
         '& .MuiTableHead-root': {
           position: 'sticky',
           top: 0,
           zIndex: 2,
-          backgroundColor: 'rgb(219, 227, 228) !important',
+          backgroundColor: 'rgb(238, 238, 250) !important', // 헤더 선택
           boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'  // 헤더에 미세한 그림자 추가
         },
         // 헤더 셀 직접 스타일링
@@ -1106,22 +1110,26 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
     },
     muiTableBodyCellProps: {
       sx: {
-        padding: '0.25rem',        // 기존 0.5rem에서 줄임
-        paddingRight: '0.25rem',   // 오른쪽 패딩은 유지
+        padding: '0.5rem',        // 패딩을 0.25rem에서 0.5rem으로 증가
+        paddingTop: '0.5rem',     // 상단 패딩 명시적 설정
+        paddingBottom: '0.5rem',  // 하단 패딩 명시적 설정
+        paddingRight: '0.5rem',   // 오른쪽 패딩 증가
         fontSize: '0.75rem',
         borderRight: '1px solid #e2e8f0',
         verticalAlign: 'top',      // 셀 내용을 상단에 정렬
         color: '#334155',          // 텍스트 색상 개선
-        minHeight: '59px',         // 최소 높이 설정
+        minHeight: '69px',         // 최소 높이 59px에서 69px로 증가
         maxHeight: 'none',         // 최대 높이 제한 제거
         overflow: 'visible',       // 셀 자체는 오버플로우 허용 (내부 컨텐츠가 스크롤 처리)
         whiteSpace: 'normal',      // 텍스트가 줄바꿈되도록 설정
         
         // 모바일 환경에서 셀 조정
         '@media (max-width: 640px)': {
-          padding: '0.125rem',     // 모바일에서는 더 줄임
+          padding: '0.25rem',     // 모바일에서도 패딩 증가
+          paddingTop: '0.35rem',  // 모바일 상단 패딩 명시적 설정
+          paddingBottom: '0.35rem', // 모바일 하단 패딩 명시적 설정
           fontSize: '0.7rem',
-          minHeight: '50px',
+          minHeight: '59px',      // 모바일 최소 높이도 50px에서 59px로 증가
         },
         
         // 마크다운 스타일링 - 이 스타일을 포탈에도 적용
@@ -1245,6 +1253,51 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           background-color:rgb(219, 227, 228) !important;
         }
         
+        /* 테이블 행 테두리 스타일 완전히 제거 */
+        .MuiTableBody-root .MuiTableRow-root {
+          border: none !important;
+          box-shadow: none !important;
+          outline: none !important;
+          min-height: 75px !important; /* 행 높이 증가 */
+        }
+        
+        /* 테이블 셀 사이에만 약간의 구분선 추가 */
+        .MuiTableBody-root .MuiTableCell-root {
+          border-bottom: 1px solid rgba(194, 190, 190, 0.3) !important;
+          border-top: none !important;
+          border-left: none !important;
+          border-right: none !important;
+          padding: 0.6rem !important; /* 셀 패딩 증가 */
+        }
+        
+        /* 마지막 셀의 오른쪽 테두리 제거 */
+        .MuiTableBody-root .MuiTableCell-root:last-child {
+          border-right: none !important;
+        }
+        
+        /* 마지막 행의 하단 테두리 제거 */
+        .MuiTableBody-root .MuiTableRow-root:last-child .MuiTableCell-root {
+          border-bottom: none !important;
+        }
+        
+        /* 테이블 전체 테두리 제거 */
+        .MuiTable-root {
+          border: none !important;
+        }
+        
+        /* 행 높이 자동 조정 */
+        .MuiTableBody-root .MuiTableRow-root {
+          height: auto !important;
+          min-height: 70px !important; /* 행 높이 증가 */
+        }
+        
+        /* 모바일 환경에서 테이블 행 높이 조정 */
+        @media (max-width: 640px) {
+          .MuiTableBody-root .MuiTableRow-root {
+            min-height: 60px !important;
+          }
+        }
+        
         /* 툴팁 딜레이 줄이기 */
         [title]:hover::after {
           content: attr(title);
@@ -1273,7 +1326,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           align-items: center !important;
           height: 36px !important;
           padding: 0 10px !important;
-          borderRight: '2px solid #e2e8f0' !important;
+          borderRight: none !important;
         }
         
         /* 마지막 헤더 셀은 오른쪽 테두리 제외 */
@@ -1283,7 +1336,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         
         /* 헤더 셀 호버 상태 */
         .MuiTableHead-root .MuiTableCell-root:hover {
-          background-color: rgb(200, 226, 228) !important;
+          background-color: rgb(231, 225, 244) !important;
         }
         
         /* 모바일 환경에서 헤더 셀 조정 */
@@ -1432,13 +1485,13 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         /* 테이블 행 높이 자동 조정 */
         .MuiTableBody-root .MuiTableRow-root {
           height: auto !important;
-          min-height: 60px !important;
+          min-height: 70px !important; /* 행 높이 증가 */
         }
         
         /* 모바일 환경에서 테이블 행 높이 조정 */
         @media (max-width: 640px) {
           .MuiTableBody-root .MuiTableRow-root {
-            min-height: 50px !important;
+            min-height: 60px !important;
           }
         }
         
@@ -1651,7 +1704,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         
         .MuiTableBody-root .prose th,
         body > div > div > div .prose th { 
-          border-width: 1px !important; 
+          border-width: px !important; 
           border-color: rgb(209 213 219) !important; 
           padding: 0.25rem 0.5rem !important; 
           background-color: rgb(249 250 251) !important; 

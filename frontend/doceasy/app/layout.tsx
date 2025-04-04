@@ -72,13 +72,17 @@ export default function RootLayout({
             }`}>
               {/* 헤더 - 모바일 환경에서는 숨김 */}
               {!isMobile && (
-                <Header className={`fixed top-0 right-0 transition-all duration-300 ease-in-out ${
-                  isSidebarCollapsed ? 'left-[60px]' : 'left-[300px]'
-                } h-[56px] z-40 bg-background`} />
+                <div 
+                  className={`fixed top-0 right-0  transition-all duration-300 ease-in-out ${
+                    isSidebarCollapsed ? 'left-[60px]' : 'left-[300px]'
+                  } h-[56px] z-40 bg-background`}
+                >
+                  <Header />
+                </div>
               )}
               
               {/* 메인 콘텐츠 영역 */}
-              <main className={`fixed right-0 bottom-0 overflow-auto transition-all duration-300 ease-in-out ${
+              <main className={`fixed right-0 bottom-0 overflow-auto  transition-all duration-300 ease-in-out ${
                 isMobile 
                   ? 'left-0 top-0' 
                   : `${isSidebarCollapsed ? 'left-[60px]' : 'left-[300px]'} top-[56px]`

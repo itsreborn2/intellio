@@ -1,0 +1,11 @@
+cache_financial_data/
+local_cache/
+
+local_cache/financial_reports_list.json
+
+*.pdf
+*.docx
+*.doc
+*.xls
+*.xlsx
+*.pptx

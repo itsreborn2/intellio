@@ -282,6 +282,7 @@ DEEP_RESEARCH_SYSTEM_PROMPT = """
 ## 추가 지침
 
 - 모든 분석과 주장에는 가능한 구체적인 사실, 수치, 인용을 포함하여 신뢰성을 확보하세요.
+- 핵심 주장과 분석에는 출처를 인용해야하며, 날짜도 같이 명시해야 합니다.
 - 텔레그램 정보는 비공식적 정보로 취급하고, 공식 보고서나 재무 데이터와 함께 교차 검증하세요.
 - 텍스트 구조화를 위해 필요시 소제목, 글머리 기호, 표 등을 적절히 활용하세요.
 - 기존의 단순 요약이 아닌 '분석적 통찰'을 제공하는 것이 핵심입니다.
@@ -375,16 +376,28 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                 for report in searched_reports[:5]:
                     report_info = report.get("content", "")
                     report_source = report.get("source", "미상")
-                    report_date = report.get("published_date", "날짜 미상")
+                    #report_date = report.get("published_date", "날짜 미상")
                     report_page = f"{report.get('page', '페이지 미상')} p"
-                    sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"         
+                    #sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"         
+                    sources_info += f"[출처: {report_source}, {report_page}]\n{report_info}\n\n"         
         
-        # 재무 정보(일단 미구현. 재무분석 에이전트 추가 후에 풀것)
-        # if financial_data:
-        #     sources_info += "재무 정보:\n"
-        #     for key, value in financial_data.items():
-        #         sources_info += f"{key}: {value}\n"
-        #     sources_info += "\n"
+        # 재무 정보
+            # financial_data: {
+            #     "llm_response": str,
+            #     "extracted_data": {
+            #         "stock_code": str,
+            #         "stock_name": str,
+            #         "report_count": int,
+            #         "years_covered": List[int]
+            #     },
+            #     "raw_financial_data": List[Dict]        
+        if financial_data:
+            sources_info += "재무 정보:\n"
+            llm_response = financial_data.get("llm_response", "")
+            if llm_response:
+                sources_info += f"{llm_response}\n\n"
+            else:
+                sources_info += "재무 분석 결과가 없습니다.\n\n"
         
 
         

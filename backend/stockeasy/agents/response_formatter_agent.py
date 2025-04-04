@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 from langchain_core.messages import HumanMessage, AIMessage
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
-from stockeasy.prompts.response_formatter_prompts import OPTIMIZED_RESPONSE_FORMATTER_SYSTEM_PROMPT, format_response_formatter_prompt
+from stockeasy.prompts.response_formatter_prompts import FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT, OPTIMIZED_RESPONSE_FORMATTER_SYSTEM_PROMPT, format_response_formatter_prompt
 from langchain_core.output_parsers import StrOutputParser
 from common.models.token_usage import ProjectType
 from stockeasy.agents.base import BaseAgent
@@ -38,7 +38,7 @@ class ResponseFormatterAgent(BaseAgent):
         self.agent_llm = get_agent_llm("response_formatter_agent")
         logger.info(f"ResponseFormatterAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.parser = StrOutputParser()
-        self.prompt_template = OPTIMIZED_RESPONSE_FORMATTER_SYSTEM_PROMPT
+        self.prompt_template = FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
