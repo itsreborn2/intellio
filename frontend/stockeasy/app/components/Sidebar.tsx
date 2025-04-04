@@ -126,7 +126,7 @@ function SidebarContent() {
   const toggleHistoryPanel = () => {
     const newIsOpen = !isHistoryPanelOpen;
     setIsHistoryPanelOpen(newIsOpen);
-    if (isMobile) setIsMenuOpen(false); // 모바일에서 패널 열 때 메뉴 닫기
+    // 모바일에서도 사이드바 메뉴를 유지하도록 수정
     
     // 패널이 열릴 때 서버에서 사용자의 히스토리 가져오기
     if (newIsOpen) {
@@ -437,10 +437,11 @@ function SidebarContent() {
         
         {/* 검색 히스토리 패널 - 애니메이션 개선 */}
         <div 
-          className={`fixed left-[59px] top-0 h-full overflow-hidden`}
+          className={`fixed top-0 h-full overflow-hidden`}
           style={{ 
             height: '100vh',
-            width: isHistoryPanelOpen ? '280px' : '0',
+            width: isHistoryPanelOpen ? (isMobile ? '340px' : '280px') : '0', // 모바일에서는 너비 20% 증가
+            left: isMobile ? '0' : '59px', // 모바일에서는 왼쪽에서 시작, 데스크탑에서는 사이드바 옆에서 시작
             transform: isHistoryPanelOpen ? 'translateX(0)' : 'translateX(-30px)',
             opacity: isHistoryPanelOpen ? 1 : 0,
             transition: isHistoryPanelOpen 
@@ -449,18 +450,19 @@ function SidebarContent() {
             pointerEvents: isHistoryPanelOpen ? 'auto' : 'none',
             transformOrigin: 'left center',
             boxShadow: isHistoryPanelOpen ? '4px 0 12px rgba(0, 0, 0, 0.2)' : 'none',
-            zIndex: 20, // 항상 높은 z-index를 유지하여 애니메이션이 완료될 때까지 보이게 함
+            zIndex: 1000, // 모바일 메뉴보다 높은 z-index 설정
             clipPath: isHistoryPanelOpen ? 'inset(0 0 0 0)' : 'inset(0 0 0 100%)', // 열리고 닫힐 때 클립 효과 추가
             visibility: isHistoryPanelOpen ? 'visible' : 'hidden', // 애니메이션 완료 후 숨김
             backgroundColor: '#282A2E', // 사이드바와 동일한 배경색
-            borderRight: '1px solid #1e2022' // 사이드바와 동일한 테두리 색상
+            borderRight: '1px solid #1e2022', // 사이드바와 동일한 테두리 색상
+            position: 'fixed' // 위치 고정
           }}
           onClick={(e) => e.stopPropagation()} // 패널 내부 클릭 시 이벤트 전파 중단하여 패널이 닫히지 않도록 함
         >
           <div className="flex flex-col h-full">
             {/* 헤더 영역 - 애니메이션 추가 */}
             <div 
-              className="flex items-center justify-between p-3 border-b border-[#1e2022]"
+              className={`flex items-center justify-between ${isMobile ? 'p-4' : 'p-3'} border-b border-[#1e2022]`}
               style={{
                 opacity: isHistoryPanelOpen ? 1 : 0,
                 transform: isHistoryPanelOpen ? 'translateX(0)' : 'translateX(-10px)',
@@ -471,21 +473,21 @@ function SidebarContent() {
             >
               <div className="flex items-center justify-between w-full">
                 <div className="flex items-center">
-                  <Clock className="w-4 h-4 mr-2 text-[#ececf1]" />
+                  <Clock className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} mr-2 text-[#ececf1]`} />
                   <h3 className="text-sm font-medium text-[#ececf1]">최근 검색 히스토리</h3>
                 </div>
                 <button 
-                  className="p-1 rounded-full hover:bg-[#3e4044]"
+                  className={`${isMobile ? 'p-2' : 'p-1'} rounded-full hover:bg-[#3e4044]`}
                   onClick={toggleHistoryPanel}
                 >
-                  <X className="w-4 h-4 text-[#ececf1]" />
+                  <X className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} text-[#ececf1]`} />
                 </button>
               </div>
             </div>
             
             {/* 콘텐츠 영역 - 애니메이션 추가 */}
             <div 
-              className="flex-1 overflow-y-auto p-2 text-[#ececf1]"
+              className={`flex-1 overflow-y-auto ${isMobile ? 'p-3' : 'p-2'} text-[#ececf1]`}
               style={{
                 opacity: isHistoryPanelOpen ? 1 : 0,
                 transform: isHistoryPanelOpen ? 'translateX(0)' : 'translateX(-15px)',
@@ -496,15 +498,15 @@ function SidebarContent() {
             >
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center h-full text-[#ececf1] text-sm">
-                  <Loader2 className="w-8 h-8 mb-2 animate-spin" />
-                  <p>히스토리 불러오는 중...</p>
+                  <Loader2 className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} mb-2 animate-spin`} />
+                  <p className="text-sm">히스토리 불러오는 중...</p>
                 </div>
               ) : historyItems.length > 0 ? (
-                <div className="space-y-2">
+                <div className={`space-y-${isMobile ? '3' : '2'}`}>
                   {historyItems.map((item) => (
                     <div 
                       key={item.id} 
-                      className="p-2 rounded border border-[#1e2022] hover:bg-[#3e4044] cursor-pointer transition-colors"
+                      className={`${isMobile ? 'p-3' : 'p-2'} rounded border border-[#1e2022] hover:bg-[#3e4044] cursor-pointer transition-colors`}
                       onClick={() => item.responseId ? loadHistoryAnalysis(item) : null}
                     >
                       <div className="flex items-center justify-between mb-1">
@@ -524,8 +526,8 @@ function SidebarContent() {
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-[#ececf1] text-sm">
-                  <Clock className="w-8 h-8 mb-2 opacity-50 text-[#ececf1]" />
-                  <p>아직 저장된 히스토리가 없습니다</p>
+                  <Clock className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} mb-2 opacity-50 text-[#ececf1]`} />
+                  <p className="text-sm">아직 저장된 히스토리가 없습니다</p>
                 </div>
               )}
             </div>
