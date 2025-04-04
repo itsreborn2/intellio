@@ -72,6 +72,7 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
  - frontend/doceasy는 next.config.mjs 를 사용한다.
  - 사용자의 명시적인 요청이 없다면, 엔드포인트를 변경하지 않는다.
  - 기존 코드의 수정은 반드시 최소한으로 한다.
+ - 사이드바 영역은 어떤 섹션도 침범해선 안돼. 반드시 사이드바 영역은 사이드바만 해당되어야해. 섹션이 사이드바 영역 뒤 밑으로 침범하지 않아야해.
 
  browser preview는 서버가 늘 실행중인걸 감안하고 요청이 오면 바로 연결한다. 단 main:dev 페이지말고 rs-rank 페이지를 연다.
  

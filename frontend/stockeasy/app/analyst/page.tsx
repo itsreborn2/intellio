@@ -103,7 +103,8 @@ const AnalystPage = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
+      <div className="w-full max-w-[1280px] mx-auto">
       <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
         <div className="bg-white rounded-md shadow">
           <div className="p-2 md:p-4">
@@ -174,6 +175,7 @@ const AnalystPage = () => {
             {/* === /6:4 비율 분할 컨테이너 === */}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

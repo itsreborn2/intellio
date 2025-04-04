@@ -576,7 +576,7 @@ const ValuationPage = () => {
   if (loading) {
     return (
       <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-hidden ml-0 md:ml-16 w-full flex flex-col">
-        <div className="max-w-6xl mx-auto w-full flex-1 flex flex-col overflow-hidden"> {/* overflow-hidden 추가 */}
+        <div className="max-w-[1280px] mx-auto w-full flex-1 flex flex-col overflow-hidden"> {/* overflow-hidden 추가 */}
           <div className="flex items-center justify-center h-screen">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
             <span className="ml-3 text-gray-700">데이터 로딩 중...</span>
@@ -587,9 +587,9 @@ const ValuationPage = () => {
   }
 
   return (
-    <div className="flex-1 p-0 sm:p-2 md:p-4 ml-0 md:ml-16 w-full">
+    <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
       {/* 메인 콘텐츠 영역 - 모바일 최적화 */}
-      <div className="max-w-6xl mx-auto"> 
+      <div className="w-full max-w-[1280px] mx-auto"> 
         {/* 테이블 섹션 컨테이너 (rs-rank 페이지와 유사하게) */}
         <div className="mb-2 md:mb-4">
           {/* 내부 컨테이너 (하단 마진 제거) */}
@@ -735,10 +735,10 @@ const ValuationPage = () => {
               {!isAllItemsLoading && (
                 <div 
                   // 테이블 래퍼에서 하단 마진 제거
-                  className="overflow-x-auto" 
+                  className="table-container" 
                   ref={tableRef}
                 >
-                  <div className="overflow-x-auto w-full">
+                  <div className="w-full">
                     <table className="min-w-full border border-gray-200 table-fixed">
                       <thead className="bg-gray-100">
                         <tr>

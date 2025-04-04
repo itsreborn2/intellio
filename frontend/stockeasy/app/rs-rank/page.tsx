@@ -1117,9 +1117,9 @@ export default function RSRankPage() {
   };
 
   return (
-    <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto ml-0 md:ml-16 w-full">
+    <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
       {/* 메인 콘텐츠 영역 - 모바일 최적화 */}
-      <div className="max-w-6xl mx-auto">
+      <div className="w-full max-w-[1280px] mx-auto">
         {/* 테이블 섹션 컨테이너 */}
         <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
           {/* RS 순위 테이블 & 52주 신고가 */}

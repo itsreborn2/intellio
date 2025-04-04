@@ -10,11 +10,11 @@ export default function ETFSectorPage() {
   const [activeTab, setActiveTab] = useState<'industry' | 'leading'>('leading');
 
   return (
-    <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto ml-0 md:ml-16 w-full">
+    <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
       {/* 사이드바 제거 - 이미 layout.tsx에 포함됨 */}
       
       {/* 메인 콘텐츠 영역 - 모바일 최적화 */}
-      <div className="max-w-6xl mx-auto"> 
+      <div className="w-full max-w-[1280px] mx-auto"> 
         {/* ETF 현재가 테이블 */}
         <div className="mb-2 md:mb-4">
           <div className="bg-white rounded-md shadow p-2 md:p-4">
