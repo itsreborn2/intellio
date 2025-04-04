@@ -587,9 +587,9 @@ const ValuationPage = () => {
   }
 
   return (
-    <div className="flex-1 p-0 sm:p-2 md:p-4 ml-0 md:ml-16 w-full">
+    <div className="flex-1 p-0 sm:p-2 md:p-4 w-full">
       {/* 메인 콘텐츠 영역 - 모바일 최적화 */}
-      <div className="max-w-6xl mx-auto"> 
+      <div className="w-full"> 
         {/* 테이블 섹션 컨테이너 (rs-rank 페이지와 유사하게) */}
         <div className="mb-2 md:mb-4">
           {/* 내부 컨테이너 (하단 마진 제거) */}
@@ -735,10 +735,10 @@ const ValuationPage = () => {
               {!isAllItemsLoading && (
                 <div 
                   // 테이블 래퍼에서 하단 마진 제거
-                  className="overflow-x-auto" 
+                  className="table-container" 
                   ref={tableRef}
                 >
-                  <div className="overflow-x-auto w-full">
+                  <div className="w-full">
                     <table className="min-w-full border border-gray-200 table-fixed">
                       <thead className="bg-gray-100">
                         <tr>

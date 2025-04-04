@@ -22,6 +22,31 @@ html, body {
   line-height: 1.5; /* ChatGPT 스타일 줄 간격 */
 }
 
+/* 메인 콘텐츠 영역 스타일 */
+main {
+  width: calc(100% - 59px); /* 사이드바 너비(59px)를 고려한 너비 설정 */
+  max-width: calc(100% - 59px); /* 최대 너비도 동일하게 제한 */
+  overflow-x: hidden; /* 가로 스크롤 방지 */
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* 내부 콘텐츠 가운데 정렬 */
+}
+
+/* 내부 콘텐츠 컨테이너 스타일 */
+.content-container {
+  width: 100%;
+  max-width: 1152px; /* 최대 너비 1152px로 제한 */
+  margin: 0 auto; /* 가운데 정렬 */
+  padding: 0 16px; /* 좌우 여백 추가 */
+}
+
+/* 테이블 컨테이너 스타일 */
+.table-container {
+  width: 100%;
+  overflow-x: auto; /* 테이블이 넓을 경우 가로 스크롤 허용 */
+  max-width: 100%; /* 최대 너비 제한 */
+}
+
 /* 스크롤바 스타일 - 브라우저 전체 */
 html::-webkit-scrollbar {
   width: 8px; /* 스크롤바 너비 */
