@@ -963,21 +963,21 @@ export default function IndustryCharts() {
                     <div className="bg-[#D8EFE9] px-3 py-1 border border-[#BBDCD3] flex justify-between items-baseline" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
                       <div className="flex items-baseline">
                         <span 
-                          className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1"
+                          className="py-0.5 rounded bg-blue-100 text-blue-800 mr-1"
                           style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
                         >
                           {etf.섹터 || ''}
                         </span>
                         <span className="font-medium mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{etf.종목명}</span>
                         <span 
-                          className={`px-1.5 py-0.5 rounded ${parseFloat(etf.etfChangePercent.replace('%', '')) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                          className={`py-0.5 rounded ${parseFloat(etf.etfChangePercent.replace('%', '')) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
                           style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
                         >
                           {etf.etfChangePercent} {/* CSV 원본 값 직접 표시 */}
                         </span>
                       </div>
                       <span 
-                        className={`px-1.5 py-0.5 rounded bg-[#D8EFE9] text-teal-800`}
+                        className={`py-0.5 rounded bg-[#D8EFE9] text-teal-800`}
                         style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
                       >
                         {getStatusText(etf)}
@@ -991,7 +991,7 @@ export default function IndustryCharts() {
                           <div className="flex items-baseline">
                             <span className="font-medium mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{stock.name}</span>
                             <span 
-                              className={`px-1.5 py-0.5 rounded ${calculateStockChangePercent(stock) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                              className={`px-0 py-0.5 rounded ${calculateStockChangePercent(stock) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
                               style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
                             >
                               {calculateStockChangePercent(stock) >= 0 ? '+' : ''}{calculateStockChangePercent(stock).toFixed(2)}%

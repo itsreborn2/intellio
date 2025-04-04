@@ -1,13 +1,11 @@
 import './globals.css';
-import Sidebar from './components/Sidebar';
 import AIChatArea from './components/AIChatArea';
 
 
 export default function StockEasyLandingPage() {
   return (
-    <div className="stockeasy-landing-page">
-      <Sidebar />
-      <div className="chat-area-wrapper">
+    <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto ml-0 md:ml-16 w-full">
+      <div className="max-w-6xl mx-auto">
         <AIChatArea />
       </div>
     </div>
