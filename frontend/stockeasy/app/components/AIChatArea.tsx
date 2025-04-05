@@ -4,8 +4,8 @@ import { Suspense, useState, useEffect, useMemo, useRef } from 'react'
 import Select from 'react-select'
 import Papa from 'papaparse'
 import { MentionsInput, Mention } from 'react-mentions'
-import { sendChatMessage } from '@/services/api/chat'
-import { IChatResponse } from '@/types/api/chat'
+import { sendChatMessage, createChatSession, createChatMessage } from '@/services/api/chat'
+import { IChatMessageDetail, IChatResponse, IChatSession } from '@/types/api/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -13,6 +13,7 @@ import rehypeRaw from 'rehype-raw'
 import rehypeHighlight from 'rehype-highlight'
 import { CSSProperties } from 'react'
 import 'highlight.js/styles/github.css' // 하이라이트 스타일 추가
+import { useChatStore } from '@/stores/chatStore'
 
 // 종목 타입 정의
 interface StockOption {
@@ -37,7 +38,7 @@ interface ChatMessage {
 }
 
 // 컨텐츠 컴포넌트
-function AIChatAreaContent() {
+function AIChatAreaContent(): JSX.Element {
   // 종목 리스트 상태
   const [stockOptions, setStockOptions] = useState<StockOption[]>([]);
   const [selectedStock, setSelectedStock] = useState<StockOption | null>(null);
@@ -63,6 +64,7 @@ function AIChatAreaContent() {
   const [searchMode, setSearchMode] = useState(false); // 종목 검색 모드 상태 추가
   const [popupHovered, setPopupHovered] = useState(false); // 팝업 호버 상태 추가
   const [windowWidth, setWindowWidth] = useState(0);
+  const [currentChatSession, setCurrentChatSession] = useState<IChatSession | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -72,6 +74,98 @@ function AIChatAreaContent() {
 
   const CACHE_DURATION = 3600000; // 캐시 유효 시간 (1시간 = 3600000ms)
   const MAX_RECENT_STOCKS = 5; // 최근 조회 종목 최대 개수
+
+  // Zustand 스토어 사용
+  const { 
+    currentSession, 
+    messages: storeMessages, 
+    isLoading: storeIsLoading 
+  } = useChatStore()
+  
+  // 스토어에서 가져온 메시지를 컴포넌트 메시지 형식으로 변환
+  useEffect(() => {
+    if (currentSession && storeMessages.length > 0) {
+      // 채팅 세션이 있을 경우, 화면 레이아웃을 메시지 모드로 변경
+      setIsInputCentered(false)
+      setShowTitle(false)
+      
+      // 현재 세션의 종목 정보 설정 (세션에서 가져오거나 없으면 첫 번째 메시지에서 추출)
+      const stockName = currentSession.stock_name || '';
+      const stockCode = currentSession.stock_code || '';
+      
+      console.log('세션 정보:', currentSession)
+      console.log('종목 정보:', stockName, stockCode)
+      
+      // 스토어의 메시지를 컴포넌트 형식으로 변환
+      const convertedMessages: ChatMessage[] = storeMessages.map(msg => {
+        //console.log('변환 중인 메시지 전체:', msg)
+        //console.log('변환 중인 메시지 메타데이터:', msg.metadata)
+        
+        // 메시지 자체 또는 메타데이터에서 종목 정보 추출
+        let msgStockName = '';
+        let msgStockCode = '';
+        
+        // 1. 먼저 메시지 자체에 속성으로 있는지 확인 (로그에서 보이는 구조)
+        if (msg.stock_name && msg.stock_code) {
+          msgStockName = msg.stock_name;
+          msgStockCode = msg.stock_code;
+          //console.log('메시지 직접 속성에서 종목 정보 추출:', msgStockName, msgStockCode);
+        } 
+        // 3. 세션 정보 사용
+        else {
+          msgStockName = stockName;
+          msgStockCode = stockCode;
+          console.log('세션에서 종목 정보 사용:', msgStockName, msgStockCode);
+        }
+        
+        const messageWithStock = {
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
+          responseId: msg.metadata?.responseId,
+          stockInfo: (msgStockName && msgStockCode) ? {
+            stockName: msgStockName,
+            stockCode: msgStockCode
+          } : undefined
+        }
+        
+        //console.log('변환된 단일 메시지:', messageWithStock)
+        //console.log('stockInfo 확인:', messageWithStock.stockInfo)
+        return messageWithStock
+      })
+      
+      //console.log('변환된 메시지들:', convertedMessages)
+      
+      // 현재 세션 정보 설정
+      setCurrentChatSession({
+        id: currentSession.id,
+        user_id: currentSession.user_id || '',
+        title: currentSession.title,
+        is_active: currentSession.is_active,
+        ok: currentSession.ok,
+        status_message: currentSession.status_message,
+        stock_code: stockCode,
+        stock_name: stockName
+      })
+
+      // 종목 선택 상태 업데이트
+      if (stockName && stockCode) {
+        const stockOption: StockOption = {
+          value: stockCode,
+          label: `${stockName} (${stockCode})`,
+          stockName,
+          stockCode,
+          display: stockName
+        };
+        setSelectedStock(stockOption);
+        console.log('종목 선택 업데이트:', stockOption)
+      }
+      
+      // 메시지 설정
+      setMessages(convertedMessages)
+    }
+  }, [currentSession, storeMessages])
 
   // 히스토리 분석 결과 로드 이벤트 리스너
   useEffect(() => {
@@ -143,24 +237,6 @@ function AIChatAreaContent() {
 
   // 클라이언트 사이드 렌더링 확인
   useEffect(() => {
-    setIsMounted(true);
-    
-    // 창 너비 초기화 (클라이언트 사이드에서만 실행)
-    setWindowWidth(window.innerWidth);
-
-    // 로컬 스토리지에서 최근 조회 종목 불러오기
-    try {
-      const recentStocksStr = localStorage.getItem('recentStocks');
-      if (recentStocksStr) {
-        const savedRecentStocks = JSON.parse(recentStocksStr);
-        if (Array.isArray(savedRecentStocks)) {
-          setRecentStocks(savedRecentStocks);
-        }
-      }
-    } catch (error) {
-      console.warn('최근 조회 종목 불러오기 실패:', error);
-    }
-
     // 외부 클릭 이벤트 리스너 추가
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -173,15 +249,35 @@ function AIChatAreaContent() {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-
     // 홈 버튼 클릭 이벤트 리스너 추가 (페이지 초기화용)
     const handleHomeButtonClick = () => {
       resetChatArea();
     };
-
-    // 커스텀 이벤트 리스너 등록
+    
+    // 컴포넌트가 마운트되었음을 설정
+    setIsMounted(true);
+    
+    // 현재 창 너비 설정
+    setWindowWidth(window.innerWidth);
+    
+    // 초기화
+    setCurrentChatSession(null);
+    
+    // 클릭 이벤트 리스너 설정
+    document.addEventListener('mousedown', handleClickOutside);
+    
+    // 홈 버튼 클릭 이벤트 설정
     window.addEventListener('homeButtonClick' as any, handleHomeButtonClick);
+    
+    // 최근 조회 종목 로드
+    try {
+      const savedRecentStocks = localStorage.getItem('recentStocks');
+      if (savedRecentStocks) {
+        setRecentStocks(JSON.parse(savedRecentStocks));
+      }
+    } catch (error) {
+      console.error('Failed to load recent stocks from localStorage:', error);
+    }
 
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
@@ -212,6 +308,7 @@ function AIChatAreaContent() {
     setTransitionInProgress(false);
     setSearchTerm('');
     setFilteredStocks([]);
+    setCurrentChatSession(null);
 
     
     console.log('채팅 영역이 초기화되었습니다.');
@@ -354,7 +451,9 @@ function AIChatAreaContent() {
       setIsInputCentered(false);
       setTransitionInProgress(true);
     }
-
+    console.log('selectedStock : ', selectedStock);
+    console.log('inputMessage : ', inputMessage);
+    console.log('currentChatSession : ', currentChatSession);
     // 메시지 ID 생성
     const messageId = `msg_${Date.now()}`;
     // 응답 ID 생성 (실제로는 서버에서 생성해야 함)
@@ -395,14 +494,41 @@ function AIChatAreaContent() {
     }, 1000);
 
     try {
-      // 백엔드 API 호출
-      const response:IChatResponse = await sendChatMessage(selectedStock?.stockCode || '', selectedStock?.stockName || '', inputMessage);
+      // 채팅 세션 ID가 없으면 새로 생성
+      let sessionId = currentChatSession?.id;
+      if (!sessionId) {
+        try {
+          // 새 채팅 세션 생성
+          const sessionTitle = selectedStock?.stockName 
+            ? `${selectedStock.stockName}(${selectedStock.stockCode}) : ${userMessageContent}` 
+            : userMessageContent;
+          const newSession = await createChatSession(sessionTitle);
+          setCurrentChatSession(newSession);
+          sessionId = newSession.id;
+          
+          console.log('새 채팅 세션 생성됨:', sessionId);
+        } catch (sessionError) {
+          console.error('채팅 세션 생성 오류:', sessionError);
+          return;
+        }
+      }
 
+      // 사용자 메시지 저장 (백엔드에 직접 저장)
+      
+      const response:IChatMessageDetail = await createChatMessage(
+        sessionId,  
+        userMessageContent,
+        selectedStock?.stockCode || '',
+        selectedStock?.stockName || ''
+      );
       if (!response.ok) {
         throw new Error(`API 응답 오류: ${response.status_message}`);
       }
 
-      const responseData = response.answer;
+
+      // 백엔드 API 호출
+
+      const responseData = response.content;
       console.log('answer : ', responseData);
 
       // 응답 메시지 생성
@@ -421,38 +547,6 @@ function AIChatAreaContent() {
       // 메시지 목록에 응답 메시지 추가
       setMessages(prevMessages => [...prevMessages, assistantMessage]);
       
-      // 히스토리에 저장하기 위한 이벤트 발생
-      if (selectedStock) {
-        const event = new CustomEvent('stockPromptSubmitted', {
-          detail: {
-            stockName: selectedStock.stockName,
-            stockCode: selectedStock.stockCode,
-            prompt: inputMessage,
-            responseId // 응답 ID 추가
-          }
-        });
-        window.dispatchEvent(event);
-        
-        // 분석 결과 저장 API 호출
-        try {
-          await fetch('/api/analysis-result', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              id: responseId,
-              content: responseData,
-              stockName: selectedStock.stockName,
-              stockCode: selectedStock.stockCode,
-              prompt: inputMessage,
-              timestamp: Date.now()
-            })
-          });
-        } catch (saveError) {
-          console.error('분석 결과 저장 오류:', saveError);
-        }
-      }
     } catch (error) {
       console.error('메시지 전송 오류:', error);
 
@@ -524,6 +618,9 @@ function AIChatAreaContent() {
     if (messages.length > 0) {
       return;
     }
+
+    // currentChatSession 초기화
+    setCurrentChatSession(null);
 
     // 초기 메시지 설정 로직은 위의 fetchMessages 함수에서 처리
   }, [isMounted, messages.length]);
@@ -1156,10 +1253,20 @@ function AIChatAreaContent() {
                   <div style={{
                     fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
                     fontWeight: 'bold',
-                    color: '#10A37F', // 파란색(#0066cc)에서 초록색(#10A37F)으로 변경
-                    marginBottom: isMobile ? '3px' : '4px'
+                    color: '#10A37F', // 초록색 색상 유지
+                    marginBottom: isMobile ? '3px' : '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
                   }}>
-                    {message.stockInfo.stockName} ({message.stockInfo.stockCode})
+                    <span>{message.stockInfo.stockName}</span>
+                    <span style={{ 
+                      fontSize: 'smaller', 
+                      color: '#555', 
+                      fontWeight: 'normal' 
+                    }}>
+                      ({message.stockInfo.stockCode})
+                    </span>
                   </div>
                 )}
                 <div style={{
@@ -1330,7 +1437,7 @@ function AIChatAreaContent() {
               )}
               <input
                 ref={inputRef}
-                placeholder={showStockSuggestions || searchMode ? "종목명 또는 종목코드 검색" : (selectedStock ? "종목에 대해 궁굼한걸 물어보세요" : "먼저 종목을 입력하거나 선택하세요")}
+                placeholder={showStockSuggestions || searchMode ? "종목명 또는 종목코드 검색" : (selectedStock ? "이 종목, 뭔가 궁금하다면 지금 바로 질문해 보세요" : "어떤 종목이든 좋아요! 먼저 입력하거나 골라주세요.")}
                 className="integrated-input-field"
                 type="text"
                 value={inputMessage}

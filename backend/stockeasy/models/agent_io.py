@@ -258,6 +258,7 @@ class AgentState(TypedDict, total=False):
     summary: Optional[str]          # 생성된 요약
     formatted_response: Optional[str]  # 최종 응답
     answer: Optional[str]           # 최종 답변
+    answer_expert: Optional[str]    # 전문가형 답변
     
     # 에러 및 메트릭
     errors: List[AgentError]        # 발생한 오류 목록

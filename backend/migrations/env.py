@@ -32,9 +32,10 @@ from doceasy.models.document import Document
 from common.models.user import User
 from doceasy.models.project import Project
 from doceasy.models.category import Category
-from stockeasy.models.telegram_message import TelegramMessage
 from common.models.token_usage import TokenUsage
 
+from stockeasy.models.telegram_message import TelegramMessage
+from stockeasy.models.chat import StockChatSession, StockChatMessage
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
