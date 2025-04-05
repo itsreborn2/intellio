@@ -29,8 +29,8 @@ export default function RootLayout({
         {/* 사이드바는 fixed 포지션으로 설정되어 있으므로 여기서는 사이드바만 배치 */}
         <Sidebar />
         
-        {/* 메인 콘텐츠는 사이드바 너비만큼 왼쪽 여백을 가짐 */}
-        <main className="ml-[59px] min-h-screen overflow-x-hidden w-[calc(100%-59px)]">
+        {/* 메인 콘텐츠는 데스크탑에서만 사이드바 너비만큼 왼쪽 여백을 가짐, 모바일에서는 전체 너비 사용 */}
+        <main className="min-h-screen overflow-x-hidden w-full ml-0 sm:ml-[59px] sm:w-[calc(100%-59px)]">
           <div className="content-container">
             {children}
           </div>

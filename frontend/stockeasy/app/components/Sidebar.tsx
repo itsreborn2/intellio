@@ -315,7 +315,13 @@ function SidebarContent() {
   // 모바일 환경 감지
   useEffect(() => {
     const checkIfMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
+      const isMobileView = window.innerWidth <= 640; // 640px 이하를 모바일로 간주 (sm 브레이크포인트와 동일하게 설정)
+      setIsMobile(isMobileView);
+      
+      // 모바일에서 데스크탑으로 변경 시 메뉴가 열려있다면 닫기
+      if (!isMobileView && isMenuOpen) {
+        setIsMenuOpen(false);
+      }
     };
     
     // 초기 실행
@@ -328,7 +334,7 @@ function SidebarContent() {
     return () => {
       window.removeEventListener('resize', checkIfMobile);
     };
-  }, []);
+  }, [isMenuOpen]);
   
   // 히스토리 패널 외부 클릭 시 패널 닫기 구현
   useEffect(() => {

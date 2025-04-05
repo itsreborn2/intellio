@@ -246,12 +246,11 @@ function AIChatAreaContent() {
 
   // 사이드바 상태 감지
   useEffect(() => {
-    // 사이드바 열림/닫힘 이벤트 리스너
-    const handleSidebarToggle = (e: MessageEvent) => {
-      if (e.data && typeof e.data === 'object' && 'type' in e.data) {
-        if (e.data.type === 'SIDEBAR_TOGGLE') {
-          setIsSidebarOpen(e.data.isOpen);
-        }
+    // 사이드바 열림/닫힘 이벤트 리스너 (CustomEvent 사용)
+    const handleSidebarToggle = (e: CustomEvent) => {
+      if (e.detail && typeof e.detail === 'object' && 'isOpen' in e.detail) {
+        console.log('사이드바 상태 변경:', e.detail.isOpen);
+        setIsSidebarOpen(e.detail.isOpen);
       }
     };
 
@@ -260,11 +259,12 @@ function AIChatAreaContent() {
       setWindowWidth(window.innerWidth);
     };
 
-    window.addEventListener('message', handleSidebarToggle);
+    // CustomEvent 리스너 등록
+    window.addEventListener('sidebarToggle', handleSidebarToggle as EventListener);
     window.addEventListener('resize', handleResize);
     
     return () => {
-      window.removeEventListener('message', handleSidebarToggle);
+      window.removeEventListener('sidebarToggle', handleSidebarToggle as EventListener);
       window.removeEventListener('resize', handleResize);
     };
   }, []);
@@ -946,7 +946,7 @@ function AIChatAreaContent() {
   };
 
   // 컨테이너 너비를 위한 변수 (일관성 유지를 위해)
-  const contentWidth = isMobile ? '100%' : (windowWidth < 768 ? '90%' : (windowWidth < 1024 ? '80%' : '65%'));
+  const contentWidth = isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%'));
   
   const inputAreaStyle: React.CSSProperties = {
     display: 'flex',
@@ -972,11 +972,11 @@ function AIChatAreaContent() {
   const integratedInputStyle: React.CSSProperties = {
     position: 'relative',
     width: contentWidth, // 메시지 컨테이너와 동일한 너비 사용
-    maxWidth: isMobile ? '100%' : (windowWidth < 768 ? '90%' : (windowWidth < 1024 ? '80%' : '65%')), // 최대 너비 제한
+    maxWidth: isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%')), // 최대 너비 제한
     margin: '0 auto',
     transition: 'width 0.3s ease-in-out', // 전체가 아닌 width만 transition
     boxSizing: 'border-box',
-    padding: isMobile ? '0 5px' : '0' // 모바일에서 양쪽 여백 추가
+    padding: isMobile ? '0 0' : '0' // 모바일에서 전체 너비 활용
   };
 
   const inputStyle: React.CSSProperties = {
@@ -1229,7 +1229,7 @@ function AIChatAreaContent() {
         <div ref={messagesEndRef} />
       </div>
       
-      {/* 입력 영역 */}
+      {/* 입력 영역 - 모바일에서 사이드바 열렸을 때 숨김 처리 */}
       {!(isMobile && isSidebarOpen) && (
         <div className="input-area" style={{ 
           ...inputAreaStyle
@@ -1646,8 +1646,9 @@ function AIChatAreaContent() {
       {/* 추천 질문 버튼 */}
       {isInputCentered && messages.length === 0 && (
         <div style={{
-          width: isMobile ? '90%' : '57.6%', 
+          width: isMobile ? '100%' : '57.6%', 
           margin: isMobile ? '50px auto 0' : '12px auto 0',
+          padding: isMobile ? '0 0' : '0',
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
           gap: '8px'
@@ -1665,7 +1666,7 @@ function AIChatAreaContent() {
               gap: isMobile ? '6px' : '8px',
               border: '1px solid #ddd',
               borderRadius: '10px',
-              padding: isMobile ? '10px' : '12px',
+              padding: isMobile ? '10px 15px' : '12px',
               backgroundColor: '#ffffff',
               flex: '1',
               width: isMobile ? '100%' : '50%',  
@@ -2021,7 +2022,7 @@ function AIChatAreaContent() {
               gap: isMobile ? '6px' : '8px',
               border: '1px solid #ddd',
               borderRadius: '10px',
-              padding: isMobile ? '10px' : '12px',
+              padding: isMobile ? '10px 15px' : '12px',
               backgroundColor: '#ffffff',
               flex: '1',
               width: isMobile ? '100%' : '50%',  

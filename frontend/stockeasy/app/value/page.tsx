@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
+import { fetchCSVData } from '../utils/fetchCSVData';
 import {
   createColumnHelper,
   flexRender,
@@ -192,17 +193,17 @@ const ValuationPage = () => {
   const headerRef = useRef<HTMLDivElement>(null);
 
   // 컬럼 정의 - 동적으로 헤더명 사용
-  // 고정 컬럼 너비 정의
+  // 고정 컬럼 너비 정의 (데스크탑 환경에서 가로 스크롤이 생기지 않도록 너비 조정)
   const fixedColumnWidths = {
-    stockCode: 80,
-    stockName: 150,
-    industry: 150,
-    marketCap: 110,
-    per2024E: 80,
-    per2025E: 80,
-    per2026E: 80,
-    per2027E: 80,
-    per2028E: 80
+    stockCode: 83,    // 75 -> 83으로 10% 증가
+    stockName: 126,   // 140 -> 126으로 10% 감소
+    industry: 161,    // 146 -> 161로 10% 더 확장
+    marketCap: 72,    // 80 -> 72로 10% 더 감소
+    per2024E: 75,     // 80 -> 75로 줄임
+    per2025E: 75,     // 80 -> 75로 줄임
+    per2026E: 75,     // 80 -> 75로 줄임
+    per2027E: 75,     // 80 -> 75로 줄임
+    per2028E: 75      // 80 -> 75로 줄임
   };
   
   const columns = useMemo(() => [
@@ -245,7 +246,7 @@ const ValuationPage = () => {
         
         return (
           <div 
-            className="cursor-pointer hover:bg-[#e8f4f1] hover:text-blue-700 transition-colors duration-150 w-full h-full flex items-center px-1 -mx-1"
+            className="cursor-pointer hover:bg-[#e8f4f1] hover:text-blue-700 transition-colors duration-150 w-full h-full flex items-center px-1 -mx-1 overflow-hidden"
             style={{ borderRadius: '4px' }}
             onClick={() => {
               if (industry) {
@@ -255,7 +256,8 @@ const ValuationPage = () => {
             }}
             title={`${industry} 업종 선택하기`}
           >
-            {industry}
+            {/* 업종명이 길 경우 말줄임표(...) 처리 */}
+            <div className="truncate">{industry}</div>
           </div>
         );
       },
@@ -327,11 +329,17 @@ const ValuationPage = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/requestfile/value/PER.csv');
+        // 파일 경로 정규화를 위해 fetchCSVData 유틸리티 함수에서 경로만 가져옴
+        const normalizedPath = await fetchCSVData('requestfile/value/PER.csv')
+          .then(() => 'requestfile/value/PER.csv')
+          .catch(() => '/requestfile/value/PER.csv'); // 오류 발생 시 절대 경로로 시도
         
         // --- CSV 인코딩 처리 시작 ---
+        // 한글 인코딩 문제로 인해 EUC-KR 인코딩 처리가 반드시 필요함
+        // 원본 파일이 EUC-KR로 인코딩되어 있어 TextDecoder를 사용해야 함
+        console.log('파일 경로:', normalizedPath); // 디버깅용 로그
+        const response = await fetch(normalizedPath);
         const buffer = await response.arrayBuffer();
-        // EUC-KR 또는 CP949로 시도, 깨진 문자에 따라 변경 필요
         const decoder = new TextDecoder('euc-kr'); 
         const decodedCsv = decoder.decode(buffer);
         // --- CSV 인코딩 처리 끝 ---
@@ -734,12 +742,13 @@ const ValuationPage = () => {
               {/* 테이블 */}
               {!isAllItemsLoading && (
                 <div 
-                  // 테이블 래퍼에서 하단 마진 제거
-                  className="table-container" 
+                  // 테이블 래퍼에 가로 스크롤 추가하여 반응형 지원
+                  // 모바일에서만 overflow-x-auto 적용, 데스크탑에서는 스크롤 없음
+                  className="table-container overflow-x-auto sm:overflow-visible" 
                   ref={tableRef}
                 >
-                  <div className="w-full">
-                    <table className="min-w-full border border-gray-200 table-fixed">
+                  <div className="w-full sm:w-auto">
+                    <table className="w-full border border-gray-200">
                       <thead className="bg-gray-100">
                         <tr>
                           {table.getHeaderGroups().map(headerGroup => (
@@ -747,7 +756,7 @@ const ValuationPage = () => {
                               <th
                                 key={header.id}
                                 scope="col"
-                                className={`px-1 sm:px-2 md:px-4 py-2 text-center text-[9px] sm:text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 ${
+                                className={`px-0.5 sm:px-1 md:px-2 py-2 text-center text-[9px] sm:text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 ${
                                   // 모바일에서 특정 컬럼 숨김 처리
                                   header.id === 'stockCode' || header.id === 'marketCap' ? 'hidden sm:table-cell' : ''
                                 }`}
@@ -783,7 +792,7 @@ const ValuationPage = () => {
                             {row.getVisibleCells().map(cell => (
                               <td
                                 key={cell.id}
-                                className={`px-1 sm:px-2 md:px-4 py-1 whitespace-nowrap text-[9px] sm:text-[10px] md:text-xs border border-gray-200 ${
+                                className={`px-0.5 sm:px-1 md:px-2 py-1 whitespace-nowrap text-[9px] sm:text-[10px] md:text-xs border border-gray-200 ${
                                   // 컬럼별 정렬 방식 적용
                                   cell.column.id === 'stockCode' ? 'text-center' :
                                   cell.column.id === 'stockName' || cell.column.id === 'industry' ? 'text-left' :

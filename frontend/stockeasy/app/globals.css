@@ -24,12 +24,20 @@ html, body {
 
 /* 메인 콘텐츠 영역 스타일 */
 main {
-  width: calc(100% - 59px); /* 사이드바 너비(59px)를 고려한 너비 설정 */
-  max-width: calc(100% - 59px); /* 최대 너비도 동일하게 제한 */
+  width: 100%; /* 모바일에서는 전체 너비 사용 */
+  max-width: 100%; /* 모바일에서는 전체 너비 사용 */
   overflow-x: hidden; /* 가로 스크롤 방지 */
   display: flex;
   flex-direction: column;
   align-items: center; /* 내부 콘텐츠 가운데 정렬 */
+}
+
+/* 데스크탑 환경에서는 사이드바 너비 고려 */
+@media (min-width: 640px) {
+  main {
+    width: calc(100% - 59px); /* 사이드바 너비(59px)를 고려한 너비 설정 */
+    max-width: calc(100% - 59px); /* 최대 너비도 동일하게 제한 */
+  }
 }
 
 /* 내부 콘텐츠 컨테이너 스타일 */
@@ -847,8 +855,8 @@ html {
   
   .integrated-input {
     width: 100% !important;
-    margin: 0 auto !important;
-    max-width: calc(100% - 20px) !important;
+    margin: 0 !important;
+    max-width: 100% !important;
   }
   
   /* 입력창 위의 메시지 영역이 입력창에 가려지지 않도록 패딩 추가 */
