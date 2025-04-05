@@ -677,12 +677,6 @@ function AIChatAreaContent() {
     setSelectedStock(stock);
     setInputMessage(''); // 입력 필드 초기화
     
-    // 중앙 배치 해제 - 종목 선택 시에도 화면을 아래로 내림
-    if (isInputCentered) {
-      setIsInputCentered(false);
-      setTransitionInProgress(true);
-    }
-    
     // 선택한 종목을 최근 조회 목록에 추가
     const updatedRecentStocks = [stock, ...recentStocks.filter(s => s.value !== stock.value)].slice(0, 5);
     setRecentStocks(updatedRecentStocks);
@@ -946,37 +940,56 @@ function AIChatAreaContent() {
   };
 
   // 컨테이너 너비를 위한 변수 (일관성 유지를 위해)
-  const contentWidth = isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%'));
+  // 모바일에서는 너비를 100%로 조정
+  const contentWidthPercent = isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%'));
+  
+  // 텍스트 박스 너비를 픽셀 단위로 관리하기 위한 상태
+  const [inputBoxWidth, setInputBoxWidth] = useState<number>(0);
+  const [initialInputBoxWidth, setInitialInputBoxWidth] = useState<number>(0);
+  const inputBoxRef = useRef<HTMLDivElement>(null);
+  
+  // 사이드바 너비 상수 (픽셀 단위)
+  const SIDEBAR_WIDTH = 59; // 사이드바 너비 (픽셀)
+  
+  // 화면 전환 전 텍스트 박스 너비 계산
+  useEffect(() => {
+    if (isInputCentered && inputBoxRef.current && initialInputBoxWidth === 0) {
+      const width = inputBoxRef.current.offsetWidth;
+      setInitialInputBoxWidth(width);
+      setInputBoxWidth(width);
+    }
+  }, [isInputCentered, initialInputBoxWidth]);
   
   const inputAreaStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center', // 중앙 정렬 강화
-    width: '100%', // 전체 너비로 변경
+    // 사이드바 영역을 침범하지 않도록 너비 조정
+    width: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : 'calc(100% - 64px)'), // 화면 전환 전후 동일한 너비 유지
     margin: '0 auto', // 중앙 정렬
-    paddingTop: '0',
-    paddingRight: '0',
-    paddingBottom: '0',
-    paddingLeft: '0',
+    padding: 0, // 모든 패딩 제거
     boxSizing: 'border-box',
     marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '35vh')) : '0px',
-    marginBottom: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
-    position: isMobile ? 'unset' : 'relative',
-    bottom: isInputCentered ? 'auto' : (isMobile ? '15px' : '20px'),
-    zIndex: isMobile ? 'unset' : 10,
-    backgroundColor: 'transparent',
+    marginBottom: '5px', // 하단 여백 5px 유지
+    // 화면 전환 시 입력 박스를 하단에 고정시키기 위해 position 속성 변경
+    position: isInputCentered ? 'relative' : 'fixed',
+    bottom: isInputCentered ? 'auto' : '0',
+    // 사이드바 영역을 침범하지 않도록 left 값 조정 및 데스크탑에서 가운데 정렬
+    left: isInputCentered ? '0' : (!isMobile ? `calc(50% - ${initialInputBoxWidth / 2}px + ${SIDEBAR_WIDTH / 2}px)` : '64px'), // 데스크탑에서는 사이드바를 고려하여 메인 영역 중앙에 배치, 모바일에서는 사이드바 여백 유지
+    zIndex: 100, // 다른 요소 위에 표시되도록 zIndex 증가
+    backgroundColor: isInputCentered ? 'transparent' : '#F4F4F4', // 고정 시 배경색 추가
     transition: 'all 0.3s ease-in-out',
-    maxWidth: '100%' // 최대 너비 제한
+    maxWidth: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : 'calc(100% - 64px)'), // 화면 전환 전후 동일한 최대 너비 유지
+    paddingBottom: '5px' // 하단 여백 5px 유지
   };
 
   const integratedInputStyle: React.CSSProperties = {
     position: 'relative',
-    width: contentWidth, // 메시지 컨테이너와 동일한 너비 사용
-    maxWidth: isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%')), // 최대 너비 제한
-    margin: '0 auto',
-    transition: 'width 0.3s ease-in-out', // 전체가 아닌 width만 transition
+    width: isMobile ? '100%' : contentWidthPercent, // 모바일에서는 100%로 설정
+    maxWidth: isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%')), // 모바일에서 최대 너비를 100%로 조정
+    margin: isMobile ? '0' : '0 auto', // 모바일에서 마진 제거
     boxSizing: 'border-box',
-    padding: isMobile ? '0 0' : '0' // 모바일에서 전체 너비 활용
+    padding: 0 // 패딩 제거하여 최대 너비 활용
   };
 
   const inputStyle: React.CSSProperties = {
@@ -1002,13 +1015,14 @@ function AIChatAreaContent() {
     overflowX: 'hidden',
     paddingTop: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
     paddingRight: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
-    paddingBottom: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
+    // 입력 박스가 하단에 고정될 때 메시지가 입력 박스 뒤로 가려지지 않도록 하단 패딩 증가
+    paddingBottom: isInputCentered ? (isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px')) : (isMobile ? '70px' : '80px'),
     paddingLeft: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
     margin: '0 auto', // 중앙 정렬
     border: 'none', 
     borderRadius: '0', 
     backgroundColor: '#F4F4F4',
-    width: contentWidth, // 일관된 너비 사용
+    width: contentWidthPercent, // 일관된 너비 사용
     height: '100%', // 전체 높이로 변경
     minHeight: 'calc(100% - 60px)',
     boxSizing: 'border-box',
@@ -1089,7 +1103,7 @@ function AIChatAreaContent() {
     bottom: `calc(100% + ${isMobile ? 5 : 30}px)`, // 모바일 5px, 데스크톱 30px로 간격 확대
     left: 0,
     right: 0,
-    width: isMobile ? '90%' : '100%', // 모바일 환경에서 너비 조정
+    width: isMobile ? '100%' : '100%', // 모바일 환경에서 너비 100%로 수정
     margin: isMobile ? '0 auto' : '0', // 모바일 환경에서 중앙 정렬
     maxHeight: isMobile ? '180px' : '200px', // 모바일 환경에서 최대 높이 조정
     overflowY: 'auto',
@@ -1102,7 +1116,7 @@ function AIChatAreaContent() {
     paddingRight: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
     paddingBottom: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
     paddingLeft: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
-    transform: isMobile ? 'none' : (isInputCentered ? 'translateY(-30px)' : 'none'), // 데스크톱 + 중앙 정렬 시에만 적용
+    transform: isMobile ? 'none' : (isInputCentered ? 'translateY(-30px)' : 'none'), // 데스크탑 + 중앙 정렬 시에만 적용
   };
 
   return (
@@ -1125,7 +1139,7 @@ function AIChatAreaContent() {
             fontSize: '16px', // 0.9rem에서 16px로 변경
             display: 'none' // 안내 텍스트 숨기기
           }}>
-            종목을 선택하고 질문을 입력하세요.
+            종목을 선택 후 분석을 요청하세요.
           </div>
         ) : (
           messages.map(message => (
@@ -1146,7 +1160,6 @@ function AIChatAreaContent() {
                 padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 13px' : '10px 14px'),
                 borderRadius: isMobile ? '10px' : '12px',
                 maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
-                width: 'auto',
                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
                 position: 'relative',
                 border: '1px solid #e0e0e0', // 테두리 추가하여 구분
@@ -1166,8 +1179,6 @@ function AIChatAreaContent() {
                   overflow: message.role === 'user' ? 'hidden' : 'visible',
                   textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
                   wordBreak: 'break-word',
-                  width: '100%',
-                  padding: message.role === 'user' ? '0' : (isMobile ? '3px 1px' : '4px 2px'),
                   maxWidth: '100%' // 최대 너비 제한
                 }}>
                   {message.role === 'user' ? (
@@ -1231,7 +1242,7 @@ function AIChatAreaContent() {
       
       {/* 입력 영역 - 모바일에서 사이드바 열렸을 때 숨김 처리 */}
       {!(isMobile && isSidebarOpen) && (
-        <div className="input-area" style={{ 
+        <div className="input-area" ref={inputBoxRef} style={{ 
           ...inputAreaStyle
         }}>
           <div className="integrated-input" style={integratedInputStyle}>
@@ -1303,9 +1314,13 @@ function AIChatAreaContent() {
                      fontSize: '0.7rem',
                     fontWeight: 'normal',
                     whiteSpace: 'nowrap',
-                    cursor: 'pointer'
+                    cursor: isProcessing ? 'not-allowed' : 'pointer' // 분석 중일 때 마우스 커서 변경
                   }}
-                  onClick={() => {
+                  onClick={(e) => {
+                    if (isProcessing) {
+                      e.preventDefault(); // 분석 중일 때 클릭 이벤트 처리 중지
+                      return;
+                    }
                     setShowStockSuggestions(true); // 종목 선택 팝업 표시
                     setSearchMode(true); // 종목 검색 모드로 변경
                     setInputMessage(''); // 입력 필드를 비워서 종목 검색을 할 수 있도록 함
@@ -1336,6 +1351,7 @@ function AIChatAreaContent() {
                 value={inputMessage}
                 onChange={handleInputChange}
                 onFocus={handleInputFocus}
+                readOnly={isProcessing} // disabled 대신 readOnly 사용하여 스타일 유지하면서 입력 금지
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     if (showStockSuggestions && filteredStocks.length > 0) {
@@ -1343,8 +1359,8 @@ function AIChatAreaContent() {
                       e.preventDefault();
                       e.stopPropagation();
                       handleStockSelect(filteredStocks[0]);
-                    } else if (selectedStock && inputMessage.trim() && !searchMode) {
-                      // 종목이 선택된 상태에서 메시지가 있고 검색 모드가 아니면 전송
+                    } else if (selectedStock && inputMessage.trim() && !searchMode && !isProcessing) {
+                      // 종목이 선택된 상태에서 메시지가 있고 검색 모드가 아니고 분석 중이 아니면 전송
                       handleSendMessage();
                     }
                   }
@@ -1354,23 +1370,30 @@ function AIChatAreaContent() {
                   border: 'none',
                   boxShadow: 'none',
                   paddingTop: '8px', // 패딩 감소 (12px -> 8px)
-                  paddingRight: '16px',
+                  paddingRight: isMobile ? '8px' : '16px', // 모바일에서 우측 패딩 감소
                   paddingBottom: '8px', // 패딩 감소 (12px -> 8px)
-                  paddingLeft: '16px',
+                  paddingLeft: isMobile ? '8px' : '16px', // 모바일에서 좌측 패딩 감소
                   flex: 1,
-                  borderRadius: '6px'
+                  borderRadius: '6px',
+                  cursor: isProcessing ? 'not-allowed' : 'text' // 분석 중일 때 마우스 커서 변경
                 }}
               />
               
               {/* 전송 아이콘 */}
               <button
-                onClick={handleSendMessage}
-                disabled={!selectedStock || !inputMessage.trim()}
+                onClick={(e) => {
+                  if (isProcessing) {
+                    e.preventDefault(); // 분석 중일 때 클릭 이벤트 처리 중지
+                    return;
+                  }
+                  handleSendMessage();
+                }}
+                disabled={!selectedStock || !inputMessage.trim()} // 분석 중일 때는 클릭 이벤트에서 처리
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: '36px',
+                  width: isMobile ? '30px' : '36px', // 모바일에서 버튼 크기 감소
                   height: '36px',
                   borderRadius: '50%',
                   border: 'none',
@@ -1890,7 +1913,7 @@ function AIChatAreaContent() {
                     display: 'LG에너지솔루션 (373220)'
                   };
                   setSelectedStock(lgStock);
-                  setInputMessage('배터리 기술 개발 현황 및 글로벌 시장 점유율');
+                  setInputMessage('배터리 기술 개발 현황 및 미래 전망 분석');
                   
                   const updatedRecentStocks = [lgStock, ...recentStocks.filter(s => s.value !== lgStock.value)].slice(0, 5);
                   setRecentStocks(updatedRecentStocks);
@@ -1944,7 +1967,7 @@ function AIChatAreaContent() {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                   maxWidth: '100%'
-                }}>배터리 기술 개발 현황 및 글로벌 시장 점유율</span>
+                }}>배터리 기술 개발 현황 및 미래 전망 분석</span>
               </button>
               
               <button
@@ -2174,7 +2197,26 @@ function AIChatAreaContent() {
         </div>
       )}
       
-    </div> // containerStyle 끝
+      {/* 고정 푸터 시작 */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: `${SIDEBAR_WIDTH}px`, // 사이드바 너비만큼 왼쪽에서 띄움
+        width: `calc(100% - ${SIDEBAR_WIDTH}px)`, // 전체 너비에서 사이드바 너비 제외
+        textAlign: 'center',
+        paddingTop: '5px', // 패딩 조정
+        paddingBottom: '5px', // 패딩 조정
+        height: 'auto', // 높이 자동
+        zIndex: 10, // 다른 요소 위에 표시되도록 z-index 설정 (기존 ClientFooter보다 높게 설정)
+        backgroundColor: 'rgba(244, 244, 244, 0.95)', // 배경색 약간 더 불투명하게
+        fontSize: '13px',
+        color: '#888',
+        fontWeight: '300',
+      }}>
+        2025 Intellio Corporation All Rights Reserved.
+      </div>
+      {/* 고정 푸터 끝 */}
+    </div>
   );
 }
 

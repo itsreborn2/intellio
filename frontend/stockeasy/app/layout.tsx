@@ -1,7 +1,17 @@
 import './globals.css';
 import Script from 'next/script';
 import Sidebar from './components/Sidebar';
+import ConditionalFooter from './components/ConditionalFooter';
 // ClientFooter 임포트 제거
+
+// 전역 스타일 추가
+import { Metadata } from 'next';
+
+// 메타데이터 설정
+export const metadata: Metadata = {
+  title: 'StockEasy - 주식 정보 분석 서비스',
+  description: '스탁이지 - 기업, 산업 리포트부터 SNS까지 한번에 정리해드립니다.',
+}
 
 export default function RootLayout({
   children,
@@ -34,7 +44,7 @@ export default function RootLayout({
           <div className="content-container">
             {children}
           </div>
-          {/* ClientFooter 사용 부분 제거 */}
+          <ConditionalFooter />
         </main>
         {/* 페이지 로드 후 스크롤 위치를 최상단으로 설정하는 스크립트 */}
         <Script id="reset-scroll" strategy="afterInteractive">

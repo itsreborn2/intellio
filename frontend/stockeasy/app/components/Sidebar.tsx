@@ -692,7 +692,7 @@ function SidebarContent() {
 // 메인 컴포넌트
 export default function Sidebar() {
   return (
-    <Suspense fallback={<div className="w-[59px] bg-background border-r animate-pulse fixed top-0 left-0 h-screen z-50">
+    <Suspense fallback={<div className="w-[59px] bg-background border-r animate-pulse fixed top-0 left-0 h-screen z-[9999]">
       <div className="p-4">
         <div className="h-6 bg-gray-200 rounded w-3/4"></div>
       </div>
@@ -703,7 +703,7 @@ export default function Sidebar() {
         </div>
       </div>
     </div>}>
-      <div className="fixed top-0 left-0 h-screen z-50">
+      <div className="fixed top-0 left-0 h-screen z-[9999]">
         <SidebarContent />
       </div>
     </Suspense>
