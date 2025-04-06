@@ -353,6 +353,14 @@ function AIChatAreaContent() {
     setIsProcessing(true);
     setElapsedTime(0);
 
+    // 타이머 시작 - 초 카운터 업데이트 로직 복원
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    timerRef.current = setInterval(() => {
+      setElapsedTime(prev => prev + 1);
+    }, 1000);
+
     // 메시지 ID 생성
     const messageId = `msg_${Date.now()}`;
     // 응답 ID 생성 (실제로는 서버에서 생성해야 함)
@@ -951,6 +959,10 @@ function AIChatAreaContent() {
   }, [isInputCentered, initialInputBoxWidth]);
   
   const inputAreaStyle: React.CSSProperties = useMemo(() => {
+    // initialInputBoxWidth를 다시 사용하여 left와 maxWidth 계산 일관성 유지
+    // 데스크탑 너비를 768px에서 1037px로 변경 (35% 증가)
+    const initialInputBoxWidth = isMobile ? windowWidth * 0.9 : 1037;
+
     return {
       width: '100%',
       // 화면 상단 중앙에 위치할 때의 스타일
@@ -959,17 +971,17 @@ function AIChatAreaContent() {
       // 화면 전환 시 입력 박스를 하단에 고정시키기 위해 position 속성 변경
       position: isInputCentered ? 'relative' : 'fixed',
       bottom: isInputCentered ? 'auto' : '0',
-      // 사이드바 영역을 침범하지 않도록 left 값 조정 및 데스크탑에서 가운데 정렬 (수정된 initialInputBoxWidth 사용)
+      // left: initialInputBoxWidth 기준으로 중앙 정렬 복원
       left: isInputCentered ? '0' : (!isMobile ? `calc(50% - ${initialInputBoxWidth / 2}px + ${SIDEBAR_WIDTH / 2}px)` : '0'),
       zIndex: 100, // 다른 요소 위에 표시되도록 zIndex 증가
       backgroundColor: isInputCentered ? 'transparent' : '#F4F4F4', // 고정 시 배경색 추가
-      // maxWidth 설정 (이전 로직 복원, initialInputBoxWidth > 0 조건 및 contentWidthPercent 폴백 사용)
-      maxWidth: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : '100%'),
+      // maxWidth: initialInputBoxWidth (768px) 사용하도록 복원
+      maxWidth: isInputCentered ? '100%' : (!isMobile ? `${initialInputBoxWidth}px` : '100%'),
       paddingBottom: '5px' // 하단 여백 5px 유지
     };
-  // 의존성 배열은 현재 상태 유지
-  }, [isMobile, isInputCentered, windowWidth, SIDEBAR_WIDTH, contentWidthPercent, initialInputBoxWidth]);
-  
+  // 의존성 배열에서 contentWidthPercent 제거
+  }, [isMobile, isInputCentered, windowWidth, SIDEBAR_WIDTH]);
+
   const integratedInputStyle: React.CSSProperties = {
     position: 'relative',
     width: isMobile ? '100%' : contentWidthPercent, // 모바일에서는 100%로 설정
@@ -1154,7 +1166,7 @@ function AIChatAreaContent() {
                 maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
                 position: 'relative',
-                border: '1px solid #3F424A', // 테두리 색상 어둡게 변경.
+                border: '1px solid #3F424A', // 테두리 색상 어둡게 변경
                 wordBreak: 'break-word',
                 color: 'white' // 글자색을 흰색으로 변경
               }}>
