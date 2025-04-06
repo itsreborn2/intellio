@@ -335,11 +335,11 @@ function AIChatAreaContent() {
 
   // 사이드바 상태 감지
   useEffect(() => {
-    // 사이드바 열림/닫힘 이벤트 리스너 (CustomEvent 사용)
-    const handleSidebarToggle = (e: CustomEvent) => {
-      if (e.detail && typeof e.detail === 'object' && 'isOpen' in e.detail) {
-        console.log('사이드바 상태 변경:', e.detail.isOpen);
-        setIsSidebarOpen(e.detail.isOpen);
+    // 사이드바 열림/닫힘 이벤트 리스너 (MessageEvent 사용)
+    const handleSidebarToggle = (e: MessageEvent) => {
+      if (e.data && typeof e.data === 'object' && 'isOpen' in e.data) {
+        console.log('사이드바 상태 변경:', e.data.isOpen);
+        setIsSidebarOpen(e.data.isOpen);
       }
     };
 
