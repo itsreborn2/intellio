@@ -57,7 +57,7 @@ function AIChatAreaContent() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [isMobile, setIsMobile] = useState(false); // 사이드바 열림 상태 감지를 위한 상태 추가
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isInputCentered, setIsInputCentered] = useState(messages.length === 0 && inputMessage === ''); // isInputCentered 초기 상태: 메시지와 입력이 모두 없을 때만 true
+  const [isInputCentered, setIsInputCentered] = useState(true); // isInputCentered 초기 상태: true
   const [showTitle, setShowTitle] = useState(true); // 제목 표시 여부
   const [transitionInProgress, setTransitionInProgress] = useState(false);
   const [searchMode, setSearchMode] = useState(false); // 종목 검색 모드 상태 추가
@@ -140,11 +140,6 @@ function AIChatAreaContent() {
       window.removeEventListener('loadHistoryAnalysis', handleLoadHistoryAnalysis as EventListener);
     };
   }, [recentStocks]);
-
-  // messages 또는 inputMessage가 변경될 때 isInputCentered 상태 업데이트
-  useEffect(() => {
-    setIsInputCentered(messages.length === 0 && inputMessage === '');
-  }, [messages, inputMessage]);
 
   // 클라이언트 사이드 렌더링 확인
   useEffect(() => {
@@ -651,6 +646,11 @@ function AIChatAreaContent() {
       const newHeight = Math.min(150, Math.max(target.scrollHeight, 40)); // 최소 40px, 최대 150px
       target.style.height = `${newHeight}px`;
     }
+    
+    // 입력 시 중앙 정렬 해제 (복원)
+    if (isInputCentered && value.trim().length > 0) {
+      setIsInputCentered(false); 
+    }
   };
 
   // 종목 선택 처리
@@ -951,9 +951,6 @@ function AIChatAreaContent() {
   }, [isInputCentered, initialInputBoxWidth]);
   
   const inputAreaStyle: React.CSSProperties = useMemo(() => {
-    // contentWidthPercentNumerical 대신 windowWidth와 고정값(768)을 사용하여 계산 단순화
-    const initialInputBoxWidth = isMobile ? windowWidth * 0.9 : 768;
-
     return {
       width: '100%',
       // 화면 상단 중앙에 위치할 때의 스타일
@@ -966,12 +963,12 @@ function AIChatAreaContent() {
       left: isInputCentered ? '0' : (!isMobile ? `calc(50% - ${initialInputBoxWidth / 2}px + ${SIDEBAR_WIDTH / 2}px)` : '0'),
       zIndex: 100, // 다른 요소 위에 표시되도록 zIndex 증가
       backgroundColor: isInputCentered ? 'transparent' : '#F4F4F4', // 고정 시 배경색 추가
-      // maxWidth 설정 (수정된 initialInputBoxWidth 사용)
-      maxWidth: isInputCentered ? '100%' : (!isMobile ? `${initialInputBoxWidth}px` : '100%'),
+      // maxWidth 설정 (이전 로직 복원, initialInputBoxWidth > 0 조건 및 contentWidthPercent 폴백 사용)
+      maxWidth: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : '100%'),
       paddingBottom: '5px' // 하단 여백 5px 유지
     };
-  // 의존성 배열 수정: contentWidthPercentNumerical, initialInputBoxWidth 제거, contentWidthPercent 추가
-  }, [isMobile, isInputCentered, windowWidth, SIDEBAR_WIDTH, contentWidthPercent]);
+  // 의존성 배열은 현재 상태 유지
+  }, [isMobile, isInputCentered, windowWidth, SIDEBAR_WIDTH, contentWidthPercent, initialInputBoxWidth]);
   
   const integratedInputStyle: React.CSSProperties = {
     position: 'relative',
