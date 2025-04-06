@@ -141,6 +141,8 @@ function AIChatAreaContent() {
     };
   }, [recentStocks]);
 
+
+  
   // 클라이언트 사이드 렌더링 확인
   useEffect(() => {
     setIsMounted(true);
@@ -386,6 +388,19 @@ function AIChatAreaContent() {
 
     // 입력 필드 초기화
     setInputMessage('');
+
+    // 메시지 처리 중 상태로 변경
+    setIsProcessing(true);
+    setElapsedTime(0);
+
+    // 타이머 시작
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    timerRef.current = setInterval(() => {
+      setElapsedTime(prev => prev + 1);
+    }, 1000);
 
     try {
       // 백엔드 API 호출
