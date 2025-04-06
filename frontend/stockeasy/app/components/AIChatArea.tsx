@@ -1154,7 +1154,7 @@ function AIChatAreaContent() {
                 maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
                 position: 'relative',
-                border: '1px solid #3F424A', // 테두리 색상 어둡게 변경
+                border: '1px solid #3F424A', // 테두리 색상 어둡게 변경.
                 wordBreak: 'break-word',
                 color: 'white' // 글자색을 흰색으로 변경
               }}>
