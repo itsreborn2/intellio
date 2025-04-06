@@ -12,30 +12,21 @@ from loguru import logger
 import time
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stockeasy.graph.agent_registry import get_graph
-from stockeasy.services.telegram.question_classifier import QuestionClassification
+from stockeasy.models.agent_io import QuestionClassification
 from common.utils.util import async_retry
 from common.core.config import settings
 from common.core.database import get_db_session
 from langchain.callbacks.tracers import LangChainTracer
 
 class StockRAGService:
-    """Langgraph 기반 주식 분석 RAG 서비스 (싱글톤 패턴)"""
+    """Langgraph 기반 주식 분석 RAG 서비스"""
     
-    _instance: ClassVar[Optional["StockRAGService"]] = None
-    _initialized: bool = False
     _cleanup_thread: Optional[threading.Thread] = None
     _stop_event: threading.Event = threading.Event()
     
-    def __new__(cls, db: Optional[AsyncSession] = None, *args, **kwargs):
-        """싱글톤 인스턴스 생성 또는 반환"""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
     def __init__(self, db: Optional[AsyncSession] = None):
         """
-        주식 분석 그래프 초기화 (싱글톤)
+        주식 분석 그래프 초기화
         
         Args:
             db: 데이터베이스 세션 객체 (선택적)
@@ -48,15 +39,17 @@ class StockRAGService:
             tracer = LangChainTracer(project_name="stockeasy_server_agents")
         else:
             os.environ["LANGCHAIN_PROJECT"] = "stockeasy_dev"
-            tracer = LangChainTracer(project_name="stockeasy_dev")        
-        # 이미 초기화된 경우 스킵
-        if self._initialized:
-            return
+            tracer = LangChainTracer(project_name="stockeasy_dev")
             
         self.db = db or asyncio.run(get_db_session())
-        self.graph = get_graph(self.db)
+        
+        # AgentRegistry 및 그래프를 직접 소유
+        from stockeasy.graph.agent_registry import AgentRegistry
+        self.agent_registry = AgentRegistry()
+        self.agent_registry.initialize_agents(self.db)
+        self.graph = self.agent_registry.get_graph(self.db)
+        
         self._user_contexts = {}  # 사용자별 컨텍스트 저장
-        self._initialized = True
         
         # 백그라운드 세션 정리 시작
         self._start_cleanup_thread()

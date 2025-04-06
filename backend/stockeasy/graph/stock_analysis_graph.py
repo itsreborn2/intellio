@@ -166,6 +166,49 @@ class StockAnalysisGraph:
         self.callbacks[event_type].append(callback_fn)
         logger.info(f"{event_type} 이벤트에 콜백 함수 등록됨")
     
+    # 콜백 제거 메서드 추가
+    def unregister_callback(self, event_type: str, callback_fn: Callable) -> bool:
+        """
+        등록된 콜백 함수를 제거합니다.
+        
+        Args:
+            event_type: 이벤트 유형 ('agent_start' 또는 'agent_end')
+            callback_fn: 제거할 콜백 함수
+            
+        Returns:
+            제거 성공 여부
+        """
+        if event_type not in self.callbacks:
+            logger.warning(f"알 수 없는 이벤트 유형: {event_type}. 지원되는 이벤트: {list(self.callbacks.keys())}")
+            return False
+            
+        if callback_fn in self.callbacks[event_type]:
+            self.callbacks[event_type].remove(callback_fn)
+            logger.info(f"{event_type} 이벤트에서 콜백 함수 제거됨")
+            return True
+        else:
+            logger.warning(f"{event_type} 이벤트에 해당 콜백 함수가 등록되어 있지 않습니다.")
+            return False
+    
+    # 모든 콜백 제거 메서드 추가
+    def clear_callbacks(self, event_type: Optional[str] = None):
+        """
+        등록된 모든 콜백 함수를 제거합니다.
+        
+        Args:
+            event_type: 제거할 이벤트 유형 (None이면 모든 이벤트의 콜백 제거)
+        """
+        if event_type:
+            if event_type in self.callbacks:
+                self.callbacks[event_type] = []
+                logger.info(f"{event_type} 이벤트의 모든 콜백 함수가 제거됨")
+            else:
+                logger.warning(f"알 수 없는 이벤트 유형: {event_type}. 지원되는 이벤트: {list(self.callbacks.keys())}")
+        else:
+            for event_type in self.callbacks:
+                self.callbacks[event_type] = []
+            logger.info(f"모든 이벤트의 콜백 함수가 제거됨")
+    
     # 콜백 실행 메서드 추가
     def _execute_callbacks(self, event_type: str, agent_name: str, state: Dict[str, Any]):
         """
@@ -177,6 +220,11 @@ class StockAnalysisGraph:
             state: 현재 상태
         """
         if event_type not in self.callbacks:
+            return
+        
+        # 세션 ID가 'test_session'인 경우에만 콜백 실행
+        session_id = state.get("session_id")
+        if session_id != "test_session":
             return
             
         for callback_fn in self.callbacks[event_type]:
@@ -213,7 +261,7 @@ class StockAnalysisGraph:
             "financial_analyzer": self.agents.get("financial_analyzer"),
             "industry_analyzer": self.agents.get("industry_analyzer"),
             "confidential_analyzer": self.agents.get("confidential_analyzer")
-        })
+        }, graph=self)  # 현재 그래프 인스턴스 전달
         
         # 그래프 초기화
         workflow = StateGraph(AgentState)
@@ -239,6 +287,25 @@ class StockAnalysisGraph:
         # 오케스트레이터 -> 병렬 검색 또는 fallback_manager (명확한 조건부 엣지)
         def orchestrator_router(state: AgentState) -> str:
             """오케스트레이터 이후 라우팅 결정"""
+            # 재시작 플래그 확인
+            if state.get("restart_from_error", False):
+                previous_error = state.get("previous_error", "")
+                logger.info(f"오류 후 재시작 상태 감지됨. 이전 오류: {previous_error}")
+                
+                # LangSmith 타임스탬프 오류였던 경우, 병렬 검색으로 직접 라우팅
+                if "invalid 'dotted_order'" in previous_error and "earlier than parent timestamp" in previous_error:
+                    logger.info("LangSmith 타임스탬프 오류 복구를 위해 병렬 검색으로 즉시 라우팅합니다.")
+                    
+                    # 추가 상태 설정 (필요 시)
+                    state["processing_status"]["question_analyzer"] = "completed"
+                    state["processing_status"]["orchestrator"] = "completed"
+                    
+                    # 재시작 플래그 제거 (중복 처리 방지)
+                    state.pop("restart_from_error", None)
+                    state.pop("previous_error", None)
+                    
+                    return "parallel_search"
+            
             # 오류가 많으면 fallback으로
             errors = state.get("errors", [])
             if errors and len(errors) > 2:
@@ -270,6 +337,13 @@ class StockAnalysisGraph:
             # 로그에 전체 상태 출력 (디버깅용)
             logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
             logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
+            
+            # 타임스탬프 오류 재시작 플래그 확인 - 재시작 직후라면 knowledge_integrator로 바로 라우팅
+            if state.get("restart_after_timestamp_error", False):
+                logger.info("LangSmith 타임스탬프 오류 후 재시작: knowledge_integrator로 즉시 라우팅합니다.")
+                # 플래그 제거
+                state.pop("restart_after_timestamp_error", None)
+                return "knowledge_integrator"
             
             # agent_results 키 확인 (중요: knowledge_integrator와 summarizer에서 사용)
             agent_results = state.get("agent_results", {})
@@ -498,6 +572,19 @@ class StockAnalysisGraph:
                 "parallel_search_executed": False,  # 병렬 검색 실행 여부 초기화
                 **kwargs
             }
+            
+            # 재시작 플래그 확인
+            restart_from_error = kwargs.get("restart_from_error", False)
+            if restart_from_error:
+                logger.info(f"[process_query] 오류 후 재시작 감지됨. 이전 오류: {kwargs.get('previous_error', '알 수 없음')}")
+                initial_state["restart_from_error"] = True
+                initial_state["previous_error"] = kwargs.get("previous_error", "")
+                
+                # LangSmith 타임스탬프 오류인 경우 특별 처리
+                if kwargs.get("previous_error") and "invalid 'dotted_order'" in kwargs.get("previous_error") and "earlier than parent timestamp" in kwargs.get("previous_error"):
+                    logger.warning("LangSmith 타임스탬프 오류에서 재시작합니다. 그래프 실행을 조정합니다.")
+                    # 타임스탬프 오류 발생 시 트레이싱 비활성화 또는 다른 특별 처리를 여기에 추가할 수 있음
+            
             logger.info(f"[process_query] initial_state: {initial_state}")
             logger.info("병렬 처리 설정으로 그래프 실행 시작")
             
@@ -531,6 +618,30 @@ class StockAnalysisGraph:
             if "telegram_retriever" in str(e) or "report_analyzer" in str(e):
                 logger.error(f"노드 전환 오류 감지됨: {str(e)}")
                 # 여기서 필요한 처리 추가
+                
+            # LangSmith 타임스탬프 오류인 경우, 폴백 메커니즘 트리거
+            if "invalid 'dotted_order'" in str(e) and "earlier than parent timestamp" in str(e):
+                logger.warning("LangSmith 타임스탬프 오류 감지됨. 폴백 메커니즘을 트리거합니다.")
+                # 오류 정보를 담은 상태로 폴백 매니저 에이전트를 직접 호출
+                try:
+                    if "fallback_manager" in self.agents:
+                        fallback_state = {
+                            "query": query,
+                            "stock_code": stock_code,
+                            "stock_name": stock_name,
+                            "session_id": session_id or "error_session",
+                            "error": str(e),
+                            "errors": [{
+                                "agent": "stock_analysis_graph",
+                                "error": str(e),
+                                "type": "LangSmithTimestampError",
+                                "timestamp": datetime.now()
+                            }]
+                        }
+                        result = await self.agents["fallback_manager"].process(fallback_state)
+                        return result
+                except Exception as fallback_error:
+                    logger.error(f"폴백 매니저 호출 중 추가 오류 발생: {str(fallback_error)}")
                 
             return {
                 "query": query,

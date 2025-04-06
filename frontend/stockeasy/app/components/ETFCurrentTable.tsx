@@ -1032,8 +1032,8 @@ export default function ETFCurrentTable() {
   });
 
   return (
-    <div className="bg-white rounded-md shadow">
-      <div ref={headerRef} className="p-4 border-b border-gray-200 flex justify-between items-center">
+    <div>
+      <div ref={headerRef} className="flex justify-between items-center mb-3">
         <div className="flex items-center space-x-4">
           <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>ETF 현재가</h2>
         </div>
@@ -1213,10 +1213,10 @@ export default function ETFCurrentTable() {
                         style={{ width: '60px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
                       >
                         <div className="flex flex-col items-start">
-                          <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-md bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                          <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', borderRadius: '4px' }}>
                             {industry === '소비재/음식료' ? '소비재/음식료' : industry}
                           </span>
-                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`} style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`} style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', paddingLeft: '2px', width: '100%' }}>
                             {calculateIndustryAverage(industry, sortedData)}
                           </span>
                         </div>
@@ -1258,7 +1258,7 @@ export default function ETFCurrentTable() {
                     <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '78px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                       {/* 포지션 상태 표시 */}
                       <div className="flex items-center justify-center">
-                        <div className={`flex items-center justify-center w-20 h-6 rounded-full ${getPositionStatusText(row['티커']).startsWith('유지') ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}`}>
+                        <div className={`flex items-center justify-center w-20 h-6 ${getPositionStatusText(row['티커']).startsWith('유지') ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'} `} style={{ borderRadius: '4px' }}>
                           <span className="text-xs font-medium" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
                             {getPositionStatusText(row['티커'])}
                           </span>

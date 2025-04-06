@@ -33,6 +33,7 @@ interface ChatMessage {
     stockName: string;
     stockCode: string;
   };
+  responseId?: string; // 분석 결과의 고유 ID
 }
 
 // 컨텐츠 컴포넌트
@@ -41,7 +42,7 @@ function AIChatAreaContent() {
   const [stockOptions, setStockOptions] = useState<StockOption[]>([]);
   const [selectedStock, setSelectedStock] = useState<StockOption | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [inputMessage, setInputMessage] = useState<string>('');
+  const [inputMessage, setInputMessage] = useState<string>(''); // 입력 메시지 상태
   const [isMounted, setIsMounted] = useState<boolean>(false); // 클라이언트 사이드 렌더링 확인용 상태
   const [error, setError] = useState<string | null>(null); // 오류 메시지 상태 추가
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
@@ -54,13 +55,14 @@ function AIChatAreaContent() {
   const [isProcessing, setIsProcessing] = useState<boolean>(false); // 메시지 처리 중 상태
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false); // 사이드바 상태 추가
-  const [isInputCentered, setIsInputCentered] = useState<boolean>(true); // 입력 필드 중앙 배치 상태 추가
-  const [showTitle, setShowTitle] = useState<boolean>(true); // 제목 표시 여부
+  const [isMobile, setIsMobile] = useState(false); // 사이드바 열림 상태 감지를 위한 상태 추가
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isInputCentered, setIsInputCentered] = useState(true); // isInputCentered 초기 상태: true
+  const [showTitle, setShowTitle] = useState(true); // 제목 표시 여부
   const [transitionInProgress, setTransitionInProgress] = useState(false);
   const [searchMode, setSearchMode] = useState(false); // 종목 검색 모드 상태 추가
   const [popupHovered, setPopupHovered] = useState(false); // 팝업 호버 상태 추가
+  const [windowWidth, setWindowWidth] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -71,9 +73,82 @@ function AIChatAreaContent() {
   const CACHE_DURATION = 3600000; // 캐시 유효 시간 (1시간 = 3600000ms)
   const MAX_RECENT_STOCKS = 5; // 최근 조회 종목 최대 개수
 
+  // 히스토리 분석 결과 로드 이벤트 리스너
+  useEffect(() => {
+    const handleLoadHistoryAnalysis = (e: CustomEvent) => {
+      const { stockName, stockCode, prompt, result, responseId } = e.detail;
+      
+      // 선택된 종목 설정
+      if (stockName && stockCode) {
+        const stockOption: StockOption = {
+          value: stockCode,
+          label: `${stockName} (${stockCode})`,
+          stockName,
+          stockCode,
+          display: `${stockName} (${stockCode})`
+        };
+        setSelectedStock(stockOption);
+        
+        // 최근 조회 종목에 추가
+        const updatedRecentStocks = [stockOption, ...recentStocks.filter(s => s.value !== stockCode)].slice(0, MAX_RECENT_STOCKS);
+        setRecentStocks(updatedRecentStocks);
+        try {
+          localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+        } catch (error) {
+          console.error('최근 조회 종목 저장 실패:', error);
+        }
+      }
+      
+      // 메시지 설정
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: prompt,
+        timestamp: Date.now(),
+        stockInfo: {
+          stockName,
+          stockCode
+        },
+        responseId
+      };
+      
+      const assistantMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: result,
+        timestamp: Date.now() + 1,
+        stockInfo: {
+          stockName,
+          stockCode
+        },
+        responseId
+      };
+      
+      // 메시지 설정 및 입력 필드 중앙 배치 해제
+      setMessages([userMessage, assistantMessage]);
+      setIsInputCentered(false);
+      setShowTitle(false);
+      
+      // 입력 필드 초기화
+      setInputMessage('');
+    };
+    
+    // 이벤트 리스너 등록
+    window.addEventListener('loadHistoryAnalysis', handleLoadHistoryAnalysis as EventListener);
+    
+    return () => {
+      window.removeEventListener('loadHistoryAnalysis', handleLoadHistoryAnalysis as EventListener);
+    };
+  }, [recentStocks]);
+
+
+  
   // 클라이언트 사이드 렌더링 확인
   useEffect(() => {
     setIsMounted(true);
+    
+    // 창 너비 초기화 (클라이언트 사이드에서만 실행)
+    setWindowWidth(window.innerWidth);
 
     // 로컬 스토리지에서 최근 조회 종목 불러오기
     try {
@@ -147,7 +222,7 @@ function AIChatAreaContent() {
   // 모바일 환경 감지
   useEffect(() => {
     const checkIfMobile = () => {
-      const isMobileView = window.innerWidth <= 768;
+      const isMobileView = windowWidth <= 768; // sm(640px) 대신 md(768px) 브레이크포인트 사용
       setIsMobile(isMobileView);
       
       // 모바일 상태가 변경될 때마다 DOM에 클래스 추가/제거
@@ -169,20 +244,30 @@ function AIChatAreaContent() {
     return () => {
       window.removeEventListener('resize', checkIfMobile);
     };
-  }, []);
+  }, [windowWidth]);
 
   // 사이드바 상태 감지
   useEffect(() => {
-    // 사이드바 열림/닫힘 이벤트 리스너
+    // 사이드바 열림/닫힘 이벤트 리스너 (CustomEvent 사용)
     const handleSidebarToggle = (e: CustomEvent) => {
-      setIsSidebarOpen(e.detail.isOpen);
+      if (e.detail && typeof e.detail === 'object' && 'isOpen' in e.detail) {
+        console.log('사이드바 상태 변경:', e.detail.isOpen);
+        setIsSidebarOpen(e.detail.isOpen);
+      }
     };
 
-    // 커스텀 이벤트 리스너 등록
-    window.addEventListener('sidebarToggle' as any, handleSidebarToggle);
+    // 화면 크기 변경 감지
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
 
+    // CustomEvent 리스너 등록
+    window.addEventListener('sidebarToggle', handleSidebarToggle as EventListener);
+    window.addEventListener('resize', handleResize);
+    
     return () => {
-      window.removeEventListener('sidebarToggle' as any, handleSidebarToggle);
+      window.removeEventListener('sidebarToggle', handleSidebarToggle as EventListener);
+      window.removeEventListener('resize', handleResize);
     };
   }, []);
 
@@ -264,16 +349,24 @@ function AIChatAreaContent() {
 
   // 메시지 전송 처리
   const handleSendMessage = async () => {
-    if (isProcessing || !selectedStock || !inputMessage.trim()) return;
+    const trimmedMessage = inputMessage.trim();
+    if (!trimmedMessage || isProcessing) return;
 
-    // 중앙 배치 해제 - 메시지 전송 시에만 화면을 아래로 내림
-    if (isInputCentered) {
-      setIsInputCentered(false);
-      setTransitionInProgress(true);
+    setIsProcessing(true);
+    setElapsedTime(0);
+
+    // 타이머 시작 - 초 카운터 업데이트 로직 복원
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
     }
+    timerRef.current = setInterval(() => {
+      setElapsedTime(prev => prev + 1);
+    }, 1000);
 
     // 메시지 ID 생성
     const messageId = `msg_${Date.now()}`;
+    // 응답 ID 생성 (실제로는 서버에서 생성해야 함)
+    const responseId = `response_${Date.now()}`;
 
     // 사용자 메시지 생성
     const userMessageContent = inputMessage;
@@ -286,7 +379,8 @@ function AIChatAreaContent() {
       stockInfo: selectedStock ? {
         stockName: selectedStock.stockName,
         stockCode: selectedStock.stockCode
-      } : undefined
+      } : undefined,
+      responseId // 응답 ID 추가
     };
 
     // 메시지 목록에 사용자 메시지 추가
@@ -324,11 +418,49 @@ function AIChatAreaContent() {
         id: `assistant-${Date.now()}`,
         role: 'assistant', 
         content: responseData || '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다.',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        stockInfo: selectedStock ? {
+          stockName: selectedStock.stockName,
+          stockCode: selectedStock.stockCode
+        } : undefined,
+        responseId // 응답 ID 추가
       };
 
       // 메시지 목록에 응답 메시지 추가
       setMessages(prevMessages => [...prevMessages, assistantMessage]);
+      
+      // 히스토리에 저장하기 위한 이벤트 발생
+      if (selectedStock) {
+        const event = new CustomEvent('stockPromptSubmitted', {
+          detail: {
+            stockName: selectedStock.stockName,
+            stockCode: selectedStock.stockCode,
+            prompt: inputMessage,
+            responseId // 응답 ID 추가
+          }
+        });
+        window.dispatchEvent(event);
+        
+        // 분석 결과 저장 API 호출
+        try {
+          await fetch('/api/analysis-result', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              id: responseId,
+              content: responseData,
+              stockName: selectedStock.stockName,
+              stockCode: selectedStock.stockCode,
+              prompt: inputMessage,
+              timestamp: Date.now()
+            })
+          });
+        } catch (saveError) {
+          console.error('분석 결과 저장 오류:', saveError);
+        }
+      }
     } catch (error) {
       console.error('메시지 전송 오류:', error);
 
@@ -537,6 +669,11 @@ function AIChatAreaContent() {
       const newHeight = Math.min(150, Math.max(target.scrollHeight, 40)); // 최소 40px, 최대 150px
       target.style.height = `${newHeight}px`;
     }
+    
+    // 입력 시 중앙 정렬 해제 (복원)
+    if (isInputCentered && value.trim().length > 0) {
+      setIsInputCentered(false); 
+    }
   };
 
   // 종목 선택 처리
@@ -618,29 +755,32 @@ function AIChatAreaContent() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: '8px',
+      gap: isMobile ? '6px' : '8px',
       backgroundColor: '#D8EFE9', // #f5f9ff에서 #D8EFE9로 변경
-      padding: '8px 12px',
-      borderRadius: '8px',
+      padding: isMobile ? '6px 10px' : (windowWidth < 768 ? '7px 11px' : '8px 12px'),
+      borderRadius: isMobile ? '6px' : '8px',
       boxShadow: '0 2px 5px rgba(0, 0, 0, 0.05)',
-      marginBottom: '12px'
+      marginBottom: isMobile ? '10px' : '12px',
+      maxWidth: '100%',
+      wordBreak: 'break-word'
     }}>
       <div style={{
         position: 'relative',
-        width: '28px',
-        height: '28px',
+        width: isMobile ? '24px' : '28px',
+        height: isMobile ? '24px' : '28px',
         borderRadius: '50%',
-        border: '2px solid #e1e1e1',
+        border: isMobile ? '1.5px solid #e1e1e1' : '2px solid #e1e1e1',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        flexShrink: 0
       }}>
         <div style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
-          width: '14px',
-          height: '2px',
+          width: isMobile ? '12px' : '14px',
+          height: isMobile ? '1.5px' : '2px',
           background: 'transparent',
           transform: 'rotate(0deg) translateX(0)',
           transformOrigin: '0 0',
@@ -648,16 +788,16 @@ function AIChatAreaContent() {
         }}>
           <div style={{
             position: 'absolute',
-            width: '8px',
-            height: '2px',
+            width: isMobile ? '6px' : '8px',
+            height: isMobile ? '1.5px' : '2px',
             backgroundColor: '#10A37F', // #3498db에서 #10A37F로 변경
             animation: 'stopwatch-sec 60s steps(60, end) infinite',
             transformOrigin: 'left center'
           }}></div>
         </div>
         <div style={{
-          width: '6px',
-          height: '6px',
+          width: isMobile ? '5px' : '6px',
+          height: isMobile ? '5px' : '6px',
           backgroundColor: '#10A37F', // #3498db에서 #10A37F로 변경
           borderRadius: '50%',
           zIndex: 3
@@ -665,9 +805,10 @@ function AIChatAreaContent() {
       </div>
       <div style={{
         fontFamily: 'monospace',
-        fontSize: '16px', // 0.9rem에서 16px로 변경
+        fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'),
         fontWeight: 'bold',
-        color: '#555'
+        color: '#555',
+        flexShrink: 0
       }}>
         {Math.floor(elapsedTime / 60).toString().padStart(2, '0')}:{(elapsedTime % 60).toString().padStart(2, '0')}
       </div>
@@ -686,44 +827,52 @@ function AIChatAreaContent() {
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'flex-start',
-      padding: '10px 14px',
+      padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 13px' : '10px 14px'),
       backgroundColor: '#D8EFE9', // #ffffff에서 #D8EFE9로 변경
-      borderRadius: '12px',
+      borderRadius: isMobile ? '10px' : '12px',
       boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
-      maxWidth: '95%',
-      marginBottom: '16px'
+      maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'),
+      marginBottom: isMobile ? '12px' : '16px',
+      width: 'auto',
+      wordBreak: 'break-word'
     }}>
       <div style={{ 
-        fontSize: '16px', // 0.85rem에서 16px로 변경
-        marginBottom: '8px',
+        fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'),
+        marginBottom: isMobile ? '6px' : '8px',
         color: '#555',
         display: 'flex',
         alignItems: 'center',
-        gap: '8px'
+        gap: isMobile ? '6px' : '8px',
+        maxWidth: '100%',
+        flexWrap: 'wrap'
       }}>
         <div className="loading-icon" style={{
-          width: '16px',
-          height: '16px',
+          width: isMobile ? '14px' : '16px',
+          height: isMobile ? '14px' : '16px',
           borderRadius: '50%',
-          border: '2px solid #f3f3f3',
-          borderTop: '2px solid #10A37F', // #3498db에서 #10A37F로 변경
+          border: isMobile ? '1.5px solid #f3f3f3' : '2px solid #f3f3f3',
+          borderTop: isMobile ? '1.5px solid #10A37F' : '2px solid #10A37F', // #3498db에서 #10A37F로 변경
           animation: 'spin 1s linear infinite',
+          flexShrink: 0
         }}></div>
         <span>정보를 검색 중입니다...</span>
       </div>
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '6px',
-        margin: '4px 0',
-        fontSize: '16px', // 0.75rem에서 16px로 변경
-        color: '#888'
+        gap: isMobile ? '5px' : '6px',
+        margin: isMobile ? '3px 0' : '4px 0',
+        fontSize: isMobile ? '13px' : (windowWidth < 768 ? '14px' : '16px'),
+        color: '#888',
+        maxWidth: '100%',
+        flexWrap: 'wrap'
       }}>
         <div className="dot" style={{
-          width: '6px',
-          height: '6px',
+          width: isMobile ? '5px' : '6px',
+          height: isMobile ? '5px' : '6px',
           borderRadius: '50%',
           backgroundColor: '#3498db',
+          flexShrink: 0,
           opacity: 0.5,
           animation: 'pulse 1.5s infinite',
         }}></div>
@@ -732,16 +881,19 @@ function AIChatAreaContent() {
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '6px',
-        margin: '4px 0',
-        fontSize: '16px', // 0.75rem에서 16px로 변경
-        color: '#888'
+        gap: isMobile ? '5px' : '6px',
+        margin: isMobile ? '3px 0' : '4px 0',
+        fontSize: isMobile ? '13px' : (windowWidth < 768 ? '14px' : '16px'),
+        color: '#888',
+        maxWidth: '100%',
+        flexWrap: 'wrap'
       }}>
         <div className="dot" style={{
-          width: '6px',
-          height: '6px',
+          width: isMobile ? '5px' : '6px',
+          height: isMobile ? '5px' : '6px',
           borderRadius: '50%',
           backgroundColor: '#3498db',
+          flexShrink: 0,
           opacity: 0.8,
           animation: 'pulse 1.5s infinite',
           animationDelay: '0.5s'
@@ -751,16 +903,19 @@ function AIChatAreaContent() {
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '6px',
-        margin: '4px 0',
-        fontSize: '16px', // 0.75rem에서 16px로 변경
-        color: '#888'
+        gap: isMobile ? '5px' : '6px',
+        margin: isMobile ? '3px 0' : '4px 0',
+        fontSize: isMobile ? '13px' : (windowWidth < 768 ? '14px' : '16px'),
+        color: '#888',
+        maxWidth: '100%',
+        flexWrap: 'wrap'
       }}>
         <div className="dot" style={{
-          width: '6px',
-          height: '6px',
+          width: isMobile ? '5px' : '6px',
+          height: isMobile ? '5px' : '6px',
           borderRadius: '50%',
           backgroundColor: '#3498db',
+          flexShrink: 0,
           opacity: 0.8,
           animation: 'pulse 1.5s infinite',
           animationDelay: '1s'
@@ -784,11 +939,11 @@ function AIChatAreaContent() {
   const aiChatAreaStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    height: 'auto', // 자동 높이로 변경하여 컨텐츠에 따라 늘어나도록 함
+    height: '100%', // 전체 높이로 변경
     width: '100%', // 전체 너비를 사용
     position: 'relative',
     backgroundColor: '#F4F4F4', // Figma 디자인에 맞게 배경색 변경
-    overflow: 'visible', // 오버플로우를 visible로 변경하여 브라우저 기본 스크롤 사용
+    overflow: 'hidden', // 오버플로우를 hidden으로 변경하여 브라우저 기본 스크롤 사용 안함
     paddingTop: isMobile ? '0' : '10px',
     paddingRight: isMobile ? '0' : '10px',
     paddingBottom: isMobile ? '0' : '10px',
@@ -798,97 +953,128 @@ function AIChatAreaContent() {
   };
 
   // 컨테이너 너비를 위한 변수 (일관성 유지를 위해)
-  const contentWidth = isMobile ? '100%' : '65%';
+  // 모바일에서는 너비를 100%로 조정
+  const contentWidthPercent = isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%'));
   
-  const inputAreaStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center', // 중앙 정렬 강화
-    width: '100%', // 전체 너비로 변경
-    margin: '0 auto',
-    paddingTop: '0',
-    paddingRight: '0',
-    paddingBottom: '0',
-    paddingLeft: '0',
-    boxSizing: 'border-box',
-    marginTop: isInputCentered ? (isMobile ? '30vh' : '35vh') : '0px',
-    marginBottom: isMobile ? '5px' : '10px',
-    position: isMobile ? 'unset' : 'relative',
-    bottom: isInputCentered ? 'auto' : '20px',
-    zIndex: isMobile ? 'unset' : 10,
-    backgroundColor: 'transparent',
-    transition: 'all 0.3s ease-in-out',
-  };
+  // 텍스트 박스 너비를 픽셀 단위로 관리하기 위한 상태
+  const [inputBoxWidth, setInputBoxWidth] = useState<number>(0);
+  const [initialInputBoxWidth, setInitialInputBoxWidth] = useState<number>(0);
+  const inputBoxRef = useRef<HTMLDivElement>(null);
+  
+  // 사이드바 너비 상수 (픽셀 단위)
+  const SIDEBAR_WIDTH = 59; // 사이드바 너비 (픽셀)
+  
+  // 화면 전환 전 텍스트 박스 너비 계산
+  useEffect(() => {
+    if (isInputCentered && inputBoxRef.current && initialInputBoxWidth === 0) {
+      const width = inputBoxRef.current.offsetWidth;
+      setInitialInputBoxWidth(width);
+      setInputBoxWidth(width);
+    }
+  }, [isInputCentered, initialInputBoxWidth]);
+  
+  const inputAreaStyle: React.CSSProperties = useMemo(() => {
+    // initialInputBoxWidth를 다시 사용하여 left와 maxWidth 계산 일관성 유지
+    // 데스크탑 너비를 768px에서 1037px로 변경 (35% 증가)
+    const initialInputBoxWidth = isMobile ? windowWidth * 0.9 : 1037;
+
+    return {
+      width: '100%',
+      // 화면 상단 중앙에 위치할 때의 스타일
+      marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '35vh')) : '0px',
+      marginBottom: '5px', // 하단 여백 5px 유지
+      // 화면 전환 시 입력 박스를 하단에 고정시키기 위해 position 속성 변경
+      position: isInputCentered ? 'relative' : 'fixed',
+      bottom: isInputCentered ? 'auto' : '0',
+      // left: initialInputBoxWidth 기준으로 중앙 정렬 복원
+      left: isInputCentered ? '0' : (!isMobile ? `calc(50% - ${initialInputBoxWidth / 2}px + ${SIDEBAR_WIDTH / 2}px)` : '0'),
+      zIndex: 100, // 다른 요소 위에 표시되도록 zIndex 증가
+      backgroundColor: isInputCentered ? 'transparent' : '#F4F4F4', // 고정 시 배경색 추가
+      // maxWidth: initialInputBoxWidth (768px) 사용하도록 복원
+      maxWidth: isInputCentered ? '100%' : (!isMobile ? `${initialInputBoxWidth}px` : '100%'),
+      paddingBottom: '5px' // 하단 여백 5px 유지
+    };
+  // 의존성 배열에서 contentWidthPercent 제거
+  }, [isMobile, isInputCentered, windowWidth, SIDEBAR_WIDTH]);
 
   const integratedInputStyle: React.CSSProperties = {
     position: 'relative',
-    width: contentWidth, // 메시지 컨테이너와 동일한 너비 사용
-    maxWidth: isMobile ? '100%' : '65%', // 최대 너비 제한
-    margin: '0 auto',
-    transition: 'width 0.3s ease-in-out', // 전체가 아닌 width만 transition
+    width: isMobile ? '100%' : contentWidthPercent, // 모바일에서는 100%로 설정
+    maxWidth: isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%')), // 모바일에서 최대 너비를 100%로 조정
+    margin: isMobile ? '0' : '0 auto', // 모바일에서 마진 제거
+    boxSizing: 'border-box',
+    padding: 0 // 패딩 제거하여 최대 너비 활용
   };
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    minHeight: isMobile ? '2.97rem' : '5.94rem', // 모바일은 한 줄, 데스크톱은 두 줄 크기로 설정
+    minHeight: isMobile ? '2.2rem' : (windowWidth < 768 ? '2.3rem' : '2.5rem'), // 화면 크기에 따라 적응
     height: 'auto',
     border: '1px solid #ccc',
-    borderRadius: '8px',
+    borderRadius: isMobile ? '6px' : '8px',
     paddingTop: '0',
-    paddingRight: '40px',
+    paddingRight: isMobile ? '35px' : '40px',
     paddingBottom: '0',
-    paddingLeft: selectedStock ? '85px' : '8px', 
-    fontSize: isMobile ? '14px' : '16px', // 모바일 14px, 데스크탑 16px
+    paddingLeft: selectedStock ? (isMobile ? '75px' : '85px') : (isMobile ? '6px' : '8px'), 
+    fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
     outline: 'none',
     boxSizing: 'border-box',
     resize: 'none',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    maxWidth: '100%' // 최대 너비 제한
   };
 
   const messagesContainerStyle: React.CSSProperties = {
-    overflowY: 'visible',
+    overflowY: 'auto',
     overflowX: 'hidden',
-    paddingTop: isMobile ? '5px' : '10px',
-    paddingRight: isMobile ? '5px' : '10px',
-    paddingBottom: isMobile ? '5px' : '10px',
-    paddingLeft: isMobile ? '5px' : '10px',
+    paddingTop: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
+    paddingRight: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
+    // 입력 박스가 하단에 고정될 때 메시지가 입력 박스 뒤로 가려지지 않도록 하단 패딩 증가
+    paddingBottom: isInputCentered ? (isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px')) : (isMobile ? '70px' : '80px'),
+    paddingLeft: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
     margin: '0 auto', // 중앙 정렬
     border: 'none', 
     borderRadius: '0', 
     backgroundColor: '#F4F4F4',
-    width: contentWidth, // 일관된 너비 사용
-    height: 'auto',
+    width: contentWidthPercent, // 일관된 너비 사용
+    height: '100%', // 전체 높이로 변경
     minHeight: 'calc(100% - 60px)',
     boxSizing: 'border-box',
     position: 'relative',
     display: isInputCentered ? 'none' : 'block',
     opacity: transitionInProgress ? 0 : 1, // 트랜지션 중에는 투명하게 처리
-    transition: 'opacity 0.3s ease-in-out' // 오직 opacity만 transition
+    transition: 'opacity 0.3s ease-in-out', // 오직 opacity만 transition
+    maxWidth: '100%' // 최대 너비 제한
   };
 
   const aiMessageStyle: React.CSSProperties = {
     backgroundColor: 'transparent', // 박스 배경 제거
     borderRadius: '0', // 테두리 둥글기 제거
-    padding: '10px 15px',
-    marginBottom: '12px',
-    width: isMobile ? '100%' : '100%', // 모바일에서도 전체 너비 사용
+    padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 14px' : '10px 15px'),
+    marginBottom: isMobile ? '10px' : '12px',
+    width: '100%', // 전체 너비 사용
     boxShadow: 'none', // 그림자 제거
     lineHeight: '1.5',
-    fontSize: '0.9rem',
-    overflowWrap: 'break-word',
-    boxSizing: 'border-box'
+    fontSize: isMobile ? '0.85rem' : (windowWidth < 768 ? '0.87rem' : '0.9rem'),
+    wordBreak: 'break-word',
+    boxSizing: 'border-box',
+    maxWidth: '100%' // 최대 너비 제한
   };
 
   // 마크다운 글로벌 스타일 추가
   const markdownStyles = `
     .markdown-content {
-      font-size: 1rem;
+      font-size: ${isMobile ? '0.9rem' : (windowWidth < 768 ? '0.95rem' : '1rem')};
       line-height: 1.6;
+      max-width: 100%;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
     }
     .markdown-content p {
       margin-top: 0.5em;
       margin-bottom: 1em;
       white-space: pre-line;
+      max-width: 100%;
     }
     .markdown-content ul, .markdown-content ol {
       margin-top: 0.5em;
@@ -928,10 +1114,10 @@ function AIChatAreaContent() {
 
   const stockSuggestionsStyle: React.CSSProperties = {
     position: 'absolute',
-    bottom: `calc(100% + ${isMobile ? 5 : 30}px)`, // 모바일 5px, 데스크톱 30px로 간격 확대
+    bottom: `calc(100% + ${isMobile ? 5 : 30}px)`, // 모바일 5px, 데스크탑 30px로 간격 확대
     left: 0,
     right: 0,
-    width: isMobile ? '90%' : '100%', // 모바일 환경에서 너비 조정
+    width: isMobile ? '100%' : '100%', // 모바일 환경에서 너비 100%로 수정
     margin: isMobile ? '0 auto' : '0', // 모바일 환경에서 중앙 정렬
     maxHeight: isMobile ? '180px' : '200px', // 모바일 환경에서 최대 높이 조정
     overflowY: 'auto',
@@ -940,12 +1126,17 @@ function AIChatAreaContent() {
     borderRadius: '8px',
     boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
     zIndex: 100,
-    paddingTop: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
-    paddingRight: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
-    paddingBottom: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
-    paddingLeft: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
-    transform: isMobile ? 'none' : (isInputCentered ? 'translateY(-30px)' : 'none'), // 데스크톱 + 중앙 정렬 시에만 적용
+    paddingTop: isMobile ? '5px' : '6px', // 모바일 5px, 데스크탑 6px 패딩 (일관성을 위해 조정)
+    paddingRight: isMobile ? '5px' : '6px', // 모바일 5px, 데스크탑 6px 패딩 (일관성을 위해 조정)
+    paddingBottom: isMobile ? '5px' : '6px', // 모바일 5px, 데스크탑 6px 패딩 (일관성을 위해 조정)
+    paddingLeft: isMobile ? '5px' : '6px', // 모바일 5px, 데스크탑 6px 패딩 (일관성을 위해 조정)
+    transform: isMobile ? 'none' : (isInputCentered ? 'translateY(-30px)' : 'none'), // 데스크탑 + 중앙 정렬 시에만 적용
   };
+
+  // 클라이언트 측에서 마운트될 때까지 렌더링하지 않음
+  if (!isMounted) {
+    return null; // 또는 로딩 스피너 등 표시 가능
+  }
 
   return (
     <div className="ai-chat-area" style={aiChatAreaStyle}>
@@ -967,7 +1158,7 @@ function AIChatAreaContent() {
             fontSize: '16px', // 0.9rem에서 16px로 변경
             display: 'none' // 안내 텍스트 숨기기
           }}>
-            종목을 선택하고 질문을 입력하세요.
+            종목을 선택 후 분석을 요청하세요.
           </div>
         ) : (
           messages.map(message => (
@@ -984,21 +1175,22 @@ function AIChatAreaContent() {
             >
               {/* 메시지 내용 */}
               <div style={message.role === 'assistant' ? aiMessageStyle : {
-                backgroundColor: '#f5f5f5', // 사용자 메시지 배경색
-                padding: '10px 14px',
-                borderRadius: '12px',
-                maxWidth: isMobile ? '95%' : '85%', // 모바일에서는 더 넓게 사용
-                width: 'auto',
-                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                backgroundColor: '#3F424A', 
+                padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 13px' : '10px 14px'),
+                borderRadius: isMobile ? '10px' : '12px',
+                maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
                 position: 'relative',
-                border: '1px solid #e0e0e0' // 테두리 추가하여 구분
+                border: '1px solid #3F424A', // 테두리 색상 어둡게 변경
+                wordBreak: 'break-word',
+                color: 'white' // 글자색을 흰색으로 변경
               }}>
                 {message.stockInfo && (
                   <div style={{
-                    fontSize: '16px', // 0.75rem에서 16px로 변경
+                    fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
                     fontWeight: 'bold',
-                    color: '#10A37F', // 파란색(#0066cc)에서 초록색(#10A37F)으로 변경
-                    marginBottom: '4px'
+                    color: message.role === 'user' ? '#4ECCA3' : '#10A37F', // 사용자 메시지일 경우 더 밝은 초록색으로 변경
+                    marginBottom: isMobile ? '3px' : '4px'
                   }}>
                     {message.stockInfo.stockName} ({message.stockInfo.stockCode})
                   </div>
@@ -1007,16 +1199,17 @@ function AIChatAreaContent() {
                   overflow: message.role === 'user' ? 'hidden' : 'visible',
                   textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
                   wordBreak: 'break-word',
-                  width: '100%',
-                  padding: message.role === 'user' ? '0' : '4px 2px'
+                  maxWidth: '100%' // 최대 너비 제한
                 }}>
                   {message.role === 'user' ? (
                     // 사용자 메시지는 일반 텍스트로 표시
                     <div style={{
-                      whiteSpace: 'nowrap',
-                      fontSize: '16px', // 0.75rem에서 16px로 변경
+                      whiteSpace: 'pre-wrap', // nowrap에서 pre-wrap으로 변경하여 긴 텍스트가 줄바꿈 되도록 설정
+                      fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
                       lineHeight: '1.6',
-                      letterSpacing: 'normal'
+                      letterSpacing: 'normal',
+                      wordBreak: 'break-word', // 단어 단위로 줄바꿈 가능하도록 설정
+                      color: 'white' // 글자색을 흰색으로 변경
                     }}>
                       {message.content}
                     </div>
@@ -1055,8 +1248,10 @@ function AIChatAreaContent() {
             display: 'flex',
             flexDirection: 'row',
             alignItems: 'flex-start',
-            gap: '12px',
-            marginBottom: '16px'
+            gap: isMobile ? '8px' : (windowWidth < 768 ? '10px' : '12px'),
+            marginBottom: isMobile ? '12px' : '16px',
+            flexWrap: 'wrap',
+            width: '100%'
           }}>
             <SearchTimer />
             <SearchingAnimation />
@@ -1066,9 +1261,9 @@ function AIChatAreaContent() {
         <div ref={messagesEndRef} />
       </div>
       
-      {/* 입력 영역 */}
+      {/* 입력 영역 - 모바일에서 사이드바 열렸을 때 숨김 처리 */}
       {!(isMobile && isSidebarOpen) && (
-        <div className="input-area" style={{ 
+        <div className="input-area" ref={inputBoxRef} style={{ 
           ...inputAreaStyle
         }}>
           <div className="integrated-input" style={integratedInputStyle}>
@@ -1107,7 +1302,7 @@ function AIChatAreaContent() {
               justifyContent: 'center', // 가운데 정렬 추가
               width: '100%',
               backgroundColor: 'white',
-              borderRadius: '30px',
+              borderRadius: '6px',
               paddingTop: '0',
               paddingRight: '0',
               paddingBottom: '0',
@@ -1140,9 +1335,13 @@ function AIChatAreaContent() {
                      fontSize: '0.7rem',
                     fontWeight: 'normal',
                     whiteSpace: 'nowrap',
-                    cursor: 'pointer'
+                    cursor: isProcessing ? 'not-allowed' : 'pointer' // 분석 중일 때 마우스 커서 변경
                   }}
-                  onClick={() => {
+                  onClick={(e) => {
+                    if (isProcessing) {
+                      e.preventDefault(); // 분석 중일 때 클릭 이벤트 처리 중지
+                      return;
+                    }
                     setShowStockSuggestions(true); // 종목 선택 팝업 표시
                     setSearchMode(true); // 종목 검색 모드로 변경
                     setInputMessage(''); // 입력 필드를 비워서 종목 검색을 할 수 있도록 함
@@ -1173,6 +1372,7 @@ function AIChatAreaContent() {
                 value={inputMessage}
                 onChange={handleInputChange}
                 onFocus={handleInputFocus}
+                readOnly={isProcessing} // disabled 대신 readOnly 사용하여 스타일 유지하면서 입력 금지
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     if (showStockSuggestions && filteredStocks.length > 0) {
@@ -1180,8 +1380,8 @@ function AIChatAreaContent() {
                       e.preventDefault();
                       e.stopPropagation();
                       handleStockSelect(filteredStocks[0]);
-                    } else if (selectedStock && inputMessage.trim() && !searchMode) {
-                      // 종목이 선택된 상태에서 메시지가 있고 검색 모드가 아니면 전송
+                    } else if (selectedStock && inputMessage.trim() && !searchMode && !isProcessing) {
+                      // 종목이 선택된 상태에서 메시지가 있고 검색 모드가 아니고 분석 중이 아니면 전송
                       handleSendMessage();
                     }
                   }
@@ -1190,24 +1390,31 @@ function AIChatAreaContent() {
                   ...inputStyle,
                   border: 'none',
                   boxShadow: 'none',
-                  paddingTop: '12px',
-                  paddingRight: '16px',
-                  paddingBottom: '12px',
-                  paddingLeft: '16px',
+                  paddingTop: '8px', // 패딩 감소 (12px -> 8px)
+                  paddingRight: isMobile ? '8px' : '16px', // 모바일에서 우측 패딩 감소
+                  paddingBottom: '8px', // 패딩 감소 (12px -> 8px)
+                  paddingLeft: isMobile ? '8px' : '16px', // 모바일에서 좌측 패딩 감소
                   flex: 1,
-                  borderRadius: '30px'
+                  borderRadius: '6px',
+                  cursor: isProcessing ? 'not-allowed' : 'text' // 분석 중일 때 마우스 커서 변경
                 }}
               />
               
               {/* 전송 아이콘 */}
               <button
-                onClick={handleSendMessage}
-                disabled={!selectedStock || !inputMessage.trim()}
+                onClick={(e) => {
+                  if (isProcessing) {
+                    e.preventDefault(); // 분석 중일 때 클릭 이벤트 처리 중지
+                    return;
+                  }
+                  handleSendMessage();
+                }}
+                disabled={!selectedStock || !inputMessage.trim()} // 분석 중일 때는 클릭 이벤트에서 처리
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: '36px',
+                  width: isMobile ? '30px' : '36px', // 모바일에서 버튼 크기 감소
                   height: '36px',
                   borderRadius: '50%',
                   border: 'none',
@@ -1483,8 +1690,9 @@ function AIChatAreaContent() {
       {/* 추천 질문 버튼 */}
       {isInputCentered && messages.length === 0 && (
         <div style={{
-          width: isMobile ? '90%' : '57.6%', 
+          width: isMobile ? '100%' : '57.6%', 
           margin: isMobile ? '50px auto 0' : '12px auto 0',
+          padding: isMobile ? '0 0' : '0',
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
           gap: '8px'
@@ -1502,7 +1710,7 @@ function AIChatAreaContent() {
               gap: isMobile ? '6px' : '8px',
               border: '1px solid #ddd',
               borderRadius: '10px',
-              padding: isMobile ? '10px' : '12px',
+              padding: isMobile ? '10px 15px' : '12px',
               backgroundColor: '#ffffff',
               flex: '1',
               width: isMobile ? '100%' : '50%',  
@@ -1726,7 +1934,7 @@ function AIChatAreaContent() {
                     display: 'LG에너지솔루션 (373220)'
                   };
                   setSelectedStock(lgStock);
-                  setInputMessage('배터리 기술 개발 현황 및 글로벌 시장 점유율');
+                  setInputMessage('배터리 기술 개발 현황 및 미래 전망 분석');
                   
                   const updatedRecentStocks = [lgStock, ...recentStocks.filter(s => s.value !== lgStock.value)].slice(0, 5);
                   setRecentStocks(updatedRecentStocks);
@@ -1780,7 +1988,7 @@ function AIChatAreaContent() {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                   maxWidth: '100%'
-                }}>배터리 기술 개발 현황 및 글로벌 시장 점유율</span>
+                }}>배터리 기술 개발 현황 및 미래 전망 분석</span>
               </button>
               
               <button
@@ -1858,7 +2066,7 @@ function AIChatAreaContent() {
               gap: isMobile ? '6px' : '8px',
               border: '1px solid #ddd',
               borderRadius: '10px',
-              padding: isMobile ? '10px' : '12px',
+              padding: isMobile ? '10px 15px' : '12px',
               backgroundColor: '#ffffff',
               flex: '1',
               width: isMobile ? '100%' : '50%',  
@@ -2010,40 +2218,47 @@ function AIChatAreaContent() {
         </div>
       )}
       
-      {/* 저작권 정보 */}
+      {/* 고정 푸터 시작 - 모바일에서는 표시하지 않음 */}
       {!isMobile && (
         <div style={{
-          width: isMobile ? '100%' : '65%', 
+          position: 'fixed',
+          bottom: 0,
+          left: `${SIDEBAR_WIDTH}px`, // 사이드바 너비만큼 왼쪽에서 띄움
+          width: `calc(100% - ${SIDEBAR_WIDTH}px)`, // 전체 너비에서 사이드바 너비 제외
           textAlign: 'center',
-          paddingTop: '10px',
-          paddingBottom: '10px',
-          margin: '0 auto',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center', 
-          height: '20px',
-          position: 'fixed', 
-          bottom: '5px', 
-          left: '63px', 
-          right: '0',
-          zIndex: 5, 
-          backgroundColor: 'rgba(244, 244, 244, 0.8)', 
+          paddingTop: '5px', // 패딩 조정
+          paddingBottom: '5px', // 패딩 조정
+          height: 'auto', // 높이 자동
+          zIndex: 10, // 다른 요소 위에 표시되도록 z-index 설정 (기존 ClientFooter보다 높게 설정)
+          backgroundColor: 'rgba(244, 244, 244, 0.95)', // 배경색 약간 더 불투명하게
+          fontSize: '13px',
+          color: '#888',
+          fontWeight: '300',
         }}>
-          <div style={{
-            fontSize: '13px', // 0.75rem에서 16px로 변경
-            color: '#888',
-            fontWeight: '300'
-          }}>
-            스탁이지 (주)Intellio since 2025
-          </div>
+          2025 Intellio Corporation All Rights Reserved.
         </div>
       )}
+      {/* 고정 푸터 끝 */}
     </div>
   );
 }
 
 // 메인 컴포넌트
 export default function AIChatArea() {
+  // 컴포넌트 마운트/언마운트 시 이벤트 발생
+  useEffect(() => {
+    // AIChatArea 컴포넌트가 마운트되었음을 알리는 이벤트 발생
+    const mountEvent = new CustomEvent('aiChatAreaMounted', { detail: { isMounted: true } });
+    window.dispatchEvent(mountEvent);
+    
+    // 컴포넌트 언마운트 시 cleanup 함수
+    return () => {
+      // AIChatArea 컴포넌트가 언마운트되었음을 알리는 이벤트 발생
+      const unmountEvent = new CustomEvent('aiChatAreaUnmounted', { detail: { isMounted: false } });
+      window.dispatchEvent(unmountEvent);
+    };
+  }, []);
+  
   return (
     <AIChatAreaContent />
   )

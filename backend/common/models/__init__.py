@@ -20,6 +20,7 @@ from doceasy.models.table_history import TableHistory
 
 # stockeasy 모델
 from stockeasy.models.telegram_message import TelegramMessage
+from stockeasy.models.chat import StockChatSession, StockChatMessage
 #from stockeasy.models.agent_io import AgentSession, AgentMessage
 
 # 관계 설정을 중앙화합니다
@@ -27,6 +28,7 @@ from stockeasy.models.telegram_message import TelegramMessage
 User.token_usages = relationship("TokenUsage", back_populates="user", cascade="all, delete-orphan")
 User.projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
 User.sessions = relationship("Session", back_populates="user", foreign_keys="[Session.user_id]", cascade="all, delete-orphan")
+User.stock_chat_sessions = relationship("StockChatSession", back_populates="user", cascade="all, delete-orphan")
 
 # Session 관계
 Session.user = relationship("User", back_populates="sessions", foreign_keys=[Session.user_id], lazy="joined")
@@ -45,6 +47,9 @@ Document.chunks = relationship("DocumentChunk", back_populates="document", casca
 # DocumentChunk 관계
 DocumentChunk.document = relationship("Document", back_populates="chunks")
 
+# StockChatSession 관계
+StockChatSession.user = relationship("User", back_populates="stock_chat_sessions", foreign_keys=[StockChatSession.user_id])
+
 __all__ = [
     "Base",
     "User",
@@ -59,6 +64,8 @@ __all__ = [
     "ChatHistory",
     "TableHistory",
     "TelegramMessage",
-    "AgentSession",
-    "AgentMessage"
+    "StockChatSession",
+    "StockChatMessage"
+    #"AgentSession",
+    #"AgentMessage"
 ] 
