@@ -42,7 +42,7 @@ function AIChatAreaContent() {
   const [stockOptions, setStockOptions] = useState<StockOption[]>([]);
   const [selectedStock, setSelectedStock] = useState<StockOption | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [inputMessage, setInputMessage] = useState<string>('');
+  const [inputMessage, setInputMessage] = useState<string>(''); // 입력 메시지 상태
   const [isMounted, setIsMounted] = useState<boolean>(false); // 클라이언트 사이드 렌더링 확인용 상태
   const [error, setError] = useState<string | null>(null); // 오류 메시지 상태 추가
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
@@ -57,7 +57,7 @@ function AIChatAreaContent() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [isMobile, setIsMobile] = useState(false); // 사이드바 열림 상태 감지를 위한 상태 추가
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isInputCentered, setIsInputCentered] = useState(true); // 입력 필드 중앙 배치 상태 추가
+  const [isInputCentered, setIsInputCentered] = useState(messages.length === 0 && inputMessage === ''); // isInputCentered 초기 상태: 메시지와 입력이 모두 없을 때만 true
   const [showTitle, setShowTitle] = useState(true); // 제목 표시 여부
   const [transitionInProgress, setTransitionInProgress] = useState(false);
   const [searchMode, setSearchMode] = useState(false); // 종목 검색 모드 상태 추가
@@ -140,6 +140,11 @@ function AIChatAreaContent() {
       window.removeEventListener('loadHistoryAnalysis', handleLoadHistoryAnalysis as EventListener);
     };
   }, [recentStocks]);
+
+  // messages 또는 inputMessage가 변경될 때 isInputCentered 상태 업데이트
+  useEffect(() => {
+    setIsInputCentered(messages.length === 0 && inputMessage === '');
+  }, [messages, inputMessage]);
 
   // 클라이언트 사이드 렌더링 확인
   useEffect(() => {
@@ -347,13 +352,11 @@ function AIChatAreaContent() {
 
   // 메시지 전송 처리
   const handleSendMessage = async () => {
-    if (isProcessing || !selectedStock || !inputMessage.trim()) return;
+    const trimmedMessage = inputMessage.trim();
+    if (!trimmedMessage || isProcessing) return;
 
-    // 중앙 배치 해제 - 메시지 전송 시에만 화면을 아래로 내림
-    if (isInputCentered) {
-      setIsInputCentered(false);
-      setTransitionInProgress(true);
-    }
+    setIsProcessing(true);
+    setElapsedTime(0);
 
     // 메시지 ID 생성
     const messageId = `msg_${Date.now()}`;
@@ -380,19 +383,6 @@ function AIChatAreaContent() {
 
     // 입력 필드 초기화
     setInputMessage('');
-
-    // 메시지 처리 중 상태로 변경
-    setIsProcessing(true);
-    setElapsedTime(0);
-
-    // 타이머 시작
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    timerRef.current = setInterval(() => {
-      setElapsedTime(prev => prev + 1);
-    }, 1000);
 
     try {
       // 백엔드 API 호출
@@ -960,29 +950,29 @@ function AIChatAreaContent() {
     }
   }, [isInputCentered, initialInputBoxWidth]);
   
-  const inputAreaStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center', // 중앙 정렬 강화
-    // 사이드바 영역을 침범하지 않도록 너비 조정
-    width: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : '100%'), // 화면 전환 전후 동일한 너비 유지, 모바일에서는 메인 영역 너비 모두 사용
-    margin: '0 auto', // 중앙 정렬
-    padding: 0, // 모든 패딩 제거
-    boxSizing: 'border-box',
-    marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '35vh')) : '0px',
-    marginBottom: '5px', // 하단 여백 5px 유지
-    // 화면 전환 시 입력 박스를 하단에 고정시키기 위해 position 속성 변경
-    position: isInputCentered ? 'relative' : 'fixed',
-    bottom: isInputCentered ? 'auto' : '0',
-    // 사이드바 영역을 침범하지 않도록 left 값 조정 및 데스크탑에서 가운데 정렬
-    left: isInputCentered ? '0' : (!isMobile ? `calc(50% - ${initialInputBoxWidth / 2}px + ${SIDEBAR_WIDTH / 2}px)` : '0'), // 데스크탑에서는 사이드바를 고려하여 메인 영역 중앙에 배치, 모바일에서는 좌측 여백 없이 전체 너비 사용
-    zIndex: 100, // 다른 요소 위에 표시되도록 zIndex 증가
-    backgroundColor: isInputCentered ? 'transparent' : '#F4F4F4', // 고정 시 배경색 추가
-    transition: 'all 0.3s ease-in-out',
-    maxWidth: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : '100%'), // 화면 전환 전후 동일한 최대 너비 유지, 모바일에서는 메인 영역 너비 모두 사용
-    paddingBottom: '5px' // 하단 여백 5px 유지
-  };
+  const inputAreaStyle: React.CSSProperties = useMemo(() => {
+    // contentWidthPercentNumerical 대신 windowWidth와 고정값(768)을 사용하여 계산 단순화
+    const initialInputBoxWidth = isMobile ? windowWidth * 0.9 : 768;
 
+    return {
+      width: '100%',
+      // 화면 상단 중앙에 위치할 때의 스타일
+      marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '35vh')) : '0px',
+      marginBottom: '5px', // 하단 여백 5px 유지
+      // 화면 전환 시 입력 박스를 하단에 고정시키기 위해 position 속성 변경
+      position: isInputCentered ? 'relative' : 'fixed',
+      bottom: isInputCentered ? 'auto' : '0',
+      // 사이드바 영역을 침범하지 않도록 left 값 조정 및 데스크탑에서 가운데 정렬 (수정된 initialInputBoxWidth 사용)
+      left: isInputCentered ? '0' : (!isMobile ? `calc(50% - ${initialInputBoxWidth / 2}px + ${SIDEBAR_WIDTH / 2}px)` : '0'),
+      zIndex: 100, // 다른 요소 위에 표시되도록 zIndex 증가
+      backgroundColor: isInputCentered ? 'transparent' : '#F4F4F4', // 고정 시 배경색 추가
+      // maxWidth 설정 (수정된 initialInputBoxWidth 사용)
+      maxWidth: isInputCentered ? '100%' : (!isMobile ? `${initialInputBoxWidth}px` : '100%'),
+      paddingBottom: '5px' // 하단 여백 5px 유지
+    };
+  // 의존성 배열 수정: contentWidthPercentNumerical, initialInputBoxWidth 제거, contentWidthPercent 추가
+  }, [isMobile, isInputCentered, windowWidth, SIDEBAR_WIDTH, contentWidthPercent]);
+  
   const integratedInputStyle: React.CSSProperties = {
     position: 'relative',
     width: isMobile ? '100%' : contentWidthPercent, // 모바일에서는 100%로 설정
@@ -1100,7 +1090,7 @@ function AIChatAreaContent() {
 
   const stockSuggestionsStyle: React.CSSProperties = {
     position: 'absolute',
-    bottom: `calc(100% + ${isMobile ? 5 : 30}px)`, // 모바일 5px, 데스크톱 30px로 간격 확대
+    bottom: `calc(100% + ${isMobile ? 5 : 30}px)`, // 모바일 5px, 데스크탑 30px로 간격 확대
     left: 0,
     right: 0,
     width: isMobile ? '100%' : '100%', // 모바일 환경에서 너비 100%로 수정
@@ -1112,12 +1102,17 @@ function AIChatAreaContent() {
     borderRadius: '8px',
     boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
     zIndex: 100,
-    paddingTop: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
-    paddingRight: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
-    paddingBottom: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
-    paddingLeft: isMobile ? '5px' : '6px', // 모바일 5px, 데스크톱 6px 패딩 (일관성을 위해 조정)
+    paddingTop: isMobile ? '5px' : '6px', // 모바일 5px, 데스크탑 6px 패딩 (일관성을 위해 조정)
+    paddingRight: isMobile ? '5px' : '6px', // 모바일 5px, 데스크탑 6px 패딩 (일관성을 위해 조정)
+    paddingBottom: isMobile ? '5px' : '6px', // 모바일 5px, 데스크탑 6px 패딩 (일관성을 위해 조정)
+    paddingLeft: isMobile ? '5px' : '6px', // 모바일 5px, 데스크탑 6px 패딩 (일관성을 위해 조정)
     transform: isMobile ? 'none' : (isInputCentered ? 'translateY(-30px)' : 'none'), // 데스크탑 + 중앙 정렬 시에만 적용
   };
+
+  // 클라이언트 측에서 마운트될 때까지 렌더링하지 않음
+  if (!isMounted) {
+    return null; // 또는 로딩 스피너 등 표시 가능
+  }
 
   return (
     <div className="ai-chat-area" style={aiChatAreaStyle}>

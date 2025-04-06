@@ -270,34 +270,35 @@ function SidebarContent() {
   useEffect(() => {
     const updateTooltipPositions = () => {
       const positions: { [key: string]: number } = {};
-      
+
       Object.entries(buttonRefs).forEach(([key, ref]) => {
-        if (ref.current) {
+        // ref.current가 null이 아니고, history 버튼의 경우 showHistoryButton이 true일 때만 위치 계산
+        if (ref.current && (key !== 'history' || showHistoryButton)) {
           const rect = ref.current.getBoundingClientRect();
           positions[key] = rect.top;
         }
       });
-      
+
       setTooltipPosition(positions);
-      console.log('툴팁 위치 업데이트됨:', positions);
+      console.log('툴팁 위치 업데이트됨:', positions); // 디버깅 로그 유지
     };
-    
-    // 초기 실행
+
+    // 초기 실행 및 의존성 변경 시 실행
     updateTooltipPositions();
-    
+
     // resize 이벤트에 대한 핸들러 추가
     window.addEventListener('resize', updateTooltipPositions);
-    
-    // 사이드바 상태 변경 이벤트에 대한 핸들러 추가
-    window.addEventListener('sidebarToggle', updateTooltipPositions);
-    
+
+    // 사이드바 상태 변경 이벤트에 대한 핸들러 추가 (필요시 유지)
+    // window.addEventListener('sidebarToggle', updateTooltipPositions);
+
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
       window.removeEventListener('resize', updateTooltipPositions);
-      window.removeEventListener('sidebarToggle', updateTooltipPositions);
+      // window.removeEventListener('sidebarToggle', updateTooltipPositions);
     };
-  }, []);
-  
+  }, [showHistoryButton]); // showHistoryButton을 의존성 배열에 추가
+
   // 호버 이벤트 핸들러
   const handleMouseEnter = (key: string) => {
     if (!isMobile) {
@@ -458,7 +459,7 @@ function SidebarContent() {
       {/* 데스크탑 환경에서 사용할 툴팁 (모바일 환경과 완전히 분리) */}
       {!isMobile && hoveredButton && (
         <div 
-          className="fixed left-[63px] bg-gray-100 text-gray-800 py-0.5 px-2 rounded-lg text-xs shadow-md z-[2000] border border-gray-200"
+          className="fixed left-[63px] bg-[#111827] text-[#ececf1] py-0.5 px-2 rounded-[6px] text-xs shadow-md z-[2000] border border-gray-700" 
           style={{ 
             top: tooltipPosition[hoveredButton] ? `${tooltipPosition[hoveredButton] + 10}px` : '0px',
             transition: 'opacity 0.2s',
@@ -466,11 +467,11 @@ function SidebarContent() {
           }}
         >
           {hoveredButton === 'home' && '스탁이지'}
-          {hoveredButton === 'analyst' && 'AI 애널리스트'} {/* AI 애널리스트 툴팁 추가 */}
+          {hoveredButton === 'analyst' && 'AI 애널리스트'} 
           {hoveredButton === 'chart' && 'RS순위'}
           {hoveredButton === 'etfSector' && 'ETF/섹터'}
           {hoveredButton === 'value' && '벨류에이션'}
-          {hoveredButton === 'history' && '검색 히스토리'} {/* 검색 히스토리 툴팁 추가 */}
+          {hoveredButton === 'history' && '검색 히스토리'} 
           {hoveredButton === 'doc' && '닥이지'}
           {hoveredButton === 'user' && '마이페이지'}
           {hoveredButton === 'settings' && '설정'}
@@ -516,7 +517,7 @@ function SidebarContent() {
                   : 'opacity 0.25s ease-in, transform 0.25s ease-in'
               }}
             >
-              <div className="flex items-center justify-between w-full">
+              <div className="flex items-center">
                 <div className="flex items-center">
                   <Clock className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} mr-2 text-[#ececf1]`} />
                   <h3 className="text-sm font-medium text-[#ececf1]">최근 검색 히스토리</h3>
