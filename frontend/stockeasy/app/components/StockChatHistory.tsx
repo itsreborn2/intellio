@@ -48,24 +48,6 @@ export default function StockChatHistory({
   // Zustand 스토어 사용
   const loadChatSession = useChatStore(state => state.loadChatSession)
 
-  // 사용자 히스토리 가져오기
-  const fetchUserHistory = async () => {
-    if (!userId) return
-    
-    setIsLoading(true)
-    try {
-      const response = await axios.get(`/api/user-history?userId=${userId}`)
-      if (response.data && Array.isArray(response.data.history)) {
-        setHistoryItems(response.data.history)
-        console.log('[히스토리 패널] 데이터 로딩 완료', response.data.history.length)
-      }
-    } catch (error) {
-      console.error('[히스토리 패널] 사용자 히스토리 가져오기 오류:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-  
   // 채팅 세션 목록 가져오기
   const fetchChatSessions = async () => {
     if (!userId) return
@@ -205,8 +187,6 @@ export default function StockChatHistory({
   // 사용자 ID가 있을 때 히스토리 가져오기
   useEffect(() => {
     if (userId && isHistoryPanelOpen) {
-      //console.log('[히스토리 패널] 열림 - 히스토리 조회 시작', userId)
-      fetchUserHistory()
       // 채팅 세션 목록도 함께 가져오기
       fetchChatSessions()
     }
