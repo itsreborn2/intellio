@@ -50,6 +50,7 @@ function SidebarContent() {
   const [isLoading, setIsLoading] = useState(false); // 로딩 상태
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false); // 분석 결과 로딩 상태
   const [userId, setUserId] = useState<string | null>(null); // 사용자 ID
+  const [showHistoryButton, setShowHistoryButton] = useState(false); // 검색 히스토리 버튼 표시 여부 상태 추가
   
   // 버튼 참조 객체
   const buttonRefs = {
@@ -372,6 +373,44 @@ function SidebarContent() {
     };
   }, [userId]); // userId가 변경될 때마다 이벤트 리스너 재설정
   
+  // 초기 로드 시 현재 페이지가 AIChatArea인지 확인
+  useEffect(() => {
+    // 현재 페이지가 홈페이지('/')인지 확인
+    const isHomePage = window.location.pathname === '/';
+    
+    // 홈페이지인 경우 AIChatArea가 로드되어 있으므로 검색 히스토리 버튼 표시
+    setShowHistoryButton(isHomePage);
+  }, []);
+  
+  // AIChatArea 컴포넌트의 마운트/언마운트 이벤트 감지
+  useEffect(() => {
+    // AIChatArea 컴포넌트 마운트 이벤트 리스너
+    const handleAIChatAreaMounted = (e: CustomEvent) => {
+      // AIChatArea 컴포넌트가 마운트되면 검색 히스토리 버튼 표시
+      setShowHistoryButton(true);
+    };
+    
+    // AIChatArea 컴포넌트 언마운트 이벤트 리스너
+    const handleAIChatAreaUnmounted = (e: CustomEvent) => {
+      // AIChatArea 컴포넌트가 언마운트되면 검색 히스토리 버튼 숨김
+      setShowHistoryButton(false);
+      // 히스토리 패널이 열려있다면 닫기
+      if (isHistoryPanelOpen) {
+        setIsHistoryPanelOpen(false);
+      }
+    };
+    
+    // 이벤트 리스너 등록
+    window.addEventListener('aiChatAreaMounted', handleAIChatAreaMounted as EventListener);
+    window.addEventListener('aiChatAreaUnmounted', handleAIChatAreaUnmounted as EventListener);
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('aiChatAreaMounted', handleAIChatAreaMounted as EventListener);
+      window.removeEventListener('aiChatAreaUnmounted', handleAIChatAreaUnmounted as EventListener);
+    };
+  }, [isHistoryPanelOpen]); // 히스토리 패널 상태 의존성 추가
+  
   // 모바일 메뉴 토글 함수
   const toggleMenu = () => {
     const newIsOpen = !isMenuOpen;
@@ -619,20 +658,22 @@ function SidebarContent() {
                 </button>
               </div>
               
-              {/* 검색 히스토리 버튼 추가 */}
-              <div className="sidebar-button-container">
-                <button 
-                  ref={buttonRefs.history}
-                  className={`sidebar-button ${isHistoryPanelOpen ? 'bg-gray-700' : ''}`} 
-                  onClick={toggleHistoryPanel} // 검색 히스토리 패널 토글 함수 연결
-                  onMouseEnter={() => handleMouseEnter('history')}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <History className="icon" />
-                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">검색 히스토리</span>}
-                </button>
-              </div>
+              {/* 검색 히스토리 버튼 - AIChatArea 컴포넌트가 마운트되었을 때만 표시 */}
+              {showHistoryButton && (
+                <div className="sidebar-button-container">
+                  <button 
+                    ref={buttonRefs.history}
+                    className={`sidebar-button ${isHistoryPanelOpen ? 'bg-gray-700' : ''}`} 
+                    onClick={toggleHistoryPanel} // 검색 히스토리 패널 토글 함수 연결
+                    onMouseEnter={() => handleMouseEnter('history')}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <History className="icon" />
+                    {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">검색 히스토리</span>}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -2226,6 +2226,20 @@ function AIChatAreaContent() {
 
 // 메인 컴포넌트
 export default function AIChatArea() {
+  // 컴포넌트 마운트/언마운트 시 이벤트 발생
+  useEffect(() => {
+    // AIChatArea 컴포넌트가 마운트되었음을 알리는 이벤트 발생
+    const mountEvent = new CustomEvent('aiChatAreaMounted', { detail: { isMounted: true } });
+    window.dispatchEvent(mountEvent);
+    
+    // 컴포넌트 언마운트 시 cleanup 함수
+    return () => {
+      // AIChatArea 컴포넌트가 언마운트되었음을 알리는 이벤트 발생
+      const unmountEvent = new CustomEvent('aiChatAreaUnmounted', { detail: { isMounted: false } });
+      window.dispatchEvent(unmountEvent);
+    };
+  }, []);
+  
   return (
     <AIChatAreaContent />
   )
