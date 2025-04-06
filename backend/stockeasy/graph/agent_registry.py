@@ -42,6 +42,7 @@ class AgentRegistry:
             "report_analyzer": ReportAnalyzerAgent,
             "financial_analyzer": FinancialAnalyzerAgent,
             "industry_analyzer": IndustryAnalyzerAgent,
+            "confidential_analyzer": ConfidentialAnalyzerAgent,
             "knowledge_integrator": KnowledgeIntegratorAgent,
             "summarizer": SummarizerAgent,
             "response_formatter": ResponseFormatterAgent,

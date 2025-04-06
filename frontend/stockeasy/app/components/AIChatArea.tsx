@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useMemo, useRef } from 'react'
 import Select from 'react-select'
 import Papa from 'papaparse'
 import { MentionsInput, Mention } from 'react-mentions'
-import { sendChatMessage, createChatSession, createChatMessage } from '@/services/api/chat'
+import { sendChatMessage, createChatSession, createChatMessage, streamChatMessage } from '@/services/api/chat'
 import { IChatMessageDetail, IChatResponse, IChatSession } from '@/types/api/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -14,6 +14,8 @@ import rehypeHighlight from 'rehype-highlight'
 import { CSSProperties } from 'react'
 import 'highlight.js/styles/github.css' // 하이라이트 스타일 추가
 import { useChatStore } from '@/stores/chatStore'
+import { cn } from '@/lib/utils'
+import { MessageSquare } from 'lucide-react'
 
 // 종목 타입 정의
 interface StockOption {
@@ -27,7 +29,7 @@ interface StockOption {
 // 메시지 타입 정의
 interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'status';
   content: string;
   timestamp: number;
   stockInfo?: {
@@ -35,6 +37,10 @@ interface ChatMessage {
     stockCode: string;
   };
   responseId?: string; // 분석 결과의 고유 ID
+  isProcessing?: boolean; // 처리 중 상태 추가
+  agent?: string; // 에이전트 정보 추가
+  elapsed?: number; // 경과 시간 추가 (초 단위)
+  elapsedStartTime?: number; // 경과 시간 시작 타임스탬프 추가
 }
 
 // 컨텐츠 컴포넌트
@@ -65,6 +71,9 @@ function AIChatAreaContent() {
   const [popupHovered, setPopupHovered] = useState(false); // 팝업 호버 상태 추가
   const [windowWidth, setWindowWidth] = useState(0);
   const [currentChatSession, setCurrentChatSession] = useState<IChatSession | null>(null);
+  const [statusMessage, setStatusMessage] = useState(''); // 상태 메시지 상태
+  const [responseMessage, setResponseMessage] = useState(''); // 응답 메시지 상태
+  const [timerState, setTimerState] = useState<{ [key: string]: number }>({});
 
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -120,14 +129,17 @@ function AIChatAreaContent() {
         
         const messageWithStock = {
           id: msg.id,
-          role: msg.role as 'user' | 'assistant',
+          role: msg.role as 'user' | 'assistant' | 'status',
           content: msg.content,
           timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
           responseId: msg.metadata?.responseId,
           stockInfo: (msgStockName && msgStockCode) ? {
             stockName: msgStockName,
             stockCode: msgStockCode
-          } : undefined
+          } : undefined,
+          isProcessing: msg.metadata?.isProcessing,
+          agent: msg.metadata?.agent,
+          elapsed: msg.metadata?.elapsed
         }
         
         //console.log('변환된 단일 메시지:', messageWithStock)
@@ -433,135 +445,248 @@ function AIChatAreaContent() {
     fetchStockList();
   }, [isMounted]); // 의존성 배열에서 cachedStockData와 lastFetchTime 제거
 
+  // 타이머 업데이트 함수 추가
+  useEffect(() => {
+    // 활성 타이머가 있는 메시지를 찾음
+    const messagesWithElapsed = messages.filter(msg => msg.elapsed !== undefined && msg.elapsedStartTime !== undefined);
+    
+    if (messagesWithElapsed.length === 0) return;
+    
+    // 100ms마다 타이머 상태 업데이트
+    const timer = setInterval(() => {
+      const newTimerState: { [key: string]: number } = {};
+      let hasRunningTimer = false;
+      
+      messagesWithElapsed.forEach(msg => {
+        if (msg.elapsedStartTime) {
+          const currentElapsed = Date.now() - msg.elapsedStartTime;
+          newTimerState[msg.id] = msg.elapsed! + (currentElapsed / 1000);
+          hasRunningTimer = true;
+        }
+      });
+      
+      if (hasRunningTimer) {
+        setTimerState(newTimerState);
+      } else {
+        clearInterval(timer);
+      }
+    }, 100);
+    
+    return () => clearInterval(timer);
+  }, [messages]);
+
   // 메시지 전송 처리
   const handleSendMessage = async () => {
-    if (isProcessing || !selectedStock || !inputMessage.trim()) return;
-
-    // 중앙 배치 해제 - 메시지 전송 시에만 화면을 아래로 내림
-    if (isInputCentered) {
-      setIsInputCentered(false);
-      setTransitionInProgress(true);
-    }
-    console.info('selectedStock : ', selectedStock);
-    console.info('inputMessage : ', inputMessage);
-    console.info('currentChatSession : ', currentChatSession);
-    // 메시지 ID 생성
-    const messageId = `msg_${Date.now()}`;
-    // 응답 ID 생성 (실제로는 서버에서 생성해야 함)
-    const responseId = `response_${Date.now()}`;
-
-    // 사용자 메시지 생성
-    const userMessageContent = inputMessage;
-
-    const userMessage: ChatMessage = {
-      id: messageId,
-      role: 'user',
-      content: userMessageContent,
-      timestamp: Date.now(),
-      stockInfo: selectedStock ? {
-        stockName: selectedStock.stockName,
-        stockCode: selectedStock.stockCode
-      } : undefined,
-      responseId // 응답 ID 추가
-    };
-
-    // 메시지 목록에 사용자 메시지 추가
-    setMessages(prevMessages => [...prevMessages, userMessage]);
-
-    // 입력 필드 초기화
-    setInputMessage('');
-
-    // 메시지 처리 중 상태로 변경
-    setIsProcessing(true);
-    setElapsedTime(0);
-
-    // 타이머 시작
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    timerRef.current = setInterval(() => {
-      setElapsedTime(prev => prev + 1);
-    }, 1000);
-
+    // ... 기존 코드 유지 ...
+    
     try {
-      // 채팅 세션 ID가 없으면 새로 생성
-      let sessionId = currentChatSession?.id;
-      if (!sessionId) {
-        try {
-          // 새 채팅 세션 생성
-          const sessionTitle = selectedStock?.stockName 
-            ? `${selectedStock.stockName}(${selectedStock.stockCode}) : ${userMessageContent}` 
-            : userMessageContent;
-          const newSession = await createChatSession(sessionTitle);
-          setCurrentChatSession(newSession);
-          sessionId = newSession.id;
-          
-          console.log('새 채팅 세션 생성됨:', sessionId);
-        } catch (sessionError) {
-          console.error('채팅 세션 생성 오류:', sessionError);
-          return;
+      setIsProcessing(true)
+      setElapsedTime(0)
+      
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+      
+      timerRef.current = setInterval(() => {
+        setElapsedTime((prev) => prev + 1)
+      }, 1000)
+      
+      // 사용자 메시지 추가
+      const userMessageObj: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: inputMessage,
+        timestamp: Date.now(),
+        stockInfo: {
+          stockName: selectedStock?.stockName || '',
+          stockCode: selectedStock?.value || ''
         }
       }
-
-      // 사용자 메시지 저장 (백엔드에 직접 저장)
       
-      const response:IChatMessageDetail = await createChatMessage(
-        sessionId,  
-        userMessageContent,
-        selectedStock?.stockCode || '',
-        selectedStock?.stockName || ''
-      );
-      if (!response.ok) {
-        throw new Error(`API 응답 오류: ${response.status_message}`);
-      }
-
-
-      // 백엔드 API 호출
-
-      const responseData = response.content;
-      console.log('answer : ', responseData);
-
-      // 응답 메시지 생성
-      const assistantMessage: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant', 
-        content: responseData || '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다.',
+      // 상태 표시 메시지 추가
+      const statusMessageObj: ChatMessage = {
+        id: `status-${Date.now()}`,
+        role: 'status',
+        content: '처리 중입니다...',
         timestamp: Date.now(),
-        stockInfo: selectedStock ? {
-          stockName: selectedStock.stockName,
-          stockCode: selectedStock.stockCode
-        } : undefined,
-        responseId // 응답 ID 추가
-      };
-
-      // 메시지 목록에 응답 메시지 추가
-      setMessages(prevMessages => [...prevMessages, assistantMessage]);
+        isProcessing: true,
+        stockInfo: {
+          stockName: selectedStock?.stockName || '',
+          stockCode: selectedStock?.value || ''
+        }
+      }
       
-    } catch (error) {
-      console.error('메시지 전송 오류:', error);
-
-      // 오류 메시지 생성
-      const errorMessage: ChatMessage = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: '죄송합니다. 서버와 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-        timestamp: Date.now()
-      };
-
-      // 메시지 목록에 오류 메시지 추가
-      setMessages(prevMessages => [...prevMessages, errorMessage]);
-    } finally {
-      // 메시지 처리 완료 상태로 변경
-      setIsProcessing(false);
-
+      // 메시지 목록에 사용자 메시지와 처리 중 상태 메시지 추가
+      setMessages((prevMessages) => [...prevMessages, userMessageObj, statusMessageObj])
+      
+      // 스크롤 아래로 이동
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 100)
+      
+      // 채팅 세션이 없으면 생성
+      let sessionId = currentChatSession?.id
+      
+      if (!sessionId) {
+        try {
+          const newSession = await createChatSession(`${selectedStock?.stockName || '새 채팅'} 분석`)
+          sessionId = newSession.id
+          setCurrentChatSession(newSession)
+          console.log('새 채팅 세션 생성:', newSession)
+        } catch (error) {
+          console.error('채팅 세션 생성 실패:', error)
+          throw error
+        }
+      }
+      
+      // 스트리밍 방식 API 호출
+      await streamChatMessage(
+        sessionId,
+        inputMessage,
+        selectedStock?.value || '',
+        selectedStock?.stockName || '',
+        {
+          onStart: () => {
+            console.log('[AIChatArea] 처리 시작');
+            // 상태 메시지 업데이트
+            setMessages((prevMessages) => 
+              prevMessages.map((msg) => 
+                msg.id === statusMessageObj.id 
+                  ? { ...msg, content: '처리를 시작합니다...', elapsed: elapsedTime } 
+                  : msg
+              )
+            )
+          },
+          onAgentStart: (data) => {
+            console.log('[AIChatArea] 에이전트 시작:', data);
+            // 상태 메시지 업데이트 (경과시간에 시작 시간 추가)
+            setMessages((prevMessages) => 
+              prevMessages.map((msg) => 
+                msg.id === statusMessageObj.id 
+                  ? { 
+                      ...msg, 
+                      content: data.message, 
+                      agent: data.agent, 
+                      elapsed: data.elapsed,
+                      elapsedStartTime: Date.now() // 경과 시간 시작점 추가
+                    } 
+                  : msg
+              )
+            )
+            
+            // 스크롤 아래로 이동
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          },
+          onAgentComplete: (data) => {
+            console.log('[AIChatArea] 에이전트 완료:', data);
+            // 상태 메시지 업데이트 (경과시간에 시작 시간 추가)
+            setMessages((prevMessages) => 
+              prevMessages.map((msg) => 
+                msg.id === statusMessageObj.id 
+                  ? { 
+                      ...msg, 
+                      content: data.message, 
+                      agent: data.agent, 
+                      elapsed: data.elapsed,
+                      elapsedStartTime: Date.now() // 경과 시간 시작점 업데이트
+                    } 
+                  : msg
+              )
+            )
+          },
+          onComplete: (data) => {
+            console.log('[AIChatArea] 처리 완료:', data);
+            
+            // 타이머 중지
+            if (timerRef.current) {
+              clearInterval(timerRef.current)
+              timerRef.current = null
+            }
+            
+            // 상태 메시지 제거
+            setMessages((prevMessages) => 
+              prevMessages.filter((msg) => msg.id !== statusMessageObj.id)
+            )
+            
+            // 최종 응답 메시지 추가
+            const assistantMessageObj: ChatMessage = {
+              id: data.message_id || `ai-${Date.now()}`,
+              role: 'assistant',
+              content: data.response,
+              timestamp: Date.now(),
+              responseId: data.metadata?.responseId,
+              stockInfo: {
+                stockName: selectedStock?.stockName || '',
+                stockCode: selectedStock?.value || ''
+              }
+            }
+            
+            setMessages((prevMessages) => [...prevMessages, assistantMessageObj])
+            setIsProcessing(false)
+            
+            // 스크롤 아래로 이동
+            setTimeout(() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+            }, 100)
+          },
+          onError: (error) => {
+            console.error('[AIChatArea] 스트리밍 오류:', error);
+            
+            // 타이머 중지
+            if (timerRef.current) {
+              clearInterval(timerRef.current)
+              timerRef.current = null
+            }
+            
+            // 상태 메시지를 오류 메시지로 변경
+            setMessages((prevMessages) => 
+              prevMessages.map((msg) => 
+                msg.id === statusMessageObj.id 
+                  ? { 
+                      ...msg, 
+                      content: `오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`, 
+                      isProcessing: false 
+                    } 
+                  : msg
+              )
+            )
+            
+            setIsProcessing(false)
+            setError(`메시지 처리 중 오류: ${error.message || '알 수 없는 오류'}`)
+          }
+        }
+      )
+      
+      // 입력 필드 초기화
+      setInputMessage('')
+      
+      // 최근 조회 종목에 추가
+      if (selectedStock) {
+        const updatedRecentStocks = [
+          selectedStock,
+          ...recentStocks.filter((s) => s.value !== selectedStock.value)
+        ].slice(0, MAX_RECENT_STOCKS)
+        
+        setRecentStocks(updatedRecentStocks)
+        try {
+          localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks))
+        } catch (error) {
+          console.error('최근 종목 저장 실패:', error)
+        }
+      }
+    } catch (error: any) {
+      console.error('[AIChatArea] 메시지 전송 오류:', error)
+      
       // 타이머 중지
       if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+        clearInterval(timerRef.current)
+        timerRef.current = null
       }
+      
+      setIsProcessing(false)
+      setError(`메시지 전송 실패: ${error.message || '알 수 없는 오류'}`)
     }
-  };
+  }
 
   // 메시지 영역 자동 스크롤
   useEffect(() => {
@@ -806,213 +931,12 @@ function AIChatAreaContent() {
 
   // 로딩 스피너 컴포넌트
   const LoadingSpinner = () => (
-    <div className="loading-spinner" style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      margin: '12px 0'
-    }}>
-      <div style={{
-        width: '36px',
-        height: '36px',
-        borderRadius: '50%',
-        border: '3px solid #f3f3f3',
-        borderTop: '3px solid #10A37F', // #3498db에서 #10A37F로 변경
-        animation: 'spin 1s linear infinite',
-      }}></div>
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
-  );
-
-  // 검색 중 타이머 컴포넌트
-  const SearchTimer = () => (
-    <div className="search-timer" style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: isMobile ? '6px' : '8px',
-      backgroundColor: '#D8EFE9', // #f5f9ff에서 #D8EFE9로 변경
-      padding: isMobile ? '6px 10px' : (windowWidth < 768 ? '7px 11px' : '8px 12px'),
-      borderRadius: isMobile ? '6px' : '8px',
-      boxShadow: '0 2px 5px rgba(0, 0, 0, 0.05)',
-      marginBottom: isMobile ? '10px' : '12px',
-      maxWidth: '100%',
-      wordBreak: 'break-word'
-    }}>
-      <div style={{
-        position: 'relative',
-        width: isMobile ? '24px' : '28px',
-        height: isMobile ? '24px' : '28px',
-        borderRadius: '50%',
-        border: isMobile ? '1.5px solid #e1e1e1' : '2px solid #e1e1e1',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0
-      }}>
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          width: isMobile ? '12px' : '14px',
-          height: isMobile ? '1.5px' : '2px',
-          background: 'transparent',
-          transform: 'rotate(0deg) translateX(0)',
-          transformOrigin: '0 0',
-          zIndex: 2
-        }}>
-          <div style={{
-            position: 'absolute',
-            width: isMobile ? '6px' : '8px',
-            height: isMobile ? '1.5px' : '2px',
-            backgroundColor: '#10A37F', // #3498db에서 #10A37F로 변경
-            animation: 'stopwatch-sec 60s steps(60, end) infinite',
-            transformOrigin: 'left center'
-          }}></div>
-        </div>
-        <div style={{
-          width: isMobile ? '5px' : '6px',
-          height: isMobile ? '5px' : '6px',
-          backgroundColor: '#10A37F', // #3498db에서 #10A37F로 변경
-          borderRadius: '50%',
-          zIndex: 3
-        }}></div>
-      </div>
-      <div style={{
-        fontFamily: 'monospace',
-        fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'),
-        fontWeight: 'bold',
-        color: '#555',
-        flexShrink: 0
-      }}>
-        {Math.floor(elapsedTime / 60).toString().padStart(2, '0')}:{(elapsedTime % 60).toString().padStart(2, '0')}
-      </div>
-      <style jsx>{`
-        @keyframes stopwatch-sec {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
+    <div style={{ display: 'none' }}></div>
   );
 
   // 검색 애니메이션 컴포넌트
   const SearchingAnimation = () => (
-    <div className="searching-animation" style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'flex-start',
-      padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 13px' : '10px 14px'),
-      backgroundColor: '#D8EFE9', // #ffffff에서 #D8EFE9로 변경
-      borderRadius: isMobile ? '10px' : '12px',
-      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
-      maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'),
-      marginBottom: isMobile ? '12px' : '16px',
-      width: 'auto',
-      wordBreak: 'break-word'
-    }}>
-      <div style={{ 
-        fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'),
-        marginBottom: isMobile ? '6px' : '8px',
-        color: '#555',
-        display: 'flex',
-        alignItems: 'center',
-        gap: isMobile ? '6px' : '8px',
-        maxWidth: '100%',
-        flexWrap: 'wrap'
-      }}>
-        <div className="loading-icon" style={{
-          width: isMobile ? '14px' : '16px',
-          height: isMobile ? '14px' : '16px',
-          borderRadius: '50%',
-          border: isMobile ? '1.5px solid #f3f3f3' : '2px solid #f3f3f3',
-          borderTop: isMobile ? '1.5px solid #10A37F' : '2px solid #10A37F', // #3498db에서 #10A37F로 변경
-          animation: 'spin 1s linear infinite',
-          flexShrink: 0
-        }}></div>
-        <span>정보를 검색 중입니다...</span>
-      </div>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: isMobile ? '5px' : '6px',
-        margin: isMobile ? '3px 0' : '4px 0',
-        fontSize: isMobile ? '13px' : (windowWidth < 768 ? '14px' : '16px'),
-        color: '#888',
-        maxWidth: '100%',
-        flexWrap: 'wrap'
-      }}>
-        <div className="dot" style={{
-          width: isMobile ? '5px' : '6px',
-          height: isMobile ? '5px' : '6px',
-          borderRadius: '50%',
-          backgroundColor: '#3498db',
-          flexShrink: 0,
-          opacity: 0.5,
-          animation: 'pulse 1.5s infinite',
-        }}></div>
-        <span>종목 정보 확인 중</span>
-      </div>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: isMobile ? '5px' : '6px',
-        margin: isMobile ? '3px 0' : '4px 0',
-        fontSize: isMobile ? '13px' : (windowWidth < 768 ? '14px' : '16px'),
-        color: '#888',
-        maxWidth: '100%',
-        flexWrap: 'wrap'
-      }}>
-        <div className="dot" style={{
-          width: isMobile ? '5px' : '6px',
-          height: isMobile ? '5px' : '6px',
-          borderRadius: '50%',
-          backgroundColor: '#3498db',
-          flexShrink: 0,
-          opacity: 0.8,
-          animation: 'pulse 1.5s infinite',
-          animationDelay: '0.5s'
-        }}></div>
-        <span>투자 분석 보고서 조회 중</span>
-      </div>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: isMobile ? '5px' : '6px',
-        margin: isMobile ? '3px 0' : '4px 0',
-        fontSize: isMobile ? '13px' : (windowWidth < 768 ? '14px' : '16px'),
-        color: '#888',
-        maxWidth: '100%',
-        flexWrap: 'wrap'
-      }}>
-        <div className="dot" style={{
-          width: isMobile ? '5px' : '6px',
-          height: isMobile ? '5px' : '6px',
-          borderRadius: '50%',
-          backgroundColor: '#3498db',
-          flexShrink: 0,
-          opacity: 0.8,
-          animation: 'pulse 1.5s infinite',
-          animationDelay: '1s'
-        }}></div>
-        <span>최신 종목 뉴스 분석 중</span>
-      </div>
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 1; }
-        }
-      `}</style>
-    </div>
+    <div style={{ display: 'none' }}></div>
   );
 
   // 스타일 정의
@@ -1314,6 +1238,19 @@ function AIChatAreaContent() {
                       >
                         {message.content}
                       </ReactMarkdown>
+                      {message.elapsed !== undefined && (
+                        <div style={{
+                          marginTop: '8px',
+                          fontSize: isMobile ? '11px' : '12px',
+                          color: 'rgb(170, 170, 170)',
+                          textAlign: 'left',
+                        }}>
+                          {message.elapsedStartTime 
+                            ? (timerState[message.id] || message.elapsed).toFixed(1)
+                            : message.elapsed.toFixed(1)
+                          }초
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1326,15 +1263,12 @@ function AIChatAreaContent() {
         {isProcessing && (
           <div style={{
             display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'flex-start',
-            gap: isMobile ? '8px' : (windowWidth < 768 ? '10px' : '12px'),
-            marginBottom: isMobile ? '12px' : '16px',
-            flexWrap: 'wrap',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '10px 0',
             width: '100%'
           }}>
-            <SearchTimer />
-            <SearchingAnimation />
+
           </div>
         )}
         

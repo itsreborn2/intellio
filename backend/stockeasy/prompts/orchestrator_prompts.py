@@ -40,11 +40,11 @@ def format_orchestrator_prompt(
     # 데이터 요구사항 문자열 생성
     data_req_list = []
     if data_requirements.get("telegram_needed"):
-        data_req_list.append("텔레그램 메시지")
+        data_req_list.append("내부DB")
     if data_requirements.get("reports_needed"):
         data_req_list.append("기업 리포트")
     if data_requirements.get("financial_statements_needed"):
-        data_req_list.append("재무제표")
+        data_req_list.append("재무 데이터")
     if data_requirements.get("industry_data_needed"):
         data_req_list.append("산업 동향 데이터")
     

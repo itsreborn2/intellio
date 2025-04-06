@@ -701,7 +701,7 @@ class IndustryAnalyzerAgent(BaseAgent):
             # 상세 분석일 경우 - LLM을 통한 분석 수행
             # 프롬프트 생성
             prompt = PromptTemplate(
-                template=INDUSTRY_ANALYSIS_PROMPT,
+                template=INDUSTRY_ANALYSIS_SYSTEM_PROMPT,
                 input_variables=["industry_data", "query", "stock_name", "stock_code", "sector", "classification"]
             )
             

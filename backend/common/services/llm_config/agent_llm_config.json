@@ -34,28 +34,28 @@
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
       "temperature": 0,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
 	"orchestrator_agent": {
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
       "temperature": 0,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
     "report_analyzer_agent": {
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
       "temperature": 0,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
     "knowledge_integrator_agent": {
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
       "temperature": 0.1,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
 
@@ -63,35 +63,36 @@
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
       "temperature": 0,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
     "industry_analyzer_agent": {
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
       "temperature": 0,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
     "confidential_analyzer_agent": {
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
       "temperature": 0,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
     "summarizer_agent": {
+
       "provider": "gemini",
       "model_name": "models/gemini-2.5-pro-exp-03-25",
       "temperature": 0.1,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
     "response_formatter_agent": {
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
       "temperature": 0.1,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
     "fallback_manager_agent": {
@@ -105,7 +106,7 @@
       "provider": "gemini",
       "model_name": "models/gemini-2.0-flash",
       "temperature": 0,
-      "max_tokens": 30000,
+      "max_tokens": 100000,
       "api_key_env": "GEMINI_API_KEY"
     },
     "industry_analyzer_agent_not-used": {
