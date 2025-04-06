@@ -442,9 +442,9 @@ function AIChatAreaContent() {
       setIsInputCentered(false);
       setTransitionInProgress(true);
     }
-    console.log('selectedStock : ', selectedStock);
-    console.log('inputMessage : ', inputMessage);
-    console.log('currentChatSession : ', currentChatSession);
+    console.info('selectedStock : ', selectedStock);
+    console.info('inputMessage : ', inputMessage);
+    console.info('currentChatSession : ', currentChatSession);
     // 메시지 ID 생성
     const messageId = `msg_${Date.now()}`;
     // 응답 ID 생성 (실제로는 서버에서 생성해야 함)
