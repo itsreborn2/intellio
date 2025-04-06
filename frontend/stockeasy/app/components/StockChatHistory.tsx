@@ -257,7 +257,7 @@ export default function StockChatHistory({
         pointerEvents: isHistoryPanelOpen ? 'auto' : 'none',
         transformOrigin: 'left center',
         boxShadow: isHistoryPanelOpen ? '4px 0 12px rgba(0, 0, 0, 0.2)' : 'none',
-        zIndex: 20, // 항상 높은 z-index를 유지하여 애니메이션이 완료될 때까지 보이게 함
+        zIndex: 9999, // zIndex 값을 최대로 설정
         clipPath: isHistoryPanelOpen ? 'inset(0 0 0 0)' : 'inset(0 0 0 100%)', // 열리고 닫힐 때 클립 효과 추가
         visibility: isHistoryPanelOpen ? 'visible' : 'hidden', // 애니메이션 완료 후 숨김
         backgroundColor: '#282A2E', // 사이드바와 동일한 배경색

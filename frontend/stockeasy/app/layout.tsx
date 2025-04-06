@@ -31,9 +31,7 @@ export default function RootLayout({
         
         {/* 메인 콘텐츠는 사이드바 너비만큼 왼쪽 여백을 가짐 */}
         <main className="ml-[59px] min-h-screen overflow-x-hidden w-[calc(100%-59px)]">
-          <div className="content-container">
-            {children}
-          </div>
+          {children}
           {/* ClientFooter 사용 부분 제거 */}
         </main>
         {/* 페이지 로드 후 스크롤 위치를 최상단으로 설정하는 스크립트 */}

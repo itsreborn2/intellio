@@ -37,7 +37,6 @@ main {
   width: 100%;
   max-width: 1152px; /* 최대 너비 1152px로 제한 */
   margin: 0 auto; /* 가운데 정렬 */
-  padding: 0 16px; /* 좌우 여백 추가 */
 }
 
 /* 테이블 컨테이너 스타일 */
