@@ -4,15 +4,6 @@ import Sidebar from './components/Sidebar';
 import ConditionalFooter from './components/ConditionalFooter';
 // ClientFooter 임포트 제거
 
-// 전역 스타일 추가
-import { Metadata } from 'next';
-
-// 메타데이터 설정
-export const metadata: Metadata = {
-  title: 'StockEasy - 주식 정보 분석 서비스',
-  description: '스탁이지 - 기업, 산업 리포트부터 SNS까지 한번에 정리해드립니다.',
-}
-
 export default function RootLayout({
   children,
 }: {
@@ -40,7 +31,7 @@ export default function RootLayout({
         <Sidebar />
         
         {/* 메인 콘텐츠는 데스크탑에서만 사이드바 너비만큼 왼쪽 여백을 가짐, 모바일에서는 전체 너비 사용 */}
-        <main className="min-h-screen overflow-x-hidden w-full ml-0 sm:ml-[59px] sm:w-[calc(100%-59px)]">
+        <main className="min-h-screen overflow-x-hidden w-full ml-0 md:ml-[59px] md:w-[calc(100%-59px)]">
           <div className="content-container">
             {children}
           </div>

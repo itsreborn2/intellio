@@ -220,7 +220,7 @@ function AIChatAreaContent() {
   // 모바일 환경 감지
   useEffect(() => {
     const checkIfMobile = () => {
-      const isMobileView = windowWidth <= 640;
+      const isMobileView = windowWidth <= 768; // sm(640px) 대신 md(768px) 브레이크포인트 사용
       setIsMobile(isMobileView);
       
       // 모바일 상태가 변경될 때마다 DOM에 클래스 추가/제거
@@ -965,7 +965,7 @@ function AIChatAreaContent() {
     alignItems: 'center',
     justifyContent: 'center', // 중앙 정렬 강화
     // 사이드바 영역을 침범하지 않도록 너비 조정
-    width: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : 'calc(100% - 64px)'), // 화면 전환 전후 동일한 너비 유지
+    width: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : '100%'), // 화면 전환 전후 동일한 너비 유지, 모바일에서는 메인 영역 너비 모두 사용
     margin: '0 auto', // 중앙 정렬
     padding: 0, // 모든 패딩 제거
     boxSizing: 'border-box',
@@ -975,11 +975,11 @@ function AIChatAreaContent() {
     position: isInputCentered ? 'relative' : 'fixed',
     bottom: isInputCentered ? 'auto' : '0',
     // 사이드바 영역을 침범하지 않도록 left 값 조정 및 데스크탑에서 가운데 정렬
-    left: isInputCentered ? '0' : (!isMobile ? `calc(50% - ${initialInputBoxWidth / 2}px + ${SIDEBAR_WIDTH / 2}px)` : '64px'), // 데스크탑에서는 사이드바를 고려하여 메인 영역 중앙에 배치, 모바일에서는 사이드바 여백 유지
+    left: isInputCentered ? '0' : (!isMobile ? `calc(50% - ${initialInputBoxWidth / 2}px + ${SIDEBAR_WIDTH / 2}px)` : '0'), // 데스크탑에서는 사이드바를 고려하여 메인 영역 중앙에 배치, 모바일에서는 좌측 여백 없이 전체 너비 사용
     zIndex: 100, // 다른 요소 위에 표시되도록 zIndex 증가
     backgroundColor: isInputCentered ? 'transparent' : '#F4F4F4', // 고정 시 배경색 추가
     transition: 'all 0.3s ease-in-out',
-    maxWidth: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : 'calc(100% - 64px)'), // 화면 전환 전후 동일한 최대 너비 유지
+    maxWidth: isInputCentered ? '100%' : (!isMobile ? (initialInputBoxWidth > 0 ? `${initialInputBoxWidth}px` : contentWidthPercent) : '100%'), // 화면 전환 전후 동일한 최대 너비 유지, 모바일에서는 메인 영역 너비 모두 사용
     paddingBottom: '5px' // 하단 여백 5px 유지
   };
 
@@ -1156,20 +1156,21 @@ function AIChatAreaContent() {
             >
               {/* 메시지 내용 */}
               <div style={message.role === 'assistant' ? aiMessageStyle : {
-                backgroundColor: '#f5f5f5', // 사용자 메시지 배경색
+                backgroundColor: '#3F424A', 
                 padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 13px' : '10px 14px'),
                 borderRadius: isMobile ? '10px' : '12px',
                 maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
-                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
                 position: 'relative',
-                border: '1px solid #e0e0e0', // 테두리 추가하여 구분
-                wordBreak: 'break-word'
+                border: '1px solid #3F424A', // 테두리 색상 어둡게 변경
+                wordBreak: 'break-word',
+                color: 'white' // 글자색을 흰색으로 변경
               }}>
                 {message.stockInfo && (
                   <div style={{
                     fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
                     fontWeight: 'bold',
-                    color: '#10A37F', // 파란색(#0066cc)에서 초록색(#10A37F)으로 변경
+                    color: message.role === 'user' ? '#4ECCA3' : '#10A37F', // 사용자 메시지일 경우 더 밝은 초록색으로 변경
                     marginBottom: isMobile ? '3px' : '4px'
                   }}>
                     {message.stockInfo.stockName} ({message.stockInfo.stockCode})
@@ -1188,7 +1189,8 @@ function AIChatAreaContent() {
                       fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
                       lineHeight: '1.6',
                       letterSpacing: 'normal',
-                      wordBreak: 'break-word' // 단어 단위로 줄바꿈 가능하도록 설정
+                      wordBreak: 'break-word', // 단어 단위로 줄바꿈 가능하도록 설정
+                      color: 'white' // 글자색을 흰색으로 변경
                     }}>
                       {message.content}
                     </div>
@@ -2197,24 +2199,26 @@ function AIChatAreaContent() {
         </div>
       )}
       
-      {/* 고정 푸터 시작 */}
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: `${SIDEBAR_WIDTH}px`, // 사이드바 너비만큼 왼쪽에서 띄움
-        width: `calc(100% - ${SIDEBAR_WIDTH}px)`, // 전체 너비에서 사이드바 너비 제외
-        textAlign: 'center',
-        paddingTop: '5px', // 패딩 조정
-        paddingBottom: '5px', // 패딩 조정
-        height: 'auto', // 높이 자동
-        zIndex: 10, // 다른 요소 위에 표시되도록 z-index 설정 (기존 ClientFooter보다 높게 설정)
-        backgroundColor: 'rgba(244, 244, 244, 0.95)', // 배경색 약간 더 불투명하게
-        fontSize: '13px',
-        color: '#888',
-        fontWeight: '300',
-      }}>
-        2025 Intellio Corporation All Rights Reserved.
-      </div>
+      {/* 고정 푸터 시작 - 모바일에서는 표시하지 않음 */}
+      {!isMobile && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: `${SIDEBAR_WIDTH}px`, // 사이드바 너비만큼 왼쪽에서 띄움
+          width: `calc(100% - ${SIDEBAR_WIDTH}px)`, // 전체 너비에서 사이드바 너비 제외
+          textAlign: 'center',
+          paddingTop: '5px', // 패딩 조정
+          paddingBottom: '5px', // 패딩 조정
+          height: 'auto', // 높이 자동
+          zIndex: 10, // 다른 요소 위에 표시되도록 z-index 설정 (기존 ClientFooter보다 높게 설정)
+          backgroundColor: 'rgba(244, 244, 244, 0.95)', // 배경색 약간 더 불투명하게
+          fontSize: '13px',
+          color: '#888',
+          fontWeight: '300',
+        }}>
+          2025 Intellio Corporation All Rights Reserved.
+        </div>
+      )}
       {/* 고정 푸터 끝 */}
     </div>
   );

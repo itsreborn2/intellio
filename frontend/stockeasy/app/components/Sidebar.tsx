@@ -315,7 +315,7 @@ function SidebarContent() {
   // 모바일 환경 감지
   useEffect(() => {
     const checkIfMobile = () => {
-      const isMobileView = window.innerWidth <= 640; // 640px 이하를 모바일로 간주 (sm 브레이크포인트와 동일하게 설정)
+      const isMobileView = window.innerWidth <= 768; // 768px 이하를 모바일로 간주 (md 브레이크포인트와 동일하게 설정)
       setIsMobile(isMobileView);
       
       // 모바일에서 데스크탑으로 변경 시 메뉴가 열려있다면 닫기
