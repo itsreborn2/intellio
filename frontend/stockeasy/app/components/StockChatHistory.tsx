@@ -12,6 +12,7 @@ interface StockChatHistoryProps {
   isHistoryPanelOpen: boolean
   toggleHistoryPanel: () => void
   isMobile: boolean
+  style?: React.CSSProperties
 }
 
 // 백엔드 API에서 반환하는 채팅 메시지 타입
@@ -36,7 +37,8 @@ interface IChatSessionListResponse {
 export default function StockChatHistory({
   isHistoryPanelOpen,
   toggleHistoryPanel,
-  isMobile
+  isMobile,
+  style
 }: StockChatHistoryProps) {
   const [historyItems, setHistoryItems] = useState<IHistoryItem[]>([]) // 히스토리 아이템
   const [isLoading, setIsLoading] = useState(false) // 로딩 상태
@@ -226,7 +228,9 @@ export default function StockChatHistory({
   return (
     <div 
       className={`fixed left-[59px] top-0 h-full overflow-hidden`}
-      style={{ 
+      style={{
+        position: 'fixed', 
+        top: 0,
         height: '100vh',
         width: isHistoryPanelOpen ? '280px' : '0',
         transform: isHistoryPanelOpen ? 'translateX(0)' : 'translateX(-30px)',
@@ -237,15 +241,16 @@ export default function StockChatHistory({
         pointerEvents: isHistoryPanelOpen ? 'auto' : 'none',
         transformOrigin: 'left center',
         boxShadow: isHistoryPanelOpen ? '4px 0 12px rgba(0, 0, 0, 0.2)' : 'none',
-        zIndex: 20, // 항상 높은 z-index를 유지하여 애니메이션이 완료될 때까지 보이게 함
-        clipPath: isHistoryPanelOpen ? 'inset(0 0 0 0)' : 'inset(0 0 0 100%)', // 열리고 닫힐 때 클립 효과 추가
-        visibility: isHistoryPanelOpen ? 'visible' : 'hidden', // 애니메이션 완료 후 숨김
-        backgroundColor: '#282A2E', // 사이드바와 동일한 배경색
-        borderRight: '1px solid #1e2022' // 사이드바와 동일한 테두리 색상
+        zIndex: 20, 
+        clipPath: isHistoryPanelOpen ? 'inset(0 0 0 0)' : 'inset(0 0 0 100%)', 
+        visibility: isHistoryPanelOpen ? 'visible' : 'hidden', 
+        backgroundColor: '#282A2E', 
+        borderRight: '1px solid #1e2022',
+        ...style
       }}
       onClick={(e) => {
         console.log('[히스토리 패널] 패널 영역 클릭')
-        e.stopPropagation() // 패널 내부 클릭 시 이벤트 전파 중단하여 패널이 닫히지 않도록 함
+        e.stopPropagation() 
       }}
     >
       <div className="flex flex-col h-full">
@@ -269,7 +274,7 @@ export default function StockChatHistory({
               className="p-1 rounded-full hover:bg-[#3e4044]"
               onClick={(e) => {
                 console.log('[히스토리 패널] 닫기 버튼 클릭')
-                e.stopPropagation() // 이벤트 전파 중단하여 외부 클릭 이벤트 방지
+                e.stopPropagation() 
                 toggleHistoryPanel()
               }}
             >
@@ -291,7 +296,7 @@ export default function StockChatHistory({
         >
           {/* 채팅 세션 섹션 */}
           <div className="mb-4">
-            <h4 className="text-xs font-medium text-[#a0a0a0] mb-2">채팅 내역</h4>
+            {/* <h4 className="text-xs font-medium text-[#a0a0a0] mb-2">채팅 내역</h4> */}
             
             {isLoadingChatSessions ? (
               <div className="flex items-center justify-center py-2">
@@ -325,10 +330,8 @@ export default function StockChatHistory({
           <div className="h-px bg-[#1e2022] my-3"></div>
           
           {/* 히스토리 섹션 */}
-          <h4 className="text-xs font-medium text-[#a0a0a0] mb-2">검색 히스토리</h4>
-          
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center h-24 text-[#ececf1] text-sm">
+            <div className="flex items-center justify-center h-20">
               <Loader2 className="w-8 h-8 mb-2 animate-spin" />
               <p>히스토리 불러오는 중...</p>
             </div>
@@ -363,10 +366,7 @@ export default function StockChatHistory({
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-24 text-[#ececf1] text-sm">
-              <Clock className="w-8 h-8 mb-2 opacity-50 text-[#ececf1]" />
-              <p>아직 저장된 히스토리가 없습니다</p>
-            </div>
+            <></>
           )}
         </div>
       </div>

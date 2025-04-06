@@ -25,7 +25,7 @@ import {
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import StockChatHistory from './StockChatHistory';
+import StockChatHistory from './StockChatHistory'; // StockChatHistory 컴포넌트 import
 
 // 컨텐츠 컴포넌트
 function SidebarContent() {
@@ -36,6 +36,8 @@ function SidebarContent() {
   const [isMenuOpen, setIsMenuOpen] = useState(false); // 모바일 메뉴 상태 추가
   const [isMobile, setIsMobile] = useState(false); // 모바일 감지 상태 추가
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false); // 검색 히스토리 패널 상태
+  const [userId, setUserId] = useState<string | null>(null); // 사용자 ID 추가
+  const [showHistoryButton, setShowHistoryButton] = useState(false); // 검색 히스토리 버튼 표시 여부 상태 추가
   
   // 버튼 참조 객체
   const buttonRefs = {
@@ -49,6 +51,10 @@ function SidebarContent() {
     user: useRef<HTMLButtonElement>(null),
     settings: useRef<HTMLButtonElement>(null)
   };
+
+  // Ref 정의
+  const sidebarRef = useRef<HTMLDivElement>(null); // 사이드바 컨테이너 Ref
+  const menuButtonRef = useRef<HTMLButtonElement>(null); // 모바일 메뉴 버튼 Ref
 
   // 환경 변수를 사용하여 URL 설정
   const stockEasyUrl = process.env.NEXT_PUBLIC_STOCKEASY_URL || 'https://stockeasy.intellio.kr';
@@ -111,12 +117,10 @@ function SidebarContent() {
   // 검색 히스토리 패널 토글 함수
   const toggleHistoryPanel = () => {
     const newIsOpen = !isHistoryPanelOpen;
-    console.log('[사이드바] 히스토리 패널 토글:', newIsOpen);
     setIsHistoryPanelOpen(newIsOpen);
-    if (isMobile) setIsMenuOpen(false); // 모바일에서 패널 열 때 메뉴 닫기
   };
   
-  // 트렌드 페이지로 이동하는 함수 추가
+  // 트렌드 페이지로 이동하는 함수 추가 (원본 코드에 있었으므로 복원)
   const goToTrendPage = () => {
     // 이미 트렌드 페이지에 있는 경우 아무 작업도 수행하지 않음
     if (window.location.pathname === '/trend') return;
@@ -131,57 +135,57 @@ function SidebarContent() {
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
 
-  // 버튼 위치에 따라 툴팁 위치 계산
+  // 버튼 위치에 따라 툴팁 위치 계산 (원본 코드 복원)
   useEffect(() => {
     const updateTooltipPositions = () => {
       const positions: { [key: string]: number } = {};
-      
+
       Object.entries(buttonRefs).forEach(([key, ref]) => {
-        if (ref.current) {
+        // ref.current가 null이 아니고, history 버튼의 경우 showHistoryButton이 true일 때만 위치 계산
+        if (ref.current && (key !== 'history' || showHistoryButton)) {
           const rect = ref.current.getBoundingClientRect();
           positions[key] = rect.top;
         }
       });
-      
+
       setTooltipPosition(positions);
-      //console.log('툴팁 위치 업데이트됨:', positions);
     };
-    
-    // 초기 실행
+
+    // 초기 실행 및 의존성 변경 시 실행
     updateTooltipPositions();
-    
+
     // resize 이벤트에 대한 핸들러 추가
     window.addEventListener('resize', updateTooltipPositions);
-    
-    // 사이드바 상태 변경 이벤트에 대한 핸들러 추가
-    window.addEventListener('sidebarToggle', updateTooltipPositions);
-    
+
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
       window.removeEventListener('resize', updateTooltipPositions);
-      window.removeEventListener('sidebarToggle', updateTooltipPositions);
     };
-  }, []);
-  
-  // 호버 이벤트 핸들러
+  }, [showHistoryButton]); // showHistoryButton을 의존성 배열에 추가
+
+  // 호버 이벤트 핸들러 (원본 코드 복원)
   const handleMouseEnter = (key: string) => {
     if (!isMobile) {
-      console.log('마우스 엔터:', key);
       setHoveredButton(key);
     }
   };
 
   const handleMouseLeave = () => {
     if (!isMobile) {
-      console.log('마우스 리브');
       setHoveredButton(null);
     }
   };
 
-  // 모바일 환경 감지
+  // 모바일 환경 감지 (원본 코드 복원)
   useEffect(() => {
     const checkIfMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
+      const isMobileView = window.innerWidth <= 768; // 768px 이하를 모바일로 간주
+      setIsMobile(isMobileView);
+      
+      // 모바일에서 데스크탑으로 변경 시 메뉴가 열려있다면 닫기
+      if (!isMobileView && isMenuOpen) {
+        setIsMenuOpen(false);
+      }
     };
     
     // 초기 실행
@@ -194,74 +198,190 @@ function SidebarContent() {
     return () => {
       window.removeEventListener('resize', checkIfMobile);
     };
+  }, [isMenuOpen]);
+
+  // 사용자 ID 가져오기 (원본 코드 복원)
+  useEffect(() => {
+    // 로컬 스토리지에서 사용자 ID 가져오기
+    const storedUserId = localStorage.getItem('userId');
+    if (storedUserId) {
+      setUserId(storedUserId);
+    } else {
+      // 새 사용자 ID 생성 (실제로는 로그인 시스템에서 가져와야 함)
+      const newUserId = `user_${Date.now()}`;
+      localStorage.setItem('userId', newUserId);
+      setUserId(newUserId);
+    }
   }, []);
   
-  // 히스토리 패널 외부 클릭 시 패널 닫기 구현
+  // 초기 로드 시 현재 페이지가 AIChatArea인지 확인 (원본 코드 복원)
+  useEffect(() => {
+    // 현재 페이지가 홈페이지('/')인지 확인
+    const isHomePage = window.location.pathname === '/';
+    
+    // 홈페이지인 경우 AIChatArea가 로드되어 있으므로 검색 히스토리 버튼 표시
+    setShowHistoryButton(isHomePage);
+  }, []);
+  
+  // AIChatArea 컴포넌트의 마운트/언마운트 이벤트 감지 (원본 코드 복원)
+  useEffect(() => {
+    // AIChatArea 컴포넌트 마운트 이벤트 리스너
+    const handleAIChatAreaMounted = (e: CustomEvent) => {
+      // AIChatArea 컴포넌트가 마운트되면 검색 히스토리 버튼 표시
+      setShowHistoryButton(true);
+    };
+    
+    // AIChatArea 컴포넌트 언마운트 이벤트 리스너
+    const handleAIChatAreaUnmounted = (e: CustomEvent) => {
+      // AIChatArea 컴포넌트가 언마운트되면 검색 히스토리 버튼 숨김
+      setShowHistoryButton(false);
+      // 히스토리 패널이 열려있다면 닫기
+      if (isHistoryPanelOpen) {
+        setIsHistoryPanelOpen(false);
+      }
+    };
+    
+    // 이벤트 리스너 등록
+    window.addEventListener('aiChatAreaMounted', handleAIChatAreaMounted as EventListener);
+    window.addEventListener('aiChatAreaUnmounted', handleAIChatAreaUnmounted as EventListener);
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('aiChatAreaMounted', handleAIChatAreaMounted as EventListener);
+      window.removeEventListener('aiChatAreaUnmounted', handleAIChatAreaUnmounted as EventListener);
+    };
+  }, [isHistoryPanelOpen]); // 히스토리 패널 상태 의존성 추가
+  
+  // 모바일 메뉴 토글 함수 (단순화: 히스토리 패널 열려있을 땐 호출 안 됨)
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen); // 메인 메뉴 상태만 토글
+  };
+  
+  // 모바일 메뉴 닫기 함수 (오버레이 클릭 시)
+  const closeMenu = () => {
+    setIsMenuOpen(false);
+    
+    // 사이드바 닫힘 이벤트 발생 (필요시 사용)
+    // const event = new CustomEvent('sidebarToggle', { detail: { isOpen: false } });
+    // window.dispatchEvent(event);
+  };
+
+  // 모바일 사이드바 외부 클릭 시 닫기 로직
+  useEffect(() => {
+    // 모바일 환경이고 메뉴가 열려 있을 때만 실행
+    if (isMobile && isMenuOpen) {
+      const handleDocumentClick = (e: MouseEvent) => {
+        // 클릭된 요소가 사이드바 내부 또는 메뉴 버튼이 아닐 경우 메뉴 닫기
+        if (
+          sidebarRef.current && 
+          !sidebarRef.current.contains(e.target as Node) &&
+          menuButtonRef.current &&
+          !menuButtonRef.current.contains(e.target as Node)
+        ) {
+          setIsMenuOpen(false);
+        }
+      };
+
+      // 이벤트 리스너 등록 (약간의 지연 후)
+      const timerId = setTimeout(() => {
+        document.addEventListener('click', handleDocumentClick);
+      }, 0);
+
+      // 클린업 함수
+      return () => {
+        clearTimeout(timerId);
+        document.removeEventListener('click', handleDocumentClick);
+      };
+    }
+  }, [isMobile, isMenuOpen]); // isMobile과 isMenuOpen 상태 변경 시 실행
+  
+  // 히스토리 패널 외부 클릭 시 패널 닫기 구현 (원본 코드 기반 복원)
   useEffect(() => {
     // 전역 클릭 이벤트 리스너 등록
     const handleDocumentClick = (e: MouseEvent) => {
       // 히스토리 패널이 열려 있을 때만 처리
       if (isHistoryPanelOpen) {
-        console.log('[사이드바] 외부 클릭으로 히스토리 패널 닫기');
+        // stopPropagation으로 인해 패널 내부 클릭은 여기까지 오지 않음
+        // 따라서 별도 조건 없이 바로 패널을 닫으면 됨
         setIsHistoryPanelOpen(false);
       }
     };
     
-    document.addEventListener('click', handleDocumentClick);
-    
-    return () => {
+    // isHistoryPanelOpen이 true일 때만 리스너 추가
+    if (isHistoryPanelOpen) {
+      // 약간의 지연 후 리스너 추가 (패널 열기 버튼 클릭과 겹치지 않도록)
+      const timerId = setTimeout(() => {
+        document.addEventListener('click', handleDocumentClick);
+      }, 0);
+      
+      // 클린업 함수: 타이머 해제 및 리스너 제거
+      return () => {
+        clearTimeout(timerId);
+        document.removeEventListener('click', handleDocumentClick);
+      };
+    } else {
+      // isHistoryPanelOpen이 false이면 리스너 즉시 제거 (만약 남아있다면)
       document.removeEventListener('click', handleDocumentClick);
-    };
-  }, [isHistoryPanelOpen]); // isHistoryPanelOpen이 변경될 때마다 이벤트 리스너 재설정
-  
-  // 모바일 메뉴 토글 함수
-  const toggleMenu = () => {
-    const newIsOpen = !isMenuOpen;
-    setIsMenuOpen(newIsOpen);
-    
-    // 사이드바 상태 변경 이벤트 발생
-    const event = new CustomEvent('sidebarToggle', { 
-      detail: { isOpen: newIsOpen } 
-    });
-    window.dispatchEvent(event);
-  };
-  
-  // 모바일 메뉴 닫기 함수
-  const closeMenu = () => {
-    setIsMenuOpen(false);
-    
-    // 사이드바 닫힘 이벤트 발생
-    const event = new CustomEvent('sidebarToggle', { 
-      detail: { isOpen: false } 
-    });
-    window.dispatchEvent(event);
-  };
+    }
 
+  }, [isHistoryPanelOpen]); // isHistoryPanelOpen 상태에 따라 리스너 추가/제거
+  
+  // 전역 이벤트 리스너 설정 - 종목 선택 및 프롬프트 입력 감지
+  useEffect(() => {
+    // 종목 선택 이벤트 리스너
+    const handleStockSelected = (e: CustomEvent) => {
+      // 종목 선택 이벤트 발생 시, 히스토리 패널이 열려있다면 닫기
+      if (isHistoryPanelOpen) {
+        setIsHistoryPanelOpen(false);
+      }
+    };
+    
+    // 프롬프트 입력 이벤트 리스너
+    const handlePromptInput = (e: CustomEvent) => {
+      // 프롬프트 입력 이벤트 발생 시, 히스토리 패널이 열려있다면 닫기
+      if (isHistoryPanelOpen) {
+        setIsHistoryPanelOpen(false);
+      }
+    };
+    
+    // 이벤트 리스너 등록
+    window.addEventListener('stockSelected', handleStockSelected as EventListener);
+    window.addEventListener('promptInput', handlePromptInput as EventListener);
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('stockSelected', handleStockSelected as EventListener);
+      window.removeEventListener('promptInput', handlePromptInput as EventListener);
+    };
+  }, [isHistoryPanelOpen]); // 히스토리 패널 상태 의존성 추가
+  
   return (
     <>
-      {/* 모바일 햄버거 메뉴 버튼 */}
-      {isMobile && (
+      {/* 모바일 햄버거 메뉴 버튼 - 히스토리 패널 열려있지 않을 때만 표시 */}
+      {isMobile && !isHistoryPanelOpen && (
         <button 
+          ref={menuButtonRef} // Ref 연결
           className="mobile-menu-button" 
           onClick={toggleMenu}
-          style={{ zIndex: 1200 }} // 사이드바보다 높은 z-index 설정
+          style={{ zIndex: 1200 }} 
         >
-          {isMenuOpen ? <X size={24} /> : <Menu size={24} />} {/* 사이드바 상태에 따라 아이콘 변경 */}
+          {/* 메뉴 또는 히스토리 패널이 열려있으면 X 아이콘 표시 -> 메뉴만 열려있을 때 X 아이콘 */}
+          {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
       )}
       
-      {/* 모바일 오버레이 (메뉴 열릴 때만 표시) */}
-      {isMobile && (
+      {/* 모바일 오버레이 */}
+      {/* {isMobile && isMenuOpen && (
         <div 
-          className={`mobile-overlay ${isMenuOpen ? 'open' : ''}`} 
-          onClick={closeMenu}
+          className="fixed inset-0 bg-black bg-opacity-50 z-[9998]"
+          onClick={closeMenu} 
         />
-      )}
-      
-      {/* 데스크탑 환경에서 사용할 툴팁 (모바일 환경과 완전히 분리) */}
+      )} */}
+
+      {/* 데스크탑 환경에서 사용할 툴팁 */}
       {!isMobile && hoveredButton && (
         <div 
-          className="fixed left-[63px] bg-gray-100 text-gray-800 py-0.5 px-2 rounded-lg text-xs shadow-md z-[2000] border border-gray-200"
+          className="fixed left-[63px] bg-[#111827] text-[#ececf1] py-0.5 px-2 rounded-[6px] text-xs shadow-md z-[2000] border border-gray-700 pointer-events-none"
           style={{ 
             top: tooltipPosition[hoveredButton] ? `${tooltipPosition[hoveredButton] + 10}px` : '0px',
             transition: 'opacity 0.2s',
@@ -269,171 +389,188 @@ function SidebarContent() {
           }}
         >
           {hoveredButton === 'home' && '스탁이지'}
-          {hoveredButton === 'analyst' && 'AI 애널리스트'} {/* AI 애널리스트 툴팁 추가 */}
+          {hoveredButton === 'analyst' && 'AI 애널리스트'} 
           {hoveredButton === 'chart' && 'RS순위'}
           {hoveredButton === 'etfSector' && 'ETF/섹터'}
           {hoveredButton === 'value' && '벨류에이션'}
-          {hoveredButton === 'history' && '검색 히스토리'} {/* 검색 히스토리 툴팁 추가 */}
+          {hoveredButton === 'history' && '검색 히스토리'} 
           {hoveredButton === 'doc' && '닥이지'}
           {hoveredButton === 'user' && '마이페이지'}
           {hoveredButton === 'settings' && '설정'}
         </div>
       )}
-      
-      {/* StockChatHistory 컴포넌트 사용 */}
+
+      {/* 검색 히스토리 패널 컴포넌트 렌더링 */}
       <StockChatHistory 
-        isHistoryPanelOpen={isHistoryPanelOpen}
-        toggleHistoryPanel={toggleHistoryPanel}
-        isMobile={isMobile}
+        isHistoryPanelOpen={isHistoryPanelOpen} 
+        toggleHistoryPanel={toggleHistoryPanel} 
+        isMobile={isMobile} 
+        style={isMobile && isHistoryPanelOpen ? { left: 0 } : {}} // 모바일 히스토리 활성 시 left: 0 적용
       />
       
-      {/* 사이드바 컨텐츠 */}
-      <div className={`w-[59px] border-r bg-gray-200 flex flex-col h-full relative sidebar ${isMenuOpen ? 'open' : ''}`}>
-        <div className="flex-1 overflow-hidden">
-          <div className="pt-4">
+      {/* 사이드바 컨텐츠 - 모바일에서 히스토리 패널 열려있지 않을 때만 렌더링 */}
+      {!(isMobile && isHistoryPanelOpen) && (
+        <div 
+          ref={sidebarRef} // Ref 연결
+          className={`sidebar ${isMobile ? 'mobile' : 'desktop'} ${isMenuOpen ? 'open' : ''}`}
+          style={{
+            // ... 기존 스타일 유지 ...
+          }}
+        >
+          <div className="flex-1 overflow-hidden">
+            <div className="pt-4">
+              <div className="w-full flex flex-col items-center">
+                
+                {/* 홈 버튼 - 스탁이지 메인 페이지로 이동 */}
+                <div className="sidebar-button-container">
+                  <button 
+                    ref={buttonRefs.home}
+                    className="sidebar-button" 
+                    onClick={goToHomePage} 
+                    onMouseEnter={() => handleMouseEnter('home')}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <Home className="icon" />
+                    {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">스탁이지</span>}
+                  </button>
+                </div>
+                
+                {/* AI 애널리스트 버튼 추가 */}
+                <div className="sidebar-button-container">
+                  <button 
+                    ref={buttonRefs.analyst}
+                    className="sidebar-button" 
+                    onClick={goToAnalystPage}
+                    onMouseEnter={() => handleMouseEnter('analyst')}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <LineChart className="icon" />
+                    {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">AI 애널리스트</span>}
+                  </button>
+                </div>
+                
+                {/* 차트 버튼 - RS순위 페이지로 이동 */}
+                <div className="sidebar-button-container">
+                  <button 
+                    ref={buttonRefs.chart}
+                    className="sidebar-button" 
+                    onClick={goToRSRankPage}
+                    onMouseEnter={() => handleMouseEnter('chart')}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <ChartColumn className="icon" />
+                    {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">RS순위</span>}
+                  </button>
+                </div>
+                
+                {/* ETF/섹터 버튼 추가 */}
+                <div className="sidebar-button-container">
+                  <button 
+                    ref={buttonRefs.etfSector}
+                    className="sidebar-button" 
+                    onClick={goToETFSectorPage} // ETF/섹터 페이지로 이동하는 함수 연결
+                    onMouseEnter={() => handleMouseEnter('etfSector')}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <PieChart className="icon" />
+                    {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">ETF/섹터</span>}
+                  </button>
+                </div>
+                
+                {/* 벨류에이션 버튼 추가 */}
+                <div className="sidebar-button-container">
+                  <button 
+                    ref={buttonRefs.value}
+                    className="sidebar-button" 
+                    onClick={goToValuePage} // 벨류에이션 페이지로 이동하는 함수 연결
+                    onMouseEnter={() => handleMouseEnter('value')}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <Scale className="icon" />
+                    {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">벨류에이션</span>}
+                  </button>
+                </div>
+                
+                {/* 검색 히스토리 버튼 - AIChatArea 컴포넌트가 마운트되었을 때만 표시 */}
+                {showHistoryButton && (
+                  <div className="sidebar-button-container">
+                    <button 
+                      ref={buttonRefs.history}
+                      className={`sidebar-button ${isHistoryPanelOpen ? 'bg-gray-700' : ''}`} 
+                      onClick={() => {
+                        setIsHistoryPanelOpen(true); // 히스토리 패널 열기
+                        // 모바일 환경에서는 히스토리 버튼 클릭 시 메뉴를 닫음
+                        if (isMobile) {
+                          setIsMenuOpen(false);
+                        }
+                      }} 
+                      onMouseEnter={() => handleMouseEnter('history')}
+                      onMouseLeave={handleMouseLeave}
+                    >
+                      <History className="icon" />
+                      {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                      {isMobile && <span className="ml-2 text-sm text-[#ececf1]">검색 히스토리</span>}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* 하단 영역 - 마이페이지와 설정 버튼을 맨 아래로 이동 */}
+          <div className="mt-auto pb-4">
             <div className="w-full flex flex-col items-center">
-              
-              {/* 홈 버튼 - 스탁이지 메인 페이지로 이동 */}
+              {/* 문서 버튼 - DocEasy로 이동 */}
               <div className="sidebar-button-container">
                 <button 
-                  ref={buttonRefs.home}
+                  ref={buttonRefs.doc}
                   className="sidebar-button" 
-                  onClick={goToHomePage} 
-                  onMouseEnter={() => handleMouseEnter('home')}
+                  onClick={goToDocEasy} 
+                  onMouseEnter={() => handleMouseEnter('doc')}
                   onMouseLeave={handleMouseLeave}
                 >
-                  <Home className="icon" />
+                  <FileStack className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">스탁이지</span>}
+                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">닥이지</span>}
                 </button>
               </div>
               
-              {/* AI 애널리스트 버튼 추가 */}
+              {/* 사용자 버튼 */}
               <div className="sidebar-button-container">
                 <button 
-                  ref={buttonRefs.analyst}
+                  ref={buttonRefs.user}
                   className="sidebar-button" 
-                  onClick={goToAnalystPage}
-                  onMouseEnter={() => handleMouseEnter('analyst')}
+                  onMouseEnter={() => handleMouseEnter('user')}
                   onMouseLeave={handleMouseLeave}
                 >
-                  <LineChart className="icon" />
+                  <User className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">AI 애널리스트</span>}
+                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">마이페이지</span>}
                 </button>
               </div>
               
-              {/* 차트 버튼 - RS순위 페이지로 이동 */}
+              {/* 설정 버튼 */}
               <div className="sidebar-button-container">
                 <button 
-                  ref={buttonRefs.chart}
+                  ref={buttonRefs.settings}
                   className="sidebar-button" 
-                  onClick={goToRSRankPage}
-                  onMouseEnter={() => handleMouseEnter('chart')}
+                  onMouseEnter={() => handleMouseEnter('settings')}
                   onMouseLeave={handleMouseLeave}
                 >
-                  <ChartColumn className="icon" />
+                  <Settings className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">RS순위</span>}
-                </button>
-              </div>
-              
-              {/* ETF/섹터 버튼 추가 */}
-              <div className="sidebar-button-container">
-                <button 
-                  ref={buttonRefs.etfSector}
-                  className="sidebar-button" 
-                  onClick={goToETFSectorPage} // ETF/섹터 페이지로 이동하는 함수 연결
-                  onMouseEnter={() => handleMouseEnter('etfSector')}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <PieChart className="icon" />
-                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">ETF/섹터</span>}
-                </button>
-              </div>
-              
-              {/* 벨류에이션 버튼 추가 */}
-              <div className="sidebar-button-container">
-                <button 
-                  ref={buttonRefs.value}
-                  className="sidebar-button" 
-                  onClick={goToValuePage} // 벨류에이션 페이지로 이동하는 함수 연결
-                  onMouseEnter={() => handleMouseEnter('value')}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <Scale className="icon" />
-                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">벨류에이션</span>}
-                </button>
-              </div>
-              
-              {/* 검색 히스토리 버튼 추가 */}
-              <div className="sidebar-button-container">
-                <button 
-                  ref={buttonRefs.history}
-                  className={`sidebar-button ${isHistoryPanelOpen ? 'bg-gray-700' : ''}`} 
-                  onClick={toggleHistoryPanel} // 검색 히스토리 패널 토글 함수 연결
-                  onMouseEnter={() => handleMouseEnter('history')}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <History className="icon" />
-                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">검색 히스토리</span>}
+                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">설정</span>}
                 </button>
               </div>
             </div>
           </div>
         </div>
-        
-        {/* 하단 영역 - 마이페이지와 설정 버튼을 맨 아래로 이동 */}
-        <div className="mt-auto pb-4">
-          <div className="w-full flex flex-col items-center">
-            {/* 문서 버튼 - DocEasy로 이동 */}
-            <div className="sidebar-button-container">
-              <button 
-                ref={buttonRefs.doc}
-                className="sidebar-button" 
-                onClick={goToDocEasy} 
-                onMouseEnter={() => handleMouseEnter('doc')}
-                onMouseLeave={handleMouseLeave}
-              >
-                <FileStack className="icon" />
-                {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                {isMobile && <span className="ml-2 text-sm text-[#ececf1]">닥이지</span>}
-              </button>
-            </div>
-            
-            {/* 사용자 버튼 */}
-            <div className="sidebar-button-container">
-              <button 
-                ref={buttonRefs.user}
-                className="sidebar-button" 
-                onMouseEnter={() => handleMouseEnter('user')}
-                onMouseLeave={handleMouseLeave}
-              >
-                <User className="icon" />
-                {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                {isMobile && <span className="ml-2 text-sm text-[#ececf1]">마이페이지</span>}
-              </button>
-            </div>
-            
-            {/* 설정 버튼 */}
-            <div className="sidebar-button-container">
-              <button 
-                ref={buttonRefs.settings}
-                className="sidebar-button" 
-                onMouseEnter={() => handleMouseEnter('settings')}
-                onMouseLeave={handleMouseLeave}
-              >
-                <Settings className="icon" />
-                {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                {isMobile && <span className="ml-2 text-sm text-[#ececf1]">설정</span>}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
     </>
   )
 }
@@ -441,7 +578,7 @@ function SidebarContent() {
 // 메인 컴포넌트
 export default function Sidebar() {
   return (
-    <Suspense fallback={<div className="w-[59px] bg-background border-r animate-pulse fixed top-0 left-0 h-screen z-50">
+    <Suspense fallback={<div className="w-[59px] bg-background border-r animate-pulse fixed top-0 left-0 h-screen z-[9999]">
       <div className="p-4">
         <div className="h-6 bg-gray-200 rounded w-3/4"></div>
       </div>
@@ -452,7 +589,8 @@ export default function Sidebar() {
         </div>
       </div>
     </div>}>
-      <div className="fixed top-0 left-0 h-screen z-50">
+      {/* z-index 적용하여 다른 요소 위에 표시 */}
+      <div className="fixed top-0 left-0 h-screen z-[9999]"> 
         <SidebarContent />
       </div>
     </Suspense>
