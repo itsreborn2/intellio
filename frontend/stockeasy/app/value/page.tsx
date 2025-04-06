@@ -330,9 +330,9 @@ const ValuationPage = () => {
       try {
         setLoading(true);
         // 파일 경로 정규화를 위해 fetchCSVData 유틸리티 함수에서 경로만 가져옴
-        const normalizedPath = await fetchCSVData('requestfile/value/PER.csv')
-          .then(() => 'requestfile/value/PER.csv')
-          .catch(() => '/requestfile/value/PER.csv'); // 오류 발생 시 절대 경로로 시도
+        const normalizedPath = await fetchCSVData('requestfile/value/per.csv')
+          .then(() => 'requestfile/value/per.csv')
+          .catch(() => '/requestfile/value/per.csv'); // 오류 발생 시 절대 경로로 시도
         
         // --- CSV 인코딩 처리 시작 ---
         // 한글 인코딩 문제로 인해 EUC-KR 인코딩 처리가 반드시 필요함
