@@ -1188,16 +1188,21 @@ function AIChatAreaContent() {
                 }}
               >
                 {/* 메시지 내용 */}
-                <div style={message.role === 'assistant' ? aiMessageStyle : {
+                <div style={message.role === 'assistant' ? {
+                  ...aiMessageStyle,
+                  position: 'relative', // 명시적으로 position 설정
+                  paddingBottom: '25px' // 버튼 공간 확보, 더 줄임
+                } : {
                   backgroundColor: '#3F424A', 
                   padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 13px' : '10px 14px'),
+                  paddingBottom: '25px', // 버튼 공간 확보, 더 줄임
                   borderRadius: isMobile ? '10px' : '12px',
-                  maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
+                  maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'),
                   boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
                   position: 'relative',
-                  border: '1px solid #3F424A', // 테두리 색상 어둡게 변경
+                  border: '1px solid #3F424A',
                   wordBreak: 'break-word',
-                  color: 'white' // 글자색을 흰색으로 변경
+                  color: 'white'
                 }}>
                   {message.stockInfo && (
                     <div style={{
@@ -1264,58 +1269,52 @@ function AIChatAreaContent() {
                       </div>
                     )}
                   </div>
+                  
+                  {/* 복사 버튼을 말풍선 내부 하단에 배치 */}
+                  {message.role !== 'status' && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(message.content);
+                        setCopyStates(prev => ({ ...prev, [message.id]: true }));
+                        setTimeout(() => {
+                          setCopyStates(prev => ({ ...prev, [message.id]: false }));
+                        }, 2000);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        bottom: '3px',
+                        right: '5px',
+                        backgroundColor: message.role === 'user' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(240, 240, 240, 0.8)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        width: '24px',
+                        height: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        opacity: 0.8,
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = '0.8';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                      title={copyStates[message.id] ? "복사 완료" : "텍스트 복사"}
+                    >
+                      {copyStates[message.id] ? (
+                        <Check size={14} color={message.role === 'user' ? '#FFFFFF' : '#10A37F'} />
+                      ) : (
+                        <Copy size={14} color={message.role === 'user' ? '#FFFFFF' : '#333333'} />
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
-
-              {/* 복사 버튼을 말풍선 아래 배치하고 status 메시지에는 표시하지 않음 */}
-              {message.role !== 'status' && (
-                <div style={{
-                  marginTop: '4px',
-                  marginRight: '8px',
-                  marginLeft:'8px',
-                  display: 'flex',
-                  justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
-                }}>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(message.content);
-                      // 토스트 팝업 대신 아이콘 상태 변경
-                      setCopyStates(prev => ({ ...prev, [message.id]: true }));
-                      // 2초 후 아이콘 복원
-                      setTimeout(() => {
-                        setCopyStates(prev => ({ ...prev, [message.id]: false }));
-                      }, 2000);
-                    }}
-                    style={{
-                      backgroundColor: 'rgba(240, 240, 240, 0.8)',
-                      border: 'none', //'1px solid rgba(0, 0, 0, 0.1)',
-                      borderRadius: '5px',
-                      width: '30px',
-                      height: '30px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      opacity: 0.9,
-                      transition: 'all 0.2s ease',
-                      
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(230, 230, 230, 1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(240, 240, 240, 0.8)';
-                    }}
-                    title={copyStates[message.id] ? "복사 완료" : "복사"}
-                  >
-                    {copyStates[message.id] ? (
-                      <Check size={18} color='#10A37F' />
-                    ) : (
-                      <Copy size={18} color='#333333' />
-                    )}
-                  </button>
-                </div>
-              )}
             </div>
           ))
         )}
