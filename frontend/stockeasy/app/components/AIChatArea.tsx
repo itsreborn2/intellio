@@ -182,15 +182,6 @@ function AIChatAreaContent() {
     }
   }, [currentSession, storeMessages])
   
-  // 컴포넌트 마운트 시 토큰 사용량 정보 가져오기
-  useEffect(() => {
-    // 토큰 사용량 요약 정보 가져오기
-    fetchSummary();
-    
-    // 질문 개수 요약 정보 가져오기
-    fetchQuestionSummary('month', 'day');
-  }, [fetchSummary, fetchQuestionSummary]);
-  
   // 토큰 사용량 정보가 변경될 때마다 로그 출력
   useEffect(() => {
     if (summary) {

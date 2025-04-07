@@ -95,15 +95,8 @@ export async function logout() {
  */
 export function isLoggedIn(): boolean {
   // 쿠키만 확인
-  const hasAuthTokenCookie = document.cookie.includes('auth_token');
+  const hasAuthTokenCookie = document.cookie.includes('user');
   
   return hasAuthTokenCookie;
 }
 
-/**
- * 사용자 ID 가져오기
- * @returns {string | null} 사용자 ID 또는 null
- */
-export function getUserId(): string | null {
-  return localStorage.getItem('userId');
-} 

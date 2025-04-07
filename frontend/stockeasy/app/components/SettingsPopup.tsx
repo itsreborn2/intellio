@@ -68,7 +68,7 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
   useEffect(() => {
     if (isOpen) {
       fetchSummary('stockeasy', period);
-      fetchQuestionSummary(period, 'day');
+      fetchQuestionSummary('day', 'day');
     }
   }, [isOpen, period, fetchSummary, fetchQuestionSummary]);
   
@@ -76,7 +76,7 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
   const handlePeriodChange = (newPeriod: PeriodType) => {
     setPeriod(newPeriod);
     fetchSummary('stockeasy', newPeriod);
-    fetchQuestionSummary(newPeriod, 'day');
+    fetchQuestionSummary('day', 'day');
   };
   
   // 사용자 이름의 첫 글자 또는 이니셜 가져오기

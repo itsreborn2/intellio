@@ -33,7 +33,8 @@ export const useQuestionCountStore = create<QuestionCountState>((set) => ({
   setError: (error) => set({ error }),
   
   // 질문 개수 요약 정보 조회
-  fetchSummary: async (period = 'month', groupBy = 'day') => {
+  // 그냥 하루 질문개수만 조회.
+  fetchSummary: async (period = 'day', groupBy = 'day') => {
     try {
       // 로그인 상태가 아니면 API 호출하지 않음
       if (!isLoggedIn()) {
