@@ -12,6 +12,7 @@ import { UploadProgressDialog } from "intellio-common/components/ui/upload-progr
 import { IDocument, DocumentStatus, IDocumentStatus, DocumentStatusResponse } from "@/types"
 import { getDocumentUploadStatus } from "@/services/api"
 import { FileUploadErrorDialog } from '@/components/FileUploadErrorDialog'
+import { RefObject } from 'react';
 
 // 모바일 환경 감지 훅
 const useIsMobile = () => {
@@ -211,7 +212,11 @@ const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => 
   );
 };
 
-export const TableSection = () => {
+interface TableSectionProps {
+  fileInputRef: RefObject<HTMLInputElement>;
+}
+
+export const TableSection: React.FC<TableSectionProps> = ({ fileInputRef }) => {
   const { state, dispatch } = useApp()
   const { isAuthenticated } = useAuth()
   const [selectedRows, setSelectedRows] = useState<number[]>([])
@@ -224,7 +229,6 @@ export const TableSection = () => {
   const [columnToDelete, setColumnToDelete] = useState<string | null>(null)
   const [columnWidths, setColumnWidths] = useState<{ [key: string]: number }>({})
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const tableRef = useRef<ITableUtils>(null);
   const { uploadProgress, uploadError, handleFileUpload, closeErrorDialog, showErrorDialog } = useFileUpload()
   const isMobile = useIsMobile();
@@ -437,7 +441,8 @@ export const TableSection = () => {
   }, []);
 
   return (
-    <div className={`h-full flex-1 overflow-hidden flex flex-col ${isMobile ? 'pt-9' : ''}`}>
+    // 최상위 div: 모바일 환경에서 pt-12 패딩 적용과 전체 스크롤 적용
+    <div className={`h-full flex-1 ${isMobile ? 'overflow-auto pt-12' : 'overflow-hidden'} flex flex-col`}>
       <UploadProgressDialog {...uploadProgress} />
       <FileUploadErrorDialog 
         isOpen={uploadError.isOpen}
@@ -459,24 +464,9 @@ export const TableSection = () => {
         accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.ppt"
       />
       
-      <div>
-        <div className={`flex items-center justify-between gap-2 p-1 ${isMobile ? 'flex-wrap' : ''}`}>
-          {isAuthenticated && (
-            <Button
-              variant="outline"
-              size={isMobile ? "sm" : "default"}
-              className={`h-8 px-2 text-xs transition-all duration-300 ease-in-out ${isMobile ? 'w-full' : ''}`}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Plus className={`h-3 w-3 mr-0.5 ${isMobile ? 'mr-1' : ''}`} />
-              {isMobile ? "문서 추가" : "문서 추가"}
-            </Button>
-          )}
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full overflow-auto">
+      <div className={`flex-1 ${isMobile ? '' : 'overflow-hidden'}`}>
+        {/* 모바일에서는 테이블 내부 스크롤 없이 전체 영역 스크롤만 사용, 데스크탑에서는 테이블 내부의의 스크롤 */}
+        <div className="h-full">
           <DocumentTable 
             ref={tableRef} 
             onHeaderSelect={handleHeaderSelect}

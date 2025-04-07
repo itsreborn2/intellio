@@ -12,6 +12,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import React from 'react'
+import { Plus } from 'lucide-react';
+import cn from 'classnames';
 
 // 모바일 환경 감지 훅
 const useIsMobile = () => {
@@ -32,65 +34,6 @@ const useIsMobile = () => {
 
   return isMobile;
 };
-
-// ChatMessage 컴포넌트를 메모이제이션
-const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { message: IMessage; isStreaming?: boolean }) {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [isLongContent, setIsLongContent] = useState(false);
-
-  useEffect(() => {
-    if (contentRef.current) {
-      const { scrollHeight, clientHeight, scrollWidth, clientWidth } = contentRef.current;
-      setIsLongContent(scrollHeight > clientHeight || scrollWidth > clientWidth);
-    }
-  }, [message.content]);
-
-  return (
-    <div className={`flex flex-col ${message.role === 'assistant' ? 'mb-6' : 'mb-3'} w-full`}>
-      <div className={`flex items-start ${
-        message.role === 'assistant' 
-          ? `mr-auto max-w-[85%]`
-          : `ml-auto max-w-[85%]`
-      }`}>
-        <div className={`
-          rounded-2xl px-4 py-2.5 
-          ${message.role === 'assistant' 
-            ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 shadow-sm' 
-            : 'bg-blue-500 text-white'
-          }
-        `}>
-          <div 
-            ref={contentRef}
-            className={`overflow-hidden ${isStreaming ? 'typing' : ''}`}
-          >
-            <ReactMarkdown 
-              remarkPlugins={[remarkGfm, remarkBreaks]}
-              skipHtml={true}
-              unwrapDisallowed={true}
-              className={`prose max-w-none markdown
-                  [&>h3]:font-semibold [&>h3]:mt-3 [&>h3]:mb-1.5
-                  [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-1
-                  [&>ul]:mt-0 [&>ul]:mb-2 [&>ul]:pl-4
-                  [&>li]:leading-relaxed
-                  [&>p:only-child]:m-0
-                  ${message.role === 'assistant' 
-                    ? '[&>h3]:text-gray-800 [&>p]:text-gray-700 [&>li]:text-gray-700 dark:[&>h3]:text-gray-200 dark:[&>p]:text-gray-300 dark:[&>li]:text-gray-300' 
-                    : '[&>h3]:text-white [&>p]:text-white [&>li]:text-white'
-                  }
-              `}
-              components={{
-                text: ({node, ...props}) => <>{props.children}</>
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
-            {isStreaming && <span className="cursor blink-cursor" />}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-});
 
 // 테이블 분석 진행 상태 컴포넌트
 const TableAnalysisProgress = React.memo(function TableAnalysisProgress({
@@ -165,7 +108,12 @@ class StreamingMarkdownHandler {
   }
 }
 
-export const ChatSection = () => {
+interface ChatSectionProps {
+  onUploadButtonClick?: () => void;
+  isMobile?: boolean; // isMobile prop 추가
+}
+
+export const ChatSection: React.FC<ChatSectionProps> = ({ onUploadButtonClick, isMobile }) => { // isMobile prop 받기
   const { state, dispatch } = useApp()
   const [input, setInput] = useState('')
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
@@ -173,7 +121,7 @@ export const ChatSection = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const messageCountRef = useRef(0)
-  const isMobile = useIsMobile();
+  const isMobileValue = useIsMobile();
   
   // 테이블 스트리밍 상태
   const [tableStreamingState, setTableStreamingState] = useState<{
@@ -581,17 +529,14 @@ export const ChatSection = () => {
   }, [state.messages])
 
   return (
-    <div className="relative h-full flex flex-col bg-[#f5f5fa] dark:bg-gray-900">
+    <div className="relative h-full flex flex-col bg-background dark:bg-gray-900">
       {/* 메시지 컨테이너 */}
       <div 
-        className={`overflow-y-auto ${isMobile ? 'px-3 py-4' : 'px-4 py-6'} 
-          scrollbar-default scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 
-          scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-500`} 
-        id="chat-container"
-        style={{ 
-          height: `calc(100% - ${isMobile ? '56px' : '60px'})`,
-          marginBottom: `${isMobile ? '56px' : '60px'}`
-        }}
+        id="chat-container" 
+        className={`overflow-y-auto ${isMobile ? 'px-3 py-4 pt-14' : 'px-4 py-6'} bg-background 
+          scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 
+          scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-500`}
+        style={{ height: `calc(100%)` }}
       >
         <div className="flex flex-col max-w-3xl mx-auto w-full">
           {renderMessages}
@@ -603,20 +548,38 @@ export const ChatSection = () => {
       <div 
         className={`${
           isMobile 
-            ? 'fixed bottom-0 left-0 right-0 z-[1000] p-2.5 bg-[#f5f5fa] dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800' 
-            : 'fixed bottom-0 left-0 right-0 z-[10] bg-[#f5f5fa] dark:bg-gray-900 border-gray-200 dark:border-gray-800'
+            ? 'fixed bottom-0 left-0 right-0 z-[1000] p-2.5 bg-background dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800' 
+            : 'fixed bottom-0 left-0 right-0 z-[10] bg-background dark:bg-gray-900 border-gray-200 dark:border-gray-800'
         }`}
         style={{ height: isMobile ? '56px' : '50px' }}
       >
         <form onSubmit={handleSubmit} className="flex max-w-3xl mx-auto w-full px-0 relative">
-          <div className="w-full relative">
+          {/* 텍스트 입력 영역 wrapper (position: relative 유지) */} 
+          <div className="w-full relative flex items-center gap-2"> 
+            {/* Plus 아이콘: 데스크탑에서는 input 안에 absolute, 모바일에서는 input 옆에 static. 버튼 스타일 추가 */} 
+            <div 
+              className={cn(
+                "cursor-pointer text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200",
+                "p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800", // 버튼 스타일 및 hover 효과
+                !isMobileValue && "absolute left-2 top-1/2 transform -translate-y-1/2 z-10", // 데스크탑: absolute 위치 조정 (left-3 -> left-2)
+                isMobileValue && "ml-1" // 모바일: 왼쪽 여백 조정 (ml-3 -> ml-1)
+              )}
+              onClick={onUploadButtonClick}
+            >
+              <Plus className="h-4 w-4" />
+            </div>
+            
+            {/* Input: 데스크탑에서만 왼쪽 패딩 추가 */} 
             <Input
-              className={`flex-1 w-full rounded-2xl pr-12 ${isMobile ? 'px-3 py-1.5 text-sm h-10' : 'px-4 py-2.5 h-11'} 
-                bg-white border-gray-200 dark:border-gray-700 focus-visible:ring-blue-500 shadow-sm`}
+              className={cn(
+                "flex-1 w-full rounded-md pr-12",
+                isMobileValue ? "px-3 py-1.5 text-sm h-10" : "py-2.5 h-11 pl-10", // 데스크탑: pl-10 유지
+                "bg-white border-gray-200 dark:border-gray-700 focus-visible:ring-[#10A37F] shadow-sm"
+              )}
               placeholder={isGenerating 
                 ? "응답 중..." 
                 : (state.analysis.mode === 'table' 
-                  ? (isMobile ? "질문을 입력하세요..." : "개별 분석을 위한 질문을 입력하세요...") 
+                  ? (isMobileValue ? "질문을 입력하세요..." : "개별 분석을 위한 질문을 입력하세요...") 
                   : "메시지를 입력하세요...")}
               value={input}
               onChange={handleInputChange}
@@ -632,18 +595,19 @@ export const ChatSection = () => {
                   size="sm"
                   onClick={handleStopGeneration}
                   disabled={state.analysis.mode === 'table' && tableStreamingState.isStreaming}
-                  className={`rounded-full bg-red-500 hover:bg-red-600 ${isMobile ? 'h-8 w-8 p-0' : 'h-9 w-9 p-0'}`}
+                  className={cn("rounded-full bg-red-500 hover:bg-red-600", isMobileValue ? 'h-8 w-8 p-0' : 'h-9 w-9 p-0')}
                 >
-                  <Square className={`${isMobile ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
+                  <Square className={cn(isMobileValue ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
                 </Button>
               ) : (
                 <Button 
                   type="submit" 
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   disabled={!input.trim() || isGenerating || state.isAnalyzing}
-                  className={`rounded-full bg-blue-500 hover:bg-blue-600 ${isMobile ? 'h-8 w-8 p-0' : 'h-9 w-9 p-0'}`}
+                  className={cn(isMobileValue ? 'h-8 w-8' : 'h-9 w-9')}
                 >
-                  <Send className={`${isMobile ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
+                  <Send className={cn(isMobileValue ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
                 </Button>
               )}
             </div>
@@ -707,3 +671,107 @@ export const ChatSection = () => {
     </div>
   )
 }
+
+// ChatMessage 컴포넌트를 메모이제이션
+const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { message: IMessage; isStreaming?: boolean }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isLongContent, setIsLongContent] = useState(false);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      const { scrollHeight, clientHeight, scrollWidth, clientWidth } = contentRef.current;
+      setIsLongContent(scrollHeight > clientHeight || scrollWidth > clientWidth);
+    }
+  }, [message.content]);
+
+  return (
+    <div className={`flex flex-col ${message.role === 'assistant' ? 'mb-2 md:mb-6' : 'mb-2 md:mb-3'} w-full`}>
+      <div className={`flex items-start ${
+        message.role === 'assistant' && !message.isStatusMessage // 상태 메시지는 assistant 역할이지만 user처럼 오른쪽에 정렬될 수 있음
+          ? `mr-auto max-w-6xl`
+          : `ml-auto max-w-4xl` // 사용자 메시지 및 상태 메시지
+      }`}>
+        {/* 사용자 메시지 스타일 */}
+        {message.role === 'user' && (
+          <div className="rounded-md px-4 py-2.5 bg-[#3F424A] text-white">
+            <div 
+              ref={contentRef}
+              className={`overflow-hidden ${isStreaming ? 'typing' : ''}`}
+            >
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                skipHtml={true}
+                unwrapDisallowed={true}
+                className={`prose max-w-none markdown text-sm md:text-base
+                    [&>h3]:font-semibold [&>h3]:mt-3 [&>h3]:mb-1.5
+                    [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-1
+                    [&>ul]:mt-0 [&>ul]:mb-2 [&>ul]:pl-4
+                    [&>li]:leading-relaxed
+                    [&>p:only-child]:m-0
+                    [&>h3]:text-white [&>p]:text-white [&>li]:text-white
+                `}
+                components={{ text: ({node, ...props}) => <>{props.children}</> }}
+              >
+                {message.content}
+              </ReactMarkdown>
+              {isStreaming && <span className="cursor blink-cursor" />}
+            </div>
+          </div>
+        )}
+
+        {/* 상태 메시지 스타일 */}
+        {message.isStatusMessage && (
+          <div className="rounded-md px-4 py-2.5 bg-[#D8EFE9] text-[#3F424A]">
+             <div 
+              ref={contentRef}
+              className={`overflow-hidden ${isStreaming ? 'typing' : ''}`}
+            >
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                skipHtml={true}
+                unwrapDisallowed={true}
+                className={`prose max-w-none markdown text-sm md:text-base
+                    [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-1
+                    [&>p:only-child]:m-0
+                    [&>p]:text-[#3F424A] // 상태 메시지 텍스트 색상 적용
+                `}
+                components={{ text: ({node, ...props}) => <>{props.children}</> }}
+              >
+                {message.content}
+              </ReactMarkdown>
+              {/* 상태 메시지는 스트리밍되지 않으므로 커서 제거 */}
+            </div>
+          </div>
+        )}
+
+        {/* 일반 AI 응답 메시지 스타일 */}
+        {message.role === 'assistant' && !message.isStatusMessage && (
+          <div 
+            ref={contentRef}
+            className={`overflow-hidden ${isStreaming ? 'typing' : ''} w-full`}
+          >
+            <ReactMarkdown 
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              skipHtml={true}
+              unwrapDisallowed={true}
+              className={`prose max-w-none markdown text-sm md:text-base
+                  [&>h3]:font-semibold [&>h3]:mt-3 [&>h3]:mb-1.5
+                  [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-1
+                  [&>ul]:mt-0 [&>ul]:mb-2 [&>ul]:pl-4
+                  [&>li]:leading-relaxed
+                  [&>p:only-child]:m-0
+                  [&>h3]:text-gray-800 [&>p]:text-gray-700 [&>li]:text-gray-700 dark:[&>h3]:text-gray-200 dark:[&>p]:text-gray-300 dark:[&>li]:text-gray-300
+                  mb-[5px] // 아래 여백 5px 추가
+                  selection:bg-[#ABABAB] selection:text-white // 텍스트 선택 스타일 추가
+              `}
+              components={{ text: ({node, ...props}) => <>{props.children}</> }}
+            >
+              {message.content}
+            </ReactMarkdown>
+            {isStreaming && <span className="cursor blink-cursor" />}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}); // }; -> }); 로 수정

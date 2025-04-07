@@ -3,7 +3,7 @@ import type { Config } from "tailwindcss";
 import commonConfig from '../common/tailwind.config';
 
 const config: Config = {
-  darkMode: "class",
+  // darkMode: "class", // 다크 모드 비활성화
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",

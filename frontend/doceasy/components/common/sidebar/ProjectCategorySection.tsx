@@ -80,19 +80,19 @@ const CategoryItem = ({
           >
             <div 
               className={cn(
-                "flex items-center justify-between py-2 px-2 cursor-pointer hover:bg-gray-100 group"
+                "flex items-center justify-between py-2 px-2 cursor-pointer hover:bg-[#3F424A] group"
               )}
               onClick={() => toggleSection(category.id)}
               onDoubleClick={() => !isEditingLocal && setIsEditingLocal(true)}
             >
               <div className="flex items-center flex-grow gap-2">
                 {isExpanded ? 
-                  <ChevronDown className="h-4 w-4 text-gray-500 flex-shrink-0" /> : 
-                  <ChevronRight className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                  <ChevronDown className="h-4 w-4 text-[#ABABAB] flex-shrink-0" /> : 
+                  <ChevronRight className="h-4 w-4 text-[#ABABAB] flex-shrink-0" />
                 }
                 {isExpanded ? 
-                  <FolderOpen className="h-4 w-4 text-amber-500 flex-shrink-0" /> : 
-                  <Folder className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                  <FolderOpen className="h-4 w-4 text-[#ABABAB] flex-shrink-0" /> : 
+                  <Folder className="h-4 w-4 text-[#ABABAB] flex-shrink-0" />
                 }
                 {isEditingLocal ? (
                   <Input
@@ -110,7 +110,7 @@ const CategoryItem = ({
                     autoFocus
                   />
                 ) : (
-                  <span className="font-medium text-sm text-gray-700">{category.name}</span>
+                  <span className="font-medium text-sm text-[#ABABAB]">{category.name}</span>
                 )}
               </div>
               
@@ -152,7 +152,7 @@ const CategoryItem = ({
                       setCategoryToDelete(category);
                     }}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4 text-[#ABABAB]" />
                   </Button>
                 )}
               </div>
@@ -486,26 +486,26 @@ function ProjectCategorySectionContent({
                 {...provided.dragHandleProps}
                 className={cn(
                   "flex items-center gap-2 w-full text-left px-3 py-2 rounded-md transition-colors group",
-                  snapshot.isDragging ? "bg-blue-100" : "hover:bg-gray-100"
+                  snapshot.isDragging ? "bg-blue-100" : "hover:bg-[#3F424A]"
                 )}
                 onClick={() => handleProjectClick(project)}
               >
-                <MessageSquare className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                <span className="text-sm truncate flex-grow">{project.name}</span>
+                <MessageSquare className="h-4 w-4 text-[#ABABAB] flex-shrink-0" />
+                <span className="text-sm truncate flex-grow text-[#ABABAB]">{project.name}</span>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 ml-auto"
                   onClick={(e) => handleDeleteProject(project.id, e)}
                 >
-                  <Trash2 className="h-4 w-4 text-gray-500" />
+                  <Trash2 className="h-4 w-4 text-[#ABABAB]" />
                 </Button>
               </div>
             )}
           </Draggable>
         ))}
         {projects.length === 0 && (
-          <div className="text-xs text-gray-400 italic py-1 px-3">저장된 프로젝트 없음</div>
+          <div className="text-xs text-[#ABABAB] italic py-1 px-3">저장된 프로젝트 없음</div>
         )}
       </div>
     );
@@ -515,7 +515,7 @@ function ProjectCategorySectionContent({
     <div className="space-y-4">
       {/* 카테고리 헤더 */}
       <div className="flex items-center justify-between px-2 py-1">
-        <span className="text-xs font-semibold text-gray-600 uppercase">폴더 목록</span>
+        <span className="text-sm text-[#F4F4F4] uppercase">폴더 목록</span>
         
         {isAuthenticated ? (
           <>

@@ -63,6 +63,7 @@ export interface IMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp?: string
+  isStatusMessage?: boolean; // 상태 메시지 여부를 나타내는 플래그 추가
 }
 
 export interface UpdateChatMessagePayload {

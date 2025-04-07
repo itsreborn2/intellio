@@ -11,7 +11,8 @@ export function DocumentStatusBadge({ status }: DocumentStatusBadgeProps) {
     case 'PROCESSING':
     case 'PARTIAL':
       return (
-        <span className="status-badge inline-flex items-center px-1.5 py-0.5 text-xs font-medium text-blue-700 bg-blue-100 rounded-full">
+        // 처리중/부분처리 상태 배지 스타일 변경: 배경색 #D8EFE9, 텍스트색 green-800
+        <span className="status-badge inline-flex items-center px-1.5 py-0.5 text-xs font-medium text-green-800 bg-[#D8EFE9] rounded-full">
           <Clock className="w-3 h-3 mr-0.5" />
           처리중
         </span>
