@@ -515,7 +515,7 @@ function ProjectCategorySectionContent({
     <div className="space-y-4">
       {/* 카테고리 헤더 */}
       <div className="flex items-center justify-between px-2 py-1">
-        <span className="text-sm font-semibold text-[#F4F4F4] uppercase">폴더 목록</span>
+        <span className="text-sm text-[#F4F4F4] uppercase">폴더 목록</span>
         
         {isAuthenticated ? (
           <>

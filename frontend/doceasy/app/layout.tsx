@@ -36,11 +36,11 @@ const MobileMenuButton = forwardRef<HTMLButtonElement, MobileMenuButtonProps>(
     return (
       <button
         ref={ref}
-        className="fixed top-4 left-4 z-[1001] md:hidden p-2 rounded-md bg-[#212529] text-white hover:bg-[#343a40]"
+        className="fixed top-4 left-4 z-[1001] md:hidden p-1.5 rounded-md bg-[#212529] text-white hover:bg-[#343a40]"
         onClick={toggleSidebar}
         aria-label="메뉴 열기/닫기"
       >
-        <Menu size={24} strokeWidth={2} />
+        <Menu size={20} strokeWidth={2} />
       </button>
     );
   }
@@ -52,7 +52,7 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  // 사이드바 상태 관리
+  // 사이드바 상태 관리 - 초기값은 false로 설정하여 서버와 클라이언트 초기 렌더링 일치
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false); // 모바일 메뉴 상태
   const isMobile = useIsMobile();
@@ -65,14 +65,6 @@ export default function RootLayout({
     const event = new CustomEvent('toggleSidebar');
     window.dispatchEvent(event);
   };
-
-  // 초기 상태 로드
-  useEffect(() => {
-    const savedState = localStorage.getItem('sidebarCollapsed');
-    if (savedState !== null) {
-      setIsSidebarCollapsed(savedState === 'true');
-    }
-  }, []);
 
   // 사이드바 상태 변경 이벤트 리스너
   useEffect(() => {
@@ -130,7 +122,12 @@ export default function RootLayout({
           )}
 
           <div className="flex h-screen overflow-hidden bg-background" style={{ position: 'relative', zIndex: 1 }}>
-            <Sidebar ref={sidebarRef} className="transition-all duration-300 ease-in-out" isMobileMenuOpen={isMenuOpen} />
+            <Sidebar 
+              ref={sidebarRef} 
+              className="transition-all duration-300 ease-in-out" 
+              isMobileMenuOpen={isMenuOpen} 
+              isCollapsed={isSidebarCollapsed} 
+            />
 
             <div className={`flex-1 transition-all duration-300 ease-in-out ${
               isMobile ? 'ml-0' : (isSidebarCollapsed ? 'ml-[60px]' : 'ml-[300px]')
@@ -147,9 +144,9 @@ export default function RootLayout({
 
               <main className={`fixed right-0 bottom-0 overflow-auto  transition-all duration-300 ease-in-out ${
                 isMobile
-                  ? 'left-0 top-0'
-                  : `${isSidebarCollapsed ? 'left-[60px]' : 'left-[300px]'} top-[56px]`
-              } h-[calc(100vh-56px)]`}>
+                  ? 'left-0 top-0 h-screen' // 모바일: 전체 화면 높이 사용
+                  : `${isSidebarCollapsed ? 'left-[60px]' : 'left-[300px]'} top-[56px] h-[calc(100vh-56px)]` // 데스크탑: 헤더 높이 제외
+              }`}>
                 {children}
               </main>
             </div>

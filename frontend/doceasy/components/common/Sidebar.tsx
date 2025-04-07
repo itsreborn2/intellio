@@ -69,11 +69,12 @@ const useIsMobile = () => {
 // 기존 SidebarProps를 확장하여 isMobileMenuOpen 속성 추가
 interface ExtendedSidebarProps extends BaseSidebarProps {
   isMobileMenuOpen?: boolean;
+  isCollapsed?: boolean; // isCollapsed 속성 추가
 }
 
 // SidebarContent를 forwardRef로 감싸서 ref를 받을 수 있도록 수정
 const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
-  ({ className, isMobileMenuOpen }, ref) => {
+  ({ className, isMobileMenuOpen, isCollapsed }, ref) => {
     const router = useRouter()
     const { state, dispatch } = useApp()
     const [categories, setCategories] = useState<Category[]>([]);
@@ -91,7 +92,6 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
     const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
     const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
     const { user, isAuthenticated, logout } = useAuth();
-    const [isCollapsed, setIsCollapsed] = useState(false);
     const isMobile = useIsMobile();
     const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -115,7 +115,6 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
     // 사이드바 접기/펼치기 상태 관리
     const toggleSidebar = () => {
       const newIsCollapsed = !isCollapsed;
-      setIsCollapsed(newIsCollapsed);
       localStorage.setItem('sidebarCollapsed', String(newIsCollapsed));
       
       // 사이드바 상태 변경 이벤트 발생
@@ -142,7 +141,7 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
     // 초기 상태 로드 (기본값: 펼침)
     useEffect(() => {
       // Always start expanded, ignore localStorage for initial load
-      setIsCollapsed(false);
+      // setIsCollapsed(false);
       // const savedState = localStorage.getItem('sidebarCollapsed');
       // if (savedState !== null) {
       //   setIsCollapsed(savedState === 'true');
@@ -442,7 +441,9 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
               "flex flex-col h-full bg-[#202123] text-white transition-all duration-300 ease-in-out border-r border-[#2e2f33]",
               isMobile
                 ? `fixed top-0 left-0 z-[9999] w-64 transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`
-                : isCollapsed ? "w-[60px]" : "w-[300px]", // 데스크탑 너비 수정 (60px)
+                : isCollapsed // prop으로 받은 isCollapsed 사용
+                  ? "w-[60px]" // 데스크탑 축소
+                  : "w-[300px]", // 데스크탑 확장
               className
             )}
           >
@@ -485,11 +486,15 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
             {/* 새 프로젝트 버튼 */}
             <div className="p-3">
               <Button 
-                className={`${isCollapsed ? 'h-10 w-10' : 'w-full'} bg-[#858B9D] text-[#FFFFFF] hover:bg-[#10A37F] hover:text-white flex items-center justify-center gap-2 rounded-md`}
+                className={cn(
+                  isCollapsed ? 'h-10 w-10' : 'w-full',
+                  'bg-[#3F424A] text-[#FFFFFF] hover:bg-[#10A37F] hover:text-white flex items-center gap-2 rounded-md',
+                  isCollapsed ? 'justify-center' : 'justify-start px-3' // 확장 시 좌측 정렬 및 패딩 추가
+                )}
                 onClick={handleNewProject}
               >
                 <Plus className={`${isCollapsed ? 'h-[22px] w-[22px]' : 'h-4 w-4'}`} strokeWidth={2.5} />
-                {!isCollapsed && <span className="ml-2 text-sm font-semibold text-[#FFFFFF]">새 프로젝트</span>}
+                {!isCollapsed && <span className="ml-1 text-sm text-[#FFFFFF]">새 프로젝트</span>} {/* 아이콘과의 간격 조정 ml-2 -> ml-1, 굵은 글씨체 제거 */} 
               </Button>
             </div>
             
@@ -515,7 +520,7 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
                   {/* 최근 프로젝트 목록 (채팅 스타일로) */}
                   <div className="space-y-1 mt-4 ">
                     <div className="flex items-center justify-between px-2 py-1">
-                      <span className="text-sm font-semibold text-[#F4F4F4] uppercase">최근 프로젝트</span>
+                      <span className="text-sm text-[#F4F4F4] uppercase">최근 프로젝트</span>
                     </div>
                     
                     {state.recentProjects.today && state.recentProjects.today.length > 0 && (
@@ -593,7 +598,7 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
                                       {...provided.dragHandleProps}
                                       className={cn(
                                         "flex items-center gap-2 w-full text-left px-3 py-2 rounded-md transition-colors",
-                                        snapshot.isDragging ? "bg-blue-100" : "hover:bg-gray-100"
+                                        snapshot.isDragging ? "bg-blue-100" : "hover:bg-[#3F424A]"
                                       )}
                                       onClick={() => {
                                         if (handleProjectClickRef.current) {
@@ -771,11 +776,16 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
 
 // Sidebar 컴포넌트도 forwardRef로 감싸서 ref를 전달받도록 수정
 export const Sidebar = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
-  ({ className, isMobileMenuOpen }, ref) => {
+  ({ className, isMobileMenuOpen, isCollapsed }, ref) => {
     return (
       <Suspense fallback={<div className="w-[300px] bg-white border-r animate-pulse"></div>}>
         {/* SidebarContent에 ref 전달 */}
-        <SidebarContent ref={ref} className={className} isMobileMenuOpen={isMobileMenuOpen} />
+        <SidebarContent 
+          ref={ref} 
+          className={className} 
+          isMobileMenuOpen={isMobileMenuOpen} 
+          isCollapsed={isCollapsed} // isCollapsed prop 전달
+        />
       </Suspense>
     )
   }

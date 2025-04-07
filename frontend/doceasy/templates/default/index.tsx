@@ -159,6 +159,7 @@ export const DefaultTemplate = () => {
                   {activeTab === 'chat' && (
                     <div className="h-full">
                       <ChatSection 
+                        isMobile={isMobile} 
                         onUploadButtonClick={handleUploadButtonClick} 
                       />
                     </div>
@@ -231,6 +232,7 @@ export const DefaultTemplate = () => {
                       </TooltipProvider>
                     </div>
                     <ChatSection 
+                      isMobile={isMobile} 
                       onUploadButtonClick={handleUploadButtonClick} 
                     />
                   </div>
@@ -258,7 +260,7 @@ export const DefaultTemplate = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 border bg-background hover:bg-accent transition-all duration-100 relative top-[2px]" 
+                              className="h-8 w-8 border bg-background hover:bg-accent transition-all duration-100 relative top-[1px]" 
                               onClick={() => {
                                 setTableExpanded(!tableExpanded);
                                 if (!tableExpanded) {
@@ -298,11 +300,11 @@ export const DefaultTemplate = () => {
     <div className="h-full w-full">
       {/* 모바일 환경 상단 분석 버튼 그룹 - 문서가 있을 때만 표시 */}
       {isMobile && state.documents && Object.keys(state.documents).length > 0 && (
-        <div className="fixed top-3 right-3 z-[1200] flex gap-1 w-[160px]">
+        <div className="fixed top-3 right-3 z-[1200] flex gap-0.3 w-[160px]">
           <Button
-            variant="outline"
+            variant={activeTab === 'chat' ? 'default' : 'outline'}
             size="sm"
-            className={`text-xs px-1 h-8 whitespace-nowrap flex-1 rounded-md ${activeTab === 'chat' ? 'bg-primary text-primary-foreground md:hover:bg-primary/90' : ''}`}
+            className="text-xs px-1 h-8 whitespace-nowrap flex-1 rounded-md"
             onClick={() => {
               dispatch({ type: 'SET_MODE', payload: 'chat' });
               const event = new CustomEvent('switchToTab', { detail: { tab: 'chat' } });
@@ -312,9 +314,9 @@ export const DefaultTemplate = () => {
             통합분석
           </Button>
           <Button
-            variant="outline"
+            variant={activeTab === 'table' ? 'default' : 'outline'}
             size="sm"
-            className={`text-xs px-1 h-8 whitespace-nowrap flex-1 rounded-md ${activeTab === 'table' ? 'bg-primary text-primary-foreground md:hover:bg-primary/90' : ''}`}
+            className="text-xs px-1 h-8 whitespace-nowrap flex-1 rounded-md"
             onClick={() => {
               dispatch({ type: 'SET_MODE', payload: 'table' });
               const event = new CustomEvent('switchToTab', { detail: { tab: 'table' } });

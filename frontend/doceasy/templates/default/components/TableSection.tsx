@@ -441,7 +441,8 @@ export const TableSection: React.FC<TableSectionProps> = ({ fileInputRef }) => {
   }, []);
 
   return (
-    <div className={`h-full flex-1 overflow-hidden flex flex-col ${isMobile ? 'pt-9' : ''}`}>
+    // 최상위 div: 모바일 환경에서 pt-12 패딩 적용과 전체 스크롤 적용
+    <div className={`h-full flex-1 ${isMobile ? 'overflow-auto pt-12' : 'overflow-hidden'} flex flex-col`}>
       <UploadProgressDialog {...uploadProgress} />
       <FileUploadErrorDialog 
         isOpen={uploadError.isOpen}
@@ -463,8 +464,9 @@ export const TableSection: React.FC<TableSectionProps> = ({ fileInputRef }) => {
         accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.ppt"
       />
       
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full overflow-auto">
+      <div className={`flex-1 ${isMobile ? '' : 'overflow-hidden'}`}>
+        {/* 모바일에서는 테이블 내부 스크롤 없이 전체 영역 스크롤만 사용, 데스크탑에서는 테이블 내부 스크롤 */}
+        <div className="h-full">
           <DocumentTable 
             ref={tableRef} 
             onHeaderSelect={handleHeaderSelect}

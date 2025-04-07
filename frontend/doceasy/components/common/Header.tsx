@@ -143,8 +143,10 @@ const HeaderContent = memo(function HeaderContent({ className }: { className?: s
 
   return (
     // header 태그로 변경하고 className 통합
-    <header className={`p-4 flex items-center justify-between fixed top-0 right-0 transition-all duration-300 ease-in-out left-[300px] h-[56px] z-40 bg-background ${className || ''}`}>
+    // 위치 지정 관련 클래스(fixed, top-0, right-0, left-[...], z-40) 제거
+    <header className={`p-4 flex items-center justify-between transition-all duration-300 ease-in-out h-[56px] bg-background ${className || ''}`}>
       <div className="flex items-center gap-2">
+        {/* 제목 표시 및 편집 */} 
         {isAuthenticated && shouldShowProjectInfo ? (
           isEditingTitle ? (
             <Input

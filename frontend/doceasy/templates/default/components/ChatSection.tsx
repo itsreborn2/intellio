@@ -13,6 +13,7 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import React from 'react'
 import { Plus } from 'lucide-react';
+import cn from 'classnames';
 
 // 모바일 환경 감지 훅
 const useIsMobile = () => {
@@ -108,10 +109,11 @@ class StreamingMarkdownHandler {
 }
 
 interface ChatSectionProps {
-  onUploadButtonClick: () => void;
+  onUploadButtonClick?: () => void;
+  isMobile?: boolean; // isMobile prop 추가
 }
 
-export const ChatSection: React.FC<ChatSectionProps> = ({ onUploadButtonClick }) => {
+export const ChatSection: React.FC<ChatSectionProps> = ({ onUploadButtonClick, isMobile }) => { // isMobile prop 받기
   const { state, dispatch } = useApp()
   const [input, setInput] = useState('')
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
@@ -119,7 +121,7 @@ export const ChatSection: React.FC<ChatSectionProps> = ({ onUploadButtonClick })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const messageCountRef = useRef(0)
-  const isMobile = useIsMobile();
+  const isMobileValue = useIsMobile();
   
   // 테이블 스트리밍 상태
   const [tableStreamingState, setTableStreamingState] = useState<{
@@ -531,7 +533,7 @@ export const ChatSection: React.FC<ChatSectionProps> = ({ onUploadButtonClick })
       {/* 메시지 컨테이너 */}
       <div 
         id="chat-container" 
-        className={`overflow-y-auto ${isMobile ? 'px-3 py-4' : 'px-4 py-6'} bg-background 
+        className={`overflow-y-auto ${isMobile ? 'px-3 py-4 pt-14' : 'px-4 py-6'} bg-background 
           scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 
           scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-500`}
         style={{ height: `calc(100%)` }}
@@ -552,28 +554,32 @@ export const ChatSection: React.FC<ChatSectionProps> = ({ onUploadButtonClick })
         style={{ height: isMobile ? '56px' : '50px' }}
       >
         <form onSubmit={handleSubmit} className="flex max-w-3xl mx-auto w-full px-0 relative">
-          {/* 문서 추가 버튼 제거 */}
-          {/* <Button ... /> */} 
-          
           {/* 텍스트 입력 영역 wrapper (position: relative 유지) */} 
-          <div className="w-full relative">
-            {/* Plus 아이콘 추가 (position: absolute) */} 
+          <div className="w-full relative flex items-center gap-2"> 
+            {/* Plus 아이콘: 데스크탑에서는 input 안에 absolute, 모바일에서는 input 옆에 static. 버튼 스타일 추가 */} 
             <div 
-              // 모바일 환경에 따라 left 값 조정 및 z-index 추가
-              className={`absolute ${isMobile ? 'left-2' : 'left-3'} top-1/2 transform -translate-y-1/2 cursor-pointer z-10 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200`}
+              className={cn(
+                "cursor-pointer text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200",
+                "p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800", // 버튼 스타일 및 hover 효과
+                !isMobileValue && "absolute left-2 top-1/2 transform -translate-y-1/2 z-10", // 데스크탑: absolute 위치 조정 (left-3 -> left-2)
+                isMobileValue && "ml-1" // 모바일: 왼쪽 여백 조정 (ml-3 -> ml-1)
+              )}
               onClick={onUploadButtonClick}
             >
-              <Plus className={`h-4 w-4`} />
+              <Plus className="h-4 w-4" />
             </div>
             
-            {/* Input에 왼쪽 패딩 추가 (pl-10) */} 
+            {/* Input: 데스크탑에서만 왼쪽 패딩 추가 */} 
             <Input
-              className={`flex-1 w-full rounded-md pr-12 pl-10 ${isMobile ? 'px-3 py-1.5 text-sm h-10' : 'py-2.5 h-11'} 
-                bg-white border-gray-200 dark:border-gray-700 focus-visible:ring-[#10A37F] shadow-sm`}
+              className={cn(
+                "flex-1 w-full rounded-md pr-12",
+                isMobileValue ? "px-3 py-1.5 text-sm h-10" : "py-2.5 h-11 pl-10", // 데스크탑: pl-10 유지
+                "bg-white border-gray-200 dark:border-gray-700 focus-visible:ring-[#10A37F] shadow-sm"
+              )}
               placeholder={isGenerating 
                 ? "응답 중..." 
                 : (state.analysis.mode === 'table' 
-                  ? (isMobile ? "질문을 입력하세요..." : "개별 분석을 위한 질문을 입력하세요...") 
+                  ? (isMobileValue ? "질문을 입력하세요..." : "개별 분석을 위한 질문을 입력하세요...") 
                   : "메시지를 입력하세요...")}
               value={input}
               onChange={handleInputChange}
@@ -589,9 +595,9 @@ export const ChatSection: React.FC<ChatSectionProps> = ({ onUploadButtonClick })
                   size="sm"
                   onClick={handleStopGeneration}
                   disabled={state.analysis.mode === 'table' && tableStreamingState.isStreaming}
-                  className={`rounded-full bg-red-500 hover:bg-red-600 ${isMobile ? 'h-8 w-8 p-0' : 'h-9 w-9 p-0'}`}
+                  className={cn("rounded-full bg-red-500 hover:bg-red-600", isMobileValue ? 'h-8 w-8 p-0' : 'h-9 w-9 p-0')}
                 >
-                  <Square className={`${isMobile ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
+                  <Square className={cn(isMobileValue ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
                 </Button>
               ) : (
                 <Button 
@@ -599,9 +605,9 @@ export const ChatSection: React.FC<ChatSectionProps> = ({ onUploadButtonClick })
                   variant="ghost"
                   size="icon"
                   disabled={!input.trim() || isGenerating || state.isAnalyzing}
-                  className={`${isMobile ? 'h-8 w-8' : 'h-9 w-9'}`}
+                  className={cn(isMobileValue ? 'h-8 w-8' : 'h-9 w-9')}
                 >
-                  <Send className={`${isMobile ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
+                  <Send className={cn(isMobileValue ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
                 </Button>
               )}
             </div>
@@ -681,16 +687,13 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
   return (
     <div className={`flex flex-col ${message.role === 'assistant' ? 'mb-2 md:mb-6' : 'mb-2 md:mb-3'} w-full`}>
       <div className={`flex items-start ${
-        message.role === 'assistant' 
+        message.role === 'assistant' && !message.isStatusMessage // 상태 메시지는 assistant 역할이지만 user처럼 오른쪽에 정렬될 수 있음
           ? `mr-auto max-w-6xl`
-          : `ml-auto max-w-4xl`
+          : `ml-auto max-w-4xl` // 사용자 메시지 및 상태 메시지
       }`}>
         {/* 사용자 메시지 스타일 */}
         {message.role === 'user' && (
-          <div className={`
-            rounded-md px-4 py-2.5 
-            bg-[#3F424A] text-white
-          `}>
+          <div className="rounded-md px-4 py-2.5 bg-[#3F424A] text-white">
             <div 
               ref={contentRef}
               className={`overflow-hidden ${isStreaming ? 'typing' : ''}`}
@@ -707,9 +710,7 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
                     [&>p:only-child]:m-0
                     [&>h3]:text-white [&>p]:text-white [&>li]:text-white
                 `}
-                components={{
-                  text: ({node, ...props}) => <>{props.children}</>
-                }}
+                components={{ text: ({node, ...props}) => <>{props.children}</> }}
               >
                 {message.content}
               </ReactMarkdown>
@@ -718,12 +719,9 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
           </div>
         )}
 
-        {/* 상태 메시지 스타일 (assistant 역할이면서 isStatusMessage 플래그가 true) */}
-        {message.role === 'assistant' && message.isStatusMessage && (
-          <div className={`
-            rounded-md px-4 py-2.5 
-            bg-[#D8EFE9] text-[#3F424A] 
-          `}>
+        {/* 상태 메시지 스타일 */}
+        {message.isStatusMessage && (
+          <div className="rounded-md px-4 py-2.5 bg-[#D8EFE9] text-[#3F424A]">
              <div 
               ref={contentRef}
               className={`overflow-hidden ${isStreaming ? 'typing' : ''}`}
@@ -733,26 +731,20 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
                 skipHtml={true}
                 unwrapDisallowed={true}
                 className={`prose max-w-none markdown text-sm md:text-base
-                    [&>h3]:font-semibold [&>h3]:mt-3 [&>h3]:mb-1.5
                     [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-1
-                    [&>ul]:mt-0 [&>ul]:mb-2 [&>ul]:pl-4
-                    [&>li]:leading-relaxed
                     [&>p:only-child]:m-0
-                    /* 텍스트 색상 상속 */
-                    [&>h3]:text-[inherit] [&>p]:text-[inherit] [&>li]:text-[inherit]
+                    [&>p]:text-[#3F424A] // 상태 메시지 텍스트 색상 적용
                 `}
-                components={{
-                  text: ({node, ...props}) => <>{props.children}</>
-                }}
+                components={{ text: ({node, ...props}) => <>{props.children}</> }}
               >
                 {message.content}
               </ReactMarkdown>
-              {isStreaming && <span className="cursor blink-cursor" />}
+              {/* 상태 메시지는 스트리밍되지 않으므로 커서 제거 */}
             </div>
           </div>
         )}
 
-        {/* 일반 AI 응답 메시지 (assistant 역할이면서 isStatusMessage 플래그가 false 또는 없음) */}
+        {/* 일반 AI 응답 메시지 스타일 */}
         {message.role === 'assistant' && !message.isStatusMessage && (
           <div 
             ref={contentRef}
@@ -769,10 +761,10 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
                   [&>li]:leading-relaxed
                   [&>p:only-child]:m-0
                   [&>h3]:text-gray-800 [&>p]:text-gray-700 [&>li]:text-gray-700 dark:[&>h3]:text-gray-200 dark:[&>p]:text-gray-300 dark:[&>li]:text-gray-300
+                  mb-[5px] // 아래 여백 5px 추가
+                  selection:bg-[#ABABAB] selection:text-white // 텍스트 선택 스타일 추가
               `}
-              components={{
-                text: ({node, ...props}) => <>{props.children}</>
-              }}
+              components={{ text: ({node, ...props}) => <>{props.children}</> }}
             >
               {message.content}
             </ReactMarkdown>
