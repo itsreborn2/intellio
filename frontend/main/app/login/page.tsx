@@ -58,10 +58,10 @@ function LoginContent() {
                 provider="google" 
                 redirectTo={searchParams.get('redirectTo') || '/'} 
               />
-              <LoginButton 
+              {/* <LoginButton 
                 provider="naver" 
                 redirectTo={searchParams.get('redirectTo') || '/'} 
-              />
+              /> */}
             </div>
           </div>
         </CardContent>

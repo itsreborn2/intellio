@@ -39,6 +39,14 @@ function CallbackHandler() {
                             setToken(token);
                             setUser(userData);
                             
+                            // 쿠키 설정 (서브도메인에서 접근 가능하도록)
+                            document.cookie = `token=${token}; path=/; domain=.intellio.kr`;
+
+                            // 쿠키에 사용자 정보를 안전하게 저장
+                            // JSON 문자열로 변환 후 바로 쿠키에 설정 (중간에 encodeURIComponent 사용)
+                            const userDataString = JSON.stringify(userData);
+                            document.cookie = `user=${encodeURIComponent(userDataString)}; path=/; domain=.intellio.kr`;
+
                             // 추가로 login 호출하여 확실하게 인증 상태 설정
                             login(userData);
 

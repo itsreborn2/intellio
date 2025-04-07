@@ -12,6 +12,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage
+} from "@/components/ui/avatar"
 
 export default function Navbar() {
   const router = useRouter()
@@ -83,13 +88,21 @@ export default function Navbar() {
     }
 
     if (isAuthenticated) {
+      const userInitials = user?.name ? user.name.substring(0, 2).toUpperCase() : 'U';
+      
       return (
         <div className="flex items-center gap-2">
           {user && <span className="text-sm text-gray-600">{user.email}</span>}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" className="flex items-center gap-1">
-                <User className="h-4 w-4" />
+                <Avatar className="h-6 w-6">
+                  {user?.profile_image ? (
+                    <AvatarImage src={user.profile_image} alt={user.name} />
+                  ) : (
+                    <AvatarFallback>{userInitials}</AvatarFallback>
+                  )}
+                </Avatar>
                 <span>내 계정</span>
               </Button>
             </DropdownMenuTrigger>

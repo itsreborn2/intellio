@@ -15,7 +15,7 @@ else:
     dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env.production")
 print(f"dotenv_path : {dotenv_path}")
 load_dotenv(dotenv_path, override=True)
-print(f"DATABASE_URL[After] : {os.getenv('DATABASE_URL')}")
+#print(f"DATABASE_URL[After] : {os.getenv('DATABASE_URL')}")
 print(f"POSTGRES_HOST : {os.getenv('POSTGRES_HOST')}")
 print(f"POSTGRES_PORT : {os.getenv('POSTGRES_PORT')}")
 print(f"POSTGRES_DB : {os.getenv('POSTGRES_DB')}")

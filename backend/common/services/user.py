@@ -115,7 +115,8 @@ class UserService:
             is_superuser=False,
             name=user_data["name"],
             oauth_provider=user_data["oauth_provider"],
-            oauth_provider_id=user_data["oauth_provider_id"]
+            oauth_provider_id=user_data["oauth_provider_id"],
+            profile_image=user_data.get("profile_image")
         )
 
         self.db.add(user)

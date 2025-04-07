@@ -10,6 +10,7 @@ class UserBase(BaseSchema):
     """사용자 기본 스키마"""
     email: EmailStr
     name: constr(min_length=2, max_length=50)  # 이름 길이 제한
+    profile_image: Optional[str] = None  # 프로필 이미지 URL
 
 class UserCreate(UserBase):
     """사용자 생성 스키마"""

@@ -89,7 +89,17 @@ class OAuthService:
                     'https://www.googleapis.com/oauth2/v2/userinfo',
                     headers={'Authorization': f'Bearer {access_token}'}
                 )
-                return response.json()
+                user_data = response.json()
+                # 구글 응답에서 필요한 데이터를 추출하여 반환
+                return {
+                    'id': user_data.get('id'),
+                    'email': user_data.get('email'),
+                    'name': user_data.get('name'),
+                    'given_name': user_data.get('given_name'),
+                    'family_name': user_data.get('family_name'),
+                    'picture': user_data.get('picture'),
+                    'locale': user_data.get('locale')
+                }
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 

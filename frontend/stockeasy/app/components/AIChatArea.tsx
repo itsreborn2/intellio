@@ -1,22 +1,17 @@
 'use client'
 
-import { Suspense, useState, useEffect, useMemo, useRef } from 'react'
-import Select from 'react-select'
+import { Suspense, useState, useEffect, useMemo, useRef} from 'react'
 import Papa from 'papaparse'
-import { MentionsInput, Mention } from 'react-mentions'
-import { sendChatMessage, createChatSession, createChatMessage, streamChatMessage } from '@/services/api/chat'
+import { createChatSession, createChatMessage, streamChatMessage } from '@/services/api/chat'
 import { IChatMessageDetail, IChatResponse, IChatSession } from '@/types/api/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
-import rehypeRaw from 'rehype-raw'
-import rehypeHighlight from 'rehype-highlight'
-import { CSSProperties } from 'react'
 import 'highlight.js/styles/github.css' // 하이라이트 스타일 추가
 import { useChatStore } from '@/stores/chatStore'
-import { cn } from '@/lib/utils'
-import { MessageSquare, Copy, Check } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { Copy, Check } from 'lucide-react'
+import { useTokenUsageStore } from '@/stores/tokenUsageStore'
+import { useQuestionCountStore } from '@/stores/questionCountStore'
 
 // 종목 타입 정의
 interface StockOption {
@@ -93,6 +88,12 @@ function AIChatAreaContent() {
     isLoading: storeIsLoading 
   } = useChatStore()
   
+  // 토큰 사용량 스토어 추가
+  const { summary, fetchSummary, isLoading: isTokenLoading } = useTokenUsageStore();
+  
+  // 질문 개수 스토어 추가
+  const { summary: questionSummary, fetchSummary: fetchQuestionSummary, isLoading: isQuestionLoading } = useQuestionCountStore();
+
   // 스토어에서 가져온 메시지를 컴포넌트 메시지 형식으로 변환
   useEffect(() => {
     if (currentSession && storeMessages.length > 0) {
@@ -180,6 +181,46 @@ function AIChatAreaContent() {
       setMessages(convertedMessages)
     }
   }, [currentSession, storeMessages])
+  
+  // 컴포넌트 마운트 시 토큰 사용량 정보 가져오기
+  useEffect(() => {
+    // 토큰 사용량 요약 정보 가져오기
+    fetchSummary();
+    
+    // 질문 개수 요약 정보 가져오기
+    fetchQuestionSummary('month', 'day');
+  }, [fetchSummary, fetchQuestionSummary]);
+  
+  // 토큰 사용량 정보가 변경될 때마다 로그 출력
+  useEffect(() => {
+    if (summary) {
+      console.log('토큰 사용량 요약 정보:', summary);
+      console.log('총 토큰 사용량:', summary.summary.total_tokens);
+      //console.log('총 비용:', summary.summary.total_cost);
+      
+      // 토큰 유형별 사용량 출력
+      Object.entries(summary.token_type_summary).forEach(([type, data]) => {
+        console.log(`${type} 토큰 사용량:`, data.total_tokens);
+        console.log(`${type} 비용:`, data.total_cost);
+      });
+    }
+  }, [summary]);
+  
+  // 질문 개수 정보가 변경될 때마다 로그 출력
+  useEffect(() => {
+    if (questionSummary) {
+      console.log('질문 개수 요약 정보:', questionSummary);
+      console.log('총 질문 개수:', questionSummary.total_questions);
+      
+      // 일별 질문 개수 출력
+      if (Object.keys(questionSummary.grouped_data).length > 0) {
+        console.log('일별 질문 개수:');
+        Object.entries(questionSummary.grouped_data).forEach(([date, count]) => {
+          console.log(`${date}: ${count}개 질문`);
+        });
+      }
+    }
+  }, [questionSummary]);
 
   // 히스토리 분석 결과 로드 이벤트 리스너
   useEffect(() => {
@@ -1283,8 +1324,9 @@ function AIChatAreaContent() {
                       style={{
                         position: 'absolute',
                         bottom: '3px',
-                        right: '5px',
-                        backgroundColor: message.role === 'user' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(240, 240, 240, 0.8)',
+                        right: message.role === 'user' ? '5px' : 'auto',
+                        left: message.role === 'assistant' ? '5px' : 'auto',
+                        backgroundColor: message.role === 'user' ? 'rgba(255, 255, 255, 0)' : 'rgba(240, 240, 240, 0.8)',
                         border: 'none',
                         borderRadius: '4px',
                         width: '24px',
@@ -1297,12 +1339,10 @@ function AIChatAreaContent() {
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.opacity = '1';
-                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.backgroundColor = message.role === 'user' ? 'rgba(175, 175, 175, 0.2)': 'rgba(210, 210, 210, 0.5)';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.opacity = '0.8';
-                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.backgroundColor = message.role === 'user' ? 'rgba(255, 255, 255, 0)' : 'rgba(240, 240, 240, 0.8)';
                       }}
                       title={copyStates[message.id] ? "복사 완료" : "텍스트 복사"}
                     >

@@ -9,6 +9,7 @@ interface User {
     email: string;
     name: string;
     provider: string;
+    profile_image?: string;
 }
 
 interface AuthState {
@@ -121,13 +122,38 @@ export const useAuth = create<AuthState>()(
                     } else if (userCookie && tokenCookie) {
                         // 세션 ID는 없지만 user와 token 쿠키가 있는 경우
                         try {
-                            const userData = JSON.parse(decodeURIComponent(userCookie));
-                            set({
-                                user: userData,
-                                token: tokenCookie,
-                                isAuthenticated: true
-                            });
-                            //console.debug('[useAuth] 쿠키에서 사용자 정보 로드 완료:', userData);
+                            // URL 디코딩을 먼저 수행
+                            const decodedUserCookie = decodeURIComponent(userCookie);
+                            
+                            // 디코딩된 문자열이 비어있지 않은지 확인
+                            if (decodedUserCookie && decodedUserCookie.trim() !== '') {
+                                // JSON 파싱 전에 로그 추가
+                                console.debug('[useAuth] 디코딩된 사용자 쿠키:', decodedUserCookie);
+                                
+                                // 이중 따옴표로 감싸진 JSON 문자열인 경우 처리
+                                let jsonString = decodedUserCookie;
+                                if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
+                                    // 바깥쪽 따옴표 제거 및 이스케이프된 따옴표 처리
+                                    jsonString = jsonString.slice(1, -1).replace(/\\"/g, '"');
+                                    console.debug('[useAuth] 따옴표 제거 후 문자열:', jsonString);
+                                }
+                                
+                                // JSON 파싱 시도
+                                const userData = JSON.parse(jsonString);
+                                set({
+                                    user: userData,
+                                    token: tokenCookie,
+                                    isAuthenticated: true
+                                });
+                                console.log('[useAuth] 쿠키에서 사용자 정보 로드 완료:', userData);
+                            } else {
+                                console.error('[useAuth] 디코딩된 사용자 쿠키가 비어있음');
+                                set({
+                                    user: null,
+                                    token: null,
+                                    isAuthenticated: false
+                                });
+                            }
                         } catch (error) {
                             console.error('[useAuth] 쿠키 파싱 오류:', error);
                             set({
@@ -138,16 +164,21 @@ export const useAuth = create<AuthState>()(
                         }
                     } else {
                         console.log('[useAuth] 인증 쿠키 없음');
-                        // 로컬 스토리지에 인증 정보가 있는지 확인
-                        const currentUser = get().user;
-                        const currentToken = get().token;
-                        const currentIsAuthenticated = get().isAuthenticated;
+                        set({
+                            user: null,
+                            token: null,
+                            isAuthenticated: false
+                        });
+                        // // 로컬 스토리지에 인증 정보가 있는지 확인
+                        // const currentUser = get().user;
+                        // const currentToken = get().token;
+                        // const currentIsAuthenticated = get().isAuthenticated;
                         
-                        // 로컬 스토리지에 인증 정보가 있지만 쿠키가 없는 경우
-                        if (currentUser || currentToken || currentIsAuthenticated) {
-                            console.log('[useAuth] 쿠키 없음, 로컬 스토리지 인증 정보 유지');
-                            // doceasy 앱에서는 로컬 스토리지 정보를 유지하며 계속 사용할 수 있도록 함
-                        }
+                        // // 로컬 스토리지에 인증 정보가 있지만 쿠키가 없는 경우
+                        // if (currentUser || currentToken || currentIsAuthenticated) {
+                        //     console.log('[useAuth] 쿠키 없음, 로컬 스토리지 인증 정보 유지');
+                        //     // doceasy 앱에서는 로컬 스토리지 정보를 유지하며 계속 사용할 수 있도록 함
+                        // }
                     }
                 } catch (error) {
                     console.error('[useAuth] 인증 확인 오류:', error);

@@ -6,7 +6,7 @@ from uuid import UUID
 from common.api.v1.auth import get_current_user
 from common.core.deps import get_current_session, get_db
 from common.models.user import Session, User
-from common.services.token_usage_service import get_token_usage
+from common.services.token_usage_service import get_token_usage, get_user_question_count
 from common.models.token_usage import ProjectType, TokenType
 from loguru import logger
 
@@ -132,4 +132,62 @@ async def read_token_usage_summary(
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"토큰 사용량 요약 조회 중 오류가 발생했습니다: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"토큰 사용량 요약 조회 중 오류가 발생했습니다: {str(e)}")
+
+@router.get("/question-count")
+async def read_user_question_count(
+    period: str = Query("month", description="기간 (day, week, month, year)"),
+    group_by: Optional[str] = Query(None, description="그룹화 기준 (day, week, month)"),
+    db: AsyncSession = Depends(get_db),
+    session: Session = Depends(get_current_session)
+):
+    """사용자의 StockEasy 질문 개수 요약 조회"""
+    try:
+        # 세션에서 사용자 ID 가져오기
+        if not session or not session.user:
+            raise HTTPException(status_code=401, detail="인증되지 않은 사용자입니다.")
+        
+        # 현재 날짜
+        now = datetime.now()
+        logger.info(f"question-count summary")
+        
+        # 기간에 따른 시작 날짜 계산
+        if period == "day":
+            start_date_obj = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == "week":
+            # 이번 주 월요일부터
+            days_since_monday = now.weekday()
+            start_date_obj = (now - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == "month":
+            # 이번 달 1일부터
+            start_date_obj = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif period == "year":
+            # 올해 1월 1일부터
+            start_date_obj = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            raise HTTPException(status_code=400, detail="유효하지 않은 기간입니다.")
+        
+        logger.info(f"start_date_obj : {start_date_obj}")
+        
+        # 서비스 함수를 호출하여 질문 개수 데이터 조회
+        question_count_data = await get_user_question_count(
+            db=db,
+            user_id=session.user.id,
+            start_date=start_date_obj,
+            end_date=now,
+            group_by=group_by
+        )
+        
+        logger.info(f"총 질문 개수: {question_count_data['total_questions']}, 그룹화: {group_by}")
+        
+        return {
+            "period": period,
+            "start_date": start_date_obj.isoformat(),
+            "end_date": now.isoformat(),
+            "total_questions": question_count_data["total_questions"],
+            "grouped_data": question_count_data["grouped_data"]
+        }
+        
+    except Exception as e:
+        logger.error(f"사용자 질문 수 조회 중 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"사용자 질문 수 조회 중 오류가 발생했습니다: {str(e)}") 

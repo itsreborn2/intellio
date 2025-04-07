@@ -44,6 +44,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { LoginButton } from "@/components/auth/LoginButton"
 import { FontSettings } from "@/components/settings/FontSettings"
 import { Loader2 } from "lucide-react"
+import { Avatar, AvatarImage, AvatarFallback } from "intellio-common/components/ui/avatar"
 
 // 모바일 환경 감지 훅
 const useIsMobile = () => {
@@ -657,7 +658,18 @@ function SidebarContent({ className }: SidebarProps) {
                       {isAuthLoading ? (
                         <Loader2 className="h-3 w-3 animate-spin mr-1 inline" />
                       ) : isAuthenticated && user ? (
-                        user.email
+                        <div className="flex items-center w-full">
+                          <Avatar className="h-6 w-6 mr-2">
+                            {user?.profile_image ? (
+                              <AvatarImage src={user.profile_image} alt={user.name || user.email} />
+                            ) : (
+                              <AvatarFallback>
+                                {user?.name ? user.name.substring(0, 2).toUpperCase() : user.email.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            )}
+                          </Avatar>
+                          <span className="truncate">{user.email}</span>
+                        </div>
                       ) : (
                         "로그인이 필요합니다"
                       )}
@@ -678,8 +690,18 @@ function SidebarContent({ className }: SidebarProps) {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => {}}>
-                          <User className="h-4 w-4 mr-2" />
-                          <span>{user.email}</span>
+                          <div className="flex items-center w-full">
+                            <Avatar className="h-6 w-6 mr-2">
+                              {user?.profile_image ? (
+                                <AvatarImage src={user.profile_image} alt={user.name || user.email} />
+                              ) : (
+                                <AvatarFallback>
+                                  {user?.name ? user.name.substring(0, 2).toUpperCase() : user.email.substring(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              )}
+                            </Avatar>
+                            <span className="truncate">{user.email}</span>
+                          </div>
                         </DropdownMenuItem>
                         <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                           <Dialog>
@@ -723,7 +745,6 @@ function SidebarContent({ className }: SidebarProps) {
                         <div className="space-y-4">
                           <div className="flex flex-col space-y-2">
                             <LoginButton provider="google" redirectTo="doceasy" />
-                            <LoginButton provider="naver" redirectTo="doceasy" />
                           </div>
                         </div>
                       </DialogContent>
@@ -744,8 +765,18 @@ function SidebarContent({ className }: SidebarProps) {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => {}}>
-                          <User className="h-4 w-4 mr-2" />
-                          <span>{user.email}</span>
+                          <div className="flex items-center w-full">
+                            <Avatar className="h-6 w-6 mr-2">
+                              {user?.profile_image ? (
+                                <AvatarImage src={user.profile_image} alt={user.name || user.email} />
+                              ) : (
+                                <AvatarFallback>
+                                  {user?.name ? user.name.substring(0, 2).toUpperCase() : user.email.substring(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              )}
+                            </Avatar>
+                            <span className="truncate">{user.email}</span>
+                          </div>
                         </DropdownMenuItem>
                         <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                           <Dialog>

@@ -13,4 +13,74 @@ export interface IHistoryItem {
   timestamp: number // 저장 시간
   userId?: string // 사용자 ID
   responseId?: string // 분석 결과의 고유 ID
+}
+
+// 토큰 사용량 요약 정보 인터페이스
+export interface ITokenUsageSummary {
+  period: string;
+  start_date: string;
+  end_date: string;
+  summary: {
+    total_prompt_tokens: number;
+    total_completion_tokens: number;
+    total_tokens: number;
+    total_cost: number;
+  };
+  token_type_summary: {
+    [key: string]: {
+      total_prompt_tokens: number;
+      total_completion_tokens: number;
+      total_tokens: number;
+      total_cost: number;
+    };
+  };
+}
+
+// 토큰 사용량 상세 정보 인터페이스
+export interface ITokenUsageDetail {
+  token_usages: Array<{
+    id: string;
+    user_id: string;
+    project_type: string;
+    token_type: string;
+    model_name: string;
+    prompt_tokens: number;
+    completion_tokens: number | null;
+    total_tokens: number;
+    cost: number;
+    created_at: string;
+  }>;
+  summary: {
+    total_prompt_tokens: number;
+    total_completion_tokens: number;
+    total_tokens: number;
+    total_cost: number;
+  };
+  project_summary: {
+    [key: string]: {
+      total_prompt_tokens: number;
+      total_completion_tokens: number;
+      total_tokens: number;
+      total_cost: number;
+    };
+  };
+  token_type_summary: {
+    [key: string]: {
+      total_prompt_tokens: number;
+      total_completion_tokens: number;
+      total_tokens: number;
+      total_cost: number;
+    };
+  };
+}
+
+// 사용자 질문 수 요약 정보 인터페이스
+export interface IQuestionCountSummary {
+  period: string;
+  start_date: string;
+  end_date: string;
+  total_questions: number;
+  grouped_data: {
+    [key: string]: number; // 날짜별 질문 수 (YYYY-MM-DD: count)
+  };
 } 

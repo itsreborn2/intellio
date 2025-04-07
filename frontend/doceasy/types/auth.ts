@@ -4,6 +4,7 @@ export interface IOAuthUser {
     email: string;
     name: string;
     provider: string;
+    profile_image?: string;
 }
 
 export interface IOAuthResponse {

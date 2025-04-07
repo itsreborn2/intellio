@@ -169,23 +169,7 @@ export default function StockChatHistory({
     }
   }
   
-  // 사용자 ID 가져오기
-  useEffect(() => {
-    console.log('[히스토리 패널] 사용자 ID 조회 시작')
-    // 로컬 스토리지에서 사용자 ID 가져오기
-    const storedUserId = localStorage.getItem('userId')
-    if (storedUserId) {
-      console.log('[히스토리 패널] 기존 사용자 ID 사용:', storedUserId)
-      setUserId(storedUserId)
-    } else {
-      // 새 사용자 ID 생성 (실제로는 로그인 시스템에서 가져와야 함)
-      const newUserId = `user_${Date.now()}`
-      console.log('[히스토리 패널] 새 사용자 ID 생성:', newUserId)
-      localStorage.setItem('userId', newUserId)
-      setUserId(newUserId)
-    }
-  }, [])
-  
+    
   // 사용자 ID가 있을 때 히스토리 가져오기
   useEffect(() => {
     if (userId && isHistoryPanelOpen) {
