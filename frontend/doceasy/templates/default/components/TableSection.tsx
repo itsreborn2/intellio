@@ -465,7 +465,7 @@ export const TableSection: React.FC<TableSectionProps> = ({ fileInputRef }) => {
       />
       
       <div className={`flex-1 ${isMobile ? '' : 'overflow-hidden'}`}>
-        {/* 모바일에서는 테이블 내부 스크롤 없이 전체 영역 스크롤만 사용, 데스크탑에서는 테이블 내부 스크롤 */}
+        {/* 모바일에서는 테이블 내부 스크롤 없이 전체 영역 스크롤만 사용, 데스크탑에서는 테이블 내부의의 스크롤 */}
         <div className="h-full">
           <DocumentTable 
             ref={tableRef} 
