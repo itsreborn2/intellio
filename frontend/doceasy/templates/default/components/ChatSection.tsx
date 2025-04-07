@@ -685,11 +685,11 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
           ? `mr-auto max-w-6xl`
           : `ml-auto max-w-4xl`
       }`}>
-        {/* 사용자 메시지만 배경 박스로 감쌉니다. */}
-        {message.role === 'user' ? (
+        {/* 사용자 메시지 스타일 */}
+        {message.role === 'user' && (
           <div className={`
             rounded-md px-4 py-2.5 
-            bg-[#282A2E] text-white 
+            bg-[#3F424A] text-white
           `}>
             <div 
               ref={contentRef}
@@ -716,8 +716,44 @@ const ChatMessage = React.memo(function ChatMessage({ message, isStreaming }: { 
               {isStreaming && <span className="cursor blink-cursor" />}
             </div>
           </div>
-        ) : (
-          // AI 응답 메시지는 박스 없이 바로 내용을 표시합니다.
+        )}
+
+        {/* 상태 메시지 스타일 (assistant 역할이면서 isStatusMessage 플래그가 true) */}
+        {message.role === 'assistant' && message.isStatusMessage && (
+          <div className={`
+            rounded-md px-4 py-2.5 
+            bg-[#D8EFE9] text-[#3F424A] 
+          `}>
+             <div 
+              ref={contentRef}
+              className={`overflow-hidden ${isStreaming ? 'typing' : ''}`}
+            >
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                skipHtml={true}
+                unwrapDisallowed={true}
+                className={`prose max-w-none markdown text-sm md:text-base
+                    [&>h3]:font-semibold [&>h3]:mt-3 [&>h3]:mb-1.5
+                    [&>p]:leading-relaxed [&>p]:mt-0 [&>p]:mb-1
+                    [&>ul]:mt-0 [&>ul]:mb-2 [&>ul]:pl-4
+                    [&>li]:leading-relaxed
+                    [&>p:only-child]:m-0
+                    /* 텍스트 색상 상속 */
+                    [&>h3]:text-[inherit] [&>p]:text-[inherit] [&>li]:text-[inherit]
+                `}
+                components={{
+                  text: ({node, ...props}) => <>{props.children}</>
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+              {isStreaming && <span className="cursor blink-cursor" />}
+            </div>
+          </div>
+        )}
+
+        {/* 일반 AI 응답 메시지 (assistant 역할이면서 isStatusMessage 플래그가 false 또는 없음) */}
+        {message.role === 'assistant' && !message.isStatusMessage && (
           <div 
             ref={contentRef}
             className={`overflow-hidden ${isStreaming ? 'typing' : ''} w-full`}

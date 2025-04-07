@@ -154,7 +154,8 @@ export function useFileUpload(): UseFileUploadReturn {
               type: actionTypes.ADD_CHAT_MESSAGE,
               payload: {
                 role: 'assistant',
-                content: `${data.total_processed}개의 문서가 업로드되었습니다.`
+                content: `${data.total_processed}개의 문서가 업로드되었습니다.`,
+                isStatusMessage: true
               }
             })
           }

@@ -548,7 +548,8 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
                                     }}
                                   >
                                     <MessageSquare className="h-4 w-4 text-[#ABABAB] flex-shrink-0" />
-                                    <span className="text-sm truncate">{project.name}</span>
+                                    {/* 프로젝트 이름 텍스트 색상 변경 */}
+                                    <span className="text-sm truncate text-[#ABABAB]">{project.name}</span> 
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -602,7 +603,8 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
                                       }}
                                     >
                                       <MessageSquare className="h-4 w-4 text-[#ABABAB] flex-shrink-0" />
-                                      <span className="text-sm truncate">{project.name}</span>
+                                      {/* 프로젝트 이름 텍스트 색상 변경 */}
+                                      <span className="text-sm truncate text-[#ABABAB]">{project.name}</span>
                                       <Button
                                         variant="ghost"
                                         size="sm"
