@@ -15,7 +15,8 @@ import { CSSProperties } from 'react'
 import 'highlight.js/styles/github.css' // 하이라이트 스타일 추가
 import { useChatStore } from '@/stores/chatStore'
 import { cn } from '@/lib/utils'
-import { MessageSquare } from 'lucide-react'
+import { MessageSquare, Copy, Check } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 // 종목 타입 정의
 interface StockOption {
@@ -74,6 +75,7 @@ function AIChatAreaContent() {
   const [statusMessage, setStatusMessage] = useState(''); // 상태 메시지 상태
   const [responseMessage, setResponseMessage] = useState(''); // 응답 메시지 상태
   const [timerState, setTimerState] = useState<{ [key: string]: number }>({});
+  const [copyStates, setCopyStates] = useState<Record<string, boolean>>({});
 
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -1171,90 +1173,149 @@ function AIChatAreaContent() {
               style={{
                 marginBottom: '16px',
                 display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
+                flexDirection: 'column', // 세로 방향으로 변경
+                alignItems: message.role === 'user' ? 'flex-end' : 'flex-start',
                 width: '100%' // 전체 너비 사용
               }}
             >
-              {/* 메시지 내용 */}
-              <div style={message.role === 'assistant' ? aiMessageStyle : {
-                backgroundColor: '#3F424A', 
-                padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 13px' : '10px 14px'),
-                borderRadius: isMobile ? '10px' : '12px',
-                maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
-                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
-                position: 'relative',
-                border: '1px solid #3F424A', // 테두리 색상 어둡게 변경
-                wordBreak: 'break-word',
-                color: 'white' // 글자색을 흰색으로 변경
-              }}>
-                {message.stockInfo && (
-                  <div style={{
-                    fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
-                    fontWeight: 'bold',
-                    color: message.role === 'user' ? '#4ECCA3' : '#10A37F', // 사용자 메시지일 경우 더 밝은 초록색으로 변경
-                    marginBottom: isMobile ? '3px' : '4px'
-                  }}>
-                    {message.stockInfo.stockName} ({message.stockInfo.stockCode})
-                  </div>
-                )}
-                <div style={{
-                  overflow: message.role === 'user' ? 'hidden' : 'visible',
-                  textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
+              <div 
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
+                  width: '100%' // 전체 너비 사용
+                }}
+              >
+                {/* 메시지 내용 */}
+                <div style={message.role === 'assistant' ? aiMessageStyle : {
+                  backgroundColor: '#3F424A', 
+                  padding: isMobile ? '8px 12px' : (windowWidth < 768 ? '9px 13px' : '10px 14px'),
+                  borderRadius: isMobile ? '10px' : '12px',
+                  maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'), // 화면 크기에 따라 적응
+                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
+                  position: 'relative',
+                  border: '1px solid #3F424A', // 테두리 색상 어둡게 변경
                   wordBreak: 'break-word',
-                  maxWidth: '100%' // 최대 너비 제한
+                  color: 'white' // 글자색을 흰색으로 변경
                 }}>
-                  {message.role === 'user' ? (
-                    // 사용자 메시지는 일반 텍스트로 표시
+                  {message.stockInfo && (
                     <div style={{
-                      whiteSpace: 'pre-wrap', // nowrap에서 pre-wrap으로 변경하여 긴 텍스트가 줄바꿈 되도록 설정
                       fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
-                      lineHeight: '1.6',
-                      letterSpacing: 'normal',
-                      wordBreak: 'break-word', // 단어 단위로 줄바꿈 가능하도록 설정
-                      color: 'white' // 글자색을 흰색으로 변경
+                      fontWeight: 'bold',
+                      color: message.role === 'user' ? '#4ECCA3' : '#10A37F', // 사용자 메시지일 경우 더 밝은 초록색으로 변경
+                      marginBottom: isMobile ? '3px' : '4px'
                     }}>
-                      {message.content}
-                    </div>
-                  ) : (
-                    // AI 응답은 마크다운으로 렌더링
-                    <div className="markdown-content">
-                      <ReactMarkdown 
-                        remarkPlugins={[
-                          remarkGfm,
-                          [remarkBreaks, { breaks: false }]
-                        ]}
-                        components={{
-                          text: ({node, ...props}) => <>{props.children}</>,
-                          h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
-                          h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
-                          h3: ({node, ...props}) => <h3 style={{marginTop: '1.2em', marginBottom: '0.8em'}} {...props} />,
-                          ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                          ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                          li: ({node, ...props}) => <li style={{marginBottom: '0'}} {...props} />,
-                          p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
-                      {message.elapsed !== undefined && (
-                        <div style={{
-                          marginTop: '8px',
-                          fontSize: isMobile ? '11px' : '12px',
-                          color: 'rgb(170, 170, 170)',
-                          textAlign: 'left',
-                        }}>
-                          {message.elapsedStartTime 
-                            ? (timerState[message.id] || message.elapsed).toFixed(1)
-                            : message.elapsed.toFixed(1)
-                          }초
-                        </div>
-                      )}
+                      {message.stockInfo.stockName} ({message.stockInfo.stockCode})
                     </div>
                   )}
+                  <div style={{
+                    overflow: message.role === 'user' ? 'hidden' : 'visible',
+                    textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
+                    wordBreak: 'break-word',
+                    maxWidth: '100%' // 최대 너비 제한
+                  }}>
+                    {message.role === 'user' ? (
+                      // 사용자 메시지는 일반 텍스트로 표시
+                      <div style={{
+                        whiteSpace: 'pre-wrap', // nowrap에서 pre-wrap으로 변경하여 긴 텍스트가 줄바꿈 되도록 설정
+                        fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'), // 화면 크기에 따라 적응
+                        lineHeight: '1.6',
+                        letterSpacing: 'normal',
+                        wordBreak: 'break-word', // 단어 단위로 줄바꿈 가능하도록 설정
+                        color: 'white' // 글자색을 흰색으로 변경
+                      }}>
+                        {message.content}
+                      </div>
+                    ) : (
+                      // AI 응답은 마크다운으로 렌더링
+                      <div className="markdown-content">
+                        <ReactMarkdown 
+                          remarkPlugins={[
+                            remarkGfm,
+                            [remarkBreaks, { breaks: false }]
+                          ]}
+                          components={{
+                            text: ({node, ...props}) => <>{props.children}</>,
+                            h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
+                            h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
+                            h3: ({node, ...props}) => <h3 style={{marginTop: '1.2em', marginBottom: '0.8em'}} {...props} />,
+                            ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
+                            ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
+                            li: ({node, ...props}) => <li style={{marginBottom: '0'}} {...props} />,
+                            p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                        {message.elapsed !== undefined && (
+                          <div style={{
+                            marginTop: '8px',
+                            fontSize: isMobile ? '11px' : '12px',
+                            color: 'rgb(170, 170, 170)',
+                            textAlign: 'left',
+                          }}>
+                            {message.elapsedStartTime 
+                              ? (timerState[message.id] || message.elapsed).toFixed(1)
+                              : message.elapsed.toFixed(1)
+                            }초
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {/* 복사 버튼을 말풍선 아래 배치하고 status 메시지에는 표시하지 않음 */}
+              {message.role !== 'status' && (
+                <div style={{
+                  marginTop: '4px',
+                  marginRight: '8px',
+                  marginLeft:'8px',
+                  display: 'flex',
+                  justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
+                }}>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(message.content);
+                      // 토스트 팝업 대신 아이콘 상태 변경
+                      setCopyStates(prev => ({ ...prev, [message.id]: true }));
+                      // 2초 후 아이콘 복원
+                      setTimeout(() => {
+                        setCopyStates(prev => ({ ...prev, [message.id]: false }));
+                      }, 2000);
+                    }}
+                    style={{
+                      backgroundColor: 'rgba(240, 240, 240, 0.8)',
+                      border: 'none', //'1px solid rgba(0, 0, 0, 0.1)',
+                      borderRadius: '5px',
+                      width: '30px',
+                      height: '30px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      opacity: 0.9,
+                      transition: 'all 0.2s ease',
+                      
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(230, 230, 230, 1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(240, 240, 240, 0.8)';
+                    }}
+                    title={copyStates[message.id] ? "복사 완료" : "복사"}
+                  >
+                    {copyStates[message.id] ? (
+                      <Check size={18} color='#10A37F' />
+                    ) : (
+                      <Copy size={18} color='#333333' />
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           ))
         )}
