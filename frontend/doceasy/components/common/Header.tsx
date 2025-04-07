@@ -177,9 +177,9 @@ const HeaderContent = memo(function HeaderContent({ className }: { className?: s
                   window.dispatchEvent(new CustomEvent('switchToTab', { detail: { tab: 'chat' } }));
                 }
               }}
-              className={`rounded-full text-xs font-medium px-4 ${
+              className={`rounded-md text-xs font-medium px-4 ${
                 state.analysis.mode === 'chat' 
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                  ? 'bg-[#282A2E] hover:bg-[#3a3d42] text-white' 
                   : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
               disabled={state.isAnalyzing}
@@ -196,9 +196,9 @@ const HeaderContent = memo(function HeaderContent({ className }: { className?: s
                   window.dispatchEvent(new CustomEvent('switchToTab', { detail: { tab: 'table' } }));
                 }
               }}
-              className={`rounded-full text-xs font-medium px-4 ${
+              className={`rounded-md text-xs font-medium px-4 ${
                 state.analysis.mode === 'table' 
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                  ? 'bg-[#282A2E] hover:bg-[#3a3d42] text-white' 
                   : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
               disabled={state.isAnalyzing}

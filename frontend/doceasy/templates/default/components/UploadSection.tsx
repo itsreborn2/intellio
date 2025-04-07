@@ -251,8 +251,9 @@ export const UploadSection = () => {
               : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5'}`}
         >
           <div className="flex flex-col items-center text-center space-y-6">
-            <div className={`p-6 rounded-full transition-colors duration-200 ${isDragActive ? 'bg-primary/20' : 'bg-primary/10'}`}>
-              <Upload className={`w-8 h-8 transition-colors duration-200 ${isDragActive ? 'text-primary' : 'text-primary/80'}`} />
+            {/* 아이콘 배경색 및 아이콘 색상 변경 */}
+            <div className={`p-6 rounded-full transition-colors duration-200 ${isDragActive ? 'bg-primary/20' : 'bg-[#282A2E]'}`}>
+              <Upload className={`w-8 h-8 transition-colors duration-200 ${isDragActive ? 'text-primary' : 'text-[#10A37F]'}`} />
             </div>
             <div className="space-y-2">
               <h3 className="font-semibold text-xl">문서 업로드</h3>
@@ -266,55 +267,35 @@ export const UploadSection = () => {
                 PDF, Word(doc/docx), 한글(hwp/hwpx), 엑셀(xls/xlsx), 이미지(jpg/jpeg/png/gif/tiff), 텍스트(txt)
               </p>
               
-              <div className="mt-6">
-                <Button
-                  variant="outline"
-                  // Added inline-flex, items-center, justify-center and gap for better alignment and spacing
-                  // Further increased horizontal padding (px-4 sm:px-8)
-                  className={`inline-flex items-center justify-center border-primary text-primary hover:bg-primary/10 px-4 py-1 text-xs sm:px-8 sm:py-2 sm:text-sm gap-1 sm:gap-2 ${isMobile ? 'hidden' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation(); // 이벤트 버블링 방지
-                    const input = document.querySelector('input[type="file"]');
-                    if (input) {
-                      (input as HTMLInputElement).click();
-                    }
-                  }}
-                >
-                  {/* Responsive icon size, removed margin */}
-                  <FileText className="w-3 h-3 sm:w-4 sm:h-4" />
-                  파일 선택
-                </Button>
-              </div>
+              <input {...getInputProps()} />
+
+              {/* 업로드 상태 표시 */}
+              {uploadStatus.total > 0 && (
+                <div className="mt-4 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <div className="text-green-600">성공: {uploadStatus.total - uploadStatus.error}</div>
+                    {uploadStatus.error > 0 && (
+                      <div className="text-red-600">
+                        실패: {uploadStatus.error}
+                        {uploadStatus.failedFiles.length > 0 && (
+                          <div className="text-xs mt-1">
+                            실패한 파일: {uploadStatus.failedFiles.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                    <div
+                      className="bg-primary rounded-full h-2 transition-all duration-500"
+                      style={{
+                        width: `${((uploadStatus.total - uploadStatus.error) / uploadStatus.total) * 100}%`
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-
-            <input {...getInputProps()} />
-
-            {/* 업로드 상태 표시 */}
-            {uploadStatus.total > 0 && (
-              <div className="mt-4 text-sm">
-                <div className="flex items-center space-x-2">
-                  <div className="text-green-600">성공: {uploadStatus.total - uploadStatus.error}</div>
-                  {uploadStatus.error > 0 && (
-                    <div className="text-red-600">
-                      실패: {uploadStatus.error}
-                      {uploadStatus.failedFiles.length > 0 && (
-                        <div className="text-xs mt-1">
-                          실패한 파일: {uploadStatus.failedFiles.join(', ')}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                  <div
-                    className="bg-primary rounded-full h-2 transition-all duration-500"
-                    style={{
-                      width: `${((uploadStatus.total - uploadStatus.error) / uploadStatus.total) * 100}%`
-                    }}
-                  />
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

@@ -260,16 +260,6 @@ function MarkdownCell({ content }: { content: string }) {
           div::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
           }
-          /* 스크롤바가 필요할 때만 표시 */
-          div::-webkit-scrollbar {
-            display: auto;
-          }
-          div:not(:hover)::-webkit-scrollbar-thumb {
-            background: transparent;
-          }
-          div:hover::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-          }
           /* 스크롤 이동 버튼 제거 */
           div::-webkit-scrollbar-button {
             display: none;
@@ -507,7 +497,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
             <div className="doc-filename-cell">
               <div className="doc-filename-container">
                 <p 
-                  className={`doc-filename-text ${isLongFilename ? 'doc-filename-long' : 'doc-filename-short'} ${colorClass}`}
+                  className={`doc-filename-text text-sm ${isLongFilename ? 'doc-filename-long' : 'doc-filename-short'} ${colorClass}`}
                   title={document.filename}
                 >
                   {document.filename}
@@ -850,7 +840,6 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           '& .Mui-TableHeadCell-Content': {
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'flex-start',
             height: '100%'
           },
           '& .Mui-TableHeadCell-Content-Labels': {
@@ -936,7 +925,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
             position: hasHorizontalScroll ? 'sticky' : 'relative', // 가로 스크롤 시 고정
             left: 0,
             zIndex: 3, // 다른 셀보다 위에 표시
-            backgroundColor: 'rgb(238, 238, 250)', // 배경색 설정
+            backgroundColor: '#F4F4F4', // 배경색 변경
             '&::after': hasHorizontalScroll ? {
               content: '""',
               position: 'absolute',
@@ -994,9 +983,8 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
     muiTableHeadProps: {
       sx: {
         '& tr': {
-          height: '36px',  // 헤더 행 높이 축소
-          //backgroundColor: 'rgb(219, 227, 228) !important',
-          backgroundColor: 'rgb(238, 238, 250)!important', // 헤더 색상
+          height: '44px',  // 헤더 행 높이 44px로 설정
+          backgroundColor: '#F4F4F4', // 배경색 변경
           '& th': {
             verticalAlign: 'middle',  // 헤더 셀 내용 수직 중앙 정렬
             lineHeight: '1',  // 라인 높이 조정
@@ -1088,14 +1076,14 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           position: 'sticky',
           top: 0,
           zIndex: 2,
-          backgroundColor: 'rgb(238, 238, 250) !important', // 헤더 선택
+          backgroundColor: '#F4F4F4', // 배경색 변경
           boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'  // 헤더에 미세한 그림자 추가
         },
         // 헤더 셀 직접 스타일링
         '& .MuiTableHead-root .MuiTableCell-root': {
           display: 'flex',
           alignItems: 'center',
-          height: '36px',
+          height: '44px', // 헤더 셀 높이 44px로 설정
           padding: '0 10px',
           hover: {
             backgroundColor: 'rgb(200, 226, 228) !important',
@@ -1117,7 +1105,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         fontSize: '0.75rem',
         borderRight: '1px solid #e2e8f0',
         verticalAlign: 'top',      // 셀 내용을 상단에 정렬
-        color: '#334155',          // 텍스트 색상 개선
+        color: '#000000',          // 글자색 변경 (검정)
         minHeight: '69px',         // 최소 높이 59px에서 69px로 증가
         maxHeight: 'none',         // 최대 높이 제한 제거
         overflow: 'visible',       // 셀 자체는 오버플로우 허용 (내부 컨텐츠가 스크롤 처리)
@@ -1240,6 +1228,15 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         }
       };
     },
+    muiTableHeadRowProps: {
+      sx: {
+        backgroundColor: '#F4F4F4', // 배경색 변경
+        '& .MuiTableCell-root': {
+          color: '#000000', // 글자색 변경 (검정)
+          fontWeight: 'normal', // 글자 굵기 일반으로 변경
+        },
+      },
+    },
     layoutMode: 'grid', //모든 칼럼은 남은 공간을 채우는 형태
   });
 
@@ -1250,7 +1247,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
       <style jsx global>{`
         /* 헤더 셀 스타일 직접 조정 */
         .MuiTableHead-root {
-          background-color:rgb(219, 227, 228) !important;
+          background-color: #F4F4F4 !important;
         }
         
         /* 테이블 행 테두리 스타일 완전히 제거 */
@@ -1324,7 +1321,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         .MuiTableHead-root .MuiTableCell-root {
           display: flex !important;
           align-items: center !important;
-          height: 36px !important;
+          height: 44px !important;
           padding: 0 10px !important;
           borderRight: none !important;
         }
@@ -1336,7 +1333,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         
         /* 헤더 셀 호버 상태 */
         .MuiTableHead-root .MuiTableCell-root:hover {
-          background-color: rgb(231, 225, 244) !important;
+          background-color: rgb(200, 220, 225) !important; /* 호버 시 배경색 변경 */
         }
         
         /* 모바일 환경에서 헤더 셀 조정 */
@@ -1868,146 +1865,9 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           cursor: default !important; /* 정렬 불가능 표시 */
         }
         
-        /* 가로 스크롤 컨테이너 스타일 */
-        .MuiTableContainer-root {
-          overflow-x: ${hasHorizontalScroll ? 'auto !important' : 'hidden !important'};
-        }
-        
-        /* 가로 스크롤바 스타일 */
-        .MuiTableContainer-root::-webkit-scrollbar {
-          height: 8px !important;
-        }
-        
-        /* 가로 스크롤바 트랙 */
-        .MuiTableContainer-root::-webkit-scrollbar-track {
-          background-color: #f1f1f1 !important;
-        }
-        
-        /* 가로 스크롤바 썸 */
-        .MuiTableContainer-root::-webkit-scrollbar-thumb {
-          background-color: #888 !important;
-          border-radius: 4px !important;
-        }
-        
-        /* 가로 스크롤바 호버 */
-        .MuiTableContainer-root::-webkit-scrollbar-thumb:hover {
-          background-color: #555 !important;
-        }
-        
-        /* 모바일 환경에서 가로 스크롤바 */
-        @media (max-width: 640px) {
-          .MuiTableContainer-root::-webkit-scrollbar {
-            height: 6px !important;
-          }
-        }
-        
-        /* Document 컬럼 헤더 고정 스타일 */
-        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"] {
-          position: ${hasHorizontalScroll ? 'sticky' : 'relative'} !important;
-          left: ${hasHorizontalScroll ? '30px' : '0'} !important; /* 체크박스 열 너비만큼 떨어짐 */
-          z-index: 3 !important; /* z-index 증가: 2 -> 3 */
-          background-color: rgb(219, 227, 228) !important;
-        }
-        
-        /* Document 컬럼 고정 경계선 */
-        .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"]::after {
-          content: ${hasHorizontalScroll ? '""' : 'none'} !important;
-          position: absolute !important;
-          right: 0 !important;
-          top: 0 !important;
-          bottom: 0 !important;
-          width: 1px !important;
-          background-color: #ccc !important;
-          box-shadow: 2px 0 5px rgba(0,0,0,0.1) !important;
-          z-index: 4 !important; /* z-index 추가 */
-        }
-        
-        /* Document 컬럼 본문 셀 고정 스타일 */
-        .MuiTableBody-root .MuiTableCell-root[data-column-id="filename"] {
-          position: ${hasHorizontalScroll ? 'sticky' : 'relative'} !important;
-          left: ${hasHorizontalScroll ? '30px' : '0'} !important; /* 체크박스 열 너비만큼 떨어짐 */
-          z-index: 2 !important; /* z-index 증가: 1 -> 2 */
-          background-color: white !important;
-        }
-        
-        /* Document 컬럼 본문 셀 고정 경계선 */
-        .MuiTableBody-root .MuiTableCell-root[data-column-id="filename"]::after {
-          content: ${hasHorizontalScroll ? '""' : 'none'} !important;
-          position: absolute !important;
-          right: 0 !important;
-          top: 0 !important;
-          bottom: 0 !important;
-          width: 1px !important;
-          background-color: #ccc !important;
-          box-shadow: 2px 0 5px rgba(0,0,0,0.1) !important;
-          z-index: 3 !important; /* z-index 추가 */
-        }
-        
-        /* 체크박스 열 고정 스타일 */
-        .MuiTableHead-root .MuiTableCell-root.mrt-row-select-head-cell {
-          position: ${hasHorizontalScroll ? 'sticky' : 'relative'} !important;
-          left: 0 !important;
-          z-index: 4 !important; /* z-index 증가: 3 -> 4 */
-          background-color: rgb(219, 227, 228) !important;
-        }
-        
-        /* 체크박스 열 본문 셀 고정 스타일 */
-        .MuiTableBody-root .MuiTableCell-root.mrt-row-select-cell {
-          position: ${hasHorizontalScroll ? 'sticky' : 'relative'} !important;
-          left: 0 !important;
-          z-index: 3 !important; /* z-index 증가: 1 -> 3 */
-          background-color: white !important;
-        }
-        
-        /* 스크롤바 보이기 표시 */
-        .horizontal-scroll-indicator {
-          position: absolute;
-          bottom: 12px;
-          right: 16px;
-          background-color: rgba(0, 0, 0, 0.5);
-          color: white;
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 11px;
-          opacity: ${hasHorizontalScroll ? 0.8 : 0};
-          transition: opacity 0.3s;
-          pointer-events: none;
-          z-index: 10;
-          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-        
-        .horizontal-scroll-indicator svg {
-          width: 14px;
-          height: 14px;
-        }
-        
-        /* 스크롤 중일 때 인디케이터 숨김 */
-        .MuiTableContainer-root:active + .horizontal-scroll-indicator,
-        .MuiTableContainer-root:focus + .horizontal-scroll-indicator,
-        .MuiTableContainer-root:hover + .horizontal-scroll-indicator {
-          opacity: 0 !important;
-        }
-        
-        /* 모바일 버전에서 문서 파일명 셀의 너비를 250px에서 300px로 늘립니다. */
-        @media (max-width: 768px) {
-          .MuiTableCell-root[data-index="1"] {
-            min-width: 350px !important;
-            max-width: 350px !important;
-            width: 350px !important;
-          }
-        }
-        
-        /* 선택된 헤더 스타일 */
-        .MuiTableHead-root .MuiTableCell-root.selected-header {
-          background-color: rgb(186, 230, 253) !important;
-        }
-        
-        /* 헤더 셀 선택 가능 표시 - filename과 체크박스 열 제외 */
-        .MuiTableHead-root .MuiTableCell-root:not([data-column-id="filename"]):not(.mrt-row-select-head-cell) {
-          cursor: pointer !important;
+        /* 테이블 헤더 폰트를 기본 앱 폰트로 상속 */
+        .MuiTableHead-root .MuiTableCell-root {
+          font-family: inherit !important;
         }
       `}</style>
       <MaterialReactTable table={table} />
