@@ -73,9 +73,9 @@ securities_mapping = {
     "SocieteGenerale": "소시에테제네랄",
     
     # 크레딧스위스
-    "크레디트스위스": "크레디트스위스",
-    "Credit Suisse": "크레디트스위스",
-    "CreditSuisse": "크레디트스위스",
+    "크레딧스위스": "크레딧스위스",
+    "Credit Suisse": "크레딧스위스",
+    "CreditSuisse": "크레딧스위스",
     
     # HSBC
     "HSBC": "HSBC",
@@ -100,6 +100,7 @@ class TelegramMessageMetadata:
     sender_id: Optional[str]     # 발신자 ID (있는 경우)
     sender_name: Optional[str]   # 발신자 이름 (있는 경우)
     message_created_at: datetime         # 메시지 생성 시간
+    message_created_at_iso: Optional[str] = None  # ISO 형식의 생성 시간 문자열
     has_media: bool             # 미디어 첨부 여부
     has_document: bool          # 문서 첨부 여부
     document_name: Optional[str] # 문서 이름 (있는 경우)
@@ -121,6 +122,7 @@ class TelegramMessageMetadata:
             sender_id=message.sender_id,
             sender_name=message.sender_name,
             message_created_at=message.message_created_at,
+            message_created_at_iso=message.message_created_at.isoformat(),
             has_media=message.has_media,
             has_document=message.has_document,
             document_name=message.document_name if message.has_document else None,
@@ -241,7 +243,8 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             elif isinstance(value, (int, float)):
                 metadata_dict[key] = str(value)  # 숫자를 문자열로 변환
             elif isinstance(value, datetime):
-                metadata_dict[key] = value.isoformat()  # datetime을 ISO 형식 문자열로 변환
+                # datetime을 Unix 타임스탬프(밀리초)로 변환
+                metadata_dict[key] = int(value.timestamp() * 1000)
             elif key == 'keywords':
                 # 키워드 리스트를 JSON 문자열로 변환
                 if value is None:
