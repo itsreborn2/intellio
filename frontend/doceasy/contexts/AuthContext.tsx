@@ -8,6 +8,7 @@ interface IUser {
   email: string;
   name: string;
   provider: string;
+  profile_image?: string;
 }
 
 // 인증 상태 인터페이스 정의

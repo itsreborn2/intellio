@@ -32,8 +32,20 @@ function HomeContent() {
         // 사용자 정보와 토큰이 있으면 로그인 상태 복원
         if (cookies.user && cookies.token) {
           try {
-            const userData: IOAuthUser = JSON.parse(cookies.user);
-            //onsole.log('[Page] 파싱된 사용자 데이터:', userData);
+            // 쿠키 값이 따옴표로 감싸진 경우 처리
+            let jsonString = cookies.user;
+            console.debug('[Page] 원본 사용자 쿠키:', jsonString);
+            
+            // 이중 따옴표로 감싸진 JSON 문자열인 경우 처리
+            if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
+              // 바깥쪽 따옴표 제거 및 이스케이프된 따옴표 처리
+              jsonString = jsonString.slice(1, -1).replace(/\\"/g, '"');
+              console.debug('[Page] 따옴표 제거 후 문자열:', jsonString);
+            }
+            
+            // JSON 파싱 시도
+            const userData: IOAuthUser = JSON.parse(jsonString);
+            console.debug('[Page] 파싱된 사용자 데이터:', userData);
             
             // 토큰 설정
             setToken(cookies.token);

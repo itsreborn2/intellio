@@ -6,6 +6,8 @@
 
 import os
 from typing import Dict, Any, List, Literal, Union, Optional, TypedDict, Tuple, Set, cast, Callable
+import asyncio
+import time
 
 from langgraph.graph import END, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
@@ -147,8 +149,14 @@ class StockAnalysisGraph:
         # 콜백 함수 저장을 위한 딕셔너리 추가
         self.callbacks = {
             'agent_start': [],
-            'agent_end': []
+            'agent_end': [],
+            'graph_start': [],
+            'graph_end': []
         }
+        
+        # 상태 추적을 위한 변수 추가
+        self.current_state = {}
+        self.state_lock = asyncio.Lock()  # 동시성 제어를 위한 락
     
     # 콜백 등록 메서드 추가
     def register_callback(self, event_type: str, callback_fn: Callable):
@@ -210,7 +218,7 @@ class StockAnalysisGraph:
             logger.info(f"모든 이벤트의 콜백 함수가 제거됨")
     
     # 콜백 실행 메서드 추가
-    def _execute_callbacks(self, event_type: str, agent_name: str, state: Dict[str, Any]):
+    async def _execute_callbacks(self, event_type: str, agent_name: str, state: Dict[str, Any]):
         """
         등록된 콜백 함수들을 실행합니다.
         
@@ -229,9 +237,34 @@ class StockAnalysisGraph:
             
         for callback_fn in self.callbacks[event_type]:
             try:
-                callback_fn(agent_name, state)
+                if asyncio.iscoroutinefunction(callback_fn):
+                    await callback_fn(agent_name, state)
+                else:
+                    callback_fn(agent_name, state)
             except Exception as e:
                 logger.error(f"{event_type} 콜백 실행 중 오류 발생: {str(e)}")
+            
+        # 상태 추적을 위한 코드 추가
+        if 'session_id' in state:
+            session_id = state['session_id']
+            async with self.state_lock:
+                if session_id not in self.current_state:
+                    self.current_state[session_id] = {}
+                
+                # 처리 상태 복사
+                if 'processing_status' in state:
+                    self.current_state[session_id]['processing_status'] = state['processing_status'].copy()
+                
+                # 기타 필요한 정보 추가
+                self.current_state[session_id]['last_updated'] = time.time()
+                self.current_state[session_id]['current_agent'] = agent_name
+                
+                # 에이전트 결과 저장 (있는 경우)
+                if 'agent_results' in state and agent_name in state['agent_results']:
+                    if 'agent_results' not in self.current_state[session_id]:
+                        self.current_state[session_id]['agent_results'] = {}
+                    
+                    self.current_state[session_id]['agent_results'][agent_name] = state['agent_results'][agent_name]
     
     def _build_graph(self, db: AsyncSession = None):
         """
@@ -445,27 +478,50 @@ class StockAnalysisGraph:
 
     def _create_wrapped_process(self, agent_name: str, original_process):
         """
-        에이전트 프로세스 함수를 래핑하여 콜백을 추가합니다.
+        에이전트 process 메서드를 래핑하여 콜백 지원 추가
         
         Args:
             agent_name: 에이전트 이름
-            original_process: 원래 프로세스 함수
+            original_process: 원본 process 메서드
             
         Returns:
-            래핑된 프로세스 함수
+            래핑된 process 메서드
         """
+        
         async def wrapped_process(state: Dict[str, Any]) -> Dict[str, Any]:
             # 에이전트 시작 콜백 실행
-            self._execute_callbacks('agent_start', agent_name, state)
+            await self._execute_callbacks("agent_start", agent_name, state)
+            
+            # 처리 상태 업데이트 - 에이전트 시작
+            if 'processing_status' not in state:
+                state['processing_status'] = {}
+            state['processing_status'][agent_name] = "processing"
             
             # 원래 프로세스 실행
-            result = await original_process(state)
-            
-            # 에이전트 종료 콜백 실행
-            self._execute_callbacks('agent_end', agent_name, result)
-            
-            return result
-            
+            try:
+                result = await original_process(state)
+                
+                # 처리 상태 업데이트 - 에이전트 완료
+                result['processing_status'][agent_name] = "completed"
+                
+                # 에이전트 종료 콜백 실행
+                await self._execute_callbacks("agent_end", agent_name, result)
+                return result
+            except Exception as e:
+                # 오류 발생 시 상태 업데이트
+                state['processing_status'][agent_name] = "error"
+                if 'errors' not in state:
+                    state['errors'] = []
+                state['errors'].append({
+                    "agent": agent_name,
+                    "error": str(e),
+                    "type": type(e).__name__
+                })
+                
+                # 에이전트 종료 콜백 실행 (오류 상태)
+                await self._execute_callbacks("agent_end", agent_name, state)
+                raise e
+                
         return wrapped_process
 
     def _determine_next_agent(self, state: AgentState) -> str:
@@ -588,6 +644,13 @@ class StockAnalysisGraph:
             logger.info(f"[process_query] initial_state: {initial_state}")
             logger.info("병렬 처리 설정으로 그래프 실행 시작")
             
+            # 세션별 상태 초기화
+            async with self.state_lock:
+                self.current_state[trace_id] = initial_state.copy()
+                
+            # 그래프 시작 콜백 실행
+            await self._execute_callbacks("graph_start", "graph", initial_state)
+            
             # 그래프 실행 (thread_id 제거, config 매개변수만 사용)
             result = await self.graph.ainvoke(
                 initial_state,
@@ -597,6 +660,16 @@ class StockAnalysisGraph:
                     "recursion_limit": 25  # 재귀 제한 설정
                 }
             )
+            
+            # 그래프 종료 콜백 실행
+            await self._execute_callbacks("graph_end", "graph", result)
+            
+            # 상태 업데이트
+            async with self.state_lock:
+                if trace_id in self.current_state:
+                    self.current_state[trace_id].update(result)
+                    self.current_state[trace_id]['completed'] = True
+                    self.current_state[trace_id]['completion_time'] = time.time()
             
             # 결과 확인
             if "retrieved_data" in result:
@@ -662,6 +735,18 @@ class StockAnalysisGraph:
             스레드 ID 목록
         """
         return list(self.memory_saver.list_threads()) 
+
+    def get_session_state(self, session_id: str) -> Dict[str, Any]:
+        """
+        특정 세션의 현재 상태를 반환합니다.
+        
+        Args:
+            session_id: 세션 ID
+            
+        Returns:
+            세션 상태 정보 (없으면 빈 딕셔너리)
+        """
+        return self.current_state.get(session_id, {})
 
 # StockAnalysisGraph 인스턴스를 생성하고 그래프를 빌드하여 반환하는 함수
 # def create_graph():

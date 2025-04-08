@@ -2,6 +2,7 @@ import './globals.css';
 import Script from 'next/script';
 import Sidebar from './components/Sidebar';
 import ConditionalFooter from './components/ConditionalFooter';
+import { Toaster } from 'react-hot-toast';
 // ClientFooter 임포트 제거
 
 export default function RootLayout({
@@ -27,6 +28,9 @@ export default function RootLayout({
         }} />
       </head>
       <body>
+        {/* 토스트 알림 컴포넌트 */}
+        <Toaster position="bottom-center" />
+        
         {/* 사이드바는 fixed 포지션으로 설정되어 있으므로 여기서는 사이드바만 배치 */}
         <Sidebar />
         

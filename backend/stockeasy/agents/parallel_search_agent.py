@@ -52,6 +52,23 @@ class ParallelSearchAgent(BaseAgent):
         start_time = time.time()
         logger.info(f"ParallelSearchAgent 병렬 처리 시작")
         
+        # 그래프에 병렬 검색 에이전트 자체의 처리 상태 업데이트
+        session_id = state.get("session_id")
+        if self.graph and session_id and hasattr(self.graph, 'current_state'):
+            try:
+                async with self.graph.state_lock:
+                    if session_id not in self.graph.current_state:
+                        self.graph.current_state[session_id] = {}
+                    
+                    if "processing_status" not in self.graph.current_state[session_id]:
+                        self.graph.current_state[session_id]["processing_status"] = {}
+                    
+                    # 병렬 검색 에이전트 자체의 상태 업데이트
+                    self.graph.current_state[session_id]["processing_status"]["parallel_search"] = "processing"
+                    logger.debug(f"ParallelSearchAgent: 처리 시작 상태를 그래프에 업데이트")
+            except Exception as e:
+                logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
+        
         # 실행 계획에서 어떤 에이전트를 실행할지 확인
         execution_plan = state.get("execution_plan", {})
         execution_order = execution_plan.get("execution_order", [])
@@ -247,61 +264,114 @@ class ParallelSearchAgent(BaseAgent):
             }
         }
         
+        # 병렬 검색 에이전트 상태를 '완료'로 설정
+        state["processing_status"]["parallel_search"] = "completed"
+        
+        # 그래프 상태 업데이트 - 병렬 검색 완료
+        session_id = state.get("session_id")
+        if self.graph and session_id and hasattr(self.graph, 'current_state'):
+            try:
+                async with self.graph.state_lock:
+                    if session_id not in self.graph.current_state:
+                        self.graph.current_state[session_id] = {}
+                    
+                    if "processing_status" not in self.graph.current_state[session_id]:
+                        self.graph.current_state[session_id]["processing_status"] = {}
+                    
+                    # 병렬 검색 에이전트 자체의 상태 업데이트
+                    self.graph.current_state[session_id]["processing_status"]["parallel_search"] = "completed"
+                    logger.debug(f"ParallelSearchAgent: 처리 완료 상태를 그래프에 업데이트")
+            except Exception as e:
+                logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
+        
         logger.info(f"ParallelSearchAgent 병렬 처리 완료. 실행 시간: {execution_time:.2f}초, 성공: {success_count}, 실패: {failure_count}")
         
         return state
     
     async def _run_agent(self, name: str, agent: BaseAgent, state: AgentState) -> AgentState:
         """
-        개별 에이전트를 실행하는 도우미 함수
+        단일 에이전트를 비동기적으로 실행합니다.
         
         Args:
             name: 에이전트 이름
             agent: 에이전트 인스턴스
-            state: 상태의 복사본(깊은 복사)
+            state: 현재 에이전트 상태
             
         Returns:
-            에이전트 실행 결과
+            에이전트 실행 후 상태
         """
         try:
+            if self.graph:
+                # 그래프에 처리 상태 업데이트 (에이전트 시작)
+                session_id = state.get("session_id")
+                if session_id and hasattr(self.graph, 'current_state'):
+                    try:
+                        async with self.graph.state_lock:
+                            if session_id not in self.graph.current_state:
+                                self.graph.current_state[session_id] = {}
+                            
+                            if "processing_status" not in self.graph.current_state[session_id]:
+                                self.graph.current_state[session_id]["processing_status"] = {}
+                            
+                            self.graph.current_state[session_id]["processing_status"][name] = "processing"
+                            logger.debug(f"ParallelSearchAgent: {name} 처리 시작 상태를 그래프에 업데이트")
+                    except Exception as e:
+                        logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
+            
             logger.info(f"에이전트 {name} 실행 시작")
-            start_time = time.time()
-            
-            # 콜백 처리 - custom_prompt_template 적용
-            # 커스텀 프롬프트 템플릿 확인
-            custom_prompt_templates = state.get("custom_prompt_templates", {})
-            
-            # 에이전트별 커스텀 프롬프트가 있으면 상태에 추가
-            if name in custom_prompt_templates:
-                # 상태에 커스텀 프롬프트 템플릿 추가
-                state["custom_prompt_template"] = custom_prompt_templates[name]
-                logger.info(f"병렬 실행 - 에이전트 {name}의 상태에 커스텀 프롬프트 템플릿 추가됨")
-            
-            # 그래프의 콜백을 직접 호출
-            graph = self.graph  # 생성자에서 전달받은 그래프 사용
-            if graph and hasattr(graph, "_execute_callbacks"):
-                try:
-                    # on_agent_start 콜백 수동 실행
-                    graph._execute_callbacks('agent_start', name, state)
-                    logger.info(f"병렬 실행 - 에이전트 {name}에 대한 on_agent_start 콜백 수동 실행")
-                except Exception as callback_error:
-                    logger.warning(f"병렬 실행 - 에이전트 {name}의 콜백 실행 중 오류: {str(callback_error)}")
-            
-            # 에이전트 처리 실행
             result = await agent.process(state)
+            logger.info(f"에이전트 {name} 실행 완료")
             
-            # 처리 완료 후 콜백 실행
-            if graph and hasattr(graph, "_execute_callbacks"):
-                try:
-                    # on_agent_end 콜백 수동 실행
-                    graph._execute_callbacks('agent_end', name, result)
-                    logger.info(f"병렬 실행 - 에이전트 {name}에 대한 on_agent_end 콜백 수동 실행")
-                except Exception as callback_error:
-                    logger.warning(f"병렬 실행 - 에이전트 {name}의 종료 콜백 실행 중 오류: {str(callback_error)}")
+            # 결과에 에이전트 이름 추가
+            result["last_agent"] = name
             
-            end_time = time.time()
-            logger.info(f"에이전트 {name} 실행 완료. 시간: {end_time - start_time:.2f}초")
+            # 처리 상태가 없는 경우 명시적으로 추가
+            if "processing_status" not in result:
+                result["processing_status"] = {}
+                
+            # 완료 상태로 설정 (혹시 set되지 않은 경우)
+            if name not in result["processing_status"]:
+                result["processing_status"][name] = "completed"
+            
+            if self.graph:
+                # 그래프에 처리 상태 업데이트 (에이전트 완료)
+                session_id = state.get("session_id")
+                if session_id and hasattr(self.graph, 'current_state'):
+                    try:
+                        async with self.graph.state_lock:
+                            if session_id not in self.graph.current_state:
+                                self.graph.current_state[session_id] = {}
+                            
+                            if "processing_status" not in self.graph.current_state[session_id]:
+                                self.graph.current_state[session_id]["processing_status"] = {}
+                            
+                            self.graph.current_state[session_id]["processing_status"][name] = result["processing_status"][name]
+                            logger.debug(f"ParallelSearchAgent: {name} {result['processing_status'][name]} 상태를 그래프에 업데이트")
+                    except Exception as e:
+                        logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
+            
             return result
         except Exception as e:
-            logger.error(f"에이전트 {name} 실행 중 오류: {str(e)}")
+            logger.error(f"에이전트 {name} 실행 중 오류 발생: {str(e)}", exc_info=True)
+            # 에러 상태 표시를 위한 처리 상태 업데이트
+            state["processing_status"][name] = "failed"
+            
+            if self.graph:
+                # 그래프에 처리 상태 업데이트 (에이전트 실패)
+                session_id = state.get("session_id")
+                if session_id and hasattr(self.graph, 'current_state'):
+                    try:
+                        async with self.graph.state_lock:
+                            if session_id not in self.graph.current_state:
+                                self.graph.current_state[session_id] = {}
+                            
+                            if "processing_status" not in self.graph.current_state[session_id]:
+                                self.graph.current_state[session_id]["processing_status"] = {}
+                            
+                            self.graph.current_state[session_id]["processing_status"][name] = "failed"
+                            logger.debug(f"ParallelSearchAgent: {name} 실패 상태를 그래프에 업데이트")
+                    except Exception as e:
+                        logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
+                        
+            # 예외를 다시 발생시켜 caller가 처리할 수 있도록 함
             raise 

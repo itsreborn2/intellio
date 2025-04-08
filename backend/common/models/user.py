@@ -27,6 +27,7 @@ class User(Base):
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     oauth_provider: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # google, naver, kakao
     oauth_provider_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    profile_image: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # 프로필 이미지 URL
 
     # 관계 설정은 __init__.py에서 중앙화하여 처리합니다
 

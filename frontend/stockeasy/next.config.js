@@ -8,6 +8,9 @@ const nextConfig = {
       },
     } 
   : undefined,
+  images: {
+    domains: ['lh3.googleusercontent.com'],
+  },
 }
 
 module.exports = nextConfig

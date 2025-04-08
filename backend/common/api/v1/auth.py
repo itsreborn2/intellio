@@ -18,16 +18,20 @@ from common.schemas.user import (
     UserLogin,
     UserResponse,
     SessionResponse,
-    SessionBase
+    SessionBase,
+    UserUpdate
 )
 from common.schemas.auth import OAuthLoginResponse
 from common.core.config import settings
 import json
-#import logging
+import logging
 from loguru import logger
+from datetime import datetime, timedelta
+from jose import jwt
+from pydantic import ValidationError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-#logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # OAuth2 bearer token 설정
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -231,19 +235,32 @@ async def oauth_callback(
         email = user_info.get("email")
         if not email:
             raise HTTPException(status_code=400, detail="Failed to get email from provider")
-        
+        profile_image = user_info.get("picture") or user_info.get("profile_image")
         user = await user_service.get_by_oauth(provider, oauth_id)
         if not user:
-            logger.info(f"Creating new user with email: {provider}")
+            
+            logger.info(f"Creating new user with email: {provider}, profile_image: {profile_image}")
             # 새 사용자 생성
             user = await user_service.create_oauth_user({
                 "email": email,
                 "oauth_provider": provider,
                 "oauth_provider_id": oauth_id,
-                "name": user_info.get("nickname") or user_info.get("name") or email.split("@")[0]
+                "name": user_info.get("nickname") or user_info.get("name") or email.split("@")[0],
+                "profile_image": user_info.get("picture") or user_info.get("profile_image")
             })
         else:
-            logger.info(f"Exsisting user with ID: {provider}, {user.id}, {user.email}")
+            logger.info(f"Existing user with ID: {provider}, {user.id}, {user.email}, {profile_image}")
+            
+            # 프로필 이미지가 변경되었다면 업데이트
+            if profile_image and profile_image != user.profile_image:
+                logger.info(f"Updating profile image for user {user.id} from {user.profile_image} to {profile_image}")
+                # UserUpdate에는 email과 name 필드가 필수이므로 기존 사용자 데이터에서 가져옴
+                update_data = {
+                    "email": user.email,
+                    "name": user.name,
+                    "profile_image": profile_image
+                }
+                user = await user_service.update(user.id, UserUpdate(**update_data))
         
         # 세션 생성
         session_create = SessionBase(
@@ -269,6 +286,10 @@ async def oauth_callback(
             "name": user.name,
             "provider": provider
         }
+        
+        # profile_image가 있을 경우에만 추가
+        if user.profile_image:
+            user_data["profile_image"] = user.profile_image
 
         # URL 인코딩을 사용하여 한글 문자를 안전하게 처리
         encoded_user_data = urllib.parse.quote(

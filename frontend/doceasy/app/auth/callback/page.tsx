@@ -36,6 +36,14 @@ function CallbackHandler() {
                             const userData = JSON.parse(decodedUserStr);
                             console.log('[Callback] 파싱된 사용자 데이터:', userData);
 
+                            // 쿠키 설정 (서브도메인에서 접근 가능하도록)
+                            document.cookie = `token=${token}; path=/; domain=.intellio.kr`;
+                            
+                            // 쿠키에 사용자 정보를 안전하게 저장
+                            // JSON 문자열로 변환 후 바로 쿠키에 설정 (중간에 encodeURIComponent 사용)
+                            const userDataString = JSON.stringify(userData);
+                            document.cookie = `user=${encodeURIComponent(userDataString)}; path=/; domain=.intellio.kr`;
+
                             setToken(token);
                             setUser(userData);
 

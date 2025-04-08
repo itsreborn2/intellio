@@ -928,6 +928,7 @@ export interface IOAuthLoginResponse {
     email: string;
     name: string;
     provider: string;
+    profile_image?: string;
   };
   token: string;
 }

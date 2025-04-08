@@ -294,7 +294,7 @@ class ChatService:
     @staticmethod
     async def create_chat_message(
         db: AsyncSession, 
-        session_id: UUID, 
+        chat_session_id: UUID, 
         role: str, 
         content: str,
         stock_code: Optional[str] = None,
@@ -321,7 +321,7 @@ class ChatService:
             
             # 메시지 생성
             message = StockChatMessage(
-                chat_session_id=session_id,
+                chat_session_id=chat_session_id,
                 role=role,
                 content=content,
                 stock_code=stock_code,
@@ -336,7 +336,7 @@ class ChatService:
             # 관련 세션의 updated_at 업데이트
             session_update = (
                 update(StockChatSession)
-                .where(StockChatSession.id == session_id)
+                .where(StockChatSession.id == chat_session_id)
                 .values(updated_at=datetime.now())
                 .execution_options(synchronize_session="fetch")
             )

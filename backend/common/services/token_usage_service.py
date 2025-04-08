@@ -1,6 +1,6 @@
 from uuid import UUID, uuid4
 from typing import Optional, Dict, List, Any, ContextManager, Callable, AsyncGenerator, Awaitable, AsyncContextManager, Union, TypeVar
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import select, func, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session as SQLAlchemySession
@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager, contextmanager
 import asyncio
 
 from common.models.token_usage import TokenUsage, ProjectType, TokenType
+from stockeasy.models.chat import StockChatMessage, StockChatSession
 # 순환 참조를 방지하기 위해 get_db 임포트를 제거하고 지연 임포트를 사용
 # from common.core.deps import get_db
 
@@ -792,3 +793,112 @@ def track_token_usage_sync(
         logger.error(f"[토큰 추적][동기] 토큰 사용량 추적 중 오류 발생: {str(e)}")
         # 예외를 다시 발생시켜 호출자에게 전파
         raise 
+
+async def get_user_question_count(
+    db: AsyncSession,
+    user_id: UUID,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    group_by: Optional[str] = None
+) -> Dict[str, Any]:
+    """사용자의 StockEasy 질문 개수 조회
+
+    Args:
+        db: 데이터베이스 세션
+        user_id: 사용자 ID
+        start_date: 시작 날짜 (선택사항)
+        end_date: 종료 날짜 (선택사항)
+        group_by: 그룹화 기준 (선택사항) - 'day', 'week', 'month'
+
+    Returns:
+        Dict[str, Any]: 질문 개수 데이터
+    """
+    try:
+        # 사용자의 채팅 세션 ID 목록 조회
+        sessions_query = select(StockChatSession.id).where(
+            StockChatSession.user_id == user_id
+        )
+        result = await db.execute(sessions_query)
+        session_ids = result.scalars().all()
+        
+        # 세션이 없으면 빈 결과 반환
+        if not session_ids:
+            return {
+                "total_questions": 0,
+                "grouped_data": {}
+            }
+        
+        # 전체 질문 수 조회 쿼리
+        count_query = select(func.count()).where(
+            StockChatMessage.chat_session_id.in_(session_ids),
+            StockChatMessage.role == "user"
+        )
+        
+        # 날짜 필터 추가
+        if start_date:
+            count_query = count_query.where(StockChatMessage.created_at >= start_date)
+        if end_date:
+            count_query = count_query.where(StockChatMessage.created_at <= end_date)
+        
+        # 전체 질문 수 조회
+        result = await db.execute(count_query)
+        total_questions = result.scalar() or 0
+        
+        # 그룹화된 데이터 조회
+        grouped_data = {}
+        if group_by:
+            # 그룹화 기준에 따른 쿼리 구성
+            if group_by == "day":
+                # 일별 그룹화
+                date_format = func.date_trunc('day', StockChatMessage.created_at)
+                label = 'day'
+            elif group_by == "week":
+                # 주별 그룹화
+                date_format = func.date_trunc('week', StockChatMessage.created_at)
+                label = 'week'
+            elif group_by == "month":
+                # 월별 그룹화
+                date_format = func.date_trunc('month', StockChatMessage.created_at)
+                label = 'month'
+            else:
+                # 유효하지 않은 그룹화 기준인 경우 빈 사전 반환
+                return {
+                    "total_questions": total_questions,
+                    "grouped_data": {}
+                }
+            
+            # 그룹화된 쿼리 구성
+            group_query = select(
+                date_format.label(label),
+                func.count().label('count')
+            ).where(
+                StockChatMessage.chat_session_id.in_(session_ids),
+                StockChatMessage.role == "user"
+            )
+            
+            # 날짜 필터 추가
+            if start_date:
+                group_query = group_query.where(StockChatMessage.created_at >= start_date)
+            if end_date:
+                group_query = group_query.where(StockChatMessage.created_at <= end_date)
+            
+            # 그룹화 및 정렬
+            group_query = group_query.group_by(date_format).order_by(date_format)
+            
+            # 쿼리 실행
+            result = await db.execute(group_query)
+            for row in result:
+                date_key = row[0].strftime('%Y-%m-%d')
+                count = row[1]
+                grouped_data[date_key] = count
+        
+        # 결과 반환
+        return {
+            "total_questions": total_questions,
+            "grouped_data": grouped_data
+        }
+        
+    except Exception as e:
+        from loguru import logger
+        logger.error(f"사용자 질문 수 조회 중 오류 발생: {str(e)}")
+        raise e 

@@ -18,6 +18,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  compiler: process.env.NODE_ENV === 'production' 
+  ? {
+      removeConsole: {
+        exclude: ['error', 'warn', 'info'],
+      },
+    } 
+  : undefined,
   eslint: {
     ignoreDuringBuilds: true,
   },

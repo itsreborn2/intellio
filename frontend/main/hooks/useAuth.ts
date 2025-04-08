@@ -7,6 +7,7 @@ interface User {
     email: string;
     name: string;
     provider: string;
+    profile_image?: string;
 }
 
 interface AuthState {
@@ -27,7 +28,9 @@ interface AuthState {
 const parseCookies = () => {
     return document.cookie.split(';').reduce((cookies, cookie) => {
         const [name, value] = cookie.trim().split('=');
-        cookies[name] = value;
+        if (name && value) {
+            cookies[name] = value;
+        }
         return cookies;
     }, {} as Record<string, string>);
 };
@@ -156,13 +159,34 @@ export const useAuth = create<AuthState>()(
                     } else if (userCookie && tokenCookie) {
                         // 세션 ID는 없지만 user와 token 쿠키가 있는 경우
                         try {
-                            const userData = JSON.parse(decodeURIComponent(userCookie));
-                            set({
-                                user: userData,
-                                token: tokenCookie,
-                                isAuthenticated: true
-                            });
-                            //console.log('[useAuth] 쿠키에서 사용자 정보 로드 완료:', userData);
+                            // URL 디코딩을 먼저 수행
+                            const decodedUserCookie = decodeURIComponent(userCookie);
+                            
+                            // 디코딩된 문자열이 비어있지 않은지 확인
+                            if (decodedUserCookie && decodedUserCookie.trim() !== '') {
+                                // JSON 파싱 전에 로그 추가
+                                console.debug('[useAuth] 디코딩된 사용자 쿠키:', decodedUserCookie);
+                                
+                                // 이중 따옴표로 감싸진 JSON 문자열인 경우 처리
+                                let jsonString = decodedUserCookie;
+                                if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
+                                    // 바깥쪽 따옴표 제거 및 이스케이프된 따옴표 처리
+                                    jsonString = jsonString.slice(1, -1).replace(/\\"/g, '"');
+                                    console.debug('[useAuth] 따옴표 제거 후 문자열:', jsonString);
+                                }
+                                
+                                // JSON 파싱 시도
+                                const userData = JSON.parse(jsonString);
+                                set({
+                                    user: userData,
+                                    token: tokenCookie,
+                                    isAuthenticated: true
+                                });
+                                console.log('[useAuth] 쿠키에서 사용자 정보 로드 완료:', userData);
+                            } else {
+                                console.error('[useAuth] 디코딩된 사용자 쿠키가 비어있음');
+                                get().clearAuthState();
+                            }
                         } catch (error) {
                             console.error('[useAuth] 쿠키 파싱 오류:', error);
                             get().clearAuthState();

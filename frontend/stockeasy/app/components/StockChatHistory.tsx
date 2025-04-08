@@ -50,57 +50,104 @@ export default function StockChatHistory({
   // Zustand 스토어 사용
   const loadChatSession = useChatStore(state => state.loadChatSession)
 
+  // 쿠키에서 사용자 정보 가져오기
+  const getUserInfoFromCookie = () => {
+    try {
+      // 쿠키 문자열 파싱
+      const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+        const [key, value] = cookie.trim().split('=');
+        acc[key.trim()] = value;
+        return acc;
+      }, {} as Record<string, string>);
+
+      // user 쿠키가 있는지 확인
+      if (cookies.user) {
+        // 쿠키 값 디코딩 및 JSON 파싱
+        let jsonString = decodeURIComponent(cookies.user);
+        
+        // 이중 따옴표로 감싸진 JSON 문자열인 경우 처리
+        if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
+          jsonString = jsonString.slice(1, -1).replace(/\\"/g, '"');
+        }
+        
+        // JSON 파싱하여 사용자 정보 추출
+        const userInfo = JSON.parse(jsonString);
+        
+        // 사용자 ID 설정
+        if (userInfo.id) {
+          console.log('[히스토리 패널] 사용자 ID 쿠키에서 로드:', userInfo.id);
+          setUserId(userInfo.id);
+          return userInfo.id;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('[히스토리 패널] 사용자 정보 파싱 오류:', error);
+      return null;
+    }
+  };
+
   // 채팅 세션 목록 가져오기
   const fetchChatSessions = async () => {
-    if (!userId) return
+    // userId가 없을 경우 쿠키에서 다시 시도
+    const currentUserId = userId || getUserInfoFromCookie();
+    if (!currentUserId) {
+      console.log('[히스토리 패널] 사용자 ID가 없어 채팅 세션을 가져올 수 없습니다.');
+      return;
+    }
     
-    setIsLoadingChatSessions(true)
+    setIsLoadingChatSessions(true);
     try {
       // 백엔드 API 호출
       const response = await axios.get<IChatSessionListResponse>(
         `${API_ENDPOINT_STOCKEASY}/chat/sessions`,
         { withCredentials: true }
-      )
+      );
       
       if (response.data.ok && Array.isArray(response.data.sessions)) {
-        setChatSessions(response.data.sessions)
-        console.log('[히스토리 패널] 채팅 세션 로딩 완료', response.data.sessions.length)
+        setChatSessions(response.data.sessions);
+        console.log('[히스토리 패널] 채팅 세션 로딩 완료', response.data.sessions.length);
       }
     } catch (error) {
-      console.error('[히스토리 패널] 채팅 세션 가져오기 오류:', error)
+      console.error('[히스토리 패널] 채팅 세션 가져오기 오류:', error);
     } finally {
-      setIsLoadingChatSessions(false)
+      setIsLoadingChatSessions(false);
     }
-  }
+  };
   
   // 채팅 세션 선택 처리
   const handleChatSessionSelect = async (session: IChatSession) => {
-    console.log('[히스토리 패널] 채팅 세션 선택:', session.id)
+    console.log('[히스토리 패널] 채팅 세션 선택:', session.id);
     try {
       // 세션에 속한 메시지 가져오기
-      const response = await axios.get(`${API_ENDPOINT_STOCKEASY}/chat/sessions/${session.id}/messages`, { withCredentials: true })
+      const response = await axios.get(`${API_ENDPOINT_STOCKEASY}/chat/sessions/${session.id}/messages`, { withCredentials: true });
       
       if (response.data.ok && Array.isArray(response.data.messages)) {
-        console.log('[히스토리 패널] 채팅 메시지 로드 성공', response.data.messages.length)
+        console.log('[히스토리 패널] 채팅 메시지 로드 성공', response.data.messages.length);
         
         // Zustand 스토어를 사용하여 메시지 저장 및 UI 업데이트
-        loadChatSession(session.id, session.title, response.data.messages)
+        loadChatSession(session.id, session.title, response.data.messages);
         
         // 모바일 환경에서는 히스토리 패널 닫기
         if (isMobile) {
-          toggleHistoryPanel()
+          toggleHistoryPanel();
         }
       }
     } catch (error) {
-      console.error('[히스토리 패널] 채팅 메시지 로드 오류:', error)
+      console.error('[히스토리 패널] 채팅 메시지 로드 오류:', error);
     }
-  }
+  };
   
   // 히스토리 아이템 추가 함수
   const addHistoryItem = (stockName: string, stockCode: string | undefined, prompt: string) => {
-    if (!userId) return
+    // userId가 없을 경우 쿠키에서 다시 시도
+    const currentUserId = userId || getUserInfoFromCookie();
+    if (!currentUserId) {
+      console.error('[히스토리 패널] 사용자 ID가 없어 히스토리를 추가할 수 없습니다.');
+      return;
+    }
     
-    console.log('[히스토리 패널] 새 아이템 추가:', { stockName, stockCode, prompt })
+    console.log('[히스토리 패널] 새 아이템 추가:', { stockName, stockCode, prompt });
     
     const newItem: IHistoryItem = {
       id: Date.now().toString(),
@@ -108,42 +155,42 @@ export default function StockChatHistory({
       stockCode,
       prompt,
       timestamp: Date.now(),
-      userId
-    }
+      userId: currentUserId
+    };
     
     // 새 아이템을 배열 맨 앞에 추가 (최신 항목이 맨 위에 표시)
-    setHistoryItems(prev => [newItem, ...prev.slice(0, 19)]) // 최대 20개 항목 유지
+    setHistoryItems(prev => [newItem, ...prev.slice(0, 19)]); // 최대 20개 항목 유지
     
     // 서버에 히스토리 저장
-    saveHistoryToServer(newItem)
-  }
+    saveHistoryToServer(newItem);
+  };
   
   // 서버에 히스토리 저장
   const saveHistoryToServer = async (item: IHistoryItem) => {
-    console.log('[히스토리 패널] 서버에 히스토리 저장 시작:', item.id)
+    console.log('[히스토리 패널] 서버에 히스토리 저장 시작:', item.id);
     try {
-      await axios.post('/api/user-history', item)
-      console.log('[히스토리 패널] 서버에 히스토리 저장 완료:', item.id)
+      await axios.post('/api/user-history', item);
+      console.log('[히스토리 패널] 서버에 히스토리 저장 완료:', item.id);
     } catch (error) {
-      console.error('[히스토리 패널] 히스토리 저장 오류:', error)
+      console.error('[히스토리 패널] 히스토리 저장 오류:', error);
     }
-  }
+  };
   
   // 히스토리 분석 결과 불러오기
   const loadHistoryAnalysis = async (item: IHistoryItem) => {
     if (!item.responseId) {
-      console.error('[히스토리 패널] 분석 결과 ID가 없습니다')
-      return
+      console.error('[히스토리 패널] 분석 결과 ID가 없습니다');
+      return;
     }
     
-    console.log('[히스토리 패널] 선택된 아이템:', item)
-    setIsLoadingAnalysis(true)
+    console.log('[히스토리 패널] 선택된 아이템:', item);
+    setIsLoadingAnalysis(true);
     try {
       // 분석 결과 불러오기 API 호출
-      const response = await axios.get(`/api/analysis-result?responseId=${item.responseId}`)
+      const response = await axios.get(`/api/analysis-result?responseId=${item.responseId}`);
       
       if (response.data && response.data.result) {
-        console.log('[히스토리 패널] 분석 결과 로드 성공')
+        console.log('[히스토리 패널] 분석 결과 로드 성공');
         // 분석 결과를 AIChatArea 컴포넌트에 전달하기 위한 이벤트 발생
         const event = new CustomEvent('loadHistoryAnalysis', {
           detail: {
@@ -153,46 +200,45 @@ export default function StockChatHistory({
             result: response.data.result,
             responseId: item.responseId
           }
-        })
-        window.dispatchEvent(event)
+        });
+        window.dispatchEvent(event);
         
         // 모바일 환경에서는 히스토리 패널 닫기
         if (isMobile) {
-          console.log('[히스토리 패널] 모바일 환경에서 패널 닫기')
-          toggleHistoryPanel()
+          console.log('[히스토리 패널] 모바일 환경에서 패널 닫기');
+          toggleHistoryPanel();
         }
       }
     } catch (error) {
-      console.error('[히스토리 패널] 분석 결과 불러오기 오류:', error)
+      console.error('[히스토리 패널] 분석 결과 불러오기 오류:', error);
     } finally {
-      setIsLoadingAnalysis(false)
+      setIsLoadingAnalysis(false);
     }
-  }
+  };
   
-  // 사용자 ID 가져오기
+  // 컴포넌트 마운트 시 쿠키에서 사용자 ID 가져오기
   useEffect(() => {
-    console.log('[히스토리 패널] 사용자 ID 조회 시작')
-    // 로컬 스토리지에서 사용자 ID 가져오기
-    const storedUserId = localStorage.getItem('userId')
-    if (storedUserId) {
-      console.log('[히스토리 패널] 기존 사용자 ID 사용:', storedUserId)
-      setUserId(storedUserId)
-    } else {
-      // 새 사용자 ID 생성 (실제로는 로그인 시스템에서 가져와야 함)
-      const newUserId = `user_${Date.now()}`
-      console.log('[히스토리 패널] 새 사용자 ID 생성:', newUserId)
-      localStorage.setItem('userId', newUserId)
-      setUserId(newUserId)
+    const id = getUserInfoFromCookie();
+    if (id) {
+      setUserId(id);
     }
-  }, [])
+  }, []);
   
-  // 사용자 ID가 있을 때 히스토리 가져오기
+  // 히스토리 패널이 열릴 때마다 쿠키에서 사용자 ID 확인 후 채팅 세션 가져오기
   useEffect(() => {
-    if (userId && isHistoryPanelOpen) {
-      // 채팅 세션 목록도 함께 가져오기
-      fetchChatSessions()
+    if (isHistoryPanelOpen) {
+      // 사용자 ID가 없다면 쿠키에서 다시 시도
+      if (!userId) {
+        const id = getUserInfoFromCookie();
+        if (id) {
+          setUserId(id);
+        }
+      }
+      
+      // 채팅 세션 목록 가져오기 (userId가 있으면 즉시, 없으면 getUserInfoFromCookie 내에서 설정된 후)
+      fetchChatSessions();
     }
-  }, [userId, isHistoryPanelOpen])
+  }, [isHistoryPanelOpen, userId]);
   
   // 패널 상태 변경 로깅
   useEffect(() => {
@@ -201,29 +247,29 @@ export default function StockChatHistory({
     } else {
       //console.log('[히스토리 패널] 닫힘')
     }
-  }, [isHistoryPanelOpen])
+  }, [isHistoryPanelOpen]);
   
   // 전역 이벤트 리스너 설정 - 종목 선택 및 프롬프트 입력 감지
   useEffect(() => {
     // 커스텀 이벤트 리스너 추가
     const handleStockPrompt = (e: CustomEvent) => {
-      const { stockName, stockCode, prompt, responseId } = e.detail
-      console.log('[히스토리 패널] 새 종목 프롬프트 감지:', { stockName, stockCode, prompt })
+      const { stockName, stockCode, prompt, responseId } = e.detail;
+      console.log('[히스토리 패널] 새 종목 프롬프트 감지:', { stockName, stockCode, prompt });
       if (stockName && prompt) {
-        addHistoryItem(stockName, stockCode, prompt)
+        addHistoryItem(stockName, stockCode, prompt);
       }
-    }
+    };
     
-    console.log('[히스토리 패널] 이벤트 리스너 등록: stockPromptSubmitted')
+    console.log('[히스토리 패널] 이벤트 리스너 등록: stockPromptSubmitted');
     // 이벤트 리스너 등록
-    window.addEventListener('stockPromptSubmitted', handleStockPrompt as EventListener)
+    window.addEventListener('stockPromptSubmitted', handleStockPrompt as EventListener);
     
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
-      console.log('[히스토리 패널] 이벤트 리스너 제거: stockPromptSubmitted')
-      window.removeEventListener('stockPromptSubmitted', handleStockPrompt as EventListener)
+      console.log('[히스토리 패널] 이벤트 리스너 제거: stockPromptSubmitted');
+      window.removeEventListener('stockPromptSubmitted', handleStockPrompt as EventListener);
     }
-  }, [userId]) // userId가 변경될 때마다 이벤트 리스너 재설정
+  }, [userId]); // userId가 변경될 때마다 이벤트 리스너 재설정
 
   return (
     <div 
