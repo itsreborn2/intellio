@@ -451,7 +451,9 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
             <div className="flex items-center justify-between p-3">
               {!isCollapsed && (
                 <div className="flex items-center gap-2">
-                  <h1 className="font-bold text-[#10A37F]">Doceasy</h1>
+                  <a href="http://localhost:3000" className="text-lg font-semibold text-white no-underline hover:no-underline">
+                    <h1 className="font-bold text-[#10A37F]">Doceasy</h1>
+                  </a>
                 </div>
               )}
               
