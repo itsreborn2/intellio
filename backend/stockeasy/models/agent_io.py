@@ -68,6 +68,13 @@ class QuestionAnalysisResult(TypedDict, total=False):
     keywords: List[str]                      # 주요 키워드
     detail_level: Literal["간략", "보통", "상세"] # 요구되는 상세도
 
+class ConversationContextAnalysisResult(TypedDict, total=False):
+    """대화 컨텍스트 분석 결과"""
+    requires_context: bool
+    is_followup_question: bool
+    referenced_context: Optional[str]
+    relation_to_previous: Literal["독립적", "직접참조", "간접참조", "확장", "수정"]
+    reasoning: str
 
 # 오케스트레이터 관련 데이터 모델들
 class AgentConfig(TypedDict, total=False):
@@ -236,6 +243,7 @@ class AgentState(TypedDict, total=False):
     stock_code: str                 # 종목코드
     stock_name: str                 # 종목명
     session_id: str                 # 세션 ID
+    chat_session_id:str             # 채팅 세션 ID
     
     # 사용자 컨텍스트
     user_context: Dict[str, Any]    # 사용자 컨텍스트 정보
@@ -270,3 +278,6 @@ class AgentState(TypedDict, total=False):
     # Fallback 정보
     used_fallback: bool             # Fallback 사용 여부
     fallback_reason: Optional[str]  # Fallback 이유 
+
+    conversation_history: List[Dict[str, Any]]  # 과거 대화 이력
+    context_analysis: Optional[ConversationContextAnalysisResult]  # 대화 컨텍스트 분석 결과

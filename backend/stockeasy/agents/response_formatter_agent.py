@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 from langchain_core.messages import HumanMessage, AIMessage
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
-from stockeasy.prompts.response_formatter_prompts import FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT, OPTIMIZED_RESPONSE_FORMATTER_SYSTEM_PROMPT, format_response_formatter_prompt
+from stockeasy.prompts.response_formatter_prompts import FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT, FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT2, format_response_formatter_prompt
 from langchain_core.output_parsers import StrOutputParser
 from common.models.token_usage import ProjectType
 from stockeasy.agents.base import BaseAgent
@@ -71,12 +71,21 @@ class ResponseFormatterAgent(BaseAgent):
             summary = state.get("summary", "")
             processing_status = state.get("processing_status", {})
             summarizer_status = processing_status.get("summarizer", "not_started")
+
+            context_response_agent = state["agent_results"].get("context_response_agent", {})
+            context_based_answer = ""
+            if context_response_agent:
+                context_based_answer = context_response_agent.get("answer", "")
+                summary = context_based_answer
+                
+
             # 통합된 응답이 없는 경우 처리
-            if not summary or summarizer_status != "completed":
+            if not context_based_answer and (not summary or summarizer_status != "completed"):
                 logger.warning(f"No summary response available.")
                 logger.warning(f"processing_status: {processing_status}")
                 logger.warning(f"Summarizer status: {summarizer_status}")
                 state["formatted_response"] = "죄송합니다. 현재 요청에 대한 정보를 찾을 수 없습니다. 다른 질문을 해 주시거나 나중에 다시 시도해 주세요."
+                state["answer"] = "죄송합니다. 현재 요청에 대한 정보를 찾을 수 없습니다. 다른 질문을 해 주시거나 나중에 다시 시도해 주세요."
                 return state
             
             # 1. 상태에서 커스텀 프롬프트 템플릿 확인

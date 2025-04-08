@@ -315,7 +315,40 @@ class StockAnalysisGraph:
         
         # 새로운 흐름 정의: 질문분류기 -> 오케스트레이터 -> 병렬 검색 -> 지식 통합
         workflow.add_edge("session_manager", "question_analyzer")
-        workflow.add_edge("question_analyzer", "orchestrator")
+        
+        # 질문 분석기 이후 라우팅 결정: 후속 질문 여부에 따라 라우팅
+        def question_analyzer_router(state: AgentState) -> str:
+            """질문 분석기 이후 라우팅 결정"""
+            # 컨텍스트 분석 결과 확인
+            context_analysis = state.get("context_analysis", {})
+            is_followup_question = context_analysis.get("is_followup_question", False)
+            requires_context = context_analysis.get("requires_context", False)
+            
+            # 대화 컨텍스트가 필요한 경우 context_response로 라우팅
+            if requires_context:
+                logger.info(f"대화 컨텍스트가 필요한 질문으로 context_response 에이전트로 라우팅합니다.")
+                # 처리 상태 업데이트
+                if "processing_status" not in state:
+                    state["processing_status"] = {}
+                state["processing_status"]["question_analyzer"] = "completed"
+                return "context_response"
+            
+            # 그 외의 경우는 일반 흐름대로 오케스트레이터로
+            logger.info(f"일반 질문으로 orchestrator 에이전트로 라우팅합니다.")
+            return "orchestrator"
+        
+        # 질문 분석기 -> 컨텍스트 응답 또는 오케스트레이터 조건부 엣지 추가
+        workflow.add_conditional_edges(
+            "question_analyzer",
+            question_analyzer_router,
+            {
+                "context_response": "context_response",
+                "orchestrator": "orchestrator"
+            }
+        )
+        
+        # 컨텍스트 응답 -> 응답 포맷터 엣지 추가
+        workflow.add_edge("context_response", "response_formatter")
         
         # 오케스트레이터 -> 병렬 검색 또는 fallback_manager (명확한 조건부 엣지)
         def orchestrator_router(state: AgentState) -> str:
@@ -614,11 +647,14 @@ class StockAnalysisGraph:
                 
             # 세션 ID 설정 (추적 ID로 사용)
             trace_id = session_id or datetime.now().strftime("%Y%m%d%H%M%S")
-            
+            chat_session_id = kwargs.get("chat_session_id", None)
+            logger.info(f"[process_query] chat_session_id: {chat_session_id}")
+
             # 초기 상태 설정
             initial_state: AgentState = {
                 "query": query,
                 "session_id": trace_id,
+                "chat_session_id": chat_session_id,
                 "stock_code": stock_code,
                 "stock_name": stock_name,
                 "errors": [],
@@ -628,6 +664,9 @@ class StockAnalysisGraph:
                 "parallel_search_executed": False,  # 병렬 검색 실행 여부 초기화
                 **kwargs
             }
+            chat_history = kwargs.get("conversation_history", [])
+            if chat_history:
+                logger.info(f"[process_query] 과거 대화 이력: {chat_history[:300]}")
             
             # 재시작 플래그 확인
             restart_from_error = kwargs.get("restart_from_error", False)
@@ -641,26 +680,37 @@ class StockAnalysisGraph:
                     logger.warning("LangSmith 타임스탬프 오류에서 재시작합니다. 그래프 실행을 조정합니다.")
                     # 타임스탬프 오류 발생 시 트레이싱 비활성화 또는 다른 특별 처리를 여기에 추가할 수 있음
             
-            logger.info(f"[process_query] initial_state: {initial_state}")
-            logger.info("병렬 처리 설정으로 그래프 실행 시작")
-            
+          
             # 세션별 상태 초기화
             async with self.state_lock:
-                self.current_state[trace_id] = initial_state.copy()
+                self.current_state[session_id] = initial_state.copy()
                 
             # 그래프 시작 콜백 실행
             await self._execute_callbacks("graph_start", "graph", initial_state)
+                
+            # LangGraph 호출
+            trace_id = f"{session_id}_{int(time.time())}"  # 고유 추적 ID 생성
+            logger.info(f"[process_query] 그래프 호출 시작 - trace_id: {trace_id}")
             
-            # 그래프 실행 (thread_id 제거, config 매개변수만 사용)
-            result = await self.graph.ainvoke(
-                initial_state,
-                config={
-                    "configurable": {"thread_id": trace_id}, 
-                    "max_concurrency": 4,  # 병렬 처리 동시성 설정
-                    "recursion_limit": 25  # 재귀 제한 설정
-                }
-            )
+            # AgentState 타입에 conversation_history가 포함되도록 상태 관리
+            # StateGraph 타입 제약 때문에 발생하는 문제 해결
+            try:
+                result = await self.graph.ainvoke(
+                    initial_state,
+                    config={
+                        "configurable": {"thread_id": trace_id}, 
+                        "max_concurrency": 4,  # 병렬 처리 동시성 설정
+                        "recursion_limit": 25  # 재귀 제한 설정
+                    }
+                )
+            except Exception as e:
+                logger.error(f"[process_query] 그래프 호출 중 오류 발생: {str(e)}", exc_info=True)
+                # 오류가 타입 관련 문제인 경우 conversation_history를 상태에서 제거하고 다시 시도
+                raise
+                
+            logger.info(f"[process_query] 그래프 호출 완료 - trace_id: {trace_id}")
             
+                
             # 그래프 종료 콜백 실행
             await self._execute_callbacks("graph_end", "graph", result)
             

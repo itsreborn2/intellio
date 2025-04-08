@@ -23,6 +23,8 @@ from stockeasy.agents.report_analyzer_agent import ReportAnalyzerAgent
 from stockeasy.agents.financial_analyzer_agent import FinancialAnalyzerAgent
 from stockeasy.agents.industry_analyzer_agent import IndustryAnalyzerAgent
 from stockeasy.agents.summarizer_agent import SummarizerAgent
+# 대화 컨텍스트 응답 에이전트 임포트
+from stockeasy.agents.context_response_agent import ContextResponseAgent
 from common.core.config import settings
 from langchain.callbacks.tracers import LangChainTracer
 
@@ -46,7 +48,8 @@ class AgentRegistry:
             "knowledge_integrator": KnowledgeIntegratorAgent,
             "summarizer": SummarizerAgent,
             "response_formatter": ResponseFormatterAgent,
-            "fallback_manager": FallbackManagerAgent
+            "fallback_manager": FallbackManagerAgent,
+            "context_response": ContextResponseAgent
         }
     
     def initialize_agents(self, db: AsyncSession = None) -> None:
@@ -98,6 +101,9 @@ class AgentRegistry:
         # 응답 및 오류 처리 에이전트 초기화
         self.agents["response_formatter"] = ResponseFormatterAgent(db=db)
         self.agents["fallback_manager"] = FallbackManagerAgent(db=db)
+        
+        # 대화 컨텍스트 응답 에이전트 초기화
+        self.agents["context_response"] = ContextResponseAgent(db=db)
         
         logger.info(f"총 {len(self.agents)} 개의 에이전트가 초기화되었습니다.")
     

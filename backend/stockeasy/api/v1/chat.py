@@ -17,12 +17,14 @@ import json
 import asyncio
 import time
 
+from stockeasy.services.financial.stock_info_service import StockInfoService
 from common.core.database import get_db_async
 from common.models.user import Session
 from common.core.deps import get_current_session
 from stockeasy.services.chat_service import ChatService
 from stockeasy.services.rag_service import StockRAGService
 from stockeasy.api.deps import get_stock_rag_service
+from common.core.memory import chat_memory_manager
 
 
 # 챗 라우터 정의 위에 도우미 함수 추가
@@ -89,13 +91,17 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
         "parallel_search": {
             "start": "다중 데이터 소스 검색 시작...",
             "complete": "데이터 검색 완료"
+        },
+        "context_response": {
+            "start": "이전 대화 맥락 고려 중...",
+            "complete": "대화 맥락 분석 완료"
         }
     }
     
     # 기본 메시지 (에이전트가 맵핑에 없는 경우)
     default_messages = {
-        "start": "데이터 분석을 시작합니다.",
-        "complete": "데이터 분석이 완료되었습니다."
+        "start": f"{agent} 에이전트가 데이터 분석을 시작합니다.",
+        "complete": f"{agent} 에이전트의 데이터 분석이 완료되었습니다."
     }
     
     # 매핑된 메시지 반환 또는 기본 메시지 반환
@@ -173,6 +179,12 @@ class ChatMessageStreamRequest(BaseModel):
     message: str = Field(..., description="메시지 내용")
     stock_code: str = Field(..., description="종목 코드")
     stock_name: str = Field(..., description="종목명")
+
+
+class ChatMemoryResponse(BaseResponse):
+    """채팅 메모리 응답 모델"""
+    messages: List[Dict[str, Any]]
+    total: int
 
 
 # 엔드포인트 정의
@@ -358,6 +370,10 @@ async def create_chat_message(
             )
         
         logger.info(f"session_data: {session_data}")
+        
+        # 메모리 관리자 인스턴스 가져오기
+        from common.core.memory import chat_memory_manager
+        
         # 사용자 메시지 저장
         user_message = await ChatService.create_chat_message(
             db=db,
@@ -369,14 +385,22 @@ async def create_chat_message(
         )
         logger.info(f"user_message: {user_message}")
         
+        # 메모리에 사용자 메시지 추가
+        await chat_memory_manager.add_user_message(str(chat_session_id), request.message)
+        
+        # 대화 히스토리 가져오기
+        conversation_history = await chat_memory_manager.get_messages(str(chat_session_id))
+        logger.info(f"대화 히스토리 로드 완료: {len(conversation_history)}개 메시지")
+        
         # LLM으로 응답 생성
-        # StockRAGService를 사용하여 응답 생성
+        # StockRAGService를 사용하여 응답 생성 (대화 히스토리 포함)
         rag_result = await stock_rag_service.analyze_stock(
             query=request.message,
             stock_code=request.stock_code,
             stock_name=request.stock_name,
             session_id=str(current_session.id),
-            user_id=str(current_session.user_id)
+            user_id=str(current_session.user_id),
+            conversation_history=conversation_history
         )
 
         # 응답 정보 추출
@@ -394,6 +418,10 @@ async def create_chat_message(
         #answer = f"어시스턴트 응답 저장 : {random.randint(1, 1000000)}"
         metadata = ""
         #logger.info(f"어시스턴트 응답 저장 : {answer}")
+        
+        # 메모리에 AI 응답 추가
+        await chat_memory_manager.add_ai_message(str(chat_session_id), answer)
+        
         # 어시스턴트 응답 저장
         # 실제 ChatService 호출 대신 더미 데이터 사용
         assistant_message = {
@@ -496,8 +524,12 @@ async def stream_chat_message(
     채팅 메시지를 생성하고 처리 과정을 스트리밍합니다.
     각 에이전트의 시작과 종료 시점에 이벤트를 전송합니다.
     """
-    logger.info("[STREAM_CHAT] 스트리밍 메시지 처리 시작: 세션 ID={}, 메시지='{}'", chat_session_id, request.message)
+    logger.info("[STREAM_CHAT] 스트리밍 메시지 처리 시작: 채팅 세션 ID={}, 메시지='{}'", chat_session_id, request.message)
     try:
+        # test code
+        stock_info_service = StockInfoService()
+        stock_info = await stock_info_service.get_stock_by_code(request.stock_code)
+        logger.info(f"[STREAM_CHAT] 종목 정보: {stock_info}")
         # 먼저 채팅 세션 확인
         logger.debug("[STREAM_CHAT] 채팅 세션 확인 중...")
         session_data = await ChatService.get_chat_session(
@@ -513,18 +545,12 @@ async def stream_chat_message(
                 detail="채팅 세션을 찾을 수 없습니다."
             )
         
-
-        # 사용자 메시지 저장
-        logger.debug("[STREAM_CHAT] 사용자 메시지 저장 중...")
-        user_message = await ChatService.create_chat_message(
-            db=db,
-            chat_session_id=chat_session_id,
-            role="user",
-            content=request.message,
-            stock_code=request.stock_code,
-            stock_name=request.stock_name
-        )
-        logger.info("[STREAM_CHAT] 사용자 메시지 저장 완료: {}", user_message["id"])
+        # 메모리 관리자 인스턴스 가져오기
+        #from common.core.memory import chat_memory_manager
+        
+        # 대화 히스토리 가져오기
+        #conversation_history = await chat_memory_manager.get_messages(str(chat_session_id))
+        #logger.info("[STREAM_CHAT] 대화 히스토리 로드 완료: {}개 메시지", len(conversation_history))
         
         # 비동기 생성기 함수 정의
         async def event_generator():
@@ -538,22 +564,23 @@ async def stream_chat_message(
                 }
             })
             
-            # 어시스턴트 메시지 ID 미리 생성
-            assistant_message_id = str(uuid4())
-            logger.debug("[STREAM_CHAT] 어시스턴트 메시지 ID 생성: {}", assistant_message_id)
             
             # 처리 시작 시간 저장
             start_time = time.time()
             
-            # 질문 처리 시작
-            logger.info("[STREAM_CHAT] analyze_stock 태스크 시작")
+            # 질문 처리 시작 (대화 히스토리 포함)
+            logger.info("[STREAM_CHAT] analyze_stock 태스크 시작 (대화 히스토리 포함)")
+            session_key = str(current_session.id)
+            logger.info(f"[STREAM_CHAT] 세션 키: {session_key}, 채팅 세션 ID: {chat_session_id}")
             task = asyncio.create_task(
                 stock_rag_service.analyze_stock(
                     query=request.message,
                     stock_code=request.stock_code,
                     stock_name=request.stock_name,
-                    session_id=str(chat_session_id),
-                    user_id=current_session.user_id
+                    session_id=session_key, # session_id는 사용자 인증 세션 id이다.
+                    user_id=current_session.user_id,
+                    chat_session_id=str(chat_session_id),
+                    #conversation_history=conversation_history
                 )
             )
             
@@ -577,7 +604,7 @@ async def stream_chat_message(
                 try:
                     # 현재 세션의 처리 상태 가져오기 (실제 구현에 맞게 수정 필요)
                     if hasattr(graph, 'current_state') and graph.current_state:
-                        state = graph.current_state.get(str(chat_session_id), {})
+                        state = graph.current_state.get(session_key, {})
                     
                     if state and 'processing_status' in state:
                         processing_status = state['processing_status']
@@ -594,7 +621,7 @@ async def stream_chat_message(
                                     "elapsed": elapsed
                                 }
                                 
-                                logger.info("[STREAM_CHAT] 에이전트 상태 변경: {}={} (경과: {:.2f}초)", agent, status, elapsed)
+                                #logger.info("[STREAM_CHAT] 에이전트 상태 변경: {}={} (경과: {:.2f}초)", agent, status, elapsed)
                                 yield json.dumps({
                                     "event": "agent_status",
                                     "data": event_data
@@ -650,20 +677,32 @@ async def stream_chat_message(
                 logger.info("[STREAM_CHAT] 응답 생성 완료 (총 소요시간: {:.2f}초, 응답 길이: {}자)", 
                            total_time, len(answer))
                 
+                # 메모리에 AI 응답 추가
+                await chat_memory_manager.add_ai_message(str(chat_session_id), answer)
+                
                 # 메타데이터 설정
                 metadata = {
                     "processing_time": total_time,
                     "agents_used": list(prev_status.keys()) if prev_status else [],
                     "responseId": str(uuid4())
                 }
-        #         user_message = await ChatService.create_chat_message(
-        #     db=db,
-        #     chat_session_id=chat_session_id,
-        #     role="user",
-        #     content=request.message,
-        #     stock_code=request.stock_code,
-        #     stock_name=request.stock_name
-        # )                
+                
+                #응답을 저장할때, 사용자 메세지도 저장.
+                # 사용자 메시지 저장
+                logger.debug("[STREAM_CHAT] 사용자 메시지 저장 중...")
+                user_message = await ChatService.create_chat_message(
+                    db=db,
+                    chat_session_id=chat_session_id,
+                    role="user",
+                    content=request.message,
+                    stock_code=request.stock_code,
+                    stock_name=request.stock_name
+                )
+                logger.info("[STREAM_CHAT] 사용자 메시지 저장 완료: {}", user_message["id"])
+                
+                # 메모리에 사용자 메시지 추가
+                await chat_memory_manager.add_user_message(str(chat_session_id), request.message)
+
                 # 에이전트 응답 저장
                 logger.debug("[STREAM_CHAT] 어시스턴트 응답 저장 중...")
                 assistant_message = await ChatService.create_chat_message(
@@ -675,7 +714,9 @@ async def stream_chat_message(
                     stock_name=request.stock_name,
                     metadata=metadata
                 )
-                logger.info("[STREAM_CHAT] 어시스턴트 응답 저장 완료: {}", assistant_message_id)
+                # 어시스턴트 메시지 ID 미리 생성
+                assistant_message_id = str(assistant_message["id"])
+                logger.info(f"[STREAM_CHAT] 어시스턴트 응답 저장 완료: {assistant_message_id}" )
                 
                 # 완료 이벤트 전송
                 logger.info("[STREAM_CHAT] 완료 이벤트 전송")
@@ -695,7 +736,7 @@ async def stream_chat_message(
                 logger.error("[STREAM_CHAT] 결과 처리 중 오류: {}", str(e))
                 
                 # 오류 메시지 저장
-                error_message = f"처리 중 오류가 발생했습니다: {str(e)}"
+                error_message = f"메세지 처리 처리 중 오류가 발생했습니다"
                 
                 await ChatService.create_chat_message(
                     db=db,
@@ -735,4 +776,99 @@ async def stream_chat_message(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"채팅 메시지 스트리밍 중 오류 발생: {str(e)}"
+        ) 
+
+@chat_router.delete("/sessions/{chat_session_id}/memory", response_model=BaseResponse)
+async def clear_chat_memory(
+    chat_session_id: UUID = Path(..., description="채팅 세션 ID"),
+    db: AsyncSession = Depends(get_db_async),
+    current_session: Session = Depends(get_current_session)
+) -> BaseResponse:
+    """채팅 세션의 대화 메모리를 초기화합니다."""
+    try:
+        # 세션 존재 여부 확인
+        session_data = await ChatService.get_chat_session(
+            db=db,
+            session_id=chat_session_id,
+            user_id=current_session.user_id
+        )
+        
+        if not session_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="채팅 세션을 찾을 수 없습니다."
+            )
+        
+        # 메모리 관리자 인스턴스 가져오기
+        from common.core.memory import chat_memory_manager
+        
+        # 대화 메모리 초기화
+        success = await chat_memory_manager.clear_memory(str(chat_session_id))
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="대화 메모리 초기화 중 오류가 발생했습니다."
+            )
+        
+        logger.info(f"채팅 세션 {chat_session_id}의 메모리가 초기화되었습니다.")
+        
+        return BaseResponse(
+            ok=True,
+            status_message="채팅 세션의 메모리가 성공적으로 초기화되었습니다."
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"대화 메모리 초기화 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"대화 메모리 초기화 중 오류 발생: {str(e)}"
+        ) 
+
+@chat_router.get("/sessions/{chat_session_id}/memory", response_model=ChatMemoryResponse)
+async def get_chat_memory(
+    chat_session_id: UUID = Path(..., description="채팅 세션 ID"),
+    limit: int = Query(10, ge=1, le=20, description="조회할 최대 메시지 수"),
+    db: AsyncSession = Depends(get_db_async),
+    current_session: Session = Depends(get_current_session)
+) -> ChatMemoryResponse:
+    """채팅 세션의 대화 메모리를 조회합니다."""
+    try:
+        # 세션 존재 여부 확인
+        session_data = await ChatService.get_chat_session(
+            db=db,
+            session_id=chat_session_id,
+            user_id=current_session.user_id
+        )
+        
+        if not session_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="채팅 세션을 찾을 수 없습니다."
+            )
+        
+        # 메모리 관리자 인스턴스 가져오기
+        from common.core.memory import chat_memory_manager
+        
+        # 대화 메모리 조회
+        messages = await chat_memory_manager.get_messages_as_dict(str(chat_session_id), limit)
+        
+        logger.info(f"채팅 세션 {chat_session_id}의 메모리 조회 완료: {len(messages)}개 메시지")
+        
+        return ChatMemoryResponse(
+            ok=True,
+            status_message="채팅 세션의 메모리 조회가 완료되었습니다.",
+            messages=messages,
+            total=len(messages)
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"대화 메모리 조회 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"대화 메모리 조회 중 오류 발생: {str(e)}"
         ) 

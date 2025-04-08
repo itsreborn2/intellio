@@ -115,7 +115,9 @@ class StockRAGService:
                            stock_name: Optional[str] = None,
                            session_id: Optional[str] = None,
                            user_id: Optional[str] = None,
-                           classification: Optional[QuestionClassification] = None) -> Dict[str, Any]:
+                           classification: Optional[QuestionClassification] = None,
+                           chat_session_id:Optional[str] = None,
+                           ) -> Dict[str, Any]:
         """
         주식 관련 쿼리 분석 및 응답 생성
         
@@ -126,6 +128,7 @@ class StockRAGService:
             session_id: 세션 ID (사용자 인증용)
             user_id: 사용자 ID (선택적)
             classification: 질문 분류 결과 (선택적)
+            conversation_history: 대화 히스토리 (선택적)
             
         Returns:
             분석 결과 (요약, 검색된 메시지, 분류 정보 등)
@@ -157,6 +160,7 @@ class StockRAGService:
                 "stock_code": stock_code,
                 "stock_name": stock_name,
                 "session_id": session_id,
+                "chat_session_id": chat_session_id,
             }
             
             # 사용자 ID가 있으면 추가
@@ -167,10 +171,18 @@ class StockRAGService:
             if session_id in self._user_contexts:
                 initial_state["user_context"] = self._user_contexts[session_id]
             
+            
+            
             if classification:
                 initial_state["question_classification"] = classification.model_dump()
             
-            logger.info(f"[analyze_stock] initial_state: {initial_state}")
+            logger.info(f"[analyze_stock] initial_state without conversation_history: {initial_state}")
+
+            # 대화 히스토리가 제공된 경우 추가
+            # if conversation_history is not None:
+            #     initial_state["conversation_history"] = conversation_history
+            #     logger.info(f"대화 히스토리 포함: {len(conversation_history)}개 메시지")
+
             result = await self.graph.process_query(**initial_state)
             
             end_time = time.time()
