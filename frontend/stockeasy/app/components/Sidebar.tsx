@@ -732,129 +732,29 @@ function SidebarContent() {
               </div>
               
               {/* 설정 버튼 - 클릭 이벤트 추가 (여기서는 Avatar 사용) */}
-              <div className="sidebar-button-container relative">
-                {isLoggedIn ? (
-                  // 로그인 상태일 때 사용자 아바타 표시
-                  userProfileImage ? (
-                    <Avatar 
-                      className="h-6 w-6 cursor-pointer rounded-full" 
-                      onClick={(e) => {
-                        console.log('설정 버튼 클릭됨');
-                        toggleSettingsMenu(e);
-                      }}
-                      onMouseEnter={() => handleMouseEnter('settings')}
-                      onMouseLeave={handleMouseLeave}
-                    >
-                      <AvatarImage src={userProfileImage} alt={userName || '사용자'} />
+              <div 
+                className={isMobile ? "sidebar-button" : "sidebar-button-container relative flex items-center w-full"} 
+                onClick={openSettingsPopup}
+                style={{ cursor: 'pointer' }} // Let the class handle padding
+              >
+                {isMobile ? (
+                  <> {/* 모바일: 아바타 + 설정 텍스트 */}
+                    <Avatar className="h-6 w-6 cursor-pointer"> 
+                      <AvatarImage src={userProfileImage || '/default-avatar.png'} alt={userName || 'User'} />
+                      <AvatarFallback>{userName ? userName.charAt(0) : 'U'}</AvatarFallback>
                     </Avatar>
-                  ) : (
-                    <Avatar 
-                      className="h-6 w-6 cursor-pointer rounded-full" 
-                      onClick={(e) => {
-                        console.log('설정 버튼 클릭됨');
-                        toggleSettingsMenu(e);
-                      }}
-                      onMouseEnter={() => handleMouseEnter('settings')}
-                      onMouseLeave={handleMouseLeave}
-                    >
-                      <AvatarFallback>
-                        {userName ? userName.substring(0, 2).toUpperCase() : 'ME'}
-                      </AvatarFallback>
+                    {/* Apply same text style as DocEasy button */}
+                    <span className="ml-2 text-sm text-[#ececf1]">설정</span> 
+                  </>
+                ) : ( 
+                   <> {/* 데스크탑: 아바타 + 이름 + 설정 아이콘 */}
+                    <Avatar className="h-8 w-8 cursor-pointer">
+                      <AvatarImage src={userProfileImage || '/default-avatar.png'} alt={userName || 'User'} />
+                      <AvatarFallback>{userName ? userName.charAt(0) : 'U'}</AvatarFallback>
                     </Avatar>
-                  )
-                ) : (
-                  // 로그아웃 상태일 때 로그인 버튼 표시
-                  <Avatar 
-                    className="h-7 w-7 cursor-pointer bg-blue-600 rounded-full" 
-                    onClick={(e) => {
-                      // 로그인 다이얼로그 열기
-                      toggleLoginDialog(e);
-                    }}
-                    onMouseEnter={() => handleMouseEnter('login')}
-                    onMouseLeave={handleMouseLeave}
-                  >
-                    <AvatarFallback className="rounded-full">
-                      <UserIcon className="h-3.5 w-3.5 text-white" />
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-
-                {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 - 로그인 상태일 때만 */}
-                {isMobile && isLoggedIn && (
-                  <span 
-                    className="ml-2 text-sm text-[#ececf1]"
-                    onClick={(e) => {
-                      console.log('설정 버튼 클릭됨');
-                      toggleSettingsMenu(e);
-                    }}
-                  >
-                    설정
-                  </span>
-                )}
-                
-                {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 - 로그아웃 상태일 때 */}
-                {isMobile && !isLoggedIn && (
-                  <span 
-                    className="ml-2 text-sm text-[#ececf1]"
-                    onClick={(e) => {
-                      // 로그인 다이얼로그 열기
-                      toggleLoginDialog(e);
-                    }}
-                  >
-                    로그인
-                  </span>
-                )}
-
-                {/* 설정 메뉴 드롭다운 - 로그인 상태일 때만 표시 */}
-                {settingsMenuOpen && isLoggedIn && (
-                  <div 
-                    ref={settingsMenuRef}
-                    className="fixed left-16 bottom-5 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 min-w-[160px] z-[10000]"
-                    style={{ 
-                      transform: isMobile ? 'translateX(-100%)' : 'none',
-                      border: '1px solid #e0e0e0'
-                    }}
-                    onClick={(e) => e.stopPropagation()} // 메뉴 내부 클릭 시 이벤트 버블링 방지
-                  >
-                    <button 
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
-                      onClick={(e) => {
-                        console.log('설정 옵션 클릭됨');
-                        openSettingsPopup(e);
-                      }}
-                    >
-                      <Settings size={16} className="mr-2" />
-                      <span>설정</span>
-                    </button>
-                    <button 
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
-                      onClick={(e) => {
-                        console.log('로그아웃 옵션 클릭됨');
-                        handleLogout(e);
-                      }}
-                    >
-                      <LogOut size={16} className="mr-2" />
-                      <span>로그아웃</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* 호버 시 툴팁 표시 */}
-                {hoveredButton === 'settings' && (
-                  <div
-                    className="sidebar-tooltip"
-                    style={{ top: tooltipPosition.settings }}
-                  >
-                    설정
-                  </div>
-                )}
-                {hoveredButton === 'login' && (
-                  <div
-                    className="sidebar-tooltip"
-                    style={{ top: tooltipPosition.login }}
-                  >
-                    로그인
-                  </div>
+                    <span className="ml-3 text-sm text-[#ececf1] flex-grow">{userName || '사용자'}</span>
+                    <Settings className="h-5 w-5 text-gray-400 cursor-pointer" />
+                  </> 
                 )}
               </div>
             </div>
