@@ -100,7 +100,6 @@ class TelegramMessageMetadata:
     sender_id: Optional[str]     # 발신자 ID (있는 경우)
     sender_name: Optional[str]   # 발신자 이름 (있는 경우)
     message_created_at: datetime         # 메시지 생성 시간
-    message_created_at_iso: Optional[str] = None  # ISO 형식의 생성 시간 문자열
     has_media: bool             # 미디어 첨부 여부
     has_document: bool          # 문서 첨부 여부
     document_name: Optional[str] # 문서 이름 (있는 경우)
@@ -109,6 +108,7 @@ class TelegramMessageMetadata:
     forward_from_name: Optional[str]  # 원본 메시지 발신자 이름
     forward_from_id: Optional[str]    # 원본 메시지 발신자 ID
     keywords: Optional[List[str]] = None  # 추출된 키워드 리스트
+    message_created_at_iso: Optional[str] = None  # ISO 형식의 생성 시간 문자열
 
     @classmethod
     def from_telegram_message(cls, message: TelegramMessage, keywords: Optional[List[str]] = None) -> 'TelegramMessageMetadata':
