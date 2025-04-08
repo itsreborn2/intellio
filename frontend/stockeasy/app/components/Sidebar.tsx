@@ -56,7 +56,7 @@ function SidebarContent() {
   // 버튼 참조 객체
   const buttonRefs = {
     home: useRef<HTMLButtonElement>(null),
-    analyst: useRef<HTMLButtonElement>(null), // AI 애널리스트 버튼 참조 추가
+    // analyst: useRef<HTMLButtonElement>(null), // AI 애널리스트 버튼 참조 추가 (주석 처리)
     chart: useRef<HTMLButtonElement>(null),
     etfSector: useRef<HTMLButtonElement>(null), // ETF/섹터 버튼 참조 추가
     value: useRef<HTMLButtonElement>(null), // 벨류에이션 버튼 참조 추가
@@ -94,16 +94,7 @@ function SidebarContent() {
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   
-  // AI 애널리스트 페이지로 이동하는 함수 추가
-  const goToAnalystPage = () => {
-    // 이미 애널리스트 페이지에 있는 경우 아무 작업도 수행하지 않음
-    if (window.location.pathname === '/analyst') return;
-    
-    // prefetch: true 옵션을 사용하여 클라이언트 측 네비게이션 활성화
-    router.push('/analyst', { scroll: false });
-    if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
-  };
-  
+  // RS랭크 페이지로 이동하는 함수
   const goToRSRankPage = () => {
     // 이미 RS랭크 페이지에 있는 경우 아무 작업도 수행하지 않음
     if (window.location.pathname === '/rs-rank') return;
@@ -131,6 +122,16 @@ function SidebarContent() {
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   
+  // // AI 애널리스트 페이지로 이동하는 함수 추가 (주석 처리)
+  // const goToAnalystPage = () => {
+  //   // 이미 애널리스트 페이지에 있는 경우 아무 작업도 수행하지 않음
+  //   if (window.location.pathname === '/analyst') return;
+  //
+  //   // prefetch: true 옵션을 사용하여 클라이언트 측 네비게이션 활성화
+  //   router.push('/analyst', { scroll: false });
+  //   if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+  // };
+
   // 검색 히스토리 패널 토글 함수
   const toggleHistoryPanel = () => {
     const newIsOpen = !isHistoryPanelOpen;
@@ -584,7 +585,7 @@ function SidebarContent() {
           }}
         >
           {hoveredButton === 'home' && '스탁이지'}
-          {hoveredButton === 'analyst' && 'AI 애널리스트'} 
+          {/* {hoveredButton === 'analyst' && 'AI 애널리스트'} */}
           {hoveredButton === 'chart' && 'RS순위'}
           {hoveredButton === 'etfSector' && 'ETF/섹터'}
           {hoveredButton === 'value' && '벨류에이션'}
@@ -645,21 +646,6 @@ function SidebarContent() {
                     <Home className="icon" />
                     {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
                     {isMobile && <span className="ml-2 text-sm text-[#ececf1]">스탁이지</span>}
-                  </button>
-                </div>
-                
-                {/* AI 애널리스트 버튼 추가 */}
-                <div className="sidebar-button-container">
-                  <button 
-                    ref={buttonRefs.analyst}
-                    className="sidebar-button" 
-                    onClick={goToAnalystPage}
-                    onMouseEnter={() => handleMouseEnter('analyst')}
-                    onMouseLeave={handleMouseLeave}
-                  >
-                    <LineChart className="icon" />
-                    {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">AI 애널리스트</span>}
                   </button>
                 </div>
                 
