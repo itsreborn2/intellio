@@ -113,6 +113,64 @@ export default function RootLayout({
     };
   }, [isMobile, isMenuOpen, sidebarRef, menuButtonRef]);
 
+  // 스크롤바 스타일을 적용하는 전역 스타일 요소 추가
+  useEffect(() => {
+    // 기존 스타일 태그가 있으면 제거
+    const existingStyle = document.getElementById('custom-scrollbar-style');
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+
+    // 새 스타일 태그 생성 및 추가
+    const style = document.createElement('style');
+    style.id = 'custom-scrollbar-style';
+    style.innerHTML = `
+      * {
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(133, 139, 157, 0.3) transparent !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
+      
+      *::-webkit-scrollbar {
+        width: 6px !important;
+        height: 6px !important;
+      }
+      
+      *::-webkit-scrollbar-track {
+        background: transparent !important;
+      }
+      
+      *::-webkit-scrollbar-thumb {
+        background-color: rgba(133, 139, 157, 0.3) !important;
+        border-radius: 3px !important;
+        border: none !important;
+      }
+      
+      *::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(133, 139, 157, 0.5) !important;
+      }
+      
+      @media (max-width: 767px) {
+        *::-webkit-scrollbar {
+          width: 4px !important;
+          height: 4px !important;
+        }
+        
+        *::-webkit-scrollbar-thumb {
+          background-color: rgba(133, 139, 157, 0.3) !important;
+          border-radius: 2px !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      if (style && document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
+    };
+  }, []);
+
   return (
     <html lang="en">
       <body className="bg-background text-foreground">

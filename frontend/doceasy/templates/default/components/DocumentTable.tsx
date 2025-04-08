@@ -734,7 +734,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
             alignItems: 'center',
             justifyContent: 'center',
             width: '30px', // 고정 너비
-            height: '100%', // 부모 높이(헤더 행 높이)에 맞춤
+            height: '42px', // 헤더 행 높이 고정
             '& .Mui-TableHeadCell-Content': { 
               display: 'flex',
               justifyContent: 'center', // 내부 div 수평 중앙 정렬
@@ -754,7 +754,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
             alignItems: 'center',
             justifyContent: 'center',
             width: '30px', // 고정 너비
-            height: '100%', // 부모 높이(본문 행 높이)에 맞춤
+            height: '69px', // 본문 행 높이 고정
           }
         }
       }
@@ -774,11 +774,15 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between', 
-          height: '34px', // 헤더 높이 34px로 변경
+          height: '42px', // 데스크톱 높이 42px로 고정
           '&:hover': { // 마우스 오버 시 배경색 변경
             backgroundColor: '#858B9D !important'
           },
-          // 모바일 스타일 제거 (전역으로 통일)
+          // 모바일 스타일
+          '@media (max-width: 767px)': {
+            minHeight: '34px', // 모바일 최소 높이 34px
+            fontSize: '0.8rem', // 모바일 폰트 크기 13px
+          },
           // .MuiBox-root 스타일 통합 (기존 유지)
           '& .MuiBox-root': {
             display: 'flex',
@@ -872,14 +876,14 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         color: '#000000',          // 글자색 변경 (검정)
         minHeight: '69px',         // 최소 높이 59px에서 69px로 증가
         maxHeight: 'none',         // 최대 높이 제한 제거
-        overflow: 'visible',       // 셀 자체는 오버플로우 허용 (내부 컨텐츠가 스크롤 처리)
+        overflow: 'visible',       // 셀 자체는 오버플로우 숨김 처리하여 높이 고정
         whiteSpace: 'normal',      // 텍스트가 줄바꿈되도록 설정
         
         // 모바일 환경에서 셀 조정
         '@media (max-width: 640px)': {
           paddingTop: '0.35rem',  // 모바일 상단 패딩 명시적 설정
           paddingBottom: '0.35rem', // 모바일 하단 패딩 명시적 설정
-          fontSize: '0.875rem', // 14px로 설정
+          fontSize: '0.8rem', // 13px로 설정
           minHeight: '59px',      // 모바일 최소 높이도 50px에서 59px로 증가
         },
         
@@ -902,15 +906,15 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           '& td': { borderWidth: '1px', borderColor: 'rgb(209 213 219)', padding: '0.25rem 0.5rem', fontSize: '0.875rem' },
           // 모바일 환경에서 마크다운 스타일 조정
           '@media (max-width: 640px)': {
-            fontSize: '0.875rem', // 14px로 설정
-            '& h1': { fontSize: '0.85rem' },
+            fontSize: '0.8rem', // 13px로 설정
+            '& h1': { fontSize: '0.85rem' }, // 헤딩 크기 유지 또는 약간 줄임
             '& h2': { fontSize: '0.8rem' },
             '& h3': { fontSize: '0.75rem' },
-            '& p': { fontSize: '0.875rem' },
-            '& li': { fontSize: '0.875rem' },
-            '& code': { fontSize: '0.875rem' },
-            '& th': { fontSize: '0.875rem', padding: '0.15rem 0.3rem' },
-            '& td': { fontSize: '0.875rem', padding: '0.15rem 0.3rem' }
+            '& p': { fontSize: '0.8rem', lineHeight: '1.2' }, // 본문 폰트 크기 조정
+            '& li': { fontSize: '0.8rem', lineHeight: '1.2' }, // 목록 폰트 크기 조정
+            '& code': { fontSize: '0.8rem' }, // 코드 폰트 크기 조정
+            '& th': { fontSize: '0.8rem', padding: '0.15rem 0.3rem' }, // 테이블 헤더 폰트/패딩 조정
+            '& td': { fontSize: '0.8rem', padding: '0.15rem 0.3rem' } // 테이블 셀 폰트/패딩 조정
           }
         },
         '&:hover': {
@@ -968,8 +972,11 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           // 모바일 환경에서 Document 칼럼 내 파일명 스타일 조정
           '@media (max-width: 640px)': {
             '& span:first-of-type': { // ':first-child' 대신 ':first-of-type' 사용
-              fontSize: '0.875rem', // 14px로 설정
-              lineHeight: 1.1,
+              fontSize: '0.8rem', // 모바일 폰트 크기 13px
+              lineHeight: 1.2,
+              '&.doc-filename-long': {
+                maxHeight: '3.6em', // 모바일 최대 3줄
+              }
             }
           }
         }
@@ -1022,10 +1029,56 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
   });
 
   return (
-    <div className="w-full h-full overflow-hidden relative">
+    <div className="w-full overflow-hidden relative" style={{ height: 'auto', maxHeight: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 삭제 버튼 제거 */}
       
       <style jsx global>{`
+        /* 스크롤바 스타일 설정 - 모든 스크롤바에 적용 */
+        * {
+          scrollbar-width: thin; /* Firefox용 */
+          scrollbar-color: rgba(133, 139, 157, 0.3) transparent; /* Firefox용 */
+          -webkit-overflow-scrolling: touch; /* iOS 스크롤 성능 향상 */
+        }
+        
+        /* Webkit 기반 브라우저(크롬, 사파리, 에지 등)용 스크롤바 스타일 */
+        *::-webkit-scrollbar {
+          width: 6px; /* 세로 스크롤바 너비 */
+          height: 6px; /* 가로 스크롤바 높이 */
+        }
+        
+        *::-webkit-scrollbar-track {
+          background: transparent; /* 스크롤바 트랙 배경 */
+        }
+        
+        *::-webkit-scrollbar-thumb {
+          background-color: rgba(133, 139, 157, 0.3); /* 스크롤바 색상 */
+          border-radius: 3px; /* 스크롤바 모서리 반경 */
+          border: none; /* 테두리 제거 */
+        }
+        
+        *::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(133, 139, 157, 0.5); /* 호버 시 스크롤바 색상 */
+        }
+        
+        /* 모바일 환경에서도 동일한 스크롤바 스타일 적용 */
+        @media (max-width: 767px) {
+          * {
+            scrollbar-width: thin; /* Firefox용 */
+            scrollbar-color: rgba(133, 139, 157, 0.3) transparent; /* Firefox용 */
+            -webkit-overflow-scrolling: touch; /* iOS 스크롤 성능 향상 */
+          }
+          
+          *::-webkit-scrollbar {
+            width: 4px; /* 모바일에서는 조금 더 작게 */
+            height: 4px;
+          }
+          
+          *::-webkit-scrollbar-thumb {
+            background-color: rgba(133, 139, 157, 0.3);
+            border-radius: 2px;
+          }
+        }
+        
         /* 헤더 셀 스타일 직접 조정 */
         .MuiTableHead-root {
           background-color: #F4F4F4 !important;
@@ -1036,7 +1089,10 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           border: none !important;
           box-shadow: none !important;
           outline: none !important;
-          min-height: 75px !important; /* 행 높이 증가 */
+          height: auto !important; /* 행 높이 자동 설정 */
+          min-height: 70px !important; /* 최소 높이 증가 */
+          max-height: none !important; /* 최대 높이 제한 제거 */
+          overflow: visible !important; /* 내용이 보이도록 오버플로우 보이게 설정 */
         }
         
         /* 테이블 셀 사이에만 약간의 구분선 추가 */
@@ -1045,7 +1101,10 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           border-top: none !important;
           border-left: none !important;
           border-right: none !important;
-          padding: 0.6rem !important; /* 셀 패딩 증가 */
+          padding: 0.4rem !important; /* 셀 패딩 증가 */
+          height: auto !important; /* 셀 높이 자동 설정 */
+          max-height: none !important; /* 셀 최대 높이 제한 제거 */
+          overflow: visible !important; /* 내용이 보이도록 오버플로우 보이게 설정 */
         }
         
         /* 마지막 셀의 오른쪽 테두리 제거 */
@@ -1061,12 +1120,6 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         /* 테이블 전체 테두리 제거 */
         .MuiTable-root {
           border: none !important;
-        }
-        
-        /* 행 높이 자동 조정 */
-        .MuiTableBody-root .MuiTableRow-root {
-          height: auto !important;
-          min-height: 70px !important; /* 행 높이 증가 */
         }
         
         /* 모바일 환경에서 테이블 행 높이 조정 */
@@ -1102,7 +1155,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         .MuiTableHead-root .MuiTableCell-root {
           display: flex !important;
           align-items: center !important;
-          height: 40px !important; /* 헤더 높이 34px로 변경 */
+          height: 42px !important; /* 데스크톱 높이 42px로 고정 */
           padding: 0 10px !important;
           borderRight: none !important;
         }
@@ -1120,9 +1173,9 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         /* 모바일 환경에서 헤더 셀 조정 */
         @media (max-width: 640px) {
           .MuiTableHead-root .MuiTableCell-root {
-            height: 30px !important;
+            height: 34px !important; /* 모바일에서도 헤더 높이 유지 */
             padding: 0 5px !important;
-            font-size: 0.875rem !important;
+            font-size: 0.8rem !important;
           }
         }
         
@@ -1132,15 +1185,19 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         .MuiTableHead-root .MuiTableCell-root > div {
           display: flex !important;
           align-items: center !important;
-          height: 100% !important;
+          height: 100% !important; /* 헤더 내부 요소 높이 자동 설정 */
         }
         
         /* 헤더 셀 텍스트 스타일 조정 */
         .MuiTableHead-root .MuiTableCell-root span {
           display: flex !important;
           align-items: center !important;
-          height: 100% !important;
+          height: 100% !important; /* 헤더 내부 요소 높이 자동 설정 */
           line-height: 1 !important;
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+          margin-top: 0 !important;
+          margin-bottom: 0 !important;
         }
         
         /* 헤더 셀 내부 모든 요소 수직 중앙 정렬 */
@@ -1152,10 +1209,64 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         .mrt-thead-cell-content, 
         .mrt-thead-cell-content-wrapper, 
         .mrt-thead-cell-content-labels,
-        .mrt-header-cell-text {
+        .mrt-header-cell-text,
+        .mrt-header-cell-content {
+          display: flex !important;
+          align-items: center !important;
+          height: 100% !important; /* 헤더 내부 요소 높이 자동 설정 */
+          justify-content: flex-start !important; /* 좌측 정렬 */
+        }
+        
+        /* 문서이름 컨텐츠 정렬 추가 조정 */
+        .MuiTableCell-head[data-index="1"] .mrt-header-cell-content,
+        .MuiTableCell-head[data-index="1"] .mrt-header-cell-text,
+        .MuiTableCell-head .Mui-TableHeadCell-Content,
+        .MuiTableCell-head .Mui-TableHeadCell-Content-Labels,
+        .MuiTableCell-head .Mui-TableHeadCell-Content-Wrapper {
           display: flex !important;
           align-items: center !important;
           height: 100% !important;
+          line-height: 1 !important; /* 줄간격 조정 */
+        }
+        
+        /* 문서이름 텍스트 자체 정렬 */
+        .MuiTableCell-head .Mui-TableHeadCell-Content-Wrapper {
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+          margin-top: 0 !important;
+          margin-bottom: 0 !important;
+        }
+        
+        /* 헤더 내 버튼 상하 중앙 정렬 */
+        .MuiTableHead-root button {
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 2px !important;
+          white-space: nowrap !important;
+          border-radius: 0.375rem !important;
+          font-size: 0.875rem !important;
+          font-weight: 500 !important;
+          height: 2rem !important; /* h-8 */
+          width: 2rem !important; /* w-8 */
+          border: 1px solid !important;
+          background-color: var(--background, white) !important;
+          position: relative !important;
+          transition: all 0.1s !important;
+        }
+        
+        /* 최대화 버튼 특별 스타일 */
+        .MuiTableHead-root button svg {
+          pointer-events: none !important;
+          height: 1rem !important; /* size-4 */
+          width: 1rem !important; /* size-4 */
+          flex-shrink: 0 !important;
+        }
+        
+        /* 버튼 호버 상태 */
+        .MuiTableHead-root button:hover {
+          background-color: var(--accent, #f4f4f4) !important;
+          color: var(--accent-foreground, #333) !important;
         }
         
         /* 체크박스 크기 축소 */
@@ -1204,7 +1315,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         .mrt-row-select-cell > div,
         .mrt-row-select-head-cell > div {
           width: 100% !important;
-          height: 100% !important;
+          height: 100% !important; /* 헤더 높이에 맞춰 100% */
           display: flex !important;
           justify-content: center !important;
           align-items: center !important;
@@ -1338,6 +1449,8 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           width: 100% !important;
           max-width: 100% !important;
           padding: 0 !important;
+          max-height: none !important; /* 셀 내부 div 최대 높이 제한 제거 */
+          overflow: visible !important; /* 내용이 보이도록 오버플로우 보이게 설정 */
         }
         
         /* MUI 테이블 셀 컨텐츠 최대화 */
@@ -1345,11 +1458,13 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           padding: 3px !important;
         }
         
-        /* 셀 내부의 p 태그 패딩 제거 */
+        /* 셀 내부의 p 태그 패딩 제거 및 높이 제한 */
         .MuiTableBody-root .MuiTableCell-root p {
           margin: 0 !important;
           padding: 0 !important;
           line-height: 1.2 !important;
+          max-height: none !important; /* 셀 내부 p 태그 최대 높이 제한 제거 */
+          overflow: visible !important; /* 내용이 보이도록 오버플로우 보이게 설정 */
         }
         
         /* 파일명 텍스트 패딩 축소 */
@@ -1372,6 +1487,8 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         .MuiTableBody-root .prose {
           margin: 0 !important;
           padding: 0 !important;
+          max-height: none !important; /* prose 컨텐츠 최대 높이 제한 제거 */
+          overflow: visible !important; /* 내용이 보이도록 오버플로우 보이게 설정 */
         }
         
         /* prose 내부 요소들의 마진 축소 */
@@ -1520,19 +1637,19 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           .MuiTableBody-root .prose li,
           body > div > div > div .prose p,
           body > div > div > div .prose li { 
-            font-size: 0.875rem !important;
+            font-size: 0.8rem !important;
           }
           
           .MuiTableBody-root .prose code,
           body > div > div > div .prose code { 
-            font-size: 0.875rem !important;
+            font-size: 0.8rem !important;
           }
           
           .MuiTableBody-root .prose th,
           .MuiTableBody-root .prose td,
           body > div > div > div .prose th,
           body > div > div > div .prose td { 
-            font-size: 0.875rem !important;
+            font-size: 0.8rem !important;
             padding: 0.15rem 0.3rem !important;
           }
         }
@@ -1653,11 +1770,19 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         /* 모바일 및 데스크탑에서의 테이블 스크롤 동작 개선 */
         @media (max-width: 767px) {
           .MuiPaper-root {
-            overflow: visible !important;
+            height: 100% !important;
+            flex: 1 !important;
           }
           .MuiTableContainer-root {
-            overflow: visible !important;
-            max-height: none !important;
+            overflow-y: visible !important; /* 내부 스크롤 제거 */
+            max-height: none !important; /* 높이 제한 제거 */
+            -webkit-overflow-scrolling: touch !important; /* iOS 스크롤 성능 향상 */
+          }
+          
+          /* 모바일에서 스크롤바 터치 영역 확대 */
+          .MuiTableContainer-root::-webkit-scrollbar {
+            width: 4px !important;
+            height: 4px !important;
           }
         }
         
@@ -1665,10 +1790,11 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         @media (min-width: 768px) {
           /* 테이블 컨테이너가 가변적으로 화면에 맞게 확장되도록 설정 */
           .MuiPaper-root {
-            height: 100% !important;
+            height: 100% !important; /* 테이블 컨테이너 높이를 부모 요소에 맞게 설정 */
             display: flex !important;
             flex-direction: column !important;
             overflow: hidden !important;
+            flex: 1 !important; /* 부모 요소의 공간을 모두 차지하도록 설정 */
           }
           
           /* 테이블 헤더 영역 고정 */
@@ -1685,13 +1811,15 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
             overflow: auto !important;
             /* 스크롤이 필요할 때만 스크롤바 표시 */
             overflow-y: auto !important;
-            max-height: calc(100vh - 300px) !important; /* 헤더 및 기타 UI 요소를 고려한 최대 높이 설정 */
+            height: auto !important; /* 고정 높이 제거 */
+            max-height: calc(100vh - 200px) !important; /* 화면 크기에 따라 가변적인 최대 높이 설정 */
           }
           
           /* 테이블 자체가 컨테이너를 채우도록 설정 */
           .MuiTable-root {
-            height: fit-content !important;
-            min-height: 100% !important;
+            height: auto !important; /* 테이블 높이 자동 설정 */
+            min-height: auto !important; /* 최소 높이 제한 제거 */
+            table-layout: fixed !important; /* 테이블 레이아웃 고정 */
           }
         }
       `}</style>

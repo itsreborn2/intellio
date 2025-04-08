@@ -7,6 +7,7 @@ import { format, subDays } from 'date-fns';
 import ChartComponent from '../components/ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
 import html2canvas from 'html2canvas';
+import TableCopyButton from '../components/TableCopyButton';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -1137,10 +1138,13 @@ export default function RSRankPage() {
                     ) : csvData ? (
                       <div className="flex flex-col h-full">
                         <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
-                          <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
-                          <div className="flex items-center justify-end">
-                            <span className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>RS는 특정 주식이 시장 또는 비교 대상에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
+                          {/* 제목과 설명 그룹 */}
+                          <div className="flex items-center">
+                             <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
+                             <span className="text-gray-600 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>RS는 특정 주식이 시장에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
                           </div>
+                          {/* 복사 버튼 */}
+                          <TableCopyButton tableRef={rsTableRef} headerRef={rsHeaderRef} tableName="RS 순위 TOP 200" />
                         </div>
                         <div className="relative">
                           <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={rsTableRef}>
@@ -1307,10 +1311,13 @@ export default function RSRankPage() {
                     {/* 금주 52주 신고가 정보 영역 */}
                     <div className="flex flex-col">
                       <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
-                        <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
-                        <div className="flex items-center justify-end">
-                          <span className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                        {/* 제목과 설명 그룹 */}
+                        <div className="flex items-center">
+                          <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
+                          <span className="text-gray-600 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
                         </div>
+                        {/* 복사 버튼 */}
+                        <TableCopyButton tableRef={highTableRef} headerRef={highHeaderRef} tableName="52주 신고가" />
                       </div>
                       <div className="relative">
                         <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={highTableRef}>

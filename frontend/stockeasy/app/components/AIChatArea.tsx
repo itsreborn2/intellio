@@ -553,6 +553,11 @@ function AIChatAreaContent() {
       // 메시지 목록에 사용자 메시지와 처리 중 상태 메시지 추가
       setMessages((prevMessages) => [...prevMessages, userMessageObj, statusMessageObj])
       
+      // 첫 메시지 전송 시 중앙 정렬 해제
+      if (isInputCentered) {
+        setIsInputCentered(false);
+      }
+      
       // 스크롤 아래로 이동
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -794,6 +799,42 @@ function AIChatAreaContent() {
     }
   }, [isMounted, stockOptions]);
 
+  // Backspace 및 Enter 키 처리 함수
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    // Backspace 키이고, 입력창이 비어있고, 종목이 선택된 상태인지 확인
+    if (
+      e.key === 'Backspace' &&
+      inputMessage === '' &&
+      selectedStock
+    ) {
+      e.preventDefault(); // 기본 Backspace 동작 방지
+
+      console.log('Backspace 누름 - 종목 선택 해제 및 팝업 표시'); // 디버깅 로그
+
+      // 선택된 종목 해제
+      setSelectedStock(null);
+
+      // 종목 추천 팝업 다시 표시
+      setShowStockSuggestions(true);
+
+      // 최근 조회 종목 또는 기본 추천 종목을 목록에 표시
+      if (recentStocks.length > 0) {
+        setFilteredStocks(recentStocks);
+      } else {
+        setFilteredStocks(stockOptions.slice(0, 5)); // 기본 추천 종목
+      }
+
+      // 검색 모드로 전환하여 사용자가 바로 검색할 수 있게 함
+      setSearchMode(true);
+    }
+
+    // Enter 키 눌렀을 때 메시지 전송 (Shift+Enter는 줄바꿈)
+    if (e.key === 'Enter' && !e.shiftKey && inputMessage.trim() !== '') {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   // 입력 필드 포커스 시 종목 추천 목록 표시
   const handleInputFocus = () => {
     // 종목 선택 팝업이 열려 있으면 검색 모드 활성화
@@ -916,10 +957,10 @@ function AIChatAreaContent() {
       target.style.height = `${newHeight}px`;
     }
     
-    // 입력 시 중앙 정렬 해제 (복원)
-    if (isInputCentered && value.trim().length > 0) {
-      setIsInputCentered(false); 
-    }
+    // 입력 시 중앙 정렬 해제 (제거)
+    // if (isInputCentered && value.trim().length > 0) {
+    //   setIsInputCentered(false); 
+    // }
   };
 
   // 종목 선택 처리
@@ -937,7 +978,7 @@ function AIChatAreaContent() {
     setInputMessage(''); // 입력 필드 초기화
     
     // 선택한 종목을 최근 조회 목록에 추가
-    const updatedRecentStocks = [stock, ...recentStocks.filter(s => s.value !== stock.value)].slice(0, 5);
+    const updatedRecentStocks = [stock, ...recentStocks.filter(s => s.value !== stock.value)].slice(0, MAX_RECENT_STOCKS);
     setRecentStocks(updatedRecentStocks);
     
     // 로컬 스토리지에 최근 조회 종목 저장
@@ -1424,17 +1465,8 @@ function AIChatAreaContent() {
               paddingBottom: '0',
               paddingLeft: '0',
               boxShadow: '0 2px 6px rgba(0, 0, 0, 0.05)',
-              border: '2px solid #282A2E', // 테두리선 추가
-              transition: 'border-color 0.3s ease' // 부드러운 색상 전환 효과
+              border: '2px solid #282A2E', // 테두리선 유지
             }}
-              onMouseEnter={(e) => {
-                // 마우스 오버 시 테두리 색상 변경
-                e.currentTarget.style.borderColor = '#10A37F';
-              }}
-              onMouseLeave={(e) => {
-                // 마우스가 벗어날 때 테두리 색상 복원
-                e.currentTarget.style.borderColor = '#282A2E';
-              }}
             >
               {selectedStock && (
                 <div 
@@ -1446,9 +1478,9 @@ function AIChatAreaContent() {
                     height: '26px', // 높이 28px -> 26px로 줄임
                     borderRadius: '6px',
                     border: '1px solid #ddd',
-                    backgroundColor: '#D8EFE9', // 연한 민트색으로 변경
-                    color: '#333',
-                     fontSize: '0.7rem',
+                    backgroundColor: '#3F424A', // 배경색 변경
+                    color: '#F4F4F4', // 글자색 변경
+                    fontSize: '0.7rem',
                     fontWeight: 'normal',
                     whiteSpace: 'nowrap',
                     cursor: isProcessing ? 'not-allowed' : 'pointer' // 분석 중일 때 마우스 커서 변경
@@ -1488,20 +1520,8 @@ function AIChatAreaContent() {
                 value={inputMessage}
                 onChange={handleInputChange}
                 onFocus={handleInputFocus}
+                onKeyDown={handleKeyDown}
                 readOnly={isProcessing} // disabled 대신 readOnly 사용하여 스타일 유지하면서 입력 금지
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    if (showStockSuggestions && filteredStocks.length > 0) {
-                      // 종목 선택 팝업이 열려 있고 검색 결과가 있는 경우, 첫 번째 종목 선택
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleStockSelect(filteredStocks[0]);
-                    } else if (selectedStock && inputMessage.trim() && !searchMode && !isProcessing) {
-                      // 종목이 선택된 상태에서 메시지가 있고 검색 모드가 아니고 분석 중이 아니면 전송
-                      handleSendMessage();
-                    }
-                  }
-                }}
                 style={{
                   ...inputStyle,
                   border: 'none',

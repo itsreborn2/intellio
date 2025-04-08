@@ -207,16 +207,18 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-lg font-medium">{name}</p>
-                    <p className="text-sm text-gray-500">{email || ' '}</p>
+                    {/* 사용자 이름 폰트 크기 조정 */}
+                    <p className="font-medium">{name || '사용자'}</p> 
+                    <p className="text-sm text-gray-500">{email}</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 질문 개수 정보 */}
+            {/* 질문 개수 정보 섹션 */}
             <div className="border-t pt-4">
-              <h3 className="font-medium mb-3 flex items-center">
+              {/* 제목 폰트 크기 조정 */}
+              <h3 className="font-medium mb-3 flex items-center text-base"> 
                 <MessageSquare className="w-4 h-4 mr-2" />
                 질문 개수 정보
               </h3>
@@ -249,8 +251,16 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
                   
                   {/* 요약 정보 */}
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-medium mb-2">총 질문</h4>
-                    <div className="text-lg font-medium">{formatNumber(questionSummary?.total_questions)} / 30</div>
+                    {/* 제목 폰트 크기 조정 */}
+                    <h4 className="font-medium mb-2 text-base">총 질문</h4> 
+                    {/* 값 폰트 크기 조정 */}
+                    <div className="font-medium"> 
+                      {isQuestionLoading ? (
+                        '로딩 중...'
+                      ) : (
+                        `${formatNumber(questionSummary?.total_questions)} / 30`
+                      )}
+                    </div>
                   </div>
                   
                  

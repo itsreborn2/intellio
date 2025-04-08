@@ -62,8 +62,7 @@ function SidebarContent() {
     value: useRef<HTMLButtonElement>(null), // 벨류에이션 버튼 참조 추가
     history: useRef<HTMLButtonElement>(null), // 검색 히스토리 버튼 참조 추가
     doc: useRef<HTMLButtonElement>(null),
-    user: useRef<HTMLButtonElement>(null),
-    settings: useRef<HTMLButtonElement>(null)
+    settings: useRef<HTMLDivElement>(null), // 설정 버튼(Avatar 컨테이너) 참조 추가
   };
 
   // 설정 메뉴 참조 객체
@@ -218,8 +217,6 @@ function SidebarContent() {
     };
   }, [isMenuOpen]);
 
-  
-  
   // 초기 로드 시 현재 페이지가 AIChatArea인지 확인 (원본 코드 복원)
   useEffect(() => {
     // 현재 페이지가 홈페이지('/')인지 확인
@@ -228,7 +225,7 @@ function SidebarContent() {
     // 홈페이지인 경우 AIChatArea가 로드되어 있으므로 검색 히스토리 버튼 표시
     setShowHistoryButton(isHomePage);
   }, []);
-  
+
   // AIChatArea 컴포넌트의 마운트/언마운트 이벤트 감지 (원본 코드 복원)
   useEffect(() => {
     // AIChatArea 컴포넌트 마운트 이벤트 리스너
@@ -258,6 +255,30 @@ function SidebarContent() {
     };
   }, [isHistoryPanelOpen]); // 히스토리 패널 상태 의존성 추가
   
+  // 헤더에서 발생한 설정 팝업 열기 이벤트 감지
+  useEffect(() => {
+    // 헤더에서 설정 팝업 열기 이벤트 리스너
+    const handleOpenSettingsPopup = (e: CustomEvent) => {
+      // 헤더에서 설정 팝업 열기 요청이 오면 설정 팝업 열기
+      setShowSettingsPopup(true);
+    };
+    
+    // 이벤트 리스너 등록
+    window.addEventListener('openSettingsPopup', handleOpenSettingsPopup as EventListener);
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('openSettingsPopup', handleOpenSettingsPopup as EventListener);
+    };
+  }, []);
+
+  // 채팅 페이지 로드 시 검색 히스토리 패널을 기본으로 열도록 useEffect 추가
+  useEffect(() => {
+    if (showHistoryButton) {
+      setIsHistoryPanelOpen(true);
+    }
+  }, [showHistoryButton]);
+
   // 모바일 메뉴 토글 함수 (단순화: 히스토리 패널 열려있을 땐 호출 안 됨)
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen); // 메인 메뉴 상태만 토글
@@ -570,7 +591,7 @@ function SidebarContent() {
           {hoveredButton === 'history' && '검색 히스토리'} 
           {hoveredButton === 'doc' && '닥이지'}
           {hoveredButton === 'user' && '마이페이지'}
-          {hoveredButton === 'settings' && '설정'}
+          {hoveredButton === 'settings' && '마이페이지'} {/* 마이페이지 툴팁 추가 */}
         </div>
       )}
 
@@ -715,7 +736,7 @@ function SidebarContent() {
           
           {/* 하단 영역 - 설정 버튼만 남김 */}
           <div className="mt-auto pb-4">
-            <div className="w-full flex flex-col items-center">
+            <div className="w-full flex flex-col items-center gap-y-2"> 
               {/* 문서 버튼 - DocEasy로 이동 */}
               <div className="sidebar-button-container">
                 <button 
@@ -733,8 +754,11 @@ function SidebarContent() {
               
               {/* 설정 버튼 - 클릭 이벤트 추가 (여기서는 Avatar 사용) */}
               <div 
+                ref={buttonRefs.settings} // Ref 추가
                 className={isMobile ? "sidebar-button" : "sidebar-button-container relative flex items-center w-full"} 
                 onClick={openSettingsPopup}
+                onMouseEnter={() => !isMobile && handleMouseEnter('settings')} // 데스크톱에서만 호버 이벤트 추가
+                onMouseLeave={() => !isMobile && handleMouseLeave()} // 데스크톱에서만 호버 이벤트 추가
                 style={{ cursor: 'pointer' }} // Let the class handle padding
               >
                 {isMobile ? (
@@ -744,16 +768,14 @@ function SidebarContent() {
                       <AvatarFallback>{userName ? userName.charAt(0) : 'U'}</AvatarFallback>
                     </Avatar>
                     {/* Apply same text style as DocEasy button */}
-                    <span className="ml-2 text-sm text-[#ececf1]">설정</span> 
+                    <span className="ml-2 text-sm text-[#ececf1]">마이페이지지</span> 
                   </>
                 ) : ( 
-                   <> {/* 데스크탑: 아바타 + 이름 + 설정 아이콘 */}
+                   <> {/* 데스크탑: 아바타만 표시 */}
                     <Avatar className="h-8 w-8 cursor-pointer">
                       <AvatarImage src={userProfileImage || '/default-avatar.png'} alt={userName || 'User'} />
                       <AvatarFallback>{userName ? userName.charAt(0) : 'U'}</AvatarFallback>
                     </Avatar>
-                    <span className="ml-3 text-sm text-[#ececf1] flex-grow">{userName || '사용자'}</span>
-                    <Settings className="h-5 w-5 text-gray-400 cursor-pointer" />
                   </> 
                 )}
               </div>
