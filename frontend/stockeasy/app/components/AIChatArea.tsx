@@ -563,7 +563,13 @@ function AIChatAreaContent() {
       
       if (!sessionId) {
         try {
-          const newSession = await createChatSession(`${selectedStock?.stockName || '새 채팅'} 분석`)
+          // 종목명(종목코드) : 질문내용 으로 session_name 생성
+          const stockName = selectedStock?.stockName || '종목명';
+          const stockCode = selectedStock?.stockCode || '000000';
+          const question = inputMessage || '';
+
+          const session_name = `${stockName}(${stockCode}) : ${question}`;
+          const newSession = await createChatSession(session_name)
           sessionId = newSession.id
           setCurrentChatSession(newSession)
           console.log('새 채팅 세션 생성:', newSession)
@@ -679,7 +685,8 @@ function AIChatAreaContent() {
                   ? { 
                       ...msg, 
                       content: `오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`, 
-                      isProcessing: false 
+                      isProcessing: false,
+                      elapsedStartTime: undefined // 타이머를 멈추기 위해 시작 시간을 undefined로 설정
                     } 
                   : msg
               )
@@ -1306,7 +1313,11 @@ function AIChatAreaContent() {
                   {message.role !== 'status' && (
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(message.content);
+                        if (message.role === 'user') {
+                          navigator.clipboard.writeText(message.content);
+                        } else {
+                          navigator.clipboard.writeText(message.content + '\n\n' + '(주)인텔리오 - 스탁이지 : https://stockeasy.intellio.kr/');
+                        }
                         setCopyStates(prev => ({ ...prev, [message.id]: true }));
                         setTimeout(() => {
                           setCopyStates(prev => ({ ...prev, [message.id]: false }));
@@ -1335,7 +1346,7 @@ function AIChatAreaContent() {
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = message.role === 'user' ? 'rgba(255, 255, 255, 0)' : 'rgba(240, 240, 240, 0.8)';
                       }}
-                      title={copyStates[message.id] ? "복사 완료" : "텍스트 복사"}
+                      title={copyStates[message.id] ? "복사 완료" : "복사"}
                     >
                       {copyStates[message.id] ? (
                         <Check size={14} color={message.role === 'user' ? '#FFFFFF' : '#10A37F'} />
@@ -2317,6 +2328,73 @@ function AIChatAreaContent() {
                   whiteSpace: 'nowrap',
                   maxWidth: '100%'
                 }}>글로벌 AI 기업과 협력 발표, 생성형 AI 기술 통합으로 시장 점유율 확대 계획</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  const woojinStock = { 
+                    value: '049800', 
+                    label: '우진플라임', 
+                    stockName: '우진플라임',
+                    stockCode: '049800',
+                    display: '우진플라임 (049800)'
+                  };
+                  setSelectedStock(woojinStock);
+                  setInputMessage('월별 전망, 잠정치, 실적 등의 통계를 보여주고 앞으로 전망을 이야기해줘');
+                  
+                  const updatedRecentStocks = [woojinStock, ...recentStocks.filter(s => s.value !== woojinStock.value)].slice(0, 5);
+                  setRecentStocks(updatedRecentStocks);
+                  try {
+                    localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+                  } catch (error) {
+                    console.error('Failed to save recent stocks to localStorage:', error);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  fontSize: '13px', // 16px에서 13px로 변경
+                  color: '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#ffffff';
+                  e.currentTarget.style.backgroundColor = '#40414F';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#333';
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                }}
+              >
+                <span style={{
+                  padding: '3px 8px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                  fontSize: '13px', // 16px에서 13px로 변경
+                  fontWeight: 'normal',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  우진플라임
+                </span>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}>발전소 수주 확대 및 신재생 에너지 사업 확장으로 매출 성장세</span>
               </button>
             </div>
           </div>

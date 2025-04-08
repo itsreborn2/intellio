@@ -88,18 +88,30 @@ class SessionManagerAgent(BaseAgent):
                     }
                     
                     # 대화 이력 검색 (캐시 또는 DB에서)
-                    conversation_history = self._get_conversation_history(str(session.id))
+                    chat_session_id = state.get("chat_session_id", None)
+                    logger.info(f"chat_session_id: {chat_session_id}")
+
+                    # 메모리 관리자 인스턴스 가져오기
+                    from common.core.memory import chat_memory_manager
+                    
+                    # 대화 히스토리 가져오기
+                    conversation_history = await chat_memory_manager.get_messages(str(chat_session_id))
+                    logger.info("[session_manager_agent] 대화 히스토리 로드 완료: {}개 메시지", len(conversation_history))
+
                     state["conversation_history"] = conversation_history
+
+                    # conversation_history = self._get_conversation_history(str(session.id))
+                    # state["conversation_history"] = conversation_history
                     
-                    # 컨텍스트를 기반으로 현재 질문 보강
-                    if conversation_history and state.get("query"):
-                        state = self._enhance_query_with_context(state)
+                    # # 컨텍스트를 기반으로 현재 질문 보강
+                    # if conversation_history and state.get("query"):
+                    #     state = self._enhance_query_with_context(state)
                     
-                    # 동일 세션 내 새 쿼리에 대해 처리 시 이전 에이전트 결과 정리
-                    if state.get("query") and state.get("query") != self._get_last_query(str(session.id)):
-                        # 새로운 쿼리가 있고 이전 쿼리와 다른 경우 에이전트 결과 초기화
-                        state = self._clean_agent_results(state)
-                        logger.info(f"새 쿼리 감지: 에이전트 결과 데이터 초기화 완료")
+                    # # 동일 세션 내 새 쿼리에 대해 처리 시 이전 에이전트 결과 정리
+                    # if state.get("query") and state.get("query") != self._get_last_query(str(session.id)):
+                    #     # 새로운 쿼리가 있고 이전 쿼리와 다른 경우 에이전트 결과 초기화
+                    #     state = self._clean_agent_results(state)
+                    #     logger.info(f"새 쿼리 감지: 에이전트 결과 데이터 초기화 완료")
                     
                     return state
             

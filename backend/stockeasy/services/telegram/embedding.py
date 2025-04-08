@@ -15,6 +15,80 @@ from stockeasy.models.telegram_message import TelegramMessage
 
 logger = logging.getLogger(__name__)
 
+# 외국계 증권사 이름 매핑 (여러 표기를 표준화된 이름으로 매핑)
+securities_mapping = {
+    # 골드만삭스 그룹
+    "골드만삭스": "골드만삭스",
+    "Goldman Sachs": "골드만삭스",
+    "GoldmanSachs": "골드만삭스",
+    
+    # JP모건 그룹
+    "JP모건": "JP모건",
+    "제이피모건": "JP모건",
+    "JPMorgan": "JP모건",
+    "JP Morgan": "JP모건",
+    
+    # 시티그룹
+    "시티": "시티그룹",
+    "씨티": "시티그룹",
+    "시티그룹": "시티그룹",
+    "씨티그룹": "시티그룹",
+    "Citigroup": "시티그룹",
+    "Citi": "시티그룹",
+    
+    # CLSA
+    "CLSA": "CLSA",
+    
+    # 노무라
+    "노무라": "노무라증권",
+    "노무라증권": "노무라증권",
+    "Nomura": "노무라증권",
+    "Nomura Securities": "노무라증권",
+    
+    # UBS
+    "UBS": "UBS",
+    
+    # 메릴린치
+    "메릴린치": "메릴린치",
+    "메릴린츠": "메릴린치",
+    "Merrill Lynch": "메릴린치",
+    
+    # 도이치방크
+    "도이치": "도이치방크",
+    "도이치방크": "도이치방크",
+    "도이치뱅크": "도이치방크",
+    "Deutsche Bank": "도이치방크",
+    
+    # 모건스탠리
+    "모건스탠리": "모건스탠리",
+    "Morgan Stanley": "모건스탠리",
+    
+    # 바클레이즈
+    "바클레이즈": "바클레이즈",
+    "Barclays": "바클레이즈",
+    
+    # 소시에테제네랄
+    "소시에테제네랄": "소시에테제네랄",
+    "Societe Generale": "소시에테제네랄",
+    "SocieteGenerale": "소시에테제네랄",
+    
+    # 크레딧스위스
+    "크레디트스위스": "크레디트스위스",
+    "Credit Suisse": "크레디트스위스",
+    "CreditSuisse": "크레디트스위스",
+    
+    # HSBC
+    "HSBC": "HSBC",
+    
+    # 제프리스
+    "Jefferies": "제프리스",
+    
+    # BNP파리바
+    "BNP Paribas": "BNP파리바",
+    "BNPParibas": "BNP파리바"
+}
+
+
 @dataclass
 class TelegramMessageMetadata:
     """텔레그램 메시지 메타데이터"""
@@ -101,7 +175,7 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             # 프롬프트 작성
             prompt = f"""
             다음 텍스트에서 1~5개의 중요 키워드를 추출해주세요. 
-            종목명, 주식 심볼, 섹터, 산업, 국내 증권사 이름, 외국계증권사 이름(골드만삭스, JP모건, 시티) 등의 중요 정보가 있다면 반드시 포함해주세요.
+            종목명, 주식 심볼, 섹터, 산업, 국내 증권사 이름, 외국계증권사 이름(골드만삭스, JP모건, 시티, CLSA, 노무라, UBS, 메릴린츠, 도이치 등)의 중요 정보가 있다면 반드시 포함해주세요.
             각각의 키워드는 빈칸,띄워쓰기 없이 모두 붙여서 추출해.
             키워드끼리는 쉼표로 구분하여 답변해주세요. 
             다른 설명은 포함하지 마세요.
@@ -125,6 +199,18 @@ class TelegramEmbeddingService(CommonEmbeddingService):
             
             # 최대 5개로 제한
             keywords = keywords[:5] if len(keywords) > 5 else keywords
+
+            
+            # 텍스트에서 증권사 이름 찾기
+            found_securities = set()
+            for company, normalized_name in securities_mapping.items():
+                if company in text:
+                    found_securities.add(normalized_name)
+            
+            # 정규화된 증권사 이름을 키워드에 추가
+            for normalized_name in found_securities:
+                if normalized_name not in keywords:
+                    keywords.append(normalized_name)
             
             logger.info(f"추출된 키워드: {keywords}")
             return keywords

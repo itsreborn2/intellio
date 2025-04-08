@@ -26,7 +26,7 @@ from stockeasy.prompts.telegram_prompts import TELEGRAM_SUMMARY_PROMPT
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
 from common.utils.util import async_retry
 from common.core.config import settings
-from stockeasy.services.telegram.embedding import TelegramEmbeddingService
+from stockeasy.services.telegram.embedding import TelegramEmbeddingService, securities_mapping
 from common.models.token_usage import ProjectType
 
 from common.services.vector_store_manager import VectorStoreManager
@@ -94,10 +94,7 @@ class TelegramRetrieverAgent(BaseAgent):
                 return state
             
             logger.info(f"TelegramRetrieverAgent processing query: {query}")
-            #logger.info(f"Classification data: {classification}")
-            #logger.info(f"State keys: {state.keys()}")
-            #logger.info(f"Entities: {entities}")
-            #logger.info(f"Data requirements: {data_requirements}")
+
             
             # 동적 임계값 및 메시지 수 설정
             threshold = self._calculate_dynamic_threshold(classification)
@@ -353,6 +350,8 @@ class TelegramRetrieverAgent(BaseAgent):
 - 실적 발표 및 향후 전망에 관한 내용
 - 애널리스트들의 목표가 및 투자의견
 - 매출, 영업이익, 순이익 등 주요 재무 지표 예측
+- 수출입 데이터 및 해외 시장 실적/전망 정보
+- 수출 규모, 주요 수출국, 수입 의존도 등 무역 관련 정보
 - 미래 성장 동력 및 위험 요소
 """
         elif primary_intent == "재무분석":
@@ -721,17 +720,51 @@ class TelegramRetrieverAgent(BaseAgent):
                 top_k=initial_k,#k * 2,
             )
             
-            if len(result.documents) == 0:
+            # 외국계 증권사 필터 넣고 한번 더?
+            # dict_values는 직렬화할 수 없으므로 list로 변환해야 함
+            securities_values = list(securities_mapping.values())
+            # 중복 제거
+            unique_securities = list(set(securities_values))
+            
+            foreign_filters = {"keywords": {"$in": unique_securities}}
+            
+            # 외국계 증권사 필터로 검색 수행
+            result_foreign: RetrievalResult = await semantic_retriever.retrieve(
+                query=search_query, 
+                top_k=initial_k,#k * 2,
+                filters=foreign_filters
+            )
+
+            # 두 검색 결과 통합
+            combined_documents = []
+            doc_ids = set()  # 문서 ID 중복 방지를 위한 집합
+            
+            # 일반 검색 결과 추가
+            for doc in result.documents:
+                doc_id = doc.metadata.get("message_id")
+                if doc_id not in doc_ids:
+                    combined_documents.append(doc)
+                    doc_ids.add(doc_id)
+            
+            # 외국계 증권사 필터 검색 결과 추가 (중복 제외)
+            for doc in result_foreign.documents:
+                doc_id = doc.metadata.get("message_id")
+                if doc_id not in doc_ids:
+                    combined_documents.append(doc)
+                    doc_ids.add(doc_id)
+            
+            if len(combined_documents) == 0:
                 logger.warning(f"No telegram messages found for query: {search_query}")
                 return []
-            logger.info(f"Found {len(result.documents)} telegram messages")
+            
+            logger.info(f"Found {len(combined_documents)} telegram messages after combining results (general: {len(result.documents)}, foreign securities: {len(result_foreign.documents)})")
             
             # 중복 메시지 필터링 및 점수 계산
             processed_messages = []
             seen_messages = set()  # 중복 확인용
             remove_duplicated_result = []
             
-            for doc in result.documents:
+            for doc in combined_documents:
                 doc_metadata = doc.metadata
                 content = doc.page_content# doc_metadata.get("text", "")
                 
@@ -747,6 +780,7 @@ class TelegramRetrieverAgent(BaseAgent):
                     
                 seen_messages.add(self._get_message_hash(normalized_content))
                 remove_duplicated_result.append(doc)
+            
             # 중복 제거된 청크로. 리랭킹 수행
 
             # 2. 리랭킹 수행

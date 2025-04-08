@@ -7,11 +7,11 @@
 
 import json
 from loguru import logger
-from typing import Dict, List, Any, Optional, Literal, cast
+from typing import Dict, List, Any, Optional, Literal, cast, Union
 from datetime import datetime
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import List, Optional as PydanticOptional
@@ -69,6 +69,15 @@ class QuestionAnalysis(BaseModel):
     detail_level: Literal["간략", "보통", "상세"] = Field(..., description="요구되는 상세도")
 
 
+class ConversationContextAnalysis(BaseModel):
+    """대화 컨텍스트 분석 결과"""
+    requires_context: bool = Field(..., description="이전 대화 컨텍스트가 필요한지 여부")
+    is_followup_question: bool = Field(..., description="이전 질문에 대한 후속 질문인지 여부")
+    referenced_context: PydanticOptional[str] = Field(None, description="참조하는 대화 컨텍스트 (있는 경우)")
+    relation_to_previous: Literal["독립적", "직접참조", "간접참조", "확장", "수정"] = Field(..., description="이전 대화와의 관계")
+    reasoning: str = Field(..., description="판단에 대한 이유 설명")
+
+
 class QuestionAnalyzerAgent(BaseAgent):
     """
     사용자 질문을 분석하는 에이전트
@@ -91,8 +100,11 @@ class QuestionAnalyzerAgent(BaseAgent):
         super().__init__(name, db)
         self.llm, self.model_name, self.provider = get_llm_for_agent("question_analyzer_agent")
         self.agent_llm = get_agent_llm("question_analyzer_agent")
-        logger.info(f"QuestionAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
+        self.agent_llm_lite = get_agent_llm("gemini-2.0-flash-lite")
+        logger.info(f"QuestionAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.prompt_template = SYSTEM_PROMPT
+        
+    
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -118,6 +130,72 @@ class QuestionAnalyzerAgent(BaseAgent):
                 logger.warning("Empty query provided to QuestionAnalyzerAgent")
                 self._add_error(state, "질문이 비어 있습니다.")
                 return state
+                        
+            # user_id 추출
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
+
+            # 대화 기록 확인
+            conversation_history = state.get("conversation_history", [])
+            logger.info(f"대화 기록 타입: {type(conversation_history)}, 길이: {len(conversation_history) if isinstance(conversation_history, list) else '알 수 없음'}")
+            # 대화 컨텍스트 의존성 분석
+            # 수정된 조건: 대화 기록이 2개 이상 있는지 확인
+            # 상용 서비스에 맞게 type 속성이 있는 경우도 처리
+            has_valid_history = (
+                conversation_history and 
+                isinstance(conversation_history, list) and 
+                len(conversation_history) > 1
+            )
+            
+            if has_valid_history:
+                logger.info(f"대화 기록 있음: {len(conversation_history)}개 메시지")
+                context_analysis = await self.analyze_conversation_context(query, conversation_history, user_id)
+                context_analysis_result = context_analysis.model_dump() # dict
+                
+                # 분석 결과 상태에 저장
+                state["context_analysis"] = context_analysis_result
+                
+                # 후속 질문인 경우 빠르게 처리하고 리턴
+                #if context_analysis.is_followup_question and context_analysis.requires_context:
+                if context_analysis.requires_context:
+                    logger.info("후속 질문으로 감지되어 상세 분석 생략하고 빠르게 리턴합니다.")
+
+                    state["agent_results"] = state.get("agent_results", {})
+                    state["agent_results"]["question_analysis"] = context_analysis_result
+                    
+                    # 메트릭 기록 및 처리 상태 업데이트
+                    end_time = datetime.now()
+                    duration = (end_time - start_time).total_seconds()
+                    
+                    state["metrics"] = state.get("metrics", {})
+                    state["metrics"]["question_analyzer"] = {
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "duration": duration,
+                        "status": "completed",
+                        "error": None,
+                        "model_name": self.model_name
+                    }
+                    
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["question_analyzer"] = "completed"
+                    
+                    logger.info(f"QuestionAnalyzerAgent 빠른 처리 완료: {duration:.2f}초 소요")
+                    return state
+                
+                # 후속 처리에 필요한 정보 기록
+                if context_analysis.requires_context:
+                    logger.info(f"이전 대화 컨텍스트 참조 필요: {context_analysis.relation_to_previous}")
+                    if context_analysis.referenced_context:
+                        logger.info(f"참조 컨텍스트: {context_analysis.referenced_context}")
+            else:
+                logger.info("대화 기록 없음, 컨텍스트 분석 건너뜀")
+                state["context_analysis"] = {
+                    "requires_context": False,
+                    "is_followup_question": False,
+                    "relation_to_previous": "독립적",
+                    "reasoning": "대화 기록이 없습니다."
+                }
             
             logger.info(f"QuestionAnalyzerAgent analyzing query: {query}")
             
@@ -138,10 +216,7 @@ class QuestionAnalyzerAgent(BaseAgent):
             
             # 프롬프트 준비
             prompt = format_question_analyzer_prompt(query=query, stock_name=stock_name, stock_code=stock_code, system_prompt=system_prompt)
-            
-            # user_id 추출
-            user_context = state.get("user_context", {})
-            user_id = user_context.get("user_id", None)
+
             
             # LLM 호출로 분석 수행 - structured output 사용
             response:QuestionAnalysis = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
@@ -196,8 +271,91 @@ class QuestionAnalyzerAgent(BaseAgent):
             logger.exception(f"Error in QuestionAnalyzerAgent: {str(e)}")
             self._add_error(state, f"질문 분석기 에이전트 오류: {str(e)}")
             return state 
-    def get_system_prompt(self) -> str:
-        return SYSTEM_PROMPT
+
+    async def analyze_conversation_context(self, query: str, conversation_history: List[Any], user_id: Optional[str] = None) -> ConversationContextAnalysis:
+        """
+        현재 질문이 이전 대화 컨텍스트에 의존하는지 분석합니다.
+        
+        Args:
+            query: 현재 사용자 질문
+            conversation_history: 이전 대화 기록 (LangChain 메시지 객체 목록)
+            
+        Returns:
+            대화 컨텍스트 분석 결과
+        """
+        logger.info(f"Analyzing conversation context dependency for query: {query}")
+        
+        if not conversation_history or len(conversation_history) < 2:
+            logger.info("대화 기록이 충분하지 않음, 컨텍스트 분석 건너뜀")
+            return ConversationContextAnalysis(
+                requires_context=False,
+                is_followup_question=False,
+                relation_to_previous="독립적",
+                reasoning="대화 기록이 충분하지 않습니다."
+            )
+        
+        # 대화 기록 포맷팅 (최근 3번의 대화만 사용)
+        formatted_history = ""
+        recent_history = conversation_history[-6:] if len(conversation_history) >= 6 else conversation_history
+        
+        for i, msg in enumerate(recent_history):
+            role = "사용자" if msg.type == "human" else "AI"
+            formatted_history += f"{role}: {msg.content}\n\n"
+        
+        # 대화 컨텍스트 분석 프롬프트
+        system_prompt = """
+당신은 대화 흐름 분석 전문가입니다. 현재 질문이 이전 대화 컨텍스트에 의존하는지, 독립적인 새 질문인지 판단해야 합니다.
+
+다음 사항을 고려하세요:
+1. 대명사(이것, 그것, 저것 등)나 생략된 주어가 있는지
+2. 이전 대화에서 언급된 특정 정보를 참조하는지
+3. 이전 응답에 대한 후속 질문인지
+4. 이전 응답 내용을 확장하거나 수정하려는 의도가 있는지
+
+분석 결과를 다음 형식으로 제공하세요:
+- requires_context: 이전 대화 컨텍스트가 필요한지 여부(true/false)
+- is_followup_question: 이전 질문에 대한 후속 질문인지 여부(true/false)
+- referenced_context: 참조하는 특정 대화 내용(있는 경우)
+- relation_to_previous: 이전 대화와의 관계("독립적", "직접참조", "간접참조", "확장", "수정" 중 하나)
+- reasoning: 판단 이유 설명(3-4문장으로 간결하게)
+"""
+        
+        user_prompt = f"""
+대화 기록:
+{formatted_history}
+
+현재 질문:
+{query}
+
+위 대화에서 현재 질문이 이전 대화 컨텍스트에 의존하는지 분석해주세요.
+"""
+
+        try:
+            prompt = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            formatted_prompt = f"{system_prompt}\n\n{user_prompt}"
+            # LLM 호출로 대화 컨텍스트 분석
+            response = await self.agent_llm_lite.with_structured_output(ConversationContextAnalysis).ainvoke(
+                formatted_prompt,
+                project_type=ProjectType.STOCKEASY,
+                user_id=user_id,
+                db=self.db
+            )
+            
+            logger.info(f"대화 컨텍스트 분석 결과: {response}")
+            return response
+            
+        except Exception as e:
+            logger.error(f"대화 컨텍스트 분석 중 오류 발생: {str(e)}")
+            # 오류 발생 시 기본값 반환
+            return ConversationContextAnalysis(
+                requires_context=False,
+                is_followup_question=False,
+                relation_to_previous="독립적",
+                reasoning=f"분석 중 오류 발생: {str(e)}"
+            )
     
     def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
         """

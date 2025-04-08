@@ -1,3 +1,4 @@
+from datetime import datetime
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from typing import Any, Dict, List, Optional
 from stockeasy.models.agent_io import RetrievedTelegramMessage
@@ -55,6 +56,7 @@ SUMMARY_PROMPT_GROK = """
 다음 정보를 분석하여 사용자의 질문에 답변하세요.
 
 사용자 질문: {query}
+오늘일자: {query_date}
 종목코드: {stock_code}
 종목명: {stock_name}
 질문 의도: {primary_intent}
@@ -293,6 +295,7 @@ DEEP_RESEARCH_SYSTEM_PROMPT = """
 """
 DEEP_RESEARCH_USER_PROMPT = """
 사용자 질문: {query}
+오늘일자: {query_date}
 종목코드: {stock_code}
 종목명: {stock_name}
 질문 의도: {primary_intent}
@@ -309,8 +312,8 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                 system_prompt: Optional[str] = None) -> ChatPromptTemplate:
         """요약을 위한 프롬프트 생성"""
         
-        
-
+        # 오늘 날짜 추가
+        query_date = datetime.now().strftime("%Y-%m-%d")
         primary_intent = classification.get("primary_intent", "기타")
         complexity = classification.get("complexity", "중간")
         expected_answer_type = classification.get("expected_answer_type", "사실형")
@@ -382,15 +385,7 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                     sources_info += f"[출처: {report_source}, {report_page}]\n{report_info}\n\n"         
         
         # 재무 정보
-            # financial_data: {
-            #     "llm_response": str,
-            #     "extracted_data": {
-            #         "stock_code": str,
-            #         "stock_name": str,
-            #         "report_count": int,
-            #         "years_covered": List[int]
-            #     },
-            #     "raw_financial_data": List[Dict]        
+ 
         if financial_data:
             sources_info += "재무 정보:\n"
             llm_response = financial_data.get("llm_response", "")
@@ -423,6 +418,7 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
             user_message
         ]).partial(
             query=query,
+            query_date=query_date,
             stock_code=stock_code or "정보 없음",
             stock_name=stock_name or "정보 없음",
             primary_intent=primary_intent,
