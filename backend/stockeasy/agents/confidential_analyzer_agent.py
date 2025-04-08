@@ -836,7 +836,7 @@ class ConfidentialAnalyzerAgent(BaseAgent):
             #opinion_content = opinion_result.content if not isinstance(opinion_result, Exception) else "의견 추출 중 오류가 발생했습니다."
             analysis_content = analysis_content.strip()
             #report_analyses.append()
-            logger.info(f"비공개자료 분석 결과: {analysis_content}")
+            #logger.info(f"비공개자료 분석 결과: {analysis_content}")
             return {
                 #"analysis": {
                     "llm_response": analysis_content,

@@ -15,6 +15,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import List, Optional as PydanticOptional
+from stockeasy.services.financial.stock_info_service import StockInfoService
 from common.models.token_usage import ProjectType
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
 from stockeasy.prompts.question_analyzer_prompts import SYSTEM_PROMPT, format_question_analyzer_prompt
@@ -32,10 +33,12 @@ class Entities(BaseModel):
     stock_name: PydanticOptional[str] = Field(None, description="종목명 또는 null")
     stock_code: PydanticOptional[str] = Field(None, description="종목코드 또는 null")
     sector: PydanticOptional[str] = Field(None, description="종목이 속한 산업/섹터 또는 null")
+    subgroup: PydanticOptional[list] = Field(None, description="종목이 속한 subgroup 또는 null")
     time_range: PydanticOptional[str] = Field(None, description="시간범위 또는 null")
     financial_metric: PydanticOptional[str] = Field(None, description="재무지표 또는 null")
     competitor: PydanticOptional[str] = Field(None, description="경쟁사 또는 null")
     product: PydanticOptional[str] = Field(None, description="제품/서비스 또는 null")
+
 
 
 class Classification(BaseModel):
@@ -130,7 +133,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                 logger.warning("Empty query provided to QuestionAnalyzerAgent")
                 self._add_error(state, "질문이 비어 있습니다.")
                 return state
-                        
+
             # user_id 추출
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
@@ -230,6 +233,14 @@ class QuestionAnalyzerAgent(BaseAgent):
             response.data_requirements.confidential_data_needed = True
             # 분석 결과 로깅
             logger.info(f"Analysis result: {response}")
+
+                        # 서브그룹 가져오기
+            stock_info_service = StockInfoService()
+            subgroup_list = await stock_info_service.get_sector_by_code(stock_code)
+            logger.info(f"subgroup_info: {subgroup_list}")
+
+            if subgroup_list and len(subgroup_list) > 0:
+                response.entities.subgroup = subgroup_list
             
             # QuestionAnalysisResult 객체 생성 - 유틸리티 함수 사   용
             question_analysis: QuestionAnalysisResult = {

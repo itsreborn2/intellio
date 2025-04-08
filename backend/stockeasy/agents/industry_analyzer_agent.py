@@ -15,6 +15,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
+from stockeasy.services.financial.stock_info_service import StockInfoService
 from common.services.embedding_models import EmbeddingModelType
 from common.services.retrievers.models import RetrievalResult
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
@@ -102,18 +103,22 @@ class IndustryAnalyzerAgent(BaseAgent):
             # 산업/섹터 정보가 없는 경우 조회
             if not sector and stock_name:
                 logger.info(f"Retrieving sector info for {stock_name}, no sector provided")
-                # try:
-                #     stock_info = await self.stock_service.get_stock_by_name(stock_name)
-                #     if stock_info and "sector" in stock_info:
-                #         sector = stock_info["sector"]
-                #         logger.info(f"Retrieved sector '{sector}' for {stock_name}")
-                #     else:
-                #         # 임시 더미 데이터 사용
-                #         sector = self._get_dummy_sector(stock_name)
-                #         logger.info(f"Using dummy sector '{sector}' for {stock_name}")
-                # except Exception as e:
-                #     logger.error(f"Error retrieving sector info: {str(e)}")
-                #     sector = self._get_dummy_sector(stock_name)
+                stock_info_service = StockInfoService()
+                sector_info = await stock_info_service.get_sector_by_code(stock_code)
+                logger.info(f"Retrieved sector '{sector_info}' for {stock_name}")
+                
+                # 섹터 정보를 keywords에 추가
+                if sector_info:
+                    logger.info(f"Adding sector '{sector_info}' to keywords")
+                    if isinstance(sector_info, list):
+                        # 리스트인 경우 확장
+                        for sector_item in sector_info:
+                            if sector_item not in keywords:
+                                keywords.append(sector_item)
+                    else:
+                        # 문자열인 경우 추가
+                        if sector_info not in keywords:
+                            keywords.append(sector_info)
             
             # 산업 데이터 조회
             try:

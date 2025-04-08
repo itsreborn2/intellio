@@ -87,6 +87,7 @@ class TelegramRetrieverAgent(BaseAgent):
             stock_code = entities.get("stock_code", state.get("stock_code"))
             stock_name = entities.get("stock_name", state.get("stock_name"))
             sector = entities.get("sector", "")
+            subgroup = entities.get("subgroup", [])
             
             if not query:
                 logger.warning("Empty query provided to TelegramRetrieverAgent")
@@ -111,7 +112,8 @@ class TelegramRetrieverAgent(BaseAgent):
                 user_id=user_id,
                 search_query= search_query,
                 k=message_count, 
-                threshold=threshold
+                threshold=threshold,
+                subgroup=subgroup
             )
             
             
@@ -620,7 +622,7 @@ class TelegramRetrieverAgent(BaseAgent):
             stock_name: 종목 이름
             classification: 질문 분류 정보
             sector: 산업 섹터 정보
-            
+
         Returns:
             검색을 위한 향상된 쿼리 문자열
         """
@@ -671,7 +673,7 @@ class TelegramRetrieverAgent(BaseAgent):
         return enhanced_query
     
     @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
-    async def _search_messages(self, search_query: str, k: int, threshold: float, user_id: Optional[Union[str, UUID]] = None) -> List[RetrievedTelegramMessage]:
+    async def _search_messages(self, search_query: str, k: int, threshold: float, user_id: Optional[Union[str, UUID]] = None, subgroup: Optional[List[str]] = None) -> List[RetrievedTelegramMessage]:
         """
         텔레그램 메시지 검색을 수행합니다.
         
@@ -735,20 +737,36 @@ class TelegramRetrieverAgent(BaseAgent):
                 filters=foreign_filters
             )
 
+            subgroup_filters = {"keywords": {"$in": subgroup}}
+            logger.info(f"[텔레검색] subgroup_filters: {subgroup_filters}")
+            # 서브그룹 증권사 필터로 검색 수행
+            result_subgroup: RetrievalResult = await semantic_retriever.retrieve(
+                query=search_query, 
+                top_k=initial_k,
+                filters=subgroup_filters
+            )
+
             # 두 검색 결과 통합
             combined_documents = []
             doc_ids = set()  # 문서 ID 중복 방지를 위한 집합
             
             # 일반 검색 결과 추가
             for doc in result.documents:
-                doc_id = doc.metadata.get("message_id")
+                doc_id = f"{doc.metadata.get('channel_id')}_{doc.metadata.get('message_id')}"
                 if doc_id not in doc_ids:
                     combined_documents.append(doc)
                     doc_ids.add(doc_id)
             
             # 외국계 증권사 필터 검색 결과 추가 (중복 제외)
             for doc in result_foreign.documents:
-                doc_id = doc.metadata.get("message_id")
+                doc_id = f"{doc.metadata.get('channel_id')}_{doc.metadata.get('message_id')}"
+                if doc_id not in doc_ids:
+                    combined_documents.append(doc)
+                    doc_ids.add(doc_id)
+            
+            # 서브그룹 필터 검색 추가
+            for doc in result_subgroup.documents:
+                doc_id = f"{doc.metadata.get('channel_id')}_{doc.metadata.get('message_id')}"
                 if doc_id not in doc_ids:
                     combined_documents.append(doc)
                     doc_ids.add(doc_id)

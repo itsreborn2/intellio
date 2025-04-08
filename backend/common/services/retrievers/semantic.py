@@ -72,7 +72,7 @@ class SemanticRetriever(BaseRetriever):
                         logger.info(f"[{i}] score: {score}, min_score: {self.config.min_score}")
                         cont = doc.page_content[:100]
                         cont = cont.replace("\n\n", "\n")
-                        logger.info(f"doc: {doc.page_content[:100].strip()}")
+                        #logger.info(f"doc: {doc.page_content[:100].strip()}")
                     score_list.append(score)
                 if score >= self.config.min_score:
                     new_doc = DocumentWithScore(

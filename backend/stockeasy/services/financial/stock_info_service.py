@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from stockeasy.services.google_sheet_service import GoogleSheetService
 from common.core.config import settings
 
 
@@ -32,8 +33,10 @@ class StockInfoService:
             asyncio.create_task(cls._instance._initialize())
         return cls._instance
     
-    async def _initialize(self):
-        """서비스 초기화"""
+    async def _initialize(self) -> None:
+        """
+        주식 정보를 초기화하고 캐싱합니다.
+        """
         logger.info("주식 정보 서비스 초기화 시작")
         
         # 종목 정보 캐시 경로
@@ -42,38 +45,67 @@ class StockInfoService:
         
         # 캐시 디렉토리 생성
         os.makedirs(self.cache_dir, exist_ok=True)
-        
-        # 초기 데이터 로드
+
         try:
-            # 1. 파일 캐시 확인
+            # 캐시 파일이 있는지 확인
             if os.path.exists(self.stock_info_path):
+                # 캐시 파일 읽기
                 with open(self.stock_info_path, 'r', encoding='utf-8') as f:
                     self._stock_info_cache = json.load(f)
-                    logger.info("캐시 파일에서 초기 주식 정보 로드 완료")
-            
-            # 2. 파일 캐시가 없으면 KRX에서 조회
-            if self._stock_info_cache is None:
-                logger.info("캐시 파일이 없어 KRX에서 초기 데이터를 가져옵니다")
-                self._stock_info_cache = await self._fetch_stock_info_from_krx()
-                
-                # 파일 캐시 저장
-                with open(self.stock_info_path, 'w', encoding='utf-8') as f:
-                    json.dump(self._stock_info_cache, f, ensure_ascii=False, indent=2)
-                    logger.info("초기 주식 정보 캐시 파일 생성 완료")
-            
-            self._last_update_date = datetime.now().date()
-            
+                    logger.info("주식 정보 캐시 파일 로드 완료")
+            else:
+                # 캐시 파일이 없으면 KRX에서 데이터 가져오기
+                if self._stock_info_cache is None:
+                    logger.info("캐시 파일이 없어 KRX에서 초기 데이터를 가져옵니다")
+                    self._stock_info_cache = await self._fetch_stock_info_from_krx()
+                    
+                    # 구글 시트에서 섹터 정보 가져오기
+                    self._stock_sector_dict = self.make_sector_dict_from_google_sheet()
+                    
+                    # 섹터 정보 업데이트 - 종목코드가 일치하는 경우에만
+                    if self._stock_sector_dict:
+                        # _stock_info_cache에 sector 키가 없으면 추가
+                        if "sector" not in self._stock_info_cache:
+                            self._stock_info_cache["sector"] = {}
+                        
+                        # 종목코드가 일치하는 경우 섹터 정보 추가
+                        updated_count = 0
+                        for code, sector_info in self._stock_sector_dict.items():
+                            # _stock_info_cache["by_code"]에 해당 종목코드가 있는 경우에만 추가
+                            if code in self._stock_info_cache["by_code"]:
+                                # 1. stock_info_cache["sector"]에 추가
+                                self._stock_info_cache["sector"][code] = sector_info
+                                
+                                # 2. 개별 종목 정보에도 섹터 추가
+                                self._stock_info_cache["by_code"][code]["sector"] = sector_info
+                                updated_count += 1
+                        
+                        logger.info(f"구글 시트에서 가져온 섹터 정보 {updated_count}개 업데이트 완료")
+                    
+                    # 파일 캐시 저장
+                    with open(self.stock_info_path, 'w', encoding='utf-8') as f:
+                        json.dump(self._stock_info_cache, f, ensure_ascii=False, indent=2)
+                        logger.info("초기 주식 정보 캐시 파일 생성 완료")
         except Exception as e:
-            logger.error(f"초기 주식 정보 로드 실패: {str(e)}")
-            self._stock_info_cache = {"by_code": {}, "by_name": {}}
-            self._last_update_date = datetime.now().date()
+            logger.error(f"주식 정보 초기화 실패: {str(e)}")
+            self._stock_info_cache = {"by_code": {}, "by_name": {}, "sector": {}}
         
         # 자동 업데이트 태스크 시작
         self._update_task = asyncio.create_task(self._start_auto_update())
         logger.info("주식 정보 서비스 초기화 완료")
-        stocks = await self.search_stocks("삼성전", limit=5)
-        for i, stock in enumerate(stocks):
-            print(f"[{i+1}] 종목명: {stock['name']}, 종목코드: {stock['code']}, 업종: {stock['sector']}")
+        try:
+            stocks = await self.search_stocks("삼성전", limit=5)
+            logger.info(f"샘플 종목 검색 결과: {len(stocks)}개")
+            for i, stock in enumerate(stocks):
+                sector_info = stock.get('sector', '정보 없음')
+                logger.info(f"[{i+1}] 종목명: {stock['name']}, 종목코드: {stock['code']}, 업종: {sector_info}")
+
+            logger.info("섹터 조회 시작")
+            sector = await self.get_sector_by_code("278470")
+            logger.info(f"섹터 조회 결과 278470 : {sector}")
+            logger.info("섹터 조회 완료")
+        except Exception as e:
+            logger.error(f"샘플 종목 및 섹터 조회 중 오류 발생: {str(e)}")
         
     async def _start_auto_update(self):
         """자동 업데이트 태스크를 시작합니다."""
@@ -95,6 +127,37 @@ class StockInfoService:
                 # 7:30이 되면 데이터 갱신
                 logger.info("예정된 시각에 주식 정보 업데이트 시작")
                 stock_info = await self._fetch_stock_info_from_krx()
+                
+                # 이전 _stock_info_cache에서 sector 정보 보존
+                if self._stock_info_cache and "sector" in self._stock_info_cache:
+                    if "sector" not in stock_info:
+                        stock_info["sector"] = {}
+                    stock_info["sector"] = self._stock_info_cache["sector"]
+                
+                # 구글 시트에서 최신 섹터 정보 가져와서 업데이트
+                logger.info("구글 시트에서 최신 섹터 정보 가져오기")
+                sector_dict = self.make_sector_dict_from_google_sheet()
+                
+                # 섹터 정보 업데이트
+                if sector_dict:
+                    # sector 키가 없으면 추가
+                    if "sector" not in stock_info:
+                        stock_info["sector"] = {}
+                    
+                    # 종목코드가 일치하는 경우에만 섹터 정보 추가/업데이트
+                    updated_count = 0
+                    for code, sector_info in sector_dict.items():
+                        if code in stock_info["by_code"]:
+                            # 1. sector 섹션에 추가
+                            stock_info["sector"][code] = sector_info
+                            
+                            # 2. 개별 종목 정보에도 섹터 추가
+                            stock_info["by_code"][code]["sector"] = sector_info
+                            updated_count += 1
+                    
+                    logger.info(f"구글 시트에서 가져온 섹터 정보 {updated_count}개 업데이트 완료")
+                
+                # 메모리 캐시 업데이트
                 self._stock_info_cache = stock_info
                 self._last_update_date = datetime.now().date()
                 
@@ -240,7 +303,6 @@ class StockInfoService:
                 stock_info = {
                     "code": row["code"],
                     "name": row["name"],
-                    "sector": row["업종"]
                 }
                 
                 by_code[row["code"]] = stock_info
@@ -254,3 +316,87 @@ class StockInfoService:
         except Exception as e:
             logger.error(f"Failed to fetch stock info from KRX: {str(e)}")
             return {"by_code": {}, "by_name": {}}
+        
+    def get_stocks_by_sector_from_google_sheet(sector_dict, target_sector):
+        """
+        특정 섹터에 속하는 모든 종목코드 리스트 반환
+        
+        Args:
+            sector_dict: 종목코드:섹터 딕셔너리
+            target_sector: 찾을 섹터명
+            
+        Returns:
+            List[str]: 해당 섹터에 속하는 종목코드 리스트
+        """
+        result = []
+        
+        for code, sectors in sector_dict.items():
+            if isinstance(sectors, list):
+                # 섹터가 리스트인 경우 (콤마로 구분된 여러 섹터)
+                if target_sector in sectors:
+                    result.append(code)
+            else:
+                # 섹터가 단일 문자열인 경우
+                if sectors == target_sector:
+                    result.append(code)
+        
+        return result
+    
+    def make_sector_dict_from_google_sheet(self) -> Dict[str, Any]:
+        """
+        구글 시트에서 섹터 정보를 가져와 딕셔너리로 반환합니다.
+        종목코드를 키로 하고 섹터 정보를 값으로 합니다.
+        
+        Returns:
+            Dict[str, Any]: 종목코드:섹터 딕셔너리
+        """
+        try:
+            from stockeasy.services.google_sheet_service import GoogleSheetService
+            
+            # 구글 시트 서비스 초기화
+            sheet_service = GoogleSheetService(credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS)
+             # 스프레드시트 URL로 열기
+            sheet_url = "https://docs.google.com/spreadsheets/d/1AgbEpblhoqSBTmryDjSSraqc5lRdgWKNwBUA4VYk2P4/edit"
+            # 섹터 딕셔너리 가져오기 (get_sector_dict 메서드가 GoogleSheetService에 구현되어 있어야 함)
+            # 시트 이름을 지정하거나 기본 시트 사용
+
+            sector_dict = sheet_service.get_sector_dict(url=sheet_url,worksheet_name="섹터")
+            
+            if sector_dict:
+                logger.info(f"구글 시트에서 {len(sector_dict)}개 종목의 섹터 정보를 가져왔습니다.")
+            else:
+                logger.warning("구글 시트에서 섹터 정보를 가져오지 못했습니다.")
+            
+            return sector_dict
+        except ImportError as e:
+            logger.error(f"GoogleSheetService 가져오기 실패 (gspread 라이브러리 설치 필요): {str(e)}")
+            return {}
+        except Exception as e:
+            logger.error(f"구글 시트에서 섹터 정보 가져오기 실패: {str(e)}")
+            return {}
+
+    async def get_sector_by_code(self, stock_code: str) -> Optional[Any]:
+        """
+        종목 코드로 섹터 정보를 조회합니다.
+        
+        Args:
+            stock_code: 종목 코드
+            
+        Returns:
+            섹터 정보 (문자열 또는 리스트) 또는 None
+        """
+        stock_info = await self._load_stock_info()
+        if not stock_info or "sector" not in stock_info:
+            return None
+        
+        # sector 정보에서 조회
+        sector_map = stock_info.get("sector", {})
+        if stock_code in sector_map:
+            return sector_map.get(stock_code)
+        
+        # by_code 내의 stock_info에서 sector 필드 조회
+        code_map = stock_info.get("by_code", {})
+        if stock_code in code_map and "sector" in code_map[stock_code]:
+            return code_map[stock_code]["sector"]
+            
+        return None

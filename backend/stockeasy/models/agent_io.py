@@ -39,11 +39,12 @@ class ExtractedEntity(TypedDict, total=False):
     stock_name: Optional[str]       # 주식/종목명
     stock_code: Optional[str]       # 종목 코드
     sector: Optional[str]           # 산업/섹터
+    subgroup: Optional[list]        # 종목이 속한 subgroup 또는 null
     time_range: Optional[str]       # 시간 범위 (예: 최근 3개월, 지난 분기 등)
     financial_metric: Optional[str] # 재무 지표 (예: 매출, 영업이익, PER 등)
     competitor: Optional[str]       # 경쟁사
     product: Optional[str]          # 제품/서비스
-
+    
 
 class QuestionClassification(TypedDict, total=False):
     """질문 분류 결과"""
