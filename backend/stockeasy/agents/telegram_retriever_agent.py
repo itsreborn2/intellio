@@ -737,15 +737,6 @@ class TelegramRetrieverAgent(BaseAgent):
                 filters=foreign_filters
             )
 
-            subgroup_filters = {"keywords": {"$in": subgroup}}
-            logger.info(f"[텔레검색] subgroup_filters: {subgroup_filters}")
-            # 서브그룹 증권사 필터로 검색 수행
-            result_subgroup: RetrievalResult = await semantic_retriever.retrieve(
-                query=search_query, 
-                top_k=initial_k,
-                filters=subgroup_filters
-            )
-
             # 두 검색 결과 통합
             combined_documents = []
             doc_ids = set()  # 문서 ID 중복 방지를 위한 집합
@@ -764,12 +755,26 @@ class TelegramRetrieverAgent(BaseAgent):
                     combined_documents.append(doc)
                     doc_ids.add(doc_id)
             
-            # 서브그룹 필터 검색 추가
-            for doc in result_subgroup.documents:
-                doc_id = f"{doc.metadata.get('channel_id')}_{doc.metadata.get('message_id')}"
-                if doc_id not in doc_ids:
-                    combined_documents.append(doc)
-                    doc_ids.add(doc_id)
+            # subgroup이 존재하고 비어있지 않을 때만 subgroup 필터 검색 수행
+            if subgroup and len(subgroup) > 0:
+                subgroup_filters = {"keywords": {"$in": subgroup}}
+                logger.info(f"[텔레검색] subgroup_filters: {subgroup_filters}")
+                
+                # 서브그룹 증권사 필터로 검색 수행
+                result_subgroup: RetrievalResult = await semantic_retriever.retrieve(
+                    query=search_query, 
+                    top_k=initial_k,
+                    filters=subgroup_filters
+                )
+                
+                # 서브그룹 필터 검색 추가
+                for doc in result_subgroup.documents:
+                    doc_id = f"{doc.metadata.get('channel_id')}_{doc.metadata.get('message_id')}"
+                    if doc_id not in doc_ids:
+                        combined_documents.append(doc)
+                        doc_ids.add(doc_id)
+            else:
+                logger.info("[텔레검색] subgroup이 없거나 비어있어 subgroup 검색 제외")
             
             if len(combined_documents) == 0:
                 logger.warning(f"No telegram messages found for query: {search_query}")
