@@ -810,7 +810,37 @@ class TelegramRetrieverAgent(BaseAgent):
                 importance_score = self._calculate_message_importance(content)
                 
                 # 시간 기반 가중치 계산
-                message_created_at = datetime.fromisoformat(doc.metadata["message_created_at"])
+                message_created_at_data = doc.metadata.get("message_created_at")
+                message_created_at = None
+                
+                # message_created_at을 datetime 객체로 변환 (다양한 형식 지원)
+                if isinstance(message_created_at_data, str):
+                    # ISO 형식 문자열인 경우
+                    try:
+                        message_created_at = datetime.fromisoformat(message_created_at_data)
+                    except (ValueError, TypeError):
+                        # ISO 형식이 아닌 경우 다른 형식 시도
+                        logger.warning(f"ISO 형식이 아닌 문자열: {message_created_at_data}, 다른 형식 시도")
+                        try:
+                            # 유닉스 타임스탬프 문자열인지 확인
+                            message_created_at = datetime.fromtimestamp(float(message_created_at_data))
+                        except (ValueError, TypeError):
+                            # 기본값으로 현재 시간 사용
+                            logger.error(f"시간 형식 변환 실패: {message_created_at_data}, 현재 시간 사용")
+                            message_created_at = datetime.now()
+                elif isinstance(message_created_at_data, (int, float)):
+                    # 유닉스 타임스탬프인 경우
+                    try:
+                        message_created_at = datetime.fromtimestamp(float(message_created_at_data))
+                    except (ValueError, TypeError):
+                        # 변환 실패 시 현재 시간 사용
+                        logger.error(f"타임스탬프 변환 실패: {message_created_at_data}, 현재 시간 사용")
+                        message_created_at = datetime.now()
+                else:
+                    # 지원되지 않는 형식인 경우 현재 시간 사용
+                    logger.error(f"지원되지 않는 시간 형식: {type(message_created_at_data)}, 현재 시간 사용")
+                    message_created_at = datetime.now()
+                
                 time_weight = self._calculate_time_weight(message_created_at)
                 
                 # 최종 점수 = 유사도 * 중요도 * 시간 가중치

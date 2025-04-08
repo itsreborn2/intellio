@@ -498,11 +498,38 @@ async def test_search_vectordb():
     
     for idx, doc in enumerate(sorted_documents, 1):
         # ISO 형식의 날짜 문자열을 datetime으로 파싱하고 한국 시간 형식으로 변환
-        created_at = datetime.fromisoformat(doc.metadata.get('message_created_at', '')).strftime('%Y-%m-%d %H:%M:%S')
+        message_created_at_data = doc.metadata.get('message_created_at', '')
+        created_at = None
+        
+        # message_created_at을 datetime 객체로 변환 (다양한 형식 지원)
+        if isinstance(message_created_at_data, str):
+            # ISO 형식 문자열인 경우
+            try:
+                created_at = datetime.fromisoformat(message_created_at_data)
+            except (ValueError, TypeError):
+                # ISO 형식이 아닌 경우 다른 형식 시도
+                try:
+                    # 유닉스 타임스탬프 문자열인지 확인
+                    created_at = datetime.fromtimestamp(float(message_created_at_data))
+                except (ValueError, TypeError):
+                    # 기본값으로 현재 시간 사용
+                    created_at = datetime.now()
+        elif isinstance(message_created_at_data, (int, float)):
+            # 유닉스 타임스탬프인 경우
+            try:
+                created_at = datetime.fromtimestamp(float(message_created_at_data))
+            except (ValueError, TypeError):
+                # 변환 실패 시 현재 시간 사용
+                created_at = datetime.now()
+        else:
+            # 지원되지 않는 형식인 경우 현재 시간 사용
+            created_at = datetime.now()
+        
+        created_at_str = created_at.strftime('%Y-%m-%d %H:%M:%S')
         
         print(f"\n[검색결과 {idx}, 점수:{doc.score}]")
         print(f"채널명: {doc.metadata.get('channel_title', '채널명 없음')}")
-        print(f"작성일시: {created_at}")
+        print(f"작성일시: {created_at_str}")
         print(f"내용: {doc.page_content}")
         print("-"*100)
     
