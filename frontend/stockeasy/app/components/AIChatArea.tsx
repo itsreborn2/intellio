@@ -363,8 +363,12 @@ function AIChatAreaContent() {
       // 모바일 상태가 변경될 때마다 DOM에 클래스 추가/제거
       if (isMobileView) {
         document.body.classList.add('mobile-view');
+        // body의 scroll 클래스 제거
+        document.body.classList.remove('scroll');
       } else {
         document.body.classList.remove('mobile-view');
+        // body의 scroll 클래스 제거
+        document.body.classList.remove('scroll');
         setIsSidebarOpen(false); // PC 화면으로 전환 시 사이드바 상태 초기화
       }
     };
@@ -1047,7 +1051,7 @@ function AIChatAreaContent() {
     width: '100%', // 전체 너비를 사용
     position: 'relative',
     backgroundColor: '#F4F4F4', // Figma 디자인에 맞게 배경색 변경
-    overflow: 'hidden', // 오버플로우를 hidden으로 변경하여 브라우저 기본 스크롤 사용 안함
+    overflow: 'hidden', // 오버플로우를 hidden으로 유지
     paddingTop: isMobile ? '0' : '10px',
     paddingRight: isMobile ? '0' : '10px',
     paddingBottom: isMobile ? '0' : '10px',
@@ -1131,9 +1135,9 @@ function AIChatAreaContent() {
   const messagesContainerStyle: React.CSSProperties = {
     overflowY: 'auto',
     overflowX: 'hidden',
-    paddingTop: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
+    paddingTop: isMobile ? '10px' : (windowWidth < 768 ? '15px' : '20px'), // 패딩 증가
     paddingRight: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
-    paddingBottom: isInputCentered ? (isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px')) : (isMobile ? '70px' : '80px'),
+    paddingBottom: isInputCentered ? (isMobile ? '10px' : (windowWidth < 768 ? '15px' : '20px')) : (isMobile ? '80px' : '90px'), // 패딩 증가
     paddingLeft: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
     margin: '0 auto',
     border: 'none',
@@ -1146,7 +1150,7 @@ function AIChatAreaContent() {
     position: 'relative',
     display: isInputCentered ? 'none' : 'block',
     opacity: 1, // 항상 완전히 불투명하게 설정
-    maxWidth: '100%'
+    maxWidth: '100%',
   };
 
   const aiMessageStyle: React.CSSProperties = {
@@ -1258,6 +1262,67 @@ function AIChatAreaContent() {
     <div className="ai-chat-area" style={aiChatAreaStyle}>
       {/* 마크다운 스타일 태그 추가 */}
       <style jsx>{markdownStyles}</style>
+      
+      {/* 스크롤바 스타일 추가 */}
+      <style jsx global>{`
+        .body {
+          overflow: hidden !important;
+        }
+        
+        /* mobile-view 클래스가 적용된 body의 direct child main에 대한 스타일 */
+        body.mobile-view > main {
+          width: 100vw !important;
+          max-width: 100vw !important;
+          margin-left: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          padding-top: 50px !important;
+          position: absolute !important;
+        }
+        
+        body.mobile-view > main > content-container {
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          /* 상단 헤더(44px)와 하단 채팅 입력 영역(60px)을 뺀 높이 */
+          height: calc(100vh - 44px - 60px) !important;
+          max-height: 100vh !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          scrollbar-width: auto;
+          scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+          padding: 0 !important;
+        }
+
+        .main {
+          overflow: hidden !important;
+          width: 100% !important;
+          margin-left: 0 !important;
+          box-sizing: border-box !important;
+          padding-right: 0 !important;
+        }
+        
+        @media (min-width: 768px) {
+          body:not(.mobile-view) > main {
+            width: calc(100% - 59px) !important;
+            margin-left: 59px !important;
+          }
+        }
+        
+        .content-container {
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          /* 상단 헤더(44px)와 하단 채팅 입력 영역(60px)을 뺀 높이 */
+          height: calc(100vh - 44px - 60px) !important;
+          max-height: 100vh !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          scrollbar-width: auto;
+          scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+          padding: 0 !important;
+        }
+        
+        
+      `}</style>
       
       {/* 애니메이션 스타일 추가 */}
       <style jsx global>{`
