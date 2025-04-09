@@ -53,6 +53,7 @@ function SidebarContent() {
   const [userEmail, setUserEmail] = useState('');
   const [userProvider, setUserProvider] = useState('');
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false); // 로그인 다이얼로그 상태 추가
+  const [showLoginTooltip, setShowLoginTooltip] = useState(false); // 로그인 툴팁 상태 추가
   
   // 버튼 참조 객체
   const buttonRefs = {
@@ -497,6 +498,15 @@ function SidebarContent() {
   const openSettingsPopup = (e: React.MouseEvent) => {
     e.preventDefault(); // 기본 동작 방지
     e.stopPropagation(); // 이벤트 버블링 방지
+    
+    // 비로그인 상태면 로그인 페이지로 리다이렉트
+    if (!isLoggedIn || userId === 'anonymous') {
+      const intellioUrl = process.env.NEXT_PUBLIC_INTELLIO_URL || 'https://intellio.kr';
+      const redirectTo = 'stockeasy';
+      window.location.href = `${intellioUrl}/login?redirectTo=${redirectTo}`;
+      return;
+    }
+    
     setShowSettingsPopup(true); // 설정 팝업 열기
     setSettingsMenuOpen(false); // 설정 메뉴 닫기
   };
@@ -587,11 +597,13 @@ function SidebarContent() {
       )} */}
 
       {/* 데스크탑 환경에서 사용할 툴팁 */}
-      {!isMobile && hoveredButton && (
+      {!isMobile && (hoveredButton || showLoginTooltip) && (
         <div 
           className="fixed left-[63px] bg-[#111827] text-[#ececf1] py-0.5 px-2 rounded-[6px] text-xs shadow-md z-[2000] border border-gray-700 pointer-events-none"
           style={{ 
-            top: tooltipPosition[hoveredButton] ? `${tooltipPosition[hoveredButton] + 10}px` : '0px',
+            top: showLoginTooltip 
+              ? `${tooltipPosition['settings'] ? tooltipPosition['settings'] + 10 : 0}px`
+              : tooltipPosition[hoveredButton!] ? `${tooltipPosition[hoveredButton!] + 10}px` : '0px',
             transition: 'opacity 0.2s',
             opacity: 1
           }}
@@ -604,7 +616,8 @@ function SidebarContent() {
           {hoveredButton === 'history' && '검색 히스토리'} 
           {hoveredButton === 'doc' && '닥이지'}
           {hoveredButton === 'user' && '마이페이지'}
-          {hoveredButton === 'settings' && '마이페이지'} {/* 마이페이지 툴팁 추가 */}
+          {hoveredButton === 'settings' && (isLoggedIn && userId !== 'anonymous' ? '마이페이지' : '로그인')} 
+          {showLoginTooltip && (!isLoggedIn || userId === 'anonymous') && '이 필요합니다'}
         </div>
       )}
 
@@ -755,24 +768,44 @@ function SidebarContent() {
                 ref={buttonRefs.settings} // Ref 추가
                 className={isMobile ? "sidebar-button" : "sidebar-button-container relative flex items-center w-full"} 
                 onClick={openSettingsPopup}
-                onMouseEnter={() => !isMobile && handleMouseEnter('settings')} // 데스크톱에서만 호버 이벤트 추가
-                onMouseLeave={() => !isMobile && handleMouseLeave()} // 데스크톱에서만 호버 이벤트 추가
+                onMouseEnter={() => {
+                  if (!isMobile) {
+                    handleMouseEnter('settings');
+                    if (!isLoggedIn || userId === 'anonymous') {
+                      setShowLoginTooltip(true);
+                    }
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (!isMobile) {
+                    handleMouseLeave();
+                    setShowLoginTooltip(false);
+                  }
+                }}
                 style={{ cursor: 'pointer' }} // Let the class handle padding
               >
                 {isMobile ? (
                   <> {/* 모바일: 아바타 + 설정 텍스트 */}
                     <Avatar className="h-6 w-6 cursor-pointer"> 
-                      <AvatarImage src={userProfileImage || '/default-avatar.png'} alt={userName || 'User'} />
-                      <AvatarFallback>{userName ? userName.charAt(0) : 'U'}</AvatarFallback>
+                      <AvatarImage src={userProfileImage} alt={userName || 'User'} />
+                      <AvatarFallback>
+                        {isLoggedIn && userId !== 'anonymous' 
+                          ? (userName ? userName.charAt(0) : 'U') 
+                          : <UserIcon size={14} />}
+                      </AvatarFallback>
                     </Avatar>
                     {/* Apply same text style as DocEasy button */}
-                    <span className="ml-2 text-sm text-[#ececf1]">마이페이지지</span> 
+                    <span className="ml-2 text-sm text-[#ececf1]">마이페이지</span> 
                   </>
                 ) : ( 
                    <> {/* 데스크탑: 아바타만 표시 */}
                     <Avatar className="h-8 w-8 cursor-pointer">
-                      <AvatarImage src={userProfileImage || '/default-avatar.png'} alt={userName || 'User'} />
-                      <AvatarFallback>{userName ? userName.charAt(0) : 'U'}</AvatarFallback>
+                      <AvatarImage src={userProfileImage} alt={userName || 'User'} />
+                      <AvatarFallback>
+                        {isLoggedIn && userId !== 'anonymous' 
+                          ? (userName ? userName.charAt(0) : 'U') 
+                          : <UserIcon size={16} />}
+                      </AvatarFallback>
                     </Avatar>
                   </> 
                 )}

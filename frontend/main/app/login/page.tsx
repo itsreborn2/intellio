@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { LoginButton } from '@/components/auth/LoginButton'
 import { useAuth, useAuthCheck } from '@/hooks/useAuth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import Link from 'next/link'
 
 function LoginContent() {
   const router = useRouter()
@@ -33,6 +34,7 @@ function LoginContent() {
     // 로그인 후 리다이렉트할 경로 저장
     const redirectTo = searchParams.get('redirectTo')
     if (redirectTo) {
+      console.log(`redirectTo: ${redirectTo}`)
       setRedirectTo(redirectTo)
     }
   }, [isAuthenticated, router, searchParams, setRedirectTo])
@@ -62,6 +64,12 @@ function LoginContent() {
                 provider="naver" 
                 redirectTo={searchParams.get('redirectTo') || '/'} 
               /> */}
+            </div>
+            <div className="text-center text-sm text-muted-foreground mt-4">
+              <p className="text-xs text-muted-foreground">계속하면 다음 약관에 동의하는 것으로 간주됩니다</p>
+              <Link href={`${process.env.NEXT_PUBLIC_INTELLIO_URL}/terms`} className="text-primary hover:underline">
+                서비스 이용약관
+              </Link>
             </div>
           </div>
         </CardContent>
