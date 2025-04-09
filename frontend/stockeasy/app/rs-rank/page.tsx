@@ -774,7 +774,14 @@ export default function RSRankPage() {
       
       // 숫자로 변환 후 억 단위로 나누고 소수점 없이 표시
       const valueStr = typeof value === 'number' ? String(value) : value;
-      const marketCapInBillions = Number(valueStr.replace(/[^0-9.]/g, ''));
+      let marketCapInBillions;
+      if (valueStr.includes('E')) {
+        // 지수 표기법이면 그대로 Number 변환 후 억 단위로 변환
+        marketCapInBillions = Number(valueStr) / 100000000;
+      } else {
+        // 일반 숫자 형식이면 콤마 제거 후 Number 변환
+        marketCapInBillions = Number(valueStr.replace(/,/g, '')) / 100000000;
+      }
       
       // 천 단위 구분 쉼표(,) 추가
       if (marketCapInBillions >= 100000000) {
