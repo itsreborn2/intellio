@@ -9,9 +9,10 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import 'highlight.js/styles/github.css' // 하이라이트 스타일 추가
 import { useChatStore } from '@/stores/chatStore'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, Briefcase } from 'lucide-react'
 import { useTokenUsageStore } from '@/stores/tokenUsageStore'
 import { useQuestionCountStore } from '@/stores/questionCountStore'
+import { toast } from 'sonner'
 
 // 종목 타입 정의
 interface StockOption {
@@ -27,6 +28,7 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'status';
   content: string;
+  content_expert?: string;
   timestamp: number;
   stockInfo?: {
     stockName: string;
@@ -58,7 +60,7 @@ function AIChatAreaContent() {
   const [isProcessing, setIsProcessing] = useState<boolean>(false); // 메시지 처리 중 상태
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const [isMobile, setIsMobile] = useState(false); // 사이드바 열림 상태 감지를 위한 상태 추가
+  const [isMobile, setIsMobile] = useState(false); // 사ㅅ이드바 열림 상태 감지를 위한 상태 추가
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isInputCentered, setIsInputCentered] = useState(true); // isInputCentered 초기 상태: true
   const [showTitle, setShowTitle] = useState(true); // 제목 표시 여부
@@ -71,6 +73,7 @@ function AIChatAreaContent() {
   const [responseMessage, setResponseMessage] = useState(''); // 응답 메시지 상태
   const [timerState, setTimerState] = useState<{ [key: string]: number }>({});
   const [copyStates, setCopyStates] = useState<Record<string, boolean>>({});
+  const [expertMode, setExpertMode] = useState<Record<string, boolean>>({}); // 전문가 모드 상태 추가
 
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 참조
   const searchInputRef = useRef<HTMLInputElement>(null); // 검색 입력 필드 참조
@@ -97,18 +100,19 @@ function AIChatAreaContent() {
   // 스토어에서 가져온 메시지를 컴포넌트 메시지 형식으로 변환
   useEffect(() => {
     if (currentSession && storeMessages.length > 0) {
-      // 채팅 세션이 있을 경우, 화면 레이아웃을 메시지 모드로 변경
-      setIsInputCentered(false)
-      setShowTitle(false)
+      // 레이아웃 설정 즉시 변경
+      setIsInputCentered(false);
+      setShowTitle(false);
+      setTransitionInProgress(false); // 트랜지션 상태 즉시 해제
       
-      // 현재 세션의 종목 정보 설정 (세션에서 가져오거나 없으면 첫 번째 메시지에서 추출)
+      // 현재 세션의 종목 정보 설정
       const stockName = currentSession.stock_name || '';
       const stockCode = currentSession.stock_code || '';
       
-      console.log('세션 정보:', currentSession)
-      console.log('종목 정보:', stockName, stockCode)
+      console.log('세션 정보:', currentSession);
+      console.log('종목 정보:', stockName, stockCode);
       
-      // 스토어의 메시지를 컴포넌트 형식으로 변환
+      // 스토어의 메시지를 컴포넌트 형식으로 변환 (변환 로직은 동일하게 유지)
       const convertedMessages: ChatMessage[] = storeMessages.map(msg => {
         //console.log('변환 중인 메시지 전체:', msg)
         //console.log('변환 중인 메시지 메타데이터:', msg.metadata)
@@ -130,10 +134,12 @@ function AIChatAreaContent() {
           console.log('세션에서 종목 정보 사용:', msgStockName, msgStockCode);
         }
         
-        const messageWithStock = {
+        // 반환할 메시지 객체 생성
+        return {
           id: msg.id,
           role: msg.role as 'user' | 'assistant' | 'status',
           content: msg.content,
+          content_expert: msg.content_expert,
           timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
           responseId: msg.metadata?.responseId,
           stockInfo: (msgStockName && msgStockCode) ? {
@@ -143,12 +149,8 @@ function AIChatAreaContent() {
           isProcessing: msg.metadata?.isProcessing,
           agent: msg.metadata?.agent,
           elapsed: msg.metadata?.elapsed
-        }
-        
-        //console.log('변환된 단일 메시지:', messageWithStock)
-        //console.log('stockInfo 확인:', messageWithStock.stockInfo)
-        return messageWithStock
-      })
+        };
+      });
       
       //console.log('변환된 메시지들:', convertedMessages)
       
@@ -177,7 +179,7 @@ function AIChatAreaContent() {
         console.log('종목 선택 업데이트:', stockOption)
       }
       
-      // 메시지 설정
+      // 메시지 설정 (스크롤 없이 표시만 함)
       setMessages(convertedMessages)
     }
   }, [currentSession, storeMessages])
@@ -511,7 +513,14 @@ function AIChatAreaContent() {
 
   // 메시지 전송 처리
   const handleSendMessage = async () => {
-    // ... 기존 코드 유지 ...
+    // 질문 개수 제한 체크
+    if (questionSummary && questionSummary.total_questions >= 30) {
+      // 할당량 초과 알림
+      toast.error('오늘의 질문 할당량(30개)을 모두 소진하였습니다. 내일 다시 이용해주세요.');
+      
+      // 메시지 전송 중단
+      return;
+    }
     
     try {
       setIsProcessing(true)
@@ -524,6 +533,9 @@ function AIChatAreaContent() {
       timerRef.current = setInterval(() => {
         setElapsedTime((prev) => prev + 1)
       }, 1000)
+      
+      // 이전 elapsed 타이머 상태 초기화
+      setTimerState({})
       
       // 사용자 메시지 추가
       const userMessageObj: ChatMessage = {
@@ -648,18 +660,25 @@ function AIChatAreaContent() {
               timerRef.current = null
             }
             
+            // 이전 elapsed 타이머 상태 초기화
+            setTimerState({})
+            setElapsedTime(0)
+            
             // 상태 메시지 제거
             setMessages((prevMessages) => 
               prevMessages.filter((msg) => msg.id !== statusMessageObj.id)
             )
             
             // 최종 응답 메시지 추가
+            
             const assistantMessageObj: ChatMessage = {
               id: data.message_id || `ai-${Date.now()}`,
               role: 'assistant',
               content: data.response,
+              content_expert: data.response_expert,
               timestamp: Date.now(),
               responseId: data.metadata?.responseId,
+              elapsed: 0, // elapsed를 0으로 설정
               stockInfo: {
                 stockName: selectedStock?.stockName || '',
                 stockCode: selectedStock?.value || ''
@@ -669,10 +688,10 @@ function AIChatAreaContent() {
             setMessages((prevMessages) => [...prevMessages, assistantMessageObj])
             setIsProcessing(false)
             
-            // 스크롤 아래로 이동
+            // 스크롤 아래로 이동 (새 메시지 전송 후에는 스크롤 자동 이동)
             setTimeout(() => {
-              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-            }, 100)
+              messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+            }, 10)
           },
           onError: (error) => {
             console.error('[AIChatArea] 스트리밍 오류:', error);
@@ -734,31 +753,27 @@ function AIChatAreaContent() {
     }
   }
 
-  // 메시지 영역 자동 스크롤
+  // 메시지 영역 자동 스크롤 - 메시지 업데이트 시에만 선택적으로 스크롤
   useEffect(() => {
-    // 입력 위치가 중앙에서 하단으로 변경될 때는 스크롤 동작을 지연시켜 레이아웃 변화가 완료된 후 작동하도록 함
-    if (messagesEndRef.current && messages.length > 0) {
-      // 최초 메시지 추가 또는 isInputCentered가 false인 상태에서 메시지 추가 시 스크롤 동작
-      if (messages.length === 1 || !transitionInProgress) {
-        setTimeout(() => {
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
-          }
-        }, 300); // 레이아웃 전환 애니메이션(0.3s)보다 약간 더 길게 설정
-      }
+    // 새 메시지가 전송된 경우에만 스크롤 이동 (사용자가 새로 메시지를 전송할 때)
+    if (messagesEndRef.current && messages.length > 0 && isProcessing) {
+      // 즉시 스크롤 이동 (지연 없음)
+      messagesEndRef.current.scrollIntoView({ behavior: 'instant' });
     }
-  }, [messages, transitionInProgress]);
+  }, [messages, isProcessing]);
 
-  // 입력 필드 위치 전환 상태 관리
+  // 입력 필드 위치 전환 상태 관리 - 즉시 실행으로 변경
   useEffect(() => {
     if (!isInputCentered) {
-      setTransitionInProgress(true);
-      // transition 시간(0.3s) 이후에 전환 완료 상태로 변경
-      setTimeout(() => {
-        setTransitionInProgress(false);
-      }, 400); // transition duration + 약간의 여유
+      // 트랜지션을 즉시 완료하도록 수정
+      setTransitionInProgress(false);
+      
+      // messagesEndRef가 있으면 스크롤 조정도 즉시 수행
+      if (messagesEndRef.current && isProcessing) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'instant' });
+      }
     }
-  }, [isInputCentered]);
+  }, [isInputCentered, isProcessing]);
 
   // 로컬 스토리지에서 메시지 불러오기
   useEffect(() => {
@@ -1115,22 +1130,20 @@ function AIChatAreaContent() {
     overflowX: 'hidden',
     paddingTop: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
     paddingRight: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
-    // 입력 박스가 하단에 고정될 때 메시지가 입력 박스 뒤로 가려지지 않도록 하단 패딩 증가
     paddingBottom: isInputCentered ? (isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px')) : (isMobile ? '70px' : '80px'),
     paddingLeft: isMobile ? '5px' : (windowWidth < 768 ? '8px' : '10px'),
-    margin: '0 auto', // 중앙 정렬
-    border: 'none', 
-    borderRadius: '0', 
+    margin: '0 auto',
+    border: 'none',
+    borderRadius: '0',
     backgroundColor: '#F4F4F4',
-    width: contentWidthPercent, // 일관된 너비 사용
-    height: '100%', // 전체 높이로 변경
+    width: contentWidthPercent,
+    height: '100%',
     minHeight: 'calc(100% - 60px)',
     boxSizing: 'border-box',
     position: 'relative',
     display: isInputCentered ? 'none' : 'block',
-    opacity: transitionInProgress ? 0 : 1, // 트랜지션 중에는 투명하게 처리
-    transition: 'opacity 0.3s ease-in-out', // 오직 opacity만 transition
-    maxWidth: '100%' // 최대 너비 제한
+    opacity: 1, // 항상 완전히 불투명하게 설정
+    maxWidth: '100%'
   };
 
   const aiMessageStyle: React.CSSProperties = {
@@ -1221,13 +1234,34 @@ function AIChatAreaContent() {
 
   // 클라이언트 측에서 마운트될 때까지 렌더링하지 않음
   if (!isMounted) {
-    return null; // 또는 로딩 스피너 등 표시 가능
+    return (
+      <div className="ai-chat-area" style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F4F4F4',
+      }}>
+        <div style={{ textAlign: 'center', color: '#666' }}>
+          <div style={{ marginBottom: '10px' }}>로딩 중...</div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="ai-chat-area" style={aiChatAreaStyle}>
       {/* 마크다운 스타일 태그 추가 */}
       <style jsx>{markdownStyles}</style>
+      
+      {/* 애니메이션 스타일 추가 */}
+      <style jsx global>{`
+        .markdown-content {
+          position: relative;
+        }
+      `}</style>
       
       {/* 메시지 표시 영역 */}
       <div 
@@ -1312,8 +1346,8 @@ function AIChatAreaContent() {
                       }}>
                         {message.content}
                       </div>
-                    ) : (
-                      // AI 응답은 마크다운으로 렌더링
+                    ) : message.role === 'status' ? (
+                      // status 진행 팝업
                       <div className="markdown-content">
                         <ReactMarkdown 
                           remarkPlugins={[
@@ -1347,6 +1381,53 @@ function AIChatAreaContent() {
                           </div>
                         )}
                       </div>
+                    ) : (
+                      // assitant 응답. AI 응답은 마크다운으로 렌더링
+                      <div className="markdown-content">
+                        {message.role === 'assistant' && message.content_expert && expertMode[message.id] ? (
+                          <div>
+                            <ReactMarkdown 
+                              remarkPlugins={[
+                                remarkGfm,
+                                [remarkBreaks, { breaks: false }]
+                              ]}
+                              components={{
+                                text: ({node, ...props}) => <>{props.children}</>,
+                                h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
+                                h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
+                                h3: ({node, ...props}) => <h3 style={{marginTop: '1.2em', marginBottom: '0.8em'}} {...props} />,
+                                ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
+                                ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
+                                li: ({node, ...props}) => <li style={{marginBottom: '0'}} {...props} />,
+                                p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
+                              }}
+                            >
+                              {message.content_expert}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <div>
+                            <ReactMarkdown 
+                              remarkPlugins={[
+                                remarkGfm,
+                                [remarkBreaks, { breaks: false }]
+                              ]}
+                              components={{
+                                text: ({node, ...props}) => <>{props.children}</>,
+                                h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
+                                h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
+                                h3: ({node, ...props}) => <h3 style={{marginTop: '1.2em', marginBottom: '0.8em'}} {...props} />,
+                                ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
+                                ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
+                                li: ({node, ...props}) => <li style={{marginBottom: '0'}} {...props} />,
+                                p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
+                              }}
+                            >
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                   
@@ -1357,7 +1438,11 @@ function AIChatAreaContent() {
                         if (message.role === 'user') {
                           navigator.clipboard.writeText(message.content);
                         } else {
-                          navigator.clipboard.writeText(message.content + '\n\n' + '(주)인텔리오 - 스탁이지 : https://stockeasy.intellio.kr/');
+                          // 어시스턴트 메시지인 경우 모드에 따라 적절한 컨텐츠 복사
+                          const contentToCopy = message.content_expert && expertMode[message.id] 
+                            ? message.content_expert 
+                            : message.content;
+                          navigator.clipboard.writeText(contentToCopy + '\n\n' + '(주)인텔리오 - 스탁이지 : https://stockeasy.intellio.kr/');
                         }
                         setCopyStates(prev => ({ ...prev, [message.id]: true }));
                         setTimeout(() => {
@@ -1396,6 +1481,41 @@ function AIChatAreaContent() {
                       )}
                     </button>
                   )}
+                  
+                  {/* 전문가용 답변 모드 버튼 추가 (어시스턴트 메시지이고 content_expert가 있는 경우에만 표시) */}
+                  {message.role === 'assistant' && message.content_expert && message.content_expert.trim() !== '' && (
+                    <button
+                      onClick={() => {
+                        // 전문가 모드 토글
+                        setExpertMode(prev => ({ ...prev, [message.id]: !prev[message.id] }));
+                      }}
+                      style={{
+                        position: 'absolute',
+                        bottom: '3px',
+                        left: '32px', // 복사 버튼 옆에 위치
+                        backgroundColor: expertMode[message.id] ? 'rgba(16, 163, 127, 0.8)' : 'rgba(240, 240, 240, 0.8)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        width: '24px',
+                        height: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        opacity: 0.8,
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = expertMode[message.id] ? 'rgba(16, 163, 127, 1)' : 'rgba(210, 210, 210, 0.5)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = expertMode[message.id] ? 'rgba(16, 163, 127, 0.8)' : 'rgba(240, 240, 240, 0.8)';
+                      }}
+                      title={expertMode[message.id] ? "주린이 모드로 보기" : "전문가 모드로 보기"}
+                    >
+                      <Briefcase size={14} color={expertMode[message.id] ? '#FFFFFF' : '#333333'} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1411,7 +1531,7 @@ function AIChatAreaContent() {
             padding: '10px 0',
             width: '100%'
           }}>
-
+            
           </div>
         )}
         

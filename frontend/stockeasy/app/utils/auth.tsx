@@ -2,6 +2,7 @@
 
 import axios from 'axios';
 import { API_ENDPOINT_COMMON } from '@/services/api/index';
+import { parseCookies } from 'nookies';
 /**
  * 로그아웃 처리 함수
  * - 쿠키 및 로컬 스토리지의 인증 정보 삭제
@@ -94,9 +95,10 @@ export async function logout() {
  * @returns {boolean} 로그인 여부
  */
 export function isLoggedIn(): boolean {
-  // 쿠키만 확인
-  const hasAuthTokenCookie = document.cookie.includes('user');
+  // nookies를 사용하여 쿠키 파싱
+  const cookies = parseCookies();
   
-  return hasAuthTokenCookie;
+  // user 쿠키 또는 user_id 쿠키가 있는지 확인
+  return !!cookies.user || !!cookies.user_id;
 }
 

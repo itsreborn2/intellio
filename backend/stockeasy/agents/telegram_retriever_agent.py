@@ -729,7 +729,7 @@ class TelegramRetrieverAgent(BaseAgent):
             unique_securities = list(set(securities_values))
             
             foreign_filters = {"keywords": {"$in": unique_securities}}
-            
+        
             # 외국계 증권사 필터로 검색 수행
             result_foreign: RetrievalResult = await semantic_retriever.retrieve(
                 query=search_query, 

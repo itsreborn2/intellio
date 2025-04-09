@@ -157,6 +157,7 @@ class ChatMessageResponse(BaseResponse):
     stock_code: Optional[str] = None
     stock_name: Optional[str] = None
     content: str
+    content_expert: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -672,7 +673,7 @@ async def stream_chat_message(
                 total_time = time.time() - start_time
                 
                 # 결과에서 요약 추출
-                summary = result.get("summary", "처리가 완료되었으나 요약을 찾을 수 없습니다.")
+                summary = result.get("summary", "")
                 answer = result.get("answer", "처리가 완료되었으나 응답을 찾을 수 없습니다.")
                 logger.info("[STREAM_CHAT] 응답 생성 완료 (총 소요시간: {:.2f}초, 응답 길이: {}자)", 
                            total_time, len(answer))
@@ -710,6 +711,7 @@ async def stream_chat_message(
                     chat_session_id=chat_session_id,
                     role="assistant",
                     content=answer,
+                    content_expert=summary,
                     stock_code=request.stock_code,
                     stock_name=request.stock_name,
                     metadata=metadata
@@ -725,6 +727,7 @@ async def stream_chat_message(
                     "data": {
                         "message": "처리가 완료되었습니다.",
                         "response": answer,
+                        "response_expert": summary,
                         "message_id": assistant_message_id,
                         "metadata": metadata,
                         "timestamp": time.time(),

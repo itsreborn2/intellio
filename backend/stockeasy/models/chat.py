@@ -99,6 +99,11 @@ class StockChatMessage(Base):
         Text, nullable=False,
         comment="메시지 텍스트 내용"
     )
+
+    content_expert: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+        comment="전문가 메시지 텍스트 내용"
+    )
     
     # 구조화된 메시지 데이터
     message_data: Mapped[Optional[dict]] = mapped_column(

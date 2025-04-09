@@ -188,16 +188,16 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
               <div className="mr-4">
                 {/* 컴포넌트가 완전히 로드된 후에만 아바타 표시 */}
                 {isLoaded && (
-                  profileImage ? (
+                  profileImage && !profileImage.includes('googleusercontent.com') ? (
                     <Avatar className="w-16 h-16">
                       <AvatarImage src={profileImage} alt={name || '사용자'} />
-                      <AvatarFallback>
+                      <AvatarFallback className="bg-gray-700 text-gray-100 text-lg">
                         {getInitials()}
                       </AvatarFallback>
                     </Avatar>
                   ) : (
                     <Avatar className="w-16 h-16">
-                      <AvatarFallback>
+                      <AvatarFallback className="bg-gray-700 text-gray-100 text-lg">
                         {getInitials()}
                       </AvatarFallback>
                     </Avatar>

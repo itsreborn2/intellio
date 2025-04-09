@@ -89,6 +89,7 @@ export interface IChatMessageDetail  extends IBaseResponse {
   chat_session_id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  content_expert?: string;
   stock_code: string;
   stock_name: string;
   metadata?: any;

@@ -2,6 +2,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from "intellio-common/components/ui/avatar";
+import { parseCookies } from 'nookies';
+import { isLoggedIn } from '../utils/auth';
+import { useQuestionCountStore } from '@/stores/questionCountStore';
+import { MessageSquare, HelpCircle } from 'lucide-react';
+import { Badge } from "@/components/ui/badge";
 
 /**
  * StockEasy 애플리케이션의 고정 헤더 컴포넌트.
@@ -14,24 +19,63 @@ const Header: React.FC = () => {
   const [userProfileImage, setUserProfileImage] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userProvider, setUserProvider] = useState('');
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(false);
+
+  // 질문 개수 스토어 사용
+  const { 
+    summary: questionSummary, 
+    fetchSummary: fetchQuestionSummary, 
+    isLoading: isQuestionLoading 
+  } = useQuestionCountStore();
+
+  // 오늘 질문 개수 가져오기
+  useEffect(() => {
+    if (isUserLoggedIn) {
+      fetchQuestionSummary('day', 'day');
+    }
+  }, [isUserLoggedIn, fetchQuestionSummary]);
 
   // 사용자 정보 가져오기
   useEffect(() => {
-    // 로컬 스토리지에서 사용자 정보 가져오기
-    const storedUserInfo = localStorage.getItem('userInfo');
+    // auth.tsx의 isLoggedIn 함수로 로그인 상태 확인
+    const loggedIn = isLoggedIn();
+    setIsUserLoggedIn(loggedIn);
     
-    if (storedUserInfo) {
-      try {
-        const userInfo = JSON.parse(storedUserInfo);
-        if (userInfo.id) setUserId(userInfo.id);
-        setIsLoggedIn(true);
-        setUserName(userInfo.name || '');
-        if (userInfo.picture) setUserProfileImage(userInfo.picture);
-        setUserEmail(userInfo.email || '');
-        setUserProvider(userInfo.provider || '');
-      } catch (error) {
-        console.error('Error parsing user info:', error);
+    if (loggedIn) {
+      // nookies를 사용하여 쿠키에서 사용자 정보 가져오기
+      const cookies = parseCookies();
+      
+      // user_id 쿠키가 있는 경우
+      if (cookies.user_id) {
+        setUserId(cookies.user_id);
+        setUserName(cookies.user_name || '');
+        setUserProfileImage(cookies.profile_image || '');
+        setUserEmail(cookies.user_email || '');
+        return;
+      }
+      
+      // user 쿠키에서 정보 파싱 시도
+      if (cookies.user) {
+        try {
+          // 쿠키 값 디코딩 및 JSON 파싱
+          let jsonString = decodeURIComponent(cookies.user);
+          
+          // 이중 따옴표로 감싸진 JSON 문자열인 경우 처리
+          if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
+            jsonString = jsonString.slice(1, -1).replace(/\\"/g, '"');
+          }
+          
+          // JSON 파싱하여 사용자 정보 추출
+          const userInfo = JSON.parse(jsonString);
+          
+          // 사용자 정보 설정
+          if (userInfo.id) setUserId(userInfo.id);
+          if (userInfo.name) setUserName(userInfo.name);
+          if (userInfo.profile_image) setUserProfileImage(userInfo.profile_image);
+          if (userInfo.email) setUserEmail(userInfo.email);
+        } catch (error) {
+          console.error('사용자 정보 파싱 오류:', error);
+        }
       }
     }
   }, []);
@@ -46,6 +90,17 @@ const Header: React.FC = () => {
       detail: { source: 'header' }
     });
     window.dispatchEvent(event);
+  };
+
+  // 오늘 질문 개수 계산
+  const getTodayQuestionCount = (): number => {
+    if (!questionSummary || !questionSummary.grouped_data) return 0;
+    
+    // 오늘 날짜 가져오기 (YYYY-MM-DD 형식)
+    const today = new Date().toISOString().split('T')[0];
+    
+    // 오늘 질문 개수 반환
+    return questionSummary.grouped_data[today] || 0;
   };
 
   return (
@@ -64,19 +119,31 @@ const Header: React.FC = () => {
         {/* 로고 텍스트 */}
         <div className="text-lg font-semibold pl-[25px] md:pl-0">StockEasy</div>
         
-        {/* 아바타 */}
-        {isLoggedIn && (
-          <div 
-            className="cursor-pointer" 
-            onClick={openSettingsPopup}
-          >
-            <Avatar className="h-8 w-8">
-              <AvatarImage key={userProfileImage} src={userProfileImage || '/default-avatar.png'} alt={userName || 'User'} />
-              <AvatarFallback>{userName ? userName.charAt(0) : 'U'}</AvatarFallback>
-            </Avatar>
-            <div style={{ fontSize: 10, color: 'red' }}>{userProfileImage}</div>
-          </div>
-        )}
+        {/* 우측 영역: 질문 개수 + 아바타 */}
+        <div className="flex items-center gap-3">
+          {/* 질문 개수 표시 */}
+          {isUserLoggedIn && (
+            <div className="flex items-center gap-1">
+              <MessageSquare size={18} className="text-gray-600" />
+              <Badge variant="outline" className="rounded-full py-0 h-5 bg-sky-50 border-sky-200">
+                {isQuestionLoading ? "..." : `${questionSummary?.total_questions} / 30`}
+              </Badge>
+            </div>
+          )}
+          
+          {/* 아바타 */}
+          {isUserLoggedIn && (
+            <div 
+              className="cursor-pointer" 
+              onClick={openSettingsPopup}
+            >
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={userProfileImage || '/default-avatar.png'} alt={userName || 'User'} />
+                <AvatarFallback>{userName ? userName.charAt(0) : 'U'}</AvatarFallback>
+              </Avatar>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 설정 팝업은 사이드바에서 관리하므로 여기서는 제거 */}

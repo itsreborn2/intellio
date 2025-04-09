@@ -32,6 +32,7 @@ import SettingsPopup from './SettingsPopup'; // SettingsPopup 컴포넌트 impor
 import LoginDialog from './LoginDialog'; // LoginDialog 컴포넌트 추가
 import { logout } from '../utils/auth';
 import { Avatar, AvatarImage, AvatarFallback } from "intellio-common/components/ui/avatar"
+import { parseCookies } from 'nookies';
 
 // 컨텐츠 컴포넌트
 function SidebarContent() {
@@ -388,13 +389,25 @@ function SidebarContent() {
     // 쿠키에서 사용자 정보 가져오기
     const getUserInfoFromCookie = () => {
       try {
-        // 쿠키 문자열 파싱
-        const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-          const [key, value] = cookie.trim().split('=');
-          acc[key.trim()] = value;
-          return acc;
-        }, {} as Record<string, string>);
+        // nookies를 사용하여 쿠키 파싱
+        const cookies = parseCookies();
 
+        // user_id 쿠키가 있는지 확인
+        if (cookies.user_id) {
+          setUserId(cookies.user_id);
+          setUserName(cookies.user_name || '');
+          setUserEmail(cookies.user_email || '');
+          setUserProvider(cookies.provider || '');
+          
+          if (cookies.profile_image) {
+            console.log('사용자 프로필 이미지:', cookies.profile_image);
+            setUserProfileImage(cookies.profile_image);
+          }
+          
+          setIsLoggedIn(true);
+          return true;
+        }
+        
         // user 쿠키가 있는지 확인
         if (cookies.user) {
           // 쿠키 값 디코딩 및 JSON 파싱
@@ -411,18 +424,17 @@ function SidebarContent() {
           // 사용자 정보 설정
           if (userInfo.id) setUserId(userInfo.id);
           if (userInfo.name) setUserName(userInfo.name);
-          if (userInfo.email) console.log('사용자 이메일:', userInfo.email);
-          if (userInfo.provider) console.log('인증 제공자:', userInfo.provider);
-          if (userInfo.profile_image) setUserProfileImage(userInfo.profile_image);
-          
-          // userEmail 상태 추가
           if (userInfo.email) setUserEmail(userInfo.email);
-          // userProvider 상태 추가
           if (userInfo.provider) setUserProvider(userInfo.provider);
+          if (userInfo.profile_image) {
+            console.log('사용자 프로필 이미지:', userInfo.profile_image);
+            setUserProfileImage(userInfo.profile_image);
+          }
           
           setIsLoggedIn(true);
           return true;
         }
+        
         return false;
       } catch (error) {
         console.error('사용자 정보 파싱 오류:', error);
