@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useMemo, useRef} from 'react'
 import Papa from 'papaparse'
-import { createChatSession, createChatMessage, streamChatMessage } from '@/services/api/chat'
+import { createChatSession, createChatMessage, streamChatMessage, sendChatMessage } from '@/services/api/chat'
 import { IChatMessageDetail, IChatResponse, IChatSession } from '@/types/api/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -687,6 +687,9 @@ function AIChatAreaContent() {
             
             setMessages((prevMessages) => [...prevMessages, assistantMessageObj])
             setIsProcessing(false)
+            
+            // 질문 개수 업데이트
+            fetchQuestionSummary('day', 'day')
             
             // 스크롤 아래로 이동 (새 메시지 전송 후에는 스크롤 자동 이동)
             setTimeout(() => {
