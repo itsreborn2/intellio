@@ -1442,7 +1442,7 @@ function AIChatAreaContent() {
                           const contentToCopy = message.content_expert && expertMode[message.id] 
                             ? message.content_expert 
                             : message.content;
-                          navigator.clipboard.writeText(contentToCopy + '\n\n' + '(주)인텔리오 - 스탁이지 : https://stockeasy.intellio.kr/');
+                          navigator.clipboard.writeText(contentToCopy + '\n\n' + '(주)인텔리오 - : https://wwww.intellio.kr/');
                         }
                         setCopyStates(prev => ({ ...prev, [message.id]: true }));
                         setTimeout(() => {
