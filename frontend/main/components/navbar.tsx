@@ -129,23 +129,7 @@ export default function Navbar() {
         <Link href="/" className="mr-6 flex items-center space-x-2">
           <span className="font-bold">Intellio</span>
         </Link>
-        <nav className="flex flex-1 items-center space-x-6 text-sm font-medium">
-          <button 
-            onClick={() => handleServiceNavigation('doceasy')} 
-            className="transition-colors hover:text-primary"
-          >
-            DocEasy
-          </button>
-          <button 
-            onClick={() => handleServiceNavigation('stockeasy')} 
-            className="transition-colors hover:text-primary"
-          >
-            StockEasy
-          </button>
-          <Link href="/about" className="transition-colors hover:text-primary">
-            About Us
-          </Link>
-        </nav>
+        <div className="flex-1"></div>
         <div className="flex items-center space-x-4">
           <Link href="https://t.me/maddingStock" target="_blank" rel="noreferrer">
             <Button variant="ghost" size="icon">

@@ -3,75 +3,22 @@ import { Github, Twitter, Linkedin } from "lucide-react"
 
 export default function Footer() {
   return (
-    <footer className="border-t">
-      <div className="container flex flex-col gap-8 py-8 md:flex-row md:py-12">
-        <div className="flex-1 space-y-4">
-          <h2 className="font-bold">Intellio 인텔리오</h2>
-          <p className="text-sm text-muted-foreground">AI powered service group</p>
-        </div>
-        <div className="grid flex-1 grid-cols-2 gap-12 sm:grid-cols-3">
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium">Solutions</h3>
-            <ul className="space-y-3 text-sm">
-              <li>
-                <Link href="/ai-analytics" className="text-muted-foreground transition-colors hover:text-primary">
-                  AI 업무 자동화
-                </Link>
-              </li>
-              <li>
-                <Link href="/cloud-services" className="text-muted-foreground transition-colors hover:text-primary">
-                  주식 정보 서비스
-                </Link>
-              </li>
-            </ul>
-          </div>
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium">Company</h3>
-            <ul className="space-y-3 text-sm">
-              <li>
-                <Link href="/about" className="text-muted-foreground transition-colors hover:text-primary">
-                  About Us
-                </Link>
-              </li>
-              <li>
-                <Link href="/careers" className="text-muted-foreground transition-colors hover:text-primary">
-                  Careers
-                </Link>
-              </li>
-            </ul>
-          </div>
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium">Connect</h3>
-            <div className="flex space-x-4">
-              <Link
-                href=""
-                className="text-muted-foreground transition-colors hover:text-primary"
-              >
-                <Github className="h-5 w-5" />
-                <span className="sr-only">GitHub</span>
-              </Link>
-              <Link
-                href=""
-                className="text-muted-foreground transition-colors hover:text-primary"
-              >
-                <Twitter className="h-5 w-5" />
-                <span className="sr-only">Twitter</span>
-              </Link>
-              <Link
-                href=""
-                className="text-muted-foreground transition-colors hover:text-primary"
-              >
-                <Linkedin className="h-5 w-5" />
-                <span className="sr-only">LinkedIn</span>
-              </Link>
+    <footer className="border-0 mt-auto pt-6">
+      <div className="container py-10">
+        <div className="mx-auto max-w-4xl text-center">
+          <div className="mb-4">
+            <p className="font-medium">주식회사 인텔리오</p>
+            <div className="text-sm text-muted-foreground space-y-1 mt-3">
+              <p>대표이사 : 김상균, 조훈</p>
+              <p>경기도 수원시 영통구 대학4로 17, 316-47호(이의동)</p>
+              <p>사업자 등록번호 : 819-88-03184</p>
+              <p>E-mail : intellio.korea@gmail.com</p>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground mt-6">
+            © 2025 Intellio Corporation All Rights Reserved.
+          </p>
         </div>
-      </div>
-      <div className="container border-t py-6">
-        <p className="text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} 주식회사 인텔리오 All rights reserved.
-        </p>
       </div>
     </footer>
   )

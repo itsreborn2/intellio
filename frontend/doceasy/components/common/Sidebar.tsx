@@ -451,7 +451,7 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
             <div className="flex items-center justify-between p-3">
               {!isCollapsed && (
                 <div className="flex items-center gap-2">
-                  <a href="http://localhost:3000" className="text-lg font-semibold text-white no-underline hover:no-underline">
+                  <a href={`${process.env.NEXT_PUBLIC_DOCEASY_URL}`} className="text-lg font-semibold text-white no-underline hover:no-underline">
                     <h1 className="font-bold text-[#10A37F]">Doceasy</h1>
                   </a>
                 </div>
@@ -744,27 +744,14 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
                       </DropdownMenuContent>
                     </DropdownMenu>
                   ) : (
-                    <Dialog open={isLoginDialogOpen} onOpenChange={setIsLoginDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="w-8 h-8 p-0 hover:bg-[#3F424A]">
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>로그인 선택</DialogTitle>
-                          <DialogDescription>
-                            소셜 계정으로 로그인하세요
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <div className="flex flex-col space-y-2">
-                            <LoginButton provider="google" redirectTo="doceasy" />
-                            <LoginButton provider="naver" redirectTo="doceasy" />
-                          </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="w-8 h-8 p-0 hover:bg-[#3F424A]"
+                      onClick={() => router.push(`${process.env.NEXT_PUBLIC_INTELLIO_URL}/login?redirectTo=doceasy`)}
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
                   )}
                 </div>
               )}
