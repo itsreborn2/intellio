@@ -3,7 +3,7 @@ import Script from 'next/script';
 import Sidebar from './components/Sidebar';
 import ConditionalFooter from './components/ConditionalFooter';
 import { Toaster } from 'react-hot-toast';
-// ClientFooter 임포트 제거
+import Header from './components/Header'; // Header 컴포넌트 import 추가
 
 export default function RootLayout({
   children,
@@ -33,9 +33,11 @@ export default function RootLayout({
         
         {/* 사이드바는 fixed 포지션으로 설정되어 있으므로 여기서는 사이드바만 배치 */}
         <Sidebar />
+        {/* 헤더는 fixed 포지션으로 설정 */}
+        <Header /> 
         
         {/* 메인 콘텐츠는 데스크탑에서만 사이드바 너비만큼 왼쪽 여백을 가짐, 모바일에서는 전체 너비 사용 */}
-        <main className="min-h-screen overflow-x-hidden w-full ml-0 md:ml-[59px] md:w-[calc(100%-59px)]">
+        <main className="min-h-screen overflow-x-hidden w-full ml-0 md:ml-[59px] md:w-[calc(100%-59px)] pt-[44px]">
           <div className="content-container">
             {children}
           </div>

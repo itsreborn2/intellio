@@ -207,16 +207,18 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-lg font-medium">{name}</p>
-                    <p className="text-sm text-gray-500">{email || ' '}</p>
+                    {/* 사용자 이름 폰트 크기 조정 */}
+                    <p className="font-medium">{name || '사용자'}</p> 
+                    <p className="text-sm text-gray-500">{email}</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 질문 개수 정보 */}
+            {/* 질문 개수 정보 섹션 */}
             <div className="border-t pt-4">
-              <h3 className="font-medium mb-3 flex items-center">
+              {/* 제목 폰트 크기 조정 */}
+              <h3 className="font-medium mb-3 flex items-center text-base"> 
                 <MessageSquare className="w-4 h-4 mr-2" />
                 질문 개수 정보
               </h3>
@@ -249,8 +251,16 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
                   
                   {/* 요약 정보 */}
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-medium mb-2">총 질문</h4>
-                    <div className="text-lg font-medium">{formatNumber(questionSummary?.total_questions)} / 30</div>
+                    {/* 제목 폰트 크기 조정 */}
+                    <h4 className="font-medium mb-2 text-base">총 질문</h4> 
+                    {/* 값 폰트 크기 조정 */}
+                    <div className="font-medium"> 
+                      {isQuestionLoading ? (
+                        '로딩 중...'
+                      ) : (
+                        `${formatNumber(questionSummary?.total_questions)} / 30`
+                      )}
+                    </div>
                   </div>
                   
                  
@@ -312,35 +322,40 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
 };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[20000]" onClick={onClose}>
+    // Modal overlay
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[20000] p-4" onClick={onClose}>
+      {/* Modal Content container - responsive width and height */}
       <div 
-        className="bg-white dark:bg-gray-800 shadow-lg rounded-xl overflow-hidden"
-        style={{ width: '800px', height: '600px', marginLeft: '59px' }} 
-        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-gray-800 shadow-lg rounded-xl overflow-hidden w-full max-w-md h-auto max-h-[90vh] flex flex-col md:w-[800px] md:h-[600px] md:max-h-[90vh]"
+        // Removed inline style: {{ width: '800px', height: '600px', marginLeft: '59px' }}
+        onClick={(e) => e.stopPropagation()} // Prevent closing modal when clicking inside
       >
-        {/* 헤더 */}
-        <div className="flex justify-between items-center px-6 py-4 border-b">
+        {/* Header */}
+        <div className="flex justify-between items-center px-4 py-3 md:px-6 md:py-4 border-b flex-shrink-0">
           <h1 className="text-lg font-medium">설정</h1>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X size={20} />
           </button>
         </div>
         
-        <div className="flex">
-          {/* 좌측 탭 메뉴 , '외형', '맞춤 설정' */}
-          <div className="w-1/4 border-r">
+        {/* Main content area - responsive direction */}
+        <div className="flex flex-col md:flex-row flex-grow overflow-hidden"> 
+          {/* Left tab menu - responsive width and borders */}
+          <div className="w-full md:w-1/4 border-b md:border-b-0 md:border-r flex-shrink-0">
             <ul>
+              {/* Currently only '계정' tab is active */} 
               {(['계정'] as TabType[]).map((tab) => (
                 <li key={tab}>
                   <button
-                    className={`flex items-center w-full text-left px-6 py-4 ${
+                    className={`flex items-center w-full text-left px-4 py-3 md:px-6 md:py-4 ${
                       activeTab === tab 
                         ? 'bg-gray-100 dark:bg-gray-700 font-medium' 
                         : 'hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                     onClick={() => setActiveTab(tab)}
                   >
-                    {tabIcons[tab]}
+                    {/* Tab icon rendering needs review if more tabs are added */}
+                    {tab === '계정' && <User size={20} className="mr-2" />} 
                     {tab}
                   </button>
                 </li>
@@ -348,9 +363,9 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
             </ul>
           </div>
           
-          {/* 우측 내용 */}
-          <div className="flex-1 p-6">
-            {renderTabContent()}
+          {/* Right content area - responsive padding and scrolling */}
+          <div className="flex-1 p-4 md:p-6 overflow-y-auto">
+            {renderTabContent()} 
           </div>
         </div>
       </div>

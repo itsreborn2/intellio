@@ -17,13 +17,14 @@ const DocumentAnalysisProgress = ({ documents }: { documents: IDocument[] }) => 
     doc.status === 'PROCESSING' || doc.status === 'PARTIAL' || doc.status === 'UPLOADING' || doc.status === 'UPLOADED'
   );
   const completedDocs = documents.filter(doc => doc.status === 'COMPLETED');
+  const isMobile = useIsMobile(); // 모바일 환경 감지 훅 사용
   
   if (processingDocs.length === 0) return null;
 
   return (
-    <div className="fixed bottom-24 right-8 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 z-50 max-w-xs">
+    <div className={`fixed ${isMobile ? 'bottom-16 right-4' : 'bottom-24 right-8'} bg-white dark:bg-gray-800 shadow-lg rounded-lg ${isMobile ? 'p-3' : 'p-4'} z-50 ${isMobile ? 'max-w-[250px]' : 'max-w-xs'}`}>
       <div className="flex flex-col space-y-2">
-        <h4 className="font-semibold text-sm">문서 분석 진행 중</h4>
+        <h4 className={`font-semibold ${isMobile ? 'text-xs' : 'text-sm'}`}>문서 분석 진행 중</h4>
         
         <div className="space-y-1">
           <div className="flex justify-between text-xs">
@@ -242,28 +243,28 @@ export const UploadSection = () => {
         onClose={closeErrorDialog}
         errorMessage={uploadError.message}
       />
-      <div className="w-full h-[50vh] flex items-center justify-center p-4">
+      <div className="w-full h-[50vh] flex items-center justify-center p-2 sm:p-4">
         <div
           {...getRootProps()}
-          className={`w-full h-full max-w-4xl p-8 rounded-lg border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center cursor-pointer
+          className={`w-full h-full max-w-4xl ${isMobile ? 'p-4 sm:p-6' : 'p-8'} rounded-lg border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center cursor-pointer
             ${isDragActive 
               ? 'border-primary bg-primary/10 scale-[0.99] shadow-lg' 
               : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5'}`}
         >
-          <div className="flex flex-col items-center text-center space-y-6">
+          <div className="flex flex-col items-center text-center space-y-4 sm:space-y-6">
             {/* 아이콘 배경색 및 아이콘 색상 변경 */}
-            <div className={`p-6 rounded-full transition-colors duration-200 ${isDragActive ? 'bg-primary/20' : 'bg-[#282A2E]'}`}>
-              <Upload className={`w-8 h-8 transition-colors duration-200 ${isDragActive ? 'text-primary' : 'text-[#10A37F]'}`} />
+            <div className={`${isMobile ? 'p-4' : 'p-6'} rounded-full transition-colors duration-200 ${isDragActive ? 'bg-primary/20' : 'bg-[#282A2E]'}`}>
+              <Upload className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8'} transition-colors duration-200 ${isDragActive ? 'text-primary' : 'text-[#10A37F]'}`} />
             </div>
             <div className="space-y-2">
-              <h3 className="font-semibold text-xl">문서 업로드</h3>
-              <p className="text-sm text-muted-foreground">
+              <h3 className={`font-semibold ${isMobile ? 'text-lg' : 'text-xl'}`}>문서 업로드</h3>
+              <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-muted-foreground`}>
                 이곳에 문서를 끌어다 놓거나 클릭하여 선택하세요
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 최대 100개 파일까지 업로드 가능
               </p>
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-xs text-muted-foreground mt-2 max-w-full break-words">
                 PDF, Word(doc/docx), 한글(hwp/hwpx), 엑셀(xls/xlsx), 이미지(jpg/jpeg/png/gif/tiff), 텍스트(txt)
               </p>
               
@@ -272,13 +273,13 @@ export const UploadSection = () => {
               {/* 업로드 상태 표시 */}
               {uploadStatus.total > 0 && (
                 <div className="mt-4 text-sm">
-                  <div className="flex items-center space-x-2">
+                  <div className={`flex ${isMobile ? 'flex-col space-y-1' : 'items-center space-x-2'}`}>
                     <div className="text-green-600">성공: {uploadStatus.total - uploadStatus.error}</div>
                     {uploadStatus.error > 0 && (
                       <div className="text-red-600">
                         실패: {uploadStatus.error}
                         {uploadStatus.failedFiles.length > 0 && (
-                          <div className="text-xs mt-1">
+                          <div className="text-xs mt-1 max-w-full break-words">
                             실패한 파일: {uploadStatus.failedFiles.join(', ')}
                           </div>
                         )}
