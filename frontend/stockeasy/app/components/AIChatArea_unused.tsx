@@ -42,7 +42,7 @@ interface ChatMessage {
 }
 
 // 컨텐츠 컴포넌트
-function AIChatAreaContent() {
+function AIChatAreaContent_unused() {
   // 종목 리스트 상태
   const [stockOptions, setStockOptions] = useState<StockOption[]>([]);
   const [selectedStock, setSelectedStock] = useState<StockOption | null>(null);
@@ -824,11 +824,7 @@ function AIChatAreaContent() {
   // Backspace 및 Enter 키 처리 함수
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     // Backspace 키이고, 입력창이 비어있고, 종목이 선택된 상태인지 확인
-    if (
-      e.key === 'Backspace' &&
-      inputMessage === '' &&
-      selectedStock
-    ) {
+    if ( e.key === 'Backspace' && inputMessage === '' && selectedStock ) {
       e.preventDefault(); // 기본 Backspace 동작 방지
 
       console.log('Backspace 누름 - 종목 선택 해제 및 팝업 표시'); // 디버깅 로그
@@ -2635,7 +2631,7 @@ function AIChatAreaContent() {
 }
 
 // 메인 컴포넌트
-export default function AIChatArea() {
+export default function AIChatArea_unused() {
   // 컴포넌트 마운트/언마운트 시 이벤트 발생
   useEffect(() => {
     // AIChatArea 컴포넌트가 마운트되었음을 알리는 이벤트 발생
@@ -2651,6 +2647,6 @@ export default function AIChatArea() {
   }, []);
   
   return (
-    <AIChatAreaContent />
+    <AIChatAreaContent_unused />
   )
 }

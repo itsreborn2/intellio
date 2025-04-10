@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import './globals.css';
-import AIChatArea from './components/AIChatArea';
+//import AIChatArea from './components/AIChatArea';
+import AIChatArea from './components/chat/AIChatArea/page';
 import { Loader2 } from 'lucide-react'
 import { useTokenUsageStore } from '@/stores/tokenUsageStore'
 import { useQuestionCountStore } from '@/stores/questionCountStore'
