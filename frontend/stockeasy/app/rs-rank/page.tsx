@@ -61,6 +61,23 @@ interface CandleData {
   volume: number;
 }
 
+// 날짜를 'dd/mm' 형식으로 포맷하는 헬퍼 함수
+const formatDateDDMM = (dateString: string): string | null => {
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date string for formatting:', dateString);
+      return null; // 잘못된 날짜 문자열 처리
+    }
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0'); // 월은 0부터 시작
+    return `${day}/${month}`;
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return null;
+  }
+};
+
 // RS순위 페이지 컴포넌트
 export default function RSRankPage() {
   // 상태 관리
@@ -80,8 +97,8 @@ export default function RSRankPage() {
   const [highDataLoading, setHighDataLoading] = useState<boolean>(true);
   const [highDataError, setHighDataError] = useState<string | null>(null);
   
-  // 52주 신고가 종목 가격 정보
-  const [stockPriceData, setStockPriceData] = useState<Record<string, { open: number, close: number }>>({});
+  // 업데이트 날짜 상태 추가
+  const [updateDate, setUpdateDate] = useState<string | null>(null); 
   
   // 차트 데이터 관련 상태 - 20개의 차트를 위한 상태 배열로 변경
   const [chartDataArray, setChartDataArray] = useState<CandleData[][]>(Array.from({length: 20}, () => []));
@@ -258,16 +275,57 @@ export default function RSRankPage() {
         });
         
         // 상태 업데이트
-        setStockPriceData(priceDataMap);
-        
+        // setStockPriceData(priceDataMap);
       } catch (error) {
         console.error('종목 가격 데이터 로드 오류:', error);
       }
     };
     
+    const loadUpdateDate = async () => {
+      try {
+        // 로컬 캐시 파일에서 직접 로드
+        const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+        
+        // 로컬 캐시 파일 로드
+        const response = await fetch(cacheFilePath, { cache: 'no-store' });
+        
+        if (!response.ok) {
+          throw new Error(`캐시 파일 로드 실패: ${response.status}`);
+        }
+        
+        const csvText = await response.text();
+        
+        // CSV 파싱 및 데이터 처리
+        const parsedData = parseCSV(csvText);
+        
+        if (parsedData && parsedData.rows.length > 0) {
+          const dateString = parsedData.rows[0]['날짜']; // 첫 번째 행의 '날짜' 컬럼 값 사용
+          if (dateString) {
+            const formatted = formatDateDDMM(dateString);
+            if (formatted) {
+              setUpdateDate(formatted);
+            } else {
+              console.error('Failed to format update date from CSV.');
+               // setError('Failed to format update date from CSV.'); // 필요시 에러 상태 업데이트
+            }
+          } else {
+            console.error('Date column "날짜" not found or empty in date CSV.');
+            // setError('Date column "날짜" not found or empty in date CSV.');
+          }
+        } else {
+          console.error('Failed to parse or empty date CSV.');
+          // setError('Failed to parse or empty date CSV.');
+        }
+      } catch (err) {
+        console.error('Failed to load update date:', err);
+        // setError(err instanceof Error ? err.message : String(err)); // 필요시 에러 상태 업데이트
+      }
+    };
+    
     loadData();
     loadHighData();
-    loadStockPriceData();
+    loadUpdateDate();
+    // loadStockPriceData();
   }, []);
 
   // 차트 데이터 로드 함수
@@ -687,24 +745,24 @@ export default function RSRankPage() {
     return Math.floor(marketCapValue).toLocaleString('ko-KR');
   };
 
-  // 등락률 계산 함수 추가
-  const calculatePriceChange = (openPrice: number, closePrice: number): number => {
-    if (!openPrice || openPrice === 0) return 0;
-    return ((closePrice - openPrice) / openPrice) * 100;
-  };
+  // 등락률 계산 함수 제거
+  // const calculatePriceChange = (openPrice: number, closePrice: number): number => {
+  //   if (!openPrice || openPrice === 0) return 0;
+  //   return ((closePrice - openPrice) / openPrice) * 100;
+  // };
 
-  // 등락률 포맷팅 함수
-  const formatPriceChange = (change: number): string => {
-    if (change === 0) return '0.00%';
-    return change > 0 ? `+${change.toFixed(2)}%` : `${change.toFixed(2)}%`;
-  };
+  // 등락률 포맷팅 함수 제거
+  // const formatPriceChange = (change: number): string => {
+  //   if (change === 0) return '0.00%';
+  //   return change > 0 ? `+${change.toFixed(2)}%` : `${change.toFixed(2)}%`;
+  // };
 
-  // 등락률에 따른 색상 결정 함수
-  const getPriceChangeColor = (change: number): string => {
-    if (change >= 5) return 'text-red-500'; // 5% 이상 상승은 빨간색
-    if (change < 0) return 'text-blue-400'; // 하락은 파란색
-    return 'text-gray-900'; // 그 외는 검정색
-  };
+  // 등락률에 따른 색상 결정 함수 제거
+  // const getPriceChangeColor = (change: number): string => {
+  //   if (change >= 5) return 'text-red-500'; // 5% 이상 상승은 빨간색
+  //   if (change < 0) return 'text-blue-400'; // 하락은 파란색
+  //   return 'text-gray-900'; // 그 외는 검정색
+  // };
 
   // 현재 페이지에 표시할 데이터 계산
   const currentPageData = useMemo(() => {
@@ -815,62 +873,38 @@ export default function RSRankPage() {
 
   // 52주 신고가 및 RS 순위 데이터 매칭하여 보여줄 데이터 생성
   const combinedHighData = useMemo(() => {
-    if (!highData || !highData.rows || !csvData || !csvData.rows) {
+    if (!highData || highData.rows.length === 0) {
       return [];
     }
-    
-    // 52주 신고가 데이터 전체를 사용하고 매칭 정보 생성
-    const mappedData = highData.rows.map((highRow: any) => {
-      // 종목명으로 RS 데이터 매칭
-      const matchingRSRow = csvData.rows.find((rsRow: any) => 
-        rsRow['종목명'] && highRow['종목명'] && 
-        String(rsRow['종목명']).trim() === String(highRow['종목명']).trim());
-      
-      // 종목 가격 정보에서 시가/종가 가져오기
-      let priceChange = 0;
-      const stockCode = highRow['종목코드'] ? String(highRow['종목코드']).trim() : '';
-      console.log(`종목코드 : ${stockCode}`)
-      if (stockCode && stockPriceData[stockCode]) {
-        const { open, close } = stockPriceData[stockCode];
-        priceChange = calculatePriceChange(open, close);
-        console.log(`종목코드 : ${stockCode}, 시가 : ${open}, 종가 : ${close}, 등락률 : ${priceChange}`)
-      }
-      
-      // 매칭된 정보 합치기
+
+    return highData.rows.map((highRow) => {
+      // 등락률 계산 로직 제거
+      // const stockName = highRow['종목명'];
+      // const priceInfo = stockPriceData[stockName]; // 등락률 계산을 위해 유지
+
+      // 등락률 계산 로직 제거
+      // const priceChange = priceInfo ? calculatePriceChange(priceInfo.open, priceInfo.close) : 0;
+
       return {
-        // 52주 신고가 데이터
         ...highRow,
-        
-        // RS 순위 데이터에서 가져온 정보
-        'RS': matchingRSRow ? matchingRSRow['RS'] : '-',
-        'RS_1M': matchingRSRow ? matchingRSRow['RS_1M'] : '-',
-        'RS_2M': matchingRSRow ? matchingRSRow['RS_2M'] : '-',
-        'RS_3M': matchingRSRow ? matchingRSRow['RS_3M'] : '-',
-        
-        // 시가총액 
-        '시가총액(억)': highRow['시가총액'] ? Number(String(highRow['시가총액']).replace(/[^0-9.]/g, '')) : 0,
-        
-        // 거래대금 
-        '거래대금(억)': highRow['거래대금'] ? Number(String(highRow['거래대금']).replace(/[^0-9.]/g, '')) : 0,
-        
-        // 등락률 추가
-        '등락률': priceChange,
+        // '등락률' 키에 CSV의 실제 '등락률' 컬럼 값을 할당
+        '등락률': highRow['등락률'], 
+        // 시가총액은 CSV에서 직접 가져옵니다. 렌더링 시 포맷팅합니다.
+        '시가총액': highRow['시가총액'], 
+        // '거래대금' 키에 CSV의 '거래대금' 컬럼 값을 할당
+        '거래대금': highRow['거래대금'],
       };
+    })
+    // 시가총액이 2천억 미만인 종목 필터링
+    .filter(item => {
+      const marketCapString = item['시가총액'];
+      // 시가총액 값을 숫자로 변환 (실패 시 0)
+      const marketCapValue = Number(marketCapString) || 0;
+      // 2천억 이상인 경우만 true 반환
+      return marketCapValue >= 200000000000;
     });
-    
-    // 거래대금이 0인 항목 제외 및 시가총액 2천억 이상인 종목만 필터링
-    const filteredData = mappedData.filter((item) => {
-      // 시가총액 필터링 - 2천억 이상만 포함
-      const marketCap = Number(item['시가총액(억)'] || 0);
-      return marketCap >= 2000; // 시가총액이 2천억 이상인 종목만 포함
-    });
-    
-    // RS 값 기준으로 내림차순 정렬 (RS 값이 높은 순)
-    return filteredData.sort((a, b) => {
-      // 숫자로 변환하여 내림차순 정렬 (큰 값이 먼저 오도록)
-      return Number(b['RS'] || 0) - Number(a['RS'] || 0);
-    });
-  }, [highData, csvData, stockPriceData]);
+  // 의존성 배열에서 stockPriceData, calculatePriceChange 제거
+  }, [highData]); 
 
   // 차트 컴포넌트 렌더링
   const renderChartComponent = (index: number) => {
@@ -1146,13 +1180,20 @@ export default function RSRankPage() {
                     ) : csvData ? (
                       <div className="flex flex-col h-full">
                         <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
-                          {/* 제목과 설명 그룹 */}
+                          {/* 제목 */}
                           <div className="flex items-center">
                              <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
-                             <span className="text-gray-600 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>RS는 특정 주식이 시장에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
-                          </div>
-                          {/* 복사 버튼 */}
-                          <TableCopyButton tableRef={rsTableRef} headerRef={rsHeaderRef} tableName="RS 순위 TOP 200" />
+                           </div>
+                           {/* 복사 버튼 및 날짜 */}
+                           <div className="flex items-center">
+                             {/* 업데이트 날짜 표시 */}
+                             {updateDate && (
+                               <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+                                 updated 16:30 {updateDate}
+                               </span>
+                             )}
+                             <TableCopyButton tableRef={rsTableRef} headerRef={rsHeaderRef} tableName="RS 순위 TOP 200" />
+                           </div>
                         </div>
                         <div className="relative">
                           <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={rsTableRef}>
@@ -1322,7 +1363,7 @@ export default function RSRankPage() {
                         {/* 제목과 설명 그룹 */}
                         <div className="flex items-center">
                           <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
-                          <span className="text-gray-600 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                          <span className="text-gray-600 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}></span>
                         </div>
                         {/* 복사 버튼 */}
                         <TableCopyButton tableRef={highTableRef} headerRef={highHeaderRef} tableName="52주 신고가" />
@@ -1420,22 +1461,28 @@ export default function RSRankPage() {
                                     {row['RS']}
                                   </td>
                                   <td 
-                                    className={`py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis ${getPriceChangeColor(row['등락률'])}`}
+                                    className={`py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis ${
+                                      // 등락률 값에 따라 색상 클래스 적용
+                                      (Number(row['등락률']) || 0) > 0 ? 'text-red-500' : (Number(row['등락률']) || 0) < 0 ? 'text-blue-500' : ''
+                                    }`}
                                     style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
                                   >
-                                    {(row['등락률'] > 0 ? '+' : '') + row['등락률'].toFixed(2)}%
+                                    {/* RS 값을 숫자로 변환하고 toFixed 적용, 변환 실패 시 0으로 처리 */}
+                                    {(Number(row['등락률']) > 0 ? '+' : '') + (Number(row['등락률']) || 0).toFixed(2)}%
                                   </td>
                                   <td 
                                     className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
                                     style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
                                   >
-                                    {row['시가총액(억)']}억
+                                    {/* CSV에서 직접 가져온 시가총액 값을 formatMarketCap 함수로 포맷팅하여 표시 */} 
+                                    {formatMarketCap(row['시가총액'])}
                                   </td>
                                   <td 
                                     className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
                                     style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
                                   >
-                                    {row['거래대금(억)']}억
+                                    {/* 거래대금 값을 숫자로 변환하고 '억' 단위 추가, 변환 실패 시 0으로 처리 */}
+                                    {(Number(row['거래대금']) || 0).toLocaleString()}억
                                   </td>
                                 </tr>
                               ))}
