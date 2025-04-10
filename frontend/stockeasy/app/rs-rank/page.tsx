@@ -61,6 +61,23 @@ interface CandleData {
   volume: number;
 }
 
+// 날짜를 'dd/mm' 형식으로 포맷하는 헬퍼 함수
+const formatDateDDMM = (dateString: string): string | null => {
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date string for formatting:', dateString);
+      return null; // 잘못된 날짜 문자열 처리
+    }
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0'); // 월은 0부터 시작
+    return `${day}/${month}`;
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return null;
+  }
+};
+
 // RS순위 페이지 컴포넌트
 export default function RSRankPage() {
   // 상태 관리
@@ -79,6 +96,9 @@ export default function RSRankPage() {
   const [highData, setHighData] = useState<CSVData>({ headers: [], rows: [], errors: [] });
   const [highDataLoading, setHighDataLoading] = useState<boolean>(true);
   const [highDataError, setHighDataError] = useState<string | null>(null);
+  
+  // 업데이트 날짜 상태 추가
+  const [updateDate, setUpdateDate] = useState<string | null>(null); 
   
   // 차트 데이터 관련 상태 - 20개의 차트를 위한 상태 배열로 변경
   const [chartDataArray, setChartDataArray] = useState<CandleData[][]>(Array.from({length: 20}, () => []));
@@ -261,8 +281,50 @@ export default function RSRankPage() {
       }
     };
     
+    const loadUpdateDate = async () => {
+      try {
+        // 로컬 캐시 파일에서 직접 로드
+        const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+        
+        // 로컬 캐시 파일 로드
+        const response = await fetch(cacheFilePath, { cache: 'no-store' });
+        
+        if (!response.ok) {
+          throw new Error(`캐시 파일 로드 실패: ${response.status}`);
+        }
+        
+        const csvText = await response.text();
+        
+        // CSV 파싱 및 데이터 처리
+        const parsedData = parseCSV(csvText);
+        
+        if (parsedData && parsedData.rows.length > 0) {
+          const dateString = parsedData.rows[0]['날짜']; // 첫 번째 행의 '날짜' 컬럼 값 사용
+          if (dateString) {
+            const formatted = formatDateDDMM(dateString);
+            if (formatted) {
+              setUpdateDate(formatted);
+            } else {
+              console.error('Failed to format update date from CSV.');
+               // setError('Failed to format update date from CSV.'); // 필요시 에러 상태 업데이트
+            }
+          } else {
+            console.error('Date column "날짜" not found or empty in date CSV.');
+            // setError('Date column "날짜" not found or empty in date CSV.');
+          }
+        } else {
+          console.error('Failed to parse or empty date CSV.');
+          // setError('Failed to parse or empty date CSV.');
+        }
+      } catch (err) {
+        console.error('Failed to load update date:', err);
+        // setError(err instanceof Error ? err.message : String(err)); // 필요시 에러 상태 업데이트
+      }
+    };
+    
     loadData();
     loadHighData();
+    loadUpdateDate();
     // loadStockPriceData();
   }, []);
 
@@ -1118,13 +1180,20 @@ export default function RSRankPage() {
                     ) : csvData ? (
                       <div className="flex flex-col h-full">
                         <div className="flex justify-between items-center mb-3" ref={rsHeaderRef}>
-                          {/* 제목과 설명 그룹 */}
+                          {/* 제목 */}
                           <div className="flex items-center">
                              <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
-                             <span className="text-gray-600 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>RS는 특정 주식이 시장에 비해 상대적으로 강한 움직임을 보이는지 수치화한 지표입니다.</span>
-                          </div>
-                          {/* 복사 버튼 */}
-                          <TableCopyButton tableRef={rsTableRef} headerRef={rsHeaderRef} tableName="RS 순위 TOP 200" />
+                           </div>
+                           {/* 복사 버튼 및 날짜 */}
+                           <div className="flex items-center">
+                             {/* 업데이트 날짜 표시 */}
+                             {updateDate && (
+                               <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+                                 updated 16:30 {updateDate}
+                               </span>
+                             )}
+                             <TableCopyButton tableRef={rsTableRef} headerRef={rsHeaderRef} tableName="RS 순위 TOP 200" />
+                           </div>
                         </div>
                         <div className="relative">
                           <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={rsTableRef}>
@@ -1294,7 +1363,7 @@ export default function RSRankPage() {
                         {/* 제목과 설명 그룹 */}
                         <div className="flex items-center">
                           <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
-                          <span className="text-gray-600 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 신고가중 RS값이 높은 순서대로 리스트업합니다.</span>
+                          <span className="text-gray-600 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}></span>
                         </div>
                         {/* 복사 버튼 */}
                         <TableCopyButton tableRef={highTableRef} headerRef={highHeaderRef} tableName="52주 신고가" />
