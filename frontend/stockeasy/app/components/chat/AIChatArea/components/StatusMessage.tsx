@@ -63,7 +63,7 @@ export function StatusMessage({ message }: StatusMessageProps) {
       <div className="status-content" style={{ display: 'flex', alignItems: 'center' }}>
         {message.isProcessing && (
           <div className="loading-spinner" style={{ marginRight: '10px' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" stroke="#E5E5E5" strokeWidth="4" />
               <path
                 d="M12 2C6.47715 2 2 6.47715 2 12"
@@ -87,14 +87,15 @@ export function StatusMessage({ message }: StatusMessageProps) {
         <span>
           {message.content}
           {message.isProcessing && <span className="animate-dots">{dots}</span>}
+          {elapsedTime > 0 && (
+            <span className="elapsed-time" style={{ display: 'block', fontSize: isMobile ? '12px' : '15px', color: '#777', marginTop: '4px' }}>
+              {formatElapsedTime(elapsedTime)}
+            </span>
+          )}
         </span>
       </div>
       
-      {elapsedTime > 0 && (
-        <div className="elapsed-time" style={{ marginLeft: '10px', fontSize: isMobile ? '12px' : '15px', color: '#777' }}>
-          {formatElapsedTime(elapsedTime)}
-        </div>
-      )}
+      
     </div>
   );
 }

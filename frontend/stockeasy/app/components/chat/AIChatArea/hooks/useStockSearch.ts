@@ -6,6 +6,9 @@ import { useState, useEffect, useCallback } from 'react';
 import Papa from 'papaparse';
 import { StockOption } from '../types';
 
+// 로컬 스토리지 키 상수 정의
+const LOCAL_STORAGE_RECENT_STOCKS_KEY = 'stockeasy_recent_stocks';
+
 interface UseStockSearchProps {
   maxRecentStocks?: number;
   cacheTimeout?: number;
@@ -36,7 +39,7 @@ export function useStockSearch({
   // 초기화 - 로컬 스토리지에서 최근 조회 종목 가져오기
   useEffect(() => {
     try {
-      const savedStocks = localStorage.getItem('recentStocks');
+      const savedStocks = localStorage.getItem(LOCAL_STORAGE_RECENT_STOCKS_KEY);
       if (savedStocks) {
         const parsedStocks = JSON.parse(savedStocks);
         if (Array.isArray(parsedStocks) && parsedStocks.length > 0) {
@@ -50,14 +53,22 @@ export function useStockSearch({
 
   // CSV에서 종목 목록 가져오기
   const fetchStockList = useCallback(async () => {
+    // 로드 중복 방지를 위한 정적 변수
+    if ((useStockSearch as any).isLoading) {
+      console.log('이미 종목 데이터를 로드 중입니다 (useStockSearch)');
+      return;
+    }
+    
     // 캐시된 데이터가 있고 유효기간이 지나지 않았으면 재사용
     const now = Date.now();
     if (cachedStockData.length > 0 && (now - lastFetchTime) < cacheTimeout) {
+      console.log('캐시된 종목 데이터 사용 (useStockSearch)');
       setStockOptions(cachedStockData);
       return;
     }
 
     try {
+      (useStockSearch as any).isLoading = true;
       setIsLoading(true);
       setError(null);
 
@@ -103,7 +114,11 @@ export function useStockSearch({
         }));
 
       if (stockData.length > 0) {
-        console.log(`종목 데이터 ${stockData.length}개 로드 완료`);
+        // 정적 변수로 이미 로그 출력했는지 확인하여 한 번만 출력
+        if (!(useStockSearch as any).hasLogged) {
+          console.log(`[useStockSearch] 종목 데이터 ${stockData.length}개 로드 완료`);
+          (useStockSearch as any).hasLogged = true;
+        }
         setStockOptions(stockData);
         setCachedStockData(stockData);
         setLastFetchTime(Date.now());
@@ -117,6 +132,7 @@ export function useStockSearch({
       console.error('종목 리스트 가져오기 오류:', error);
       setError(errorMsg);
     } finally {
+      (useStockSearch as any).isLoading = false;
       setIsLoading(false);
     }
   }, [cachedStockData, lastFetchTime, cacheTimeout]);
@@ -137,7 +153,7 @@ export function useStockSearch({
     
     // 로컬 스토리지에 저장
     try {
-      localStorage.setItem('recentStocks', JSON.stringify(updatedRecentStocks));
+      localStorage.setItem(LOCAL_STORAGE_RECENT_STOCKS_KEY, JSON.stringify(updatedRecentStocks));
     } catch (error) {
       console.error('최근 종목 저장 실패:', error);
     }
@@ -164,7 +180,7 @@ export function useStockSearch({
         const searchLower = term.toLowerCase();
         return stockName.includes(searchLower) || stockCode.includes(searchLower);
       })
-      .slice(0, 10); // 최대 10개 결과만 표시
+      .slice(0, 20); // 최대 10개 결과만 표시
 
     setFilteredStocks(filtered);
   }, [stockOptions, recentStocks]);
@@ -191,7 +207,7 @@ export function useStockSearch({
   // 최근 종목 목록 초기화
   const clearRecentStocks = useCallback(() => {
     setRecentStocks([]);
-    localStorage.removeItem('recentStocks');
+    localStorage.removeItem(LOCAL_STORAGE_RECENT_STOCKS_KEY);
   }, []);
 
   return {

@@ -17,6 +17,7 @@ interface StockSuggestionsProps {
   onSelectStock: (stock: StockOption) => void;
   onClearRecentStocks: () => void;
   isInputCentered?: boolean;
+  focusedItemIndex?: number; // 현재 포커스된 아이템 인덱스 추가
 }
 
 export function StockSuggestions({
@@ -27,7 +28,8 @@ export function StockSuggestions({
   stockOptions = [], // 전체 종목 목록 (기본값 빈 배열)
   onSelectStock,
   onClearRecentStocks,
-  isInputCentered = false
+  isInputCentered = false,
+  focusedItemIndex = 0 // 기본값은 첫 번째 아이템
 }: StockSuggestionsProps) {
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,18 +42,33 @@ export function StockSuggestions({
     right: 0,
     width: isMobile ? '100%' : '100%',
     margin: isMobile ? '0 auto' : '0',
-    maxHeight: isMobile ? '180px' : '200px',
+    maxHeight: isMobile ? '300px' : '350px',
     overflowY: 'auto',
     backgroundColor: 'white',
     border: '1px solid #ccc',
-    borderRadius: '8px',
-    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
+    borderRadius: '12px',
+    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
     zIndex: 100,
-    paddingTop: isMobile ? '5px' : '6px',
-    paddingRight: isMobile ? '5px' : '6px',
-    paddingBottom: isMobile ? '5px' : '6px',
-    paddingLeft: isMobile ? '5px' : '6px',
+    padding: '0',
     transform: isMobile ? 'none' : (isInputCentered ? 'translateY(-30px)' : 'none'),
+    WebkitFontSmoothing: 'antialiased',
+    MozOsxFontSmoothing: 'grayscale',
+    backfaceVisibility: 'hidden',
+  };
+  
+  // 헤더 고정 스타일
+  const headerStyle: React.CSSProperties = {
+    position: 'sticky',
+    top: 0,
+    backgroundColor: 'white',
+    zIndex: 2,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '10px 12px', // 패딩 증가
+    borderBottom: '2px solid #e0e0e0', // 테두리 두껍게 변경
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)', // 약간의 그림자 효과 추가
+    minHeight: '56px', // 최소 높이 설정
   };
   
   // 종목 아이템 클릭 핸들러
@@ -80,6 +97,84 @@ export function StockSuggestions({
     return <div style={{ paddingTop: '8px', paddingRight: '8px', paddingBottom: '8px', paddingLeft: '8px', textAlign: 'center', color: '#666' }}>검색 결과가 없습니다.</div>;
   };
   
+  // 포커스된 아이템이 뷰에 보이도록 자동 스크롤
+  const scrollToFocusedItem = (focusedIndex: number) => {
+    if (containerRef.current && filteredStocks.length > 0 && 
+        focusedIndex >= 0 && focusedIndex < filteredStocks.length) {
+      const container = containerRef.current;
+      const focusedItem = container.querySelector(`[data-index="${focusedIndex}"]`) as HTMLElement;
+      
+      if (focusedItem) {
+        const containerTop = container.scrollTop;
+        const containerBottom = containerTop + container.clientHeight;
+        
+        // 헤더의 높이를 계산 (헤더가 있는 경우)
+        const headerHeight = recentStocks.length > 0 && 
+                            JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) ? 41 : 0;
+        
+        const itemTop = focusedItem.offsetTop;
+        const itemBottom = itemTop + focusedItem.clientHeight;
+        
+        if (itemTop - headerHeight < containerTop) {
+          // 아이템이 위에 있어서 보이지 않는 경우 (헤더 높이 고려)
+          container.scrollTop = itemTop - headerHeight;
+        } else if (itemBottom > containerBottom) {
+          // 아이템이 아래에 있어서 보이지 않는 경우
+          container.scrollTop = itemBottom - container.clientHeight;
+        }
+      }
+    }
+  };
+  
+  // 포커스된 아이템이 변경될 때 스크롤 조정
+  React.useEffect(() => {
+    scrollToFocusedItem(focusedItemIndex);
+  }, [focusedItemIndex]);
+  
+  // 최근 조회 종목 헤더 렌더링
+  const renderRecentStocksHeader = () => {
+    return (
+      <div className="recent-stocks-header" style={headerStyle}>
+        <span style={{ 
+          fontSize: '16px', // 글꼴 크기 증가 
+          fontWeight: 'bold', 
+          color: '#333' 
+        }}>
+          최근 조회 종목
+        </span>
+        {recentStocks.length > 0 && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClearRecentStocks();
+            }}
+            style={{
+              fontSize: '12px',
+              color: '#666',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              transition: 'color 0.2s ease',
+              backgroundColor: 'transparent',
+              fontWeight: 'normal'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#10A37F';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#666';
+            }}
+          >
+            목록 지우기
+          </button>
+        )}
+      </div>
+    );
+  };
+  
   return (
     <div
       style={stockSuggestionsStyle}
@@ -88,83 +183,88 @@ export function StockSuggestions({
       {filteredStocks.length === 0 ? (
         noResultsMessage()
       ) : (
-        <div className="stock-suggestions">
-          {/* 최근 조회 종목 표시 - 필터링된 종목이 최근 종목과 동일하면 제목 표시 */}
-          {filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) && (
-            <div className="recent-stocks-header" style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '8px 12px',
-              borderBottom: '1px solid #f0f0f0'
-            }}>
-              <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#333' }}>
-                최근 조회 종목
-              </span>
-              {recentStocks.length > 0 && (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onClearRecentStocks();
-                  }}
-                  style={{
-                    fontSize: '12px',
-                    color: '#666',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '2px 4px'
-                  }}
-                >
-                  목록 지우기
-                </button>
-              )}
-            </div>
-          )}
+        <div className="stock-suggestions" style={{ position: 'relative' }}>
+          {/* 최근 조회 종목 헤더 - 필터링된 종목이 최근 종목과 동일하면 표시 */}
+          {filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) && renderRecentStocksHeader()}
 
-          {filteredStocks.map((stock, index) => (
-            <div
-              key={stock.value}
-              className="stock-item"
-              onClick={handleStockItemClick(stock)}
-              style={{
-                padding: '10px 12px',
-                cursor: 'pointer',
-                borderBottom: index < filteredStocks.length - 1 ? '1px solid #f0f0f0' : 'none',
-                transition: 'background-color 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f5f5f5';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#333' }}>
-                  {stock.stockName}
-                </span>
-                <span style={{ fontSize: '12px', color: '#666' }}>
-                  {stock.stockCode}
-                </span>
-              </div>
+          <div style={{ 
+            paddingTop: filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) ? '12px' : '6px', 
+            paddingBottom: '6px',
+            borderTop: filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) ? '1px solid #f0f0f0' : 'none'
+          }}>
+            {filteredStocks.map((stock, index) => (
               <div
+                key={stock.value}
+                data-index={index} // 인덱스 데이터 속성 추가
+                className="stock-item"
+                onClick={handleStockItemClick(stock)}
                 style={{
-                  fontSize: '12px',
-                  color: '#666',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  backgroundColor: '#f0f0f0'
+                  padding: '12px 10px 12px 10px',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: focusedItemIndex === index ? '#EAF9F6' : 'transparent',
+                  border: '1px solid ' + (focusedItemIndex === index ? '#10A37F' : 'transparent'),
+                  borderRadius: focusedItemIndex === index ? '12px' : '12px',
+                  marginLeft: '4px',
+                  marginRight: '6px',
+                  marginTop: focusedItemIndex === index && index === 0 ? '4px' : index === 0 ? '4px' : '0',
+                  marginBottom: focusedItemIndex === index && index === filteredStocks.length - 1 ? '8px' : '0',
+                  zIndex: focusedItemIndex === index ? 1 : 'auto',
+                  position: 'relative',
+                  outline: 'none',
+                  minHeight: '50px',
+                  transform: focusedItemIndex === index ? 'scale(1.005)' : 'scale(1)',
+                  transformOrigin: 'center center',
+                  backfaceVisibility: 'hidden',
+                }}
+                onMouseEnter={(e) => {
+                  if (focusedItemIndex !== index) {
+                    e.currentTarget.style.backgroundColor = '#f5f5f5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (focusedItemIndex !== index) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
                 }}
               >
-                {stock.stockCode}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ 
+                    fontSize: '15px',
+                    fontWeight: focusedItemIndex === index ? 'bold' : 'normal',
+                    color: focusedItemIndex === index ? '#0E866C' : '#333',
+                    transition: 'color 0.2s ease, font-weight 0.2s ease'
+                  }}>
+                    {stock.stockName}
+                  </span>
+                  <span style={{ 
+                    fontSize: '13px',
+                    fontWeight: focusedItemIndex === index ? 'bold' : 'normal', 
+                    color: focusedItemIndex === index ? '#0E866C' : '#333',
+                    transition: 'color 0.2s ease, font-weight 0.2s ease'
+                  }}>
+                    {stock.stockCode}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: '13px',
+                    color: focusedItemIndex === index ? '#0E866C' : '#666',
+                    padding: '6px 10px',
+                    borderRadius: '4px',
+                    backgroundColor: focusedItemIndex === index ? '#e6f0ff' : '#f0f0f0',
+                    fontWeight: focusedItemIndex === index ? 'bold' : 'normal',
+                    transition: 'background-color 0.2s ease, color 0.2s ease, font-weight 0.2s ease'
+                  }}
+                >
+                  {stock.stockCode}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>

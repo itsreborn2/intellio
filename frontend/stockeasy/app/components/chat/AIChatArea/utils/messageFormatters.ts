@@ -28,11 +28,10 @@ export function formatElapsedTime(seconds: number): string {
   const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
   const remainingSeconds = (totalSeconds % 60).toString().padStart(2, '0');
   
-  // 1분 미만이면 초 단위로만 표시 (소수점 1자리까지)
-  if (minutes === '00') {
-    const formattedSeconds = seconds.toFixed(1);
-    return `${formattedSeconds}초`;
-  }
+  // 1분 미만이면 초 단위로만 표시 (소수점 없이)
+  // if (minutes === '00') {
+  //   return `${totalSeconds}초`;
+  // }
   
   // 1분 이상이면 분:초 형식으로 표시
   return `${minutes}:${remainingSeconds}`;

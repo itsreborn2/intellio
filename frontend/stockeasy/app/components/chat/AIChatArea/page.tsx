@@ -32,7 +32,8 @@ function AIChatAreaContent() {
     showSuggestions,
     setSearchMode,
     addRecentStock,
-    clearRecentStocks
+    clearRecentStocks,
+    fetchStockList
   } = useStockSelector();
 
   // MessageList에 대한 ref 생성
@@ -333,8 +334,8 @@ function AIChatAreaContent() {
       // ChatContext에 선택된 종목 업데이트
       setSelectedStock(stock);
     } else {
-        // stock이 null인 경우(종목 선택 해제) 처리
-        setSelectedStock(null);
+      // stock이 null인 경우(종목 선택 해제) 처리
+      setSelectedStock(null);
     }
   };
 
@@ -388,7 +389,7 @@ function AIChatAreaContent() {
         isProcessing={state.isProcessing}
         isInputCentered={state.isInputCentered}
         showStockSuggestions={stockState.showStockSuggestions}
-        filteredStocks={stockState.filteredStocks}
+        stockOptions={stockState.stockOptions}
         recentStocks={stockState.recentStocks}
         searchMode={stockState.searchMode}
         isLoading={stockState.isLoading}
@@ -452,13 +453,23 @@ function AIChatAreaContent() {
     </>
   );
 
-  // 컴포넌트 마운트 시 종목 데이터 로드
+  // 컴포넌트 마운트 시 종목 데이터 로드 (빈 의존성 배열로 최초 1회만 실행)
   useEffect(() => {
-    console.log('[AIChatAreaContent] 컴포넌트 마운트 - 종목 데이터 로드');
-    const { stockOptions } = stockState;
-    const { fetchStockList } = useStockSelector();
-    stockOptions.length === 0 && fetchStockList();
-  }, [stockState]);
+    // 로컬 상태 변수로 이미 실행 여부 확인
+    let isFirstLoad = true;
+
+    if (isFirstLoad) {
+      console.log('[AIChatAreaContent] 컴포넌트 마운트 - 종목 데이터 로드 검사');
+      const { stockOptions } = stockState;
+      if (stockOptions.length === 0) {
+        console.log('[AIChatAreaContent] 종목 데이터 없음 - 로드 시작');
+        fetchStockList();
+      } else {
+        console.log('[AIChatAreaContent] 종목 데이터 이미 로드됨 (', stockOptions.length, '개)');
+      }
+      isFirstLoad = false;
+    }
+  }, []); // 빈 의존성 배열로 최초 한 번만 실행
 
   return (
     <>

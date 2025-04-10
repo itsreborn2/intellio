@@ -2,9 +2,12 @@
  * StockSelectorContext.tsx
  * 종목 선택 상태 관리를 위한 컨텍스트 API
  */
-import React, { createContext, useContext, useReducer, ReactNode, useMemo, useEffect, useState } from 'react';
+import React, { createContext, useContext, useReducer, ReactNode, useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { StockOption, StockSearchState, StockSearchAction } from '../types';
 import Papa from 'papaparse';
+
+// 로컬 스토리지 키 상수 정의
+const LOCAL_STORAGE_RECENT_STOCKS_KEY = 'stockeasy_recent_stocks';
 
 // 초기 상태 정의
 const initialState: StockSearchState = {
@@ -110,9 +113,38 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
   const [cachedStockData, setCachedStockData] = useState<StockOption[]>([]);
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   
-  // 종목 목록 가져오기 함수
-  const fetchStockList = async () => {
+  // 데이터 로드 중복 방지를 위한 ref
+  const isLoadingRef = useRef(false);
+  const hasLoggedRef = useRef(false);
+  
+  // 종목 목록 가져오기 함수 (useCallback으로 안정화)
+  const fetchStockList = useCallback(async () => {
+    // 이미 로드 중이면 중복 호출 방지
+    if (isLoadingRef.current) {
+      console.log('이미 종목 데이터를 로드 중입니다');
+      return;
+    }
+    
+    // 이미 데이터가 있으면 다시 로드하지 않음
+    if (state.stockOptions.length > 0) {
+      console.log('이미 종목 데이터가 로드되어 있음');
+      return;
+    }
+
+    // 마지막 로드 시간 확인 (1시간 내에 다시 로드하지 않음)
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000;
+    if (lastFetchTime > 0 && now - lastFetchTime < oneHour) {
+      console.log('최근에 종목 데이터를 로드했습니다. 캐시된 데이터 사용');
+      if (cachedStockData.length > 0) {
+        dispatch({ type: 'SET_STOCK_OPTIONS', payload: cachedStockData });
+        return;
+      }
+    }
+
     try {
+      // 로드 시작 플래그 설정
+      isLoadingRef.current = true;
       dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'SET_ERROR', payload: null }); // 요청 시작 시 오류 상태 초기화
 
@@ -160,7 +192,11 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
         }));
 
       if (stockData.length > 0) {
-        console.log(`종목 데이터 ${stockData.length}개 로드 완료`);
+        // 한 번만 로그 출력 (세션당)
+        if (!hasLoggedRef.current) {
+          console.log(`종목 데이터 ${stockData.length}개 로드 완료`);
+          hasLoggedRef.current = true;
+        }
         dispatch({ type: 'SET_STOCK_OPTIONS', payload: stockData });
         setCachedStockData(stockData);
         setLastFetchTime(Date.now());
@@ -169,26 +205,54 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
         console.error(errorMsg);
         dispatch({ type: 'SET_ERROR', payload: errorMsg });
       }
-
-      dispatch({ type: 'SET_LOADING', payload: false });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : '종목 리스트를 가져오는 중 오류가 발생했습니다.';
       console.error('종목 리스트 가져오기 오류:', error);
       dispatch({ type: 'SET_ERROR', payload: errorMsg });
+    } finally {
+      isLoadingRef.current = false;
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  };
+  }, [state.stockOptions.length, cachedStockData, lastFetchTime]); // 종속성을 명확히 지정
 
-  // 컴포넌트 마운트 시 종목 리스트 가져오기
+  // 컴포넌트 마운트 시 상태 초기화
   useEffect(() => {
     setIsMounted(true);
+    
+    // 로컬 스토리지에서 최근 조회 종목 가져오기
+    try {
+      const savedStocks = localStorage.getItem(LOCAL_STORAGE_RECENT_STOCKS_KEY);
+      if (savedStocks) {
+        const parsedStocks = JSON.parse(savedStocks);
+        if (Array.isArray(parsedStocks) && parsedStocks.length > 0) {
+          dispatch({ type: 'SET_RECENT_STOCKS', payload: parsedStocks.slice(0, 5) });
+        }
+      }
+    } catch (error) {
+      console.error('최근 종목 로드 실패:', error);
+    }
   }, []);
 
+  // 컴포넌트 마운트 시 종목 리스트 가져오기 (최초 한 번만)
   useEffect(() => {
-    if (isMounted) {
-      fetchStockList();
+    // 마운트 되었을 때, 한번만 실행되도록 정적 변수 사용
+    if (typeof (StockSelectorProvider as any).hasInitialized === 'undefined') {
+      (StockSelectorProvider as any).hasInitialized = false;
     }
-  }, [isMounted]);
+
+    if (isMounted && !(StockSelectorProvider as any).hasInitialized) {
+      (StockSelectorProvider as any).hasInitialized = true;
+      
+      if (state.stockOptions.length === 0 && cachedStockData.length === 0) {
+        console.log('[StockSelectorProvider] 최초 마운트 시 종목 데이터 로드');
+        fetchStockList();
+      } else if (cachedStockData.length > 0 && state.stockOptions.length === 0) {
+        // 캐시된 데이터가 있으면 사용
+        console.log('[StockSelectorProvider] 캐시된 종목 데이터 사용');
+        dispatch({ type: 'SET_STOCK_OPTIONS', payload: cachedStockData });
+      }
+    }
+  }, [isMounted]); // fetchStockList 의존성 제거
   
   // 편의 함수들 메모이제이션
   const contextValue = useMemo(() => ({
@@ -208,10 +272,27 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'SET_ERROR', payload: error }),
     setSearchMode: (isSearchMode: boolean) => 
       dispatch({ type: 'SET_SEARCH_MODE', payload: isSearchMode }),
-    addRecentStock: (stock: StockOption) => 
-      dispatch({ type: 'ADD_RECENT_STOCK', payload: stock }),
-    clearRecentStocks: () => 
-      dispatch({ type: 'CLEAR_RECENT_STOCKS' }),
+    addRecentStock: (stock: StockOption) => {
+      // 최근 종목에 추가
+      const updatedRecentStocks = [
+        stock, 
+        ...state.recentStocks.filter(s => s.value !== stock.value)
+      ].slice(0, 5); // 최대 5개 항목
+      
+      dispatch({ type: 'ADD_RECENT_STOCK', payload: stock });
+      
+      // 로컬 스토리지에 저장
+      try {
+        localStorage.setItem(LOCAL_STORAGE_RECENT_STOCKS_KEY, JSON.stringify(updatedRecentStocks));
+      } catch (error) {
+        console.error('최근 종목 저장 실패:', error);
+      }
+    },
+    clearRecentStocks: () => {
+      dispatch({ type: 'CLEAR_RECENT_STOCKS' });
+      // 로컬 스토리지에서도 삭제
+      localStorage.removeItem(LOCAL_STORAGE_RECENT_STOCKS_KEY);
+    },
     setStockOptions: (stocks: StockOption[]) => 
       dispatch({ type: 'SET_STOCK_OPTIONS', payload: stocks }),
     fetchStockList // 종목 목록 가져오기 함수 추가
