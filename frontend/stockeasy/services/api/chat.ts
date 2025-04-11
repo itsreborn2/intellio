@@ -265,22 +265,22 @@ export const streamChatMessage = async (
                 break
                 
               case 'agent_status':
-                console.log('[STREAM_CHAT] 에이전트 상태 변경:', data.data)
+                //console.log('[STREAM_CHAT] 에이전트 상태 변경:', data.data)
                 callbacks.onAgentStatus?.(data.data)
                 break
                 
               case 'agent_start':
-                console.log('[STREAM_CHAT] 에이전트 처리 시작:', data.data)
+                //console.log('[STREAM_CHAT] 에이전트 처리 시작:', data.data)
                 callbacks.onAgentStart?.(data.data)
                 break
                 
               case 'agent_complete':
-                console.log('[STREAM_CHAT] 에이전트 처리 완료:', data.data)
+                //console.log('[STREAM_CHAT] 에이전트 처리 완료:', data.data)
                 callbacks.onAgentComplete?.(data.data)
                 break
                 
               case 'complete':
-                console.log('[STREAM_CHAT] 처리 완료:', data.data)
+                //console.log('[STREAM_CHAT] 처리 완료:', data.data)
                 callbacks.onComplete?.(data.data)
                 break
                 
@@ -333,4 +333,41 @@ export const streamChatMessage = async (
     console.error('[STREAM_CHAT] 스트리밍 메시지 처리 중 오류:', error)
     callbacks.onError?.(error)
   }
-} 
+}
+
+/**
+ * 특정 채팅 세션을 조회합니다.
+ * @param sessionId 채팅 세션 ID
+ * @returns 채팅 세션 정보
+ */
+export const getChatSession = async (
+  sessionId: string
+): Promise<IChatSession> => {
+  const response = await apiFetch(`${API_ENDPOINT_STOCKEASY}/chat/sessions/${sessionId}`);
+
+  if (!response.ok) {
+    throw new Error('채팅 세션을 가져오는데 실패했습니다.');
+  }
+
+  return response.json();
+};
+
+/**
+ * 채팅 세션을 삭제합니다.
+ * @param sessionId 삭제할 채팅 세션 ID
+ * @returns 성공 여부
+ */
+export const deleteChatSession = async (
+  sessionId: string
+): Promise<boolean> => {
+  const response = await apiFetch(`${API_ENDPOINT_STOCKEASY}/chat/sessions/${sessionId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || '채팅 세션 삭제에 실패했습니다.');
+  }
+
+  return true;
+}; 

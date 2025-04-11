@@ -81,18 +81,31 @@ function SidebarContent() {
   
   // 페이지 이동 함수
   const goToHomePage = () => {
+    // 홈버튼 클릭 이벤트 발생 (채팅 영역 초기화용)
+    console.log('홈버튼 클릭: 이벤트 발생시킴', new Date().toISOString());
+    
+    // 명시적으로 CustomEvent 생성 및 발생
+    try {
+      // 이벤트 정의 (사용자 정의 이벤트의 경우 bubbles: true 추가)
+      const event = new CustomEvent('homeButtonClick', { 
+        bubbles: true, 
+        detail: { timestamp: Date.now() } 
+      });
+      window.dispatchEvent(event);
+      console.log('homeButtonClick 이벤트 발생 완료');
+    } catch (error) {
+      console.error('이벤트 발생 중 오류:', error);
+    }
+    
     // 현재 경로가 홈페이지(루트)인 경우
     if (window.location.pathname === '/') {
-      // 홈버튼 클릭 이벤트 발생 (채팅 영역 초기화용)
-      const event = new CustomEvent('homeButtonClick');
-      window.dispatchEvent(event);
-      
-      // 클라이언트 측 네비게이션 사용 (새로고침 대신)
+      // 클라이언트 측 네비게이션 사용 (새로고침)
       router.refresh();
     } else {
-      // 클라이언트 측 네비게이션 사용
+      // 다른 경로에서는 홈으로 이동
       router.push('/', { scroll: false });
     }
+    
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
   };
   
