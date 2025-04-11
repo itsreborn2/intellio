@@ -128,6 +128,27 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
     };
   }, [scrollToStatusMessage]);
   
+  // 채팅 스크롤을 맨 위로 올리는 이벤트 리스너 추가
+  useEffect(() => {
+    const handleScrollChatToTop = () => {
+      console.log('[MessageList] 스크롤 맨 위로 이벤트 수신');
+      // 즉시 실행
+      scrollToTop();
+      // 렌더링이 완료된 후 한 번 더 실행
+      window.requestAnimationFrame(() => {
+        scrollToTop();
+        // 추가 안정성을 위해 약간의 지연 후 한 번 더 실행
+        setTimeout(scrollToTop, 300);
+      });
+    };
+    
+    window.addEventListener('scrollChatToTop', handleScrollChatToTop);
+    
+    return () => {
+      window.removeEventListener('scrollChatToTop', handleScrollChatToTop);
+    };
+  }, [scrollToTop]);
+  
   // 스크롤 위치 설정 시도 함수
   const attemptScrollToTop = useCallback(() => {
     // 마지막 히스토리 로드 이후 10초 이내에만 시도

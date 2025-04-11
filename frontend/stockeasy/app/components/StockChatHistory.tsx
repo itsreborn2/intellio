@@ -128,6 +128,13 @@ export default function StockChatHistory({
         // Zustand 스토어를 사용하여 메시지 저장 및 UI 업데이트
         loadChatSession(session.id, session.title, response.data.messages);
         
+        // 채팅 메시지 로드 후 스크롤을 맨 위로 올리기 위한 이벤트 발생
+        window.requestAnimationFrame(() => {
+          const scrollTopEvent = new CustomEvent('scrollChatToTop');
+          window.dispatchEvent(scrollTopEvent);
+          console.log('[히스토리 패널] 스크롤 이벤트 발생: scrollChatToTop');
+        });
+        
         // 모바일 환경에서는 히스토리 패널 닫기
         if (isMobile) {
           toggleHistoryPanel();
