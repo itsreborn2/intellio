@@ -79,7 +79,7 @@ export function useChatSession(): ChatSessionHook {
 
     try {
       const apiMessages = await getChatMessages(sessionId);
-      const convertedMessages = apiMessages.map(convertApiMessageToComponentMessage);
+      const convertedMessages = apiMessages.messages.map(convertApiMessageToComponentMessage);
       setMessages(convertedMessages);
       return convertedMessages;
     } catch (err: any) {
