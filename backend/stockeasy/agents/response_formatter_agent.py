@@ -7,7 +7,7 @@
 
 import json
 from loguru import logger
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable, AsyncGenerator
 
 from langchain_core.messages import HumanMessage, AIMessage
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
@@ -113,18 +113,68 @@ class ResponseFormatterAgent(BaseAgent):
                 system_prompt=system_prompt
             )
             
-            # # LLM 호출로 포맷팅 수행
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
-            response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
-                input=prompt.format_prompt(),
-                user_id=user_id,
-                project_type=ProjectType.STOCKEASY,
-                db=self.db
-            )
-            formatted_response = response.content
             
-            logger.info("Response formatting completed successfully")
+            # 스트리밍 콜백 확인 또는 생성
+            streaming_callback = state.get("streaming_callback")
+            logger.info(f"상태에서 전달받은 streaming_callback: {streaming_callback}, 타입: {type(streaming_callback).__name__ if streaming_callback else 'None'}")
+            
+            # 스트리밍 콜백이 없으면 더미 콜백 생성
+            if not streaming_callback or not callable(streaming_callback):
+                logger.info("스트리밍 콜백이 없어 더미 콜백을 생성합니다.")
+                # 더미 스트리밍 콜백 - 실제로는 아무것도 하지 않음
+                async def dummy_streaming_callback(chunk: str):
+                    pass
+                streaming_callback = dummy_streaming_callback
+                logger.warning("주의: 더미 콜백을 사용하여 실제 스트리밍이 클라이언트에게 전달되지 않습니다.")
+            else:
+                logger.info(f"유효한 스트리밍 콜백 함수가 발견되었습니다: {streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else '이름 없는 함수'}")
+            
+            logger.info("스트리밍 모드로 응답 생성 시작")
+            # 스트리밍 모드로 호출
+            formatted_response = ""
+            
+            try:
+                # 새로 구현된 stream 메서드 사용
+                async for chunk in self.agent_llm.stream(
+                    input=prompt.format_prompt().to_string(),
+                    user_id=user_id,
+                    project_type=ProjectType.STOCKEASY,
+                    db=self.db
+                ):
+                    # 청크 내용 추출
+                    if hasattr(chunk, 'content'):
+                        chunk_content = chunk.content
+                    else:
+                        chunk_content = str(chunk)
+                    
+                    # 콜백 호출하여 청크 전송
+                    try:
+                        #print(chunk_content, end="", flush=True)
+                        logger.info(f"스트리밍 콜백 호출: 청크 길이={len(chunk_content)}, callback={streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else type(streaming_callback).__name__}")
+                        await streaming_callback(chunk_content)
+                        logger.info(f"스트리밍 콜백 호출 완료: 청크 길이={len(chunk_content)}")
+                    except Exception as callback_error:
+                        logger.error(f"스트리밍 콜백 호출 중 오류: {str(callback_error)}", exc_info=True)
+                    
+                    # 전체 응답 누적
+                    formatted_response += chunk_content
+                
+                logger.info("스트리밍 응답 생성 완료")
+            except Exception as e:
+                # 스트리밍 중 오류 발생 시 간단한 오류 처리
+                logger.error(f"스트리밍 응답 생성 중 오류 발생: {str(e)}")
+                # 부분 응답이 없으면 일반 모드로 폴백
+                if not formatted_response:
+                    logger.info("일반 모드로 폴백")
+                    response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
+                        input=prompt.format_prompt(),
+                        user_id=user_id,
+                        project_type=ProjectType.STOCKEASY,
+                        db=self.db
+                    )
+                    formatted_response = response.content
             
             # 포맷팅된 응답 저장
             state["formatted_response"] = formatted_response

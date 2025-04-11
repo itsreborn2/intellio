@@ -231,7 +231,21 @@ export function StockSuggestions({
                   }
                 }}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div
+                    style={{
+                      fontSize: '13px',
+                      color: focusedItemIndex === index ? '#0E866C' : '#666',
+                      padding: '6px 10px',
+                      borderRadius: '4px',
+                      backgroundColor: focusedItemIndex === index ? '#e6f0ff' : '#f0f0f0',
+                      fontWeight: focusedItemIndex === index ? 'bold' : 'normal',
+                      transition: 'background-color 0.2s ease, color 0.2s ease, font-weight 0.2s ease'
+                    }}
+                  >
+                    {stock.stockCode}
+                  </div>
+                  
                   <span style={{ 
                     fontSize: '15px',
                     fontWeight: focusedItemIndex === index ? 'bold' : 'normal',
@@ -240,28 +254,8 @@ export function StockSuggestions({
                   }}>
                     {stock.stockName}
                   </span>
-                  <span style={{ 
-                    fontSize: '13px',
-                    fontWeight: focusedItemIndex === index ? 'bold' : 'normal', 
-                    color: focusedItemIndex === index ? '#0E866C' : '#333',
-                    transition: 'color 0.2s ease, font-weight 0.2s ease'
-                  }}>
-                    {stock.stockCode}
-                  </span>
                 </div>
-                <div
-                  style={{
-                    fontSize: '13px',
-                    color: focusedItemIndex === index ? '#0E866C' : '#666',
-                    padding: '6px 10px',
-                    borderRadius: '4px',
-                    backgroundColor: focusedItemIndex === index ? '#e6f0ff' : '#f0f0f0',
-                    fontWeight: focusedItemIndex === index ? 'bold' : 'normal',
-                    transition: 'background-color 0.2s ease, color 0.2s ease, font-weight 0.2s ease'
-                  }}
-                >
-                  {stock.stockCode}
-                </div>
+                
               </div>
             ))}
           </div>

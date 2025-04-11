@@ -307,30 +307,10 @@ function AIChatAreaContent() {
         addRecentStock(state.selectedStock);
       }
       
-      // 메시지 목록 맨 아래로 스크롤을 다시 한번 더 시도
-      if (messageListRef.current?.scrollToBottom) {
-        setTimeout(() => {
-          messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom();
-          console.log('[AIChatAreaContent] 메시지 전송 후 추가 스크롤 시도');
-        }, 150);
-      }
+
       
       console.log('[AIChatAreaContent] 메시지 전송 완료');
-      
-      // 메시지 전송 후 상태 메시지를 찾아 스크롤 이동 (잠시 지연 후 실행)
-      setTimeout(() => {
-        // 최신 status 메시지 찾기
-        const statusMessage = state.messages.find(msg => msg.role === 'status');
-        if (statusMessage) {
-          statusMessageIdRef.current = statusMessage.id;
-          
-          // 상태 메시지로 스크롤 이동을 위한 이벤트 발생
-          const scrollEvent = new CustomEvent('scrollToStatusMessage', {
-            detail: { messageId: statusMessage.id }
-          });
-          window.dispatchEvent(scrollEvent);
-        }
-      }, 250); // 지연 시간 증가
+
       
       // 전송 플래그 리셋 (AI 응답이 완료된 후)
       setTimeout(() => setIsUserSending(false), 1000);

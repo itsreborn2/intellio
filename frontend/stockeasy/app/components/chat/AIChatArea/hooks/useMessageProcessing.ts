@@ -2,7 +2,7 @@
  * useMessageProcessing.ts
  * 메시지 처리 로직을 위한 커스텀 훅
  */
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { ChatMessage, StockOption } from '../types';
 import { createChatSession, streamChatMessage } from '@/services/api/chat';
@@ -62,6 +62,12 @@ export function useMessageProcessing(
   
   // 타이머 훅 사용
   const { elapsedTime, startTimer, stopTimer } = useTimers();
+
+  // 스트리밍 응답을 위한 AI 메시지 ID 참조
+  const assistantMessageId = useRef<string | null>(null);
+  
+  // 누적 응답 콘텐츠 저장
+  const accumulatedContent = useRef<string>('');
 
   // 메시지 전송 처리 함수
   const sendMessage = useCallback(async (
@@ -154,7 +160,7 @@ export function useMessageProcessing(
             });
           },
           onAgentStart: (data) => {
-            console.log('[MessageProcessing] 에이전트 시작 ', statusMessageObj.id );
+            console.log('[MessageProcessing] 에이전트 시작 ', data );
             
             // 상태 메시지 업데이트 (에이전트 정보만 변경, 시간은 초기 시작 시간 유지)
             updateMessage(statusMessageObj.id, { 
@@ -165,7 +171,7 @@ export function useMessageProcessing(
             });
           },
           onAgentComplete: (data) => {
-            console.log('[MessageProcessing] 에이전트 완료 ', statusMessageObj.id);
+            console.log('[MessageProcessing] 에이전트 완료 ', data);
             
             // 상태 메시지 업데이트 (에이전트 정보만 변경, 시간은 초기 시작 시간 유지)
             updateMessage(statusMessageObj.id, { 
@@ -175,31 +181,94 @@ export function useMessageProcessing(
               // elapsed와 elapsedStartTime은 변경하지 않음 (전체 시간 유지)
             });
           },
+          onToken: (data) => {
+            //console.log('[MessageProcessing] 토큰 msg id :', data.message_id);
+            console.log('[MessageProcessing] 토큰 수신:', data.token.substring(0, 20) + '...');
+            
+            // 어시스턴트 응답 메시지 ID 생성 (없으면)
+            if (!assistantMessageId.current) {
+              console.log('[MessageProcessing] 토큰 msg id 생성:', data.message_id);
+              // UUID를 문자열로 확실하게 변환
+              assistantMessageId.current = String(data.message_id);
+              accumulatedContent.current = ''; // 누적 콘텐츠 초기화
+              
+              // 상태 메시지 제거 (첫 번째 토큰이 도착했을 때)
+              stopTimer();
+              removeMessage(statusMessageObj.id);
+              
+              // 어시스턴트 메시지 초기 생성
+              const assistantMessageObj: ChatMessage = {
+                id: assistantMessageId.current,
+                role: 'assistant',
+                content: '',  // 빈 내용으로 시작
+                timestamp: Date.now(),
+                stockInfo: {
+                  stockName: selectedStock.stockName || '',
+                  stockCode: selectedStock.value || ''
+                }
+              };
+              
+              addMessage(assistantMessageObj);
+            }
+            
+            // 콘텐츠 누적하고 메시지 업데이트
+            accumulatedContent.current += data.token;
+            console.log('[MessageProcessing] 누적 콘텐츠 길이:', accumulatedContent.current.length);
+            
+            // React 상태 업데이트를 확실히 트리거하기 위한 처리
+            // 새 객체를 생성하여 참조가 변경되도록 함
+            const updatedContent = accumulatedContent.current;
+            
+            // 기존 메시지를 새 콘텐츠로 업데이트
+            updateMessage(assistantMessageId.current, {
+              content: updatedContent,
+              timestamp: Date.now(),
+            });
+          },
           onComplete: (data) => {
             console.log('[MessageProcessing] 처리 완료:', data);
             
             // 타이머 중지
             stopTimer();
             
-            // 상태 메시지 제거
-            removeMessage(statusMessageObj.id);
+            // 상태 메시지가 아직 존재하는 경우에만 제거 (토큰이 없을 경우)
+            try {
+              removeMessage(statusMessageObj.id);
+            } catch (error) {
+              console.log('[MessageProcessing] 상태 메시지가 이미 제거됨');
+            }
             
-            // 최종 응답 메시지 추가
-            const assistantMessageObj: ChatMessage = {
-              id: data.message_id || `ai-${Date.now()}`,
-              role: 'assistant',
-              content: data.response,
-              content_expert: data.response_expert,
-              timestamp: Date.now(),
-              responseId: data.metadata?.responseId,
-              elapsed: 0,
-              stockInfo: {
-                stockName: selectedStock.stockName || '',
-                stockCode: selectedStock.value || ''
-              }
-            };
+            // 스트리밍으로 이미 메시지가 생성되었다면 기존 메시지 업데이트
+            if (assistantMessageId.current) {
+              updateMessage(assistantMessageId.current, {
+                content: data.response,
+                content_expert: data.response_expert,
+                responseId: data.metadata?.responseId,
+                elapsed: data.elapsed || 0,
+                _forceUpdate: Math.random() // 리렌더링 강제
+              });
+              
+              // 참조 초기화
+              assistantMessageId.current = null;
+            } else {
+              // 스트리밍 없이 완료된 경우 (혹시 모를 상황 대비)
+              const assistantMessageObj: ChatMessage = {
+                id: data.message_id || `ai-${Date.now()}`,
+                role: 'assistant',
+                content: data.response,
+                content_expert: data.response_expert,
+                timestamp: Date.now(),
+                responseId: data.metadata?.responseId,
+                elapsed: data.elapsed || 0,
+                stockInfo: {
+                  stockName: selectedStock.stockName || '',
+                  stockCode: selectedStock.value || ''
+                }
+              };
+              
+              addMessage(assistantMessageObj);
+            }
             
-            addMessage(assistantMessageObj);
             setProcessing(false);
             
             // 처리 완료 콜백 호출

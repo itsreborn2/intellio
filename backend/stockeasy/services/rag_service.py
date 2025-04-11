@@ -7,7 +7,8 @@
 import asyncio
 import os
 import threading
-from typing import Dict, List, Any, Optional, ClassVar
+from typing import Dict, List, Any, Optional, ClassVar, Union, Callable
+from uuid import UUID
 from loguru import logger
 import time
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,112 +110,79 @@ class StockRAGService:
         logger.info(f"사용자 컨텍스트 설정: 세션 ID {session_id}, 사용자 ID {user_id or '익명'}")
     
     @async_retry(retries=2, delay=2.0, exceptions=(Exception,))
-    async def analyze_stock(self, 
-                           query: str, 
-                           stock_code: Optional[str] = None,
-                           stock_name: Optional[str] = None,
-                           session_id: Optional[str] = None,
-                           user_id: Optional[str] = None,
-                           classification: Optional[QuestionClassification] = None,
-                           chat_session_id:Optional[str] = None,
-                           ) -> Dict[str, Any]:
+    async def analyze_stock(
+        self,
+        query: str,
+        stock_code: str,
+        stock_name: str,
+        session_id: str,
+        user_id: Optional[Union[str, UUID]] = None,
+        chat_session_id: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        streaming_callback: Optional[Callable] = None
+    ) -> Dict[str, Any]:
         """
-        주식 관련 쿼리 분석 및 응답 생성
-        
+        주식 정보 분석
+
         Args:
             query: 사용자 질문
-            stock_code: 종목 코드 (선택적)
-            stock_name: 종목명 (선택적)
-            session_id: 세션 ID (사용자 인증용)
-            user_id: 사용자 ID (선택적)
-            classification: 질문 분류 결과 (선택적)
-            conversation_history: 대화 히스토리 (선택적)
-            
+            stock_code: 종목 코드
+            stock_name: 종목명
+            session_id: 세션 ID
+            user_id: 사용자 ID
+            chat_session_id: 채팅 세션 ID (선택적)
+            conversation_history: 대화 이력 (선택적)
+            streaming_callback: 스트리밍 응답을 받을 콜백 함수 (선택적)
+
         Returns:
-            분석 결과 (요약, 검색된 메시지, 분류 정보 등)
+            분석 결과
         """
         try:
-            start_time = time.time()
-            logger.info(f"주식 분석 시작: {query}")
-            
-            # 세션 ID가 없는 경우 오류 반환
-            if not session_id:
-                logger.warning("세션 ID가 제공되지 않았습니다. 인증이 필요합니다.")
-                return {
-                    "query": query,
-                    "errors": [{
-                        "agent": "stock_rag_service",
-                        "error": "인증이 필요합니다. 로그인 후 이용해주세요.",
-                        "type": "AuthenticationError"
-                    }],
-                    "authentication_required": True,
-                    "summary": "인증이 필요합니다. 로그인 후 이용해주세요."
-                }
-            
-            # 사용자 컨텍스트 업데이트/설정
-            self.configure_for_user(session_id, user_id)
-            
-            # 이미 분류 결과가 있으면 해당 정보 사용
-            initial_state = {
-                "query": query,
-                "stock_code": stock_code,
-                "stock_name": stock_name,
+            # 에이전트 그래프 초기화 (필요시)
+            if not self.graph:
+                self.graph = self.agent_registry.get_graph(self.db)
+
+            # 사용자 컨텍스트 준비
+            user_context = {
+                "user_id": str(user_id) if user_id else None,
                 "session_id": session_id,
-                "chat_session_id": chat_session_id,
+                "stock_code": stock_code,
+                "stock_name": stock_name
             }
-            
-            # 사용자 ID가 있으면 추가
-            if user_id is not None:  # None이더라도 명시적으로 전달
-                initial_state["user_id"] = user_id
-                
-            # 해당 사용자의 컨텍스트가 있으면 추가
-            if session_id in self._user_contexts:
-                initial_state["user_context"] = self._user_contexts[session_id]
-            
-            
-            
-            if classification:
-                initial_state["question_classification"] = classification.model_dump()
-            
-            logger.info(f"[analyze_stock] initial_state without conversation_history: {initial_state}")
 
-            # 대화 히스토리가 제공된 경우 추가
-            # if conversation_history is not None:
-            #     initial_state["conversation_history"] = conversation_history
-            #     logger.info(f"대화 히스토리 포함: {len(conversation_history)}개 메시지")
-
-            result = await self.graph.process_query(**initial_state)
+            # 분석 실행
+            logger.info(f"[StockRAGService] 주식 분석 시작: 질문='{query}', 종목코드={stock_code}, 종목명={stock_name}")
             
-            end_time = time.time()
-            processing_time = end_time - start_time
+            # streaming_callback 로깅 추가
+            callback_name = getattr(streaming_callback, '__name__', '이름 없음')
+            callback_id = id(streaming_callback) if streaming_callback else None
+            logger.info(f"[StockRAGService] 스트리밍 콜백 상태: {callback_name}, id={callback_id}")
             
-            # 처리 시간 로깅
-            logger.info(f"주식 분석 완료: 처리 시간 = {processing_time:.2f}초")
+            # process_query 호출 시 추가 인자 전달
+            result = await self.graph.process_query(
+                query=query,
+                session_id=session_id,
+                stock_code=stock_code,
+                stock_name=stock_name,
+                user_context=user_context,
+                chat_session_id=chat_session_id,
+                conversation_history=conversation_history,
+                streaming_callback=streaming_callback  # 스트리밍 콜백 함수 전달
+            )
             
-            # 결과에 처리 시간, 세션 ID 및 사용자 ID 추가
-            if result:
-                if "processing_status" not in result:
-                    result["processing_status"] = {}
-                result["processing_status"]["total_time"] = processing_time
-                
-                # 세션 ID와 사용자 ID 추가 (클라이언트가 추적할 수 있게)
-                result["session_id"] = session_id
-                result["user_id"] = user_id
+            logger.info(f"[StockRAGService] 주식 분석 완료: 종목코드={stock_code}, 결과 크기={len(str(result))}자")
             
             return result
             
         except Exception as e:
-            logger.error(f"주식 분석 중 오류 발생: {str(e)}", exc_info=True)
+            logger.exception(f"[StockRAGService] 주식 분석 중 오류 발생: {str(e)}")
+            # 오류 발생 시 기본 응답 반환
             return {
                 "query": query,
-                "session_id": session_id,  # 오류 발생 시에도 세션 ID 포함
-                "user_id": user_id,        # 오류 발생 시에도 사용자 ID 포함
-                "errors": [{
-                    "agent": "stock_rag_service",
-                    "error": str(e),
-                    "type": type(e).__name__
-                }],
-                "summary": "죄송합니다. 주식 분석 중 오류가 발생했습니다."
+                "stock_code": stock_code,
+                "stock_name": stock_name,
+                "answer": f"죄송합니다. 질문 처리 중 오류가 발생했습니다: {str(e)}",
+                "error": str(e)
             }
 
     def cleanup_old_contexts(self, max_age_hours: int = 24) -> int:

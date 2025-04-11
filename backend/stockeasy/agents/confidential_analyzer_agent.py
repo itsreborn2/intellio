@@ -257,7 +257,7 @@ class ConfidentialAnalyzerAgent(BaseAgent):
             duration = (end_time - start_time).total_seconds()
             
             after_analysis = analysis if need_detailed_analysis else None
-            logger.info(f"after_analysis: {after_analysis}")
+            #logger.info(f"after_analysis: {after_analysis}")
             state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["confidential_analyzer"] = {
                 "agent_name": "confidential_analyzer",

@@ -524,6 +524,7 @@ async def stream_chat_message(
     """
     채팅 메시지를 생성하고 처리 과정을 스트리밍합니다.
     각 에이전트의 시작과 종료 시점에 이벤트를 전송합니다.
+    최종 응답은 토큰 단위로 스트리밍됩니다.
     """
     logger.info("[STREAM_CHAT] 스트리밍 메시지 처리 시작: 채팅 세션 ID={}, 메시지='{}'", chat_session_id, request.message)
     try:
@@ -546,15 +547,52 @@ async def stream_chat_message(
                 detail="채팅 세션을 찾을 수 없습니다."
             )
         
-        # 메모리 관리자 인스턴스 가져오기
-        #from common.core.memory import chat_memory_manager
+        # 응답 스트리밍용 이벤트 큐
+        streaming_queue = asyncio.Queue()
+        # 응답 생성 완료 이벤트
+        response_done_event = asyncio.Event()
+        # 최종 응답 저장 변수
+        full_response = ""
+        # 응답 메타데이터
+        response_metadata = {}
+        # 어시스턴트 메시지 ID
+        assistant_message_id = uuid4()
         
-        # 대화 히스토리 가져오기
-        #conversation_history = await chat_memory_manager.get_messages(str(chat_session_id))
-        #logger.info("[STREAM_CHAT] 대화 히스토리 로드 완료: {}개 메시지", len(conversation_history))
+        # JSON 직렬화를 위한 커스텀 인코더 (datetime 객체 처리)
+        class DateTimeEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, datetime):
+                    return obj.isoformat()
+                return super().default(obj)
+            
+        # 스트리밍 콜백 함수
+        async def streaming_callback(chunk: str):
+            nonlocal full_response
+            # 로깅 추가
+            print(chunk, end="", flush=True)
+            logger.info(f"[STREAM_CHAT] streaming_callback 호출됨: 청크 길이={len(chunk)}")
+            # 청크 내용을 큐에 추가
+            await streaming_queue.put(json.dumps({
+                "event": "token",
+                "data": {
+                    "token": chunk,
+                    "message_id": str(assistant_message_id),
+                    "timestamp": time.time()
+                }
+            }, cls=DateTimeEncoder))
+            # 전체 응답에 누적
+            full_response += chunk
+        
+        # 스트리밍 콜백 함수에 이름 부여 (디버깅 용이)
+        streaming_callback.__name__ = "streaming_callback_chat"
+        logger.info(f"[STREAM_CHAT] 스트리밍 콜백 함수 생성 완료: {streaming_callback.__name__}, id={id(streaming_callback)}")
         
         # 비동기 생성기 함수 정의
         async def event_generator():
+            nonlocal full_response, response_metadata, assistant_message_id
+            
+            
+            
             # 초기 이벤트 전송
             logger.info("[STREAM_CHAT] 초기 이벤트 전송")
             yield json.dumps({
@@ -565,116 +603,186 @@ async def stream_chat_message(
                 }
             })
             
-            
             # 처리 시작 시간 저장
             start_time = time.time()
             
-            # 질문 처리 시작 (대화 히스토리 포함)
-            logger.info("[STREAM_CHAT] analyze_stock 태스크 시작 (대화 히스토리 포함)")
+            # 사용자 메시지 저장
+            logger.debug("[STREAM_CHAT] 사용자 메시지 저장 중...")
+            user_message = await ChatService.create_chat_message(
+                db=db,
+                chat_session_id=chat_session_id,
+                role="user",
+                content=request.message,
+                stock_code=request.stock_code,
+                stock_name=request.stock_name
+            )
+            logger.info("[STREAM_CHAT] 사용자 메시지 저장 완료: {}", user_message["id"])
+            
+            # 메모리에 사용자 메시지 추가
+            await chat_memory_manager.add_user_message(str(chat_session_id), request.message)
+            
+            # 스트리밍 콜백을 설정하고 질문 처리 시작
+            logger.info("[STREAM_CHAT] analyze_stock 태스크 시작 (스트리밍 콜백 포함)")
             session_key = str(current_session.id)
             logger.info(f"[STREAM_CHAT] 세션 키: {session_key}, 채팅 세션 ID: {chat_session_id}")
+            
+            # 태스크 생성 및 시작
             task = asyncio.create_task(
                 stock_rag_service.analyze_stock(
                     query=request.message,
                     stock_code=request.stock_code,
                     stock_name=request.stock_name,
-                    session_id=session_key, # session_id는 사용자 인증 세션 id이다.
+                    session_id=session_key,
                     user_id=current_session.user_id,
                     chat_session_id=str(chat_session_id),
-                    #conversation_history=conversation_history
+                    streaming_callback=streaming_callback  # 스트리밍 콜백 전달
                 )
             )
             
+            logger.info(f"[STREAM_CHAT] analyze_stock 태스크에 스트리밍 콜백 함수 전달: {streaming_callback.__name__}, id={id(streaming_callback)}")
+            
             # 상태 추적을 위한 이전 상태 저장 변수
             prev_status = {}
+            # 응답 시작 여부
+            response_started = False
             
-            # 처리 상태 주기적 확인
-            logger.debug("[STREAM_CHAT] 처리 상태 모니터링 시작")
+            # 처리 상태 모니터링과 응답 스트리밍을 동시에 처리
+            logger.debug("[STREAM_CHAT] 처리 상태 모니터링 및 응답 스트리밍 시작")
             check_count = 0
-            while not task.done():
-                await asyncio.sleep(0.5)  # 0.5초마다 상태 확인
-                check_count += 1
+            
+            # 2개의 동시 작업 생성: 상태 모니터링 및 응답 스트리밍
+            async def monitor_status():
+                nonlocal prev_status, check_count, response_started
+                status_events = []  # 이벤트를 저장할 리스트
                 
-                if check_count % 10 == 0:  # 5초마다 로그
-                    logger.debug("[STREAM_CHAT] 처리 대기 중... (경과: {:.1f}초)", time.time() - start_time)
-                
-                # stock_rag_service의 내부 상태에서 현재 처리 중인 에이전트 정보 확인
-                graph = stock_rag_service.graph
-                state = None
-                
-                try:
-                    # 현재 세션의 처리 상태 가져오기 (실제 구현에 맞게 수정 필요)
-                    if hasattr(graph, 'current_state') and graph.current_state:
-                        state = graph.current_state.get(session_key, {})
+                while not task.done():
+                    await asyncio.sleep(0.5)  # 0.5초마다 상태 확인
+                    check_count += 1
                     
-                    if state and 'processing_status' in state:
-                        processing_status = state['processing_status']
+                    if check_count % 10 == 0:  # 5초마다 로그
+                        logger.debug("[STREAM_CHAT] 처리 대기 중... (경과: {:.1f}초)", time.time() - start_time)
+                    
+                    # 처리 상태 확인
+                    graph = stock_rag_service.graph
+                    state = None
+                    
+                    try:
+                        # 현재 세션의 처리 상태 가져오기
+                        if hasattr(graph, 'current_state') and graph.current_state:
+                            state = graph.current_state.get(session_key, {})
                         
-                        # 이전 상태와 비교하여 변경된 부분 확인
-                        for agent, status in processing_status.items():
-                            if agent not in prev_status or prev_status[agent] != status:
-                                elapsed = time.time() - start_time
-                                # 상태 변경 이벤트 전송
-                                event_data = {
-                                    "agent": agent,
-                                    "status": status,
-                                    "timestamp": time.time(),
-                                    "elapsed": elapsed
-                                }
-                                
-                                #logger.info("[STREAM_CHAT] 에이전트 상태 변경: {}={} (경과: {:.2f}초)", agent, status, elapsed)
-                                yield json.dumps({
-                                    "event": "agent_status",
-                                    "data": event_data
-                                })
-                                
-                                # 에이전트 시작 또는 완료 특별 이벤트
-                                if status == "processing":
-                                    logger.info("[STREAM_CHAT] 에이전트 시작: {} (경과: {:.2f}초)", agent, elapsed)
+                        if state and 'processing_status' in state:
+                            processing_status = state['processing_status']
+                            
+                            # 이전 상태와 비교하여 변경된 부분 확인
+                            for agent, status in processing_status.items():
+                                if agent not in prev_status or prev_status[agent] != status:
+                                    elapsed = time.time() - start_time
+                                    # 상태 변경 이벤트 전송
+                                    event_data = {
+                                        "agent": agent,
+                                        "status": status,
+                                        "timestamp": time.time(),
+                                        "elapsed": elapsed
+                                    }
                                     
-                                    # 에이전트 이름에 따른 사용자 친화적인 메시지 매핑
-                                    user_friendly_message = get_user_friendly_agent_message(agent, "start")
+                                    # 이벤트를 직접 yield하지 않고 큐에 전송
+                                    await streaming_queue.put(json.dumps({
+                                        "event": "agent_status",
+                                        "data": event_data
+                                    }, cls=DateTimeEncoder))
                                     
-                                    yield json.dumps({
-                                        "event": "agent_start",
-                                        "data": {
-                                            "agent": agent,
-                                            "message": user_friendly_message,
-                                            "timestamp": time.time(),
-                                            "elapsed": elapsed
-                                        }
-                                    })
-                                elif status in ["completed", "completed_with_default_plan", "completed_no_data"]:
-                                    logger.info("[STREAM_CHAT] 에이전트 완료: {} (경과: {:.2f}초)", agent, elapsed)
-                                    
-                                    # 에이전트 이름에 따른 사용자 친화적인 메시지 매핑
-                                    user_friendly_message = get_user_friendly_agent_message(agent, "complete")
-                                    
-                                    yield json.dumps({
-                                        "event": "agent_complete",
-                                        "data": {
-                                            "agent": agent,
-                                            "message": user_friendly_message,
-                                            "timestamp": time.time(),
-                                            "elapsed": elapsed
-                                        }
-                                    })
-                        
-                        # 현재 상태를 이전 상태로 저장
-                        prev_status = processing_status.copy()
-                except Exception as e:
-                    logger.error("[STREAM_CHAT] 처리 상태 확인 중 오류: {}", str(e))
-                    # 오류가 발생해도 스트리밍은 계속 진행
+                                    # 에이전트 시작 또는 완료 특별 이벤트
+                                    if status == "processing":
+                                        logger.info("[STREAM_CHAT] 에이전트 시작: {} (경과: {:.2f}초)", agent, elapsed)
+                                        
+                                        # 에이전트 이름에 따른 사용자 친화적인 메시지 매핑
+                                        user_friendly_message = get_user_friendly_agent_message(agent, "start")
+                                        
+                                        await streaming_queue.put(json.dumps({
+                                            "event": "agent_start",
+                                            "data": {
+                                                "agent": agent,
+                                                "message": user_friendly_message,
+                                                "timestamp": time.time(),
+                                                "elapsed": elapsed
+                                            }
+                                        }, cls=DateTimeEncoder))
+                                    elif status in ["completed", "completed_with_default_plan", "completed_no_data"]:
+                                        logger.info("[STREAM_CHAT] 에이전트 완료: {} (경과: {:.2f}초)", agent, elapsed)
+                                        
+                                        # 에이전트 이름에 따른 사용자 친화적인 메시지 매핑
+                                        user_friendly_message = get_user_friendly_agent_message(agent, "complete")
+                                        
+                                        await streaming_queue.put(json.dumps({
+                                            "event": "agent_complete",
+                                            "data": {
+                                                "agent": agent,
+                                                "message": user_friendly_message,
+                                                "timestamp": time.time(),
+                                                "elapsed": elapsed
+                                            }
+                                        }, cls=DateTimeEncoder))
+                                        
+                                        # response_formatter가 시작되면 응답 스트리밍 단계 시작 알림
+                                        if agent == "response_formatter" and status == "processing" and not response_started:
+                                            response_started = True
+                                            logger.info("[STREAM_CHAT] 응답 스트리밍 단계 시작")
+                                            await streaming_queue.put(json.dumps({
+                                                "event": "response_start",
+                                                "data": {
+                                                    "message": "응답 생성을 시작합니다.",
+                                                    "timestamp": time.time(),
+                                                    "elapsed": elapsed
+                                                }
+                                            }, cls=DateTimeEncoder))
+                            
+                            # 현재 상태를 이전 상태로 저장
+                            prev_status = processing_status.copy()
+                    except Exception as e:
+                        logger.error("[STREAM_CHAT] 처리 상태 확인 중 오류: {}", str(e))
+                
+                logger.info("[STREAM_CHAT] 상태 모니터링 종료")
+            
+            async def stream_response():
+                nonlocal response_started
+                
+                # 응답 토큰 스트리밍
+                while not task.done() or not streaming_queue.empty():
+                    try:
+                        # 0.1초 대기 후 큐에서 토큰 가져오기 시도
+                        try:
+                            event_data = await asyncio.wait_for(streaming_queue.get(), timeout=0.1)
+                            print(f"{event_data}", end="", flush=True)
+                            # SSE 형식으로 데이터 전송 (data: 접두사 추가)
+                            yield f"{event_data}\n\n"
+                            streaming_queue.task_done()
+                        except asyncio.TimeoutError:
+                            # 타임아웃은 무시하고 계속 진행
+                            pass
+                    except Exception as e:
+                        logger.error(f"[STREAM_CHAT] 응답 스트리밍 중 오류: {str(e)}")
+                
+                logger.info("[STREAM_CHAT] 응답 스트리밍 종료")
+            
+            # monitor_status 실행 (비동기 태스크로 실행)
+            asyncio.create_task(monitor_status())
+            
+            # stream_response는 제너레이터로 사용
+            async for event_data in stream_response():
+                if event_data:  # None이 아닌 결과만 전달
+                    yield event_data
             
             try:
-                # 태스크 완료 후 결과 가져오기
-                logger.info("[STREAM_CHAT] 태스크 완료, 결과 처리 중...")
-                result = task.result()
+                # 태스크 완료 대기
+                result = await task
                 total_time = time.time() - start_time
                 
                 # 결과에서 요약 추출
                 summary = result.get("summary", "")
-                answer = result.get("answer", "처리가 완료되었으나 응답을 찾을 수 없습니다.")
+                # 전체 응답이 스트리밍을 통해 구성되었음
+                answer = full_response or result.get("answer", "처리가 완료되었으나 응답을 찾을 수 없습니다.")
+                
                 logger.info("[STREAM_CHAT] 응답 생성 완료 (총 소요시간: {:.2f}초, 응답 길이: {}자)", 
                            total_time, len(answer))
                 
@@ -687,27 +795,13 @@ async def stream_chat_message(
                     "agents_used": list(prev_status.keys()) if prev_status else [],
                     "responseId": str(uuid4())
                 }
+                response_metadata = metadata
                 
-                #응답을 저장할때, 사용자 메세지도 저장.
-                # 사용자 메시지 저장
-                logger.debug("[STREAM_CHAT] 사용자 메시지 저장 중...")
-                user_message = await ChatService.create_chat_message(
-                    db=db,
-                    chat_session_id=chat_session_id,
-                    role="user",
-                    content=request.message,
-                    stock_code=request.stock_code,
-                    stock_name=request.stock_name
-                )
-                logger.info("[STREAM_CHAT] 사용자 메시지 저장 완료: {}", user_message["id"])
-                
-                # 메모리에 사용자 메시지 추가
-                await chat_memory_manager.add_user_message(str(chat_session_id), request.message)
-
                 # 에이전트 응답 저장
                 logger.debug("[STREAM_CHAT] 어시스턴트 응답 저장 중...")
                 assistant_message = await ChatService.create_chat_message(
                     db=db,
+                    message_id=assistant_message_id,
                     chat_session_id=chat_session_id,
                     role="assistant",
                     content=answer,
@@ -716,36 +810,43 @@ async def stream_chat_message(
                     stock_name=request.stock_name,
                     metadata=metadata
                 )
-                # 어시스턴트 메시지 ID 미리 생성
+                # 어시스턴트 메시지 ID 저장
                 assistant_message_id = str(assistant_message["id"])
-                logger.info(f"[STREAM_CHAT] 어시스턴트 응답 저장 완료: {assistant_message_id}" )
+                logger.info(f"[STREAM_CHAT] 어시스턴트 응답 저장 완료: {assistant_message_id}")
                 
                 # 완료 이벤트 전송
                 logger.info("[STREAM_CHAT] 완료 이벤트 전송")
-                yield json.dumps({
-                    "event": "complete",
-                    "data": {
-                        "message": "처리가 완료되었습니다.",
-                        "response": answer,
-                        "response_expert": summary,
-                        "message_id": assistant_message_id,
-                        "metadata": metadata,
-                        "timestamp": time.time(),
-                        "elapsed": total_time
+                complete_data = json.dumps({
+                    'event': 'complete',
+                    'data': {
+                        'message': '처리가 완료되었습니다.',
+                        'response': answer,
+                        'response_expert': summary,
+                        'message_id': assistant_message_id,
+                        'metadata': metadata,
+                        'timestamp': time.time(),
+                        'elapsed': total_time
                     }
-                })
+                }, cls=DateTimeEncoder)
+                yield f"{complete_data}\n\n"
                 
             except Exception as e:
-                logger.error("[STREAM_CHAT] 결과 처리 중 오류: {}", str(e))
+                logger.error("[STREAM_CHAT] 결과 처리 중 오류: {}", str(e), exc_info=True)
                 
                 # 오류 메시지 저장
-                error_message = f"메세지 처리 처리 중 오류가 발생했습니다"
+                error_message = f"메시지 처리 중 오류가 발생했습니다"
+                
+                # 응답이 부분적으로 생성되었다면 그것을 저장
+                if full_response:
+                    answer_to_save = full_response + "\n\n[오류로 인해 응답이 중단되었습니다]"
+                else:
+                    answer_to_save = error_message
                 
                 await ChatService.create_chat_message(
                     db=db,
                     chat_session_id=chat_session_id,
                     role="assistant",
-                    content=error_message,
+                    content=answer_to_save,
                     stock_code=request.stock_code,
                     stock_name=request.stock_name,
                     metadata={"error": str(e)}
@@ -753,14 +854,15 @@ async def stream_chat_message(
                 
                 # 오류 이벤트 전송
                 logger.error("[STREAM_CHAT] 오류 이벤트 전송: {}", error_message)
-                yield json.dumps({
-                    "event": "error",
-                    "data": {
-                        "message": error_message,
-                        "timestamp": time.time(),
-                        "elapsed": time.time() - start_time
+                error_data = json.dumps({
+                    'event': 'error',
+                    'data': {
+                        'message': error_message,
+                        'timestamp': time.time(),
+                        'elapsed': time.time() - start_time
                     }
-                })
+                }, cls=DateTimeEncoder)
+                yield f"data: {error_data}\n\n"
         
         # EventSourceResponse 반환
         logger.info("[STREAM_CHAT] EventSourceResponse 설정 및 반환")
@@ -775,11 +877,11 @@ async def stream_chat_message(
         )
         
     except Exception as e:
-        logger.error("[STREAM_CHAT] 채팅 메시지 스트리밍 중 오류 발생: {}", str(e))
+        logger.error("[STREAM_CHAT] 채팅 메시지 스트리밍 중 오류 발생: {}", str(e), exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"채팅 메시지 스트리밍 중 오류 발생: {str(e)}"
-        ) 
+        )
 
 @chat_router.delete("/sessions/{chat_session_id}/memory", response_model=BaseResponse)
 async def clear_chat_memory(

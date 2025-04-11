@@ -412,6 +412,26 @@ export default React.memo(MessageBubble, (prevProps, nextProps) => {
     return false;
   }
   
+  // 메시지 내용 변경 시 리렌더링
+  if (prevProps.message.content !== nextProps.message.content) {
+    return false;
+  }
+  
+  // 전문가 모드 내용 변경 시 리렌더링
+  if (prevProps.message.content_expert !== nextProps.message.content_expert) {
+    return false;
+  }
+  
+  // 타임스탬프 변경 시 리렌더링
+  if (prevProps.message.timestamp !== nextProps.message.timestamp) {
+    return false;
+  }
+  
+  // _forceUpdate 항목이 있고 다르면 리렌더링
+  if (prevProps.message._forceUpdate !== nextProps.message._forceUpdate) {
+    return false;
+  }
+  
   // 전문가 모드 변경 시 리렌더링
   if (prevProps.isExpertMode !== nextProps.isExpertMode) {
     return false;

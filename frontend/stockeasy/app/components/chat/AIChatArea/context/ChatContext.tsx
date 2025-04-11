@@ -32,11 +32,29 @@ function chatReducer(state: ChatContextState, action: ChatAction): ChatContextSt
     case 'UPDATE_MESSAGE':
       return {
         ...state,
-        messages: state.messages.map(msg =>
-          msg.id === action.payload.id
-            ? { ...msg, ...action.payload.message }
-            : msg
-        )
+        messages: state.messages.map(msg => {
+          if (msg.id === action.payload.id) {
+            const updatedMessage = { ...msg };
+            
+            // 메시지 업데이트
+            Object.entries(action.payload.message).forEach(([key, value]) => {
+              const typedKey = key as keyof ChatMessage;
+              if (typeof value === 'function') {
+                // 함수인 경우, 이전 값을 전달하여 새 값 계산
+                const prevValue = msg[typedKey];
+                // @ts-ignore - 함수 호출 타입 오류 무시
+                updatedMessage[typedKey] = value(prevValue);
+              } else {
+                // 일반 값인 경우 그대로 할당
+                // @ts-ignore - 인덱스 접근 타입 오류 무시
+                updatedMessage[typedKey] = value;
+              }
+            });
+            
+            return updatedMessage;
+          }
+          return msg;
+        })
       };
     case 'REMOVE_MESSAGE':
       return {
