@@ -271,7 +271,7 @@ function AIChatAreaContent() {
   // 메시지 전송 핸들러
   const handleSendMessage = async () => {
     console.log(`[AIChatAreaContent] 메시지 전송 요청 : ${stockState.searchTerm.trim()}`);
-    
+
     // 선택된 종목과 입력 메시지 확인
     if (!state.selectedStock || !stockState.searchTerm.trim()) {
       console.error('종목이 선택되지 않았거나 메시지가 없습니다.');
@@ -281,6 +281,16 @@ function AIChatAreaContent() {
     try {
       // 사용자 메시지 전송 플래그 설정
       setIsUserSending(true);
+
+      // 메세지 전송 요청할때, 젤 아래로 한번 내려주자.
+      if (messageListRef.current?.scrollToBottom) {
+        messageListRef.current.scrollToBottom();
+        
+        // 추가 안정성을 위해 약간의 지연 후 한 번 더 실행
+        setTimeout(() => {
+          messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom();
+        }, 100);
+      }
       
       // useMessageProcessing 훅의 sendMessage 함수 호출
       await sendMessage(
@@ -297,9 +307,12 @@ function AIChatAreaContent() {
         addRecentStock(state.selectedStock);
       }
       
-      // 메시지 목록 맨 아래로 스크롤
+      // 메시지 목록 맨 아래로 스크롤을 다시 한번 더 시도
       if (messageListRef.current?.scrollToBottom) {
-        messageListRef.current.scrollToBottom();
+        setTimeout(() => {
+          messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom();
+          console.log('[AIChatAreaContent] 메시지 전송 후 추가 스크롤 시도');
+        }, 150);
       }
       
       console.log('[AIChatAreaContent] 메시지 전송 완료');
@@ -317,7 +330,7 @@ function AIChatAreaContent() {
           });
           window.dispatchEvent(scrollEvent);
         }
-      }, 100);
+      }, 250); // 지연 시간 증가
       
       // 전송 플래그 리셋 (AI 응답이 완료된 후)
       setTimeout(() => setIsUserSending(false), 1000);
