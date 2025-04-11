@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Papa from 'papaparse';
 import { fetchCSVData } from '../utils/fetchCSVData';
 import {
@@ -15,16 +15,15 @@ import { copyTableAsImage } from '../utils/tableCopyUtils'; // 테이블 복사 
 
 // CSV 데이터 타입 정의
 interface ValuationData {
-  stockCode: string;      // C열: 종목코드
-  stockName: string;      // D열: 종목명
-  industry: string;       // B열: 업종
-  marketCap: string;      // 시가총액
-  tradingVolume: string;  // 거래대금 (사용하지 않음)
-  per2024E: string;       // I열: 2024(E) PER
-  per2025E: string;       // J열: 2025(E) PER
-  per2026E: string;       // K열: 2026(E) PER
-  per2027E: string;       // L열: 2027(E) PER
-  per2028E: string;       // M열: 2028(E) PER
+  stockCode: string;      // C열 (Index 2)
+  stockName: string;      // D열 (Index 3)
+  industry: string;       // B열 (Index 1)
+  marketCap: string;      // E열 (Index 4 - 시가총액)
+  I: string;              // I열 (Index 8 - 2024 PER)
+  J: string;              // J열 (Index 9 - 2025(E) PER)
+  K: string;              // K열 (Index 10 - 2026(E) PER)
+  L: string;              // L열 (Index 11 - 2027(E) PER)
+  M: string;              // M열 (Index 12 - 2028(E) PER)
 }
 
 // 숫자에 3자리마다 콤마를 추가하는 함수
@@ -168,15 +167,10 @@ const columnHelper = createColumnHelper<ValuationData>();
 const ValuationPage = () => {
   const [data, setData] = useState<ValuationData[]>([]);
   const [filteredData, setFilteredData] = useState<ValuationData[]>([]);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]); // CSV 헤더 상태 추가
   const [loading, setLoading] = useState(true);
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [rowsPerPage, setRowsPerPage] = useState<number>(21); // 한 페이지에 표시할 행 수
-  
-  // 필터 상태 추가
-  const [searchFilter, setSearchFilter] = useState<string>('');
-  const [industryFilter, setIndustryFilter] = useState<string>('');
+  const [searchFilter, setSearchFilter] = useState('');
+  const [industryFilter, setIndustryFilter] = useState('');
   const [industries, setIndustries] = useState<string[]>([]);
   
   // 선택된 종목과 업종 상태
@@ -188,9 +182,47 @@ const ValuationPage = () => {
   // 전종목 출력 로딩 상태 추가
   const [isAllItemsLoading, setIsAllItemsLoading] = useState(false);
   
+  // 페이지네이션 및 정렬 상태
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [rowsPerPage, setRowsPerPage] = useState<number>(21);
+  
   // 테이블 복사 기능을 위한 ref 생성
   const tableRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
+
+  // 화면 크기에 따라 표시할 행 수를 업데이트하는 함수
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const updateRowsPerPage = useCallback(() => {
+    if (tableContainerRef.current) {
+      const containerHeight = tableContainerRef.current.offsetHeight;
+      // 헤더(60px), 페이지네이션(50px), 기타 여백(20px) 제외
+      const availableHeight = containerHeight - 130;
+      const rowHeight = 35; // 각 행의 높이 (패딩 포함)
+      const calculatedRows = Math.max(5, Math.floor(availableHeight / rowHeight)); // 최소 5개 행 보장
+      setRowsPerPage(calculatedRows);
+    } else {
+      // 기본값 설정 (컨테이너 참조가 아직 없을 때)
+      setRowsPerPage(21); // 기본값으로 21 설정
+    }
+  }, []);
+
+  // 현재 페이지 데이터 계산
+  const currentPageData = useMemo(() => {
+    if (showAllItems) {
+      return filteredData;
+    }
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    return filteredData.slice(startIndex, startIndex + rowsPerPage);
+  }, [filteredData, currentPage, rowsPerPage, showAllItems]);
+
+  // 총 페이지 수 계산
+  const totalPages = useMemo(() => {
+    if (showAllItems) {
+      return 1;
+    }
+    return Math.ceil(filteredData.length / rowsPerPage);
+  }, [filteredData, rowsPerPage, showAllItems]);
 
   // 컬럼 정의 - 동적으로 헤더명 사용
   // 고정 컬럼 너비 정의 (데스크탑 환경에서 가로 스크롤이 생기지 않도록 너비 조정)
@@ -199,27 +231,27 @@ const ValuationPage = () => {
     stockName: 126,   // 140 -> 126으로 10% 감소
     industry: 161,    // 146 -> 161로 10% 더 확장
     marketCap: 72,    // 80 -> 72로 10% 더 감소
-    per2024E: 75,     // 80 -> 75로 줄임
-    per2025E: 75,     // 80 -> 75로 줄임
-    per2026E: 75,     // 80 -> 75로 줄임
-    per2027E: 75,     // 80 -> 75로 줄임
-    per2028E: 75      // 80 -> 75로 줄임
+    I: 75,             // 80 -> 75로 줄임
+    J: 75,             // 80 -> 75로 줄임
+    K: 75,             // 80 -> 75로 줄임
+    L: 75,             // 80 -> 75로 줄임
+    M: 75,             // 80 -> 75로 줄임
   };
   
   const columns = useMemo(() => [
     columnHelper.accessor('stockCode', {
-      header: () => headers[2] || '종목코드', // C열 헤더
+      header: () => csvHeaders[2] || '종목코드', // CSV 헤더 사용 (Index 2)
       cell: info => {
         // 종목코드가 있을 경우 6자리로 표시 (앞에 0 채우기)
         const code = info.getValue();
         return code ? String(code).padStart(6, '0') : '';
       },
-      size: fixedColumnWidths.per2024E,
-      minSize: fixedColumnWidths.per2024E,
-      maxSize: fixedColumnWidths.per2024E,
+      size: fixedColumnWidths.stockCode,
+      minSize: fixedColumnWidths.stockCode,
+      maxSize: fixedColumnWidths.stockCode,
     }),
     columnHelper.accessor('stockName', {
-      header: () => headers[3] || '종목명', // D열 헤더
+      header: () => csvHeaders[3] || '종목명', // CSV 헤더 사용 (Index 3)
       cell: info => {
         const stockName = info.getValue();
         const stockCode = info.row.original.stockCode;
@@ -235,12 +267,12 @@ const ValuationPage = () => {
           </div>
         );
       },
-      size: fixedColumnWidths.industry,
-      minSize: fixedColumnWidths.industry,
-      maxSize: fixedColumnWidths.industry,
+      size: fixedColumnWidths.stockName,
+      minSize: fixedColumnWidths.stockName,
+      maxSize: fixedColumnWidths.stockName,
     }),
     columnHelper.accessor('industry', {
-      header: () => headers[1] || '업종', // B열 헤더
+      header: () => csvHeaders[1] || '업종', // CSV 헤더 사용 (Index 1)
       cell: info => {
         const industry = info.getValue();
         
@@ -266,137 +298,141 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.industry,
     }),
     columnHelper.accessor('marketCap', {
-      header: () => '시가총액(백억)',
+      header: () => csvHeaders[4] || '시가총액(백억)', // CSV 헤더 사용 (Index 4)
       cell: info => formatMarketCapToHundredBillion(info.getValue()),
       size: fixedColumnWidths.marketCap,
       minSize: fixedColumnWidths.marketCap,
       maxSize: fixedColumnWidths.marketCap,
     }),
-    columnHelper.accessor('per2024E', {
-      header: () => headers[8] || '2024(E) PER', // I열 헤더
+    // --- PER 컬럼 수정 시작 ---
+    columnHelper.accessor('I', { // 필드명 변경
+      header: () => csvHeaders[8] || '2024 PER', // CSV 헤더 사용 (Index 8)
       cell: info => info.getValue(),
-      size: fixedColumnWidths.per2024E,
-      minSize: fixedColumnWidths.per2024E,
-      maxSize: fixedColumnWidths.per2024E,
+      size: fixedColumnWidths.I, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.I,
+      maxSize: fixedColumnWidths.I,
     }),
-    columnHelper.accessor('per2025E', {
-      header: () => headers[9] || '2025(E) PER', // J열 헤더
+    columnHelper.accessor('J', { // 필드명 변경
+      header: () => csvHeaders[9] || '2025(E) PER', // CSV 헤더 사용 (Index 9)
       cell: info => info.getValue(),
-      size: fixedColumnWidths.per2024E,
-      minSize: fixedColumnWidths.per2024E,
-      maxSize: fixedColumnWidths.per2024E,
+      size: fixedColumnWidths.J, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.J,
+      maxSize: fixedColumnWidths.J,
     }),
-    columnHelper.accessor('per2026E', {
-      header: () => headers[10] || '2026(E) PER', // K열 헤더
+    columnHelper.accessor('K', { // 필드명 변경
+      header: () => csvHeaders[10] || '2026(E) PER', // CSV 헤더 사용 (Index 10)
       cell: info => info.getValue(),
-      size: fixedColumnWidths.per2024E,
-      minSize: fixedColumnWidths.per2024E,
-      maxSize: fixedColumnWidths.per2024E,
+      size: fixedColumnWidths.K, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.K,
+      maxSize: fixedColumnWidths.K,
     }),
-    columnHelper.accessor('per2027E', {
-      header: () => headers[11] || '2027(E) PER', // L열 헤더
+    columnHelper.accessor('L', { // 필드명 변경
+      header: () => csvHeaders[11] || '2027(E) PER', // CSV 헤더 사용 (Index 11)
       cell: info => info.getValue(),
-      size: fixedColumnWidths.per2024E,
-      minSize: fixedColumnWidths.per2024E,
-      maxSize: fixedColumnWidths.per2024E,
+      size: fixedColumnWidths.L, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.L,
+      maxSize: fixedColumnWidths.L,
     }),
-    columnHelper.accessor('per2028E', {
-      header: () => headers[12] || '2028(E) PER', // M열 헤더
-      cell: info => info.getValue(),
-      size: fixedColumnWidths.per2024E,
-      minSize: fixedColumnWidths.per2024E,
-      maxSize: fixedColumnWidths.per2024E,
+    columnHelper.accessor('M', { // 필드명 변경
+      header: () => csvHeaders[12] || '2028(E) PER', // CSV 헤더 사용 (Index 12)
+      cell: info => info.getValue() || '-', // 값이 없으면 '-' 표시
+      size: fixedColumnWidths.M, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.M,
+      maxSize: fixedColumnWidths.M,
     }),
-    // "추이" 컬럼 추가
+    // --- PER 컬럼 수정 끝 ---
+    
+    // 추이 컬럼 추가
     columnHelper.display({
       id: 'trend',
       header: () => '추이',
-      cell: info => {
-        const rowData = info.row.original;
+      cell: ({ row }) => {
+        // 새 필드명(I~M) 사용하도록 수정
         const values = [
-          rowData.per2025E,
-          rowData.per2026E,
-          rowData.per2027E,
-          rowData.per2028E,
+          parseFloat(row.original.I) || 0,
+          // parseFloat(row.original.J) || 0, // J 값 제외
+          parseFloat(row.original.K) || 0,
+          parseFloat(row.original.L) || 0,
+          parseFloat(row.original.M) || 0,
         ];
         return <TrendBarGraph values={values} />;
       },
-      size: 130, // 추이 컬럼 너비
+      size: 200, // 추이 컬럼 너비 증가
+      minSize: 150,
+      maxSize: 300,
     }),
-  ], [headers]);
+  ], [selectedStock, selectedIndustry, csvHeaders]); // csvHeaders 의존성 추가
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+      const csvUrl = '/requestfile/value/per.csv'; // 실제 CSV 파일 경로
       try {
-        setLoading(true);
-        // 파일 경로 정규화를 위해 fetchCSVData 유틸리티 함수에서 경로만 가져옴
-        const normalizedPath = await fetchCSVData('requestfile/value/per.csv')
-          .then(() => 'requestfile/value/per.csv')
-          .catch(() => '/requestfile/value/per.csv'); // 오류 발생 시 절대 경로로 시도
+        const response = await fetch(csvUrl);
+        if (!response.ok) { // 응답 상태 확인
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
-        // --- CSV 인코딩 처리 시작 ---
-        // 한글 인코딩 문제로 인해 EUC-KR 인코딩 처리가 반드시 필요함
-        // 원본 파일이 EUC-KR로 인코딩되어 있어 TextDecoder를 사용해야 함
-        console.log('파일 경로:', normalizedPath); // 디버깅용 로그
-        const response = await fetch(normalizedPath);
+        // --- EUC-KR 인코딩 처리 수정 ---
+        // 응답을 ArrayBuffer로 받아 EUC-KR로 디코딩
         const buffer = await response.arrayBuffer();
-        const decoder = new TextDecoder('euc-kr'); 
-        const decodedCsv = decoder.decode(buffer);
-        // --- CSV 인코딩 처리 끝 ---
-
-        Papa.parse<string[]>(decodedCsv, {
+        const decoder = new TextDecoder('euc-kr');
+        const csvText = decoder.decode(buffer);
+        // --- EUC-KR 인코딩 처리 수정 끝 ---
+        
+        // PapaParse 설정: 헤더 사용 안함
+        Papa.parse(csvText, {
+          header: false, // 헤더 사용 안함
+          skipEmptyLines: true,
           complete: (results) => {
-            // a행은 헤더, c행부터 데이터 시작 (인덱스로는 0부터 시작하므로 c행은 인덱스 2)
-            const headers = results.data[0] || []; // a행의 헤더 가져오기
-            setHeaders(headers);
-            const parsedData = results.data.slice(2).map(row => ({
-              stockCode: row[2] || '', // C열: 종목코드
-              stockName: row[3] || '', // D열: 종목명
-              industry: row[1] || '', // B열: 업종
-              marketCap: row[4] || '', // 시가총액
-              tradingVolume: row[5] || '', // 거래대금 (사용하지 않음)
-              per2024E: row[8] || '', // I열
-              per2025E: row[9] || '', // J열
-              per2026E: row[10] || '', // K열
-              per2027E: row[11] || '', // L열
-              per2028E: row[12] || '', // M열
-            })).filter(item => item.stockName); // 종목명이 있는 데이터만 필터링
+            // 첫 번째 행을 헤더로 저장
+            const headers = results.data[0] as string[] || [];
+            setCsvHeaders(headers);
             
-            setData(parsedData);
-            setFilteredData(parsedData); // 초기 필터링된 데이터는 전체 데이터와 동일
+            // 첫 두 줄은 헤더 정보이므로 건너뜀 (데이터는 3번째 줄부터 시작)
+            const parsedData = (results.data as string[][]).slice(2).map((row) => ({
+              stockCode: row[2], // C열
+              stockName: row[3], // D열
+              industry: row[1], // B열
+              marketCap: row[4], // E열
+              I: row[8], // I열 (index 8)
+              J: row[9], // J열 (index 9)
+              K: row[10], // K열 (index 10)
+              L: row[11], // L열 (index 11)
+              M: row[12], // M열 (index 12)
+            }));
             
-            // 업종 목록 추출
-            const uniqueIndustries = Array.from(new Set(parsedData.map(item => item.industry)))
-              .filter(Boolean) // 빈 값 제거
-              .sort(); // 알파벳 순 정렬
+            // 업종 목록 추출 (중복 제거 및 정렬)
+            const uniqueIndustries = Array.from(new Set(parsedData.map(item => item.industry))).sort();
             setIndustries(uniqueIndustries);
             
-            // 화면 크기에 따라 동적으로 행 수 조정
-            updateRowsPerPage();
-            
+            setData(parsedData);
+            setFilteredData(parsedData); // 초기 필터링 데이터 설정
             setLoading(false);
           },
-          error: (error: any) => { 
-            console.error('Error parsing CSV:', error);
+          error: (error: any) => {
+            console.error("Error parsing CSV:", error);
             setLoading(false);
-          },
-          skipEmptyLines: true,
+          }
         });
-      } catch (error: any) { // error 파라미터에 : any 타입 명시
-        console.error('Error fetching CSV:', error);
+      } catch (error) {
+        console.error("Error fetching or decoding CSV data:", error); // 에러 메시지 수정
         setLoading(false);
       }
     };
 
     fetchData();
     
-    // 화면 크기 변경 시 행 수 업데이트
+    // 화면 크기 변경 감지
+    updateRowsPerPage(); // 초기 로드 시 행 수 계산
     window.addEventListener('resize', updateRowsPerPage);
+
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
       window.removeEventListener('resize', updateRowsPerPage);
     };
-  }, []);
-  
+  }, [updateRowsPerPage]); // updateRowsPerPage를 의존성 배열에 추가
+
   // 필터 적용 효과
   useEffect(() => {
     // 필터링 로직
@@ -470,37 +506,6 @@ const ValuationPage = () => {
     setIndustryFilter('');
   };
   
-  // 화면 크기에 따라 표시할 행 수 계산
-  const updateRowsPerPage = () => {
-    try {
-      // 사용자 요청에 따라 고정 행 수 21개로 설정
-      const fixedRows = 21;
-      
-      setRowsPerPage(fixedRows);
-    } catch (error) {
-      console.error('행 수 계산 오류:', error);
-      // 오류 발생 시 기본값 설정
-      setRowsPerPage(21);
-    }
-  };
-  
-  // 현재 페이지 데이터 계산
-  const currentPageData = useMemo(() => {
-    if (showAllItems) {
-      return filteredData;
-    }
-    const startIndex = (currentPage - 1) * rowsPerPage;
-    return filteredData.slice(startIndex, startIndex + rowsPerPage);
-  }, [filteredData, currentPage, rowsPerPage, showAllItems]);
-
-  // 총 페이지 수 계산
-  const totalPages = useMemo(() => {
-    if (showAllItems) {
-      return 1;
-    }
-    return Math.ceil(filteredData.length / rowsPerPage);
-  }, [filteredData, rowsPerPage, showAllItems]);
-
   // 컬럼 너비 상태 추가 - 고정 너비 사용
   const [columnSizes, setColumnSizes] = useState<Record<string, number>>(() => {
     // 초기 컬럼 너비 설정
@@ -511,6 +516,7 @@ const ValuationPage = () => {
     return initialSizes;
   });
 
+  // 페이지네이션 및 정렬을 위한 테이블 인스턴스 생성
   const table = useReactTable({
     data: showAllItems ? filteredData : currentPageData, // 전 종목 출력 여부에 따라 데이터 소스 변경
     columns,
