@@ -6,6 +6,7 @@ import React from 'react';
 import { Sparklines, SparklinesLine, SparklinesSpots, SparklinesReferenceLine, SparklinesBars } from 'react-sparklines';
 import { copyTableAsImage } from '../utils/tableCopyUtils';
 import TableCopyButton from './TableCopyButton';
+import { formatDateMMDD } from '../utils/dateUtils';
 
 // CSV 데이터를 파싱한 결과를 위한 인터페이스
 interface CSVData {
@@ -52,13 +53,14 @@ const ETF_FILES = {
 };
 
 // CSV 파일 파싱 함수
-function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedData; errors: any[] } {
+function parseCSV(csvText: string): { headers: string[]; rows: Record<string, any>[]; groupedData: GroupedData; errors: any[] } {
   try {
     if (!csvText || typeof csvText !== 'string') {
       console.error('유효하지 않은 CSV 텍스트:', csvText);
       // 기본 데이터 반환
       return {
         headers: ['코드', '이름', '가격', '변동', '변동률', '거래량', '시가총액'],
+        rows: [], 
         groupedData: {},
         errors: [],
       };
@@ -87,6 +89,7 @@ function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedDat
       console.error('파싱된 데이터가 없습니다.');
       return {
         headers: results.meta.fields || [],
+        rows: [], 
         groupedData: {},
         errors: [],
       };
@@ -155,16 +158,18 @@ function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedDat
     
     return {
       headers: results.meta.fields || [],
+      rows: results.data as Record<string, any>[], 
       groupedData: groupedData,
-      errors: [],  // 오류가 없는 경우 빈 배열 반환
+      errors: results.errors,
     };
   } catch (error) {
     console.error('CSV 파싱 오류:', error);
     // 오류 발생 시 빈 데이터 반환
     return {
-      headers: ['코드', '이름', '가격', '변동', '변동률', '거래량', '시가총액'],
+      headers: [],
+      rows: [], 
       groupedData: {},
-      errors: [],
+      errors: [error],
     };
   }
 };
@@ -172,7 +177,7 @@ function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedDat
 // ETF 현재가 테이블 컴포넌트
 export default function ETFCurrentTable() {
   // 상태 관리
-  const [csvData, setCsvData] = useState<{ headers: string[]; groupedData: GroupedData; errors: any[] }>({ headers: [], groupedData: {}, errors: [] });
+  const [csvData, setCsvData] = useState<{ headers: string[]; rows: Record<string, any>[]; groupedData: GroupedData; errors: any[] }>({ headers: [], rows: [], groupedData: {}, errors: [] });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);  
   const [sortKey, setSortKey] = useState<string>('산업');  // 정렬 상태 - 기본값으로 산업 컬럼 오름차순 설정
@@ -183,6 +188,7 @@ export default function ETFCurrentTable() {
     stockNameMap: {[key: string]: string}
   }>({ tickerMap: {}, stockNameMap: {} });
   const [etfStockList, setEtfStockList] = useState<{[key: string]: Array<{name: string, rs: string}>}>({});
+  const [updateDate, setUpdateDate] = useState<string | null>(null); // Add state for update date
   
   // 테이블 복사 기능을 위한 ref 생성
   const tableRef = useRef<HTMLDivElement>(null);
@@ -748,6 +754,21 @@ export default function ETFCurrentTable() {
           setEtfStockList(stockListMap);
         }
         
+        // 날짜 추출 및 상태 업데이트 (CSV 첫 행의 '날짜' 컬럼 사용)
+        if (parsedData.rows && parsedData.rows.length > 0) {
+          const dateString = parsedData.rows[0]['날짜']; 
+          if (dateString) {
+            const formattedDate = formatDateMMDD(dateString);
+            if (formattedDate) {
+              setUpdateDate(formattedDate);
+            } else {
+              console.warn('날짜 형식을 변환할 수 없습니다:', dateString);
+            }
+          } else {
+            console.warn('CSV 데이터에 날짜 정보가 없습니다.');
+          }
+        }
+        
       } catch (err) {
         console.error('데이터 로드 오류:', err);
         setError(`데이터 로드 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
@@ -1090,6 +1111,41 @@ export default function ETFCurrentTable() {
     return isAboveMA ? `유지 ${durationText}` : `이탈 ${durationText}`;
   };
 
+  // 테이블 이미지 복사 함수
+  const handleCopyTableAsImage = async () => {
+    try {
+      const currentDate = new Date();
+      const formattedDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+      
+      await copyTableAsImage(
+        tableRef,
+        headerRef,
+        'ETF 현재가 테이블',
+        {
+          copyrightText: '© intellio.kr',
+          watermark: {
+            text: 'intellio.kr',
+            opacity: 0.1,
+            fontSize: '24px',
+            color: '#000000'
+          },
+          scale: 2,
+          backgroundColor: '#ffffff',
+          footerStyle: {
+            fontSize: '8px',
+            color: '#999999',
+            marginTop: '8px',
+            textAlign: 'center'
+          }
+        },
+        formattedDate
+      );
+    } catch (error) {
+      console.error('테이블 이미지 복사 중 오류 발생:', error);
+      alert('테이블 이미지 복사에 실패했습니다.');
+    }
+  };
+
   // 로딩 중 표시
   if (loading) {
     return (
@@ -1199,22 +1255,35 @@ export default function ETFCurrentTable() {
   return (
     <div>
       <div ref={headerRef} className="flex justify-between items-center mb-3">
-        <div className="flex items-center space-x-4">
-          <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>ETF 현재가</h2>
+        {/* 좌측 그룹: 제목 */}
+        <div className="flex items-center">
+          <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>ETF 현재가</h2>
         </div>
-        <div className="flex items-center space-x-2">
-          <span className="text-xs text-gray-600" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 섹터/ETF 등락율</span>
-          <TableCopyButton
-            tableRef={tableRef}
+        {/* 우측 그룹: 업데이트 시간 + 복사 버튼 */}
+        <div className="flex items-center">
+          {/* 업데이트 시간 추가 */}
+          {updateDate && (
+            <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+              updated 16:30 {updateDate}
+            </span>
+          )}
+          {/* 복사 버튼 */}
+          {/* <TableCopyButton 
+            tableRef={tableRef} 
             headerRef={headerRef}
             tableName="ETF 현재가"
             buttonText="이미지 저장"
+            updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
             data-component-name="TableCopyButton"
-          />
+          /> */}
         </div>
       </div>
       
-      <div id="etf-current-table" className="overflow-x-auto">
+      <div id="etf-current-table" className="overflow-x-auto" ref={tableRef}>
+        <div ref={headerRef} className="hidden">
+          <h2 className="text-lg font-semibold">ETF 현재가 테이블</h2>
+          <p className="text-sm text-gray-500">{new Date().toISOString().split('T')[0]}</p>
+        </div>
         <table className="min-w-full border border-gray-200 table-fixed">
           <thead className="bg-gray-100">
             <tr>

@@ -36,8 +36,9 @@ export default function RootLayout({
         {/* 헤더는 fixed 포지션으로 설정 */}
         <Header /> 
         
-        {/* 메인 콘텐츠는 데스크탑에서만 사이드바 너비만큼 왼쪽 여백을 가짐, 모바일에서는 전체 너비 사용 */}
-        <main className="min-h-screen overflow-x-hidden w-full ml-0 md:ml-[59px] md:w-[calc(100%-59px)] pt-[44px]">
+        {/* 메인 콘텐츠는 fixed 포지션으로 변경하고, 헤더 높이만큼 상단 여백 적용 */}
+        {/* overflow-auto를 추가하여 메인 콘텐츠 내부에서 스크롤 발생 */}
+        <main className="fixed top-[44px] bottom-0 right-0 left-0 md:left-[59px] overflow-auto">
           <div className="content-container">
             {children}
           </div>

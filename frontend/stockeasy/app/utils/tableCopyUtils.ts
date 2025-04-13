@@ -23,6 +23,7 @@ export interface TableCopyButtonProps {
   options?: CopyTableOptions;
   className?: string;
   buttonText?: string;
+  updateDateText?: string; // updateDateText 추가
 }
 
 /**
@@ -31,12 +32,14 @@ export interface TableCopyButtonProps {
  * @param headerRef 헤더 요소에 대한 참조
  * @param tableName 테이블 이름 (알림 메시지에 사용)
  * @param options 추가 옵션 (저작권 텍스트, 푸터 스타일 등)
+ * @param updateDateText 테이블 컴포넌트에서 전달받은 업데이트 날짜/시간 텍스트
  */
 export const copyTableAsImage = async (
   tableRef: React.RefObject<HTMLDivElement>,
   headerRef: React.RefObject<HTMLDivElement>,
   tableName: string,
-  options?: CopyTableOptions
+  options?: CopyTableOptions,
+  updateDateText?: string // 인자 추가
 ) => {
   // 로딩 메시지 즉시 표시 (가장 먼저 실행)
   const loadingToast = document.createElement('div');
@@ -67,7 +70,7 @@ export const copyTableAsImage = async (
     scale: 2,
     backgroundColor: '#ffffff',
     watermark: {
-      text: '스탁이지\nby (주)인텔리오\nhttps://stockeasy.intellio.kr/',
+      text: '스탁이지\nby (주)인텔리오\nhttps://stockeasy.intellio.kr',
       opacity: 0.08, // 10% 불투명도 (매우 흐리게)
       fontSize: '24px',
       color: '#000000'
@@ -134,23 +137,19 @@ export const copyTableAsImage = async (
     const buttons = headerClone.querySelectorAll('button');
     buttons.forEach(button => button.remove());
     
-    // 날짜 정보 추가 (제목 우측에 표시)
-    const titleElements = headerClone.querySelectorAll('h2');
-    if (titleElements.length > 0) {
-      const titleElement = titleElements[0];
-      const currentDate = new Date();
-      const formattedDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-      
-      // 날짜 텍스트 요소 생성
-      const dateSpan = document.createElement('span');
-      dateSpan.textContent = ` (${formattedDate})`;
-      dateSpan.style.fontSize = '9px';
-      dateSpan.style.fontWeight = 'normal';
-      dateSpan.style.color = '#718096';
-      dateSpan.style.marginLeft = '5px';
-      
-      // 제목 요소에 날짜 추가
-      titleElement.appendChild(dateSpan);
+    // 업데이트 날짜 텍스트 추가 (updateDateText가 있을 경우)
+    if (updateDateText) {
+      const titleElements = headerClone.querySelectorAll('h2');
+      if (titleElements.length > 0) {
+        const titleElement = titleElements[0];
+        const dateSpan = document.createElement('span');
+        dateSpan.textContent = ` (${updateDateText})`;
+        dateSpan.style.fontSize = '9px';
+        dateSpan.style.fontWeight = 'normal';
+        dateSpan.style.color = '#718096';
+        dateSpan.style.marginLeft = '5px';
+        titleElement.appendChild(dateSpan);
+      }
     }
     
     // 헤더 내 기존 설명 텍스트 제거 (중복 방지)

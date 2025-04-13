@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import Papa from 'papaparse';
 import { format, subDays } from 'date-fns';
+import { formatDateMMDD } from '../utils/dateUtils';
 import ChartComponent from '../components/ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
 import html2canvas from 'html2canvas';
@@ -60,23 +61,6 @@ interface CandleData {
   close: number;
   volume: number;
 }
-
-// 날짜를 'dd/mm' 형식으로 포맷하는 헬퍼 함수
-const formatDateDDMM = (dateString: string): string | null => {
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      console.error('Invalid date string for formatting:', dateString);
-      return null; // 잘못된 날짜 문자열 처리
-    }
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0'); // 월은 0부터 시작
-    return `${day}/${month}`;
-  } catch (error) {
-    console.error('Error formatting date:', error);
-    return null;
-  }
-};
 
 // RS순위 페이지 컴포넌트
 export default function RSRankPage() {
@@ -303,7 +287,7 @@ export default function RSRankPage() {
         if (parsedData && parsedData.rows.length > 0) {
           const dateString = parsedData.rows[0]['날짜']; // 첫 번째 행의 '날짜' 컬럼 값 사용
           if (dateString) {
-            const formatted = formatDateDDMM(dateString);
+            const formatted = formatDateMMDD(dateString);
             if (formatted) {
               setUpdateDate(formatted);
             } else {
@@ -1228,7 +1212,7 @@ export default function RSRankPage() {
                           <div className="flex items-center">
                              <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>RS 순위</h2>
                            </div>
-                           {/* 복사 버튼 및 날짜 */}
+                           {/* 우측 그룹: 업데이트 시간 + 복사 버튼 */}
                            <div className="flex items-center">
                              {/* 업데이트 날짜 표시 */}
                              {updateDate && (
@@ -1236,7 +1220,12 @@ export default function RSRankPage() {
                                  updated 16:30 {updateDate}
                                </span>
                              )}
-                             <TableCopyButton tableRef={rsTableRef} headerRef={rsHeaderRef} tableName="RS 순위 TOP 200" />
+                             <TableCopyButton 
+                               tableRef={rsTableRef} 
+                               headerRef={rsHeaderRef} 
+                               tableName="RS 순위 TOP 200" 
+                               updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
+                             />
                            </div>
                         </div>
                         <div className="relative">
@@ -1406,132 +1395,153 @@ export default function RSRankPage() {
                       <div className="flex justify-between items-center mb-3" ref={highHeaderRef}>
                         {/* 제목과 설명 그룹 */}
                         <div className="flex items-center">
-                          <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 신고가</h2>
-                          <span className="text-gray-600 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}></span>
+                          <h2 className="font-semibold whitespace-nowrap mr-2" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>52주 주요 종목</h2>
                         </div>
-                        {/* 복사 버튼 */}
-                        <TableCopyButton tableRef={highTableRef} headerRef={highHeaderRef} tableName="52주 신고가" />
+                        {/* 우측 그룹: 업데이트 시간 + 복사 버튼 */}
+                        <div className="flex items-center">
+                          {/* 업데이트 시간 추가 */}
+                          {updateDate && (
+                            <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+                              updated 16:30 {updateDate}
+                            </span>
+                          )}
+                          <TableCopyButton 
+                            tableRef={highTableRef} 
+                            headerRef={highHeaderRef} 
+                            tableName="52주 주요 종목"
+                            updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
+                          />
+                        </div>
                       </div>
                       <div className="relative">
-                        <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={highTableRef}>
-                          <table className="w-full bg-white border border-gray-200 table-fixed">
-                            <thead>
-                              <tr className="bg-gray-100">
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
-                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '90px', height: '35px' }}
-                                  onClick={() => handleHighSort('종목명')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>종목명</span>
-                                    {highSortKey === '종목명' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
-                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '45px', height: '35px' }}
-                                  onClick={() => handleHighSort('RS')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>RS</span>
-                                    {highSortKey === 'RS' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
-                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '55px', height: '35px' }} // 너비 늘림 (예: 55px -> 60px)
-                                  onClick={() => handleHighSort('등락률')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>등락률</span>
-                                    {highSortKey === '등락률' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
-                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px', height: '35px' }}
-                                  onClick={() => handleHighSort('시가총액')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>시가총액</span>
-                                    {highSortKey === '시가총액' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
-                                  style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px', height: '35px' }}
-                                  onClick={() => handleHighSort('거래대금')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>거래대금</span>
-                                    {highSortKey === '거래대금' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {sortedHighData.slice(0, 20).map((row: any, rowIndex: number) => (
-                                <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                  <td 
-                                    className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-left whitespace-nowrap overflow-hidden text-ellipsis"
-                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                        {/* overflow-y-auto와 max-h 추가 */}
+                        <div className="flex-1 overflow-x-auto overflow-y-auto max-h-[630px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={highTableRef}>
+                          {/* 데이터 유무 확인 */}
+                          {highData && highData.rows.length > 0 ? (
+                            <table className="w-full bg-white border border-gray-200 table-fixed">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th 
+                                    className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '90px', height: '35px' }}
+                                    onClick={() => handleHighSort('종목명')}
                                   >
-                                    {row['종목명']}
-                                  </td>
-                                  <td 
-                                    className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis"
-                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                    <div className="flex items-center justify-center">
+                                      <span>종목명</span>
+                                      {highSortKey === '종목명' && (
+                                        <span className="ml-1">
+                                          {highSortDirection === 'asc' ? '↑' : '↓'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </th>
+                                  <th 
+                                    className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '45px', height: '35px' }}
+                                    onClick={() => handleHighSort('RS')}
                                   >
-                                    {row['RS']}
-                                  </td>
-                                  <td 
-                                    className={`py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis ${
-                                      // 등락률 값에 따라 색상 클래스 적용
-                                      (Number(row['등락률']) || 0) > 0 ? 'text-red-500' : (Number(row['등락률']) || 0) < 0 ? 'text-blue-500' : ''
-                                    }`}
-                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                    <div className="flex items-center justify-center">
+                                      <span>RS</span>
+                                      {highSortKey === 'RS' && (
+                                        <span className="ml-1">
+                                          {highSortDirection === 'asc' ? '↑' : '↓'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </th>
+                                  <th 
+                                    className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '55px', height: '35px' }} // 너비 늘림 (예: 55px -> 60px)
+                                    onClick={() => handleHighSort('등락률')}
                                   >
-                                    {/* RS 값을 숫자로 변환하고 toFixed 적용, 변환 실패 시 0으로 처리 */}
-                                    {(Number(row['등락률']) > 0 ? '+' : '') + (Number(row['등락률']) || 0).toFixed(2)}%
-                                  </td>
-                                  <td 
-                                    className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                    <div className="flex items-center justify-center">
+                                      <span>등락률</span>
+                                      {highSortKey === '등락률' && (
+                                        <span className="ml-1">
+                                          {highSortDirection === 'asc' ? '↑' : '↓'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </th>
+                                  <th 
+                                    className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px', height: '35px' }}
+                                    onClick={() => handleHighSort('시가총액')}
                                   >
-                                    {/* CSV에서 직접 가져온 시가총액 값을 formatMarketCap 함수로 포맷팅하여 표시 */} 
-                                    {formatMarketCap(row['시가총액'])}
-                                  </td>
-                                  <td 
-                                    className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
-                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                    <div className="flex items-center justify-center">
+                                      <span>시가총액</span>
+                                      {highSortKey === '시가총액' && (
+                                        <span className="ml-1">
+                                          {highSortDirection === 'asc' ? '↑' : '↓'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </th>
+                                  <th 
+                                    className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
+                                    style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px', height: '35px' }}
+                                    onClick={() => handleHighSort('거래대금')}
                                   >
-                                    {/* 거래대금 값을 숫자로 변환하고 '억' 단위 추가, 변환 실패 시 0으로 처리 */}
-                                    {(Number(row['거래대금']) || 0).toLocaleString()}억
-                                  </td>
+                                    <div className="flex items-center justify-center">
+                                      <span>거래대금</span>
+                                      {highSortKey === '거래대금' && (
+                                        <span className="ml-1">
+                                          {highSortDirection === 'asc' ? '↑' : '↓'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody>
+                                {/* .slice(0, 20) 제거 */}
+                                {sortedHighData.map((row: any, rowIndex: number) => (
+                                  <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                    <td 
+                                      className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-left whitespace-nowrap overflow-hidden text-ellipsis"
+                                      style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                    >
+                                      {row['종목명']}
+                                    </td>
+                                    <td 
+                                      className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis"
+                                      style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                    >
+                                      {row['RS']}
+                                    </td>
+                                    <td 
+                                      className={`py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis ${
+                                        // 등락률 값에 따라 색상 클래스 적용
+                                        (Number(row['등락률']) || 0) > 0 ? 'text-red-500' : (Number(row['등락률']) || 0) < 0 ? 'text-blue-500' : ''
+                                      }`}
+                                      style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                    >
+                                      {/* RS 값을 숫자로 변환하고 toFixed 적용, 변환 실패 시 0으로 처리 */}
+                                      {(Number(row['등락률']) > 0 ? '+' : '') + (Number(row['등락률']) || 0).toFixed(2)}%
+                                    </td>
+                                    <td 
+                                      className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                                      style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                    >
+                                      {/* CSV에서 직접 가져온 시가총액 값을 formatMarketCap 함수로 포맷팅하여 표시 */} 
+                                      {formatMarketCap(row['시가총액'])}
+                                    </td>
+                                    <td 
+                                      className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis"
+                                      style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                                    >
+                                      {/* 거래대금 값을 숫자로 변환하고 '억' 단위 추가, 변환 실패 시 0으로 처리 */}
+                                      {(Number(row['거래대금']) || 0).toLocaleString()}억
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          ) : (
+                            <p className="text-gray-700 text-center py-4" style={{ fontSize: 'clamp(0.7rem, 0.8vw, 0.8rem)' }}>
+                              52주 신고가를 갱신한 주요 종목이 없습니다.<br />시장 환경이 좋지 않은 상태를 의미합니다.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
