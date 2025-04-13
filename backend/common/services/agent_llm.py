@@ -901,33 +901,83 @@ class AgentLLM:
 
 # 에이전트별 LLM 캐시
 agent_llm_cache: Dict[str, AgentLLM] = {}
+# 마지막 캐시 검사 시간 (성능 최적화용)
+_last_cache_check_time = 0
+# 캐시 검사 간격 (초) - 너무 자주 체크하면 성능에 영향을 줄 수 있음
+_CACHE_CHECK_INTERVAL = 60  # 5초마다 설정 파일 변경 여부 확인
 
-def get_agent_llm(agent_name: str) -> AgentLLM:
+def refresh_agent_llm_cache(force: bool = False) -> None:
+    """
+    에이전트 LLM 캐시를 새로고침합니다.
+    이 함수는 설정 파일이 변경된 경우에만 캐시를 갱신합니다.
+    
+    Args:
+        force: 강제 새로고침 여부
+    """
+    global _last_cache_check_time
+    
+    current_time = time.time()
+    
+    # 마지막 체크 이후 일정 시간이 지났거나 강제 새로고침인 경우에만 체크
+    if force or (current_time - _last_cache_check_time) > _CACHE_CHECK_INTERVAL:
+        # 설정 파일 변경 확인
+        config_modified_time = llm_config_manager._get_file_modified_time()
+        manager_last_modified = llm_config_manager._last_modified_time
+        
+        # 설정 파일이 변경되었거나 강제 새로고침인 경우에만 캐시 갱신
+        if force or config_modified_time > manager_last_modified:
+            logger.info(f"LLM 설정 파일 변경 감지: 마지막={manager_last_modified}, 현재={config_modified_time}")
+            
+            # 설정 관리자 새로고침
+            llm_config_manager.refresh()
+            
+            # 캐시된 모든 에이전트 LLM 초기화
+            for agent_name, agent_llm in agent_llm_cache.items():
+                # LLM 객체와 설정 초기화
+                agent_llm.llm_config = get_agent_llm_config(agent_name)
+                agent_llm.llm = None
+                agent_llm.llm_streaming = None
+                logger.info(f"에이전트 LLM 캐시 초기화: {agent_name}")
+        
+        # 마지막 체크 시간 업데이트
+        _last_cache_check_time = current_time
+
+def get_agent_llm(agent_name: str, refresh: bool = False) -> AgentLLM:
     """
     에이전트별 LLM 인스턴스 반환
     
     Args:
         agent_name: 에이전트 이름
+        refresh: 설정 새로고침 여부
         
     Returns:
         AgentLLM 인스턴스
     """
+    # 필요시 캐시 새로고침
+    refresh_agent_llm_cache(force=refresh)
+    
     # 캐시에 없으면 새로 생성
     if agent_name not in agent_llm_cache:
         agent_llm_cache[agent_name] = AgentLLM(agent_name)
+    elif refresh:
+        # 강제 새로고침인 경우 설정과 LLM 초기화
+        agent_llm_cache[agent_name].llm_config = get_agent_llm_config(agent_name)
+        agent_llm_cache[agent_name].llm = None
+        agent_llm_cache[agent_name].llm_streaming = None
     
     return agent_llm_cache[agent_name]
 
 # 편의 함수
-def get_llm_for_agent(agent_name: str) -> Union[BaseChatModel, Tuple[BaseChatModel, str, str]]:
+def get_llm_for_agent(agent_name: str, refresh: bool = False) -> Union[BaseChatModel, Tuple[BaseChatModel, str, str]]:
     """
     에이전트별 LLM 인스턴스와 모델 정보 반환 (편의 함수)
     
     Args:
         agent_name: 에이전트 이름
+        refresh: 설정 새로고침 여부
         
     Returns:
         LLM 인스턴스, 모델 이름, 제공자 이름의 튜플
     """
-    agent_llm = get_agent_llm(agent_name)
+    agent_llm = get_agent_llm(agent_name, refresh=refresh)
     return agent_llm.get_llm(), agent_llm.get_model_name(), agent_llm.get_provider() 

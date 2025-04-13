@@ -55,7 +55,7 @@ class StockRAGService:
         # 백그라운드 세션 정리 시작
         self._start_cleanup_thread()
         
-        logger.info("멀티에이전트 기반 주식 분석 RAG 서비스가 초기화되었습니다.")
+        #logger.info("멀티에이전트 기반 주식 분석 RAG 서비스가 초기화되었습니다.")
 
     def _start_cleanup_thread(self):
         """백그라운드 세션 정리 스레드 시작"""

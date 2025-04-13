@@ -204,12 +204,12 @@ function AIChatAreaContent() {
     },
     {
       stock: { 
-        value: '373220', 
+        value: '049800', 
         label: '우진플라임', 
         stockName: '우진플라임', 
-        stockCode: '373220' 
+        stockCode: '049800' 
       },
-      updateInfo: '발전소 수주 확대 소식'
+      updateInfo: '월별 전망, 잠정치, 실적 등의 통계, 앞으로 전망'
     }
   ];
 

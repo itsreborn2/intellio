@@ -118,7 +118,7 @@ class ResponseFormatterAgent(BaseAgent):
             
             # 스트리밍 콜백 확인 또는 생성
             streaming_callback = state.get("streaming_callback")
-            logger.info(f"상태에서 전달받은 streaming_callback: {streaming_callback}, 타입: {type(streaming_callback).__name__ if streaming_callback else 'None'}")
+            #logger.info(f"상태에서 전달받은 streaming_callback: {streaming_callback}, 타입: {type(streaming_callback).__name__ if streaming_callback else 'None'}")
             
             # 스트리밍 콜백이 없으면 더미 콜백 생성
             if not streaming_callback or not callable(streaming_callback):
@@ -131,7 +131,7 @@ class ResponseFormatterAgent(BaseAgent):
             else:
                 logger.info(f"유효한 스트리밍 콜백 함수가 발견되었습니다: {streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else '이름 없는 함수'}")
             
-            logger.info("스트리밍 모드로 응답 생성 시작")
+            #logger.info("스트리밍 모드로 응답 생성 시작")
             # 스트리밍 모드로 호출
             formatted_response = ""
             
@@ -152,16 +152,16 @@ class ResponseFormatterAgent(BaseAgent):
                     # 콜백 호출하여 청크 전송
                     try:
                         #print(chunk_content, end="", flush=True)
-                        logger.info(f"스트리밍 콜백 호출: 청크 길이={len(chunk_content)}, callback={streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else type(streaming_callback).__name__}")
+                        #logger.info(f"스트리밍 콜백 호출: 청크 길이={len(chunk_content)}, callback={streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else type(streaming_callback).__name__}")
                         await streaming_callback(chunk_content)
-                        logger.info(f"스트리밍 콜백 호출 완료: 청크 길이={len(chunk_content)}")
+                        #logger.info(f"스트리밍 콜백 호출 완료: 청크 길이={len(chunk_content)}")
                     except Exception as callback_error:
                         logger.error(f"스트리밍 콜백 호출 중 오류: {str(callback_error)}", exc_info=True)
                     
                     # 전체 응답 누적
                     formatted_response += chunk_content
                 
-                logger.info("스트리밍 응답 생성 완료")
+                #logger.info("스트리밍 응답 생성 완료")
             except Exception as e:
                 # 스트리밍 중 오류 발생 시 간단한 오류 처리
                 logger.error(f"스트리밍 응답 생성 중 오류 발생: {str(e)}")

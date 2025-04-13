@@ -17,6 +17,7 @@ import json
 import asyncio
 import time
 
+from common.services.agent_llm import refresh_agent_llm_cache
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from common.core.database import get_db_async
 from common.models.user import Session
@@ -528,6 +529,7 @@ async def stream_chat_message(
     """
     logger.info("[STREAM_CHAT] 스트리밍 메시지 처리 시작: 채팅 세션 ID={}, 메시지='{}'", chat_session_id, request.message)
     try:
+        refresh_agent_llm_cache()
         # test code
         stock_info_service = StockInfoService()
         stock_info = await stock_info_service.get_stock_by_code(request.stock_code)
@@ -569,7 +571,7 @@ async def stream_chat_message(
         async def streaming_callback(chunk: str):
             nonlocal full_response
             # 로깅 추가
-            print(chunk, end="", flush=True)
+            print(f"[{chunk}]", end="", flush=True)
             logger.info(f"[STREAM_CHAT] streaming_callback 호출됨: 청크 길이={len(chunk)}")
             # 청크 내용을 큐에 추가
             await streaming_queue.put(json.dumps({
@@ -594,7 +596,7 @@ async def stream_chat_message(
             
             
             # 초기 이벤트 전송
-            logger.info("[STREAM_CHAT] 초기 이벤트 전송")
+            #logger.info("[STREAM_CHAT] 초기 이벤트 전송")
             yield json.dumps({
                 "event": "start",
                 "data": {
@@ -622,7 +624,7 @@ async def stream_chat_message(
             await chat_memory_manager.add_user_message(str(chat_session_id), request.message)
             
             # 스트리밍 콜백을 설정하고 질문 처리 시작
-            logger.info("[STREAM_CHAT] analyze_stock 태스크 시작 (스트리밍 콜백 포함)")
+            #logger.info("[STREAM_CHAT] analyze_stock 태스크 시작 (스트리밍 콜백 포함)")
             session_key = str(current_session.id)
             logger.info(f"[STREAM_CHAT] 세션 키: {session_key}, 채팅 세션 ID: {chat_session_id}")
             
@@ -639,7 +641,7 @@ async def stream_chat_message(
                 )
             )
             
-            logger.info(f"[STREAM_CHAT] analyze_stock 태스크에 스트리밍 콜백 함수 전달: {streaming_callback.__name__}, id={id(streaming_callback)}")
+            #logger.info(f"[STREAM_CHAT] analyze_stock 태스크에 스트리밍 콜백 함수 전달: {streaming_callback.__name__}, id={id(streaming_callback)}")
             
             # 상태 추적을 위한 이전 상태 저장 변수
             prev_status = {}
@@ -647,7 +649,7 @@ async def stream_chat_message(
             response_started = False
             
             # 처리 상태 모니터링과 응답 스트리밍을 동시에 처리
-            logger.debug("[STREAM_CHAT] 처리 상태 모니터링 및 응답 스트리밍 시작")
+            #logger.debug("[STREAM_CHAT] 처리 상태 모니터링 및 응답 스트리밍 시작")
             check_count = 0
             
             # 2개의 동시 작업 생성: 상태 모니터링 및 응답 스트리밍
@@ -727,7 +729,7 @@ async def stream_chat_message(
                                         # response_formatter가 시작되면 응답 스트리밍 단계 시작 알림
                                         if agent == "response_formatter" and status == "processing" and not response_started:
                                             response_started = True
-                                            logger.info("[STREAM_CHAT] 응답 스트리밍 단계 시작")
+                                            #logger.info("[STREAM_CHAT] 응답 스트리밍 단계 시작")
                                             await streaming_queue.put(json.dumps({
                                                 "event": "response_start",
                                                 "data": {

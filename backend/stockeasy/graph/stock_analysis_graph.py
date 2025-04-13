@@ -404,8 +404,8 @@ class StockAnalysisGraph:
         def parallel_search_router(state: AgentState) -> str:
             """병렬 검색 이후 라우팅 결정"""
             # 로그에 전체 상태 출력 (디버깅용)
-            logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
-            logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
+            #logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
+            #logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
             
             # 타임스탬프 오류 재시작 플래그 확인 - 재시작 직후라면 knowledge_integrator로 바로 라우팅
             if state.get("restart_after_timestamp_error", False):

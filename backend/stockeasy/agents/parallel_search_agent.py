@@ -180,7 +180,7 @@ class ParallelSearchAgent(BaseAgent):
             else:
                 # 성공적인 결과 병합
                 success_count += 1
-                logger.info(f"에이전트 {name} 실행 완료")
+                #logger.info(f"에이전트 {name} 실행 완료")
                 
                 # 처리 상태 업데이트
                 if "processing_status" in result:
@@ -211,8 +211,8 @@ class ParallelSearchAgent(BaseAgent):
         if "agent_results" not in state:
             state["agent_results"] = {}
             logger.warning("agent_results가 없어 빈 딕셔너리로 초기화합니다.")
-        else:
-            logger.info(f"병합된 agent_results 키: {list(state['agent_results'].keys())}")
+        # else:
+        #     logger.info(f"병합된 agent_results 키: {list(state['agent_results'].keys())}")
         
         # 모든 에이전트가 실패했는지 확인
         if search_agents and failure_count == len(search_agents):
@@ -224,7 +224,7 @@ class ParallelSearchAgent(BaseAgent):
         for key, value in state["retrieved_data"].items():
             if key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data"] and value:
                 has_data = True
-                logger.info(f"검색 결과 있음: {key}에 {len(value)}개 항목")
+                #logger.info(f"검색 결과 있음: {key}에 {len(value)}개 항목")
                 break
         
         if not has_data:
@@ -318,9 +318,9 @@ class ParallelSearchAgent(BaseAgent):
                     except Exception as e:
                         logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
             
-            logger.info(f"에이전트 {name} 실행 시작")
+            #logger.info(f"에이전트 {name} 실행 시작")
             result = await agent.process(state)
-            logger.info(f"에이전트 {name} 실행 완료")
+            #logger.info(f"에이전트 {name} 실행 완료")
             
             # 결과에 에이전트 이름 추가
             result["last_agent"] = name
