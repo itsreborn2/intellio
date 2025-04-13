@@ -1204,13 +1204,13 @@ export default function ETFCurrentTable() {
         </div>
         <div className="flex items-center space-x-2">
           <span className="text-xs text-gray-600" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 섹터/ETF 등락율</span>
-          {/* <TableCopyButton
+          <TableCopyButton
             tableRef={tableRef}
             headerRef={headerRef}
             tableName="ETF 현재가"
             buttonText="이미지 저장"
             data-component-name="TableCopyButton"
-          /> */}
+          />
         </div>
       </div>
       

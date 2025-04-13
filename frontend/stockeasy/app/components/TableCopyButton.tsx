@@ -18,6 +18,7 @@ export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
   buttonText = "이미지복사"
 }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   
   // 이미지 복사 핸들러
   const handleCopyImage = async () => {
@@ -29,11 +30,14 @@ export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
       await copyTableAsImage(tableRef, headerRef, tableName, options);
     } catch (error) {
       console.error('이미지 복사 중 오류 발생:', error);
+      alert('이미지 복사에 실패했습니다. 콘솔을 확인해주세요.');
     } finally {
-      // 복사 작업 완료 후 로딩 상태 해제 (약간의 지연 추가)
+      // 복사 작업 완료 후 로딩 상태 해제 및 성공 메시지 표시
       setTimeout(() => {
         setIsLoading(false);
-      }, 3000); // 3초 후 로딩 상태 해제 (성공 메시지가 표시되는 시간과 맞춤)
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 2000); // 2초 후 성공 메시지 숨김
+      }, 500); // 로딩 상태 해제 후 0.5초 지연
     }
   };
   
@@ -52,7 +56,7 @@ export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
       disabled={isLoading}
       style={buttonStyle}
     >
-      {isLoading ? "생성 중..." : <ClipboardCopy className="h-3.5 w-3.5" />}
+      {isLoading ? "생성 중..." : showSuccess ? "복사 완료!" : <ClipboardCopy className="h-3.5 w-3.5" />}
     </button>
   );
 };

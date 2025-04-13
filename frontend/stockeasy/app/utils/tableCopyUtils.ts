@@ -112,6 +112,7 @@ export const copyTableAsImage = async (
     headerClone.style.width = '100%';
     headerClone.style.marginBottom = '0'; // 헤더 아래 여백 제거
     headerClone.style.paddingBottom = '0'; // 헤더 아래 패딩 제거
+    headerClone.style.paddingRight = '20px'; // 우측 여백 추가로 잘림 방지
     
     // 헤더 내 제목 텍스트 크기 및 중앙 정렬
     const headerTitles = headerClone.querySelectorAll('h2');
@@ -509,9 +510,16 @@ export const copyTableAsImage = async (
       const blob = await response.blob();
 
       // 클립보드에 복사
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob })
-      ]);
+      try {
+        console.log('클립보드에 이미지 쓰기 시도');
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        console.log('클립보드에 이미지 쓰기 성공');
+      } catch (err) {
+        console.error('클립보드 쓰기 오류:', err);
+        throw new Error(`클립보드 쓰기 실패: ${(err as Error).message}`);
+      }
       
       // 임시 컨테이너 제거
       document.body.removeChild(container);
