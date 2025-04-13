@@ -296,7 +296,8 @@ class StockAnalysisGraph:
             "report_analyzer": self.agents.get("report_analyzer"),
             "financial_analyzer": self.agents.get("financial_analyzer"),
             "industry_analyzer": self.agents.get("industry_analyzer"),
-            "confidential_analyzer": self.agents.get("confidential_analyzer")
+            "confidential_analyzer": self.agents.get("confidential_analyzer"),
+            "revenue_breakdown": self.agents.get("revenue_breakdown")
         }, graph=self)  # 현재 그래프 인스턴스 전달
         
         # 그래프 초기화
@@ -431,6 +432,7 @@ class StockAnalysisGraph:
             financial_status = processing_status.get("financial_analyzer")
             industry_status = processing_status.get("industry_analyzer")
             confidential_status = processing_status.get("confidential_analyzer")
+            revenue_breakdown_status = processing_status.get("revenue_breakdown")
             
             # 완료 상태 목록
             completed_statuses = ["completed", "completed_with_default_plan", "completed_no_data"]
@@ -441,13 +443,14 @@ class StockAnalysisGraph:
                 report_status in completed_statuses, 
                 financial_status in completed_statuses,
                 industry_status in completed_statuses,
-                confidential_status in completed_statuses
+                confidential_status in completed_statuses,
+                revenue_breakdown_status in completed_statuses
             ])
             
             # 검색 에이전트가 실행되지 않았는지 확인
             if not parallel_search_executed and not search_completed:
                 logger.warning("병렬 검색이 실행되지 않았습니다.")
-                logger.warning(f"실행 상태: telegram={telegram_status}, report={report_status}, financial={financial_status}, industry={industry_status}, confidential={confidential_status}")
+                logger.warning(f"실행 상태: telegram={telegram_status}, report={report_status}, financial={financial_status}, industry={industry_status}, confidential={confidential_status}, revenue_breakdown={revenue_breakdown_status}")
                 return "fallback_manager"
             
             # 모든 에이전트가 실패한 경우
@@ -460,7 +463,7 @@ class StockAnalysisGraph:
             
             # 실제 데이터 포함 항목만 확인
             has_data = False
-            for key in ["telegram_messages", "report_data", "financial_data", "industry_data"]:
+            for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "revenue_breakdown"]:
                 if key in retrieved_data and retrieved_data[key]:
                     has_data = True
                     logger.info(f"데이터가 검색됨: {key}에 {len(retrieved_data[key])}개 항목이 있습니다.")

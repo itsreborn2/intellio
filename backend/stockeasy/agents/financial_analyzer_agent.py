@@ -97,13 +97,16 @@ class FinancialAnalyzerAgent(BaseAgent):
                 return state
                 
             # 분석 기간 파악
-            year_range = self._determine_year_range(query, data_requirements)
-            logger.info(f"year_range: {year_range}")
+            date_range = self._determine_date_range(query, data_requirements)
+            logger.info(f"date_range: {date_range}")
+            
             # 재무 데이터 조회 (GCS에서 PDF 파일을 가져와서 처리)
-            financial_data = await self.financial_service.get_financial_data(stock_code, year_range)
+            financial_data = await self.financial_service.get_financial_data(stock_code, date_range)
+            
             # content를 제외한 메타데이터만 로깅
             log_data = {
                 "stock_code": financial_data.get("stock_code"),
+                "date_range": financial_data.get("date_range", {}),
                 "reports": {
                     key: {
                         "metadata": value.get("metadata", {})
@@ -131,7 +134,8 @@ class FinancialAnalyzerAgent(BaseAgent):
                     "execution_time": duration,
                     "metadata": {
                         "stock_code": stock_code,
-                        "stock_name": stock_name
+                        "stock_name": stock_name,
+                        "date_range": date_range
                     }
                 }
                 
@@ -161,7 +165,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             
             # 필요한 재무 지표 식별
             required_metrics = self._identify_required_metrics(classification, query)
-            #logger.info(f"required_metrics: {required_metrics}")
+            logger.info(f"[FinancialAnalyzerAgent] required_metrics: {required_metrics}")
 
 
             # 추출된 재무 데이터를 LLM에 전달할 형식으로 변환
@@ -171,7 +175,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 required_metrics,
                 data_requirements
             )
-            #logger.info(f"formatted_data: {formatted_data}")
+            #logger.info(f"[FinancialAnalyzerAgent] formatted_data: {formatted_data}")
             
             # 재무 데이터 분석 수행
             analysis_results = await self._analyze_financial_data(
@@ -209,7 +213,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     "stock_code": stock_code,
                     "stock_name": stock_name,
                     "required_metrics": required_metrics,
-                    "year_range": year_range
+                    "date_range": date_range
                 }
             }
             
@@ -249,7 +253,14 @@ class FinancialAnalyzerAgent(BaseAgent):
                 "data": {},
                 "error": str(e),
                 "execution_time": 0,
-                "metadata": {}
+                "metadata": {
+                    "stock_code": stock_code,
+                    "stock_name": stock_name or "",
+                    "date_range": {
+                        "start_date": datetime.now().strftime("%Y-%m-%d"),
+                        "end_date": datetime.now().strftime("%Y-%m-%d")
+                    }
+                }
             }
             
             # 타입 주석을 사용한 데이터 할당
@@ -281,19 +292,21 @@ class FinancialAnalyzerAgent(BaseAgent):
             "context": {"query": state.get("query", "")}
         })
     
-    def _determine_year_range(self, query: str, data_requirements: Dict[str, Any]) -> int:
+    def _determine_date_range(self, query: str, data_requirements: Dict[str, Any]) -> Dict[str, datetime]:
         """
-        질문과 데이터 요구사항을 기반으로 분석할 연도 범위를 결정합니다.
+        질문과 데이터 요구사항을 기반으로 분석할 날짜 범위를 결정합니다.
         
         Args:
             query: 사용자 쿼리
             data_requirements: 데이터 요구사항
             
         Returns:
-            연도 범위 (몇 년치 데이터를 분석할지)
+            날짜 범위 (시작일, 종료일)
         """
-        # 기본값 설정
-        default_range = 2
+        # 현재 날짜 기준
+        end_date = datetime.now()
+        start_date = end_date
+        default_years = 2
         
         # 데이터 요구사항에서 시간 범위 확인
         time_range = data_requirements.get("time_range", "")
@@ -302,29 +315,95 @@ class FinancialAnalyzerAgent(BaseAgent):
             recent_years_match = re.search(r'최근\s*(\d+)\s*년', time_range)
             if recent_years_match:
                 years = int(recent_years_match.group(1))
-                return min(max(years, 1), 5)  # 1~5년 사이로 제한
+                years = min(max(years, 1), 5)  # 1~5년 사이로 제한
+                start_date = end_date - timedelta(days=years*365)
+                return {"start_date": start_date, "end_date": end_date}
                 
-            # "최근 X개월" 패턴 - 1년 이하는 1년으로, 그 이상은 올림하여 연단위로 변환
+            # "최근 X개월" 패턴
             recent_months_match = re.search(r'최근\s*(\d+)\s*개월', time_range)
             if recent_months_match:
                 months = int(recent_months_match.group(1))
-                years = (months + 11) // 12  # 올림 나눗셈
-                return min(max(years, 1), 5)
+                start_date = end_date - timedelta(days=months*30)
+                return {"start_date": start_date, "end_date": end_date}
                 
             # "YYYY년" 패턴 - 현재 연도와의 차이를 계산
             year_match = re.search(r'(20\d{2})년', time_range)
             if year_match:
                 target_year = int(year_match.group(1))
-                current_year = datetime.now().year
-                return min(max(current_year - target_year + 1, 1), 5)
+                start_date = datetime(target_year, 1, 1)
+                end_date = datetime(target_year, 12, 31)
+                return {"start_date": start_date, "end_date": end_date}
                 
-            # "X분기" 패턴 - 분기 데이터는 1년치로 처리
+            # "YY년" 패턴 (2자리 연도) - 20을 앞에 붙여서 4자리 연도로 변환
+            short_year_match = re.search(r'(\d{2})년', time_range)
+            if short_year_match:
+                year_suffix = int(short_year_match.group(1))
+                # 2000년대로 가정
+                target_year = 2000 + year_suffix
+                # 미래 연도인 경우 현재 연도 이하로 조정
+                current_year = datetime.now().year
+                if target_year > current_year:
+                    target_year = current_year
+                
+                start_date = datetime(target_year, 1, 1)
+                end_date = datetime(target_year, 12, 31)
+                return {"start_date": start_date, "end_date": end_date}
+                
+            # "X분기" 패턴 - 분기 데이터만 처리
             quarter_match = re.search(r'(\d)분기', time_range)
             if quarter_match:
-                return 1
+                quarter = int(quarter_match.group(1))
+                current_year = end_date.year
+                
+                # 분기 시작/종료일 계산
+                if quarter == 1:
+                    start_date = datetime(current_year, 4, 1)
+                    end_date = datetime(current_year, 5, 16)
+                elif quarter == 2:
+                    start_date = datetime(current_year, 7, 1)
+                    end_date = datetime(current_year, 8, 16)
+                elif quarter == 3: # 3분기
+                    start_date = datetime(current_year, 10, 1)
+                    end_date = datetime(current_year, 11, 16)
+                elif quarter == 4: # 4분기는 1~3월에 마감. 연간 사업보고서에는 4분기 실적이 따로 없으므로, 연간보고서 - 3분기실적 으로 처리.
+                    start_date = datetime(current_year, 10, 1)
+                    end_date = datetime(current_year+1, 3, 31)
+                
+                return {"start_date": start_date, "end_date": end_date}
         
         # 쿼리에서 연도 범위 파악
-        year_patterns = [
+        
+        # 1. 특정 연도 매칭 패턴 (예: 2023년, 23년)
+        year_specific_patterns = [
+            r"(20\d{2})년",  # 4자리 연도 (YYYY년)
+            r"(\d{2})년"     # 2자리 연도 (YY년)
+        ]
+        
+        for pattern in year_specific_patterns:
+            match = re.search(pattern, query)
+            if match:
+                try:
+                    group = match.group(1)
+                    # 연도 처리
+                    if len(group) == 4 and group.startswith('20'):
+                        target_year = int(group)
+                    else:  # 2자리 연도
+                        year_suffix = int(group)
+                        target_year = 2000 + year_suffix
+                    
+                    # 미래 연도인 경우 현재 연도 이하로 조정
+                    current_year = datetime.now().year
+                    if target_year > current_year:
+                        target_year = current_year
+                        
+                    start_date = datetime(target_year, 1, 1)
+                    end_date = datetime(target_year, 12, 31)
+                    return {"start_date": start_date, "end_date": end_date}
+                except ValueError:
+                    pass
+        
+        # 2. 기간 매칭 패턴 (예: 3년간, 5년 동안)
+        period_patterns = [
             r"(\d+)년간",
             r"(\d+)년\s*동안",
             r"지난\s*(\d+)년",
@@ -335,27 +414,32 @@ class FinancialAnalyzerAgent(BaseAgent):
             r"(\d+)\s*years"
         ]
         
-        for pattern in year_patterns:
+        for pattern in period_patterns:
             match = re.search(pattern, query)
             if match:
                 try:
                     year_range = int(match.group(1))
-                    return min(max(year_range, 1), 5)  # 1~5년 사이로 제한
+                    year_range = min(max(year_range, 1), 5)  # 1~5년 사이로 제한
+                    start_date = end_date - timedelta(days=year_range*365)
+                    return {"start_date": start_date, "end_date": end_date}
                 except ValueError:
                     pass
         
         # 특정 키워드에 기반한 범위 결정
         if any(keyword in query or keyword in str(time_range) 
                for keyword in ["장기", "전체", "역대", "모든", "전부"]):
-            return 5
+            start_date = end_date - timedelta(days=5*365)  # 5년
         elif any(keyword in query or keyword in str(time_range)
                 for keyword in ["중장기", "3년", "삼년"]):
-            return 3
+            start_date = end_date - timedelta(days=3*365)  # 3년
         elif any(keyword in query or keyword in str(time_range)
                 for keyword in ["단기", "1년", "일년", "올해"]):
-            return 1
-            
-        return default_range
+            start_date = end_date - timedelta(days=1*365)  # 1년
+        else:
+            # 기본값: 2년
+            start_date = end_date - timedelta(days=default_years*365)
+        
+        return {"start_date": start_date, "end_date": end_date}
     
     def _identify_required_metrics(self, classification: Dict[str, Any], query: str) -> List[str]:
         """
@@ -426,10 +510,10 @@ class FinancialAnalyzerAgent(BaseAgent):
         reports = financial_data.get("reports", {})
         stock_code = financial_data.get("stock_code", "")
         formatted_data = []
-        
-        # 보고서 기간 파악
+        # 보고서 기간 파악 
+        # # data_requirements 는 각종 에이전트를 사용하냐 마냐하는 필드임.
         specific_period = None
-        if "period" in data_requirements:
+        if data_requirements and "period" in data_requirements:
             period_info = data_requirements.get("period", {})
             specific_period = period_info.get("value")
             
@@ -450,16 +534,37 @@ class FinancialAnalyzerAgent(BaseAgent):
                     metrics[metric] = keyword_context
             
             # 보고서 데이터 구조화
+            year = int(metadata.get("year", ""))
+            report_type = metadata.get('type')
+            if( report_type.lower() == "annual" ):
+                year = year - 1
+
             formatted_report = {
-                "source": f"{metadata.get('year')}년 {metadata.get('type')} 보고서",
+                "source": f"{year}년 {report_type} 보고서",
                 "date": metadata.get("date", ""),
-                "content": content[:3000] if len(content) > 3000 else content,  # 컨텐츠 제한
+                "content": content[:5000] if len(content) > 5000 else content,  # 컨텐츠 제한
                 "financial_indicators": metrics,
                 "metadata": metadata
             }
             
             formatted_data.append(formatted_report)
+        
+        # 데이터 타입 검사 및 로깅
+        if not formatted_data:
+            logger.warning(f"formatted_data가 비어 있습니다. stock_code: {stock_code}")
+            print(f"[재무 분석] 포맷된 데이터가 비어 있습니다: {stock_code}")
+            return []
             
+        # 데이터 타입 검사
+        for idx, item in enumerate(formatted_data):
+            if not isinstance(item, dict):
+                logger.error(f"포맷된 데이터 오류: 항목 {idx}이(가) 딕셔너리가 아닙니다. 타입: {type(item)}")
+                print(f"[재무 분석] 데이터 형식 오류 - 항목 {idx}의 타입: {type(item)}")
+                # 오류 항목 제거
+                formatted_data = [item for item in formatted_data if isinstance(item, dict)]
+                break
+                
+        print(f"[재무 분석] 처리된 보고서 수: {len(formatted_data)}")
         return formatted_data
         
     def _extract_keyword_context(self, text: str, keyword: str, context_size: int = 200) -> str:
@@ -523,6 +628,20 @@ class FinancialAnalyzerAgent(BaseAgent):
             분석 결과
         """
         try:
+            # 타입 검사
+            if not isinstance(formatted_data, list):
+                logger.error(f"타입 오류: formatted_data가 리스트가 아닙니다. 타입: {type(formatted_data)}")
+                print(f"[재무 분석] 치명적 오류: formatted_data 타입이 리스트가 아닙니다: {type(formatted_data)}")
+                formatted_data = []
+            else:
+                # 리스트 내부 항목 검사
+                invalid_items = [i for i, item in enumerate(formatted_data) if not isinstance(item, dict)]
+                if invalid_items:
+                    logger.error(f"타입 오류: formatted_data의 일부 항목이 딕셔너리가 아닙니다. 인덱스: {invalid_items}")
+                    print(f"[재무 분석] 잘못된 데이터 항목 발견: {invalid_items}")
+                    # 잘못된 항목 필터링
+                    formatted_data = [item for item in formatted_data if isinstance(item, dict)]
+            
             # 재무 데이터 문자열 변환
             financial_data_str = format_financial_data(formatted_data)
             
@@ -561,7 +680,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     "stock_code": stock_code,
                     "stock_name": stock_name,
                     "report_count": len(formatted_data),
-                    "years_covered": self._extract_years_covered(formatted_data)
+                    "date_range": self._extract_date_range(formatted_data)
                 },
                 "raw_financial_data": formatted_data[:3] if formatted_data else []  # 최대 2개 보고서만 포함
             }
@@ -574,20 +693,58 @@ class FinancialAnalyzerAgent(BaseAgent):
                 "raw_financial_data": []
             }
             
-    def _extract_years_covered(self, formatted_data: List[Dict[str, Any]]) -> List[int]:
+    def _extract_date_range(self, formatted_data: List[Dict[str, Any]]) -> Dict[str, str]:
         """
-        포맷된 데이터에서 포함된 연도 목록을 추출합니다.
+        포맷된 데이터에서 실제 포함된 날짜 범위를 추출합니다.
         
         Args:
             formatted_data: 포맷된 재무 데이터
             
         Returns:
-            포함된 연도 목록
+            포함된 날짜 범위 (시작일, 종료일)
         """
+        dates = []
         years = set()
+        
         for report in formatted_data:
             metadata = report.get("metadata", {})
+            
+            # 날짜 정보 확인
+            date_str = metadata.get("date", "")
+            if date_str:
+                try:
+                    date = datetime.fromisoformat(date_str)
+                    dates.append(date)
+                except ValueError:
+                    pass
+            
+            # 연도 정보 확인 (날짜 정보가 없는 경우 대비)
             if "year" in metadata:
                 years.add(metadata["year"])
-                
-        return sorted(list(years), reverse=True)  # 최신 연도부터 내림차순 정렬 
+        
+        # 날짜 정보가 있는 경우 해당 날짜 범위 사용
+        if dates:
+            min_date = min(dates)
+            max_date = max(dates)
+            return {
+                "start_date": min_date.strftime("%Y-%m-%d"),
+                "end_date": max_date.strftime("%Y-%m-%d"),
+                "included_years": sorted(list(years), reverse=True)
+            }
+        
+        # 날짜 정보가 없는 경우 연도 정보만 사용
+        if years:
+            min_year = min(years)
+            max_year = max(years)
+            return {
+                "start_date": f"{min_year}-01-01",
+                "end_date": f"{max_year}-12-31",
+                "included_years": sorted(list(years), reverse=True)
+            }
+        
+        # 아무 정보도 없는 경우 기본값 반환
+        return {
+            "start_date": "",
+            "end_date": "",
+            "included_years": []
+        } 

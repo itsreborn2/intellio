@@ -61,6 +61,7 @@ class DataRequirements(BaseModel):
     financial_statements_needed: bool = Field(..., description="재무제표 데이터 필요 여부")
     industry_data_needed: bool = Field(..., description="산업 데이터 필요 여부")
     confidential_data_needed: bool = Field(..., description="비공개 자료 필요 여부")
+    revenue_data_needed: bool = Field(False, description="매출 및 수주 현황 데이터 필요 여부")
 
 
 class QuestionAnalysis(BaseModel):
@@ -231,6 +232,7 @@ class QuestionAnalyzerAgent(BaseAgent):
             response.entities.stock_name = stock_name
             response.entities.stock_code = stock_code
             response.data_requirements.confidential_data_needed = True
+            response.data_requirements.revenue_data_needed = True
             # 분석 결과 로깅
             logger.info(f"Analysis result: {response}")
 

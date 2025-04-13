@@ -59,6 +59,7 @@ class DataRequirement(TypedDict, total=False):
     reports_needed: bool            # 기업 리포트 필요 여부
     financial_statements_needed: bool # 재무제표 필요 여부
     industry_data_needed: bool      # 산업 데이터 필요 여부
+    revenue_data_needed: bool      # 매출 및 수주 현황 필요 여부
 
 
 class QuestionAnalysisResult(TypedDict, total=False):

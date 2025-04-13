@@ -5,6 +5,7 @@
 import asyncio
 import os
 import sys
+import time
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from loguru import logger
@@ -41,13 +42,19 @@ GEMINI_API_KEY = settings.GEMINI_API_KEY
 OPENAI_API_KEY = settings.OPENAI_API_KEY
 
 async def test_all():
+    start_time = time.time()
     # stockeasy/local_cache/financial_reports/정기보고서/103590
     base_dir = "stockeasy/local_cache/financial_reports/정기보고서"
-    code_list = ["005380","103590", "005930", "044340", "195870", "326030", "140410", "049800", "267260"]
+    #code_list = ["005380","103590", "005930", "044340", "195870", "326030", "140410", "049800", "267260"]
+    # 103590 일진전기
+    # 049880 우진플람
+    # 214450 파마리서치, 010140 삼성중공업, 112610 씨에스윈드, 014620 성광벤드, 329180 현대중공업
+    #code_list = ["112610", "014620", "329180"]
+    code_list = ["278470"]
 
     result = ""
     for code in code_list:
-        result += await test_find매출(f"{base_dir}/{code}")
+        result += await test_find매출_수주현황_사업부별매출(f"{base_dir}/{code}")
 
     print(result)
     # 마크다운 파일로 저장
@@ -124,37 +131,32 @@ async def test_all():
     with open("D:/Work/intellio/md/2.html", "w", encoding="utf-8") as f:
         f.write(styled_html)
     
+    end_time = time.time()
+    print(f"총 실행 시간: {end_time - start_time}초")
     return result
+async def extract_분기별데이터(target_report: str):
+    
+    base_file_name = os.path.basename(target_report)
+    print(f"최신 사업보고서: {base_file_name}")
+    #  20250320_메지온_140410_일반서비스_annual_DART.pdf
+    year = base_file_name.split("_")[0]
+    year = year[:4]
+    quater_file = base_file_name.split("_")[4]
+    if quater_file == "annual":
+        year = int(year) - 1
+    report_type_map = {
+            "Q1": "1분기",
+            "Q3": "3분기",
+            "semiannual": "2분기",
+            "annual": "4분기"
+        }
+    print("test1")
+    quater = report_type_map[quater_file]
 
-async def test_find매출(dir_path: str):
-    """
-    사업보고서의 매출처, 수주현황, 사업부별 매출 등의 정보를 추출합니다.
-    
-    1. 지정된 폴더에서 가장 최신 사업보고서를 찾습니다.
-    2. 'II. 사업의 내용' 목차 하위의 '매출 및 수주상황' 목차를 찾습니다.
-    3. 찾지 못했다면, 'II. 사업의 내용' 목차를 찾습니다.
-    4. 찾은 목차의 시작 페이지와 끝 페이지를 이용해 해당 내용을 추출합니다.
-    5. LLM을 이용해 매출처, 수주현황, 사업부별 매출 정보를 추출합니다.
-    """
-    # 1. 삼성전자(005930) 사업보고서 폴더 경로
-
-    report_folder = Path(dir_path)
-    
-    # 2. 가장 최신 사업보고서 파일 찾기 (파일명에 annual이 포함된 파일)
-    annual_reports = list(report_folder.glob("*.pdf"))
-    annual_reports.sort(key=lambda x: x.name, reverse=True)  # 파일명 기준 내림차순 정렬
-    
-    if not annual_reports:
-        logger.error("사업보고서 파일을 찾을 수 없습니다.")
-        return
-    
-    latest_report = str(annual_reports[0])
-    logger.info(f"최신 사업보고서: {latest_report}")
-    
     # 3. fitz를 사용하여 목차 내용 추출
-    doc = fitz.open(latest_report)
+    doc = fitz.open(target_report)
     toc = doc.get_toc()  # 목차 가져오기
-    
+    print(f"toc: {len(toc)}")
     if not toc:
         logger.error("목차를 찾을 수 없습니다.")
         doc.close()
@@ -217,8 +219,10 @@ async def test_find매출(dir_path: str):
         return
     
     # 6. pdfplumber를 사용하여 해당 페이지 내용 추출
-    extracted_text = ""
-    with pdfplumber.open(latest_report) as pdf:
+    extracted_text = f"-----------------------------\n\n"
+    extracted_text += f"## {year}년 {quater} 데이터\n\n"
+    print(f"{extracted_text}")
+    with pdfplumber.open(target_report) as pdf:
         # 페이지 범위가 너무 크면 최대 10페이지로 제한
         max_pages = 30
         if end_page - start_page > max_pages:
@@ -232,52 +236,87 @@ async def test_find매출(dir_path: str):
                 if text:
                     extracted_text += f"\n\n--- 페이지 {page_num + 1} ---\n\n{text}"
     
+    extracted_text += f"\n\n--- 데이터 끝 ---\n\n"
     if not extracted_text:
         logger.error("추출된 텍스트가 없습니다.")
         doc.close()
         return
+    return extracted_text
+async def test_find매출_수주현황_사업부별매출(dir_path: str):
+    """
+    """
+    # 1. 삼성전자(005930) 사업보고서 폴더 경로
+
+    report_folder = Path(dir_path)
     
+    # 2. 가장 최신 사업보고서 파일 찾기 (파일명에 annual이 포함된 파일)
+    annual_reports = list(report_folder.glob("*.pdf"))
+    annual_reports.sort(key=lambda x: x.name, reverse=True)  # 파일명 기준 내림차순 정렬
+    
+    if not annual_reports:
+        logger.error("사업보고서 파일을 찾을 수 없습니다.")
+        return
+    
+    file_list = annual_reports[:4]
+    extracted_text = ""
+    for file in file_list:
+        extracted_text += await extract_분기별데이터(file)
+
+    print(f"length: {len(extracted_text)}")
+
+
     # 7. LLM을 사용하여 매출처, 수주현황, 사업부별 매출 정보 추출
     try:
         # LLM 초기화 (Google Gemini 모델 직접 초기화)
         # Gemini 모델 사용 부분 주석 처리
-        
-        if settings.GEMINI_API_KEY == "YOUR_GEMINI_API_KEY":
-            logger.error("Gemini API 키가 설정되지 않았습니다. 실제 API 키로 교체해주세요.")
-            doc.close()
-            return
             
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-lite", #"gemini-2.0-flash","gemini-2.0-flash-lite"
-            #model="gemini-2.0-flash",
+            #model="gemini-2.0-flash-lite", #"gemini-2.0-flash","gemini-2.0-flash-lite"
+            model="gemini-2.0-flash",
             google_api_key=GEMINI_API_KEY,
             temperature=0.1,
             max_output_tokens=8000
         )
         
-        
-        # OpenAI GPT-4o-mini 모델 사용
-        # if settings.OPENAI_API_KEY == "YOUR_OPENAI_API_KEY":
-        #     logger.error("OpenAI API 키가 설정되지 않았습니다. 실제 API 키로 교체해주세요.")
-        #     doc.close()
-        #     return
-        
-        # llm = ChatOpenAI(
-        #     model="gpt-4o-mini",
-        #     openai_api_key=OPENAI_API_KEY,
-        #     temperature=0.1,
-        #     max_tokens=4096
-        # )
-        
         # 프롬프트 템플릿 설정
         system_prompt = """
-        당신은 기업 분석 전문가입니다. 주어진 사업보고서 내용을 분석하여 다음 정보를 추출해주세요:
-        
-        1. 주요 매출처 (주요 거래처, 주요 고객)
-        2. 수주 현황 (계약, 수주 잔고 등)
-        3. 사업부별/제품별/지역별 매출 비중 (사업부문별, 제품별, 지역별 매출 구성)
-        
-        위 정보만 간결하게 정리하여 표로 제공해주세요. 정보가 없는 항목은 '관련 정보 없음'으로 표시하세요.
+당신은 기업 분석 전문가입니다. 주어진 사업보고서 내용을 분석하여 다음 정보를 표로 정리해주세요:
+
+1. 주요 매출처 (주요 거래처, 주요 고객)
+2. 수주 현황 (계약, 수주 잔고 등)
+3. 수주 현황의 분기별 증감율 현황
+4. 사업부문별 매출 현황과 지난 분기 대비 증감율(QoQ)
+5. 제품별 매출 현황과 지난 분기 대비 증감율(QoQ)
+6. 지역별 매출 현황과 지난 분기 대비 증감율(QoQ)
+7. 사업부문별 매출 비중 (전체 매출 대비 각 사업부의 비율, %)
+
+**요청 사항:**
+- 위 정보를 간결한 **표** 형태로 정리해주세요.
+- 정보가 없는 항목은 생략합니다.
+- 항목 4~6번은 각각 별도의 표로 구분하여 작성해주세요.
+- 항목 7번은 항목 4번의 매출을 기반으로 비중을 계산해주세요.
+- 4~6번 표는 다음 형식으로 출력해주세요:
+
+[📊 표 예시: 제품별 매출]
+
+| 분기 | 나동선 | 알루미늄 | 내수 |
+|------|--------|-----------|--------|
+| 2024년 1분기 | 470,626 (5.2%) | 220,000 (2.1%) | 110,000 (3.5%) |
+| 2024년 2분기 | 667,098 (11.3%) | 250,000 (13.6%) | 130,000 (18.2%) |
+| 2024년 3분기 | 911,377 (10.1%) | 285,000 (9.2%) | 150,000 (15.4%) |
+
+[📈 표 예시: 사업부문별 매출 비중]
+
+| 분기 | 전선 | 중전기 | 기타 |
+|------|------|--------|------|
+| 2024년 1분기 | 65.2% | 32.5% | 2.3% |
+| 2024년 2분기 | 66.1% | 31.4% | 2.5% |
+| 2024년 3분기 | 67.3% | 30.1% | 2.6% |
+
+※ 모든 금액 단위는 **백만원**, 괄호 안은 전 분기 대비 증감율(QoQ)입니다.
+※ 매출 비중(%)은 각 분기 총 매출 기준으로 계산된 비율입니다.
+※ 매출액이 없는 항목은 ‘-’로 표기해주세요.
+
         """
         
         human_prompt = """
@@ -296,14 +335,16 @@ async def test_find매출(dir_path: str):
         chain = prompt | llm | StrOutputParser()
         result = chain.invoke({"content": extracted_text})  # 토큰 제한을 고려하여 내용 잘라냄
         
-        base_file_name = f"{os.path.basename(latest_report)} {start_page+1}~{end_page+1}"
-        answer = f"-----------------------------\n\n## 파일 : {base_file_name}\n\n-----------------------------\n\n{result}\n\n"
+        base_files = ""
+        for file in file_list:
+            base_file_name = f"{os.path.basename(file)}"
+            base_files += f"{base_file_name}\n\n"
+
+        answer = f"-----------------------------\n\n## 파일 : {base_files}\n\n-----------------------------\n\n{result}\n\n"
         return answer
         
     except Exception as e:
         logger.exception(f"LLM 처리 중 오류 발생: {str(e)}")
-    finally:
-        doc.close()
     
     return
 
