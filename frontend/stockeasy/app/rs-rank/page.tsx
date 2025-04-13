@@ -902,6 +902,14 @@ export default function RSRankPage() {
       const marketCapValue = Number(marketCapString) || 0;
       // 2천억 이상인 경우만 true 반환
       return marketCapValue >= 200000000000;
+    })
+    // RS 값 기준으로 내림차순 정렬 (높은 값이 먼저 오도록)
+    .sort((a, b) => {
+      // RS 값을 숫자로 변환 (변환 실패 시 0으로 처리)
+      const rsA = Number(a['RS']) || 0;
+      const rsB = Number(b['RS']) || 0;
+      // 내림차순 정렬 (큰 값이 먼저 오도록)
+      return rsB - rsA;
     });
   // 의존성 배열에서 stockPriceData, calculatePriceChange 제거
   }, [highData]); 

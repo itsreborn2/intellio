@@ -124,7 +124,7 @@ export default function IndustryCharts() {
         return newList;
       });
 
-      const csvFilePath = `/requestfile/rs_etf/${code}.csv`;
+      const csvFilePath = `/requestfile/rs_etf/${code}.csv?t=${Date.now()}`; // 타임스탬프 추가
       const response = await fetch(csvFilePath);
       
       if (!response.ok) {
@@ -181,7 +181,7 @@ export default function IndustryCharts() {
     await Promise.all(
       tickers.map(async (ticker) => {
         try {
-          const response = await fetch(`/requestfile/rs_etf/${ticker}.csv`);
+          const response = await fetch(`/requestfile/rs_etf/${ticker}.csv?t=${Date.now()}`); // 타임스탬프 추가
           if (response.ok) {
             const csvText = await response.text();
             const result = Papa.parse(csvText, { header: true });
@@ -294,39 +294,42 @@ export default function IndustryCharts() {
     }
   };
   
-  // 등락율 계산
+  // 등락율 계산 (전일 종가 대비)
   const calculateChangePercent = (ticker: string): number => {
     try {
       // 이미 로드된 차트 데이터 사용
       const chartData = chartDataMap[ticker];
-      if (!chartData || chartData.length === 0) {
-        console.error(`차트 데이터가 비어있음: ${ticker}`);
+      // 데이터가 2개 미만이면 등락률 계산 불가
+      if (!chartData || chartData.length < 2) {
+        console.warn(`차트 데이터 부족 (최소 2개 필요) 또는 없음: ${ticker}`);
         return 0;
       }
-      
-      // 가장 최근 데이터 가져오기
-      const latestData = chartData[chartData.length - 1];
-      
-      // 시가와 종가로 등락율 계산
-      const openPrice = latestData.open;
-      const closePrice = latestData.close;
-      
-      // 시가가 0이거나 유효하지 않은 경우 0 반환
-      if (openPrice === 0 || !openPrice || isNaN(openPrice)) {
-        console.warn(`유효하지 않은 시가 (${ticker}): ${openPrice}`);
+
+      // 가장 최근 데이터(당일)와 그 이전 데이터(전일) 가져오기
+      const currentData = chartData[chartData.length - 1];
+      const previousData = chartData[chartData.length - 2];
+
+      const currentClose = currentData.close;
+      const previousClose = previousData.close;
+
+      // 전일 종가가 0이거나 유효하지 않은 경우 0 반환 (0으로 나누기 방지)
+      if (previousClose === 0 || !previousClose || isNaN(previousClose)) {
+        console.warn(`유효하지 않은 전일 종가 (${ticker}): ${previousClose}`);
         return 0;
       }
-      
-      // 등락률 계산 및 소수점 제한 (무한대 값 방지)
-      const changePercent = ((closePrice - openPrice) / openPrice) * 100;
-      
+
+      // 등락률 계산 (전일 종가 대비 당일 종가)
+      const changePercent = ((currentClose - previousClose) / previousClose) * 100;
+
       // 무한대 값 체크
       if (!isFinite(changePercent)) {
         console.warn(`무한대 등락률 감지 (${ticker}): ${changePercent}`);
         return 0;
       }
-      
-      return changePercent;
+
+      // 소수점 2자리까지 반올림
+      return parseFloat(changePercent.toFixed(2));
+
     } catch (error) {
       console.error(`등락율 계산 오류 (${ticker}):`, error);
       return 0;

@@ -116,7 +116,7 @@ const ChartComponent: React.FC<ChartProps> = ({
         : '/requestfile/market-index/1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg.csv';
       
       // 로컬 캐시 파일에서 데이터 가져오기
-      const response = await fetch(marketIndexPath);
+      const response = await fetch(marketIndexPath, { cache: 'no-store' });
       
       if (!response.ok) {
         const errorText = await response.text();

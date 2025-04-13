@@ -282,6 +282,10 @@ export function InputArea({
       if (scrollToBottom) {
         scrollToBottom();
       }
+    } else if (e.key === 'Enter' && !e.shiftKey && inputMessage.trim() !== '' && !selectedStock) {
+      console.log('[InputArea] Enter 키 입력 - 종목 미선택으로 전송 불가');
+      // 필요하다면 사용자에게 종목 선택을 유도하는 메시지를 표시할 수 있습니다.
+      // 예: alert('메시지를 보내려면 먼저 종목을 선택해주세요.');
     }
   }, [
     inputMessage, 
@@ -415,6 +419,10 @@ export function InputArea({
       if (scrollToBottom) {
         scrollToBottom();
       }
+    } else if (!selectedStock) {
+      console.log('[InputArea] 전송 버튼 클릭 - 종목 미선택으로 전송 불가');
+      // 필요하다면 사용자에게 종목 선택을 유도하는 메시지를 표시할 수 있습니다.
+      // 예: alert('메시지를 보내려면 먼저 종목을 선택해주세요.');
     }
   }, [selectedStock, inputMessage, isProcessing, onSendMessage, scrollToBottom]);
   
@@ -523,7 +531,7 @@ export function InputArea({
           {/* 전송 아이콘 */}
           <SendButton
             onClick={handleSendButtonClick}
-            disabled={!selectedStock || !inputMessage.trim()}
+            disabled={isProcessing || !inputMessage.trim() || !selectedStock}
             isProcessing={isProcessing}
           />
         </div>

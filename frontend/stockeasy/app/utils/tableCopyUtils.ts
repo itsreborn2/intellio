@@ -1,10 +1,17 @@
-import html2canvas from 'html2canvas';
+// @ts-ignore
+import domtoimage from 'dom-to-image-more';
 
 interface CopyTableOptions {
   copyrightText?: string;
   footerStyle?: Partial<CSSStyleDeclaration>;
   scale?: number;
   backgroundColor?: string;
+  watermark?: {
+    text?: string;
+    opacity?: number;
+    fontSize?: string;
+    color?: string;
+  };
 }
 
 /**
@@ -59,7 +66,13 @@ export const copyTableAsImage = async (
       color: '#718096'
     },
     scale: 2,
-    backgroundColor: '#ffffff'
+    backgroundColor: '#ffffff',
+    watermark: {
+      text: '스탁이지\nby (주)인텔리오',
+      opacity: 0.08, // 10% 불투명도 (매우 흐리게)
+      fontSize: '24px',
+      color: '#000000'
+    }
   };
   
   // 사용자 옵션과 기본 옵션 병합
@@ -218,6 +231,37 @@ export const copyTableAsImage = async (
     
     container.appendChild(tableClone);
     
+    // 워터마크 추가 (중앙에 반투명하게 표시)
+    if (mergedOptions.watermark && mergedOptions.watermark.text) {
+      const watermarkContainer = document.createElement('div');
+      
+      // 워터마크 컨테이너 스타일 설정
+      watermarkContainer.style.position = 'absolute';
+      watermarkContainer.style.top = '0';
+      watermarkContainer.style.left = '0';
+      watermarkContainer.style.width = '100%';
+      watermarkContainer.style.height = '100%';
+      watermarkContainer.style.display = 'flex';
+      watermarkContainer.style.justifyContent = 'center';
+      watermarkContainer.style.alignItems = 'center';
+      watermarkContainer.style.pointerEvents = 'none'; // 클릭 이벤트 무시
+      watermarkContainer.style.zIndex = '10';
+      
+      // 워터마크 텍스트 요소 생성
+      const watermark = document.createElement('div');
+      watermark.style.opacity = String(mergedOptions.watermark.opacity || 0.1);
+      watermark.style.fontSize = mergedOptions.watermark.fontSize || '24px';
+      watermark.style.fontWeight = 'bold';
+      watermark.style.color = mergedOptions.watermark.color || '#000000';
+      watermark.style.transform = 'rotate(-30deg)'; // 비스듬히 표시
+      watermark.style.whiteSpace = 'pre-line'; // 줄바꿈 허용
+      watermark.style.textAlign = 'center';
+      watermark.textContent = mergedOptions.watermark.text;
+      
+      watermarkContainer.appendChild(watermark);
+      container.appendChild(watermarkContainer);
+    }
+    
     // 구분선 및 저작권 정보 추가
     if (mergedOptions.copyrightText) {
       const footer = document.createElement('div');
@@ -245,46 +289,68 @@ export const copyTableAsImage = async (
     container.style.position = 'absolute';
     container.style.left = '-9999px';
     
-    // 테이블을 이미지로 변환
-    const canvas = await html2canvas(container, {
-      scale: mergedOptions.scale || 2, // 고해상도 이미지를 위한 스케일
-      backgroundColor: mergedOptions.backgroundColor || '#ffffff',
-      logging: false
+    // --- 텍스트 위치 조정 시작 ---
+    const textElements = container.querySelectorAll('td, th, span, p, div, caption'); // 텍스트를 포함할 수 있는 주요 요소 선택
+    textElements.forEach(el => {
+      // HTMLElement 타입인지 확인하고 style 속성에 접근
+      if (el instanceof HTMLElement) {
+        el.style.position = 'relative';
+        el.style.top = '-5px'; // 텍스트를 위로 5px 이동
+      }
     });
+    // --- 텍스트 위치 조정 끝 ---
     
+    // dom-to-image-more 사용
+    const dataUrl = await domtoimage.toPng(container, {
+      // scale 옵션은 dom-to-image-more에서 직접 지원하지 않음
+      // 필요 시 후처리로 크기 조절 필요
+      bgcolor: mergedOptions.backgroundColor, // backgroundColor -> bgcolor
+      width: container.scrollWidth, // 캡처 영역 너비 명시
+      height: container.scrollHeight, // 캡처 영역 높이 명시
+      style: {
+        // 렌더링 전 스타일 강제 적용 (폰트 로딩 등)
+        transform: 'scale(1)', // 스케일 초기화
+        transformOrigin: 'top left',
+      }
+    });
+
     // 임시 컨테이너 제거
     document.body.removeChild(container);
     
     // 이미지를 클립보드에 복사
-    canvas.toBlob(async (blob) => {
-      if (!blob) {
-        console.error('이미지 생성 실패');
-        return;
-      }
+    const blob = await fetch(dataUrl).then(res => res.blob());
+    if (!blob) {
+      console.error('이미지 생성 실패');
+      return;
+    }
+    
+    try {
+      // 클립보드에 이미지 복사
+      const item = new ClipboardItem({ 'image/png': blob });
+      await navigator.clipboard.write([item]);
       
-      try {
-        // 클립보드에 이미지 복사
-        const item = new ClipboardItem({ 'image/png': blob });
-        await navigator.clipboard.write([item]);
-        
-        // 성공 메시지 표시
-        document.body.removeChild(loadingToast);
-        const successToast = document.createElement('div');
-        successToast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
-        successToast.textContent = `${tableName} 이미지가 클립보드에 복사되었습니다.`;
-        document.body.appendChild(successToast);
-        
-        // 3초 후 메시지 제거
-        setTimeout(() => {
-          document.body.removeChild(successToast);
-        }, 3000);
-      } catch (error) {
-        console.error('클립보드 복사 실패:', error);
-        alert('클립보드 복사에 실패했습니다. 브라우저 권한을 확인해주세요.');
-      }
-    });
+      // 성공 메시지 표시
+      document.body.removeChild(loadingToast);
+      const successToast = document.createElement('div');
+      successToast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+      successToast.textContent = `${tableName} 이미지가 클립보드에 복사되었습니다.`;
+      document.body.appendChild(successToast);
+      
+      // 3초 후 메시지 제거
+      setTimeout(() => {
+        document.body.removeChild(successToast);
+      }, 3000);
+    } catch (error) {
+      console.error('클립보드 복사 실패:', error);
+      alert('클립보드 복사에 실패했습니다. 브라우저 권한을 확인해주세요.');
+    }
   } catch (error) {
     console.error('이미지 생성 실패:', error);
     alert('이미지 생성에 실패했습니다.');
+  } finally {
+    // 로딩 메시지 제거 (오류 발생 시에도 제거)
+    if (document.body.contains(loadingToast)) {
+      document.body.removeChild(loadingToast);
+    }
   }
 };

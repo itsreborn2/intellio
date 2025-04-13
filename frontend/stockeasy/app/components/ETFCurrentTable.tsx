@@ -255,7 +255,7 @@ export default function ETFCurrentTable() {
       }
       
       // CSV 파일 로드
-      const response = await fetch(`/requestfile/rs_etf/${ticker}.csv`);
+      const response = await fetch(`/requestfile/rs_etf/${ticker}.csv?t=${Date.now()}`);
       if (!response.ok) {
         console.error(`${ticker} CSV 파일을 불러오는데 실패했습니다: ${response.status}`);
         return [];
@@ -401,7 +401,7 @@ export default function ETFCurrentTable() {
         for (const availableTicker of availableTickers) {
           // 해당 티커의 CSV 파일을 로드하여 종목명 확인
           try {
-            const response = await fetch(`/requestfile/rs_etf/${availableTicker}.csv`);
+            const response = await fetch(`/requestfile/rs_etf/${availableTicker}.csv?t=${Date.now()}`);
             if (response.ok) {
               const csvText = await response.text();
               const result = Papa.parse(csvText, { header: true });
@@ -659,7 +659,7 @@ export default function ETFCurrentTable() {
       
       try {
         // ETF 현재가 데이터 파일 경로 - 구글 드라이브 동기화 시스템과 일치
-        const filePath = `${ETF_FILES.currentPrice.path}/${ETF_FILES.currentPrice.fileName}`;
+        const filePath = `${ETF_FILES.currentPrice.path}/${ETF_FILES.currentPrice.fileName}?t=${Date.now()}`;
         
         console.log('파일 경로:', filePath);
         

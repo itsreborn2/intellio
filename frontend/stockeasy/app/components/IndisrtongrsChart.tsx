@@ -83,6 +83,7 @@ export default function IndustryCharts() {
   const [selectedStocksChartMap, setSelectedStocksChartMap] = useState<Record<string, CandleData[]>>({});
   const [processedStocks, setProcessedStocks] = useState<string[]>([]);
   const [selectedStockCodes, setSelectedStockCodes] = useState<string[]>([]);
+  const [isInitialLoading, setIsInitialLoading] = useState(true); // 초기 로딩 상태 추가
   
   useEffect(() => {
     // 초기 ETF 정보 설정
@@ -94,12 +95,13 @@ export default function IndustryCharts() {
   
   // 모든 ETF 데이터 로드 함수
   const loadAllETFData = async () => {
+    setIsInitialLoading(true); // 로딩 시작 시 상태 설정
     try {
       // 선택된 종목 코드 초기화
       setSelectedStockCodes([]);
       
       // 20malist.csv 파일 로드
-      const response = await fetch('/requestfile/20ma_list/20malist.csv');
+      const response = await fetch(`/requestfile/20ma_list/20malist.csv?t=${Date.now()}`); // 타임스탬프 추가
       const csvText = await response.text();
       
       // CSV 파싱
@@ -182,7 +184,10 @@ export default function IndustryCharts() {
       return filteredRows;
     } catch (error) {
       console.error('20malist.csv 파일 로드 오류:', error);
-      return [];
+      setEtfInfoList([]); // 오류 발생 시 목록 비우기
+      // return []; // 이전 코드 주석 처리 또는 삭제
+    } finally {
+      setIsInitialLoading(false); // 로딩 완료 (성공/실패 무관)
     }
   };
   
@@ -226,10 +231,10 @@ export default function IndustryCharts() {
         while (true) {
           try {
             // 파일이 존재하는지 확인하기 위해 HEAD 요청 시도
-            const testResponse = await fetch(`/requestfile/etf_indiestocklist/file_${index}.csv`, { method: 'HEAD' });
+            const testResponse = await fetch(`/requestfile/etf_indiestocklist/file_${index}.csv?t=${Date.now()}`, { method: 'HEAD' }); // 타임스탬프 추가
             if (testResponse.ok) {
               // 파일이 존재하면 목록에 추가
-              const response = await fetch(`/requestfile/etf_indiestocklist/file_${index}.csv`);
+              const response = await fetch(`/requestfile/etf_indiestocklist/file_${index}.csv?t=${Date.now()}`); // 타임스탬프 추가
               const text = await response.text();
               const firstLine = text.split('\n')[0];
               if (firstLine) {
@@ -274,7 +279,7 @@ export default function IndustryCharts() {
   const listDirectoryFiles = async (folderPath: string): Promise<string[]> => {
     try {
       // file_list.json 파일에서 파일 목록 가져오기
-      const response = await fetch(`${folderPath}/file_list.json`);
+      const response = await fetch(`${folderPath}/file_list.json?t=${Date.now()}`); // 타임스탬프 추가
       
       if (!response.ok) {
         throw new Error(`파일 목록을 가져오는데 실패했습니다: ${response.status} ${response.statusText}`);
@@ -446,7 +451,7 @@ export default function IndustryCharts() {
       // 각 종목별로 차트 데이터 로드
       for (const stock of topStocks) {
         // 파일 경로 수정: 종목코드_종목명_RS값.csv 형식에 맞게 변경
-        const csvFilePath = `/requestfile/etf_indiestocklist/${stock.code}_${stock.name}_${stock.rsValue}.csv`;
+        const csvFilePath = `/requestfile/etf_indiestocklist/${stock.code}_${stock.name}_${stock.rsValue}.csv?t=${Date.now()}`; // 타임스탬프 추가
         
         try {
           const response = await fetch(csvFilePath);
@@ -492,7 +497,7 @@ export default function IndustryCharts() {
       }
       
       // ETF 차트 데이터 로드
-      const etfCsvFilePath = `/requestfile/rs_etf/${code}.csv`;
+      const etfCsvFilePath = `/requestfile/rs_etf/${code}.csv?t=${Date.now()}`; // 타임스탬프 추가
       let etfChartData: CandleData[] = [];
       
       try {
@@ -569,7 +574,7 @@ export default function IndustryCharts() {
     await Promise.all(
       tickers.map(async (ticker) => {
         try {
-          const response = await fetch(`/requestfile/rs_etf/${ticker}.csv`);
+          const response = await fetch(`/requestfile/rs_etf/${ticker}.csv?t=${Date.now()}`); // 타임스탬프 추가
           if (response.ok) {
             const csvText = await response.text();
             const result = Papa.parse(csvText, { header: true });
@@ -949,77 +954,88 @@ export default function IndustryCharts() {
         <p className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)'}}>20일 이동평균선 위에 10일 이상 유지중인 섹터별 ETF중 단기 RS_1M(한달)의 값이 90 이상의 대표종목 차트. 유지일이 긴 섹터 우선 정렬.</p>
       </div>
       
-      {etfInfoList.length === 0 ? (
+      {/* 로딩 상태 표시 */}
+      {isInitialLoading && (
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
+          <span className="ml-4 text-gray-500">데이터 로딩 중...</span>
         </div>
-      ) : (
-        <div className="flex flex-col gap-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {etfGrid.map((etf, etfIndex) => (
-              <div key={etfIndex}>
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <div className="bg-[#D8EFE9] px-3 py-1 border border-[#BBDCD3] flex justify-between items-baseline" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
-                      <div className="flex items-baseline">
-                        <span 
-                          className="py-0.5 rounded bg-blue-100 text-blue-800 mr-1"
-                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
-                        >
-                          {etf.섹터 || ''}
-                        </span>
-                        <span className="font-medium mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{etf.종목명}</span>
-                        <span 
-                          className={`py-0.5 rounded ${parseFloat(etf.etfChangePercent.replace('%', '')) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
-                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
-                        >
-                          {etf.etfChangePercent} {/* CSV 원본 값 직접 표시 */}
-                        </span>
-                      </div>
-                      <span 
-                        className={`py-0.5 rounded bg-[#D8EFE9] text-teal-800`}
-                        style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
-                      >
-                        {getStatusText(etf)}
-                      </span>
-                    </div>
-                    
-                    {etf.selectedStocks && etf.selectedStocks.slice(0, 2).map((stock, stockIndex) => (
-                      <div key={stockIndex}>
-                        {/* 종목 헤더 */}
-                        <div className="bg-gray-100 px-3 py-1 border border-t-0 border-gray-200 flex justify-between items-baseline">
-                          <div className="flex items-baseline">
-                            <span className="font-medium mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{stock.name}</span>
-                            <span 
-                              className={`px-0 py-0.5 rounded ${calculateStockChangePercent(stock) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
-                              style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
-                            >
-                              {calculateStockChangePercent(stock) >= 0 ? '+' : ''}{calculateStockChangePercent(stock).toFixed(2)}%
-                            </span>
-                          </div>
-                          <div className="flex items-baseline">
-                            <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
-                            <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{stock.rsValue}</span>
-                          </div>
-                        </div>
-                        <div className="border border-t-0 border-gray-200" style={{ borderRadius: stockIndex === Math.min((etf.selectedStocks?.length || 0) - 1, 1) ? '0 0 0.375rem 0.375rem' : '0', overflow: 'hidden' }}>
-                          <ChartComponent
-                            data={stock.chartData || []}
-                            height={300}
-                            width="100%"
-                            showVolume={true}
-                            showMA20={true}
-                            title={`${stock.name}`}
-                            parentComponent="IndisrtongrsChart"
-                          />
-                        </div>
-                      </div>
-                    ))}
+      )}
+
+      {/* 로딩 완료 후 데이터 없음 메시지 표시 */}
+      {!isInitialLoading && etfInfoList.length === 0 && (
+        <div className="text-center text-gray-500 text-sm sm:text-base px-4 py-6">
+          <p>20일 이동평균선 위 10일 이상 유지 섹터 없음.</p>
+          <p className="mt-1">시장 상황 개선 후 다시 확인해주세요.</p>
+        </div>
+      )}
+
+      {/* 로딩 완료 후 데이터 있음: 차트 렌더링 */}
+      {!isInitialLoading && etfInfoList.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {etfGrid.map((etf, index) => (
+            <div key={index} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow hover:shadow-md transition-shadow duration-200">
+            <div className="flex flex-col gap-4">
+              <div>
+                <div className="bg-[#D8EFE9] px-3 py-1 border border-[#BBDCD3] flex justify-between items-baseline" style={{ borderRadius: '0.375rem 0.375rem 0 0' }}>
+                  <div className="flex items-baseline">
+                    <span 
+                      className="py-0.5 rounded bg-blue-100 text-blue-800 mr-1"
+                      style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                    >
+                      {etf.섹터 || ''}
+                    </span>
+                    <span className="font-medium mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{etf.종목명}</span>
+                    <span 
+                      className={`py-0.5 rounded ${parseFloat(etf.etfChangePercent.replace('%', '')) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                      style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                    >
+                      {etf.etfChangePercent} {/* CSV 원본 값 직접 표시 */}
+                    </span>
                   </div>
+                  <span 
+                    className={`py-0.5 rounded bg-[#D8EFE9] text-teal-800`}
+                    style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                  >
+                    {getStatusText(etf)}
+                  </span>
                 </div>
+                
+                {etf.selectedStocks && etf.selectedStocks.slice(0, 2).map((stock, stockIndex) => (
+                  <div key={stockIndex}>
+                    {/* 종목 헤더 */}
+                    <div className="bg-gray-100 px-3 py-1 border border-t-0 border-gray-200 flex justify-between items-baseline">
+                      <div className="flex items-baseline">
+                        <span className="font-medium mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{stock.name}</span>
+                        <span 
+                          className={`px-0 py-0.5 rounded ${calculateStockChangePercent(stock) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                        >
+                          {calculateStockChangePercent(stock) >= 0 ? '+' : ''}{calculateStockChangePercent(stock).toFixed(2)}%
+                        </span>
+                      </div>
+                      <div className="flex items-baseline">
+                        <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+                        <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{stock.rsValue}</span>
+                      </div>
+                    </div>
+                    <div className="border border-t-0 border-gray-200" style={{ borderRadius: stockIndex === Math.min((etf.selectedStocks?.length || 0) - 1, 1) ? '0 0 0.375rem 0.375rem' : '0', overflow: 'hidden' }}>
+                      <ChartComponent
+                        data={stock.chartData || []}
+                        height={300}
+                        width="100%"
+                        showVolume={true}
+                        showMA20={true}
+                        title={`${stock.name}`}
+                        parentComponent="IndisrtongrsChart"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
+          ))}
         </div>
       )}
     </div>
