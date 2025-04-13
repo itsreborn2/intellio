@@ -185,7 +185,7 @@ export default function ETFCurrentTable() {
   const [etfStockList, setEtfStockList] = useState<{[key: string]: Array<{name: string, rs: string}>}>({});
   
   // 테이블 복사 기능을 위한 ref 생성
-  const tableId = 'etf-current-table';
+  const tableRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
   // 사용 가능한 티커 목록 (rs_etf 폴더에 있는 파일 이름)
@@ -1204,17 +1204,17 @@ export default function ETFCurrentTable() {
         </div>
         <div className="flex items-center space-x-2">
           <span className="text-xs text-gray-600" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 섹터/ETF 등락율</span>
-          <TableCopyButton
-            tableId={tableId}
+          {/* <TableCopyButton
+            tableRef={tableRef}
             headerRef={headerRef}
             tableName="ETF 현재가"
             buttonText="이미지 저장"
             data-component-name="TableCopyButton"
-          />
+          /> */}
         </div>
       </div>
       
-      <div id={tableId} className="overflow-x-auto">
+      <div id="etf-current-table" className="overflow-x-auto">
         <table className="min-w-full border border-gray-200 table-fixed">
           <thead className="bg-gray-100">
             <tr>
