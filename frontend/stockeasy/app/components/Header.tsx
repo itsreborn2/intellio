@@ -125,7 +125,7 @@ const Header: React.FC = () => {
           {isUserLoggedIn && (
             <div className="flex items-center gap-1">
               <MessageSquare size={18} className="text-gray-600" />
-              <Badge variant="outline" className="rounded-full py-0 h-5 bg-sky-50 border-sky-200">
+              <Badge variant="outline" className="rounded-md py-0 h-5 bg-[#D8EFE9] border-[#D8EFE9]" style={{ borderRadius: '6px' }}>
                 {isQuestionLoading ? "..." : `${questionSummary?.total_questions} / 30`}
               </Badge>
             </div>

@@ -86,19 +86,24 @@ export const copyTableAsImage = async (
     container.style.left = '10px';
     container.style.zIndex = '9999';
     container.style.width = 'fit-content'; // 내용에 맞게 자동 조정
-    container.style.maxWidth = '480px'; // 최대 너비 제한
+    container.style.maxWidth = '600px'; // 최대 너비를 늘려서 우측 잘림 방지
     container.style.height = 'fit-content'; // 내용에 맞게 자동 조정
     container.style.backgroundColor = mergedOptions.backgroundColor || '#ffffff';
-    container.style.padding = '10px';
+    container.style.padding = '0px 20px 20px 0px'; // 좌측 패딩 제거, 우측과 하단 패딩 추가로 잘림 방지
+    container.style.margin = '0px'; // 모든 마진 제거
     container.style.boxSizing = 'border-box';
     container.style.fontFamily = 'Arial, sans-serif';
     container.style.overflow = 'visible'; // 스크롤 방지
-    container.style.border = '1px solid #ccc'; // 디버깅을 위한 테두리
+    container.style.border = 'none'; // 디버깅을 위한 테두리 제거
+    container.style.paddingBottom = '20px'; // 하단 여백 추가로 이미지 잘림 방지
+    container.style.paddingLeft = '0px'; // 좌측 여백 제거로 테이블 시작점에 맞춤
     
     // 테이블 컨테이너 생성
     const tableContainer = document.createElement('div');
     tableContainer.style.width = 'fit-content'; // 내용에 맞게 자동 조정
     tableContainer.style.overflow = 'visible'; // 스크롤 방지
+    tableContainer.style.padding = '0px'; // 테이블 컨테이너 패딩 제거
+    tableContainer.style.margin = '0px'; // 테이블 컨테이너 마진 제거
     
     // 헤더 복제
     const headerClone = headerRef.current.cloneNode(true) as HTMLElement;
@@ -108,11 +113,11 @@ export const copyTableAsImage = async (
     headerClone.style.marginBottom = '0'; // 헤더 아래 여백 제거
     headerClone.style.paddingBottom = '0'; // 헤더 아래 패딩 제거
     
-    // 헤더 내 제목 텍스트 크기 조정
+    // 헤더 내 제목 텍스트 크기 및 중앙 정렬
     const headerTitles = headerClone.querySelectorAll('h2');
     headerTitles.forEach(title => {
       (title as HTMLElement).style.fontSize = '11px';
-      (title as HTMLElement).style.fontWeight = 'bold';
+      (title as HTMLElement).style.textAlign = 'center'; // 헤더 텍스트 중앙 정렬
     });
 
     // 테이블 행의 텍스트 상하 가운데 정렬
@@ -246,6 +251,21 @@ export const copyTableAsImage = async (
     const allCells = tableClone.querySelectorAll('td');
     allCells.forEach(cell => {
       (cell as HTMLElement).style.verticalAlign = 'middle';
+    });
+    
+    // 테이블 헤더 셀 중앙 정렬
+    const headerCells = tableClone.querySelectorAll('thead tr th');
+    headerCells.forEach(cell => {
+      (cell as HTMLElement).style.textAlign = 'center !important'; // 헤더 셀 텍스트 중앙 정렬 (우선순위 높임)
+      (cell as HTMLElement).style.display = 'table-cell';
+      (cell as HTMLElement).style.width = 'auto';
+      (cell as HTMLElement).style.cssText += 'text-align: center !important; justify-content: center !important; align-items: center !important;'; // 추가적인 중앙 정렬 속성
+      // 내부 요소에도 중앙 정렬 적용
+      const innerElements = cell.querySelectorAll('*');
+      innerElements.forEach(el => {
+        (el as HTMLElement).style.textAlign = 'center !important';
+        (el as HTMLElement).style.display = 'inline-block';
+      });
     });
     
     // 복사된 테이블의 각 셀에 스타일 적용 (수직 정렬 및 텍스트 위치 조정)

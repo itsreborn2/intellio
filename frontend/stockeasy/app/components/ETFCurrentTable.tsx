@@ -174,9 +174,9 @@ export default function ETFCurrentTable() {
   // 상태 관리
   const [csvData, setCsvData] = useState<{ headers: string[]; groupedData: GroupedData; errors: any[] }>({ headers: [], groupedData: {}, errors: [] });
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<string>('');
-  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [error, setError] = useState<string | null>(null);  
+  const [sortKey, setSortKey] = useState<string>('산업');  // 정렬 상태 - 기본값으로 산업 컬럼 오름차순 설정
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [stockPriceData, setStockPriceData] = useState<StockPriceData>({});
   const [tickerMappingInfo, setTickerMappingInfo] = useState<{
     tickerMap: {[key: string]: string},
@@ -185,7 +185,7 @@ export default function ETFCurrentTable() {
   const [etfStockList, setEtfStockList] = useState<{[key: string]: Array<{name: string, rs: string}>}>({});
   
   // 테이블 복사 기능을 위한 ref 생성
-  const tableRef = useRef<HTMLDivElement>(null);
+  const tableId = 'etf-current-table';
   const headerRef = useRef<HTMLDivElement>(null);
 
   // 사용 가능한 티커 목록 (rs_etf 폴더에 있는 파일 이름)
@@ -761,11 +761,16 @@ export default function ETFCurrentTable() {
 
   // 정렬 처리 함수
   const handleSort = (key: string) => {
+    console.log(`정렬 시도: 컴럼 = ${key}, 현재 정렬키 = ${sortKey}, 현재 방향 = ${sortDirection}`);
+    
     if (sortKey === key) {
-      // 같은 컬럼을 다시 클릭한 경우, 정렬 방향 변경
-      setSortDirection(sortDirection === 'asc' ? 'desc' : sortDirection === 'desc' ? null : 'asc');
+      // 같은 컴럼을 다시 클릭한 경우, 오름차순과 내림차순만 반복하도록 수정
+      const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      console.log(`같은 컴럼 클릭: 정렬 방향 변경 ${sortDirection} -> ${newDirection}`);
+      setSortDirection(newDirection);
     } else {
-      // 다른 컬럼을 클릭한 경우, 해당 컬럼으로 오름차순 정렬
+      // 다른 컴럼을 클릭한 경우, 해당 컴럼으로 오름차순 정렬
+      console.log(`새 컴럼 클릭: 정렬키 변경 ${sortKey} -> ${key}, 방향 = asc`);
       setSortKey(key);
       setSortDirection('asc');
     }
@@ -777,25 +782,185 @@ export default function ETFCurrentTable() {
       return csvData.groupedData;
     }
     
-    const sortedGroupedData: GroupedData = {};
+    // 마켓 행 반드시 복사하여 사용
+    const marketGroup = [...(csvData.groupedData['마켓'] || [])];
+    
+    // 1. 마켓을 포함한 모든 산업 그룹들의 데이터를 복사
+    const allIndustries: GroupedData = {};
     for (const industry in csvData.groupedData) {
-      sortedGroupedData[industry] = [...csvData.groupedData[industry]].sort((a, b) => {
-        let aValue = a[sortKey];
-        let bValue = b[sortKey];
-        
-        // 숫자 문자열을 숫자로 변환
-        if (!isNaN(parseFloat(aValue)) && !isNaN(parseFloat(bValue))) {
-          aValue = parseFloat(aValue);
-          bValue = parseFloat(bValue);
-        }
-        
-        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-        return 0;
-      });
+      allIndustries[industry] = [...csvData.groupedData[industry]];
     }
     
-    return sortedGroupedData;
+    // 2. 단순한 행 정렬 함수 정의
+    const sortRow = (a: any, b: any) => {
+      let aValue = a[sortKey];
+      let bValue = b[sortKey];
+      
+      // 포지션 컴럼은 특별 처리
+      if (sortKey === '포지션') {
+        // 포지션 값은 데이터에 직접 존재하지 않음
+        // 티커를 사용하여 포지션 값을 가져와야 함
+        const aTicker = a['티커'];
+        const bTicker = b['티커'];
+        
+        console.log('포지션 정렬을 위한 티커:', aTicker, bTicker);
+        
+        // 포지션 값 추출 및 처리 - getPositionStatusText 함수 대신 직접 구현
+        const extractPositionValue = (ticker: string): number => {
+          if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) return 0;
+          
+          // 현재가와 20일 이동평균선 데이터 가져오기
+          const priceData = stockPriceData[ticker];
+          if (!priceData || priceData.length < 20) {
+            return 0;
+          }
+          
+          const currentPrice = priceData[priceData.length - 1].price;
+          const ma20 = priceData.slice(-20).reduce((acc, val) => acc + val.price, 0) / 20;
+          
+          // 현재 상태 (20일선 위 또는 아래)
+          const isAboveMA = currentPrice > ma20;
+          
+          // 유지 기간 계산 - 직접 구현
+          let duration = 0;
+          try {
+            if (!priceData || priceData.length < 2) return isAboveMA ? 1 : -1;
+            
+            // 역순으로 데이터 확인
+            const reversedData = [...priceData].reverse();
+            const ma20Values = [];
+            
+            // 20일 이동평균 계산
+            for (let i = 0; i < reversedData.length - 19; i++) {
+              const slice = reversedData.slice(i, i + 20);
+              const ma = slice.reduce((sum, item) => sum + item.price, 0) / 20;
+              ma20Values.push({
+                price: reversedData[i].price,
+                ma20: ma,
+                date: reversedData[i].date,
+                isAbove: reversedData[i].price > ma
+              });
+            }
+            
+            // 현재 상태
+            const currentStatus = ma20Values[0].isAbove;
+            
+            // 연속 유지 기간 계산
+            duration = 1; // 현재 일자 포함
+            for (let i = 1; i < ma20Values.length; i++) {
+              if (ma20Values[i].isAbove === currentStatus) {
+                duration++;
+              } else {
+                break;
+              }
+            }
+            
+            // 이탈이면 음수로 처리
+            if (!currentStatus) {
+              duration = -duration;
+            }
+          } catch (error) {
+            console.error('포지션 기간 계산 오류:', error);
+            duration = isAboveMA ? 1 : -1; // 오류 발생 시 기본값
+          }
+          
+          console.log(`티커 ${ticker}의 포지션 값:`, duration);
+          return duration;
+        };
+        
+        const aPositionValue = extractPositionValue(aTicker);
+        const bPositionValue = extractPositionValue(bTicker);
+        
+        console.log(`비교: ${aPositionValue} vs ${bPositionValue}, 정렬방향: ${sortDirection}`);
+        
+        if (aPositionValue < bPositionValue) return sortDirection === 'asc' ? -1 : 1;
+        if (aPositionValue > bPositionValue) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      }
+      // 숫자 문자열을 숫자로 변환 (일반 컴럼)
+      else if (!isNaN(parseFloat(aValue)) && !isNaN(parseFloat(bValue))) {
+        aValue = parseFloat(aValue);
+        bValue = parseFloat(bValue);
+      }
+      
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    };
+    
+    // 3. 산업 그룹을 등락률 평균 기준으로 정렬 (직접 계산)
+    // 산업 컴럼 외 다른 컴럼을 정렬할 때는 산업그룹 순서는 유지하고 그룹 내부만 정렬
+    if (sortKey === '산업') {
+      // 산업 컴럼을 클릭했을 때는 산업 그룹을 정렬
+
+      const industryAverages: Record<string, number> = {};
+      
+      // 각 산업의 등락률 평균값 계산
+      for (const industry in allIndustries) {
+        // 마켓을 제외한 산업만 평균 계산 (마켓은 항상 최상단에 고정)
+        if (industry !== '마켓') {
+          // 해당 산업의 모든 항목에 대해 등락률 평균 계산
+          let sum = 0;
+          let count = 0;
+          
+          allIndustries[industry].forEach((item: any) => {
+            const changeRate = item['등락율']; // '등락율' 기준으로 평균 계산
+            if (changeRate) {
+              const numValue = parseFloat(changeRate.replace('%', ''));
+              if (!isNaN(numValue)) {
+                sum += numValue;
+                count++;
+              }
+            }
+          });
+          
+          // 산업 평균 등락률 계산
+          industryAverages[industry] = count > 0 ? sum / count : 0;
+        }
+      }
+      
+      // 마켓을 제외한 산업 그룹만 정렬
+      const sortedIndustries = Object.keys(allIndustries)
+        .filter(industry => industry !== '마켓')
+        .sort((a, b) => {
+          const aAvg = industryAverages[a];
+          const bAvg = industryAverages[b];
+          
+          // sortDirection에 따라 산업 그룹 정렬 방향 변경
+          if (aAvg < bAvg) return sortDirection === 'asc' ? 1 : -1; 
+          if (aAvg > bAvg) return sortDirection === 'asc' ? -1 : 1;
+          return 0;
+        });
+      
+      // 정렬된 산업 순서대로 새 데이터 객체 생성 (마켓은 최상단 고정)
+      const sortedGroupedData: GroupedData = { '마켓': marketGroup };
+      
+      // 정렬된 산업 순서대로 그룹 추가
+      sortedIndustries.forEach(industry => {
+        sortedGroupedData[industry] = allIndustries[industry];
+      });
+      
+      return sortedGroupedData;
+    } else {
+      // 다른 컴럼을 클릭했을 때는 그룹 순서는 유지하고 그룹 내부만 정렬
+      
+      // 1. 산업 그룹 내부 정렬
+      for (const industry in allIndustries) {
+        allIndustries[industry].sort(sortRow);
+      }
+      
+      // 2. 마켓 그룹은 최상단에 고정
+      const sortedGroupedData: GroupedData = { '마켓': allIndustries['마켓'] };
+      
+      // 3. 기존 산업 순서를 유지하면서 그룹 내부만 정렬된 데이터 추가
+      Object.keys(csvData.groupedData)
+        .filter(industry => industry !== '마켓')
+        .forEach(industry => {
+          sortedGroupedData[industry] = allIndustries[industry];
+        });
+      
+      return sortedGroupedData;
+    }
   }, [csvData.groupedData, sortKey, sortDirection]);
 
   // 날짜 컬럼을 제외한 헤더 필터링
@@ -1040,16 +1205,16 @@ export default function ETFCurrentTable() {
         <div className="flex items-center space-x-2">
           <span className="text-xs text-gray-600" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 섹터/ETF 등락율</span>
           <TableCopyButton
-            tableRef={tableRef}
+            tableId={tableId}
             headerRef={headerRef}
-            tableName="ETF 현재가 테이블"
-            buttonText="이미지 복사"
-            data-component-name="ETFCurrentTable"
+            tableName="ETF 현재가"
+            buttonText="이미지 저장"
+            data-component-name="TableCopyButton"
           />
         </div>
       </div>
       
-      <div ref={tableRef} className="overflow-x-auto">
+      <div id={tableId} className="overflow-x-auto">
         <table className="min-w-full border border-gray-200 table-fixed">
           <thead className="bg-gray-100">
             <tr>
@@ -1144,32 +1309,30 @@ export default function ETFCurrentTable() {
                   height: '35px',
                   fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
                 }}
+                onClick={() => handleSort('포지션')}
               >
-                포지션
+                <div className="flex justify-center items-center">
+                  포지션
+                  {sortKey === '포지션' && (
+                    <span className="ml-1">
+                      {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                    </span>
+                  )}
+                </div>
               </th>
               {['20일선 이격', '돌파/이탈', '대표종목(RS)'].map((header) => (
                 <th
                   key={header}
                   scope="col"
-                  className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 hidden md:table-cell`}
+                  className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 hidden md:table-cell`}
                   style={{
-                    width: header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px',
+                    width: header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목(RS)' ? '380px' : '80px',
                     height: '35px',
                     fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
-                  }}
-                  onClick={() => {
-                    if (header !== '52주 차트' && header !== '20일선 기준가' && header !== '돌파/이탈' && header !== '포지션' && header !== '대표종목') {
-                      handleSort(header);
-                    }
                   }}
                 >
                   <div className="flex justify-center items-center">
                     {header}
-                    {header !== '52주 차트' && header !== '20일선 기준가' && header !== '돌파/이탈' && header !== '포지션' && header !== '대표종목' && sortKey === header && (
-                      <span className="ml-1">
-                        {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
-                      </span>
-                    )}
                   </div>
                 </th>
               ))}
@@ -1181,9 +1344,26 @@ export default function ETFCurrentTable() {
               const industryGroups: { [industry: string]: { rows: Record<string, any>[], firstRowIndex: number } } = {};
               let allRows: { industry: string, row: Record<string, any> }[] = [];
               
-              // 데이터 준비
-              orderedIndustries.forEach(industry => {
-                if (sortedData[industry]) {
+              // sortedData의 키를 직접 사용하여 정렬된 순서대로 데이터 추가
+              // 마켓은 항상 먼저 표시하고, 나머지는 sortedData의 키 순서대로 추가
+              const industriesToRender = Object.keys(sortedData);
+              
+              // 마켓을 먼저 추가
+              if (industriesToRender.includes('마켓')) {
+                const industry = '마켓';
+                industryGroups[industry] = { 
+                  rows: sortedData[industry], 
+                  firstRowIndex: allRows.length 
+                };
+                
+                sortedData[industry].forEach(row => {
+                  allRows.push({ industry, row });
+                });
+              }
+              
+              // 나머지 산업 그룹들을 sortedData 순서대로 추가
+              industriesToRender.forEach(industry => {
+                if (industry !== '마켓' && sortedData[industry]) {
                   industryGroups[industry] = { 
                     rows: sortedData[industry], 
                     firstRowIndex: allRows.length 

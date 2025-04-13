@@ -965,8 +965,8 @@ export default function IndustryCharts() {
       {/* 로딩 완료 후 데이터 없음 메시지 표시 */}
       {!isInitialLoading && etfInfoList.length === 0 && (
         <div className="text-center text-gray-500 text-sm sm:text-base px-4 py-6">
-          <p>20일 이동평균선 위 10일 이상 유지 섹터 없음.</p>
-          <p className="mt-1">시장 상황 개선 후 다시 확인해주세요.</p>
+          <p>20일 이동평균선 위 10일 이상 유지된 섹터와 RS가 90이상인 대표종목이 없습니다.</p>
+          <p className="mt-1">시장 환경이 좋지 않은 상태를 의미합니다.</p>
         </div>
       )}
 

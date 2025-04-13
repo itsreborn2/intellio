@@ -42,7 +42,11 @@ export function StockSuggestions({
     right: 0,
     width: isMobile ? '100%' : '100%',
     margin: isMobile ? '0 auto' : '0',
-    maxHeight: isMobile ? '300px' : '350px',
+    // 헤더 영역을 침범하지 않도록 최대 높이를 동적으로 계산
+    // 화면 높이의 40%를 최대로 하되, 모바일에서는 더 작게 설정
+    maxHeight: `calc(40vh - ${isMobile ? 80 : 100}px)`,
+    // 최소 높이도 설정하여 너무 작아지지 않도록 함
+    minHeight: isMobile ? '150px' : '200px',
     overflowY: 'auto',
     backgroundColor: 'white',
     border: '1px solid #ccc',
