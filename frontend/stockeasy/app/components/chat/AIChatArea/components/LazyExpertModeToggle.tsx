@@ -38,7 +38,7 @@ interface LazyExpertModeToggleProps {
 export function LazyExpertModeToggle({ expertMode, onChange }: LazyExpertModeToggleProps) {
   return (
     <Suspense fallback={<ExpertToggleFallback />}>
-      <ExpertModeToggle expertMode={expertMode} onChange={onChange} />
+      <ExpertModeToggle isExpertMode={expertMode} onToggle={() => onChange(!expertMode)} />
     </Suspense>
   );
 }

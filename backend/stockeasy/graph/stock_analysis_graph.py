@@ -251,20 +251,23 @@ class StockAnalysisGraph:
                 if session_id not in self.current_state:
                     self.current_state[session_id] = {}
                 
+                # streaming_callback 함수 제거 (직렬화 불가능)
+                serializable_state = {k: v for k, v in state.items() if k != 'streaming_callback'}
+                
                 # 처리 상태 복사
-                if 'processing_status' in state:
-                    self.current_state[session_id]['processing_status'] = state['processing_status'].copy()
+                if 'processing_status' in serializable_state:
+                    self.current_state[session_id]['processing_status'] = serializable_state['processing_status'].copy()
                 
                 # 기타 필요한 정보 추가
                 self.current_state[session_id]['last_updated'] = time.time()
                 self.current_state[session_id]['current_agent'] = agent_name
                 
                 # 에이전트 결과 저장 (있는 경우)
-                if 'agent_results' in state and agent_name in state['agent_results']:
+                if 'agent_results' in serializable_state and agent_name in serializable_state['agent_results']:
                     if 'agent_results' not in self.current_state[session_id]:
                         self.current_state[session_id]['agent_results'] = {}
                     
-                    self.current_state[session_id]['agent_results'][agent_name] = state['agent_results'][agent_name]
+                    self.current_state[session_id]['agent_results'][agent_name] = serializable_state['agent_results'][agent_name]
     
     def _build_graph(self, db: AsyncSession = None):
         """
@@ -401,8 +404,8 @@ class StockAnalysisGraph:
         def parallel_search_router(state: AgentState) -> str:
             """병렬 검색 이후 라우팅 결정"""
             # 로그에 전체 상태 출력 (디버깅용)
-            logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
-            logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
+            #logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
+            #logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
             
             # 타임스탬프 오류 재시작 플래그 확인 - 재시작 직후라면 knowledge_integrator로 바로 라우팅
             if state.get("restart_after_timestamp_error", False):
@@ -511,49 +514,74 @@ class StockAnalysisGraph:
 
     def _create_wrapped_process(self, agent_name: str, original_process):
         """
-        에이전트 process 메서드를 래핑하여 콜백 지원 추가
+        에이전트 프로세스를 래핑하여 상태 관리 및 콜백 처리를 추가합니다.
         
         Args:
             agent_name: 에이전트 이름
-            original_process: 원본 process 메서드
+            original_process: 원본 프로세스 함수
             
         Returns:
-            래핑된 process 메서드
+            래핑된 프로세스 함수
         """
         
         async def wrapped_process(state: Dict[str, Any]) -> Dict[str, Any]:
             # 에이전트 시작 콜백 실행
             await self._execute_callbacks("agent_start", agent_name, state)
             
-            # 처리 상태 업데이트 - 에이전트 시작
-            if 'processing_status' not in state:
-                state['processing_status'] = {}
-            state['processing_status'][agent_name] = "processing"
+            # 처리 상태 업데이트
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"][agent_name] = "processing"
             
-            # 원래 프로세스 실행
+            # 세션 ID로 현재 상태 저장 (진행 상황 추적용)
+            session_id = state.get("session_id")
+            if session_id:
+                async with self.state_lock:
+                    # 직렬화 가능한 상태만 저장
+                    serializable_state = {k: v for k, v in state.items() if k != 'streaming_callback'}
+                    self.current_state[session_id] = serializable_state.copy()
+            
+            # 전역 스트리밍 콜백이 있는지 확인하고 상태에 추가
+            if hasattr(self, '_streaming_callback') and self._streaming_callback and 'streaming_callback' not in state:
+                state['streaming_callback'] = self._streaming_callback
+                logger.info(f"[wrapped_process] {agent_name} 에이전트에 스트리밍 콜백 함수 추가: {self._streaming_callback.__name__ if hasattr(self._streaming_callback, '__name__') else '이름 없는 함수'}")
+            elif 'streaming_callback' in state and state['streaming_callback'] is None and hasattr(self, '_streaming_callback') and self._streaming_callback:
+                # 상태에 streaming_callback이 None으로 있는 경우 전역 콜백으로 대체
+                state['streaming_callback'] = self._streaming_callback
+                logger.info(f"[wrapped_process] {agent_name} 에이전트의 None 콜백을 전역 콜백으로 대체: {self._streaming_callback.__name__ if hasattr(self._streaming_callback, '__name__') else '이름 없는 함수'}")
+            elif 'streaming_callback' in state:
+                logger.info(f"[wrapped_process] {agent_name} 에이전트에 이미 콜백 함수가 있음: {state['streaming_callback'].__name__ if hasattr(state['streaming_callback'], '__name__') else '이름 없는 함수' if state['streaming_callback'] else 'None'}")
+            
             try:
+                # 원본 프로세스 호출
                 result = await original_process(state)
                 
-                # 처리 상태 업데이트 - 에이전트 완료
-                result['processing_status'][agent_name] = "completed"
+                # streaming_callback 함수 제거 (직렬화 불가능)
+                if 'streaming_callback' in result:
+                    del result['streaming_callback']
                 
-                # 에이전트 종료 콜백 실행
+                # 에이전트 완료 콜백 실행
                 await self._execute_callbacks("agent_end", agent_name, result)
+                
                 return result
             except Exception as e:
-                # 오류 발생 시 상태 업데이트
-                state['processing_status'][agent_name] = "error"
-                if 'errors' not in state:
-                    state['errors'] = []
-                state['errors'].append({
+                logger.error(f"에이전트 {agent_name} 처리 중 오류 발생: {str(e)}", exc_info=True)
+                state["processing_status"][agent_name] = "failed"
+                state["errors"] = state.get("errors", [])
+                state["errors"].append({
                     "agent": agent_name,
                     "error": str(e),
-                    "type": type(e).__name__
+                    "type": type(e).__name__,
+                    "timestamp": datetime.now()
                 })
                 
-                # 에이전트 종료 콜백 실행 (오류 상태)
-                await self._execute_callbacks("agent_end", agent_name, state)
-                raise e
+                # streaming_callback 함수 제거 (직렬화 불가능)
+                if 'streaming_callback' in state:
+                    del state['streaming_callback']
+                
+                # 에이전트 오류 콜백 실행
+                await self._execute_callbacks("agent_error", agent_name, state)
+                
+                raise
                 
         return wrapped_process
 
@@ -628,17 +656,17 @@ class StockAnalysisGraph:
                            stock_code: Optional[str] = None, stock_name: Optional[str] = None,
                            **kwargs) -> Dict[str, Any]:
         """
-        사용자 쿼리를 처리하여 결과를 반환합니다.
-        
+        사용자 쿼리를 처리하는 메인 메서드
+
         Args:
-            query: 사용자 질문
+            query: 사용자 쿼리
             session_id: 세션 ID (선택적)
             stock_code: 종목 코드 (선택적)
             stock_name: 종목명 (선택적)
-            **kwargs: 추가 매개변수
-            
+            **kwargs: 추가 인자
+
         Returns:
-            처리 결과
+            처리 결과를 담은 딕셔너리
         """
         try:
             if not self.graph:
@@ -650,7 +678,15 @@ class StockAnalysisGraph:
             chat_session_id = kwargs.get("chat_session_id", None)
             logger.info(f"[process_query] chat_session_id: {chat_session_id}")
 
-            # 초기 상태 설정
+            # 스트리밍 콜백 함수 추출 및 클래스 멤버로 저장
+            streaming_callback = kwargs.get("streaming_callback")
+            if streaming_callback and callable(streaming_callback):
+                logger.info(f"[process_query] 스트리밍 콜백 함수가 전달되었습니다: {streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else '이름 없는 함수'}")
+                self._streaming_callback = streaming_callback  # 클래스 멤버로 저장
+            
+            # 초기 상태 설정 (streaming_callback을 제외한 다른 모든 키워드 인자 사용)
+            kwargs_copy = {k: v for k, v in kwargs.items() if k != "streaming_callback"}
+            
             initial_state: AgentState = {
                 "query": query,
                 "session_id": trace_id,
@@ -662,7 +698,7 @@ class StockAnalysisGraph:
                 "retrieved_data": {},  # 검색 결과를 담을 딕셔너리
                 "agent_results": {},   # 명시적으로 agent_results 초기화
                 "parallel_search_executed": False,  # 병렬 검색 실행 여부 초기화
-                **kwargs
+                **kwargs_copy  # streaming_callback을 제외한 나머지 인자
             }
             chat_history = kwargs.get("conversation_history", [])
             if chat_history:
@@ -695,6 +731,10 @@ class StockAnalysisGraph:
             # AgentState 타입에 conversation_history가 포함되도록 상태 관리
             # StateGraph 타입 제약 때문에 발생하는 문제 해결
             try:
+                # 주의: streaming_callback은 직렬화가 불가능하므로 
+                # _create_wrapped_process에서 각 에이전트 호출 시 추가됩니다.
+                # 여기서는 initial_state에 추가하지 않습니다.
+                
                 result = await self.graph.ainvoke(
                     initial_state,
                     config={

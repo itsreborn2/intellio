@@ -282,3 +282,6 @@ class AgentState(TypedDict, total=False):
 
     conversation_history: List[Dict[str, Any]]  # 과거 대화 이력
     context_analysis: Optional[ConversationContextAnalysisResult]  # 대화 컨텍스트 분석 결과
+    
+    # 스트리밍 콜백 함수 (비동기 함수 객체)
+    streaming_callback: Any         # 스트리밍 응답 콜백 함수

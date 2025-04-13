@@ -276,4 +276,4 @@ xxhash==3.5.0
 yarg==0.1.9
 yarl==1.18.3
 zstandard==0.23.0
-gspread==5.13.2
+gspread==6.2.0

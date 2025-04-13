@@ -204,12 +204,12 @@ function AIChatAreaContent() {
     },
     {
       stock: { 
-        value: '373220', 
+        value: '049800', 
         label: '우진플라임', 
         stockName: '우진플라임', 
-        stockCode: '373220' 
+        stockCode: '049800' 
       },
-      updateInfo: '발전소 수주 확대 소식'
+      updateInfo: '월별 전망, 잠정치, 실적 등의 통계, 앞으로 전망'
     }
   ];
 
@@ -271,7 +271,7 @@ function AIChatAreaContent() {
   // 메시지 전송 핸들러
   const handleSendMessage = async () => {
     console.log(`[AIChatAreaContent] 메시지 전송 요청 : ${stockState.searchTerm.trim()}`);
-    
+
     // 선택된 종목과 입력 메시지 확인
     if (!state.selectedStock || !stockState.searchTerm.trim()) {
       console.error('종목이 선택되지 않았거나 메시지가 없습니다.');
@@ -281,6 +281,16 @@ function AIChatAreaContent() {
     try {
       // 사용자 메시지 전송 플래그 설정
       setIsUserSending(true);
+
+      // 메세지 전송 요청할때, 젤 아래로 한번 내려주자.
+      if (messageListRef.current?.scrollToBottom) {
+        messageListRef.current.scrollToBottom();
+        
+        // 추가 안정성을 위해 약간의 지연 후 한 번 더 실행
+        setTimeout(() => {
+          messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom();
+        }, 100);
+      }
       
       // useMessageProcessing 훅의 sendMessage 함수 호출
       await sendMessage(
@@ -297,27 +307,10 @@ function AIChatAreaContent() {
         addRecentStock(state.selectedStock);
       }
       
-      // 메시지 목록 맨 아래로 스크롤
-      if (messageListRef.current?.scrollToBottom) {
-        messageListRef.current.scrollToBottom();
-      }
+
       
       console.log('[AIChatAreaContent] 메시지 전송 완료');
-      
-      // 메시지 전송 후 상태 메시지를 찾아 스크롤 이동 (잠시 지연 후 실행)
-      setTimeout(() => {
-        // 최신 status 메시지 찾기
-        const statusMessage = state.messages.find(msg => msg.role === 'status');
-        if (statusMessage) {
-          statusMessageIdRef.current = statusMessage.id;
-          
-          // 상태 메시지로 스크롤 이동을 위한 이벤트 발생
-          const scrollEvent = new CustomEvent('scrollToStatusMessage', {
-            detail: { messageId: statusMessage.id }
-          });
-          window.dispatchEvent(scrollEvent);
-        }
-      }, 100);
+
       
       // 전송 플래그 리셋 (AI 응답이 완료된 후)
       setTimeout(() => setIsUserSending(false), 1000);

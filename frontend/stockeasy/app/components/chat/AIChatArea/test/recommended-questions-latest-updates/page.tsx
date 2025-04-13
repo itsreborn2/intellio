@@ -223,8 +223,8 @@ export default function RecommendedQuestionsLatestUpdatesTestPage() {
           isProcessing={isProcessing}
           isInputCentered={false}
           showStockSuggestions={showStockSuggestions}
-          filteredStocks={filteredStocks}
           recentStocks={recentStocks}
+          stockOptions={filteredStocks}
           searchMode={searchMode}
           isLoading={isLoading}
           error={error}

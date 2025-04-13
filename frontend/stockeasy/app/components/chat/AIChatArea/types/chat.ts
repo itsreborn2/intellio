@@ -20,6 +20,7 @@ export interface ChatMessage {
   agent?: string; // 에이전트 정보
   elapsed?: number; // 경과 시간 (초 단위)
   elapsedStartTime?: number; // 경과 시간 시작 타임스탬프
+  _forceUpdate?: number; // UI 리렌더링을 강제하기 위한 임의의 값
 }
 
 /**
@@ -60,7 +61,7 @@ export interface ChatContextState {
  */
 export type ChatAction =
   | { type: 'ADD_MESSAGE'; payload: ChatMessage }
-  | { type: 'UPDATE_MESSAGE'; payload: { id: string; message: Partial<ChatMessage> } }
+  | { type: 'UPDATE_MESSAGE'; payload: { id: string; message: Partial<ChatMessage> | Record<string, any> } }
   | { type: 'REMOVE_MESSAGE'; payload: string }
   | { type: 'SET_SELECTED_STOCK'; payload: StockOption | null }
   | { type: 'SET_PROCESSING'; payload: boolean }

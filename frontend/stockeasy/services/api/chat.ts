@@ -180,6 +180,7 @@ export const streamChatMessage = async (
     onAgentStatus?: (data: any) => void,
     onAgentStart?: (data: any) => void,
     onAgentComplete?: (data: any) => void,
+    onToken?: (data: { token: string, timestamp: number, message_id: string }) => void,
     onComplete?: (data: any) => void,
     onError?: (error: any) => void
   }
@@ -236,7 +237,7 @@ export const streamChatMessage = async (
         if (line.trim() === '') continue
         
         try {
-          //console.log('[STREAM_CHAT] 수신된 라인:', line);
+          console.log('[STREAM_CHAT] 수신된 라인:', line);
           
           // ping 메시지 처리
           if (line.startsWith(': ping')) {
@@ -247,15 +248,22 @@ export const streamChatMessage = async (
           // SSE 형식 확인 (data: 로 시작하는지)
           if (line.startsWith('data:')) {
             // 'data:' 접두사 제거 후 JSON 파싱
-            const jsonStr = line.substring(5).trim();
+            const jsonStr = line.substring(5);
             //console.log('[STREAM_CHAT] 파싱할 JSON:', jsonStr);
             
-            if (jsonStr === '[DONE]' || jsonStr === '') {
+            if (jsonStr === '[DONE]' || jsonStr.trim() === '') {
               console.log('[STREAM_CHAT] 스트리밍 완료 신호 수신');
               continue;
             }
+            let fixedJsonStr = jsonStr;
+            if (jsonStr.startsWith('data:')) {
+              fixedJsonStr = jsonStr.substring(5);
+              console.log('[STREAM_CHAT] 재파싱 JSON:')
+              console.log(fixedJsonStr);
+            }
             
-            const data = JSON.parse(jsonStr);
+            const data = JSON.parse(fixedJsonStr);
+            console.log(`[STREAM_CHAT] 이벤트 수신: ${data.event}`);
             
             // 이벤트 유형에 따른 처리
             switch (data.event) {
@@ -279,8 +287,19 @@ export const streamChatMessage = async (
                 callbacks.onAgentComplete?.(data.data)
                 break
                 
+              case 'token':
+                //console.log('[STREAM_CHAT] 토큰 수신:', data.data?.token)
+                // 토큰 이벤트 처리 추가
+                const tokenData = {
+                  token: data.data?.token,
+                  timestamp: data.data?.timestamp,
+                  message_id: data.data?.message_id
+                }
+                callbacks.onToken?.(tokenData)
+                break
+                
               case 'complete':
-                //console.log('[STREAM_CHAT] 처리 완료:', data.data)
+                console.log('[STREAM_CHAT] 처리 완료:', data.data)
                 callbacks.onComplete?.(data.data)
                 break
                 
@@ -294,32 +313,42 @@ export const streamChatMessage = async (
             }
           } else {
             // 'data:' 접두사가 없는 경우 그대로 파싱 시도
-            console.log('[STREAM_CHAT] 비표준 SSE 형식:', line);
-            const data = JSON.parse(line);
-            console.log('[STREAM_CHAT] 비표준 데이터 처리:', data);
-            
-            // 이벤트 정보가 있는 경우에만 처리
-            if (data.event) {
-              switch (data.event) {
-                case 'start':
-                  callbacks.onStart?.()
-                  break
-                case 'agent_status':
-                  callbacks.onAgentStatus?.(data.data)
-                  break
-                case 'agent_start':
-                  callbacks.onAgentStart?.(data.data)
-                  break
-                case 'agent_complete':
-                  callbacks.onAgentComplete?.(data.data)
-                  break
-                case 'complete':
-                  callbacks.onComplete?.(data.data)
-                  break
-                case 'error':
-                  callbacks.onError?.(data.data)
-                  break
+            try {
+              console.log('[STREAM_CHAT] 비표준 SSE 형식:', line);
+              // JSON 형식인지 확인 (event와 data 객체가 있는지)
+              if (line.includes('"event"') && line.includes('"data"')) {
+                const data = JSON.parse(line);
+                console.log('[STREAM_CHAT] 비표준 데이터 처리:', data);
+                
+                // 이벤트 정보가 있는 경우에만 처리
+                if (data.event) {
+                  switch (data.event) {
+                    case 'start':
+                      callbacks.onStart?.()
+                      break
+                    case 'agent_status':
+                      callbacks.onAgentStatus?.(data.data)
+                      break
+                    case 'agent_start':
+                      callbacks.onAgentStart?.(data.data)
+                      break
+                    case 'agent_complete':
+                      callbacks.onAgentComplete?.(data.data)
+                      break
+                    case 'token':
+                      callbacks.onToken?.(data.data)
+                      break
+                    case 'complete':
+                      callbacks.onComplete?.(data.data)
+                      break
+                    case 'error':
+                      callbacks.onError?.(data.data)
+                      break
+                  }
+                }
               }
+            } catch (err) {
+              console.error('[STREAM_CHAT] 비표준 SSE 데이터 파싱 오류:', err, '원본 라인:', line)
             }
           }
         } catch (err) {

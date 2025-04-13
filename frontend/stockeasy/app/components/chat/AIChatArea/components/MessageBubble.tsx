@@ -115,26 +115,13 @@ export function MessageBubble({
       margin-bottom: 1em;
       padding-left: 1.5em;
     }
-    .markdown-content li {
-      margin-top: 0;
-      margin-bottom: 0;
-      line-height: 1.3;
-      padding-bottom: 0;
-      white-space: normal;
-    }
+
     .markdown-content li p {
       margin-top: 0;
-      margin-bottom: 0;
+      margin-bottom: 0.25em;
       white-space: pre-line;
     }
-    .markdown-content li + li {
-      margin-top: 0;
-    }
-    .markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4 {
-      margin-top: 1.5em;
-      margin-bottom: 1em;
-      line-height: 1.3;
-    }
+
     .markdown-content blockquote {
       margin-left: 0;
       padding-left: 1em;
@@ -144,6 +131,8 @@ export function MessageBubble({
       margin-bottom: 1em;
       white-space: pre-line;
     }
+
+
   `;
   
   // 메시지 타입에 따른 스타일 선택
@@ -286,12 +275,13 @@ export function MessageBubble({
                   ]}
                   components={{
                     text: ({node, ...props}) => <>{props.children}</>,
-                    h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
-                    h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
-                    h3: ({node, ...props}) => <h3 style={{marginTop: '1.2em', marginBottom: '0.8em'}} {...props} />,
+                    h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1em', fontSize: '1.8rem'}} {...props} />,
+                    h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1em', fontSize: '1.5rem'}} {...props} />,
+                    h3: ({node, ...props}) => <h3 style={{marginTop: '1.2em', marginBottom: '0.8em', fontSize: '1.25rem'}} {...props} />,
+                    h4: ({node, ...props}) => <h4 style={{marginTop: '1em', marginBottom: '0.7em', fontSize: '1.1rem'}} {...props} />,
                     ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
                     ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                    li: ({node, ...props}) => <li style={{marginBottom: '0'}} {...props} />,
+                    li: ({node, ...props}) => <li style={{marginBottom: '0.3em', lineHeight: '0.8'}} {...props} />,
                     p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
                   }}
                 >
@@ -322,12 +312,13 @@ export function MessageBubble({
                     ]}
                     components={{
                       text: ({node, ...props}) => <>{props.children}</>,
-                      h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
-                      h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
-                      h3: ({node, ...props}) => <h3 style={{marginTop: '1.2em', marginBottom: '0.8em'}} {...props} />,
+                      h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1.5em', fontSize: '1.7rem'}} {...props} />,
+                      h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1.5em', fontSize: '1.6rem'}} {...props} />,
+                      h3: ({node, ...props}) => <h3 style={{marginTop: '2.3em', marginBottom: '1.5em', fontSize: '1.5rem'}} {...props} />,
+                      h4: ({node, ...props}) => <h4 style={{marginTop: '1.8em', marginBottom: '0.7em', fontSize: '1.1rem'}} {...props} />,
                       ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
                       ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                      li: ({node, ...props}) => <li style={{marginBottom: '0'}} {...props} />,
+                      li: ({node, ...props}) => <li style={{marginBottom: '0.3em', lineHeight: '1.5'}} {...props} />,
                       p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
                     }}
                   >
@@ -341,12 +332,13 @@ export function MessageBubble({
                     ]}
                     components={{
                       text: ({node, ...props}) => <>{props.children}</>,
-                      h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
-                      h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1em'}} {...props} />,
-                      h3: ({node, ...props}) => <h3 style={{marginTop: '1.2em', marginBottom: '0.8em'}} {...props} />,
+                      h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1.5em', fontSize: '1.7rem'}} {...props} />,
+                      h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1.5em', fontSize: '1.6rem'}} {...props} />,
+                      h3: ({node, ...props}) => <h3 style={{marginTop: '2.3em', marginBottom: '1.5em', fontSize: '1.5rem'}} {...props} />,
+                      h4: ({node, ...props}) => <h4 style={{marginTop: '1.8em', marginBottom: '0.7em', fontSize: '1.1rem'}} {...props} />,
                       ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
                       ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                      li: ({node, ...props}) => <li style={{marginBottom: '0'}} {...props} />,
+                      li: ({node, ...props}) => <li style={{marginBottom: '0.3em', lineHeight: '1.5'}} {...props} />,
                       p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
                     }}
                   >
@@ -409,6 +401,26 @@ export function MessageBubble({
 export default React.memo(MessageBubble, (prevProps, nextProps) => {
   // ID가 다르면 무조건 리렌더링
   if (prevProps.message.id !== nextProps.message.id) {
+    return false;
+  }
+  
+  // 메시지 내용 변경 시 리렌더링
+  if (prevProps.message.content !== nextProps.message.content) {
+    return false;
+  }
+  
+  // 전문가 모드 내용 변경 시 리렌더링
+  if (prevProps.message.content_expert !== nextProps.message.content_expert) {
+    return false;
+  }
+  
+  // 타임스탬프 변경 시 리렌더링
+  if (prevProps.message.timestamp !== nextProps.message.timestamp) {
+    return false;
+  }
+  
+  // _forceUpdate 항목이 있고 다르면 리렌더링
+  if (prevProps.message._forceUpdate !== nextProps.message._forceUpdate) {
     return false;
   }
   

@@ -88,8 +88,24 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
   // 스크롤 자동 이동 함수
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current && messages.length > 0) {
+      // 첫 번째 방법: scrollIntoView 사용
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      console.log('[MessageList] 스크롤 맨 아래로 이동 (scrollIntoView)');
+      
+      // 두 번째 방법: 컨테이너의 scrollTop 설정 (더 확실한 방법)
+      if (messagesContainerRef.current) {
+        const container = messagesContainerRef.current;
+        window.requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight;
+          console.log('[MessageList] 스크롤 강제 이동 (scrollTop 설정):', container.scrollHeight);
+          
+          // 추가 안정성을 위해 약간의 지연 후 한 번 더 실행
+          setTimeout(() => {
+            container.scrollTop = container.scrollHeight;
+          }, 100);
+        });
+      }
+      
+      console.log('[MessageList] 스크롤 맨 아래로 이동 시도 (scrollIntoView)');
     }
   }, [messages]);
   
@@ -127,6 +143,27 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
       window.removeEventListener('scrollToStatusMessage', handleScrollToStatusMessage as EventListener);
     };
   }, [scrollToStatusMessage]);
+  
+  // 채팅 스크롤을 맨 위로 올리는 이벤트 리스너 추가
+  useEffect(() => {
+    const handleScrollChatToTop = () => {
+      console.log('[MessageList] 스크롤 맨 위로 이벤트 수신');
+      // 즉시 실행
+      scrollToTop();
+      // 렌더링이 완료된 후 한 번 더 실행
+      window.requestAnimationFrame(() => {
+        scrollToTop();
+        // 추가 안정성을 위해 약간의 지연 후 한 번 더 실행
+        setTimeout(scrollToTop, 100);
+      });
+    };
+    
+    window.addEventListener('scrollChatToTop', handleScrollChatToTop);
+    
+    return () => {
+      window.removeEventListener('scrollChatToTop', handleScrollChatToTop);
+    };
+  }, [scrollToTop]);
   
   // 스크롤 위치 설정 시도 함수
   const attemptScrollToTop = useCallback(() => {

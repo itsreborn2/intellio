@@ -1,11 +1,58 @@
+# 유지보수 모드 설정
+# 허용된 IP 주소들 (예시 IP이므로 실제 허용할 IP로 변경해주세요)
+geo $allowed_ip {
+    default 0;
+    127.0.0.1 1;        # 로컬호스트
+    # 여기에 허용할 IP 추가 (개발자/관리자 IP)
+    218.38.24.30 1; # 내 아이피
+}
+
+# 유지보수 모드 상태
+map $allowed_ip $maintenance {
+    0 1;  # maintenance on
+    1 0;  # maintenance off
+}
+
 # HTTP를 HTTPS로 리다이렉트
 server {
     listen 80;
     listen [::]:80;
-    server_name intellio.kr www.intellio.kr doceasy.intellio.kr;
+    server_name intellio.kr www.intellio.kr doceasy.intellio.kr stockeasy.intellio.kr;
 
     location / {
         return 301 https://$host$request_uri;
+    }
+}
+
+# 유지보수 전용 서버 설정
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name intellio.kr www.intellio.kr doceasy.intellio.kr stockeasy.intellio.kr;
+    
+    # maintenance mode check - 유지보수 모드가 꺼져 있는 경우(허용 IP) 이 블록 건너뜀
+    if ($maintenance = 0) {
+        return 444;  # 해당 서버 블록 무시
+    }
+    
+    # SSL 인증서 설정
+    ssl_certificate /etc/letsencrypt/live/intellio.kr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/intellio.kr/privkey.pem;
+    
+    # SSL 설정
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    
+    # 보안 헤더 설정
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    
+    location / {
+        root /etc/nginx;
+        try_files /maintenance.html =503;
+        add_header Content-Type "text/html; charset=utf-8";
     }
 }
 
@@ -14,6 +61,11 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     server_name intellio.kr www.intellio.kr;
+
+    # maintenance mode check - 유지보수 모드가 켜져 있는 경우(비허용 IP) 이 블록 건너뜀
+    if ($maintenance = 1) {
+        return 444;  # 해당 서버 블록 무시
+    }
 
     # SSL 인증서 설정
     ssl_certificate /etc/letsencrypt/live/intellio.kr/fullchain.pem;
@@ -115,6 +167,11 @@ server {
     listen [::]:443 ssl;
     server_name doceasy.intellio.kr;
 
+    # maintenance mode check - 유지보수 모드가 켜져 있는 경우(비허용 IP) 이 블록 건너뜀
+    if ($maintenance = 1) {
+        return 444;  # 해당 서버 블록 무시
+    }
+
     # SSL 인증서 설정
     ssl_certificate /etc/letsencrypt/live/intellio.kr/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/intellio.kr/privkey.pem;
@@ -197,6 +254,11 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     server_name stockeasy.intellio.kr;
+
+    # maintenance mode check - 유지보수 모드가 켜져 있는 경우(비허용 IP) 이 블록 건너뜀
+    if ($maintenance = 1) {
+        return 444;  # 해당 서버 블록 무시
+    }
 
     # SSL 인증서 설정
     ssl_certificate /etc/letsencrypt/live/intellio.kr/fullchain.pem;

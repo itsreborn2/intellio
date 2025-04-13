@@ -193,8 +193,8 @@ export default function IntegrationTestPage() {
           isProcessing={isProcessing}
           isInputCentered={isInputCentered}
           showStockSuggestions={showStockSuggestions}
-          filteredStocks={recentStocks}
           recentStocks={recentStocks}
+          stockOptions={recentStocks}
           searchMode={false}
           isLoading={false}
           error={null}

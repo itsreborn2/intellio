@@ -14,6 +14,7 @@ from stockeasy.services.telegram.rag import TelegramRAGService
 from stockeasy.services.telegram.collector import CollectorService
 from stockeasy.api import deps
 from pydantic import BaseModel
+from common.services.agent_llm import refresh_agent_llm_cache
 
 # FastAPI 라우터 설정 ( /api/v1/stockeasy/telegram)
 telegram_router = APIRouter(prefix="/telegram", tags=["telegram"])
@@ -94,6 +95,9 @@ async def summarize_messages(
         }
         ```
     """
+    # LLM 설정 파일 변경 확인 및 agent_llm_cache 새로고침
+    refresh_agent_llm_cache()
+    
     qc = QuestionClassifierService()
     classification:QuestionClassification = qc.classify_question(request.query)
         

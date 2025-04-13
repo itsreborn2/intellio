@@ -103,7 +103,7 @@ async def read_token_usage_summary(
         else:
             raise HTTPException(status_code=400, detail="유효하지 않은 기간입니다.")
         
-        logger.info(f"start_date_obj : {start_date_obj}")
+        #logger.info(f"start_date_obj : {start_date_obj}")
         # 프로젝트 유형 변환
         project_type_enum = None
         if project_type:
@@ -167,7 +167,7 @@ async def read_user_question_count(
         else:
             raise HTTPException(status_code=400, detail="유효하지 않은 기간입니다.")
         
-        logger.info(f"start_date_obj : {start_date_obj}")
+        #logger.info(f"start_date_obj : {start_date_obj}")
         
         # 서비스 함수를 호출하여 질문 개수 데이터 조회
         question_count_data = await get_user_question_count(

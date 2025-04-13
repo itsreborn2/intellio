@@ -297,6 +297,7 @@ class ChatService:
         chat_session_id: UUID, 
         role: str, 
         content: str,
+        message_id: Optional[UUID] = None,
         content_expert: Optional[str] = None,
         stock_code: Optional[str] = None,
         stock_name: Optional[str] = None,
@@ -321,15 +322,21 @@ class ChatService:
             metadata_str = json.dumps(metadata) if metadata else None
             
             # 메시지 생성
-            message = StockChatMessage(
-                chat_session_id=chat_session_id,
-                role=role,
-                content=content,
-                content_expert=content_expert,
-                stock_code=stock_code,
-                stock_name=stock_name,
-                message_metadata=metadata_str,
-            )
+            message_params = {
+                "chat_session_id": chat_session_id,
+                "role": role,
+                "content": content,
+                "content_expert": content_expert,
+                "stock_code": stock_code,
+                "stock_name": stock_name,
+                "message_metadata": metadata_str,
+            }
+
+            # id가 있는 경우에만 추가
+            if message_id is not None:
+                message_params["id"] = message_id
+
+            message = StockChatMessage(**message_params)
             
             db.add(message)
             await db.flush()

@@ -854,7 +854,9 @@ class TelegramRetrieverAgent(BaseAgent):
                 elif isinstance(message_created_at_data, (int, float)):
                     # 유닉스 타임스탬프인 경우
                     try:
-                        message_created_at = datetime.fromtimestamp(float(message_created_at_data))
+                        # 밀리초를 초 단위로 변환
+                        timestamp_in_seconds = float(message_created_at_data) / 1000.0
+                        message_created_at = datetime.fromtimestamp(timestamp_in_seconds)
                     except (ValueError, TypeError):
                         # 변환 실패 시 현재 시간 사용
                         logger.error(f"타임스탬프 변환 실패: {message_created_at_data}, 현재 시간 사용")

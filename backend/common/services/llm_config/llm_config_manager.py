@@ -8,6 +8,7 @@ LLM 설정 관리자 모듈
 import os
 import json
 import time
+import datetime
 from typing import Dict, Any, Optional
 from loguru import logger
 from functools import lru_cache
@@ -64,9 +65,22 @@ class LLMConfigManager:
     
     def _get_file_modified_time(self) -> float:
         """파일 수정 시간 확인"""
-        if not os.path.exists(self._config_path):
-            return 0
-        return os.path.getmtime(self._config_path)
+        try:
+            if not os.path.exists(self._config_path):
+                return 0
+            return os.path.getmtime(self._config_path)
+        except Exception as e:
+            logger.error(f"설정 파일 수정 시간 확인 중 오류 발생: {str(e)}")
+            return 0  # 오류 발생 시 0 반환하여 항상 새로 로드하도록 함
+    
+    def is_config_file_changed(self) -> bool:
+        """설정 파일 변경 여부 확인
+        
+        Returns:
+            변경 여부 (True/False)
+        """
+        current_modified_time = self._get_file_modified_time()
+        return current_modified_time > self._last_modified_time
     
     def _load_config(self) -> Dict[str, Any]:
         """설정 파일 로드"""
@@ -76,6 +90,10 @@ class LLMConfigManager:
             # 캐시된 설정이 있고 파일이 변경되지 않았으면 캐시 사용
             if (self._config_cache is not None and 
                 self._last_modified_time >= modified_time):
+                # 타임스탬프를 읽기 쉬운 형식으로 변환
+                last_modified_str = datetime.datetime.fromtimestamp(self._last_modified_time).strftime('%Y-%m-%d %H:%M:%S')
+                modified_str = datetime.datetime.fromtimestamp(modified_time).strftime('%Y-%m-%d %H:%M:%S')
+                logger.info(f"LLM 설정 파일 캐시 사용: {last_modified_str}, {modified_str} (타임스탬프: {self._last_modified_time}, {modified_time})")
                 return self._config_cache
             
             # 파일 로드
@@ -85,8 +103,9 @@ class LLMConfigManager:
             # 캐시 업데이트
             self._config_cache = config
             self._last_modified_time = modified_time
+            last_modified_str = datetime.datetime.fromtimestamp(self._last_modified_time).strftime('%Y-%m-%d %H:%M:%S')
             
-            logger.info(f"LLM 설정 파일 로드 완료: {self._config_path}")
+            logger.info(f"LLM 설정 파일 로드 완료: {self._config_path}, {last_modified_str}")
             return config
             
         except Exception as e:

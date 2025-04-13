@@ -65,10 +65,10 @@ export function StockSuggestions({
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '10px 12px', // 패딩 증가
-    borderBottom: '2px solid #e0e0e0', // 테두리 두껍게 변경
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)', // 약간의 그림자 효과 추가
-    minHeight: '56px', // 최소 높이 설정
+    padding: '8px 10px', // 패딩 감소
+    borderBottom: '2px solid #e0e0e0',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+    minHeight: '44px', // 최소 높이 감소
   };
   
   // 종목 아이템 클릭 핸들러
@@ -136,7 +136,7 @@ export function StockSuggestions({
     return (
       <div className="recent-stocks-header" style={headerStyle}>
         <span style={{ 
-          fontSize: '16px', // 글꼴 크기 증가 
+          fontSize: '14px', // 글꼴 크기 감소 
           fontWeight: 'bold', 
           color: '#333' 
         }}>
@@ -188,18 +188,18 @@ export function StockSuggestions({
           {filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) && renderRecentStocksHeader()}
 
           <div style={{ 
-            paddingTop: filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) ? '12px' : '6px', 
-            paddingBottom: '6px',
+            paddingTop: filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) ? '8px' : '4px', // 패딩 감소
+            paddingBottom: '4px', // 패딩 감소
             borderTop: filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) ? '1px solid #f0f0f0' : 'none'
           }}>
             {filteredStocks.map((stock, index) => (
               <div
                 key={stock.value}
-                data-index={index} // 인덱스 데이터 속성 추가
+                data-index={index}
                 className="stock-item"
                 onClick={handleStockItemClick(stock)}
                 style={{
-                  padding: '12px 10px 12px 10px',
+                  padding: '8px 10px', // 패딩 감소
                   cursor: 'pointer',
                   transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease',
                   display: 'flex',
@@ -207,15 +207,15 @@ export function StockSuggestions({
                   justifyContent: 'space-between',
                   backgroundColor: focusedItemIndex === index ? '#EAF9F6' : 'transparent',
                   border: '1px solid ' + (focusedItemIndex === index ? '#10A37F' : 'transparent'),
-                  borderRadius: focusedItemIndex === index ? '12px' : '12px',
+                  borderRadius: focusedItemIndex === index ? '10px' : '10px', // 라운딩 약간 감소
                   marginLeft: '4px',
                   marginRight: '6px',
-                  marginTop: focusedItemIndex === index && index === 0 ? '4px' : index === 0 ? '4px' : '0',
-                  marginBottom: focusedItemIndex === index && index === filteredStocks.length - 1 ? '8px' : '0',
+                  marginTop: focusedItemIndex === index && index === 0 ? '2px' : index === 0 ? '2px' : '0', // 마진 감소
+                  marginBottom: focusedItemIndex === index && index === filteredStocks.length - 1 ? '4px' : '0', // 마진 감소
                   zIndex: focusedItemIndex === index ? 1 : 'auto',
                   position: 'relative',
                   outline: 'none',
-                  minHeight: '50px',
+                  minHeight: '38px', // 최소 높이 감소
                   transform: focusedItemIndex === index ? 'scale(1.005)' : 'scale(1)',
                   transformOrigin: 'center center',
                   backfaceVisibility: 'hidden',
@@ -231,37 +231,31 @@ export function StockSuggestions({
                   }
                 }}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div
+                    style={{
+                      fontSize: '12px', // 글꼴 크기 감소
+                      color: focusedItemIndex === index ? '#0E866C' : '#666',
+                      padding: '4px 8px', // 패딩 감소
+                      borderRadius: '4px',
+                      backgroundColor: focusedItemIndex === index ? '#e6f0ff' : '#f0f0f0',
+                      fontWeight: focusedItemIndex === index ? 'bold' : 'normal',
+                      transition: 'background-color 0.2s ease, color 0.2s ease, font-weight 0.2s ease'
+                    }}
+                  >
+                    {stock.stockCode}
+                  </div>
+                  
                   <span style={{ 
-                    fontSize: '15px',
+                    fontSize: '14px', // 글꼴 크기 감소
                     fontWeight: focusedItemIndex === index ? 'bold' : 'normal',
                     color: focusedItemIndex === index ? '#0E866C' : '#333',
                     transition: 'color 0.2s ease, font-weight 0.2s ease'
                   }}>
                     {stock.stockName}
                   </span>
-                  <span style={{ 
-                    fontSize: '13px',
-                    fontWeight: focusedItemIndex === index ? 'bold' : 'normal', 
-                    color: focusedItemIndex === index ? '#0E866C' : '#333',
-                    transition: 'color 0.2s ease, font-weight 0.2s ease'
-                  }}>
-                    {stock.stockCode}
-                  </span>
                 </div>
-                <div
-                  style={{
-                    fontSize: '13px',
-                    color: focusedItemIndex === index ? '#0E866C' : '#666',
-                    padding: '6px 10px',
-                    borderRadius: '4px',
-                    backgroundColor: focusedItemIndex === index ? '#e6f0ff' : '#f0f0f0',
-                    fontWeight: focusedItemIndex === index ? 'bold' : 'normal',
-                    transition: 'background-color 0.2s ease, color 0.2s ease, font-weight 0.2s ease'
-                  }}
-                >
-                  {stock.stockCode}
-                </div>
+                
               </div>
             ))}
           </div>
@@ -278,22 +272,22 @@ function StockItem({ stock, onClick }: { stock: StockOption; onClick: (e: React.
       onClick={onClick}
       style={{
         width: 'auto',
-        paddingTop: '6px',
-        paddingRight: '10px',
-        paddingBottom: '6px',
-        paddingLeft: '10px',
-        borderRadius: '8px',
+        paddingTop: '4px', // 패딩 감소
+        paddingRight: '8px', // 패딩 감소
+        paddingBottom: '4px', // 패딩 감소
+        paddingLeft: '8px', // 패딩 감소
+        borderRadius: '6px', // 라운딩 약간 감소
         border: '1px solid #ddd',
         backgroundColor: '#f5f5f5',
         textAlign: 'center',
         cursor: 'pointer',
         transition: 'background-color 0.2s',
-        fontSize: '13px',
+        fontSize: '12px', // 글꼴 크기 감소
         color: '#333',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '6px',
+        gap: '4px', // 간격 감소
         whiteSpace: 'nowrap',
         minWidth: 'fit-content',
         flexShrink: 0
@@ -308,16 +302,16 @@ function StockItem({ stock, onClick }: { stock: StockOption; onClick: (e: React.
       }}
     >
       <span style={{
-        paddingTop: '3px',
-        paddingRight: '8px',
-        paddingBottom: '3px',
-        paddingLeft: '8px',
-        height: '24px',
-        borderRadius: '6px',
+        paddingTop: '2px', // 패딩 감소
+        paddingRight: '6px', // 패딩 감소
+        paddingBottom: '2px', // 패딩 감소
+        paddingLeft: '6px', // 패딩 감소
+        height: '20px', // 높이 감소
+        borderRadius: '4px', // 라운딩 약간 감소
         border: '1px solid #ddd',
         backgroundColor: '#f5f5f5',
         color: '#333',
-        fontSize: '13px',
+        fontSize: '12px', // 글꼴 크기 감소
         fontWeight: 'normal',
         whiteSpace: 'nowrap',
         display: 'flex',
