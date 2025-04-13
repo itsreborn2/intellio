@@ -18,6 +18,7 @@ from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTempla
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.language_models import BaseChatModel
 
+from common.services.reranker import PineconeRerankerConfig, Reranker, RerankerConfig, RerankerType
 from common.models.token_usage import ProjectType
 from common.services.embedding_models import EmbeddingModelType
 from stockeasy.prompts.report_prompts import (
@@ -608,15 +609,33 @@ class ReportAnalyzerAgent(BaseAgent):
             # 검색 수행
             retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
                 query=query, 
-                top_k=k * 2,  # 중복 제거를 고려하여 2배로 검색
+                top_k=k * 4,  # 중복 제거, 리랭킹을 고려하여 4배로 검색
                 filters=metadata_filter
             )
+
+            # 2. 리랭킹 수행
+            reranker = Reranker(
+                RerankerConfig(
+                    reranker_type=RerankerType.PINECONE,
+                    pinecone_config=PineconeRerankerConfig(
+                        api_key=settings.PINECONE_API_KEY_STOCKEASY,
+                        min_score=0.1  # 낮은 임계값으로 더 많은 결과 포함
+                    )
+                )
+            )
             
+            reranked_results = await reranker.rerank(
+                query=query,
+                documents=retrieval_result.documents,
+                top_k=int(k * 1.5)
+            )
+            logger.info(f"리랭킹 완료 - 결과: {len(retrieval_result.documents)} -> {len(reranked_results.documents)} 문서")
             # 검색 결과 처리
             results = []
             seen_contents = set()  # 중복 제거를 위한 집합
             
-            for i, doc in enumerate(retrieval_result.documents):
+            #for i, doc in enumerate(retrieval_result.documents):
+            for i, doc in enumerate(reranked_results.documents):
                 content = doc.page_content
                 metadata = doc.metadata
                 score = doc.score or 0.0

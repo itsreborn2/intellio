@@ -87,6 +87,7 @@ class OrchestratorAgent(BaseAgent):
             "telegram_retriever": "내부DB 검색 에이전트",
             "report_analyzer": "기업 리포트 검색 및 분석 에이전트",
             "financial_analyzer": "재무 데이터 분석 에이전트",
+            "revenue_breakdown": "매출 및 수주 현황 분석 에이전트",
             "industry_analyzer": "산업 동향 분석 에이전트",
             "confidential_analyzer": "비공개 자료 검색 및 분석 에이전트",
             "knowledge_integrator": "정보 통합 에이전트",

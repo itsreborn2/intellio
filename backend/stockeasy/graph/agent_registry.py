@@ -25,6 +25,8 @@ from stockeasy.agents.industry_analyzer_agent import IndustryAnalyzerAgent
 from stockeasy.agents.summarizer_agent import SummarizerAgent
 # 대화 컨텍스트 응답 에이전트 임포트
 from stockeasy.agents.context_response_agent import ContextResponseAgent
+# 매출 및 수주 현황 분석 에이전트 임포트
+from stockeasy.agents.revenue_breakdown_agent import RevenueBreakdownAgent
 from common.core.config import settings
 from langchain.callbacks.tracers import LangChainTracer
 
@@ -45,6 +47,7 @@ class AgentRegistry:
             "financial_analyzer": FinancialAnalyzerAgent,
             "industry_analyzer": IndustryAnalyzerAgent,
             "confidential_analyzer": ConfidentialAnalyzerAgent,
+            "revenue_breakdown": RevenueBreakdownAgent,
             "knowledge_integrator": KnowledgeIntegratorAgent,
             "summarizer": SummarizerAgent,
             "response_formatter": ResponseFormatterAgent,
@@ -93,6 +96,9 @@ class AgentRegistry:
         self.agents["financial_analyzer"] = FinancialAnalyzerAgent(db=db)
         self.agents["industry_analyzer"] = IndustryAnalyzerAgent(db=db)
         self.agents["confidential_analyzer"] = ConfidentialAnalyzerAgent(db=db)
+        
+        # 매출 및 수주 현황 분석 에이전트 초기화
+        self.agents["revenue_breakdown"] = RevenueBreakdownAgent(db=db)
 
         # 통합 및 요약 에이전트 초기화
         self.agents["knowledge_integrator"] = KnowledgeIntegratorAgent(db=db)
