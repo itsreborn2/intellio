@@ -502,9 +502,39 @@ const SidebarContent = forwardRef<HTMLDivElement, ExtendedSidebarProps>(
             
             {/* 사이드바 내용 - 접혀있지 않을 때만 세부 내용 표시 */}
             <div className="flex-1 overflow-y-auto">
+              {/* === StockEasy 바로가기 링크 추가 시작 === */}
+              {!isCollapsed ? (
+                <div className="p-1 pt-2"> {/* 위쪽 패딩 추가 */}
+                    <a href="https://stockeasy.intellio.kr" target="_blank" rel="noopener noreferrer" className="block mb-1">
+                        <Button variant="ghost" className="w-full justify-start text-sm h-9 font-normal"> {/* 높이 및 폰트 조정 */}
+                            <BarChart2 className="mr-2 h-4 w-4 text-blue-400" /> {/* 아이콘 색상 추가 */}
+                            StockEasy
+                        </Button>
+                    </a>
+                    <hr className="border-t border-[#2e2f33] mx-2 my-1" /> {/* 구분선 */}
+                </div>
+              ) : (
+                <div className="flex justify-center p-2 pt-3"> {/* 위쪽 패딩 추가 */}
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <a href="https://stockeasy.intellio.kr" target="_blank" rel="noopener noreferrer">
+                                    <Button variant="ghost" size="icon" className="h-9 w-9"> {/* 크기 조정 */}
+                                        <BarChart2 className="h-4 w-4 text-blue-400" /> {/* 아이콘 색상 추가 */}
+                                        <span className="sr-only">StockEasy</span>
+                                    </Button>
+                                </a>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">StockEasy</TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
+              )}
+              {/* === StockEasy 바로가기 링크 추가 끝 === */}
+
               {/* 카테고리 및 프로젝트 영역 */}
               {!isCollapsed ? (
-                <div className="p-1">
+                <div className="p-1"> {/* StockEasy 링크 추가로 인해 여기의 pt-2 제거 */}
                   {/* ProjectCategorySection 컴포넌트 - 폴더 목록을 가장 위로 이동 */}
                   <ProjectCategorySection 
                     expandedSections={expandedSections}

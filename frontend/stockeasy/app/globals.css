@@ -3,56 +3,10 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
-/* Spoqa Han Sans Neo 로컬 폰트 정의 */
-@font-face {
-    font-family: 'Spoqa Han Sans Neo';
-    font-weight: 700; /* Bold */
-    src: local('Spoqa Han Sans Neo Bold'),
-         url('/fonts/SpoqaHanSansNeo-Bold.woff2') format('woff2'),
-         url('/fonts/SpoqaHanSansNeo-Bold.woff') format('woff'),
-         url('/fonts/SpoqaHanSansNeo-Bold.ttf') format('truetype');
-}
-
-@font-face {
-    font-family: 'Spoqa Han Sans Neo';
-    font-weight: 500; /* Medium */
-    src: local('Spoqa Han Sans Neo Medium'),
-         url('/fonts/SpoqaHanSansNeo-Medium.woff2') format('woff2'),
-         url('/fonts/SpoqaHanSansNeo-Medium.woff') format('woff'),
-         url('/fonts/SpoqaHanSansNeo-Medium.ttf') format('truetype');
-}
-
-@font-face {
-    font-family: 'Spoqa Han Sans Neo';
-    font-weight: 400; /* Regular */
-    src: local('Spoqa Han Sans Neo Regular'),
-         url('/fonts/SpoqaHanSansNeo-Regular.woff2') format('woff2'),
-         url('/fonts/SpoqaHanSansNeo-Regular.woff') format('woff'),
-         url('/fonts/SpoqaHanSansNeo-Regular.ttf') format('truetype');
-}
-
-@font-face {
-    font-family: 'Spoqa Han Sans Neo';
-    font-weight: 300; /* Light */
-    src: local('Spoqa Han Sans Neo Light'),
-         url('/fonts/SpoqaHanSansNeo-Light.woff2') format('woff2'),
-         url('/fonts/SpoqaHanSansNeo-Light.woff') format('woff'),
-         url('/fonts/SpoqaHanSansNeo-Light.ttf') format('truetype');
-}
-
-@font-face {
-    font-family: 'Spoqa Han Sans Neo';
-    font-weight: 100; /* Thin */
-    src: local('Spoqa Han Sans Neo Thin'),
-         url('/fonts/SpoqaHanSansNeo-Thin.woff2') format('woff2'),
-         url('/fonts/SpoqaHanSansNeo-Thin.woff') format('woff'),
-         url('/fonts/SpoqaHanSansNeo-Thin.ttf') format('truetype');
-}
-
 /* 폰트 설정 */
 :root {
-  /* 폰트 적용 - Spoqa Han Sans Neo 우선, 시스템 폰트 대체 */
-  font-family: 'Spoqa Han Sans Neo', ui-sans-serif, -apple-system, system-ui, 'Segoe UI', Helvetica, 'Apple Color Emoji', Arial, sans-serif, 'Segoe UI Emoji', 'Segoe UI Symbol';
+  /* 폰트 적용 - 시스템 최적화 */
+  font-family: ui-sans-serif, -apple-system, system-ui, 'Segoe UI', Helvetica, 'Apple Color Emoji', Arial, sans-serif, 'Segoe UI Emoji', 'Segoe UI Symbol';
   font-size: 16px; /* 기본 폰트 크기 명시적 설정 */
 }
 
@@ -980,4 +934,31 @@ html {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* 기본 스크롤바 스타일 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent; /* 트랙 배경 투명 */
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #555; /* 스크롤바 색상 */
+  border-radius: 10px;
+  border: 2px solid transparent; /* 트랙과의 간격을 위한 투명 테두리 */
+  background-clip: padding-box; /* 테두리 안쪽으로 배경 클리핑 */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #777; /* 호버 시 스크롤바 색상 */
+}
+
+/* Firefox 스크롤바 스타일 */
+* {
+  scrollbar-width: thin; /* 스크롤바 두께 */
+  scrollbar-color: #555 transparent; /* 스크롤바 색상 및 트랙 배경 */
 }

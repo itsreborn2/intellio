@@ -585,7 +585,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
             position: 'sticky',
             left: '30px', // 체크박스 컬럼 너비
             zIndex: 2,
-            backgroundColor: 'rgb(238, 238, 250)', // 배경색 일관성 유지
+            backgroundColor: 'rgb(238, 238, 250) !important', // 기본 배경색 유지
             // 기존 스타일 유지...
             '&::after': {
               content: '""',
@@ -645,21 +645,21 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
   const hasHorizontalScroll = useMemo(() => columns.length > 5, [columns.length]);
   
   // 칼럼 삭제 핸들러 (기존 로직 유지)
-  const handleDeleteColumn = async () => {
-    if (!selectedHeader || selectedHeader === 'filename') return;
+  const handleDeleteColumn = async (columnId: string) => {
+    if (!columnId || columnId === 'filename') return;
     
     try {
       const projectId = state.currentProjectId;
       if (!projectId) return;
       
-      const response = await api.deleteColumn(projectId, selectedHeader);
+      const response = await api.deleteColumn(projectId, columnId);
       
       if (response.success) {
         dispatch({
           type: DELETE_COLUMN,
-          payload: selectedHeader
+          payload: columnId
         });
-        toast.success(`${selectedHeader} 컬럼이 삭제되었습니다.`);
+        toast.success(`${columnId} 컬럼이 삭제되었습니다.`);
         if (props.onHeaderSelect) {
           props.onHeaderSelect(null);
         }
@@ -773,12 +773,11 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           whiteSpace: 'nowrap',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between', 
           height: '42px', // 데스크톱 높이 42px로 고정
           '&:hover': { // 마우스 오버 시 배경색 변경
-            backgroundColor: '#858B9D !important'
+            backgroundColor: 'rgba(0, 0, 0, 0.04) !important'
           },
-          // 모바일 스타일
+          // 모바일 특정 스타일 제거 (전역 설정 사용)
           '@media (max-width: 767px)': {
             minHeight: '34px', // 모바일 최소 높이 34px
             fontSize: '0.8rem', // 모바일 폰트 크기 13px
@@ -828,21 +827,21 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
             style={{ 
               display: 'flex', 
               alignItems: 'center',
+              // justifyContent: 'space-between', // 스타일 제거
               width: '100%' 
             }}
           >
             {/* header 텍스트는 전역 fontSize 적용 */}
             <span>{column.columnDef.header}</span> 
-            {selectedHeader === column.id && (
-              <Trash2 
-                size={14} // 아이콘 크기는 유지
-                className="text-gray-500 hover:text-red-500 ml-2 cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation(); 
-                  handleDeleteColumn();
-                }}
-              />
-            )}
+            {/* 휴지통 아이콘 - 항상 표시되도록 조건 제거 */}
+            <Trash2 
+              size={14} // 아이콘 크기는 유지
+              className="text-gray-500 hover:text-red-500 ml-2 cursor-pointer flex-shrink-0" // 줄어들지 않도록 flex-shrink-0 추가
+              onClick={(e) => {
+                e.stopPropagation(); // 헤더 선택 이벤트 전파 방지
+                handleDeleteColumn(column.id); // 삭제할 컬럼 ID 전달 (handleDeleteColumn 함수 시그니처 확인 필요)
+              }}
+            />
           </div>
         );
         
@@ -853,12 +852,12 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         props.sx['&:hover'] = {
           backgroundColor: selectedHeader === column.id 
             ? 'rgb(186, 230, 253) !important' 
-            : 'rgb(200, 226, 228) !important' // 호버 시 배경색
+            : 'rgba(0, 0, 0, 0.04) !important' // 선택되지 않은 헤더 hover 배경색
         };
       } else {
         // filename 컬럼 처리 (기존 유지)
         props.sx['&:hover'] = {
-          backgroundColor: '#858B9D !important'
+          backgroundColor: 'rgba(0, 0, 0, 0.04) !important'
         };
       }
       
@@ -918,7 +917,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           }
         },
         '&:hover': {
-          backgroundColor: '#f8f8f8',
+          backgroundColor: 'rgba(0, 0, 0, 0.04)',
           cursor: 'pointer',
         },
         
@@ -988,6 +987,11 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           backgroundColor: '#ABABAB !important', // 선택된 행 배경색
           '&:hover': {
             backgroundColor: '#ABABAB !important', // 선택된 행 호버 시 배경색 유지
+          },
+        }),
+        ...(!row.getIsSelected() && {
+          '&:hover': {
+            backgroundColor: 'rgba(0, 0, 0, 0.04) !important', // 선택되지 않은 행 hover 배경색 추가
           },
         }),
       },
@@ -1167,7 +1171,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         
         /* 헤더 셀 호버 상태 */
         .MuiTableHead-root .MuiTableCell-root:hover {
-          background-color: #858B9D !important; /* 호버 시 배경색 변경 */
+          background-color: 'rgba(0, 0, 0, 0.04) !important';
         }
         
         /* 모바일 환경에서 헤더 셀 조정 */
@@ -1255,7 +1259,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
           transition: all 0.1s !important;
         }
         
-        /* 최대화 버튼 특별 스타일 */
+        /* 헤더 내 버튼 상하 중앙 정렬 */
         .MuiTableHead-root button svg {
           pointer-events: none !important;
           height: 1rem !important; /* size-4 */
@@ -1738,7 +1742,7 @@ const DocumentTable = forwardRef<ITableUtils, DocumentTableProps>((props, ref) =
         
         /* Document 컬럼 헤더 호버 효과 */
         .MuiTableHead-root .MuiTableCell-root[data-column-id="filename"]:hover {
-          background-color: #858B9D !important; /* 호버 시 배경색 변경 */
+          background-color: 'rgba(0, 0, 0, 0.04) !important';
         }
         
         /* Document 컬럼 헤더와 정렬 아이콘 배치 */

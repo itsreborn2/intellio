@@ -1,5 +1,4 @@
-// @ts-ignore
-import domtoimage from 'dom-to-image-more';
+import { toPng } from 'html-to-image';
 
 interface CopyTableOptions {
   copyrightText?: string;
@@ -56,7 +55,7 @@ export const copyTableAsImage = async (
   
   // 기본 옵션 설정
   const defaultOptions: CopyTableOptions = {
-    copyrightText: '스탁이지 stockeasy.intellio.kr<br>(주)인텔리오',
+    copyrightText: '', // 저작권 텍스트 제거
     footerStyle: {
       borderTop: '1px solid #e2e8f0',
       marginTop: '10px',
@@ -79,16 +78,27 @@ export const copyTableAsImage = async (
   const mergedOptions = { ...defaultOptions, ...options };
   
   try {
-    // 임시 컨테이너 생성 (테이블 헤더, 테이블, 저작권 정보를 포함)
+    // 임시 컨테이너 생성
     const container = document.createElement('div');
+    // 디버깅을 위해 화면에 보이도록 설정 (나중에 다시 숨김 처리)
+    container.style.position = 'fixed';
+    container.style.top = '10px';
+    container.style.left = '10px';
+    container.style.zIndex = '9999';
+    container.style.width = 'fit-content'; // 내용에 맞게 자동 조정
+    container.style.maxWidth = '480px'; // 최대 너비 제한
+    container.style.height = 'fit-content'; // 내용에 맞게 자동 조정
     container.style.backgroundColor = mergedOptions.backgroundColor || '#ffffff';
-    container.style.padding = '5px'; // 전체 패딩 축소
+    container.style.padding = '10px';
+    container.style.boxSizing = 'border-box';
+    container.style.fontFamily = 'Arial, sans-serif';
+    container.style.overflow = 'visible'; // 스크롤 방지
+    container.style.border = '1px solid #ccc'; // 디버깅을 위한 테두리
     
-    // 모바일 사이즈로 고정 (너비 360px)
-    container.style.width = '360px';
-    
-    // 전체 컨테이너에 폰트 크기 조정 적용
-    container.style.fontSize = '12px';
+    // 테이블 컨테이너 생성
+    const tableContainer = document.createElement('div');
+    tableContainer.style.width = 'fit-content'; // 내용에 맞게 자동 조정
+    tableContainer.style.overflow = 'visible'; // 스크롤 방지
     
     // 헤더 복제
     const headerClone = headerRef.current.cloneNode(true) as HTMLElement;
@@ -173,6 +183,23 @@ export const copyTableAsImage = async (
     // 테이블 복제
     const tableClone = tableRef.current.cloneNode(true) as HTMLElement;
     
+    // 모바일에서 숨겨지는 컬럼 제거 (.hidden.md\:table-cell 클래스를 가진 요소)
+    try {
+      const hiddenCells = tableClone.querySelectorAll('.hidden.md\\:table-cell');
+      hiddenCells.forEach(cell => {
+        if (cell.parentNode) {
+          cell.parentNode.removeChild(cell);
+        }
+      });
+      
+      // 테이블 스타일 직접 적용
+      tableClone.style.width = 'auto';
+      tableClone.style.borderCollapse = 'collapse';
+      tableClone.style.fontSize = '10px';
+    } catch (error) {
+      console.error('테이블 요소 처리 중 오류:', error);
+    }
+    
     // 테이블 너비 조정
     tableClone.style.width = '100%';
     tableClone.style.marginTop = '0'; // 테이블 위 여백 제거
@@ -189,19 +216,11 @@ export const copyTableAsImage = async (
       if (el.tagName === 'TH') {
         (el as HTMLElement).style.fontSize = '11px';
         (el as HTMLElement).style.fontWeight = 'bold';
-        (el as HTMLElement).style.padding = '4px';
       } else if (el.tagName === 'TD') {
         (el as HTMLElement).style.fontSize = '10px';
-        (el as HTMLElement).style.padding = '3px';
       } else if ((el as HTMLElement).classList.contains('text-xs')) {
         (el as HTMLElement).style.fontSize = '10px';
       }
-    });
-    
-    // 모바일 환경에서 숨겨진 컬럼 처리
-    const hiddenCells = tableClone.querySelectorAll('.hidden.md\\:table-cell');
-    hiddenCells.forEach(cell => {
-      (cell as HTMLElement).style.display = 'none';
     });
     
     // 테이블 셀 정렬 스타일 적용
@@ -229,6 +248,84 @@ export const copyTableAsImage = async (
       (cell as HTMLElement).style.verticalAlign = 'middle';
     });
     
+    // 복사된 테이블의 각 셀에 스타일 적용 (수직 정렬 및 텍스트 위치 조정)
+    const clonedCells = tableClone.querySelectorAll('th, td');
+    clonedCells.forEach((cell) => {
+      const htmlCell = cell as HTMLElement;
+      
+      // 수직 정렬 스타일 적용
+      htmlCell.style.verticalAlign = 'middle';
+      htmlCell.style.lineHeight = '1.2';
+      
+      // 내부 div 요소의 수직 정렬만 적용
+      const innerDivs = htmlCell.querySelectorAll('div');
+      innerDivs.forEach(div => {
+        (div as HTMLElement).style.alignItems = 'center';
+      });
+      
+      // 산업 컴포넌트의 버튼 요소 제거
+      // 산업 컴포넌트에 있는 버튼 요소 찾기
+      if (htmlCell.textContent?.includes('산업') || htmlCell.querySelector('span.px-1.sm\\:px-2.py-0\\.5.sm\\:py-1.bg-white.text-gray-700.border.border-gray-200.shadow-sm')) {
+        // 버튼 요소 찾기
+        const industryButtons = htmlCell.querySelectorAll('span.px-1.sm\\:px-2.py-0\\.5.sm\\:py-1.bg-white.text-gray-700.border.border-gray-200.shadow-sm');
+        
+        // 버튼 요소의 스타일 제거
+        industryButtons.forEach(btn => {
+          (btn as HTMLElement).style.border = 'none';
+          (btn as HTMLElement).style.backgroundColor = 'transparent';
+          (btn as HTMLElement).style.boxShadow = 'none';
+          (btn as HTMLElement).style.padding = '0';
+        });
+      }
+      
+      // 버튼 요소의 수직 정렬 및 좌측 정렬 적용
+      const buttons = htmlCell.querySelectorAll('button, .flex');
+      buttons.forEach(btn => {
+        (btn as HTMLElement).style.alignItems = 'center';
+        (btn as HTMLElement).style.justifyContent = 'flex-start';
+      });
+      
+      // 테이블 셀 내부의 좌측 정렬 요소 처리
+      const leftAlignedItems = htmlCell.querySelectorAll('.items-start, .justify-start');
+      leftAlignedItems.forEach(item => {
+        (item as HTMLElement).style.justifyContent = 'flex-start';
+        (item as HTMLElement).style.alignItems = 'flex-start';
+      });
+    });
+
+    // 종목명 컬럼 너비 조정 (예: 두 번째 컬럼, 인덱스 1)
+    const stockNameColumnIndex = 1; // 실제 종목명 컬럼 인덱스로 조정하세요.
+
+    try {
+      // 헤더 셀 조정
+      const headerCells = tableClone.querySelectorAll('thead th');
+      if (headerCells.length > stockNameColumnIndex) {
+        const headerCell = headerCells[stockNameColumnIndex] as HTMLElement;
+        if (headerCell) {
+          // 기존 패딩 값을 가져와서 조정하거나 고정값 설정
+          headerCell.style.paddingRight = '5px'; // 오른쪽 패딩 축소
+          console.log(`DEBUG: 종목명 헤더 셀[${stockNameColumnIndex}] 패딩 조정됨`);
+        }
+      }
+
+      // 데이터 셀 조정
+      const dataRows = tableClone.querySelectorAll('tbody tr');
+      dataRows.forEach((row, rowIndex) => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length > stockNameColumnIndex) {
+          const cell = cells[stockNameColumnIndex] as HTMLElement;
+          if (cell) {
+            cell.style.paddingRight = '5px'; // 오른쪽 패딩 축소
+            // console.log(`DEBUG: Row ${rowIndex}, 종목명 데이터 셀[${stockNameColumnIndex}] 패딩 조정됨`); // 너무 많은 로그 방지
+          }
+        }
+      });
+      console.log(`DEBUG: 총 ${dataRows.length}개 데이터 행의 종목명 컬럼 패딩 조정 완료`);
+    } catch(e) {
+      console.error("종목명 컬럼 너비 조정 중 오류 발생:", e);
+    }
+
+    // 임시 컨테이너 생성 (스타일 적용 및 중앙 정렬을 위해)
     container.appendChild(tableClone);
     
     // 워터마크 추가 (중앙에 반투명하게 표시)
@@ -284,50 +381,120 @@ export const copyTableAsImage = async (
       container.appendChild(footer);
     }
     
-    // 임시로 DOM에 추가 (스타일 계산을 위해)
+    // 컨테이너를 DOM에 추가 (화면에 보이도록)
     document.body.appendChild(container);
-    container.style.position = 'absolute';
-    container.style.left = '-9999px';
-    
-    // --- 텍스트 위치 조정 시작 ---
-    const textElements = container.querySelectorAll('td, th, span, p, div, caption'); // 텍스트를 포함할 수 있는 주요 요소 선택
-    textElements.forEach(el => {
-      // HTMLElement 타입인지 확인하고 style 속성에 접근
-      if (el instanceof HTMLElement) {
-        el.style.position = 'relative';
-        el.style.top = '-5px'; // 텍스트를 위로 5px 이동
-      }
-    });
-    // --- 텍스트 위치 조정 끝 ---
-    
-    // dom-to-image-more 사용
-    const dataUrl = await domtoimage.toPng(container, {
-      // scale 옵션은 dom-to-image-more에서 직접 지원하지 않음
-      // 필요 시 후처리로 크기 조절 필요
-      bgcolor: mergedOptions.backgroundColor, // backgroundColor -> bgcolor
-      width: container.scrollWidth, // 캡처 영역 너비 명시
-      height: container.scrollHeight, // 캡처 영역 높이 명시
-      style: {
-        // 렌더링 전 스타일 강제 적용 (폰트 로딩 등)
-        transform: 'scale(1)', // 스케일 초기화
-        transformOrigin: 'top left',
-      }
-    });
 
-    // 임시 컨테이너 제거
-    document.body.removeChild(container);
-    
-    // 이미지를 클립보드에 복사
-    const blob = await fetch(dataUrl).then(res => res.blob());
-    if (!blob) {
-      console.error('이미지 생성 실패');
-      return;
-    }
-    
+    // 렌더링 완료를 위해 약간의 지연 추가
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     try {
-      // 클립보드에 이미지 복사
-      const item = new ClipboardItem({ 'image/png': blob });
-      await navigator.clipboard.write([item]);
+
+      // 로깅 추가: 컨테이너 크기 및 내용 확인
+      console.log('DEBUG: Container dimensions before toPng:', container.offsetWidth, container.offsetHeight);
+      console.log('DEBUG: Container innerHTML start:', container.innerHTML.substring(0, 500));
+
+      // 컨테이너 크기를 내용에 맞게 조정
+      container.style.width = 'fit-content';
+      container.style.height = 'fit-content';
+      
+      // 내부 요소들의 스크롤 방지 및 스타일 직접 적용
+      const allElements = container.querySelectorAll('*');
+      allElements.forEach((el) => {
+        if (el instanceof HTMLElement) {
+          el.style.overflow = 'visible';
+          
+          // 테이블 셀에 직접 스타일 적용
+          if (el.tagName === 'TD' || el.tagName === 'TH') {
+            el.style.padding = '2px 4px';
+            el.style.border = '1px solid #ddd';
+          }
+          
+          // 버튼 스타일 적용
+          if (el.tagName === 'BUTTON') {
+            el.style.padding = '2px 4px';
+            el.style.margin = '2px';
+            el.style.fontSize = '9px';
+          }
+        }
+      });
+      
+      // 충분한 지연으로 스타일 적용 및 렌더링 보장
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('컨테이너 크기:', container.offsetWidth, container.offsetHeight);
+      console.log('컨테이너 내용 크기:', container.scrollWidth, container.scrollHeight);
+      
+      // 이미지 생성 전에 컨테이너가 제대로 보이는지 확인 (디버깅용)
+      // 2초 대기하여 화면에 보이는 그대로 이미지 저장
+      // 이 시간을 더 늘리면 이미지가 더 정확하게 저장될 수 있음
+      console.log('컨테이너 렌더링을 위해 2초 대기 시작...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('대기 완료, 이미지 캡처 시작');
+      
+      // 화면에 보이는 그대로 이미지 생성 (화면 캡처 방식)
+      let dataUrl;
+
+      try {
+        // 화면에 보이는 그대로 직접 컨테이너를 캡처
+        console.log('미리보기 요소 캡처 시도:', container.offsetWidth, 'x', container.offsetHeight);
+        
+        // html2canvas 대신 html-to-image의 toPng 사용
+        // 이미 화면에 보이는 컨테이너를 그대로 캡처
+        dataUrl = await toPng(container, {
+          pixelRatio: 2, // 해상도 설정
+          backgroundColor: '#ffffff',
+          skipFonts: true, // 웹폰트 문제 해결을 위해 건너뛰기
+          cacheBust: true, // 캡시 문제 해결
+          quality: 1.0, // 최고 품질
+          canvasWidth: container.offsetWidth * 2,
+          canvasHeight: container.offsetHeight * 2,
+          // 스타일 문제 해결을 위한 필터
+          filter: (node) => {
+            // 스크립트와 스타일 요소 제외
+            return node.tagName !== 'SCRIPT';
+          }
+        });
+        
+        console.log('이미지 생성 성공:', dataUrl.substring(0, 50) + '...');
+      } catch (error) {
+        console.error('이미지 생성 오류:', error);
+        
+        // 대체 방법: 스크린샷 API 사용 시도 (브라우저에서 지원하는 경우)
+        try {
+          // 더 단순한 설정으로 재시도
+          dataUrl = await toPng(container, {
+            pixelRatio: 2,
+            backgroundColor: '#ffffff',
+            skipFonts: true,
+            cacheBust: true,
+            includeQueryParams: true,
+            // 추가 옵션 제거
+            style: undefined,
+            width: undefined,
+            height: undefined
+          });
+        } catch (fallbackError) {
+          console.error('대체 방법도 실패:', fallbackError);
+          throw new Error('이미지 생성 실패');
+        }
+      }
+
+      // 데이터 URL이 없으면 오류 발생
+      if (!dataUrl) {
+        throw new Error('이미지 데이터 URL을 생성하지 못했습니다.');
+      }
+      
+      // 데이터 URL을 Blob으로 변환
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+
+      // 클립보드에 복사
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      
+      // 임시 컨테이너 제거
+      document.body.removeChild(container);
       
       // 성공 메시지 표시
       document.body.removeChild(loadingToast);
@@ -341,16 +508,22 @@ export const copyTableAsImage = async (
         document.body.removeChild(successToast);
       }, 3000);
     } catch (error) {
-      console.error('클립보드 복사 실패:', error);
-      alert('클립보드 복사에 실패했습니다. 브라우저 권한을 확인해주세요.');
+      console.error('이미지 생성 실패:', error);
+      document.body.removeChild(loadingToast);
+      alert(`이미지 생성에 실패했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      // 임시 컨테이너 제거 (finally 블록으로 이동하여 에러 발생 시에도 제거되도록 보장)
+      if (document.body.contains(container)) {
+        document.body.removeChild(container);
+      }
+      // 로딩 메시지 제거 (성공/실패 여부와 관계없이 항상 제거)
+      if (document.body.contains(loadingToast)) {
+        document.body.removeChild(loadingToast);
+      }
     }
   } catch (error) {
     console.error('이미지 생성 실패:', error);
-    alert('이미지 생성에 실패했습니다.');
-  } finally {
-    // 로딩 메시지 제거 (오류 발생 시에도 제거)
-    if (document.body.contains(loadingToast)) {
-      document.body.removeChild(loadingToast);
-    }
+    document.body.removeChild(loadingToast);
+    alert(`이미지 생성에 실패했습니다: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
