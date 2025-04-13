@@ -36,19 +36,26 @@ TELEGRAM_SUMMARY_PROMPT = """
 1. 메시지의 시간 순서를 고려하여 사건의 흐름을 파악하세요.
 2. 중복되는 정보는 한 번만 포함하세요.
 3. 질문과 관련 없는 메세지는 제외하세요.
-4. 구체적인 수치나 통계는 정확히 인용하세요.
-5. 메시지 작성자의 주관적 의견과 객관적 사실을 구분하세요.
-6. 요약은 명확하고 간결하게 작성하되, 중요한 세부사항은 포함하세요.
+4. 질문과 관련 없는 종목에 대한 메시지는 반드시 제외하세요.
+5. 재무데이터(매출, 영업이익, 순이익)가 포함된 메시지의 경우, 종목명 또는 종목코드가 정확히 일치하지 않으면 제외하세요.
+6. 구체적인 수치나 통계는 정확히 인용하세요.
+7. 메시지 작성자의 주관적 의견과 객관적 사실을 구분하세요.
+8. 요약은 명확하고 간결하게 작성하되, 중요한 세부사항은 포함하세요.
 
+메시지 필터링 규칙:
+- 재무데이터(매출, 영업이익, 순이익) 메시지는 위의 종목코드나 종목명이 정확히 언급된 경우에만 포함
+- 다른 종목에 대한 내용이 혼합된 메시지에서는 관련 종목 정보만 추출하여 요약에 포함
 """
 
 
 #def format_telegram_messages(messages):
-def format_telegram_messages(telegram_data: List[RetrievedTelegramMessage]):
+def format_telegram_messages(telegram_data: dict, stock_code: str = None, stock_name: str = None):
     """텔레그램 메시지 목록을 형식화합니다.
     
     Args:
-        messages: RetrievedMessage 객체 목록
+        telegram_data: 텔레그램 데이터 (messages와 summary를 포함)
+        stock_code: 종목 코드
+        stock_name: 종목명
         
     Returns:
         형식화된 메시지 문자열
@@ -57,7 +64,7 @@ def format_telegram_messages(telegram_data: List[RetrievedTelegramMessage]):
     # 요약만 넘길것인가
     # 요약 + 메시지 모두 넘길것인가
     summary = telegram_data.get("summary", "")
-    messages: List[RetrievedTelegramMessage] = telegram_data.get("messages", [])
+    messages = telegram_data.get("messages", [])
     
     if summary:
         content = f"\n종합결과: \n{summary}"

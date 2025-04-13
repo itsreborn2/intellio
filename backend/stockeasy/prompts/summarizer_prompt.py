@@ -225,6 +225,7 @@ DEEP_RESEARCH_SYSTEM_PROMPT = """
    - 각 출처의 정보를 단순히 나열하지 말고, 서로 다른 출처의 정보를 교차 검증하세요
    - 상충되는 정보가 있다면 이를 명시하고, 가능한 원인과 함께 어떤 관점이 더 신뢰할 수 있는지 분석하세요
    - 시간적 흐름에 따라 정보를 정렬하여 변화하는 추세와 패턴을 파악하세요
+   - 정보 출처의 우선순위는 사업보고서 > 기업리포트 > 텔레그램 > 비공개자료 순으로 고려하세요
 
 2. **멀티레이어 분석**
    - 1차 분석: 각 정보 소스의 핵심 주장과 근거를 추출
@@ -246,6 +247,17 @@ DEEP_RESEARCH_SYSTEM_PROMPT = """
    - 불확실성이 높은 부분은 그 이유와 함께 설명하세요
    - 향후 모니터링이 필요한 핵심 지표나 이벤트를 제안하세요
 
+## 정보 출처 신뢰도 및 우선순위
+
+분석 시 다음과 같은 우선순위로 정보를 고려하세요:
+
+1. **사업보고서** - 가장 높은 신뢰도를 갖는 공식 문서로, 재무제표 및 경영 분석 정보를 최우선으로 고려
+2. **기업리포트** - 증권사 등 전문기관의 분석 보고서로, 전문가의 시각과 분석을 중요하게 고려
+3. **텔레그램 메시지** - 비공식 채널의 정보로, 시장 정서나 단기적 이슈를 파악하는 데 참고
+4. **비공개자료** - 출처가 명확하지 않은 정보로, 다른 신뢰성 높은 자료와 교차 검증 후 보조적으로만 활용
+
+재무 데이터를 분석할 때는 항상 공식 사업보고서와 같은 신뢰할 수 있는 출처의 정보를 우선시하고, 다른 출처의 정보는 이를 보완하는 관점에서 활용하세요.
+
 ## 최종 결과물 구조화
 
 리서치 보고서 형식으로 구조화된 결과물을 제공하세요. 단순 요약이나 짧은 답변은 적절하지 않습니다.
@@ -257,7 +269,7 @@ DEEP_RESEARCH_SYSTEM_PROMPT = """
 2. **종합 분석 (Comprehensive Analysis)**
    - 산업/시장 동향 분석
    - 기업 전략 및 포지셔닝 평가
-   - 재무 성과 및 전망 분석
+   - 재무 성과 및 전망 분석 (공식 사업보고서 데이터 중심)
    - 경쟁사 비교 및 차별화 요소
    - 리스크 요인 및 기회 요소
 
@@ -278,7 +290,7 @@ DEEP_RESEARCH_SYSTEM_PROMPT = """
 
 - **종목기본정보**: 단순 사실 나열을 넘어 기업의 핵심 가치 제안, 경쟁 우위, 시장 포지셔닝을 심층 분석하세요.
 - **성과전망**: 다양한 내부/외부 요인을 고려한 시나리오별 전망과 각 시나리오의 발생 조건 및 가능성을 분석하세요.
-- **재무분석**: 단순 지표 나열이 아닌, 재무 결과의 원인과 영향, 미래 재무 성과 예측 근거를 심층적으로 분석하세요.
+- **재무분석**: 단순 지표 나열이 아닌, 재무 결과의 원인과 영향, 미래 재무 성과 예측 근거를 심층적으로 분석하세요. 사업보고서의 재무데이터를 최우선으로 참고하세요.
 - **산업동향**: 산업 내 기업의 위치, 산업 변화가 특정 기업에 미치는 영향, 산업 트렌드와 기업 전략의 정합성을 평가하세요.
 
 ## 추가 지침
@@ -291,7 +303,6 @@ DEEP_RESEARCH_SYSTEM_PROMPT = """
 - 정보의 품질과 양에 관계없이, 사용자의 질문에 최대한 깊이 있는 응답을 제공하세요.
 
 당신의 임무는 단순히 정보를 요약하는 것이 아니라, 다양한 출처의 정보를 통합하고 분석하여 투자 의사결정에 실질적으로 도움이 되는 심층적인 인사이트를 제공하는 것입니다.
-
 """
 DEEP_RESEARCH_USER_PROMPT = """
 사용자 질문: {query}
@@ -323,10 +334,21 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
         # 소스 정보 형식화
         sources_info = ""
         
-        # 텔레그램 메시지
-        if telegram_data:
-            formatted_msgs = format_telegram_messages(telegram_data)
-            sources_info += f"------\n출처 - 내부DB :\n{formatted_msgs}\n\n"
+        # 재무 정보
+ 
+        if financial_data:
+            sources_info += "------\n사업보고서, 재무 분석 정보:\n"
+            llm_response = financial_data.get("llm_response", "")
+            if llm_response:
+                sources_info += f"{llm_response}\n\n"
+            else:
+                sources_info += "재무 분석 결과가 없습니다.\n\n"
+
+        if revenue_breakdown_data and len(revenue_breakdown_data) > 0:
+            sources_info += "------\n매출 및 수주 현황:\n"
+            sources_info += f"{revenue_breakdown_data}\n\n"
+
+        
         
         # 기업 리포트
         if report_data:
@@ -382,19 +404,11 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                     #sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"         
                     sources_info += f"[출처: {report_source}, {report_page}]\n{report_info}\n\n"         
         
-        # 재무 정보
- 
-        if financial_data:
-            sources_info += "------\n재무 정보:\n"
-            llm_response = financial_data.get("llm_response", "")
-            if llm_response:
-                sources_info += f"{llm_response}\n\n"
-            else:
-                sources_info += "재무 분석 결과가 없습니다.\n\n"
-
-        if revenue_breakdown_data and len(revenue_breakdown_data) > 0:
-            sources_info += "------\n매출 및 수주 현황:\n"
-            sources_info += f"{revenue_breakdown_data}\n\n"
+        # 텔레그램 메시지
+        if telegram_data:
+            formatted_msgs = format_telegram_messages(telegram_data, stock_code, stock_name)
+            sources_info += f"------\n출처 - 내부DB :\n{formatted_msgs}\n\n"
+        
         
 
         

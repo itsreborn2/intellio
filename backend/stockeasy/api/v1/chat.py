@@ -65,6 +65,10 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
             "start": "재무 데이터 분석 중...",
             "complete": "재무 분석 완료"
         },
+        "revenue_breakdown": {
+            "start": "매출 및 수주 현황 분석 중...",
+            "complete": "매출 및 수주 현황 분석 완료"
+        },
         "industry_analyzer": {
             "start": "산업 및 경쟁사 분석 중...",
             "complete": "산업 분석 완료"
