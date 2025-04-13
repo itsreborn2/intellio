@@ -431,7 +431,8 @@ class KnowledgeIntegratorAgent(BaseAgent):
         return formatted
     
     def _format_financial_results(self, financial_data: Dict[str, Any]) -> str:
-        """재무 분석 결과를 문자열로 포맷팅
+        """
+        재무 분석 결과를 문자열로 포맷팅합니다.
         
         Args:
             financial_data: {
@@ -440,7 +441,11 @@ class KnowledgeIntegratorAgent(BaseAgent):
                     "stock_code": str,
                     "stock_name": str,
                     "report_count": int,
-                    "years_covered": List[int]
+                    "date_range": {
+                        "start_date": str,
+                        "end_date": str,
+                        "included_years": List[int]
+                    }
                 },
                 "raw_financial_data": List[Dict]
             }
@@ -458,9 +463,17 @@ class KnowledgeIntegratorAgent(BaseAgent):
         # 추출된 데이터 정보 추가
         extracted_data = financial_data.get("extracted_data", {})
         if extracted_data:
-            years = extracted_data.get("years_covered", [])
-            if years:
-                formatted += f"분석 기간: {min(years)}년 ~ {max(years)}년\n"
+            date_range = extracted_data.get("date_range", {})
+            if date_range:
+                start_date = date_range.get("start_date", "")
+                end_date = date_range.get("end_date", "")
+                if start_date and end_date:
+                    formatted += f"분석 기간: {start_date} ~ {end_date}\n"
+                # 후속 처리를 위해 included_years 정보도 유지
+                included_years = date_range.get("included_years", [])
+                if included_years:
+                    formatted += f"포함된 연도: {', '.join(map(str, included_years))}\n"
+                    
             report_count = extracted_data.get("report_count", 0)
             if report_count:
                 formatted += f"분석된 보고서 수: {report_count}개\n\n"

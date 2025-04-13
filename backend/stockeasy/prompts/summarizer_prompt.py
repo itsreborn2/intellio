@@ -308,7 +308,9 @@ DEEP_RESEARCH_USER_PROMPT = """
 def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[str],
                 classification: Dict[str, Any], telegram_data: Dict[str, Any],
                 report_data: List[Dict[str, Any]], confidential_data: List[Dict[str, Any]],
-                financial_data: Dict[str, Any], industry_data: List[Dict[str, Any]], integrated_knowledge: Optional[Any],
+                financial_data: Dict[str, Any],
+                revenue_breakdown_data: str,
+                industry_data: List[Dict[str, Any]], integrated_knowledge: Optional[Any],
                 system_prompt: Optional[str] = None) -> ChatPromptTemplate:
         """요약을 위한 프롬프트 생성"""
         
@@ -324,12 +326,12 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
         # 텔레그램 메시지
         if telegram_data:
             formatted_msgs = format_telegram_messages(telegram_data)
-            sources_info += f"\n출처 - 내부DB :\n{formatted_msgs}\n\n"
+            sources_info += f"------\n출처 - 내부DB :\n{formatted_msgs}\n\n"
         
         # 기업 리포트
         if report_data:
             analysis = report_data.get("analysis", {})
-            sources_info += "\n출처 - 기업 리포트:\n"
+            sources_info += "------\n출처 - 기업 리포트:\n"
             if analysis:
                 # 전체 소스를 다 줄게 아니라, 기업리포트 에이전트가 출력한 결과만 전달.
                 # 아.. 인용처리가 애매해지네.
@@ -349,7 +351,7 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
         # 산업 동향(일단 미구현. 산업리포트 에이전트 추가 후에 풀것)
         if industry_data:
             analysis = industry_data.get("analysis", {})
-            sources_info += "\n출처 - 산업 동향:\n"
+            sources_info += "------\n출처 - 산업 동향:\n"
             if analysis:
                 sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
             else:
@@ -360,15 +362,11 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                     report_date = report.get("published_date", "날짜 미상")
                     report_page = f"{report.get('page', '페이지 미상')} p"
                     sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
-                # industry_info = item.get("content", "")
-                # industry_source = item.get("source", "미상")
-                # industry_date = item.get("published_date", "날짜 미상")
-                # sources_info += f"[출처: {industry_source}, {industry_date}]\n{industry_info}\n\n"   
 
-         # 기업 리포트
+         # 비공개 리포트
         if confidential_data:
             analysis = confidential_data.get("analysis", {})
-            sources_info += "\n출처 - 비공개자료:\n"
+            sources_info += "------\n출처 - 비공개자료:\n"
             if analysis:
                 # 전체 소스를 다 줄게 아니라, 기업리포트 에이전트가 출력한 결과만 전달.
                 # 아.. 인용처리가 애매해지네.
@@ -387,12 +385,16 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
         # 재무 정보
  
         if financial_data:
-            sources_info += "재무 정보:\n"
+            sources_info += "------\n재무 정보:\n"
             llm_response = financial_data.get("llm_response", "")
             if llm_response:
                 sources_info += f"{llm_response}\n\n"
             else:
                 sources_info += "재무 분석 결과가 없습니다.\n\n"
+
+        if revenue_breakdown_data and len(revenue_breakdown_data) > 0:
+            sources_info += "------\n매출 및 수주 현황:\n"
+            sources_info += f"{revenue_breakdown_data}\n\n"
         
 
         

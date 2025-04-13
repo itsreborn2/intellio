@@ -47,6 +47,8 @@ def format_orchestrator_prompt(
         data_req_list.append("재무 데이터")
     if data_requirements.get("industry_data_needed"):
         data_req_list.append("산업 동향 데이터")
+    if data_requirements.get("revenue_data_needed"):
+        data_req_list.append("매출 및 수주 현황 데이터")
     
     data_req_str = ", ".join(data_req_list) if data_req_list else "없음"
     

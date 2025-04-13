@@ -36,7 +36,8 @@ class ParallelSearchAgent(BaseAgent):
             "report_analyzer", 
             "financial_analyzer", 
             "industry_analyzer",
-            "confidential_analyzer"
+            "confidential_analyzer",
+            "revenue_breakdown"
         ]
     
     async def process(self, state: AgentState) -> AgentState:
@@ -125,6 +126,9 @@ class ParallelSearchAgent(BaseAgent):
                     should_execute = True
                 elif agent_name == "confidential_analyzer" and data_requirements.get("confidential_data_needed", False):
                     logger.info(f"비공개 자료 필요: {agent_name}, {data_requirements}")
+                    should_execute = True
+                elif agent_name == "revenue_breakdown" and data_requirements.get("revenue_data_needed", False):
+                    logger.info(f"매출 및 수주 현황 데이터 필요: {agent_name}, {data_requirements}")
                     should_execute = True
             #logger.info(f"데이터 요구사항: {should_execute} {agent_name}, {data_requirements}")
             # 에이전트가 존재하고 실행이 필요한 경우 목록에 추가

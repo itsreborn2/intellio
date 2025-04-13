@@ -44,7 +44,7 @@ FINANCIAL_ANALYSIS_SYSTEM_PROMPT = """당신은 기업 재무제표 및 사업�
 
 """
 
-def format_financial_data(financial_data: List[Dict[str, Any]]) -> str:
+def format_financial_data(formatted_data: List[Dict[str, Any]]) -> str:
     """재무 데이터를 문자열로 포맷팅합니다.
 
     Args:
@@ -53,12 +53,34 @@ def format_financial_data(financial_data: List[Dict[str, Any]]) -> str:
     Returns:
         str: 포맷팅된 재무 데이터 문자열
     """
-    if not financial_data:
+    if not formatted_data:
+        print("[FIN_FORMAT] 입력 데이터가 비어 있습니다.")
         return "재무 데이터가 없습니다."
     
-    formatted_data = []
+    # 원본 데이터 보존을 위해 복사본 생성
+    result_strings = []
     
-    for item in financial_data:
+    print(f"[FIN_FORMAT] 입력 데이터 길이: {len(formatted_data)}")
+    print(f"[FIN_FORMAT] 입력 데이터 ID: {id(formatted_data)}")
+    
+    for idx, item in enumerate(formatted_data):
+        # item의 키값 출력
+        if isinstance(item, dict):
+            print(f"[FIN_FORMAT] [{idx}] 딕셔너리 항목, 키: {list(item.keys())}")
+        else:
+            print(f"[FIN_FORMAT] [{idx}] 예상치 못한 타입: {type(item)}")
+            
+        # 문자열인 경우 그대로 추가
+        if isinstance(item, str):
+            result_strings.append(item)
+            continue
+            
+        # 딕셔너리가 아닌 경우 건너뛰기
+        if not isinstance(item, dict):
+            print(f"[FIN_FORMAT] 경고: 잘못된 데이터 타입: {type(item)} (인덱스 {idx})")
+            continue
+            
+        # 필요한 값 추출
         source = item.get("source", "알 수 없는 출처")
         date = item.get("date", "날짜 없음")
         content = item.get("content", "")
@@ -75,9 +97,15 @@ def format_financial_data(financial_data: List[Dict[str, Any]]) -> str:
         # 보고서 내용 추가
         data_str += f"\n## 보고서 본문:\n{content}\n"
         
-        formatted_data.append(data_str)
+        # 결과 문자열 목록에 추가 (원본 데이터를 변경하지 않음)
+        result_strings.append(data_str)
     
-    return "\n\n===== 보고서 구분선 =====\n\n".join(formatted_data)
+    print(f"[FIN_FORMAT] 결과 문자열 수: {len(result_strings)}")
+    result = "\n\n===== 보고서 구분선 =====\n\n".join(result_strings)
+    print(f"[FIN_FORMAT] 반환되는 최종 문자열 길이: {len(result)}")
+    
+    # 모든 포맷팅된 문자열을 구분선으로 연결하여 반환
+    return result
 
 # PDF 텍스트에서 재무 지표 추출을 위한 프롬프트
 FINANCIAL_DATA_EXTRACTION_PROMPT = """당신은 재무제표와 사업보고서에서 정보를 추출하는 전문가입니다.

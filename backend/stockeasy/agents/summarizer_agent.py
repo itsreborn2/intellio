@@ -54,7 +54,7 @@ class SummarizerAgent(BaseAgent):
             financial_data = agent_results.get("financial_analyzer", {}).get("data", {})
             industry_data = agent_results.get("industry_analyzer", {}).get("data", [])
             confidential_data = agent_results.get("confidential_analyzer", {}).get("data", {})
-            
+            revenue_breakdown_data = agent_results.get("revenue_breakdown", {}).get("data", {})
             # 통합된 지식이 있으면 사용
             integrated_knowledge = agent_results.get("knowledge_integrator", {}).get("data", {})
             #integrated_knowledge = state.get("integrated_knowledge")
@@ -110,7 +110,8 @@ class SummarizerAgent(BaseAgent):
                 query=query, stock_code=stock_code, stock_name=stock_name, classification=classification,
                 telegram_data=telegram_data, report_data=report_data, confidential_data=confidential_data,
                 financial_data=financial_data, industry_data=industry_data,
-                integrated_knowledge=integrated_knowledge, system_prompt=system_prompt
+                integrated_knowledge=integrated_knowledge, revenue_breakdown_data=revenue_breakdown_data,
+                system_prompt=system_prompt
             )
             
             # LLM으로 요약 생성
