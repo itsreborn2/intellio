@@ -96,6 +96,8 @@ export default function RSRankPage() {
   const [highData, setHighData] = useState<CSVData>({ headers: [], rows: [], errors: [] });
   const [highDataLoading, setHighDataLoading] = useState<boolean>(true);
   const [highDataError, setHighDataError] = useState<string | null>(null);
+  const [highSortKey, setHighSortKey] = useState<string>('RS');
+  const [highSortDirection, setHighSortDirection] = useState<SortDirection>('desc');
   
   // 업데이트 날짜 상태 추가
   const [updateDate, setUpdateDate] = useState<string | null>(null); 
@@ -699,6 +701,14 @@ export default function RSRankPage() {
     setSortDirection(direction);
   };
 
+  // 52주 신고가 테이블 정렬 함수
+  const handleHighSort = useCallback((key: string) => {
+    setHighSortKey(key);
+    setHighSortDirection(prev => 
+      key === highSortKey ? (prev === 'asc' ? 'desc' : 'asc') : 'desc'
+    );
+  }, [highSortKey]);
+
   // 셀의 정렬 방향을 결정하는 함수
   const getCellAlignment = (header: string) => {
     // RS 관련 수치들은 가운데 정렬
@@ -787,6 +797,38 @@ export default function RSRankPage() {
     return sortedData.slice(startIndex, startIndex + 20);
   }, [csvData, currentPage, sortKey, sortDirection]);
 
+  // 52주 신고가 데이터 정렬
+  const sortedHighData = useMemo(() => {
+    if (!highSortKey || highSortDirection === null) {
+      return [...highData.rows];
+    }
+    
+    return [...highData.rows].sort((a, b) => {
+      let aValue = a[highSortKey];
+      let bValue = b[highSortKey];
+      
+      // 등락률 컬럼의 경우 숫자로 변환하여 비교
+      if (highSortKey === '등락률') {
+        aValue = parseFloat(aValue.replace('%', '')) || 0;
+        bValue = parseFloat(bValue.replace('%', '')) || 0;
+      }
+      // 시가총액 컬럼의 경우 숫자로 변환하여 비교
+      else if (highSortKey === '시가총액') {
+        aValue = parseFloat(aValue.replace(/,/g, '')) || 0;
+        bValue = parseFloat(bValue.replace(/,/g, '')) || 0;
+      }
+      // 거래대금 컬럼의 경우 숫자로 변환하여 비교
+      else if (highSortKey === '거래대금') {
+        aValue = parseFloat(aValue.replace(/,/g, '')) || 0;
+        bValue = parseFloat(bValue.replace(/,/g, '')) || 0;
+      }
+      
+      if (aValue < bValue) return highSortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return highSortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [highData.rows, highSortKey, highSortDirection]);
+
   // 총 페이지 수 계산 - 필터링된 데이터 기준으로 계산
   const totalPages = useMemo(() => {
     if (!csvData || !csvData.rows) return 0;
@@ -832,21 +874,15 @@ export default function RSRankPage() {
       
       // 숫자로 변환 후 억 단위로 나누고 소수점 없이 표시
       const valueStr = typeof value === 'number' ? String(value) : value;
-      let marketCapInBillions;
-      if (valueStr.includes('E')) {
-        // 지수 표기법이면 그대로 Number 변환 후 억 단위로 변환
-        marketCapInBillions = Number(valueStr) / 100000000;
-      } else {
-        // 일반 숫자 형식이면 콤마 제거 후 Number 변환
-        marketCapInBillions = Number(valueStr.replace(/,/g, '')) / 100000000;
+      let marketCapValue = Number(valueStr.replace(/[^0-9.]/g, ''));
+      
+      // 10억 이상인 경우 억 단위로 변환 (1,000,000,000 이상)
+      if (marketCapValue >= 100000000) {
+        marketCapValue = marketCapValue / 100000000; // 억 단위로 변환
       }
       
-      // 천 단위 구분 쉼표(,) 추가
-      if (marketCapInBillions >= 100000000) {
-        return Math.floor(marketCapInBillions / 100000000).toLocaleString('ko-KR');
-      } else {
-        return Math.floor(marketCapInBillions).toLocaleString('ko-KR');
-      }
+      // 소수점 제거하고 천 단위 구분 쉼표(,) 추가
+      return Math.floor(marketCapValue).toLocaleString('ko-KR');
     }
     
     // 거래대금 컬럼인 경우 억 단위로 포맷팅
@@ -1384,13 +1420,13 @@ export default function RSRankPage() {
                                 <th 
                                   className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
                                   style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '90px', height: '35px' }}
-                                  onClick={() => requestSort('종목명')}
+                                  onClick={() => handleHighSort('종목명')}
                                 >
                                   <div className="flex items-center justify-center">
                                     <span>종목명</span>
-                                    {sortKey === '종목명' && (
+                                    {highSortKey === '종목명' && (
                                       <span className="ml-1">
-                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                        {highSortDirection === 'asc' ? '↑' : '↓'}
                                       </span>
                                     )}
                                   </div>
@@ -1398,13 +1434,13 @@ export default function RSRankPage() {
                                 <th 
                                   className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
                                   style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '45px', height: '35px' }}
-                                  onClick={() => requestSort('RS')}
+                                  onClick={() => handleHighSort('RS')}
                                 >
                                   <div className="flex items-center justify-center">
                                     <span>RS</span>
-                                    {sortKey === 'RS' && (
+                                    {highSortKey === 'RS' && (
                                       <span className="ml-1">
-                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                        {highSortDirection === 'asc' ? '↑' : '↓'}
                                       </span>
                                     )}
                                   </div>
@@ -1412,13 +1448,13 @@ export default function RSRankPage() {
                                 <th 
                                   className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
                                   style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '55px', height: '35px' }} // 너비 늘림 (예: 55px -> 60px)
-                                  onClick={() => requestSort('등락률')}
+                                  onClick={() => handleHighSort('등락률')}
                                 >
                                   <div className="flex items-center justify-center">
                                     <span>등락률</span>
-                                    {sortKey === '등락률' && (
+                                    {highSortKey === '등락률' && (
                                       <span className="ml-1">
-                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                        {highSortDirection === 'asc' ? '↑' : '↓'}
                                       </span>
                                     )}
                                   </div>
@@ -1426,13 +1462,13 @@ export default function RSRankPage() {
                                 <th 
                                   className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
                                   style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px', height: '35px' }}
-                                  onClick={() => requestSort('시가총액')}
+                                  onClick={() => handleHighSort('시가총액')}
                                 >
                                   <div className="flex items-center justify-center">
                                     <span>시가총액</span>
-                                    {sortKey === '시가총액' && (
+                                    {highSortKey === '시가총액' && (
                                       <span className="ml-1">
-                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                        {highSortDirection === 'asc' ? '↑' : '↓'}
                                       </span>
                                     )}
                                   </div>
@@ -1440,13 +1476,13 @@ export default function RSRankPage() {
                                 <th 
                                   className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center"
                                   style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', width: '60px', height: '35px' }}
-                                  onClick={() => requestSort('거래대금')}
+                                  onClick={() => handleHighSort('거래대금')}
                                 >
                                   <div className="flex items-center justify-center">
                                     <span>거래대금</span>
-                                    {sortKey === '거래대금' && (
+                                    {highSortKey === '거래대금' && (
                                       <span className="ml-1">
-                                        {sortDirection === 'asc' ? '▲' : '▼'}
+                                        {highSortDirection === 'asc' ? '↑' : '↓'}
                                       </span>
                                     )}
                                   </div>
@@ -1454,7 +1490,7 @@ export default function RSRankPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {combinedHighData.slice(0, 20).map((row: any, rowIndex: number) => (
+                              {sortedHighData.slice(0, 20).map((row: any, rowIndex: number) => (
                                 <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                                   <td 
                                     className="py-1 px-0.5 sm:py-1.5 sm:px-1 md:px-2 border-b border-r text-left whitespace-nowrap overflow-hidden text-ellipsis"
