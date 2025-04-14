@@ -1391,7 +1391,7 @@ export default function RSRankPage() {
                   {/* 52주 신고/신저가 테이블 섹션 */}
                   <div className="flex-1">
                     <div ref={highHeaderRef} className="flex justify-between items-center mb-2">
-                      <h2 className="text-sm md:text-base font-semibold text-gray-700">52주 신고/신저가</h2>
+                      <h2 className="text-sm md:text-base font-semibold text-gray-700">52주 주요 종목</h2>
                       <div className="flex items-center space-x-2">
                         {/* 업데이트 날짜 표시 */}
                         {updateDate && (
