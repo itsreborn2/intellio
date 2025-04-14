@@ -631,10 +631,11 @@ const ValuationPage = () => {
           <div className="bg-white rounded-md shadow p-2 md:p-4">
             {/* 내부 패딩 조정: 하단 패딩(pb) 제거 */}
             <div className="bg-white rounded border border-gray-100 p-2 md:p-4 h-auto"> 
+              {/* 테이블 제목 추가 */}
+              <h2 className="text-sm md:text-base font-semibold">밸류에이션</h2>
               {/* 테이블 헤더 영역 */}
               <div ref={headerRef} className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3"> {/* 제목 영역 + mb-3 */}
                 {/* text-lg 클래스 제거하여 RS 순위 제목과 크기 맞춤 */}
-                <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>밸류에이션</h2>
               </div>
               
               {/* 필터 섹션 */}
@@ -647,8 +648,11 @@ const ValuationPage = () => {
                   {selectedStock ? (
                     <button
                       onClick={handleClearSelectedStock}
-                      className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
-                      style={{ height: '35px', borderRadius: '4px' }}
+                      className="px-2 sm:px-3 bg-gray-200 text-gray-700 text-[10px] sm:text-xs hover:bg-gray-300 focus:outline-none"
+                      style={{ 
+                        height: '35px',
+                        borderRadius: '4px'
+                      }}
                     >
                       <span>{selectedStock.name} ({selectedStock.code})</span>
                       <span className="ml-1">×</span>
@@ -784,7 +788,7 @@ const ValuationPage = () => {
                               <th
                                 key={header.id}
                                 scope="col"
-                                className={`px-0.5 sm:px-1 md:px-2 py-2 text-center text-[9px] sm:text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 ${
+                                className={`px-1 sm:px-1.5 md:px-2 py-2 text-center text-[9px] sm:text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 ${ // md:text-sm -> md:text-xs
                                   // 모바일에서 특정 컬럼 숨김 처리
                                   header.id === 'stockCode' ? 'hidden sm:table-cell' : ''
                                 }`}
@@ -820,12 +824,12 @@ const ValuationPage = () => {
                             {row.getVisibleCells().map(cell => (
                               <td
                                 key={cell.id}
-                                className={`border-b border-gray-200 truncate ${cell.column.id === 'stockCode' ? 'text-center hidden sm:table-cell' : cell.column.id === 'stockName' ? 'text-left' : cell.column.id === 'industry' ? 'text-left' : 'text-right'} ${cell.column.id === 'stockName' ? 'font-medium' : ''}`}
+                                className={`px-1 sm:px-1.5 md:px-2 py-2 text-[9px] sm:text-[10px] md:text-xs border-b border-gray-200 truncate ${cell.column.id === 'stockCode' ? 'text-center hidden sm:table-cell' : cell.column.id === 'stockName' ? 'text-left' : cell.column.id === 'industry' ? 'text-left' : 'text-right'} ${cell.column.id === 'stockName' ? 'font-medium' : ''}`} // px-0.5 sm:px-1 -> px-1 sm:px-1.5
                                 style={{
                                   width: `${getColumnWidth(cell.column.id)}px`,
                                   minWidth: `${getColumnWidth(cell.column.id)}px`,
                                   maxWidth: `${getColumnWidth(cell.column.id)}px`,
-                                  ...responsiveStyle,
+                                  // ...responsiveStyle, // 제거
                                 }}
                                 title={typeof cell.getValue() === 'string' ? cell.getValue() as string : undefined}
                               >
