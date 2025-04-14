@@ -163,28 +163,7 @@ export const copyTableAsImage = async (
     
     // 헤더를 컨테이너에 추가
     container.appendChild(headerClone);
-    
-    // 설명 텍스트를 별도로 생성하여 헤더 다음에 직접 추가
-    const descriptionDiv = document.createElement('div');
-    
-    // 테이블 이름에 따라 설명 텍스트 설정
-    if (tableName.includes('52주 신고가')) {
-      descriptionDiv.textContent = '당일 52주 신고가중 RS값이 높은 순서대로 리스트업합니다.';
-    } else {
-      descriptionDiv.textContent = '상대강도(RS) 기준으로 정렬된 주도 종목 리스트입니다.';
-    }
-    
-    // 설명 텍스트 스타일 설정
-    descriptionDiv.style.fontSize = '8px';
-    descriptionDiv.style.color = '#718096';
-    descriptionDiv.style.padding = '2px 0 4px 0'; // 패딩 축소
-    descriptionDiv.style.borderBottom = '1px solid #edf2f7';
-    descriptionDiv.style.marginBottom = '4px'; // 여백 축소
-    descriptionDiv.style.textAlign = 'left';
-    
-    // 설명 텍스트를 컨테이너에 추가 (헤더와 테이블 사이)
-    container.appendChild(descriptionDiv);
-    
+
     // 테이블 복제
     const tableClone = tableRef.current.cloneNode(true) as HTMLElement;
     
