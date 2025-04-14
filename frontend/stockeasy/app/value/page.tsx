@@ -516,6 +516,27 @@ const ValuationPage = () => {
     return initialSizes;
   });
 
+  // 테이블 반응형 디자인 개선
+  const tableContainerStyle: React.CSSProperties = {
+    position: 'relative',
+    width: '100%',
+    overflowX: 'auto', // 모바일에서 가로 스크롤 허용
+    maxHeight: 'calc(100vh - 180px)',
+    overflowY: 'auto',
+    backgroundColor: '#ffffff',
+    borderRadius: '6px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+  };
+
+  const getResponsiveStyle = () => {
+    const width = window.innerWidth;
+    if (width < 640) return { fontSize: '9px', padding: '0.25rem 0.5rem' }; // 모바일
+    if (width < 1024) return { fontSize: '10px', padding: '0.5rem 1rem' }; // 태블릿
+    return { fontSize: '12px', padding: '0.5rem 1rem' }; // 데스크톱
+  };
+
+  const responsiveStyle = useMemo(() => getResponsiveStyle(), []);
+
   // 페이지네이션 및 정렬을 위한 테이블 인스턴스 생성
   const table = useReactTable({
     data: showAllItems ? filteredData : currentPageData, // 전 종목 출력 여부에 따라 데이터 소스 변경
@@ -610,10 +631,11 @@ const ValuationPage = () => {
           <div className="bg-white rounded-md shadow p-2 md:p-4">
             {/* 내부 패딩 조정: 하단 패딩(pb) 제거 */}
             <div className="bg-white rounded border border-gray-100 p-2 md:p-4 h-auto"> 
+              {/* 테이블 제목 추가 */}
+              <h2 className="text-sm md:text-base font-semibold">밸류에이션</h2>
               {/* 테이블 헤더 영역 */}
               <div ref={headerRef} className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3"> {/* 제목 영역 + mb-3 */}
                 {/* text-lg 클래스 제거하여 RS 순위 제목과 크기 맞춤 */}
-                <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>밸류에이션</h2>
               </div>
               
               {/* 필터 섹션 */}
@@ -626,8 +648,11 @@ const ValuationPage = () => {
                   {selectedStock ? (
                     <button
                       onClick={handleClearSelectedStock}
-                      className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
-                      style={{ height: '35px', borderRadius: '4px' }}
+                      className="px-2 sm:px-3 bg-gray-200 text-gray-700 text-[10px] sm:text-xs hover:bg-gray-300 focus:outline-none"
+                      style={{ 
+                        height: '35px',
+                        borderRadius: '4px'
+                      }}
                     >
                       <span>{selectedStock.name} ({selectedStock.code})</span>
                       <span className="ml-1">×</span>
@@ -752,6 +777,7 @@ const ValuationPage = () => {
                   // 모바일에서만 overflow-x-auto 적용, 데스크탑에서는 스크롤 없음
                   className="table-container overflow-x-auto sm:overflow-visible" 
                   ref={tableRef}
+                  style={tableContainerStyle}
                 >
                   <div className="w-full sm:w-auto">
                     <table className="w-full border border-gray-200">
@@ -762,9 +788,9 @@ const ValuationPage = () => {
                               <th
                                 key={header.id}
                                 scope="col"
-                                className={`px-0.5 sm:px-1 md:px-2 py-2 text-center text-[9px] sm:text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 ${
+                                className={`px-1 sm:px-1.5 md:px-2 py-2 text-center text-[9px] sm:text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 ${ // md:text-sm -> md:text-xs
                                   // 모바일에서 특정 컬럼 숨김 처리
-                                  header.id === 'stockCode' || header.id === 'marketCap' ? 'hidden sm:table-cell' : ''
+                                  header.id === 'stockCode' ? 'hidden sm:table-cell' : ''
                                 }`}
                                 style={{ 
                                   width: `${getColumnWidth(header.id)}px`,
@@ -798,21 +824,14 @@ const ValuationPage = () => {
                             {row.getVisibleCells().map(cell => (
                               <td
                                 key={cell.id}
-                                className={`px-0.5 sm:px-1 md:px-2 py-1 whitespace-nowrap text-[9px] sm:text-[10px] md:text-xs border border-gray-200 ${
-                                  // 컬럼별 정렬 방식 적용
-                                  cell.column.id === 'stockCode' ? 'text-center' :
-                                  cell.column.id === 'stockName' || cell.column.id === 'industry' ? 'text-left' :
-                                  'text-right'
-                                } ${
-                                  // 모바일에서 특정 컬럼 숨김 처리
-                                  cell.column.id === 'stockCode' || cell.column.id === 'marketCap' ? 'hidden sm:table-cell' : ''
-                                }`}
-                                style={{ 
+                                className={`px-1 sm:px-1.5 md:px-2 py-2 text-[9px] sm:text-[10px] md:text-xs border-b border-gray-200 truncate ${cell.column.id === 'stockCode' ? 'text-center hidden sm:table-cell' : cell.column.id === 'stockName' ? 'text-left' : cell.column.id === 'industry' ? 'text-left' : 'text-right'} ${cell.column.id === 'stockName' ? 'font-medium' : ''}`} // px-0.5 sm:px-1 -> px-1 sm:px-1.5
+                                style={{
                                   width: `${getColumnWidth(cell.column.id)}px`,
-                                  height: '35px',
                                   minWidth: `${getColumnWidth(cell.column.id)}px`,
-                                  maxWidth: `${getColumnWidth(cell.column.id)}px`
-                                 }}
+                                  maxWidth: `${getColumnWidth(cell.column.id)}px`,
+                                  // ...responsiveStyle, // 제거
+                                }}
+                                title={typeof cell.getValue() === 'string' ? cell.getValue() as string : undefined}
                               >
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
                               </td>

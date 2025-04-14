@@ -445,8 +445,8 @@ export default function IndustryCharts() {
     <div>
       {/* 차트 제목 및 설명 추가 */}
       <div className="mb-4">
-        <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>산업별 주도ETF 차트</h2>
-        <p className="text-gray-600 mr-2 hidden sm:inline" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+        <h2 className="font-semibold whitespace-nowrap text-sm md:text-base">산업별 주도ETF 차트</h2>
+        <p className="text-gray-600 mr-2 hidden sm:inline text-[11px] md:text-xs"> 
           각 산업별 ETF의 20일 이동평균선 기준 상태와 등락률을 확인할 수 있습니다. 
           연한 녹색 배경은 20일선 위에 있는 ETF, 회색 배경은 20일선 아래에 있는 ETF를 나타냅니다.
           각 ETF는 당일 등락률 기준으로 내림차순 정렬되어 있습니다.

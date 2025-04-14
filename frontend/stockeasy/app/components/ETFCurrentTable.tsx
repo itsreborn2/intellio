@@ -6,6 +6,7 @@ import React from 'react';
 import { Sparklines, SparklinesLine, SparklinesSpots, SparklinesReferenceLine, SparklinesBars } from 'react-sparklines';
 import { copyTableAsImage } from '../utils/tableCopyUtils';
 import TableCopyButton from './TableCopyButton';
+import { formatDateMMDD } from '../utils/dateUtils';
 
 // CSV 데이터를 파싱한 결과를 위한 인터페이스
 interface CSVData {
@@ -52,13 +53,14 @@ const ETF_FILES = {
 };
 
 // CSV 파일 파싱 함수
-function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedData; errors: any[] } {
+function parseCSV(csvText: string): { headers: string[]; rows: Record<string, any>[]; groupedData: GroupedData; errors: any[] } {
   try {
     if (!csvText || typeof csvText !== 'string') {
       console.error('유효하지 않은 CSV 텍스트:', csvText);
       // 기본 데이터 반환
       return {
         headers: ['코드', '이름', '가격', '변동', '변동률', '거래량', '시가총액'],
+        rows: [], 
         groupedData: {},
         errors: [],
       };
@@ -87,6 +89,7 @@ function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedDat
       console.error('파싱된 데이터가 없습니다.');
       return {
         headers: results.meta.fields || [],
+        rows: [], 
         groupedData: {},
         errors: [],
       };
@@ -155,16 +158,18 @@ function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedDat
     
     return {
       headers: results.meta.fields || [],
+      rows: results.data as Record<string, any>[], 
       groupedData: groupedData,
-      errors: [],  // 오류가 없는 경우 빈 배열 반환
+      errors: results.errors,
     };
   } catch (error) {
     console.error('CSV 파싱 오류:', error);
     // 오류 발생 시 빈 데이터 반환
     return {
-      headers: ['코드', '이름', '가격', '변동', '변동률', '거래량', '시가총액'],
+      headers: [],
+      rows: [], 
       groupedData: {},
-      errors: [],
+      errors: [error],
     };
   }
 };
@@ -172,7 +177,7 @@ function parseCSV(csvText: string): { headers: string[]; groupedData: GroupedDat
 // ETF 현재가 테이블 컴포넌트
 export default function ETFCurrentTable() {
   // 상태 관리
-  const [csvData, setCsvData] = useState<{ headers: string[]; groupedData: GroupedData; errors: any[] }>({ headers: [], groupedData: {}, errors: [] });
+  const [csvData, setCsvData] = useState<{ headers: string[]; rows: Record<string, any>[]; groupedData: GroupedData; errors: any[] }>({ headers: [], rows: [], groupedData: {}, errors: [] });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);  
   const [sortKey, setSortKey] = useState<string>('산업');  // 정렬 상태 - 기본값으로 산업 컬럼 오름차순 설정
@@ -183,6 +188,8 @@ export default function ETFCurrentTable() {
     stockNameMap: {[key: string]: string}
   }>({ tickerMap: {}, stockNameMap: {} });
   const [etfStockList, setEtfStockList] = useState<{[key: string]: Array<{name: string, rs: string}>}>({});
+  const [updateDate, setUpdateDate] = useState<string | null>(null); // Add state for update date
+  const [maListMap, setMaListMap] = useState<Record<string, MaListData>>({}); // 종목명 -> 20malist 데이터
   
   // 테이블 복사 기능을 위한 ref 생성
   const tableRef = useRef<HTMLDivElement>(null);
@@ -426,231 +433,6 @@ export default function ETFCurrentTable() {
     return null;
   };
   
-  // 20일선 돌파/이탈 이벤트 계산
-  const calculate20DayCrossover = (ticker: string): { date: string; type: 'cross_above' | 'cross_below' } | null => {
-    if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) {
-      return null;
-    }
-    
-    // 최근 데이터 추출 (가능한 많은 데이터 사용)
-    const recentData = stockPriceData[ticker];
-    const events = [];
-    
-    // 각 날짜에 대해 20일 이동평균선 계산 및 돌파/이탈 확인
-    // 최소 20일 데이터가 있어야 시작
-    for (let i = 19; i < recentData.length; i++) {
-      try {
-        // i번째 날짜의 20일 이동평균 계산
-        const ma20 = recentData.slice(i - 19, i + 1).reduce((acc, val) => acc + val.price, 0) / 20;
-        
-        // 가격 데이터 (종가 기준)
-        const currPrice = recentData[i].price;
-        
-        // 실제 데이터의 날짜 사용
-        const dateString = recentData[i].date;
-        
-        // 이전 데이터가 있는 경우에만 돌파/이탈 확인
-        if (i > 19) {
-          const prevMa20 = recentData.slice(i - 20, i).reduce((acc, val) => acc + val.price, 0) / 20;
-          const prevPrice = recentData[i - 1].price;
-          
-          // 가격이 20일선 아래에서 위로 돌파 (종가 기준)
-          if (prevPrice < prevMa20 && currPrice > ma20) {
-            events.push({
-              date: dateString,
-              type: 'cross_above' as const,
-              index: i
-            });
-          }
-          // 가격이 20일선 위에서 아래로 이탈 (종가 기준)
-          else if (prevPrice > prevMa20 && currPrice < ma20) {
-            events.push({
-              date: dateString,
-              type: 'cross_below' as const,
-              index: i
-            });
-          }
-        }
-        
-        // 첫 번째 데이터 포인트에 대한 특별 처리 (이전 데이터가 없는 경우)
-        // 첫 번째 데이터 포인트의 위치에 따라 초기 이벤트 설정
-        if (i === 19 && events.length === 0) {
-          if (currPrice > ma20) {
-            events.push({
-              date: dateString,
-              type: 'cross_above' as const,
-              index: i
-            });
-          } else if (currPrice < ma20) {
-            events.push({
-              date: dateString,
-              type: 'cross_below' as const,
-              index: i
-            });
-          }
-        }
-      } catch (error) {
-        console.error(`Error calculating MA for ticker ${ticker} at index ${i}:`, error);
-      }
-    }
-    
-    // 이벤트가 없으면 현재 상태에 따라 기본 이벤트 생성
-    if (events.length === 0) {
-      try {
-        const lastIndex = recentData.length - 1;
-        if (lastIndex >= 19) {
-          const lastPrice = recentData[lastIndex].price;
-          const lastMA20 = recentData.slice(lastIndex - 19, lastIndex + 1).reduce((acc, val) => acc + val.price, 0) / 20;
-          
-          // 실제 데이터의 날짜 사용
-          const dateString = recentData[lastIndex].date;
-          
-          if (lastPrice > lastMA20) {
-            return {
-              date: dateString,
-              type: 'cross_above'
-            };
-          } else {
-            return {
-              date: dateString,
-              type: 'cross_below'
-            };
-          }
-        }
-      } catch (error) {
-        console.error(`Error creating default event for ticker ${ticker}:`, error);
-      }
-      return null;
-    }
-    
-    // 모든 이벤트 로깅
-    // if (events.length > 0) {
-    //   console.log(`${ticker} 감지된 모든 이벤트:`, events.map(e => `${e.date} (${e.type})`).join(', '));
-    // }
-    
-    // 현재 상태에 따라 가장 최근의 유의미한 이벤트 반환
-    const lastIndex = recentData.length - 1;
-    const lastPrice = recentData[lastIndex].price;
-    const lastMA20 = recentData.slice(lastIndex - 19, lastIndex + 1).reduce((acc, val) => acc + val.price, 0) / 20;
-    const isAboveMA = lastPrice > lastMA20;
-    
-    if (isAboveMA) {
-      // 현재 20일선 위에 있으면, 가장 최근 돌파 이벤트 찾기
-      const lastCrossAbove = events.filter(e => e.type === 'cross_above')
-                                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-      if (lastCrossAbove) {
-        return {
-          date: lastCrossAbove.date,
-          type: lastCrossAbove.type
-        };
-      }
-    } else {
-      // 현재 20일선 아래에 있으면, 가장 최근 이탈 이벤트 찾기
-      const lastCrossBelow = events.filter(e => e.type === 'cross_below')
-                                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-      if (lastCrossBelow) {
-        return {
-          date: lastCrossBelow.date,
-          type: lastCrossBelow.type
-        };
-      }
-    }
-    
-    // 현재 상태와 일치하는 이벤트가 없으면 가장 최근 이벤트 반환
-    const lastEvent = events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-    return {
-      date: lastEvent.date,
-      type: lastEvent.type
-    };
-  };
-
-  // 종목별 20일 이동평균선 위치 계산
-  const calculate20DayMAPosition = (ticker: string): string => {
-    if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) {
-      return '-';
-    }
-    
-    // 최근 20일 데이터 추출
-    const recentData = stockPriceData[ticker].slice(-20);
-    
-    // 20일 이동평균 계산
-    const sum = recentData.reduce((acc, val) => acc + val.price, 0);
-    const ma20 = sum / recentData.length;
-    
-    // 현재가 (가장 최근 데이터)
-    const currentPrice = stockPriceData[ticker][stockPriceData[ticker].length - 1].price;
-    
-    // 현재가와 20일 이동평균선 비교
-    const diffPercent = ((currentPrice - ma20) / ma20 * 100).toFixed(1);
-    
-    // 위치 표시 (위, 아래 또는 일치)
-    if (currentPrice > ma20) {
-      return `+${diffPercent}%`;
-    } else if (currentPrice < ma20) {
-      return `${diffPercent}%`;
-    } else {
-      return '0%';
-    }
-  };
-
-  // 돌파/이탈 유지 기간 계산 (캔들 기준)
-  const calculatePositionDuration = (ticker: string): number | null => {
-    if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) {
-      return null;
-    }
-    
-    // 현재가와 20일 이동평균선 데이터 가져오기
-    const priceData = stockPriceData[ticker];
-    if (!priceData || priceData.length < 20) {
-      return null;
-    }
-    
-    const currentPrice = priceData[priceData.length - 1].price;
-    const ma20 = priceData.slice(-20).reduce((acc, val) => acc + val.price, 0) / 20;
-    
-    // 현재 상태 (20일선 위 또는 아래)
-    const isAboveMA = currentPrice > ma20;
-    
-    // 연속일수 계산 (IndustryCharts 방식)
-    let durationDays = 1;
-    for (let i = priceData.length - 2; i >= 0; i--) {
-      // 이전 가격과 이전 20일 이동평균선 계산
-      const price = priceData[i].price;
-      
-      // 이전 20일 이동평균선 계산 (데이터가 20개 미만일 수 있으므로 처리)
-      const prevMA20 = priceData
-        .slice(Math.max(0, i - 19), i + 1)
-        .reduce((acc, val) => acc + val.price, 0) / Math.min(20, i + 1);
-      
-      // 이전 상태가 현재 상태와 다르면 중단
-      if ((price > prevMA20) !== isAboveMA) {
-        break;
-      }
-      
-      // 같은 상태면 일수 증가
-      durationDays++;
-    }
-    
-    return durationDays;
-  };
-
-  // 날짜 형식 변환 함수 (YYYY-MM-DD -> MM-DD)
-  const formatDateToMMDD = (dateString: string): string => {
-    if (!dateString) return '';
-    
-    const parts = dateString.split('-');
-    if (parts.length !== 3) return dateString;
-    
-    return `${parts[1]}-${parts[2]}`;
-  };
-
-  // 표시용 날짜 형식 변환 함수 (컴포넌트에서 사용)
-  const formatDisplayDate = (dateString: string, type: 'cross_above' | 'cross_below'): string => {
-    const mmdd = formatDateToMMDD(dateString);
-    const typeText = type === 'cross_above' ? '돌파' : '이탈';
-    return `${mmdd} ${typeText}`;
-  };
-
   useEffect(() => {
     // 페이지 로드 시 데이터 로드
     const loadData = async () => {
@@ -746,6 +528,46 @@ export default function ETFCurrentTable() {
           });
           
           setEtfStockList(stockListMap);
+        }
+        
+        // 20malist.csv 데이터 로드
+        const maListResponse = await fetch('/requestfile/20ma_list/20malist.csv?t=' + Date.now());
+        if (maListResponse.ok) {
+          const maListCsvText = await maListResponse.text();
+          const maListParsedResult = Papa.parse<MaListData>(maListCsvText, {
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: false, // 필요에 따라 true로 변경하여 타입 자동 변환
+          });
+
+          if (maListParsedResult.errors.length > 0) {
+            console.error('20malist.csv Parsing Errors:', maListParsedResult.errors);
+            // 에러 처리 (예: 사용자에게 알림)
+          }
+
+          // 종목명을 키로 하는 맵 생성
+          const map: Record<string, MaListData> = {};
+          for (const row of maListParsedResult.data) {
+            if (row.종목명) { // 종목명이 있는 경우에만 추가
+              map[row.종목명.trim()] = row; // 혹시 모를 공백 제거
+            }
+          }
+          setMaListMap(map);
+        }
+        
+        // 날짜 추출 및 상태 업데이트 (CSV 첫 행의 '날짜' 컬럼 사용)
+        if (parsedData.rows && parsedData.rows.length > 0) {
+          const dateString = parsedData.rows[0]['날짜']; 
+          if (dateString) {
+            const formattedDate = formatDateMMDD(dateString);
+            if (formattedDate) {
+              setUpdateDate(formattedDate);
+            } else {
+              console.warn('날짜 형식을 변환할 수 없습니다:', dateString);
+            }
+          } else {
+            console.warn('CSV 데이터에 날짜 정보가 없습니다.');
+          }
         }
         
       } catch (err) {
@@ -1040,54 +862,78 @@ export default function ETFCurrentTable() {
     return 'text-gray-500';
   };
 
-  // 돌파/이탈 일 컬럼 렌더링 함수
-  const renderCrossover = (ticker: string) => {
-    const crossover = calculate20DayCrossover(ticker);
-    
-    if (!crossover) {
-      return <span className="text-gray-400">-</span>;
+  // 포지션 상태 텍스트 가져오기
+  const getPositionStatusText = (stockName: string): string => {
+    const maData = maListMap[stockName?.trim()];
+    if (!maData || !maData['포지션']) {
+      return '-';
     }
-    
-    // 날짜 형식 변환 (YYYY-MM-DD -> MM-DD)
-    const formattedDate = formatDisplayDate(crossover.date, crossover.type);
-    
+
+    return maData['포지션'];
+  };
+
+  // 포지션 뱃지 렌더링 함수
+  const renderPositionBadge = (stockName: string) => {
+    const maData = maListMap[stockName?.trim()];
+    const positionText = (maData && maData['포지션']) ? maData['포지션'] : '-'; // 포지션 텍스트 가져오기, 없으면 '-'
+
+    // 이전 조건부 스타일 클래스 적용
+    let containerClasses = 'flex items-center justify-center w-20 h-6'; // 기본 컨테이너 클래스
+    const textClasses = 'text-xs font-medium'; // 기본 텍스트 클래스
+
+    if (positionText === '-') {
+      // 기본값 또는 데이터 없는 경우 스타일 (이전 로직에 맞춰 회색 계열 사용)
+      containerClasses += ' bg-gray-200 text-gray-700'; 
+    } else if (positionText.includes('유지')) {
+      // '유지' 포함 시 녹색 스타일 (이전 스타일)
+      containerClasses += ' bg-green-100 text-green-800';
+    } else {
+      // '이탈' 포함 시 또는 기타 경우 회색 스타일 (이전 스타일)
+      containerClasses += ' bg-gray-200 text-gray-700';
+    }
+
     return (
-      <div className="flex items-center justify-center">
-        <span 
-          className={`text-xs font-medium ${
-            crossover.type === 'cross_above' 
-              ? 'text-red-400' 
-              : 'text-blue-400'
-          }`}
-          style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
-        >
-          {formattedDate}
+      <div className={containerClasses} style={{ borderRadius: '4px' }}>
+        <span className={textClasses}>
+          {positionText}
         </span>
       </div>
     );
   };
 
-  // 포지션 상태 텍스트 가져오기
-  const getPositionStatusText = (ticker: string): string => {
-    if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) return '-';
-    
-    // 현재가와 20일 이동평균선 데이터 가져오기
-    const priceData = stockPriceData[ticker];
-    if (!priceData || priceData.length < 20) {
-      return '-';
+  // 테이블 이미지 복사 함수
+  const handleCopyTableAsImage = async () => {
+    try {
+      const currentDate = new Date();
+      const formattedDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+      
+      await copyTableAsImage(
+        tableRef,
+        headerRef,
+        'ETF 현재가 테이블',
+        {
+          copyrightText: ' intellio.kr',
+          watermark: {
+            text: 'intellio.kr',
+            opacity: 0.1,
+            fontSize: '24px',
+            color: '#000000'
+          },
+          scale: 2,
+          backgroundColor: '#ffffff',
+          footerStyle: {
+            fontSize: '8px',
+            color: '#999999',
+            marginTop: '8px',
+            textAlign: 'center'
+          }
+        },
+        formattedDate
+      );
+    } catch (error) {
+      console.error('테이블 이미지 복사 중 오류 발생:', error);
+      alert('테이블 이미지 복사에 실패했습니다.');
     }
-    
-    const currentPrice = priceData[priceData.length - 1].price;
-    const ma20 = priceData.slice(-20).reduce((acc, val) => acc + val.price, 0) / 20;
-    
-    // 현재 상태 (20일선 위 또는 아래)
-    const isAboveMA = currentPrice > ma20;
-    
-    // 유지 기간 계산
-    const duration = calculatePositionDuration(ticker);
-    const durationText = duration !== null ? `+${duration}일` : '';
-    
-    return isAboveMA ? `유지 ${durationText}` : `이탈 ${durationText}`;
   };
 
   // 로딩 중 표시
@@ -1199,33 +1045,45 @@ export default function ETFCurrentTable() {
   return (
     <div>
       <div ref={headerRef} className="flex justify-between items-center mb-3">
-        <div className="flex items-center space-x-4">
-          <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.75rem, 0.9vw, 0.9rem)' }}>ETF 현재가</h2>
+        {/* 좌측 그룹: 제목 */}
+        <div className="flex items-center">
+          <h2 className="text-sm md:text-base font-semibold whitespace-nowrap mr-2">ETF 현재가</h2>
         </div>
-        <div className="flex items-center space-x-2">
-          <span className="text-xs text-gray-600" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>당일 섹터/ETF 등락율</span>
-          {/* <TableCopyButton
-            tableRef={tableRef}
+        {/* 우측 그룹: 업데이트 시간 + 복사 버튼 */}
+        <div className="flex items-center">
+          {/* 업데이트 시간 추가 */}
+          {updateDate && (
+            <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+              updated 16:30 {updateDate}
+            </span>
+          )}
+          {/* 복사 버튼 */}
+          <TableCopyButton 
+            tableRef={tableRef} 
             headerRef={headerRef}
             tableName="ETF 현재가"
             buttonText="이미지 저장"
+            updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
             data-component-name="TableCopyButton"
-          /> */}
+          />
         </div>
       </div>
       
-      <div id="etf-current-table" className="overflow-x-auto">
+      <div id="etf-current-table" className="overflow-x-auto" ref={tableRef}>
+        <div ref={headerRef} className="hidden">
+          <h2 className="text-lg font-semibold">ETF 현재가 테이블</h2>
+          <p className="text-sm text-gray-500">{new Date().toISOString().split('T')[0]}</p>
+        </div>
         <table className="min-w-full border border-gray-200 table-fixed">
           <thead className="bg-gray-100">
             <tr>
               <th
                 key="산업"
                 scope="col"
-                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
                   width: '60px',
-                  height: '35px',
-                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                  height: '35px'
                 }}
                 onClick={() => handleSort('산업')}
               >
@@ -1241,11 +1099,10 @@ export default function ETFCurrentTable() {
               <th
                 key="섹터"
                 scope="col"
-                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
                   width: '60px',
-                  height: '35px',
-                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                  height: '35px'
                 }}
                 onClick={() => handleSort('섹터')}
               >
@@ -1261,11 +1118,10 @@ export default function ETFCurrentTable() {
               <th
                 key="종목명"
                 scope="col"
-                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
                   width: '140px',
-                  height: '35px',
-                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                  height: '35px'
                 }}
                 onClick={() => handleSort('종목명')}
               >
@@ -1284,9 +1140,8 @@ export default function ETFCurrentTable() {
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
-                    width: '38px',
-                    height: '35px',
-                    fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                    width: '60px', // 너비 복원
+                    height: '35px'
                   }}
                   onClick={() => handleSort(header)}
                 >
@@ -1306,8 +1161,7 @@ export default function ETFCurrentTable() {
                 className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
                   width: '78px',
-                  height: '35px',
-                  fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                  height: '35px'
                 }}
                 onClick={() => handleSort('포지션')}
               >
@@ -1320,19 +1174,18 @@ export default function ETFCurrentTable() {
                   )}
                 </div>
               </th>
-              {['20일선 이격', '돌파/이탈', '대표종목(RS)'].map((header) => (
+              {['20일 이격', '돌파/이탈', '대표종목(RS)'].map((header) => (
                 <th
                   key={header}
                   scope="col"
                   className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 hidden md:table-cell`}
                   style={{
-                    width: header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목(RS)' ? '380px' : '80px',
-                    height: '35px',
-                    fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                    width: header === '20일 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목(RS)' ? '380px' : '80px',
+                    height: '35px'
                   }}
                 >
                   <div className="flex justify-center items-center">
-                    {header}
+                    {header === '돌파/이탈' ? <>돌파/<br />이탈</> : header}
                   </div>
                 </th>
               ))}
@@ -1390,13 +1243,13 @@ export default function ETFCurrentTable() {
                       <td
                         rowSpan={rowCount}
                         className="px-2 py-1 whitespace-nowrap text-xs border border-gray-200 align-middle"
-                        style={{ width: '60px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                        style={{ width: '60px' }}
                       >
                         <div className="flex flex-col items-start">
-                          <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', borderRadius: '4px' }}>
+                          <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ borderRadius: '4px' }}>
                             {industry === '소비재/음식료' ? '소비재/음식료' : industry}
                           </span>
-                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`} style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)', paddingLeft: '2px', width: '100%' }}>
+                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`} style={{ paddingLeft: '2px', width: '100%' }}>
                             {calculateIndustryAverage(industry, sortedData)}
                           </span>
                         </div>
@@ -1404,91 +1257,92 @@ export default function ETFCurrentTable() {
                     )}
                     <td 
                       className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} 
-                      style={{ width: '60px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}
+                      style={{ width: '60px', height: '16px' }}
                     >
                       {row['섹터']}
                     </td>
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '140px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '140px', height: '16px' }}>
                       {row['종목명'] || tickerMappingInfo.stockNameMap[row['티커']] || ''}
                     </td>
                     {filteredHeaders.filter(header => header === '등락율').map((header) => {
-                      const isChangeColumn = header === '등락율' || header === '전일대비';
-                      const isTickerColumn = false; // 티커 컬럼은 이 필터에 포함되지 않으므로 항상 false
-                      const value = row[header];
-                      const numericValue = isChangeColumn ? parseFloat(value) : null;
-                      const colorClass = isChangeColumn
-                        ? numericValue! > 0 ? 'text-red-400' : numericValue! < 0 ? 'text-blue-400' : 'text-gray-600'
-                        : '';
+                      const stockName = row['종목명'] as string;
+                      const maData = maListMap[stockName?.trim()];
+                      const changeRateText = maData ? maData['등락률'] : '-';
+                      
+                      let textColorClass = 'text-gray-500'; // 기본값
+                      if (changeRateText && changeRateText !== '-') {
+                        // '%' 기호 제거 및 숫자로 변환 시도
+                        const changeRateValue = parseFloat(changeRateText.replace('%', ''));
+                        if (!isNaN(changeRateValue)) {
+                          textColorClass = changeRateValue > 0 ? 'text-red-500' : changeRateValue < 0 ? 'text-blue-500' : 'text-gray-500';
+                        }
+                      }
                       
                       return (
                         <td
                           key={header}
-                          className={`px-4 py-1 whitespace-nowrap text-xs ${colorClass} border border-gray-200 ${isChangeColumn || isTickerColumn ? 'text-center' : ''} ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`}
-                          style={{ 
-                            width: '38px', 
-                            height: '16px',
-                            fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
-                          }}
+                          className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 text-right tabular-nums ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`}
+                          style={{ width: '60px', height: '16px' }}
                         >
-                          {isChangeColumn && numericValue! > 0 ? '+' : ''}
-                          {value}
+                          <span className={textColorClass}>{changeRateText || '-'}</span>
                         </td>
                       );
                     })}
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '78px', height: '16px', fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '78px', height: '16px' }}>
                       {/* 포지션 상태 표시 */}
                       <div className="flex items-center justify-center">
-                        <div className={`flex items-center justify-center w-20 h-6 ${getPositionStatusText(row['티커']).startsWith('유지') ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'} `} style={{ borderRadius: '4px' }}>
-                          <span className="text-xs font-medium" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
-                            {getPositionStatusText(row['티커'])}
-                          </span>
-                        </div>
+                        {renderPositionBadge(row['종목명'])}
                       </div>
                     </td>
-                    {['20일선 이격', '돌파/이탈', '대표종목'].map((header) => (
+                    {['20일 이격', '돌파/이탈', '대표종목(RS)'].map((header) => (
                       <td
                         key={header}
                         className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''} hidden md:table-cell`}
-                        style={{ 
-                          width: header === '20일선 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목' ? '380px' : '80px', 
-                          height: '16px',
-                          fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)'
+                        style={{
+                          width: header === '20일 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목(RS)' ? '380px' : '80px',
+                          height: '16px'
                         }}
                       >
                         {(() => {
-                          if (header === '20일선 이격') {
-                            // 20일선 위치 데이터 표시
-                            const ticker = row['티커'];
-                            if (!ticker) return '-';
+                          if (header === '20일 이격') {
+                            // maListMap에서 20일 이격 데이터 가져오기
+                            const stockName = row['종목명'] as string;
+                            const maData = maListMap[stockName?.trim()];
+                            const maPositionText = maData ? maData['20일 이격'] : '-';
                             
-                            const position = calculate20DayMAPosition(ticker);
-                            const positionValue = parseFloat(position);
+                            let textColor = 'text-gray-500'; // 기본값
+                            if (maPositionText?.startsWith('+')) {
+                              textColor = 'text-red-500';
+                            } else if (maPositionText?.startsWith('-')) {
+                              textColor = 'text-blue-500';
+                            }
+                            return <div className={`text-right tabular-nums ${textColor}`}>{maPositionText}</div>;
+                          } else if (header === '돌파/이탈') {
+                            // maListMap에서 변동일 데이터 가져와서 포맷팅하기
+                            const stockName = row['종목명'] as string;
+                            const maData = maListMap[stockName?.trim()];
+                            let displayDate = '-';
+                            let textColor = 'text-gray-500'; // 기본값
                             
-                            // 색상 결정
-                            let colorClass = 'text-gray-600';
-                            if (!isNaN(positionValue)) {
-                              if (positionValue > 0) {
-                                colorClass = 'text-red-400';
-                              } else if (positionValue < 0) {
-                                colorClass = 'text-blue-400';
+                            if (maData && maData['변동일']) {
+                              try {
+                                // YYYY-MM-DD 형식에서 MM-DD 추출
+                                displayDate = maData['변동일'].substring(5);
+                                
+                                // 포지션 텍스트 기준으로 색상 결정
+                                if (maData['포지션']?.includes('유지')) {
+                                  textColor = 'text-red-500'; // 돌파 유지
+                                } else if (maData['포지션']?.includes('이탈')) {
+                                  textColor = 'text-blue-500'; // 이탈 유지
+                                }
+                                
+                              } catch (e) {
+                                console.error(`Error formatting date ${maData['변동일']}:`, e);
+                                // 날짜 형식이 예상과 다를 경우 오류 로깅 및 '-' 표시
                               }
                             }
-                            
-                            return (
-                              <div className="flex items-center justify-center h-full">
-                                <span className={`text-xs font-medium ${colorClass}`} style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
-                                  {position}
-                                </span>
-                              </div>
-                            );
-                          } else if (header === '돌파/이탈') {
-                            // 돌파/이탈 데이터 표시
-                            return (
-                              <div className="flex items-center justify-center h-full">
-                                {renderCrossover(row['티커'])}
-                              </div>
-                            );
-                          } else if (header === '대표종목') {
+                            return <div className={`text-center tabular-nums ${textColor}`}>{displayDate}</div>;
+                          } else if (header === '대표종목(RS)') {
                             // 대표종목 데이터 표시
                             const ticker = row['티커'];
                             if (!ticker) return '-';
@@ -1519,10 +1373,9 @@ export default function ETFCurrentTable() {
                               <div className="flex flex-wrap items-center gap-1">
                                 {stockList.map((item, index) => (
                                   <div key={index} className="flex items-center">
-                                    <span className="text-xs" style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>{item.name}</span>
+                                    <span className="text-xs">{item.name}</span>
                                     {item.rs && (
-                                      <span className={`text-xs ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable"
-                                            style={{ fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)' }}>
+                                      <span className={`text-xs ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable">
                                         ({item.rs})
                                       </span>
                                     )}
@@ -1543,4 +1396,15 @@ export default function ETFCurrentTable() {
       </div>
     </div>
   );
+}
+
+interface MaListData {
+  종목코드: string;
+  종목명: string;
+  섹터: string;
+  대표종목: string;
+  등락률: string; // 또는 number
+  변동일: string; // YYYY-MM-DD 형식
+  포지션: string;
+  '20일 이격': string; // 또는 number
 }

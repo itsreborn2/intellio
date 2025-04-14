@@ -264,21 +264,12 @@ const Header: React.FC = () => {
         <div className="flex items-center gap-3">
           {/* 질문 개수 표시 */}
           {isUserLoggedIn && (
-            <div 
-              className={`
-                flex items-center h-7 px-3 rounded-full
-                ${getQuestionCountBgColor()}
-                transition-colors duration-300
-              `}
-              title="오늘 남은 질문 수"
-            >
-              <MessageSquare 
-                size={20} 
-                className={`mr-1.5 ${getQuestionCountColor()}`} 
-              />
-              <span className={`text-s font-semibold ${getQuestionCountColor()}`}>
+            <div className="flex items-center gap-1">
+              <MessageSquare size={18} className="text-gray-600" />
+              {/* 반응형 클래스 추가: 기본(모바일)은 text-xs, px-2 / sm 이상은 text-sm, px-2.5 */}
+              <Badge variant="outline" className="rounded-md py-0 h-5 bg-[#D8EFE9] border-[#D8EFE9] text-xs px-2 sm:text-sm sm:px-2.5" style={{ borderRadius: '6px' }}>
                 {isQuestionLoading ? "..." : `${questionSummary?.total_questions} / 30`}
-              </span>
+              </Badge>
             </div>
           )}
           

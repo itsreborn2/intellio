@@ -9,15 +9,21 @@ import { ClipboardCopy } from 'lucide-react'; // ClipboardCopy 아이콘 import
  * 테이블을 이미지로 복사하는 기능을 제공하는 재사용 가능한 버튼
  * @param props 버튼 속성 (테이블 참조, 헤더 참조, 테이블 이름, 옵션, 클래스명, 버튼 텍스트)
  */
-export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
+interface ExtendedTableCopyButtonProps extends TableCopyButtonProps {
+  updateDateText?: string; // 선택적 업데이트 날짜 텍스트
+}
+
+export const TableCopyButton: React.FC<ExtendedTableCopyButtonProps> = ({
   tableRef,
   headerRef,
   tableName,
   options,
   className = "",
-  buttonText = "이미지복사"
+  buttonText = "이미지복사",
+  updateDateText
 }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   
   // 이미지 복사 핸들러
   const handleCopyImage = async () => {
@@ -25,15 +31,18 @@ export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
     setIsLoading(true);
     
     try {
-      // 이미지 복사 함수 호출
-      await copyTableAsImage(tableRef, headerRef, tableName, options);
+      // 이미지 복사 함수 호출 시 updateDateText 전달
+      await copyTableAsImage(tableRef, headerRef, tableName, options, updateDateText);
     } catch (error) {
       console.error('이미지 복사 중 오류 발생:', error);
+      alert('이미지 복사에 실패했습니다. 콘솔을 확인해주세요.');
     } finally {
-      // 복사 작업 완료 후 로딩 상태 해제 (약간의 지연 추가)
+      // 복사 작업 완료 후 로딩 상태 해제 및 성공 메시지 표시
       setTimeout(() => {
         setIsLoading(false);
-      }, 3000); // 3초 후 로딩 상태 해제 (성공 메시지가 표시되는 시간과 맞춤)
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 2000); // 2초 후 성공 메시지 숨김
+      }, 500); // 로딩 상태 해제 후 0.5초 지연
     }
   };
   
@@ -52,7 +61,7 @@ export const TableCopyButton: React.FC<TableCopyButtonProps> = ({
       disabled={isLoading}
       style={buttonStyle}
     >
-      {isLoading ? "생성 중..." : <ClipboardCopy className="h-3.5 w-3.5" />}
+      {isLoading ? "생성 중..." : showSuccess ? "복사 완료!" : <ClipboardCopy className="h-3.5 w-3.5" />}
     </button>
   );
 };

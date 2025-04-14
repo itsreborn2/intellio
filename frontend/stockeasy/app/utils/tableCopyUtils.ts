@@ -23,6 +23,7 @@ export interface TableCopyButtonProps {
   options?: CopyTableOptions;
   className?: string;
   buttonText?: string;
+  updateDateText?: string; // updateDateText 추가
 }
 
 /**
@@ -31,12 +32,14 @@ export interface TableCopyButtonProps {
  * @param headerRef 헤더 요소에 대한 참조
  * @param tableName 테이블 이름 (알림 메시지에 사용)
  * @param options 추가 옵션 (저작권 텍스트, 푸터 스타일 등)
+ * @param updateDateText 테이블 컴포넌트에서 전달받은 업데이트 날짜/시간 텍스트
  */
 export const copyTableAsImage = async (
   tableRef: React.RefObject<HTMLDivElement>,
   headerRef: React.RefObject<HTMLDivElement>,
   tableName: string,
-  options?: CopyTableOptions
+  options?: CopyTableOptions,
+  updateDateText?: string // 인자 추가
 ) => {
   // 로딩 메시지 즉시 표시 (가장 먼저 실행)
   const loadingToast = document.createElement('div');
@@ -67,7 +70,7 @@ export const copyTableAsImage = async (
     scale: 2,
     backgroundColor: '#ffffff',
     watermark: {
-      text: '스탁이지\nby (주)인텔리오\nhttps://stockeasy.intellio.kr/',
+      text: '스탁이지\nby (주)인텔리오\nhttps://stockeasy.intellio.kr',
       opacity: 0.08, // 10% 불투명도 (매우 흐리게)
       fontSize: '24px',
       color: '#000000'
@@ -112,6 +115,7 @@ export const copyTableAsImage = async (
     headerClone.style.width = '100%';
     headerClone.style.marginBottom = '0'; // 헤더 아래 여백 제거
     headerClone.style.paddingBottom = '0'; // 헤더 아래 패딩 제거
+    headerClone.style.paddingRight = '20px'; // 우측 여백 추가로 잘림 방지
     
     // 헤더 내 제목 텍스트 크기 및 중앙 정렬
     const headerTitles = headerClone.querySelectorAll('h2');
@@ -133,23 +137,19 @@ export const copyTableAsImage = async (
     const buttons = headerClone.querySelectorAll('button');
     buttons.forEach(button => button.remove());
     
-    // 날짜 정보 추가 (제목 우측에 표시)
-    const titleElements = headerClone.querySelectorAll('h2');
-    if (titleElements.length > 0) {
-      const titleElement = titleElements[0];
-      const currentDate = new Date();
-      const formattedDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-      
-      // 날짜 텍스트 요소 생성
-      const dateSpan = document.createElement('span');
-      dateSpan.textContent = ` (${formattedDate})`;
-      dateSpan.style.fontSize = '9px';
-      dateSpan.style.fontWeight = 'normal';
-      dateSpan.style.color = '#718096';
-      dateSpan.style.marginLeft = '5px';
-      
-      // 제목 요소에 날짜 추가
-      titleElement.appendChild(dateSpan);
+    // 업데이트 날짜 텍스트 추가 (updateDateText가 있을 경우)
+    if (updateDateText) {
+      const titleElements = headerClone.querySelectorAll('h2');
+      if (titleElements.length > 0) {
+        const titleElement = titleElements[0];
+        const dateSpan = document.createElement('span');
+        dateSpan.textContent = ` (${updateDateText})`;
+        dateSpan.style.fontSize = '9px';
+        dateSpan.style.fontWeight = 'normal';
+        dateSpan.style.color = '#718096';
+        dateSpan.style.marginLeft = '5px';
+        titleElement.appendChild(dateSpan);
+      }
     }
     
     // 헤더 내 기존 설명 텍스트 제거 (중복 방지)
@@ -199,11 +199,230 @@ export const copyTableAsImage = async (
       
       // 테이블 스타일 직접 적용
       tableClone.style.width = 'auto';
-      tableClone.style.borderCollapse = 'collapse';
+      tableClone.style.minWidth = '100%'; // 테이블이 컨테이너 너비를 채우도록
+      tableClone.style.borderCollapse = 'collapse'; // 테두리 겹침 제거
       tableClone.style.fontSize = '10px';
     } catch (error) {
       console.error('테이블 요소 처리 중 오류:', error);
     }
+    
+    // 포지션 셀 처리 함수 - try-catch 블록 외부로 이동
+    const processPositionCell = (cell: HTMLTableCellElement) => {
+      try {
+        // 셀 내용 저장
+        const cellText = cell.textContent || '';
+        
+        // 모든 버튼 요소 명시적 제거
+        const buttons = cell.querySelectorAll('button, .btn, [class*="button"], [class*="badge"]');
+        buttons.forEach(button => button.remove());
+        
+        // 남은 모든 자식 요소 제거
+        while (cell.firstChild) {
+          cell.removeChild(cell.firstChild);
+        }
+        
+        // 새 텍스트 노드 추가
+        cell.appendChild(document.createTextNode(cellText.trim()));
+        
+        // 스타일 적용
+        cell.style.textAlign = 'center';
+        cell.style.verticalAlign = 'middle';
+        cell.style.backgroundColor = 'transparent';
+        cell.style.padding = '4px';
+        
+        // '유지'가 포함된 경우만 초록색 텍스트 처리, 그 외에는 기본 색상(검은색) 사용
+        if (cellText.includes('유지')) {
+          cell.style.color = 'green'; // 초록색
+        } else {
+          cell.style.color = '#000000'; // 기본 검은색
+        }
+        
+        cell.style.border = '1px solid #e2e8f0'; // 테이블 셀 테두리 유지
+        
+        // 모든 기존 클래스 제거 및 기본 클래스만 적용
+        cell.className = 'text-center';
+      } catch (cellError) {
+        console.error("Error processing individual position cell:", cellError);
+      }
+    };
+    
+    // '포지션' 컬럼 처리 로직 추가
+    try {
+      // 1. 헤더를 기반으로 '포지션'과 '등락율' 컬럼 인덱스 찾기
+      const headers = Array.from(tableClone.querySelectorAll('thead th, thead td'));
+      let positionColumnIndices: number[] = [];
+      let changeRateColumnIndices: number[] = [];
+      
+      headers.forEach((header, index) => {
+        const headerText = header.textContent?.trim() || '';
+        if (headerText === '포지션') {
+          positionColumnIndices.push(index);
+        }
+        if (headerText === '등락율') {
+          changeRateColumnIndices.push(index);
+        }
+      });
+      
+      // 2. 모든 테이블 행 처리
+      const rows = tableClone.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        const rowElement = row as HTMLTableRowElement;
+        
+        // 3. 인덱스 기반으로 '포지션' 셀 처리
+        for (const index of positionColumnIndices) {
+          if (index < rowElement.cells.length) {
+            processPositionCell(rowElement.cells[index]);
+          }
+        }
+        
+        // '등락율' 셀 처리 - 셀 내용 완전히 재구성
+        for (const index of changeRateColumnIndices) {
+          if (index < rowElement.cells.length) {
+            const cell = rowElement.cells[index];
+            
+            // 셀 내용 저장 및 텍스트 색상 확인
+            const cellText = cell.textContent || '';
+            let textColor = 'black';
+            
+            // 양수/음수 확인하여 색상 결정
+            if (cellText.includes('+') || cellText.match(/[1-9][0-9]*\.[0-9]+%/) || cellText.match(/[1-9][0-9]*%/)) {
+              textColor = 'red';
+            } else if (cellText.includes('-')) {
+              textColor = 'blue';
+            }
+            
+            // 모든 자식 요소 제거
+            while (cell.firstChild) {
+              cell.removeChild(cell.firstChild);
+            }
+            
+            // 새 텍스트 노드 추가
+            cell.appendChild(document.createTextNode(cellText.trim()));
+            
+            // 스타일 완전히 재설정
+            cell.style.textAlign = 'center';
+            cell.style.verticalAlign = 'middle';
+            cell.style.color = textColor;
+            cell.style.padding = '4px';
+            
+            // 클래스 완전히 재설정
+            cell.className = 'text-center tabular-nums';
+          }
+        }
+        
+        // 4. 내용 기반으로 '포지션' 셀 처리 (추가 안전장치)
+        for (let i = 0; i < rowElement.cells.length; i++) {
+          const cell = rowElement.cells[i];
+          const cellText = cell.textContent || '';
+          
+          // '유지' 또는 '이탈' 텍스트를 포함하는 셀 처리
+          if (cellText.includes('유지') || cellText.includes('이탈')) {
+            processPositionCell(cell);
+          }
+          
+          // 셀 내부에 버튼 요소가 있는지 확인하고 처리
+          const buttons = cell.querySelectorAll('button, .btn, [class*="button"], [class*="badge"]');
+          if (buttons.length > 0) {
+            processPositionCell(cell);
+          }
+        }
+      });
+      
+      // 5. 헤더 셀도 가운데 정렬
+      positionColumnIndices.forEach(index => {
+        if (index < headers.length) {
+          const header = headers[index] as HTMLElement;
+          header.style.textAlign = 'center';
+        }
+      });
+      
+      // '등락율' 헤더 셀도 가운데 정렬
+      changeRateColumnIndices.forEach(index => {
+        if (index < headers.length) {
+          const header = headers[index] as HTMLElement;
+          header.style.textAlign = 'center';
+        }
+      });
+      
+      // 6. 추가 안전장치: 모든 테이블 셀을 검사하여 퍼센트 값이 포함된 셀을 가운데 정렬 ('산업' 컬럼 제외)
+      const allCells = tableClone.querySelectorAll('td');
+      
+      // 테이블 헤더 검사하여 '산업' 컬럼 인덱스 확인
+      const tableHeaders = tableClone.querySelectorAll('thead th, thead td');
+      let industryColumnIndex = -1;
+      
+      tableHeaders.forEach((header, index) => {
+        const headerText = header.textContent?.trim() || '';
+        if (headerText === '산업' || headerText === '업종') {
+          industryColumnIndex = index;
+        }
+      });
+      
+      allCells.forEach((cell, index) => {
+        // 셀의 열 인덱스 찾기 (행에서의 위치)
+        let cellColumnIndex = 0;
+        let currentCell = cell;
+        while (currentCell.previousElementSibling) {
+          currentCell = currentCell.previousElementSibling as HTMLTableCellElement;
+          cellColumnIndex++;
+        }
+        
+        // '산업' 컬럼이면 처리하지 않음
+        if (industryColumnIndex !== -1 && cellColumnIndex === industryColumnIndex) {
+          return; // 산업 컬럼은 건너뛼
+        }
+        
+        // 첫 번째 컬럼이거나 텍스트로 산업 컬럼으로 판단되는 경우 처리하지 않음
+        if (cellColumnIndex === 0 || cell.textContent?.includes('산업') || cell.textContent?.includes('반도체') || 
+            cell.textContent?.includes('은행') || cell.textContent?.includes('자동차') || 
+            cell.textContent?.includes('바이오') || cell.textContent?.includes('인터넷')) {
+          return; // 산업 컬럼으로 판단되는 경우 건너뛼
+        }
+        
+        const cellText = cell.textContent || '';
+        
+        // 퍼센트 값이 포함된 셀이나 '등락율' 컬럼의 셀인지 확인
+        if (cellText.includes('%') || 
+            (cell.previousElementSibling && 
+             cell.previousElementSibling.textContent && 
+             cell.previousElementSibling.textContent.includes('종목명'))) {
+          
+          // 강제 가운데 정렬 적용
+          cell.style.cssText += 'text-align: center !important; vertical-align: middle !important;';
+          
+          // 텍스트 색상 처리
+          let textColor = 'black';
+          if (cellText.includes('+') || (cellText.match(/[1-9][0-9]*\.?[0-9]*%/) && !cellText.includes('-'))) {
+            textColor = 'red';
+          } else if (cellText.includes('-')) {
+            textColor = 'blue';
+          }
+          
+          // 셀 내용 재구성 (선택적)
+          if (cellText.match(/[+-]?[0-9]+\.?[0-9]*%/)) {
+            // 모든 자식 요소 제거
+            while (cell.firstChild) {
+              cell.removeChild(cell.firstChild);
+            }
+            
+            // 새 텍스트 노드 추가
+            const textNode = document.createTextNode(cellText.trim());
+            cell.appendChild(textNode);
+            
+            // 스타일 적용
+            cell.style.color = textColor;
+          }
+        }
+      });
+      
+    } catch (error) {
+      console.error("Error processing '포지션' column for image copy:", error);
+      // 오류 발생 시에도 이미지 생성은 계속 시도할 수 있도록 처리
+    }
+    
+    // 테이블 너비 고정 및 레이아웃 고정
+    tableClone.style.tableLayout = 'fixed'; // 고정 레이아웃 사용
+    tableClone.style.width = '100%'; // 전체 너비 사용
     
     // 테이블 너비 조정
     tableClone.style.width = '100%';
@@ -509,9 +728,16 @@ export const copyTableAsImage = async (
       const blob = await response.blob();
 
       // 클립보드에 복사
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob })
-      ]);
+      try {
+        console.log('클립보드에 이미지 쓰기 시도');
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        console.log('클립보드에 이미지 쓰기 성공');
+      } catch (err) {
+        console.error('클립보드 쓰기 오류:', err);
+        throw new Error(`클립보드 쓰기 실패: ${(err as Error).message}`);
+      }
       
       // 임시 컨테이너 제거
       document.body.removeChild(container);

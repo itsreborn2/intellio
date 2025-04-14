@@ -15,7 +15,7 @@ import {
   LayoutDashboard,
   Menu, // 햄버거 메뉴 아이콘 추가
   X, // X 아이콘 추가 (닫기 버튼용)
-  Scale, // 벨류에이션 추가
+  Scale, // 밸류에이션 추가
   LineChart, // AI 애널리스트 추가
   History, // 검색 히스토리 아이콘
   ChevronRight, // 패널 닫기 아이콘
@@ -61,7 +61,7 @@ function SidebarContent() {
     // analyst: useRef<HTMLButtonElement>(null), // AI 애널리스트 버튼 참조 추가 (주석 처리)
     chart: useRef<HTMLButtonElement>(null),
     etfSector: useRef<HTMLButtonElement>(null), // ETF/섹터 버튼 참조 추가
-    value: useRef<HTMLButtonElement>(null), // 벨류에이션 버튼 참조 추가
+    value: useRef<HTMLButtonElement>(null), // 밸류에이션 버튼 참조 추가
     history: useRef<HTMLButtonElement>(null), // 검색 히스토리 버튼 참조 추가
     doc: useRef<HTMLButtonElement>(null),
     settings: useRef<HTMLDivElement>(null), // 설정 버튼(Avatar 컨테이너) 참조 추가
@@ -149,7 +149,7 @@ function SidebarContent() {
   };
   
   const goToValuePage = () => {
-    // 이미 벨류에이션 페이지에 있는 경우 아무 작업도 수행하지 않음
+    // 이미 밸류에이션 페이지에 있는 경우 아무 작업도 수행하지 않음
     if (window.location.pathname === '/value') return;
     
     // prefetch: true 옵션을 사용하여 클라이언트 측 네비게이션 활성화
@@ -652,7 +652,7 @@ function SidebarContent() {
           {/* {hoveredButton === 'analyst' && 'AI 애널리스트'} */}
           {hoveredButton === 'chart' && 'RS순위'}
           {hoveredButton === 'etfSector' && 'ETF/섹터'}
-          {hoveredButton === 'value' && '벨류에이션'}
+          {hoveredButton === 'value' && '밸류에이션'}
           {hoveredButton === 'history' && '검색 히스토리'} 
           {hoveredButton === 'doc' && '닥이지'}
           {hoveredButton === 'user' && '마이페이지'}
@@ -744,18 +744,18 @@ function SidebarContent() {
                   </button>
                 </div>
                 
-                {/* 벨류에이션 버튼 추가 */}
+                {/* 밸류에이션 버튼 추가 */}
                 <div className="sidebar-button-container">
                   <button 
                     ref={buttonRefs.value}
                     className="sidebar-button" 
-                    onClick={goToValuePage} // 벨류에이션 페이지로 이동하는 함수 연결
+                    onClick={goToValuePage} // 밸류에이션 페이지로 이동하는 함수 연결
                     onMouseEnter={() => handleMouseEnter('value')}
                     onMouseLeave={handleMouseLeave}
                   >
                     <Scale className="icon" />
                     {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">벨류에이션</span>}
+                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">밸류에이션</span>}
                   </button>
                 </div>
                 
