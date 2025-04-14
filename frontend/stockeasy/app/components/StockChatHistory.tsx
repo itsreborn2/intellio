@@ -357,7 +357,7 @@ export default function StockChatHistory({
   // 채팅 입력 이벤트 감지 (채팅 입력 시 채팅 세션 강제 갱신)
   useEffect(() => {
     const handleChatMessageSent = () => {
-      console.log('[히스토리 패널] 새 채팅 메시지 입력 감지, 세션 목록 강제 갱신');
+      console.log('[히스토리 패널] 새 채팅 메시지 입력 감지, 세션 목록 갱신');
       fetchChatSessions(true);
     };
     
@@ -441,7 +441,6 @@ export default function StockChatHistory({
         >
           {/* 채팅 세션 섹션 */}
           <div className="mt-4 flex-1">
-            <h3 className="text-sm font-semibold text-gray-400 px-2">채팅 히스토리</h3>
             {isLoadingChatSessions ? (
               <div className="flex justify-center items-center h-32">
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -451,7 +450,7 @@ export default function StockChatHistory({
                 {chatSessions.map((session) => (
                   <button
                     key={session.id}
-                    className="p-2 rounded border border-[#1e2022] hover:bg-[#3e4044] cursor-pointer transition-colors"
+                    className="p-2 text-left rounded border border-[#1e2022] hover:bg-[#3e4044] cursor-pointer transition-colors"
                     onClick={() => handleChatSessionSelect(session)}
                   >
                     <div className="flex items-center justify-between">

@@ -46,7 +46,12 @@ function AIChatAreaContent() {
   const statusMessageIdRef = useRef<string | null>(null);
 
   // Zustand 스토어 사용
-  const { currentSession, messages: storeMessages } = useChatStore();
+  const { 
+    currentSession, 
+    messages: storeMessages, 
+    setCurrentSession: setStoreSession,  // 스토어의 세션 설정 함수
+    clearMessages                        // 스토어의 메시지 초기화 함수
+  } = useChatStore();
   const { fetchSummary } = useTokenUsageStore();
   const questionStore = useQuestionCountStore();
   const questionCount = questionStore.summary?.total_questions || 0;
@@ -221,6 +226,21 @@ function AIChatAreaContent() {
     const mountEvent = new CustomEvent('aiChatAreaMounted', { detail: { isMounted: true } });
     window.dispatchEvent(mountEvent);
     
+    // 초기 마운트 시 항상 상태 초기화 - 페이지 새로고침 또는 다른 페이지에서 이동 시 적용
+    // 이전에 storeMessages 의존성을 사용했으나, 항상 초기화되도록 수정
+    console.log('[AIChatArea] 컴포넌트 마운트 - 초기 상태로 초기화');
+    
+    // 리액트 상태 초기화
+    setInputCentered(true);
+    setAllMessages([]);
+    setChatSession(null);
+    setSelectedStock(null);
+    setSearchTerm('');
+    
+    // Zustand 스토어 상태도 초기화
+    setStoreSession(null);
+    clearMessages();
+    
     // homeButtonClick 이벤트 리스너 등록 - 한 번만 등록되도록 함
     const handleHomeButtonClick = () => {
       console.log('[AIChatArea] 홈버튼 클릭 이벤트 감지: AIChatArea 리셋');
@@ -231,6 +251,10 @@ function AIChatAreaContent() {
       setChatSession(null);
       setSelectedStock(null);
       setSearchTerm('');
+      
+      // Zustand 스토어 상태도 초기화
+      setStoreSession(null);
+      clearMessages();
     };
     
     // 이벤트 리스너 등록
@@ -247,7 +271,7 @@ function AIChatAreaContent() {
       // homeButtonClick 이벤트 리스너 제거
       window.removeEventListener('homeButtonClick', handleHomeButtonClick);
     };
-  }, []); // 빈 의존성 배열: 컴포넌트 마운트/언마운트 시에만 실행
+  }, []); // 의존성 배열에서 storeMessages.length 제거, 마운트 시 한 번만 실행
 
   // 창 너비 상태 추가
   const [windowWidth, setWindowWidth] = useState<number>(1024); // 기본값 설정
