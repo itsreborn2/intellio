@@ -534,7 +534,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     metrics[metric] = keyword_context
             
             # 보고서 데이터 구조화
-            print(f"[FIN_FORMAT] 보고서 데이터 구조화: {metadata}")
+            #print(f"[FIN_FORMAT] 보고서 데이터 구조화: {metadata}")
             year = int(metadata.get("year", ""))
             report_type = metadata.get('type')
             # if( report_type.lower() == "annual" ):

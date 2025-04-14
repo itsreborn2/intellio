@@ -443,7 +443,8 @@ class AgentLLM:
                 
                 # 로깅
                 if provider_idx == 0:
-                    logger.info(f"기본 LLM으로 비동기 호출: {self.agent_name}, provider={self.llm_config.get('provider')}, userid={user_id}, project_type={project_type}")
+                    #logger.info(f"기본 LLM으로 비동기 호출: {self.agent_name}, provider={self.llm_config.get('provider')}, userid={user_id}, project_type={project_type}")
+                    pass
                 else:
                     logger.info(f"폴백 LLM으로 비동기 호출 시도 ({provider_idx}/{max_retries}): provider={provider_config.get('provider')}")
                 

@@ -91,14 +91,11 @@ def format_financial_data(formatted_data: List[Dict[str, Any]]) -> str:
     result_strings = []
     
     print(f"[FIN_FORMAT] 입력 데이터 길이: {len(formatted_data)}")
-    print(f"[FIN_FORMAT] 입력 데이터 ID: {id(formatted_data)}")
+    #print(f"[FIN_FORMAT] 입력 데이터 ID: {id(formatted_data)}")
     
     for idx, item in enumerate(formatted_data):
         # item의 키값 출력
-        if isinstance(item, dict):
-            print(f"[FIN_FORMAT] [{idx}] 딕셔너리 항목, 키: {list(item.keys())}")
-        else:
-            print(f"[FIN_FORMAT] [{idx}] 예상치 못한 타입: {type(item)}")
+
             
         # 문자열인 경우 그대로 추가
         if isinstance(item, str):
