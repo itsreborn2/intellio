@@ -1408,7 +1408,7 @@ export default function RSRankPage() {
                       </div>
                     </div>
                     <div className="relative">
-                      <div className="flex-1 overflow-x-auto overflow-y-auto max-h-[630px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={highTableRef}>
+                      <div className="flex-1 overflow-x-auto" ref={highTableRef}>
                         {/* 데이터 유무 확인 */}
                         {highData && highData.rows.length > 0 ? (
                           <table className="w-full bg-white border border-gray-200 table-fixed">
