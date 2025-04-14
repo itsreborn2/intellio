@@ -1044,39 +1044,31 @@ export default function ETFCurrentTable() {
 
   return (
     <div>
-      <div ref={headerRef} className="flex justify-between items-center mb-3">
-        {/* 좌측 그룹: 제목 */}
-        <div className="flex items-center">
-          <h2 className="text-sm md:text-base font-semibold whitespace-nowrap mr-2">ETF 현재가</h2>
-        </div>
-        {/* 우측 그룹: 업데이트 시간 + 복사 버튼 */}
-        <div className="flex items-center">
-          {/* 업데이트 시간 추가 */}
+      <div ref={headerRef} className="flex justify-start items-center mb-2">
+        <h2 className="text-sm md:text-base font-semibold text-gray-700">ETF 주요섹터</h2>
+        <div className="flex items-center space-x-2 ml-auto">
+          {/* 업데이트 날짜 표시 */}
           {updateDate && (
             <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
               updated 16:30 {updateDate}
             </span>
           )}
-          {/* 복사 버튼 */}
-          <TableCopyButton 
-            tableRef={tableRef} 
+          {/* 테이블 복사 버튼 */}
+          <TableCopyButton
+            tableRef={tableRef}
             headerRef={headerRef}
-            tableName="ETF 현재가"
-            buttonText="이미지 저장"
+            tableName="ETF 현황"
             updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
-            data-component-name="TableCopyButton"
+            // className="p-1 text-xs" // 필요시 버튼 스타일 조정
           />
         </div>
       </div>
-      
-      <div id="etf-current-table" className="overflow-x-auto" ref={tableRef}>
-        <div ref={headerRef} className="hidden">
-          <h2 className="text-lg font-semibold">ETF 현재가 테이블</h2>
-          <p className="text-sm text-gray-500">{new Date().toISOString().split('T')[0]}</p>
-        </div>
-        <table className="min-w-full border border-gray-200 table-fixed">
-          <thead className="bg-gray-100">
-            <tr>
+
+      <div ref={tableRef} className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+        <table className="min-w-full bg-white border border-gray-200 table-fixed">
+          <thead>
+            <tr className="bg-gray-100">
+              {/* 기존 thead 내용 유지 */}
               <th
                 key="산업"
                 scope="col"
