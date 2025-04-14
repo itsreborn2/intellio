@@ -93,6 +93,13 @@ function SidebarContent() {
       });
       window.dispatchEvent(event);
       console.log('homeButtonClick 이벤트 발생 완료');
+      
+      // 토글 버튼 숨김 이벤트 발생
+      const hideToggleEvent = new CustomEvent('hideToggleButton', {
+        bubbles: true
+      });
+      window.dispatchEvent(hideToggleEvent);
+
     } catch (error) {
       console.error('이벤트 발생 중 오류:', error);
     }
@@ -113,10 +120,17 @@ function SidebarContent() {
   const goToRSRankPage = () => {
     // 이미 RS랭크 페이지에 있는 경우 아무 작업도 수행하지 않음
     if (window.location.pathname === '/rs-rank') return;
-    
+
     // prefetch: true 옵션을 사용하여 클라이언트 측 네비게이션 활성화
     router.push('/rs-rank', { scroll: false });
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+
+    // 토글 버튼 숨김 이벤트 발생
+    const hideToggleEvent = new CustomEvent('hideToggleButton', {
+      bubbles: true
+    });
+    window.dispatchEvent(hideToggleEvent);
+
   };
   
   const goToETFSectorPage = () => {
@@ -126,6 +140,12 @@ function SidebarContent() {
     // prefetch: true 옵션을 사용하여 클라이언트 측 네비게이션 활성화
     router.push('/etf-sector', { scroll: false });
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+    // 토글 버튼 숨김 이벤트 발생
+    const hideToggleEvent = new CustomEvent('hideToggleButton', {
+      bubbles: true
+    });
+    window.dispatchEvent(hideToggleEvent);
+
   };
   
   const goToValuePage = () => {
@@ -135,6 +155,13 @@ function SidebarContent() {
     // prefetch: true 옵션을 사용하여 클라이언트 측 네비게이션 활성화
     router.push('/value', { scroll: false });
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+
+    // 토글 버튼 숨김 이벤트 발생
+    const hideToggleEvent = new CustomEvent('hideToggleButton', {
+      bubbles: true
+    });
+    window.dispatchEvent(hideToggleEvent);
+    
   };
   
   // // AI 애널리스트 페이지로 이동하는 함수 추가 (주석 처리)

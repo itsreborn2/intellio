@@ -641,7 +641,7 @@ async def stream_chat_message(
                     session_id=session_key,
                     user_id=current_session.user_id,
                     chat_session_id=str(chat_session_id),
-                    streaming_callback=streaming_callback  # 스트리밍 콜백 전달
+                    #streaming_callback=streaming_callback  # 스트리밍 콜백 전달
                 )
             )
             

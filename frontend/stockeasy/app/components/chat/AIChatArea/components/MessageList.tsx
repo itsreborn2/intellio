@@ -81,7 +81,6 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
   const scrollToTop = useCallback(() => {
     if (messagesTopRef.current) {
       messagesTopRef.current.scrollIntoView({ behavior: 'auto' });
-      console.log('[MessageList] 스크롤 맨 위로 이동 (scrollIntoView)');
     }
   }, []);
   

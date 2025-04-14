@@ -292,6 +292,13 @@ function AIChatAreaContent() {
         }, 100);
       }
       
+      // 토글 버튼 표시를 위한 커스텀 이벤트 발생
+      const showToggleEvent = new CustomEvent('showToggleButton', {
+        bubbles: true
+      });
+      window.dispatchEvent(showToggleEvent);
+      console.log('[AIChatAreaContent] 이벤트 발생: showToggleButton');
+      
       // useMessageProcessing 훅의 sendMessage 함수 호출
       await sendMessage(
         stockState.searchTerm,
@@ -307,7 +314,9 @@ function AIChatAreaContent() {
         addRecentStock(state.selectedStock);
       }
       
-
+      // 채팅 메시지 전송 이벤트 발생 - 채팅 세션 갱신을 위한 이벤트
+      const chatMessageSentEvent = new CustomEvent('chatMessageSent');
+      window.dispatchEvent(chatMessageSentEvent);
       
       console.log('[AIChatAreaContent] 메시지 전송 완료');
 
