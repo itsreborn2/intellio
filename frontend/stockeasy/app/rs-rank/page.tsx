@@ -1402,7 +1402,7 @@ export default function RSRankPage() {
                         <TableCopyButton 
                           tableRef={highTableRef} 
                           headerRef={highHeaderRef} 
-                          tableName="52주 신고/신저가"
+                          tableName="52주 주요 종목"
                           updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
                         />
                       </div>
