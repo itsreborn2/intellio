@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Papa from 'papaparse';
 import { fetchCSVData } from '../utils/fetchCSVData';
 import {
@@ -12,6 +12,7 @@ import {
   SortingState,
 } from '@tanstack/react-table';
 import { copyTableAsImage } from '../utils/tableCopyUtils'; // 테이블 복사 유틸리티 import
+import { formatDateMMDD } from '../utils/dateUtils'; // 날짜 포맷 유틸리티 import
 
 // CSV 데이터 타입 정의
 interface ValuationData {
@@ -24,6 +25,7 @@ interface ValuationData {
   K: string;              // K열 (Index 10 - 2026(E) PER)
   L: string;              // L열 (Index 11 - 2027(E) PER)
   M: string;              // M열 (Index 12 - 2028(E) PER)
+  [key: string]: string | number; // 인덱스 시그니처 추가
 }
 
 // 숫자에 3자리마다 콤마를 추가하는 함수
@@ -167,6 +169,7 @@ const columnHelper = createColumnHelper<ValuationData>();
 const ValuationPage = () => {
   const [data, setData] = useState<ValuationData[]>([]);
   const [filteredData, setFilteredData] = useState<ValuationData[]>([]);
+  const [sortedData, setSortedData] = useState<ValuationData[]>([]); // 정렬된 데이터 상태 추가
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]); // CSV 헤더 상태 추가
   const [loading, setLoading] = useState(true);
   const [searchFilter, setSearchFilter] = useState('');
@@ -210,19 +213,19 @@ const ValuationPage = () => {
   // 현재 페이지 데이터 계산
   const currentPageData = useMemo(() => {
     if (showAllItems) {
-      return filteredData;
+      return sortedData;
     }
     const startIndex = (currentPage - 1) * rowsPerPage;
-    return filteredData.slice(startIndex, startIndex + rowsPerPage);
-  }, [filteredData, currentPage, rowsPerPage, showAllItems]);
+    return sortedData.slice(startIndex, startIndex + rowsPerPage);
+  }, [sortedData, currentPage, rowsPerPage, showAllItems]);
 
   // 총 페이지 수 계산
   const totalPages = useMemo(() => {
     if (showAllItems) {
       return 1;
     }
-    return Math.ceil(filteredData.length / rowsPerPage);
-  }, [filteredData, rowsPerPage, showAllItems]);
+    return Math.ceil(sortedData.length / rowsPerPage);
+  }, [sortedData, rowsPerPage, showAllItems]);
 
   // 컬럼 정의 - 동적으로 헤더명 사용
   // 고정 컬럼 너비 정의 (데스크탑 환경에서 가로 스크롤이 생기지 않도록 너비 조정)
@@ -298,8 +301,11 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.industry,
     }),
     columnHelper.accessor('marketCap', {
-      header: () => csvHeaders[4] || '시가총액(백억)', // CSV 헤더 사용 (Index 4)
-      cell: info => formatMarketCapToHundredBillion(info.getValue()),
+      header: () => <div style={{ textAlign: 'center' }}>시가총액(억)</div>, // 헤더명 고정
+      cell: info => {
+        const value = info.getValue<number | string>() ?? 0;
+        return <div style={{ textAlign: 'right' }}>{Number(value).toLocaleString()}</div>;
+      },
       size: fixedColumnWidths.marketCap,
       minSize: fixedColumnWidths.marketCap,
       maxSize: fixedColumnWidths.marketCap,
@@ -363,6 +369,73 @@ const ValuationPage = () => {
     }),
   ], [selectedStock, selectedIndustry, csvHeaders]); // csvHeaders 의존성 추가
 
+  // 날짜 데이터 로드 useEffect
+  const [updateDate, setUpdateDate] = useState<string | null>(null); // 업데이트 날짜 상태 추가
+  const [loadingDate, setLoadingDate] = useState<boolean>(true); // 날짜 로딩 상태 추가
+  const [errorDate, setErrorDate] = useState<string | null>(null); // 날짜 로딩 오류 상태 추가
+
+  useEffect(() => {
+    const loadUpdateDate = async () => {
+      setLoadingDate(true);
+      setErrorDate(null);
+      try {
+        // fetch 경로를 사용자의 원래 요청대로 today_price_etf.csv로 되돌림
+        const response = await fetch('/requestfile/today_price_etf/today_price_etf.csv'); 
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const csvText = await response.text();
+        
+        // PapaParse를 사용하여 CSV 파싱
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            if (results.errors.length > 0) {
+              console.error('CSV 파싱 오류:', results.errors);
+              setErrorDate('날짜 데이터 파싱 중 오류가 발생했습니다.');
+              return;
+            }
+            
+            const parsedData = results.data as Record<string, string>[];
+            
+            if (parsedData && parsedData.length > 0) {
+              const dateString = parsedData[0]['날짜']; // 첫 번째 행의 '날짜' 컬럼 값
+              if (dateString) {
+                const formattedDate = formatDateMMDD(dateString); // MM/DD 형식으로 변환
+                if (formattedDate) {
+                  setUpdateDate(formattedDate); // 상태 업데이트
+                } else {
+                  setErrorDate('날짜 형식이 올바르지 않습니다.');
+                }
+              } else {
+                setErrorDate('CSV에서 날짜 정보를 찾을 수 없습니다.');
+              }
+            } else {
+              setErrorDate('날짜 데이터가 비어있습니다.');
+            }
+          },
+          error: (error: any) => {
+            console.error('CSV 파싱 중 심각한 오류:', error);
+            setErrorDate('날짜 데이터 파싱 중 심각한 오류가 발생했습니다.');
+          }
+        });
+      } catch (err: unknown) {
+        console.error('날짜 데이터 로딩 오류:', err);
+        setErrorDate('날짜 데이터를 불러오는 데 실패했습니다.');
+        if (err instanceof Error) {
+          setErrorDate(`날짜 데이터를 불러오는 데 실패했습니다: ${err.message}`);
+        } else {
+          setErrorDate('알 수 없는 오류로 날짜 데이터를 불러오는 데 실패했습니다.');
+        }
+      } finally {
+        setLoadingDate(false);
+      }
+    };
+
+    loadUpdateDate();
+  }, []); // 컴포넌트 마운트 시 한 번만 실행
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -415,7 +488,7 @@ const ValuationPage = () => {
             setLoading(false);
           }
         });
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("Error fetching or decoding CSV data:", error); // 에러 메시지 수정
         setLoading(false);
       }
@@ -432,6 +505,40 @@ const ValuationPage = () => {
       window.removeEventListener('resize', updateRowsPerPage);
     };
   }, [updateRowsPerPage]); // updateRowsPerPage를 의존성 배열에 추가
+
+  // 정렬 로직 구현 - 모든 데이터 기준으로 정렬
+  useEffect(() => {
+    if (sorting.length > 0) {
+      const sortedData = [...filteredData].sort((a, b) => {
+        for (const { id, desc } of sorting) {
+          const multiplier = desc ? -1 : 1;
+          const aValue = a[id];
+          const bValue = b[id];
+
+          // 숫자 컬럼인지 확인
+          const numericColumns = [
+            'marketCap', 'I', 'J', 'K', 'L', 'M'
+          ];
+
+          if (numericColumns.includes(id)) {
+            const aNum = typeof aValue === 'number' ? aValue : parseFloat(aValue) || 0;
+            const bNum = typeof bValue === 'number' ? bValue : parseFloat(bValue) || 0;
+            if (aNum !== bNum) return (aNum - bNum) * multiplier;
+          } else {
+            // 문자열 비교 (업종, 종목명, 종목코드 등)
+            const aStr = String(aValue || '').toLowerCase();
+            const bStr = String(bValue || '').toLowerCase();
+            if (aStr < bStr) return -1 * multiplier;
+            if (aStr > bStr) return 1 * multiplier;
+          }
+        }
+        return 0;
+      });
+      setSortedData(sortedData);
+    } else {
+      setSortedData(filteredData);
+    }
+  }, [sorting, filteredData]); // 의존성 배열에 filteredData 추가
 
   // 필터 적용 효과
   useEffect(() => {
@@ -518,7 +625,7 @@ const ValuationPage = () => {
 
   // 페이지네이션 및 정렬을 위한 테이블 인스턴스 생성
   const table = useReactTable({
-    data: showAllItems ? filteredData : currentPageData, // 전 종목 출력 여부에 따라 데이터 소스 변경
+    data: showAllItems ? sortedData : currentPageData, // 전 종목 출력 여부에 따라 데이터 소스 변경
     columns,
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
@@ -581,7 +688,7 @@ const ValuationPage = () => {
       
       // 로딩 상태 비활성화
       setIsAllItemsLoading(false);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('전종목 출력 처리 중 오류:', error);
       setIsAllItemsLoading(false);
     }
@@ -610,9 +717,8 @@ const ValuationPage = () => {
           <div className="bg-white rounded-md shadow p-2 md:p-4">
             {/* 내부 패딩 조정: 하단 패딩(pb) 제거 */}
             <div className="bg-white rounded border border-gray-100 p-2 md:p-4 h-auto"> 
-              {/* 테이블 헤더 영역 */}
-              <div ref={headerRef} className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3"> {/* 제목 영역 + mb-3 */}
-                {/* clamp() 최대값을 1.1rem에서 1rem으로 수정 */}
+              {/* 제목과 날짜를 그룹화하는 div */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center mb-3">
                 <h2 className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.9rem, 0.5vw + 0.85rem, 1rem)' }}>밸류에이션</h2>
               </div>
               
@@ -734,6 +840,19 @@ const ValuationPage = () => {
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     </div>
+                  )}
+                </div>
+                
+                {/* 업데이트 날짜 표시 영역 추가 - ml-auto 적용, self-end 추가 */}
+                <div className="text-gray-600 text-xs ml-auto self-end" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+                  {loadingDate ? (
+                    <span>날짜 로딩 중...</span>
+                  ) : errorDate ? (
+                    <span className="text-red-500">{errorDate}</span>
+                  ) : updateDate ? (
+                    <span>updated 20:00 {updateDate}</span>
+                  ) : (
+                    <span>날짜 정보 없음</span> // 로딩 완료 후에도 날짜가 없을 경우
                   )}
                 </div>
               </div>

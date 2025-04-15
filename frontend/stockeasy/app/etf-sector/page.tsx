@@ -47,7 +47,7 @@ export default function ETFSectorPage() {
               }`}
               onClick={() => setActiveTab('industry')}
             >
-              산업별 등락률 차트
+              산업별 주도ETF 차트
             </button>
           </div>
           <div className="bg-white rounded-md shadow p-2 md:p-4 border border-gray-200">

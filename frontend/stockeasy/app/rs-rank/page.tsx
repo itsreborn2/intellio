@@ -86,15 +86,15 @@ export default function RSRankPage() {
   // 업데이트 날짜 상태 추가
   const [updateDate, setUpdateDate] = useState<string | null>(null); 
   
-  // 차트 데이터 관련 상태 - 20개의 차트를 위한 상태 배열로 변경
-  const [chartDataArray, setChartDataArray] = useState<CandleData[][]>(Array.from({length: 20}, () => []));
-  const [chartLoadingArray, setChartLoadingArray] = useState<boolean[]>(Array.from({length: 20}, () => false));
-  const [chartErrorArray, setChartErrorArray] = useState<string[]>(Array.from({length: 20}, () => '')); 
-  const [chartMarketTypes, setChartMarketTypes] = useState<string[]>(Array.from({length: 20}, () => '')); // 빈 문자열로 초기화
+  // 차트 데이터 관련 상태 - 21개의 차트를 위한 상태 배열로 변경
+  const [chartDataArray, setChartDataArray] = useState<CandleData[][]>(Array.from({length: 21}, () => []));
+  const [chartLoadingArray, setChartLoadingArray] = useState<boolean[]>(Array.from({length: 21}, () => false));
+  const [chartErrorArray, setChartErrorArray] = useState<string[]>(Array.from({length: 21}, () => '')); 
+  const [chartMarketTypes, setChartMarketTypes] = useState<string[]>(Array.from({length: 21}, () => '')); // 빈 문자열로 초기화
   // 종목명을 저장할 상태 추가
-  const [chartStockNames, setChartStockNames] = useState<string[]>(Array.from({length: 20}, () => ''));
+  const [chartStockNames, setChartStockNames] = useState<string[]>(Array.from({length: 21}, () => ''));
   // RS 값을 저장할 상태 추가
-  const [chartRsValues, setChartRsValues] = useState<string[]>(Array.from({length: 20}, () => ''));
+  const [chartRsValues, setChartRsValues] = useState<string[]>(Array.from({length: 21}, () => ''));
   const [kospiIndexData, setKospiIndexData] = useState<CandleData[]>([]);
   const [kosdaqIndexData, setKosdaqIndexData] = useState<CandleData[]>([]);
   
@@ -322,20 +322,20 @@ export default function RSRankPage() {
         return;
       }
       
-      // 상위 20개 종목 추출
-      const top20Stocks = rsData.rows.slice(0, 20);
+      // 상위 21개 종목 추출
+      const topStocks = rsData.rows.slice(0, 21);
       
       // 차트 데이터 배열 초기화
-      const newChartDataArray: CandleData[][] = Array.from({length: 20}, () => []);
-      const newStockNames: string[] = Array.from({length: 20}, () => '');
-      const newMarketTypes: string[] = Array.from({length: 20}, () => ''); // 빈 문자열로 초기화
-      const newChartLoadingArray: boolean[] = Array.from({length: 20}, () => true);
-      const newChartErrorArray: string[] = Array.from({length: 20}, () => '');
-      const newRsValues: string[] = Array.from({length: 20}, () => '');
+      const newChartDataArray: CandleData[][] = Array.from({length: 21}, () => []);
+      const newStockNames: string[] = Array.from({length: 21}, () => '');
+      const newMarketTypes: string[] = Array.from({length: 21}, () => ''); // 빈 문자열로 초기화
+      const newChartLoadingArray: boolean[] = Array.from({length: 21}, () => true);
+      const newChartErrorArray: string[] = Array.from({length: 21}, () => '');
+      const newRsValues: string[] = Array.from({length: 21}, () => '');
       
       // RS 값 설정 (종목 데이터에서 가져옴)
-      top20Stocks.forEach((stock, index) => {
-        if (index < 20) {
+      topStocks.forEach((stock, index) => {
+        if (index < 21) {
           newRsValues[index] = stock.RS ? String(stock.RS) : '';
           newStockNames[index] = stock.종목명 || '';
         }
@@ -362,7 +362,8 @@ export default function RSRankPage() {
         '/requestfile/chart-data/17.csv',
         '/requestfile/chart-data/18.csv',
         '/requestfile/chart-data/19.csv',
-        '/requestfile/chart-data/20.csv'
+        '/requestfile/chart-data/20.csv',
+        '/requestfile/chart-data/21.csv' // 21번째 파일 추가
       ];
       
       // 시장 지수 데이터 파일 경로
@@ -469,8 +470,8 @@ export default function RSRankPage() {
         console.error('시장 지수 데이터 로드 오류:', error);
       }
       
-      // 실제 데이터 로드 (최대 20개)
-      const loadLimit = Math.min(20, top20Stocks.length);
+      // 실제 데이터 로드 (최대 21개)
+      const loadLimit = Math.min(21, topStocks.length);
       
       // 모든 차트 데이터를 로드하기 위한 Promise 배열 생성
       const loadPromises = [];
@@ -590,8 +591,8 @@ export default function RSRankPage() {
       
     } catch (error) {
       console.error('차트 데이터 로드 오류:', error);
-      setChartLoadingArray(Array.from({length: 20}, () => false));
-      setChartErrorArray(Array.from({length: 20}, () => `데이터 로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`));
+      setChartLoadingArray(Array.from({length: 21}, () => false)); // 크기 21로 변경
+      setChartErrorArray(Array.from({length: 21}, () => `데이터 로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`)); // 크기 21로 변경
     }
   };
 
@@ -1226,7 +1227,7 @@ export default function RSRankPage() {
                             <tr className="bg-gray-100">
                               {(() => {
                                 // 표시할 헤더 순서 정의
-                                const desiredOrder = ['종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_2M', 'RS_3M', 'MTT', '시가총액'];
+                                const desiredOrder = ['종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
                                 // '테마명' 제외하고 원하는 순서대로 정렬
                                 const orderedHeaders = csvData.headers
                                   .filter(header => header !== '테마명')
@@ -1239,11 +1240,11 @@ export default function RSRankPage() {
                                       ${header === '업종' ? 'text-center' : ''} // 업종 헤더 가운데 정렬
                                       ${
                                       // 모바일 화면에서 숨길 컬럼들
-                                      (header === '업종' || header === 'RS_2M' || header === 'RS_3M' || header === '시가총액' || header === '종목코드') ? 'hidden md:table-cell' : 
+                                      (header === '업종' || header === 'RS_3M' || header === 'RS_6M' || header === '시가총액' || header === '종목코드') ? 'hidden md:table-cell' : 
                                       ''
                                     }`}
                                     style={{
-                                      width: header === 'RS' || header === 'RS_1M' || header === 'RS_2M' || header === 'RS_3M' || header === 'MTT' ? '70px' :
+                                      width: header === 'RS' || header === 'RS_1M' || header === 'RS_3M' || header === 'RS_6M' || header === 'MTT' ? '70px' :
                                              header === '시가총액' || header === '거래대금' ? '110px' :
                                              header === '종목명' ? '200px' :
                                              header === '종목코드' ? '90px' :
@@ -1273,7 +1274,7 @@ export default function RSRankPage() {
                               <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                                 {(() => {
                                   // 헤더와 동일한 순서로 셀 렌더링
-                                  const desiredOrder = ['종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_2M', 'RS_3M', 'MTT', '시가총액'];
+                                  const desiredOrder = ['종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
                                   const orderedHeaders = csvData.headers
                                     .filter(header => header !== '테마명')
                                     .sort((a, b) => desiredOrder.indexOf(a) - desiredOrder.indexOf(b));
@@ -1284,7 +1285,7 @@ export default function RSRankPage() {
                                       className={`py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis text-xs
                                         ${
                                         // 모바일 화면에서 숨길 컬럼들
-                                        (header === '업종' || header === 'RS_2M' || header === 'RS_3M' || header === '시가총액' || header === '종목코드') ? 'hidden md:table-cell' : 
+                                        (header === '업종' || header === 'RS_3M' || header === 'RS_6M' || header === '시가총액' || header === '종목코드') ? 'hidden md:table-cell' : 
                                         ''
                                       }`}
                                       style={{ 
@@ -1556,7 +1557,7 @@ export default function RSRankPage() {
                     <h2 className="text-sm md:text-base font-semibold">RS상위 시장 비교차트</h2>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Array.from({length: 20}).map((_, index) => (
+                    {Array.from({length: 21}).map((_, index) => (
                       <div key={index} className="rounded-md">
                         {renderChartComponent(index)}
                       </div>
