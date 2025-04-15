@@ -35,7 +35,7 @@
     "rehype-raw": "^7.0.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
-    "sonner": "^1.7.0",
+    "sonner": "^1.7.4",
     "tailwind-merge": "^2.2.1",
     "tailwindcss-animate": "^1.0.7",
     "ui": "github:shadcn/ui",

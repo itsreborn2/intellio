@@ -24,6 +24,51 @@ interface MessageBubbleProps {
   windowWidth: number;
 }
 
+// 마크다운 텍스트를 일반 텍스트로 변환하는 함수
+function stripMarkdown(text: string): string {
+  // 코드 블록 처리 (```code``` -> code)
+  let plainText = text.replace(/```[\s\S]*?```/g, (match) => {
+    return match.replace(/```(?:\w+)?\n([\s\S]*?)```/g, '$1');
+  });
+  
+  // 인라인 코드 처리 (`code` -> code)
+  plainText = plainText.replace(/`([^`]+)`/g, '$1');
+  
+  // 헤더 처리 (# Header -> Header)
+  plainText = plainText.replace(/^(#+)\s+(.*)$/gm, '$2');
+  
+  // 볼드/이탤릭 처리 (**bold** -> bold, *italic* -> italic)
+  plainText = plainText.replace(/(\*\*|__)(.*?)\1/g, '$2');
+  plainText = plainText.replace(/(\*|_)(.*?)\1/g, '$2');
+  
+  // 링크 처리 ([text](url) -> text)
+  plainText = plainText.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  
+  // 이미지 처리 (![alt](url) -> alt)
+  plainText = plainText.replace(/!\[([^\]]+)\]\([^)]+\)/g, '$1');
+  
+  // 목록 처리 (- item -> item, * item -> item, 1. item -> item)
+  plainText = plainText.replace(/^\s*[-*]\s+(.*)$/gm, '$1');
+  plainText = plainText.replace(/^\s*\d+\.\s+(.*)$/gm, '$1');
+  
+  // 인용구 처리 (> quote -> quote)
+  plainText = plainText.replace(/^\s*>\s+(.*)$/gm, '$1');
+  
+  // 수평선 제거 (--- or *** or ___ -> 빈줄)
+  plainText = plainText.replace(/^\s*([-*_])\1{2,}\s*$/gm, '');
+  
+  // 테이블 포맷팅 제거 (|---|---| -> 빈줄)
+  plainText = plainText.replace(/^\|.*\|$/gm, (match) => {
+    if (match.includes('---')) return '';
+    return match.replace(/\|/g, ' ').trim();
+  });
+  
+  // 다중 줄바꿈을 하나로 통일
+  plainText = plainText.replace(/\n{3,}/g, '\n\n');
+  
+  return plainText.trim();
+}
+
 export function MessageBubble({
   message,
   isExpertMode: individualExpertMode,
@@ -192,6 +237,9 @@ export function MessageBubble({
         return;
       }
       
+      // 마크다운 제거
+      const plainTextContent = stripMarkdown(contentToCopy);
+      
       // Clipboard API 사용
       if (navigator.clipboard && window.isSecureContext) {
         if (message.role === 'assistant') {
@@ -202,7 +250,9 @@ export function MessageBubble({
       } else {
         // Fallback: 텍스트 영역을 생성
         const textArea = document.createElement('textarea');
-        textArea.value = contentToCopy;
+        textArea.value = message.role === 'assistant' 
+          ? plainTextContent + '\n\n(주)인텔리오 - : https://wwww.intellio.kr/'
+          : plainTextContent;
         
         textArea.style.position = 'absolute';
         textArea.style.left = '-999999px';

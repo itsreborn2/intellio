@@ -9,6 +9,14 @@ from loguru import logger
 from datetime import datetime
 import pytz
 import sys
+from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+import os
+import time
 
 # 서울 타임존 설정
 seoul_tz = pytz.timezone('Asia/Seoul')
@@ -58,6 +66,15 @@ app.include_router(api_router_doceasy, prefix=settings.API_V1_STR)
 
 # 스탁이지 라우터
 app.include_router(api_router_stockeasy, prefix=settings.API_V1_STR)
+
+
+# 정적 파일 서빙 설정 (임시 파일용)
+TEMP_DIR = settings.TEMP_DIR
+temp_path = Path(TEMP_DIR)
+if not temp_path.exists():
+    temp_path.mkdir(parents=True, exist_ok=True)
+
+app.mount("/download_chat_session", StaticFiles(directory=TEMP_DIR), name="download_chat_session")
 
 # if __name__ == "__main__":
 #     uvicorn.run(app, host="0.0.0.0", port=8000)          # 포트 8000에서 서버 실행

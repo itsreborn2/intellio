@@ -1,16 +1,17 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from "intellio-common/components/ui/avatar";
 import { parseCookies } from 'nookies';
 import { isLoggedIn } from '../utils/auth';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore, useIsClient } from '@/stores/userModeStore';
-import { MessageSquare, Users, Briefcase } from 'lucide-react';
+import { MessageSquare, Download, Loader2 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { usePathname } from 'next/navigation';
 import { useChatStore } from '@/stores/chatStore';
-
+import { toast } from 'sonner';
+import { usePdfExport } from '@/services/api/usePdfExport';
 /**
  * StockEasy 애플리케이션의 고정 헤더 컴포넌트.
  * 화면 상단에 고정되며, 데스크톱에서는 사이드바 영역을 제외한 너비를 가집니다.
@@ -21,7 +22,6 @@ const Header: React.FC = () => {
   const [userName, setUserName] = useState('');
   const [userProfileImage, setUserProfileImage] = useState('');
   const [userEmail, setUserEmail] = useState('');
-  const [userProvider, setUserProvider] = useState('');
   const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(false);
   const [toggleVisible, setToggleVisible] = useState(false);
   
@@ -34,8 +34,11 @@ const Header: React.FC = () => {
   // 현재 경로 가져오기
   const pathname = usePathname();
   
-  // 채팅 스토어에서 메시지 목록 가져오기
-  const { messages: storeMessages } = useChatStore();
+  // 채팅 스토어에서 메시지 목록과 현재 세션 가져오기
+  const { messages: storeMessages, currentSession } = useChatStore();
+  
+  // PDF 내보내기 훅 사용
+  const { isPdfLoading, exportToPdf } = usePdfExport();
   
   // 메시지가 있는지 확인하여 토글 버튼을 표시할지 결정
   const hasChatMessages = storeMessages.length > 0;
@@ -66,8 +69,7 @@ const Header: React.FC = () => {
     // 토글 버튼 표시 이벤트 핸들러
     const handleShowToggle = () => {
       console.log('[헤더] 토글 버튼 표시 이벤트 수신');
-      
-        setToggleVisible(true);
+      setToggleVisible(true);
     };
 
     // 이벤트 리스너 등록
@@ -174,20 +176,15 @@ const Header: React.FC = () => {
     return (questionSummary.total_questions / 30) * 100;
   };
 
-  // 질문 상태에 따른 색상 반환
-  const getQuestionCountColor = () => {
-    const ratio = getQuestionRatio();
-    if (ratio < 50) return 'text-[#10A37F]'; // 녹색 (50% 미만)
-    if (ratio < 80) return 'text-amber-700'; // 주황색 (80% 미만)
-    return 'text-rose-500'; // 빨간색 (80% 이상)
-  };
-
-  // 질문 상태에 따른 배경색 반환
-  const getQuestionCountBgColor = () => {
-    const ratio = getQuestionRatio();
-    if (ratio < 50) return 'bg-[#E6F7F1]'; // 연한 녹색 (50% 미만)
-    if (ratio < 80) return 'bg-amber-50'; // 연한 주황색 (80% 미만)
-    return 'bg-rose-50'; // 연한 빨간색 (80% 이상)
+  // PDF 내보내기 처리 핸들러
+  const handleSaveAsPdf = () => {
+    if (!currentSession) {
+      toast.error('채팅 세션이 없습니다.');
+      return;
+    }
+    
+    // usePdfExport 훅의 exportToPdf 함수 호출
+    exportToPdf(currentSession.id, userMode === 'expert');
   };
 
   return (
@@ -209,7 +206,7 @@ const Header: React.FC = () => {
         {/* 중앙 영역: 모드 선택 토글 - 채팅 메시지가 있을 때만 표시 */}
         <div 
           className={`
-            hidden md:flex items-center 
+            flex items-center 
             transition-opacity duration-300 ease-in-out
             ${toggleVisible ? 'opacity-100' : 'opacity-0'}
           `}
@@ -262,13 +259,28 @@ const Header: React.FC = () => {
         
         {/* 우측 영역: 질문 개수 + 아바타 */}
         <div className="flex items-center gap-3">
+          {/* PDF 내보내기 버튼 - 채팅 메시지가 있고 세션이 있을 때만 표시 */}
+          {isUserLoggedIn && hasChatMessages && currentSession && (
+            <button
+              onClick={handleSaveAsPdf}
+              disabled={isPdfLoading}
+              className="flex items-center gap-1 text-sm px-2.5 py-1 rounded-md bg-[#F5F5F5] hover:bg-[#E5E5E5] transition-colors border border-[#DDD]"
+            >
+              {isPdfLoading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Download size={16} />
+              )}
+              <span className="hidden sm:inline">PDF</span>
+            </button>
+          )}
+          
           {/* 질문 개수 표시 */}
           {isUserLoggedIn && (
-            <div className="flex items-center gap-1">
-              <MessageSquare size={18} className="text-gray-600" />
-              {/* 반응형 클래스 추가: 기본(모바일)은 text-xs, px-2 / sm 이상은 text-sm, px-2.5 */}
-              <Badge variant="outline" className="rounded-md py-0 h-5 bg-[#D8EFE9] border-[#D8EFE9] text-xs px-2 sm:text-sm sm:px-2.5" style={{ borderRadius: '6px' }}>
-                {isQuestionLoading ? "..." : `${questionSummary?.total_questions} / 30`}
+            <div className="flex items-center gap-0.5">
+              <MessageSquare size={16} className="text-gray-600" />
+              <Badge variant="outline" className="h-5 text-xs px-1.5 ml-0.5 rounded-md flex items-center justify-center">
+                {isQuestionLoading ? "..." : `${30 - (questionSummary?.total_questions || 0)}`}
               </Badge>
             </div>
           )}

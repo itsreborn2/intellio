@@ -73,6 +73,9 @@ telegram_collector.session*
 stockeasy/telegram_channels.json
 stockeasy/cache_financial_data/
 stockeasy/local_cache/**/*
+#채팅 다운로드 파일 임시
+tmp_download/
+
 
 # Celery
 celerybeat-schedule
@@ -86,3 +89,4 @@ evaluation/results
 # langgraph
 langgraph_project/
 .langgraph_api
+

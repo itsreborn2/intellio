@@ -109,9 +109,11 @@ class CommonSettings(BaseSettings):
     NAVER_OAUTH_STATE: str
 
     # JWT Settings for OAuth
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-oauth-jwt-secret-key")
-    JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRATION: int = 30 * 24 * 60  # 30 days in minutes
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24 * 7)  # 7일
+    )
 
     # File Upload Settings
     ALLOWED_EXTENSIONS: set = {
@@ -215,6 +217,10 @@ class CommonSettings(BaseSettings):
             "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
             "client_x509_cert_url": os.getenv("GOOGLE_CLOUD_CLIENT_CERT_URL")
         }
+
+    # 임시 파일 경로
+    TEMP_DIR: str = "tmp_download"
+    
 
 @lru_cache()
 def get_settings() -> CommonSettings:

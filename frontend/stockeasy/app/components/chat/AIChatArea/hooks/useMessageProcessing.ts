@@ -2,13 +2,14 @@
  * useMessageProcessing.ts
  * 메시지 처리 로직을 위한 커스텀 훅
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ChatMessage, StockOption } from '../types';
 import { createChatSession, streamChatMessage } from '@/services/api/chat';
 import { IChatSession } from '@/types/api/chat';
 import { useTimers } from './useTimers';
 import { saveRecentStocksToStorage } from '../utils/stockDataUtils';
+import { API_ENDPOINT_STOCKEASY } from '@/services/api/index';
 
 interface MessageProcessingOptions {
   onQuestionLimitExceeded?: () => void;
@@ -33,6 +34,8 @@ interface MessageProcessingHook {
     selectedStock: StockOption | null, 
     recentStocks: StockOption[]
   ) => Promise<void>;
+  saveAsPdf: (sessionId: string, expertMode?: boolean) => Promise<void>;
+  isPdfLoading: boolean;
 }
 
 /**
@@ -57,6 +60,9 @@ export function useMessageProcessing(
     maxQuestions = 30
   } = options;
 
+  // PDF 로딩 상태
+  const [isPdfLoading, setIsPdfLoading] = useState<boolean>(false);
+
   // 핸들러 함수들 추출
   const { addMessage, updateMessage, removeMessage, setCurrentSession, setProcessing } = messageHandlers;
   
@@ -68,6 +74,50 @@ export function useMessageProcessing(
   
   // 누적 응답 콘텐츠 저장
   const accumulatedContent = useRef<string>('');
+
+  // PDF 저장 함수
+  const saveAsPdf = useCallback(async (sessionId: string, expertMode: boolean = false) => {
+    if (!sessionId) {
+      toast.error('채팅 세션이 없습니다.');
+      return;
+    }
+    
+    try {
+      setIsPdfLoading(true);
+      
+      // 백엔드에 PDF 생성 요청 (POST 메서드로 변경하고 expert_mode 전달)
+      const response = await fetch(`${API_ENDPOINT_STOCKEASY}/chat/sessions/${sessionId}/save_pdf`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          expert_mode: expertMode  // 전문가/주린이 모드 상태 전달
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`PDF 생성 요청 실패: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // PDF 다운로드 링크 열기
+      if (data.download_url) {
+        // 새 탭에서 다운로드 링크 열기
+        window.open(data.download_url, '_blank');
+        toast.success('PDF 파일이 생성되었습니다.');
+      } else {
+        toast.error('PDF 다운로드 URL이 제공되지 않았습니다.');
+      }
+    } catch (error) {
+      console.error('PDF 생성 중 오류:', error);
+      toast.error('PDF 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsPdfLoading(false);
+    }
+  }, []);
 
   // 메시지 전송 처리 함수
   const sendMessage = useCallback(async (
@@ -331,7 +381,9 @@ export function useMessageProcessing(
 
   return {
     elapsedTime,
-    sendMessage
+    sendMessage,
+    saveAsPdf,
+    isPdfLoading
   };
 }
 

@@ -16,7 +16,9 @@ import { useIsMobile, useMessageProcessing } from './hooks';
 import { useChatStore } from '@/stores/chatStore';
 import { useTokenUsageStore } from '@/stores/tokenUsageStore';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
+import { useUserModeStore } from '@/stores/userModeStore';
 import { StockOption } from './types';
+import { Download } from 'lucide-react';
 
 /**
  * AIChatArea 메인 컴포넌트
@@ -49,9 +51,13 @@ function AIChatAreaContent() {
   const { 
     currentSession, 
     messages: storeMessages, 
-    setCurrentSession: setStoreSession,  // 스토어의 세션 설정 함수
-    clearMessages                        // 스토어의 메시지 초기화 함수
+    setCurrentSession: setStoreSession,  
+    clearMessages                       
   } = useChatStore();
+  
+  // 사용자 모드 스토어 추가
+  const { mode: userMode } = useUserModeStore();
+  
   const { fetchSummary } = useTokenUsageStore();
   const questionStore = useQuestionCountStore();
   const questionCount = questionStore.summary?.total_questions || 0;
@@ -59,7 +65,9 @@ function AIChatAreaContent() {
   // 메시지 처리 로직을 위한 커스텀 훅 사용 - 상태 관리 함수 전달
   const { 
     elapsedTime, 
-    sendMessage
+    sendMessage,
+    saveAsPdf,
+    isPdfLoading
   } = useMessageProcessing(
     questionCount,
     {
@@ -120,6 +128,10 @@ function AIChatAreaContent() {
       // 레이아웃 설정 변경
       setInputCentered(false);
       setAllMessages(convertedMessages);
+      
+      // 채팅 세션 정보 설정 - 이 부분이 누락되어 있었음
+      setChatSession(currentSession);
+      console.log('[AIChatArea] 채팅 세션 설정:', currentSession.id);
       
       // 세션 정보에서 종목 정보 가져오기
       if (currentSession.stock_name && currentSession.stock_code) {
@@ -387,6 +399,20 @@ function AIChatAreaContent() {
     
     // 종목 제안 팝업 닫기
     showSuggestions(false);
+  };
+
+  // PDF 다운로드 핸들러
+  const handleSaveAsPdf = async () => {
+    if (!state.currentChatSession) {
+      toast.error('채팅 세션이 없습니다.');
+      return;
+    }
+    
+    // userModeStore에서 전문가 모드 상태 가져오기
+    const isExpertMode = userMode === 'expert';
+    
+    console.log('[AIChatAreaContent] PDF 내보내기 전문가 모드 (userModeStore):', isExpertMode);
+    await saveAsPdf(state.currentChatSession.id, isExpertMode);
   };
 
   // 채팅 컨텐츠 렌더링
