@@ -283,17 +283,22 @@ class TelegramRetrieverAgent(BaseAgent):
             for msg in found_messages:
                 created_at = msg["message_created_at"].strftime("%Y-%m-%d %H:%M")
                 content = msg["content"]
-                formatted_messages.append(f"[{created_at}] {content}")
+                score = msg["final_score"]
+                formatted_messages.append(f"--- 메세지 시작 ---")
+                formatted_messages.append(f"- 메세지 일자: {created_at}\n- 내부점수: {score}\n- 메세지 내용:\n {content}")
+                formatted_messages.append(f"--- 메세지 끝 ---")
             
             # 형식화된 메시지를 구분선으로 연결
-            messages_text = "\n------\n".join(formatted_messages)
-            messages_text += f"\n\n-------\n사용자 질문: {query}\n종목코드:{stock_code}\n종목명:{stock_name}"
+            messages_text = "\n".join(formatted_messages)
+            messages_text += f"\n\n-------\n사용자 질문: {query}\n종목코드:{stock_code}\n종목명:{stock_name}\n"
+            messages_text += f"\n메시지 필터링 규칙:\n- 재무데이터 메시지는 위의 종목코드나 종목명이 정확히 언급된 경우에만 포함\n- 다른 종목에 대한 내용이 혼합된 메시지에서는 관련 종목 정보만 추출하여 요약에 포함\n"
             
             # 질문 분류 결과에 따라 프롬프트 생성
             if system_prompt:
                 prompt_context = system_prompt
             else:
-                prompt_context = self.MakeSummaryPrompt(classification)
+                base_prompt = self.MakeSummaryPrompt(classification)
+                prompt_context = base_prompt.format(stock_code=stock_code, stock_name=stock_name)
             
             # 프롬프트와 메시지를 하나의 문자열로 결합
             combined_prompt = f"{prompt_context}\n\n내용: \n{messages_text}"
@@ -331,7 +336,7 @@ class TelegramRetrieverAgent(BaseAgent):
         Returns:
             str: 생성된 요약 프롬프트
         """
-        # 기본 프롬프트 템플릿
+        # 기본 프롬프트 템플릿 - stock_code와 stock_name은 나중에 format 함수에서 주입됨
         base_prompt = TELEGRAM_SUMMARY_PROMPT
         
         # 1. 주요 의도(primary_intent)에 따른 프롬프트 추가
@@ -350,8 +355,8 @@ class TelegramRetrieverAgent(BaseAgent):
             intent_prompt = """
 해당 종목의 성과 및 전망에 관한 질문입니다. 다음 사항에 중점을 두어 요약하세요:
 - 실적 발표 및 향후 전망에 관한 내용
-- 애널리스트들의 목표가 및 투자의견
-- 매출, 영업이익, 순이익 등 주요 재무 지표 예측
+- 종목명,종목코드가 정확히 일치하는 경우에만 애널리스트들의 목표가 및 투자의견
+- 종목명,종목코드가 정확히 일치하는 경우에만 매출, 영업이익, 순이익 등 주요 재무 지표 예측
 - 수출입 데이터 및 해외 시장 실적/전망 정보
 - 수출 규모, 주요 수출국, 수입 의존도 등 무역 관련 정보
 - 미래 성장 동력 및 위험 요소
@@ -359,6 +364,7 @@ class TelegramRetrieverAgent(BaseAgent):
         elif primary_intent == "재무분석":
             intent_prompt = """
 재무 분석에 관한 질문입니다. 다음 사항에 중점을 두어 요약하세요:
+- 종목명,종목코드가 정확히 일치하는 경우에만 메세지를 포함하여 분석.
 - 주요 재무제표 수치 및 비율 분석
 - 동종 업계 대비 재무 건전성
 - 수익성, 성장성, 안정성 관련 지표
@@ -812,7 +818,7 @@ class TelegramRetrieverAgent(BaseAgent):
                     reranker_type=RerankerType.PINECONE,
                     pinecone_config=PineconeRerankerConfig(
                         api_key=settings.PINECONE_API_KEY_STOCKEASY,
-                        min_score=0.1  # 낮은 임계값으로 더 많은 결과 포함
+                        min_score=0.2  # 낮은 임계값으로 더 많은 결과 포함
                     )
                 )
             )
@@ -870,7 +876,7 @@ class TelegramRetrieverAgent(BaseAgent):
                 
                 # 최종 점수 = 유사도 * 중요도 * 시간 가중치
                 #final_score = doc.score * importance_score * time_weight
-                final_score = (doc.score * 0.5) + (importance_score * 0.3) + (time_weight * 0.2)
+                final_score = (doc.score * 0.7) + (time_weight * 0.3)
                 # 메시지 데이터 구성
                 message:RetrievedTelegramMessage = {
                     "content": content,

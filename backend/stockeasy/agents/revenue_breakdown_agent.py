@@ -242,8 +242,8 @@ class RevenueBreakdownAgent(BaseAgent):
             # 보고서 데이터 구조화
             year = int(metadata.get("year", ""))
             report_type = metadata.get('type')
-            if report_type.lower() == "annual":
-                year = year - 1
+            # if report_type.lower() == "annual":
+            #     year = year - 1
 
             formatted_report = {
                 "source": f"{year}년 {self._get_report_type_name(report_type)} 보고서",

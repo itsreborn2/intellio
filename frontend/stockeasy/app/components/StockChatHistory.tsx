@@ -34,6 +34,9 @@ interface IChatSessionListResponse {
   total: number
 }
 
+// 로컬 스토리지 키 상수 추가
+const CHAT_SESSIONS_LAST_FETCH_KEY = 'stockeasy-chat-sessions-last-fetch';
+
 export default function StockChatHistory({
   isHistoryPanelOpen,
   toggleHistoryPanel,
@@ -87,12 +90,69 @@ export default function StockChatHistory({
     }
   };
 
+  // 마지막 채팅 세션 갱신 시간 확인
+  const shouldFetchChatSessions = () => {
+    try {
+      const lastFetch = localStorage.getItem(CHAT_SESSIONS_LAST_FETCH_KEY);
+      const currentTime = Date.now();
+      
+      // 마지막 갱신 시간이 없으면 갱신 필요
+      if (!lastFetch) {
+        console.log('[히스토리 패널] 저장된 마지막 갱신 시간 없음, 갱신 필요');
+        return true;
+      }
+      
+      const lastFetchTime = parseInt(lastFetch, 10);
+      
+      // 채팅 세션이 없는 경우 (이전에 오류가 있었을 수 있음), 30초 후 다시 시도
+      if (chatSessions.length === 0) {
+        const thirtySecondsInMs = 30 * 1000;
+        const timeSinceLastFetch = currentTime - lastFetchTime;
+        const needsFetch = timeSinceLastFetch > thirtySecondsInMs;
+        
+        console.log(`[히스토리 패널] 채팅 세션이 없음. 마지막 갱신 이후 경과 시간: ${Math.round(timeSinceLastFetch / 1000)}초`);
+        console.log(`[히스토리 패널] 30초 경과 여부(갱신 필요): ${needsFetch}`);
+        
+        return needsFetch;
+      }
+      
+      // 일반적인 경우: 1시간 후 갱신
+      const oneHourInMs = 60 * 60 * 1000; // 1시간을 밀리초로 변환
+      const timeSinceLastFetch = currentTime - lastFetchTime;
+      const needsFetch = timeSinceLastFetch > oneHourInMs;
+      
+      console.log(`[히스토리 패널] 마지막 갱신 이후 경과 시간: ${Math.round(timeSinceLastFetch / 1000 / 60)}분`);
+      console.log(`[히스토리 패널] 갱신 필요: ${needsFetch}`);
+      
+      return needsFetch;
+    } catch (error) {
+      console.error('[히스토리 패널] 갱신 필요 여부 확인 오류:', error);
+      return true; // 오류 발생 시 기본적으로 갱신
+    }
+  };
+
+  // 마지막 갱신 시간 저장
+  const updateLastFetchTime = () => {
+    try {
+      localStorage.setItem(CHAT_SESSIONS_LAST_FETCH_KEY, Date.now().toString());
+      console.log('[히스토리 패널] 마지막 갱신 시간 업데이트');
+    } catch (error) {
+      console.error('[히스토리 패널] 마지막 갱신 시간 저장 오류:', error);
+    }
+  };
+
   // 채팅 세션 목록 가져오기
-  const fetchChatSessions = async () => {
+  const fetchChatSessions = async (forceUpdate = false) => {
     // userId가 없을 경우 쿠키에서 다시 시도
     const currentUserId = userId || getUserInfoFromCookie();
     if (!currentUserId) {
       console.log('[히스토리 패널] 사용자 ID가 없어 채팅 세션을 가져올 수 없습니다.');
+      return;
+    }
+    
+    // 강제 갱신이 아니고 갱신이 필요하지 않으면 요청 건너뛰기
+    if (!forceUpdate && !shouldFetchChatSessions()) {
+      //console.log('[히스토리 패널] 갱신 필요 없음, 요청 건너뛰기');
       return;
     }
     
@@ -107,6 +167,9 @@ export default function StockChatHistory({
       if (response.data.ok && Array.isArray(response.data.sessions)) {
         setChatSessions(response.data.sessions);
         console.log('[히스토리 패널] 채팅 세션 로딩 완료', response.data.sessions.length);
+        
+        // 마지막 갱신 시간 업데이트
+        updateLastFetchTime();
       }
     } catch (error) {
       console.error('[히스토리 패널] 채팅 세션 가져오기 오류:', error);
@@ -117,13 +180,13 @@ export default function StockChatHistory({
   
   // 채팅 세션 선택 처리
   const handleChatSessionSelect = async (session: IChatSession) => {
-    console.log('[히스토리 패널] 채팅 세션 선택:', session.id);
+    //console.log('[히스토리 패널] 채팅 세션 선택:', session.id);
     try {
       // 세션에 속한 메시지 가져오기
       const response = await axios.get(`${API_ENDPOINT_STOCKEASY}/chat/sessions/${session.id}/messages`, { withCredentials: true });
       
       if (response.data.ok && Array.isArray(response.data.messages)) {
-        console.log('[히스토리 패널] 채팅 메시지 로드 성공', response.data.messages.length);
+        //console.log('[히스토리 패널] 채팅 메시지 로드 성공', response.data.messages.length);
         
         // Zustand 스토어를 사용하여 메시지 저장 및 UI 업데이트
         loadChatSession(session.id, session.title, response.data.messages);
@@ -132,8 +195,14 @@ export default function StockChatHistory({
         window.requestAnimationFrame(() => {
           const scrollTopEvent = new CustomEvent('scrollChatToTop');
           window.dispatchEvent(scrollTopEvent);
-          console.log('[히스토리 패널] 스크롤 이벤트 발생: scrollChatToTop');
         });
+        
+        // 토글 버튼 표시를 위한 커스텀 이벤트 발생
+        const showToggleEvent = new CustomEvent('showToggleButton', {
+          bubbles: true
+        });
+        window.dispatchEvent(showToggleEvent);
+        console.log('[히스토리 패널] 이벤트 발생: showToggleButton');
         
         // 모바일 환경에서는 히스토리 패널 닫기
         if (isMobile) {
@@ -210,6 +279,13 @@ export default function StockChatHistory({
         });
         window.dispatchEvent(event);
         
+        // 토글 버튼 표시를 위한 커스텀 이벤트 발생
+        const showToggleEvent = new CustomEvent('showToggleButton', {
+          bubbles: true
+        });
+        window.dispatchEvent(showToggleEvent);
+        console.log('[히스토리 패널] 이벤트 발생: showToggleButton');
+        
         // 모바일 환경에서는 히스토리 패널 닫기
         if (isMobile) {
           console.log('[히스토리 패널] 모바일 환경에서 패널 닫기');
@@ -242,7 +318,7 @@ export default function StockChatHistory({
         }
       }
       
-      // 채팅 세션 목록 가져오기 (userId가 있으면 즉시, 없으면 getUserInfoFromCookie 내에서 설정된 후)
+      // 채팅 세션 목록 가져오기 (필요한 경우에만)
       fetchChatSessions();
     }
   }, [isHistoryPanelOpen, userId]);
@@ -277,6 +353,22 @@ export default function StockChatHistory({
       window.removeEventListener('stockPromptSubmitted', handleStockPrompt as EventListener);
     }
   }, [userId]); // userId가 변경될 때마다 이벤트 리스너 재설정
+
+  // 채팅 입력 이벤트 감지 (채팅 입력 시 채팅 세션 강제 갱신)
+  useEffect(() => {
+    const handleChatMessageSent = () => {
+      console.log('[히스토리 패널] 새 채팅 메시지 입력 감지, 세션 목록 갱신');
+      fetchChatSessions(true);
+    };
+    
+    // 채팅 입력 이벤트 리스너 등록
+    window.addEventListener('chatMessageSent', handleChatMessageSent);
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('chatMessageSent', handleChatMessageSent);
+    };
+  }, [userId]);
 
   return (
     <div 
@@ -349,7 +441,6 @@ export default function StockChatHistory({
         >
           {/* 채팅 세션 섹션 */}
           <div className="mt-4 flex-1">
-            <h3 className="text-sm font-semibold text-gray-400 px-2">채팅 히스토리</h3>
             {isLoadingChatSessions ? (
               <div className="flex justify-center items-center h-32">
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -359,7 +450,7 @@ export default function StockChatHistory({
                 {chatSessions.map((session) => (
                   <button
                     key={session.id}
-                    className="p-2 rounded border border-[#1e2022] hover:bg-[#3e4044] cursor-pointer transition-colors"
+                    className="p-2 text-left rounded border border-[#1e2022] hover:bg-[#3e4044] cursor-pointer transition-colors"
                     onClick={() => handleChatSessionSelect(session)}
                   >
                     <div className="flex items-center justify-between">

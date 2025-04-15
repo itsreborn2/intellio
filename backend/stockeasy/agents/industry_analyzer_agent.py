@@ -569,11 +569,15 @@ class IndustryAnalyzerAgent(BaseAgent):
         날짜 문자열 형식화
         
         Args:
-            date_str: 날짜 문자열 (예: "20230101")
+            date_str: 날짜 문자열 (예: "20230101") 또는 숫자 (예: 20230101.0)
             
         Returns:
             형식화된 날짜 문자열 (예: "2023-01-01")
         """
+        # float나 int 타입인 경우 문자열로 변환
+        if isinstance(date_str, (float, int)):
+            date_str = str(date_str).split('.')[0]  # 소수점 이하 제거
+        
         if not date_str or len(date_str) != 8:
             return date_str
         

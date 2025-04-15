@@ -84,26 +84,38 @@ function SidebarContent() {
     // 홈버튼 클릭 이벤트 발생 (채팅 영역 초기화용)
     console.log('홈버튼 클릭: 이벤트 발생시킴', new Date().toISOString());
     
-    // 명시적으로 CustomEvent 생성 및 발생
     try {
-      // 이벤트 정의 (사용자 정의 이벤트의 경우 bubbles: true 추가)
-      const event = new CustomEvent('homeButtonClick', { 
-        bubbles: true, 
-        detail: { timestamp: Date.now() } 
-      });
-      window.dispatchEvent(event);
-      console.log('homeButtonClick 이벤트 발생 완료');
+      // 현재 경로가 홈페이지(루트)인 경우에만 이벤트 발생
+      if (window.location.pathname === '/') {
+        // 이벤트 정의 (사용자 정의 이벤트의 경우 bubbles: true 추가)
+        const event = new CustomEvent('homeButtonClick', { 
+          bubbles: true, 
+          detail: { timestamp: Date.now() } 
+        });
+        window.dispatchEvent(event);
+        console.log('homeButtonClick 이벤트 발생 완료');
+        
+        // 토글 버튼 숨김 이벤트 발생
+        const hideToggleEvent = new CustomEvent('hideToggleButton', {
+          bubbles: true
+        });
+        window.dispatchEvent(hideToggleEvent);
+
+        // 같은 페이지에서 초기화를 위해 refresh 호출
+        router.refresh();
+      } else {
+        // 다른 경로에서는 홈으로 이동
+        // 히스토리 스택에 쌓이지 않도록 replace 옵션 사용
+        router.replace('/', { scroll: false });
+        
+        // 토글 버튼 숨김 이벤트 발생
+        const hideToggleEvent = new CustomEvent('hideToggleButton', {
+          bubbles: true
+        });
+        window.dispatchEvent(hideToggleEvent);
+      }
     } catch (error) {
-      console.error('이벤트 발생 중 오류:', error);
-    }
-    
-    // 현재 경로가 홈페이지(루트)인 경우
-    if (window.location.pathname === '/') {
-      // 클라이언트 측 네비게이션 사용 (새로고침)
-      router.refresh();
-    } else {
-      // 다른 경로에서는 홈으로 이동
-      router.push('/', { scroll: false });
+      console.error('페이지 이동 중 오류:', error);
     }
     
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
@@ -113,10 +125,17 @@ function SidebarContent() {
   const goToRSRankPage = () => {
     // 이미 RS랭크 페이지에 있는 경우 아무 작업도 수행하지 않음
     if (window.location.pathname === '/rs-rank') return;
-    
+
     // prefetch: true 옵션을 사용하여 클라이언트 측 네비게이션 활성화
     router.push('/rs-rank', { scroll: false });
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+
+    // 토글 버튼 숨김 이벤트 발생
+    const hideToggleEvent = new CustomEvent('hideToggleButton', {
+      bubbles: true
+    });
+    window.dispatchEvent(hideToggleEvent);
+
   };
   
   const goToETFSectorPage = () => {
@@ -126,6 +145,12 @@ function SidebarContent() {
     // prefetch: true 옵션을 사용하여 클라이언트 측 네비게이션 활성화
     router.push('/etf-sector', { scroll: false });
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+    // 토글 버튼 숨김 이벤트 발생
+    const hideToggleEvent = new CustomEvent('hideToggleButton', {
+      bubbles: true
+    });
+    window.dispatchEvent(hideToggleEvent);
+
   };
   
   const goToValuePage = () => {
@@ -135,6 +160,13 @@ function SidebarContent() {
     // prefetch: true 옵션을 사용하여 클라이언트 측 네비게이션 활성화
     router.push('/value', { scroll: false });
     if (isMobile) setIsMenuOpen(false); // 모바일에서 페이지 이동 시 메뉴 닫기
+
+    // 토글 버튼 숨김 이벤트 발생
+    const hideToggleEvent = new CustomEvent('hideToggleButton', {
+      bubbles: true
+    });
+    window.dispatchEvent(hideToggleEvent);
+    
   };
   
   // // AI 애널리스트 페이지로 이동하는 함수 추가 (주석 처리)
@@ -291,7 +323,8 @@ function SidebarContent() {
   // 채팅 페이지 로드 시 검색 히스토리 패널을 기본으로 열도록 useEffect 추가
   useEffect(() => {
     if (showHistoryButton) {
-      setIsHistoryPanelOpen(true);
+      // 히스토리 패널이 자동으로 열리지 않도록 주석 처리 또는 제거
+      // setIsHistoryPanelOpen(true);
     }
   }, [showHistoryButton]);
 

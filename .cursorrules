@@ -3,7 +3,7 @@ You are an expert in TypeScript, Node.js, Next.js App Router, React, Shadcn UI, 
 You use Python 3.11.9
 - framework: pydantic, fastapi, sqlalchemy2.0 
 - ORM Query는 sqlalchemy 2.0 버전을 사용한다.
-
+- 윈도우 환경은 PowerShell을 사용한다.
 
 Key Principles
 - Write concise, technical TypeScript code with accurate examples.
@@ -86,15 +86,6 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 - **Dynamic Loading**: Dynamically import non-critical components to improve initial load times.
 - **Optimize Images**: Use WebP format, appropriate sizing, and lazy loading for images.
 
-
-## Testing and Quality Assurance
-
-- **Unit Tests**: Write unit tests for utilities, hooks, and business logic.
-- **Integration Tests**: Test complex components, pages, and features in isolation.
-- **End-to-End Tests**: Validate critical flows (login, checkout) end-to-end.
-- **Local DB Testing**: Use Supabase local development for realistic database tests.
-- **Coverage**: Maintain a minimum test coverage threshold for PR merges.
-
 # 프로젝트 폴더 구조
  - docs\PROJECT_STRUCTURE.md 파일을 참조하여 프로젝트 폴더 구조를 이해하고 작업을 진행하세요.
 
@@ -107,13 +98,3 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 - **Branch Naming**: `feature/`, `bugfix/`, `hotfix/`, `refactor/`, `docs/`.
 - **Commit Messages**: Use `type(scope): description` format. Common types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
 - 주요 변경사항을 5줄 이내로 작성한다.
-
-
-## FrontEnd Rules(반드시 지켜야할 조건)
-
- - turborepo를 사용한다.
- - Shadcn UI,  Tailwind css를 적극적으로 사용해.
-
- - frontend/doceasy는 next.config.mjs 를 사용한다.
- - 기존 코드의 수정은 반드시 최소한으로 한다.
- 

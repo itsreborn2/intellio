@@ -13,19 +13,65 @@ import { useIsMobile } from '../hooks';
 import { CopyButton } from './CopyButton';
 import { toast } from 'sonner';
 import ExpertModeToggle from './ExpertModeToggle';
+import { useUserModeStore, useIsClient } from '@/stores/userModeStore';
 
 interface MessageBubbleProps {
   message: ChatMessage;
-  isExpertMode?: boolean; // 선택적 속성으로 변경
+  isExpertMode?: boolean; // 개별 메시지 전문가 모드 (옵션)
   timerState?: Record<string, number>;
-  onCopy?: (id: string) => void; // 선택적 속성으로 변경 (필요한 경우에만 사용)
-  onToggleExpertMode?: (id: string) => void; // 선택적 속성으로 변경
+  onCopy?: (id: string) => void; 
+  onToggleExpertMode?: (id: string) => void;
   windowWidth: number;
+}
+
+// 마크다운 텍스트를 일반 텍스트로 변환하는 함수
+function stripMarkdown(text: string): string {
+  // 코드 블록 처리 (```code``` -> code)
+  let plainText = text.replace(/```[\s\S]*?```/g, (match) => {
+    return match.replace(/```(?:\w+)?\n([\s\S]*?)```/g, '$1');
+  });
+  
+  // 인라인 코드 처리 (`code` -> code)
+  plainText = plainText.replace(/`([^`]+)`/g, '$1');
+  
+  // 헤더 처리 (# Header -> Header)
+  plainText = plainText.replace(/^(#+)\s+(.*)$/gm, '$2');
+  
+  // 볼드/이탤릭 처리 (**bold** -> bold, *italic* -> italic)
+  plainText = plainText.replace(/(\*\*|__)(.*?)\1/g, '$2');
+  plainText = plainText.replace(/(\*|_)(.*?)\1/g, '$2');
+  
+  // 링크 처리 ([text](url) -> text)
+  plainText = plainText.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  
+  // 이미지 처리 (![alt](url) -> alt)
+  plainText = plainText.replace(/!\[([^\]]+)\]\([^)]+\)/g, '$1');
+  
+  // 목록 처리 (- item -> item, * item -> item, 1. item -> item)
+  plainText = plainText.replace(/^\s*[-*]\s+(.*)$/gm, '$1');
+  plainText = plainText.replace(/^\s*\d+\.\s+(.*)$/gm, '$1');
+  
+  // 인용구 처리 (> quote -> quote)
+  plainText = plainText.replace(/^\s*>\s+(.*)$/gm, '$1');
+  
+  // 수평선 제거 (--- or *** or ___ -> 빈줄)
+  plainText = plainText.replace(/^\s*([-*_])\1{2,}\s*$/gm, '');
+  
+  // 테이블 포맷팅 제거 (|---|---| -> 빈줄)
+  plainText = plainText.replace(/^\|.*\|$/gm, (match) => {
+    if (match.includes('---')) return '';
+    return match.replace(/\|/g, ' ').trim();
+  });
+  
+  // 다중 줄바꿈을 하나로 통일
+  plainText = plainText.replace(/\n{3,}/g, '\n\n');
+  
+  return plainText.trim();
 }
 
 export function MessageBubble({
   message,
-  isExpertMode: externalExpertMode,
+  isExpertMode: individualExpertMode,
   timerState,
   onCopy,
   onToggleExpertMode,
@@ -34,11 +80,19 @@ export function MessageBubble({
   const isMobile = useIsMobile();
   const messageIdRef = useRef(message.id);
   
+  // 클라이언트 측 마운트 상태 확인
+  const isClient = useIsClient();
+  
+  // 앱 전체 사용자 모드 상태 가져오기
+  const { mode: userMode } = useUserModeStore();
+  const isGlobalExpertMode = isClient && userMode === 'expert';
+  
   // 내부적으로 전문가 모드 상태 관리
   const [internalExpertMode, setInternalExpertMode] = useState(false);
   
-  // 외부에서 전달된 isExpertMode가 있으면 사용, 없으면 내부 상태 사용
-  const isExpertMode = externalExpertMode !== undefined ? externalExpertMode : internalExpertMode;
+  // 표시할 전문가 모드 결정 (우선순위: 글로벌 > 개별 > 내부)
+  // 글로벌 전문가 모드가 켜져있으면 무조건 전문가 모드 내용 표시
+  const isExpertMode = isGlobalExpertMode || (individualExpertMode !== undefined ? individualExpertMode : internalExpertMode);
   
   // 내부적으로 복사 상태 관리 (UI 표시용)
   const [isCopied, setIsCopied] = useState(false);
@@ -142,6 +196,14 @@ export function MessageBubble({
     return aiMessageStyle;
   };
 
+  // 표시할 메시지 내용 결정
+  const getMessageContent = () => {
+    if (isExpertMode && message.role === 'assistant' && message.content_expert) {
+      return message.content_expert;
+    }
+    return message.content;
+  };
+
   // 복사할 내용 결정
   const getContentToCopy = () => {
     if (isExpertMode && message.role === 'assistant' && message.content_expert) {
@@ -175,6 +237,9 @@ export function MessageBubble({
         return;
       }
       
+      // 마크다운 제거
+      const plainTextContent = stripMarkdown(contentToCopy);
+      
       // Clipboard API 사용
       if (navigator.clipboard && window.isSecureContext) {
         if (message.role === 'assistant') {
@@ -185,7 +250,9 @@ export function MessageBubble({
       } else {
         // Fallback: 텍스트 영역을 생성
         const textArea = document.createElement('textarea');
-        textArea.value = contentToCopy;
+        textArea.value = message.role === 'assistant' 
+          ? plainTextContent + '\n\n(주)인텔리오 - : https://wwww.intellio.kr/'
+          : plainTextContent;
         
         textArea.style.position = 'absolute';
         textArea.style.left = '-999999px';
@@ -248,103 +315,77 @@ export function MessageBubble({
           )}
           
           <div style={{
-            overflow: message.role === 'user' ? 'hidden' : 'visible',
-            textOverflow: message.role === 'user' ? 'ellipsis' : 'clip',
-            wordBreak: 'break-word',
-            maxWidth: '100%'
+            position: 'relative',
           }}>
+            {/* 여기서 getMessageContent 함수를 호출하여 적절한 내용을 표시 */}
             {message.role === 'user' ? (
-              // 사용자 메시지는 일반 텍스트로 표시
               <div style={{
                 whiteSpace: 'pre-wrap',
-                fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'),
-                lineHeight: '1.6',
-                letterSpacing: 'normal',
-                wordBreak: 'break-word',
-                color: 'white'
+                fontSize: isMobile ? '0.85rem' : (windowWidth < 768 ? '0.9rem' : '0.95rem'),
+                lineHeight: '1.5',
               }}>
-                {message.content}
-              </div>
-            ) : message.role === 'status' ? (
-              // 상태 메시지는 마크다운으로 표시 + 경과 시간
-              <div className="markdown-content">
-                <ReactMarkdown 
-                  remarkPlugins={[
-                    remarkGfm,
-                    [remarkBreaks, { breaks: false }]
-                  ]}
-                  components={{
-                    text: ({node, ...props}) => <>{props.children}</>,
-                    h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1em', fontSize: '1.8rem'}} {...props} />,
-                    h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1em', fontSize: '1.5rem'}} {...props} />,
-                    h3: ({node, ...props}) => <h3 style={{marginTop: '1.2em', marginBottom: '0.8em', fontSize: '1.25rem'}} {...props} />,
-                    h4: ({node, ...props}) => <h4 style={{marginTop: '1em', marginBottom: '0.7em', fontSize: '1.1rem'}} {...props} />,
-                    ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                    ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                    li: ({node, ...props}) => <li style={{marginBottom: '0.3em', lineHeight: '0.8'}} {...props} />,
-                    p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
-                  }}
-                >
-                  {message.content}
-                </ReactMarkdown>
-                {message.elapsed !== undefined && (
-                  <div style={{
-                    marginTop: '8px',
-                    fontSize: isMobile ? '11px' : '12px',
-                    color: 'rgb(170, 170, 170)',
-                    textAlign: 'left',
-                  }}>
-                    {message.elapsedStartTime 
-                      ? (timerState?.[message.id] || message.elapsed).toFixed(1)
-                      : message.elapsed.toFixed(1)
-                    }초
-                  </div>
-                )}
+                {getMessageContent()}
               </div>
             ) : (
-              // AI 응답 메시지는 마크다운으로 표시 (전문가 모드 지원)
               <div className="markdown-content">
-                {message.role === 'assistant' && message.content_expert && isExpertMode ? (
-                  <ReactMarkdown 
-                    remarkPlugins={[
-                      remarkGfm,
-                      [remarkBreaks, { breaks: false }]
-                    ]}
-                    components={{
-                      text: ({node, ...props}) => <>{props.children}</>,
-                      h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1.5em', fontSize: '1.7rem'}} {...props} />,
-                      h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1.5em', fontSize: '1.6rem'}} {...props} />,
-                      h3: ({node, ...props}) => <h3 style={{marginTop: '2.3em', marginBottom: '1.5em', fontSize: '1.5rem'}} {...props} />,
-                      h4: ({node, ...props}) => <h4 style={{marginTop: '1.8em', marginBottom: '0.7em', fontSize: '1.1rem'}} {...props} />,
-                      ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                      ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                      li: ({node, ...props}) => <li style={{marginBottom: '0.3em', lineHeight: '1.5'}} {...props} />,
-                      p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
-                    }}
-                  >
-                    {message.content_expert}
-                  </ReactMarkdown>
-                ) : (
-                  <ReactMarkdown 
-                    remarkPlugins={[
-                      remarkGfm,
-                      [remarkBreaks, { breaks: false }]
-                    ]}
-                    components={{
-                      text: ({node, ...props}) => <>{props.children}</>,
-                      h1: ({node, ...props}) => <h1 style={{marginTop: '1.5em', marginBottom: '1.5em', fontSize: '1.7rem'}} {...props} />,
-                      h2: ({node, ...props}) => <h2 style={{marginTop: '1.5em', marginBottom: '1.5em', fontSize: '1.6rem'}} {...props} />,
-                      h3: ({node, ...props}) => <h3 style={{marginTop: '2.3em', marginBottom: '1.5em', fontSize: '1.5rem'}} {...props} />,
-                      h4: ({node, ...props}) => <h4 style={{marginTop: '1.8em', marginBottom: '0.7em', fontSize: '1.1rem'}} {...props} />,
-                      ul: ({node, ...props}) => <ul style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                      ol: ({node, ...props}) => <ol style={{marginTop: '0.5em', marginBottom: '1em', paddingLeft: '1.5em'}} {...props} />,
-                      li: ({node, ...props}) => <li style={{marginBottom: '0.3em', lineHeight: '1.5'}} {...props} />,
-                      p: ({node, ...props}) => <p style={{marginTop: '0.5em', marginBottom: '1em'}} {...props} />
-                    }}
-                  >
-                    {message.content}
-                  </ReactMarkdown>
-                )}
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    // 마크다운 요소에 대한 스타일 및 속성 지정
+                    p: ({ node, ...props }) => <p style={{ margin: '8px 0' }} {...props} />,
+                    strong: ({ node, ...props }) => <strong style={{ fontWeight: 'bold' }} {...props} />,
+                    em: ({ node, ...props }) => <em style={{ fontStyle: 'italic' }} {...props} />,
+                    a: ({ node, ...props }) => <a style={{ color: '#10A37F', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer" {...props} />,
+                    h1: ({ node, ...props }) => <h1 style={{ fontSize: '1.5em', margin: '16px 0', fontWeight: 'bold' }} {...props} />,
+                    h2: ({ node, ...props }) => <h2 style={{ fontSize: '1.3em', margin: '14px 0', fontWeight: 'bold' }} {...props} />,
+                    h3: ({ node, ...props }) => <h3 style={{ fontSize: '1.1em', margin: '12px 0', fontWeight: 'bold' }} {...props} />,
+                    ul: ({ node, ...props }) => <ul style={{ paddingLeft: '20px', margin: '8px 0' }} {...props} />,
+                    ol: ({ node, ...props }) => <ol style={{ paddingLeft: '20px', margin: '8px 0' }} {...props} />,
+                    li: ({ node, ...props }) => <li style={{ margin: '4px 0' }} {...props} />,
+                    code: ({ node, inline, className, children, ...props }: any) => (
+                      <code
+                        className={className}
+                        style={{
+                          backgroundColor: '#f0f0f0',
+                          padding: inline ? '2px 4px' : '8px',
+                          borderRadius: '4px',
+                          fontFamily: 'monospace',
+                          fontSize: '0.9em',
+                          display: inline ? 'inline' : 'block',
+                          overflowX: 'auto',
+                          maxWidth: '100%',
+                          whiteSpace: inline ? 'pre' : 'pre-wrap'
+                        }}
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    ),
+                    table: ({ node, ...props }) => (
+                      <div style={{ overflowX: 'auto', maxWidth: '100%', margin: '12px 0' }}>
+                        <table style={{ borderCollapse: 'collapse', width: '100%' }} {...props} />
+                      </div>
+                    ),
+                    thead: ({ node, ...props }) => <thead style={{ backgroundColor: '#f0f0f0' }} {...props} />,
+                    th: ({ node, ...props }) => <th style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'left' }} {...props} />,
+                    td: ({ node, ...props }) => <td style={{ padding: '8px', border: '1px solid #ddd' }} {...props} />,
+                    blockquote: ({ node, ...props }) => (
+                      <blockquote
+                        style={{
+                          borderLeft: '4px solid #ddd',
+                          paddingLeft: '16px',
+                          margin: '12px 0',
+                          fontStyle: 'italic',
+                          color: '#555'
+                        }}
+                        {...props}
+                      />
+                    ),
+                    hr: ({ node, ...props }) => <hr style={{ border: 'none', borderTop: '1px solid #ddd', margin: '16px 0' }} {...props} />
+                  }}
+                >
+                  {getMessageContent()}
+                </ReactMarkdown>
               </div>
             )}
           </div>
@@ -375,22 +416,7 @@ export function MessageBubble({
             </div>
           )}
 
-          {/* 전문가 모드 버튼 - 어시스턴트 메시지이고 전문가 모드 내용이 있는 경우에만 표시 */}
-          {message.role === 'assistant' && message.content_expert && message.content_expert.trim() !== '' && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: '3px',
-                left: '32px', // 복사 버튼 옆에 위치
-              }}
-            >
-              <ExpertModeToggle 
-                isExpertMode={isExpertMode} 
-                onToggle={handleToggleExpertMode}
-                size="sm"
-              />
-            </div>
-          )}
+          
         </div>
       </div>
     </div>

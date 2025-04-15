@@ -65,6 +65,10 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
             "start": "재무 데이터 분석 중...",
             "complete": "재무 분석 완료"
         },
+        "revenue_breakdown": {
+            "start": "매출 및 수주 현황 분석 중...",
+            "complete": "매출 및 수주 현황 분석 완료"
+        },
         "industry_analyzer": {
             "start": "산업 및 경쟁사 분석 중...",
             "complete": "산업 분석 완료"
@@ -187,6 +191,13 @@ class ChatMemoryResponse(BaseResponse):
     """채팅 메모리 응답 모델"""
     messages: List[Dict[str, Any]]
     total: int
+
+
+class PDFResponse(BaseResponse):
+    """PDF 다운로드 응답 모델"""
+    download_url: str = Field(..., description="PDF 다운로드 URL")
+    file_name: str = Field(..., description="PDF 파일 이름")
+    expires_at: str = Field(..., description="URL 만료 시간")
 
 
 # 엔드포인트 정의
@@ -637,7 +648,7 @@ async def stream_chat_message(
                     session_id=session_key,
                     user_id=current_session.user_id,
                     chat_session_id=str(chat_session_id),
-                    streaming_callback=streaming_callback  # 스트리밍 콜백 전달
+                    #streaming_callback=streaming_callback  # 스트리밍 콜백 전달
                 )
             )
             
@@ -978,4 +989,72 @@ async def get_chat_memory(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"대화 메모리 조회 중 오류 발생: {str(e)}"
+        ) 
+
+class PDFRequest(BaseModel):
+    expert_mode: bool = False
+
+@chat_router.post("/sessions/{chat_session_id}/save_pdf", response_model=PDFResponse)
+async def save_chat_to_pdf(
+    chat_session_id: UUID = Path(..., description="채팅 세션 ID"),
+    pdf_request: PDFRequest = Body(...),
+    db: AsyncSession = Depends(get_db_async),
+    current_session: Session = Depends(get_current_session)
+) -> PDFResponse:
+    """채팅 세션의 메시지를 PDF로 저장하고 다운로드 URL을 생성합니다."""
+    try:
+        logger.info(f"PDF 생성 시작: {chat_session_id}, expert_mode: {pdf_request.expert_mode}")
+        # 세션 존재 여부 확인
+        session_data = await ChatService.get_chat_session(
+            db=db,
+            session_id=chat_session_id,
+            user_id=current_session.user_id
+        )
+        
+        if not session_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="채팅 세션을 찾을 수 없습니다."
+            )
+        
+        # 메시지 목록 조회 (모든 메시지)
+        messages = await ChatService.get_chat_messages(
+            db=db,
+            session_id=chat_session_id,
+            user_id=current_session.user_id,
+            limit=1000,  # 충분히 큰 제한값 설정
+            offset=0
+        )
+        
+        logger.info(f"메시지 목록 조회 완료: {len(messages)}개 메시지")
+        
+        # PDF 생성 서비스 호출
+        from stockeasy.services.pdf_service import PDFService
+        pdf_service = PDFService()
+        logger.info(f"PDF 생성 서비스 초기화 완료")
+        # PDF 생성
+        pdf_result = await pdf_service.generate_chat_pdf(
+            chat_session=session_data,
+            messages=messages,
+            user_id=str(current_session.user_id),
+            expert_mode=pdf_request.expert_mode
+        )
+        
+        logger.info(f"PDF 생성 완료: {pdf_result['file_name']}")
+        
+        return PDFResponse(
+            ok=True,
+            status_message="PDF 생성 완료",
+            download_url=pdf_result["download_url"],
+            file_name=pdf_result["file_name"],
+            expires_at=pdf_result["expires_at"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF 생성 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF 생성 중 오류 발생: {str(e)}"
         ) 

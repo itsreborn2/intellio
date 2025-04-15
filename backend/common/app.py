@@ -66,7 +66,6 @@ app = FastAPI(
     lifespan=lifespan,
     redirect_slashes=False  # 슬래시 리다이렉션 비활성화
 )
-
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,

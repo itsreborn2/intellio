@@ -16,7 +16,9 @@ import { useIsMobile, useMessageProcessing } from './hooks';
 import { useChatStore } from '@/stores/chatStore';
 import { useTokenUsageStore } from '@/stores/tokenUsageStore';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
+import { useUserModeStore } from '@/stores/userModeStore';
 import { StockOption } from './types';
+import { Download } from 'lucide-react';
 
 /**
  * AIChatArea 메인 컴포넌트
@@ -46,7 +48,16 @@ function AIChatAreaContent() {
   const statusMessageIdRef = useRef<string | null>(null);
 
   // Zustand 스토어 사용
-  const { currentSession, messages: storeMessages } = useChatStore();
+  const { 
+    currentSession, 
+    messages: storeMessages, 
+    setCurrentSession: setStoreSession,  
+    clearMessages                       
+  } = useChatStore();
+  
+  // 사용자 모드 스토어 추가
+  const { mode: userMode } = useUserModeStore();
+  
   const { fetchSummary } = useTokenUsageStore();
   const questionStore = useQuestionCountStore();
   const questionCount = questionStore.summary?.total_questions || 0;
@@ -54,7 +65,9 @@ function AIChatAreaContent() {
   // 메시지 처리 로직을 위한 커스텀 훅 사용 - 상태 관리 함수 전달
   const { 
     elapsedTime, 
-    sendMessage
+    sendMessage,
+    saveAsPdf,
+    isPdfLoading
   } = useMessageProcessing(
     questionCount,
     {
@@ -115,6 +128,10 @@ function AIChatAreaContent() {
       // 레이아웃 설정 변경
       setInputCentered(false);
       setAllMessages(convertedMessages);
+      
+      // 채팅 세션 정보 설정 - 이 부분이 누락되어 있었음
+      setChatSession(currentSession);
+      console.log('[AIChatArea] 채팅 세션 설정:', currentSession.id);
       
       // 세션 정보에서 종목 정보 가져오기
       if (currentSession.stock_name && currentSession.stock_code) {
@@ -221,6 +238,21 @@ function AIChatAreaContent() {
     const mountEvent = new CustomEvent('aiChatAreaMounted', { detail: { isMounted: true } });
     window.dispatchEvent(mountEvent);
     
+    // 초기 마운트 시 항상 상태 초기화 - 페이지 새로고침 또는 다른 페이지에서 이동 시 적용
+    // 이전에 storeMessages 의존성을 사용했으나, 항상 초기화되도록 수정
+    console.log('[AIChatArea] 컴포넌트 마운트 - 초기 상태로 초기화');
+    
+    // 리액트 상태 초기화
+    setInputCentered(true);
+    setAllMessages([]);
+    setChatSession(null);
+    setSelectedStock(null);
+    setSearchTerm('');
+    
+    // Zustand 스토어 상태도 초기화
+    setStoreSession(null);
+    clearMessages();
+    
     // homeButtonClick 이벤트 리스너 등록 - 한 번만 등록되도록 함
     const handleHomeButtonClick = () => {
       console.log('[AIChatArea] 홈버튼 클릭 이벤트 감지: AIChatArea 리셋');
@@ -231,6 +263,10 @@ function AIChatAreaContent() {
       setChatSession(null);
       setSelectedStock(null);
       setSearchTerm('');
+      
+      // Zustand 스토어 상태도 초기화
+      setStoreSession(null);
+      clearMessages();
     };
     
     // 이벤트 리스너 등록
@@ -247,7 +283,7 @@ function AIChatAreaContent() {
       // homeButtonClick 이벤트 리스너 제거
       window.removeEventListener('homeButtonClick', handleHomeButtonClick);
     };
-  }, []); // 빈 의존성 배열: 컴포넌트 마운트/언마운트 시에만 실행
+  }, []); // 의존성 배열에서 storeMessages.length 제거, 마운트 시 한 번만 실행
 
   // 창 너비 상태 추가
   const [windowWidth, setWindowWidth] = useState<number>(1024); // 기본값 설정
@@ -292,6 +328,13 @@ function AIChatAreaContent() {
         }, 100);
       }
       
+      // 토글 버튼 표시를 위한 커스텀 이벤트 발생
+      const showToggleEvent = new CustomEvent('showToggleButton', {
+        bubbles: true
+      });
+      window.dispatchEvent(showToggleEvent);
+      console.log('[AIChatAreaContent] 이벤트 발생: showToggleButton');
+      
       // useMessageProcessing 훅의 sendMessage 함수 호출
       await sendMessage(
         stockState.searchTerm,
@@ -307,7 +350,9 @@ function AIChatAreaContent() {
         addRecentStock(state.selectedStock);
       }
       
-
+      // 채팅 메시지 전송 이벤트 발생 - 채팅 세션 갱신을 위한 이벤트
+      const chatMessageSentEvent = new CustomEvent('chatMessageSent');
+      window.dispatchEvent(chatMessageSentEvent);
       
       console.log('[AIChatAreaContent] 메시지 전송 완료');
 
@@ -354,6 +399,20 @@ function AIChatAreaContent() {
     
     // 종목 제안 팝업 닫기
     showSuggestions(false);
+  };
+
+  // PDF 다운로드 핸들러
+  const handleSaveAsPdf = async () => {
+    if (!state.currentChatSession) {
+      toast.error('채팅 세션이 없습니다.');
+      return;
+    }
+    
+    // userModeStore에서 전문가 모드 상태 가져오기
+    const isExpertMode = userMode === 'expert';
+    
+    console.log('[AIChatAreaContent] PDF 내보내기 전문가 모드 (userModeStore):', isExpertMode);
+    await saveAsPdf(state.currentChatSession.id, isExpertMode);
   };
 
   // 채팅 컨텐츠 렌더링

@@ -2,7 +2,7 @@
  * ChatContext.tsx
  * 채팅 상태 관리를 위한 컨텍스트 API
  */
-import React, { createContext, useContext, useReducer, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useReducer, ReactNode, useMemo, useCallback } from 'react';
 import { ChatContextState, ChatAction, ChatMessage, StockOption } from '../types';
 import { IChatSession } from '@/types/api/chat';
 
@@ -148,33 +148,69 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, initialState);
   
-  // 편의 함수들 메모이제이션
+  // 메모이제이션된 함수들을 useCallback으로 정의
+  const addMessage = useCallback((message: ChatMessage) => 
+    dispatch({ type: 'ADD_MESSAGE', payload: message }), []);
+    
+  const updateMessage = useCallback((id: string, message: Partial<ChatMessage>) => 
+    dispatch({ type: 'UPDATE_MESSAGE', payload: { id, message } }), []);
+    
+  const removeMessage = useCallback((id: string) => 
+    dispatch({ type: 'REMOVE_MESSAGE', payload: id }), []);
+    
+  const setSelectedStock = useCallback((stock: StockOption | null) => 
+    dispatch({ type: 'SET_SELECTED_STOCK', payload: stock }), []);
+    
+  const setProcessing = useCallback((isProcessing: boolean) => 
+    dispatch({ type: 'SET_PROCESSING', payload: isProcessing }), []);
+    
+  const setInputCentered = useCallback((isCentered: boolean) => 
+    dispatch({ type: 'SET_INPUT_CENTERED', payload: isCentered }), []);
+    
+  const resetChat = useCallback(() => 
+    dispatch({ type: 'RESET_CHAT' }), []);
+    
+  const toggleExpertMode = useCallback((messageId: string) => 
+    dispatch({ type: 'TOGGLE_EXPERT_MODE', payload: messageId }), []);
+    
+  const setCopyState = useCallback((id: string, state: boolean) => 
+    dispatch({ type: 'SET_COPY_STATE', payload: { id, state } }), []);
+    
+  const setChatSession = useCallback((session: IChatSession | null) => 
+    dispatch({ type: 'SET_CHAT_SESSION', payload: session }), []);
+    
+  const setAllMessages = useCallback((messages: ChatMessage[]) =>
+    dispatch({ type: 'SET_ALL_MESSAGES', payload: messages }), []);
+  
+  // 컨텍스트 값 메모이제이션 - 이제 개별 함수들은 이미 메모이제이션됨
   const contextValue = useMemo(() => ({
     state,
     dispatch,
-    addMessage: (message: ChatMessage) => 
-      dispatch({ type: 'ADD_MESSAGE', payload: message }),
-    updateMessage: (id: string, message: Partial<ChatMessage>) => 
-      dispatch({ type: 'UPDATE_MESSAGE', payload: { id, message } }),
-    removeMessage: (id: string) => 
-      dispatch({ type: 'REMOVE_MESSAGE', payload: id }),
-    setSelectedStock: (stock: StockOption | null) => 
-      dispatch({ type: 'SET_SELECTED_STOCK', payload: stock }),
-    setProcessing: (isProcessing: boolean) => 
-      dispatch({ type: 'SET_PROCESSING', payload: isProcessing }),
-    setInputCentered: (isCentered: boolean) => 
-      dispatch({ type: 'SET_INPUT_CENTERED', payload: isCentered }),
-    resetChat: () => 
-      dispatch({ type: 'RESET_CHAT' }),
-    toggleExpertMode: (messageId: string) => 
-      dispatch({ type: 'TOGGLE_EXPERT_MODE', payload: messageId }),
-    setCopyState: (id: string, state: boolean) => 
-      dispatch({ type: 'SET_COPY_STATE', payload: { id, state } }),
-    setChatSession: (session: IChatSession | null) => 
-      dispatch({ type: 'SET_CHAT_SESSION', payload: session }),
-    setAllMessages: (messages: ChatMessage[]) =>
-      dispatch({ type: 'SET_ALL_MESSAGES', payload: messages })
-  }), [state, dispatch]);
+    addMessage,
+    updateMessage,
+    removeMessage,
+    setSelectedStock,
+    setProcessing,
+    setInputCentered,
+    resetChat,
+    toggleExpertMode,
+    setCopyState,
+    setChatSession,
+    setAllMessages
+  }), [
+    state,
+    addMessage,
+    updateMessage,
+    removeMessage,
+    setSelectedStock,
+    setProcessing,
+    setInputCentered,
+    resetChat,
+    toggleExpertMode,
+    setCopyState,
+    setChatSession,
+    setAllMessages
+  ]);
 
   return (
     <ChatContext.Provider value={contextValue}>
