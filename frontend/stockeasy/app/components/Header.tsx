@@ -196,11 +196,11 @@ const Header: React.FC = () => {
     exportToPdf(currentSession.id, userMode === 'expert');
   };
 
-  console.log('[Header] 렌더링:', 
-    '로그인:', isUserLoggedIn, 
-    '메시지:', storeMessages.length, 
-    '세션:', !!currentSession
-  );
+  // console.log('[Header] 렌더링:', 
+  //   '로그인:', isUserLoggedIn, 
+  //   '메시지:', storeMessages.length, 
+  //   '세션:', !!currentSession
+  // );
 
   return (
     <header 
