@@ -212,6 +212,7 @@ class TelegramRetrieverAgent(BaseAgent):
             
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["telegram_retriever"] = "completed"
+            logger.info(f"TelegramRetrieverAgent processing_status: {state['processing_status']}")
             
             # 메트릭 기록
             state["metrics"] = state.get("metrics", {})

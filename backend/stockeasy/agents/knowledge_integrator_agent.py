@@ -175,9 +175,6 @@ class KnowledgeIntegratorAgent(BaseAgent):
             # 검증 결과 로깅
             logger.info(f"쿼리 '{query}'에 대한 검증된 에이전트 결과: {list(agent_results.keys())}")
             
-            # 검증 결과 로깅
-            logger.info(f"쿼리 '{query}'에 대한 검증된 에이전트 결과: {list(agent_results.keys())}")
-            
             # 데이터 중요도 설정 (기본값: 5/10)
             data_importance = state.get("data_importance", {})
             telegram_importance = data_importance.get("telegram_retriever", 5)

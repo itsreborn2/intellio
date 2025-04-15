@@ -384,8 +384,14 @@ class StockAnalysisGraph:
                 
             # 실행 계획이 없으면 fallback으로
             execution_plan = state.get("execution_plan", {})
-            if not execution_plan or not execution_plan.get("execution_order"):
+            if not execution_plan:
                 logger.info("실행 계획이 없어 fallback_manager로 라우팅합니다.")
+                return "fallback_manager"
+                
+            # 실행 순서가 없거나 빈 배열이면 fallback으로
+            execution_order = execution_plan.get("execution_order", [])
+            if not execution_order:
+                logger.info("실행 순서가 비어있어 fallback_manager로 라우팅합니다.")
                 return "fallback_manager"
                 
             # 정상 흐름은 병렬 검색으로
@@ -405,8 +411,8 @@ class StockAnalysisGraph:
         def parallel_search_router(state: AgentState) -> str:
             """병렬 검색 이후 라우팅 결정"""
             # 로그에 전체 상태 출력 (디버깅용)
-            #logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
-            #logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
+            logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
+            logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
             
             # 타임스탬프 오류 재시작 플래그 확인 - 재시작 직후라면 knowledge_integrator로 바로 라우팅
             if state.get("restart_after_timestamp_error", False):
@@ -461,17 +467,34 @@ class StockAnalysisGraph:
             # 검색 결과가 있는지 확인
             retrieved_data = state.get("retrieved_data", {})
             
+            # 검색 데이터 키 로깅
+            logger.info(f"검색 데이터 키: {list(retrieved_data.keys())}")
+            
             # 실제 데이터 포함 항목만 확인
             has_data = False
-            for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "revenue_breakdown"]:
+            for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "revenue_breakdown"]:
                 if key in retrieved_data and retrieved_data[key]:
                     has_data = True
                     logger.info(f"데이터가 검색됨: {key}에 {len(retrieved_data[key])}개 항목이 있습니다.")
                     break
             
+            # 병렬 검색이 실행되었다면, 검색 결과가 없어도 계속 진행
+            # 이미 하위 에이전트가, 진행 중일 수 있기 때문에, 바로 fallback_manager로 가지 않음
             if not has_data:
-                logger.warning("검색 결과가 없어 fallback_manager로 라우팅합니다.")
-                return "fallback_manager"
+                # 모든 하위 에이전트가 실패했거나 완료되었는지 확인
+                all_agents_completed_or_failed = True
+                for agent_name in ["telegram_retriever", "report_analyzer", "financial_analyzer", "industry_analyzer", "confidential_analyzer", "revenue_breakdown"]:
+                    status = processing_status.get(agent_name)
+                    if status and status not in completed_statuses and status != "failed" and status != "error":
+                        all_agents_completed_or_failed = False
+                        break
+                
+                if all_agents_completed_or_failed:
+                    logger.warning("모든 검색 에이전트가 완료되었거나 실패했으며, 검색 결과가 없어 fallback_manager로 라우팅합니다.")
+                    return "fallback_manager"
+                else:
+                    logger.info("검색 결과가 아직 없지만 일부 에이전트가. 진행 중이므로 knowledge_integrator로 라우팅합니다.")
+                    return "knowledge_integrator"
             
             logger.info("데이터가 검색되어 knowledge_integrator로 라우팅합니다.")
             return "knowledge_integrator"
@@ -613,7 +636,7 @@ class StockAnalysisGraph:
         # 실행 순서 확인
         execution_order = execution_plan.get("execution_order", [])
         if not execution_order:
-            logger.info("실행 순서가 없어 fallback_manager로 라우팅합니다.")
+            logger.info("실행 순서가 비어있어 fallback_manager로 라우팅합니다.")
             return "fallback_manager"
         
         # 현재 상태에서 마지막으로 실행된 에이전트 확인

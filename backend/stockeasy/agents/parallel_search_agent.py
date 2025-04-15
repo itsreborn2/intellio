@@ -115,7 +115,6 @@ class ParallelSearchAgent(BaseAgent):
             
             # 데이터 요구사항 기반 확인
             if data_requirements:
-                
                 if agent_name == "telegram_retriever" and data_requirements.get("telegram_needed", False):
                     should_execute = True
                 elif agent_name == "report_analyzer" and data_requirements.get("reports_needed", False):
@@ -151,8 +150,10 @@ class ParallelSearchAgent(BaseAgent):
         for name, agent in search_agents:
             # 처리 상태 초기화 - 우선 processing 상태로 설정
             state["processing_status"][name] = "processing"
-            # 복사본 생성 및 커스텀 템플릿 정보 추가
+            # 복사본 생성
             agent_state = copy.deepcopy(state)
+            # processing_status는 참조로 유지 (다시 원본으로 설정)
+            agent_state["processing_status"] = state["processing_status"]
             # 커스텀 프롬프트 템플릿 정보 추가
             if custom_prompt_templates:
                 agent_state["custom_prompt_templates"] = custom_prompt_templates

@@ -16,6 +16,7 @@ from stockeasy.core.celery_app import celery
 from stockeasy.models.telegram_message import TelegramMessage
 from stockeasy.services.telegram.embedding import TelegramEmbeddingService
 from loguru import logger
+from sqlalchemy import func
 #logger = logging.getLogger(__name__)
 
 class EmbeddingTask(Task):
@@ -56,15 +57,22 @@ class EmbeddingTask(Task):
             self._db = None
 
     def should_execute(self) -> bool:
-        now = datetime.now()
+        now = datetime.now(tz=timezone.utc)
         current_hour = now.hour
 
         # 현재 시간과 마지막 실행 시간의 차이를 계산
-        time_diff = now - self._last_execution_time
+        if self._last_execution_time.tzinfo is None:
+            # _last_execution_time에 시간대 정보가 없는 경우 UTC로 설정
+            last_execution_with_tz = self._last_execution_time.replace(tzinfo=timezone.utc)
+        else:
+            last_execution_with_tz = self._last_execution_time
+            
+        time_diff = now - last_execution_with_tz
 
+        # 400개 3분. 800개 6분.
         if current_hour >= 17 or current_hour < 7:
             # 17시 ~ 7시: 20분마다 실행
-            should_run = time_diff.total_seconds() >= 30 * 60  # 60분
+            should_run = time_diff.total_seconds() >= 10 * 60 #임시로 10분간격 #30 * 60  # 60분
         else:
             # 7시 ~ 17시: 5분마다 실행
             should_run = time_diff.total_seconds() >= 6 * 60  # 20분
@@ -82,7 +90,7 @@ class EmbeddingTask(Task):
     max_retries=3,
     soft_time_limit=60,  # 1분 제한
 )
-def process_new_messages(self, batch_size: int = 400) -> int:
+def process_new_messages(self, batch_size: int = 800) -> int:
     """새로 수집된 메시지를 임베딩 처리하는 태스크
     
     아직 임베딩되지 않은 메시지들을 가져와서 벡터화하고 저장합니다.
@@ -108,6 +116,8 @@ def process_new_messages(self, batch_size: int = 400) -> int:
         messages: List[TelegramMessage] = (
             self.db.query(TelegramMessage)
             .filter(TelegramMessage.is_embedded.is_(False))
+            .filter(TelegramMessage.message_text.is_not(None))  # 메시지 텍스트가 None이 아닌 것
+            .filter(func.length(func.trim(TelegramMessage.message_text)) >= 10)  # 텍스트 길이가 10 이상인 것만
             .limit(batch_size)
             .all()
         )
@@ -118,18 +128,32 @@ def process_new_messages(self, batch_size: int = 400) -> int:
         
         logger.info(f"{len(messages)}개의 새로운 메시지를 임베딩합니다.")
         
-        # 배치 임베딩 처리
+        # 메시지의 ID 목록 기록
+        message_ids = [message.message_id for message in messages]
+        logger.debug(f"임베딩 처리할 메시지 ID: {message_ids}")
+        
+        # 배치 임베딩 처리 - 결과는 전체 성공 여부만 반환
         success = self.embedding_service.embed_telegram_messages_batch(messages)
         
         if success:
-            # 임베딩 상태 업데이트
+            # 개별 메시지의 임베딩 상태 확인
+            success_count = 0
             for message in messages:
-                message.is_embedded = True
+                # 벡터 저장소에서 각 메시지의 벡터 ID를 확인하여 실제 저장 여부 확인
+                vector_id = f"{message.channel_id}_{message.message_id}"
+                exists = self.embedding_service.vector_store.vector_exists(vector_id)
+                
+                if exists:
+                    # 실제로 벡터가 저장된 메시지만 임베딩 성공으로 표시
+                    message.is_embedded = True
+                    success_count += 1
+                else:
+                    logger.warning(f"메시지 벡터 저장 실패 (vector_id: {vector_id}), len({message.message_text})")
             
             # 변경사항 저장
             self.db.commit()
-            logger.info(f"{len(messages)}개 메시지 임베딩 완료")
-            return len(messages)
+            logger.info(f"{success_count}개 메시지 임베딩 완료 (전체 {len(messages)}개 중)")
+            return success_count
         else:
             logger.error("메시지 임베딩 실패")
             return 0
