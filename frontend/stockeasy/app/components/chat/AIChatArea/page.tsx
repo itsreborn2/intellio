@@ -18,7 +18,6 @@ import { useTokenUsageStore } from '@/stores/tokenUsageStore';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore } from '@/stores/userModeStore';
 import { StockOption } from './types';
-import { Download } from 'lucide-react';
 
 /**
  * AIChatArea 메인 컴포넌트
@@ -65,9 +64,7 @@ function AIChatAreaContent() {
   // 메시지 처리 로직을 위한 커스텀 훅 사용 - 상태 관리 함수 전달
   const { 
     elapsedTime, 
-    sendMessage,
-    saveAsPdf,
-    isPdfLoading
+    sendMessage
   } = useMessageProcessing(
     questionCount,
     {
@@ -254,23 +251,51 @@ function AIChatAreaContent() {
     clearMessages();
     
     // homeButtonClick 이벤트 리스너 등록 - 한 번만 등록되도록 함
-    const handleHomeButtonClick = () => {
-      console.log('[AIChatArea] 홈버튼 클릭 이벤트 감지: AIChatArea 리셋');
+    const handleHomeButtonClick = (event: Event) => {
+      //console.log('[AIChatArea] 홈버튼 클릭 이벤트 감지:', event);
       
-      // 함수형 업데이트를 사용하여 최신 상태 참조
-      setInputCentered(true);
-      setAllMessages([]);
-      setChatSession(null);
-      setSelectedStock(null);
-      setSearchTerm('');
-      
-      // Zustand 스토어 상태도 초기화
-      setStoreSession(null);
-      clearMessages();
+      try {
+        // 이벤트 세부 정보 로깅
+        const customEvent = event as CustomEvent;
+        //console.log('[AIChatArea] 이벤트 detail:', customEvent.detail);
+        
+        // Zustand 스토어 상태 초기화 전 로그
+        console.log('[AIChatArea] 스토어 초기화 전 상태:', 
+          '세션:', useChatStore.getState().currentSession?.id,
+          '메시지 수:', useChatStore.getState().messages.length
+        );
+        
+        // Zustand 스토어 상태도 초기화
+        setStoreSession(null);
+        //console.log('[AIChatArea] 세션 초기화 후:', useChatStore.getState().currentSession);
+        
+        clearMessages();
+        //console.log('[AIChatArea] 메시지 초기화 후:', useChatStore.getState().messages.length);
+        
+        // 함수형 업데이트를 사용하여 최신 상태 참조
+        setInputCentered(true);
+        setAllMessages([]);
+        setChatSession(null);
+        setSelectedStock(null);
+        setSearchTerm('');
+        
+        console.log('[AIChatArea] 모든 상태 초기화 완료');
+      } catch (error) {
+        console.error('[AIChatArea] 홈버튼 클릭 이벤트 처리 중 오류:', error);
+      }
     };
     
-    // 이벤트 리스너 등록
+    // 이벤트 리스너 등록 - document에도 등록 시도
+    console.log('[AIChatArea] homeButtonClick 이벤트 리스너 등록');
     window.addEventListener('homeButtonClick', handleHomeButtonClick);
+    document.addEventListener('homeButtonClick', handleHomeButtonClick);
+    
+    // 전역 리셋 함수 - 디버깅용 (직접 호출 가능)
+    // @ts-ignore - 전역 객체에 속성 추가
+    window.__resetAIChatArea = () => {
+      console.log('[AIChatArea] 직접 리셋 함수 호출됨');
+      handleHomeButtonClick(new CustomEvent('manual_reset'));
+    };
     
     // 컴포넌트 언마운트 시 cleanup 함수
     return () => {
@@ -282,6 +307,11 @@ function AIChatAreaContent() {
       
       // homeButtonClick 이벤트 리스너 제거
       window.removeEventListener('homeButtonClick', handleHomeButtonClick);
+      document.removeEventListener('homeButtonClick', handleHomeButtonClick);
+      
+      // 전역 리셋 함수 제거
+      // @ts-ignore - 전역 객체에서 속성 제거
+      delete window.__resetAIChatArea;
     };
   }, []); // 의존성 배열에서 storeMessages.length 제거, 마운트 시 한 번만 실행
 
@@ -401,20 +431,6 @@ function AIChatAreaContent() {
     showSuggestions(false);
   };
 
-  // PDF 다운로드 핸들러
-  const handleSaveAsPdf = async () => {
-    if (!state.currentChatSession) {
-      toast.error('채팅 세션이 없습니다.');
-      return;
-    }
-    
-    // userModeStore에서 전문가 모드 상태 가져오기
-    const isExpertMode = userMode === 'expert';
-    
-    console.log('[AIChatAreaContent] PDF 내보내기 전문가 모드 (userModeStore):', isExpertMode);
-    await saveAsPdf(state.currentChatSession.id, isExpertMode);
-  };
-
   // 채팅 컨텐츠 렌더링
   const renderChatContent = () => (
     <>
@@ -523,6 +539,73 @@ function AIChatAreaContent() {
     }
   }, []); // 빈 의존성 배열로 최초 한 번만 실행
 
+  // window 객체에 디버깅 함수 추가 (개발용)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // 전역 초기화 함수 정의
+      const resetChatArea = () => {
+        console.log('[AIChatArea] 직접 초기화 함수 호출');
+        
+        try {
+          // 스토어 상태 초기화 전 상태 확인
+          console.log('[AIChatArea] 초기화 전 상태:', 
+            'useChatStore 세션:', useChatStore.getState().currentSession?.id,
+            'useChatStore 메시지 수:', useChatStore.getState().messages.length
+          );
+          
+          // Zustand 스토어 상태 초기화
+          setStoreSession(null);
+          clearMessages();
+          
+          // 리액트 상태 초기화
+          setInputCentered(true);
+          setAllMessages([]);
+          setChatSession(null);
+          setSelectedStock(null);
+          setSearchTerm('');
+          
+          console.log('[AIChatArea] 초기화 후 상태:', 
+            'useChatStore 세션:', useChatStore.getState().currentSession,
+            'useChatStore 메시지 수:', useChatStore.getState().messages.length
+          );
+        } catch (error) {
+          console.error('[AIChatArea] 초기화 중 오류:', error);
+        }
+      };
+      
+      // @ts-ignore - 디버깅용 메서드 추가
+      window.__debug_resetAIChatArea = resetChatArea;
+      
+      // homeButtonClick 이벤트 리스너 함수 정의
+      const handleHomeButtonClick = () => {
+        console.log('[AIChatArea] homeButtonClick 이벤트 캡처');
+        resetChatArea();
+      };
+      
+      // 이벤트 리스너 등록
+      window.addEventListener('homeButtonClick', handleHomeButtonClick);
+      
+      // 클린업
+      return () => {
+        if (typeof window !== 'undefined') {
+          // @ts-ignore - 디버깅용 메서드 제거
+          delete window.__debug_resetAIChatArea;
+          
+          // 이벤트 리스너 제거
+          window.removeEventListener('homeButtonClick', handleHomeButtonClick);
+        }
+      };
+    }
+  }, [
+    setInputCentered, 
+    setAllMessages, 
+    setChatSession, 
+    setSelectedStock, 
+    setSearchTerm, 
+    setStoreSession, 
+    clearMessages
+  ]);
+
   return (
     <>
       {isMobile ? (
@@ -545,29 +628,6 @@ function AIChatAreaContent() {
  * 컨텍스트 제공자로 래핑하여 전체 상태를 관리합니다.
  */
 export default function AIChatArea() {
-  // window 객체에 디버깅 함수 추가 (개발용)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // @ts-ignore - 디버깅용 메서드 추가
-      window.__debug_resetAIChatArea = () => {
-        console.log('디버그: AIChatArea 리셋 시도');
-        // 직접 이벤트 발생시켜 테스트
-        const event = new CustomEvent('homeButtonClick', {
-          bubbles: true,
-          detail: { timestamp: Date.now(), source: 'debug' }
-        });
-        window.dispatchEvent(event);
-      };
-    }
-    // 클린업
-    return () => {
-      if (typeof window !== 'undefined') {
-        // @ts-ignore - 디버깅용 메서드 제거
-        delete window.__debug_resetAIChatArea;
-      }
-    };
-  }, []);
-
   return (
     <ChatProvider>
       <StockSelectorProvider>

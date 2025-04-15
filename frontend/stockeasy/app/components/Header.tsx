@@ -43,6 +43,15 @@ const Header: React.FC = () => {
   // 메시지가 있는지 확인하여 토글 버튼을 표시할지 결정
   const hasChatMessages = storeMessages.length > 0;
 
+  // useChatStore 변경 감시
+  useEffect(() => {
+    console.log('[Header] 채팅 스토어 변경 감지:', 
+      '메시지:', storeMessages.length, 
+      '세션:', !!currentSession,
+      '세션ID:', currentSession?.id
+    );
+  }, [storeMessages, currentSession]);
+
   // 질문 개수 스토어 사용
   const { 
     summary: questionSummary, 
@@ -186,6 +195,12 @@ const Header: React.FC = () => {
     // usePdfExport 훅의 exportToPdf 함수 호출
     exportToPdf(currentSession.id, userMode === 'expert');
   };
+
+  console.log('[Header] 렌더링:', 
+    '로그인:', isUserLoggedIn, 
+    '메시지:', storeMessages.length, 
+    '세션:', !!currentSession
+  );
 
   return (
     <header 

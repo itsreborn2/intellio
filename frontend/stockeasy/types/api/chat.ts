@@ -87,7 +87,7 @@ export interface IChatSession  extends IBaseResponse {
 export interface IChatMessageDetail  extends IBaseResponse {
   id: string;
   chat_session_id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'status';
   content: string;
   content_expert?: string;
   stock_code: string;

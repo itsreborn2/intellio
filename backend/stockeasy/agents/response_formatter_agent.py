@@ -133,33 +133,44 @@ class ResponseFormatterAgent(BaseAgent):
             
             #logger.info("스트리밍 모드로 응답 생성 시작")
             # 스트리밍 모드로 호출
+            isStreaming = False
             formatted_response = ""
             
             try:
-                # 새로 구현된 stream 메서드 사용
-                async for chunk in self.agent_llm.stream(
-                    input=prompt.format_prompt().to_string(),
-                    user_id=user_id,
-                    project_type=ProjectType.STOCKEASY,
-                    db=self.db
-                ):
-                    # 청크 내용 추출
-                    if hasattr(chunk, 'content'):
-                        chunk_content = chunk.content
-                    else:
-                        chunk_content = str(chunk)
-                    
-                    # 콜백 호출하여 청크 전송
-                    try:
-                        #print(chunk_content, end="", flush=True)
-                        #logger.info(f"스트리밍 콜백 호출: 청크 길이={len(chunk_content)}, callback={streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else type(streaming_callback).__name__}")
-                        await streaming_callback(chunk_content)
-                        #logger.info(f"스트리밍 콜백 호출 완료: 청크 길이={len(chunk_content)}")
-                    except Exception as callback_error:
-                        logger.error(f"스트리밍 콜백 호출 중 오류: {str(callback_error)}", exc_info=True)
-                    
-                    # 전체 응답 누적
-                    formatted_response += chunk_content
+                if not isStreaming:
+                    logger.info("일반 모드로 폴백")
+                    response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
+                        input=prompt.format_prompt(),
+                        user_id=user_id,
+                        project_type=ProjectType.STOCKEASY,
+                        db=self.db
+                    )
+                    formatted_response = response.content
+                else:
+                    # 새로 구현된 stream 메서드 사용
+                    async for chunk in self.agent_llm.stream(
+                        input=prompt.format_prompt().to_string(),
+                        user_id=user_id,
+                        project_type=ProjectType.STOCKEASY,
+                        db=self.db
+                    ):
+                        # 청크 내용 추출
+                        if hasattr(chunk, 'content'):
+                            chunk_content = chunk.content
+                        else:
+                            chunk_content = str(chunk)
+                        
+                        # 콜백 호출하여 청크 전송
+                        try:
+                            #print(chunk_content, end="", flush=True)
+                            #logger.info(f"스트리밍 콜백 호출: 청크 길이={len(chunk_content)}, callback={streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else type(streaming_callback).__name__}")
+                            await streaming_callback(chunk_content)
+                            #logger.info(f"스트리밍 콜백 호출 완료: 청크 길이={len(chunk_content)}")
+                        except Exception as callback_error:
+                            logger.error(f"스트리밍 콜백 호출 중 오류: {str(callback_error)}", exc_info=True)
+                        
+                        # 전체 응답 누적
+                        formatted_response += chunk_content
                 
                 #logger.info("스트리밍 응답 생성 완료")
             except Exception as e:

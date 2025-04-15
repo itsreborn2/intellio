@@ -10,6 +10,7 @@ import { IChatSession } from '@/types/api/chat';
 import { useTimers } from './useTimers';
 import { saveRecentStocksToStorage } from '../utils/stockDataUtils';
 import { API_ENDPOINT_STOCKEASY } from '@/services/api/index';
+import { useChatStore } from '@/stores/chatStore';
 
 interface MessageProcessingOptions {
   onQuestionLimitExceeded?: () => void;
@@ -46,7 +47,7 @@ interface MessageProcessingHook {
  * @param options 설정 옵션
  * @returns 메시지 처리 관련 함수
  */
-export function useMessageProcessing(
+function useMessageProcessing(
   questionCount: number = 0,
   messageHandlers: MessageHandlers,
   currentSession: IChatSession | null = null,
@@ -143,6 +144,9 @@ export function useMessageProcessing(
       startTimer();
       onProcessingStart();
 
+      // 채팅 세션 ID 초기화
+      let sessionId = currentSession?.id;
+
       // 사용자 메시지 추가
       const userMessageObj: ChatMessage = {
         id: `user-${Date.now()}`,
@@ -171,10 +175,42 @@ export function useMessageProcessing(
       // 메시지 목록에 사용자 메시지와 처리 중 상태 메시지 추가
       addMessage(userMessageObj);
       addMessage(statusMessageObj);
+      
+      // useChatStore에도 사용자 메시지 추가 (Zustand 스토어 동기화)
+      const chatStore = useChatStore.getState();
+      chatStore.addMessage({
+        id: userMessageObj.id,
+        role: 'user',
+        content: userMessageObj.content,
+        created_at: new Date().toISOString(),
+        stock_name: selectedStock.stockName || '',
+        stock_code: selectedStock.value || '',
+        chat_session_id: sessionId || '',
+        ok: true,
+        status_message: '',
+        metadata: {
+          stockInfo: userMessageObj.stockInfo
+        }
+      });
+      
+      // useChatStore에도 상태 메시지 추가 (Zustand 스토어 동기화)
+      chatStore.addMessage({
+        id: statusMessageObj.id,
+        role: 'status', // IChatMessageDetail의 role 타입에 맞춤 (system -> status)
+        content: statusMessageObj.content,
+        created_at: new Date().toISOString(),
+        stock_name: selectedStock.stockName || '',
+        stock_code: selectedStock.value || '',
+        chat_session_id: sessionId || '',
+        ok: true,
+        status_message: '',
+        metadata: {
+          stockInfo: statusMessageObj.stockInfo,
+          isProcessing: true
+        }
+      });
 
       // 채팅 세션이 없으면 새로 생성
-      let sessionId = currentSession?.id;
-
       if (!sessionId) {
         try {
           // 종목명(종목코드) : 질문내용 형식으로 세션명 생성
@@ -185,6 +221,10 @@ export function useMessageProcessing(
           const newSession = await createChatSession(session_name);
           sessionId = newSession.id;
           setCurrentSession(newSession);
+          
+          // Zustand 스토어에도 세션 저장
+          chatStore.setCurrentSession(newSession);
+          
           console.log('새 채팅 세션 생성:', newSession);
         } catch (error: any) {
           console.error('채팅 세션 생성 실패:', error);
@@ -246,6 +286,13 @@ export function useMessageProcessing(
               stopTimer();
               removeMessage(statusMessageObj.id);
               
+              // useChatStore에서도 상태 메시지 제거
+              const messagesWithoutStatus = chatStore.messages.filter(
+                (msg: any) => msg.id !== statusMessageObj.id
+              );
+              chatStore.setMessages(messagesWithoutStatus);
+              console.log('[MessageProcessing] Zustand 스토어에서 상태 메시지 제거 (첫 번째 토큰 시):', statusMessageObj.id);
+              
               // 어시스턴트 메시지 초기 생성
               const assistantMessageObj: ChatMessage = {
                 id: assistantMessageId.current,
@@ -259,6 +306,22 @@ export function useMessageProcessing(
               };
               
               addMessage(assistantMessageObj);
+              
+              // Zustand 스토어에도 어시스턴트 메시지 추가
+              chatStore.addMessage({
+                id: assistantMessageObj.id,
+                role: 'assistant',
+                content: '',
+                created_at: new Date().toISOString(),
+                stock_name: selectedStock.stockName || '',
+                stock_code: selectedStock.value || '',
+                chat_session_id: sessionId,
+                ok: true,
+                status_message: '',
+                metadata: {
+                  stockInfo: assistantMessageObj.stockInfo
+                }
+              });
             }
             
             // 콘텐츠 누적하고 메시지 업데이트
@@ -284,19 +347,56 @@ export function useMessageProcessing(
             // 상태 메시지가 아직 존재하는 경우에만 제거 (토큰이 없을 경우)
             try {
               removeMessage(statusMessageObj.id);
+              
+              // useChatStore에서도 상태 메시지 제거
+              const messagesWithoutStatus = chatStore.messages.filter(
+                (msg: any) => msg.id !== statusMessageObj.id
+              );
+              chatStore.setMessages(messagesWithoutStatus);
+              console.log('[MessageProcessing] Zustand 스토어에서 상태 메시지 제거 (완료 시):', statusMessageObj.id);
             } catch (error) {
               console.log('[MessageProcessing] 상태 메시지가 이미 제거됨');
             }
             
             // 스트리밍으로 이미 메시지가 생성되었다면 기존 메시지 업데이트
             if (assistantMessageId.current) {
+              const finalContent = data.response;
+              const finalContentExpert = data.response_expert;
+              
               updateMessage(assistantMessageId.current, {
-                content: data.response,
-                content_expert: data.response_expert,
+                content: finalContent,
+                content_expert: finalContentExpert,
                 responseId: data.metadata?.responseId,
                 elapsed: data.elapsed || 0,
                 _forceUpdate: Math.random() // 리렌더링 강제
               });
+              
+              // Zustand 스토어의 메시지도 업데이트
+              const currentMessages = chatStore.messages;
+              const messageToUpdate = currentMessages.find(msg => msg.id === assistantMessageId.current);
+              
+              if (messageToUpdate) {
+                // 새 메시지 객체 생성 (참조 변경을 위해)
+                const updatedMessage = {
+                  ...messageToUpdate,
+                  content: finalContent,
+                  content_expert: finalContentExpert,
+                  metadata: {
+                    ...messageToUpdate.metadata,
+                    responseId: data.metadata?.responseId,
+                    elapsed: data.elapsed || 0
+                  }
+                };
+                
+                // 메시지 배열 업데이트 (새 배열 생성)
+                const newMessages = currentMessages.map(msg => 
+                  msg.id === assistantMessageId.current ? updatedMessage : msg
+                );
+                
+                // Zustand 스토어 상태 업데이트
+                chatStore.setMessages(newMessages);
+                console.log('[MessageProcessing] Zustand 스토어 메시지 업데이트');
+              }
               
               // 참조 초기화
               assistantMessageId.current = null;
@@ -317,6 +417,27 @@ export function useMessageProcessing(
               };
               
               addMessage(assistantMessageObj);
+              
+              // Zustand 스토어에도 어시스턴트 메시지 추가 (스트리밍 없는 경우)
+              chatStore.addMessage({
+                id: assistantMessageObj.id,
+                role: 'assistant',
+                content: data.response,
+                content_expert: data.response_expert,
+                created_at: new Date().toISOString(),
+                stock_name: selectedStock.stockName || '',
+                stock_code: selectedStock.value || '',
+                chat_session_id: sessionId,
+                ok: true,
+                status_message: '',
+                metadata: {
+                  stockInfo: assistantMessageObj.stockInfo,
+                  responseId: data.metadata?.responseId,
+                  elapsed: data.elapsed || 0
+                }
+              });
+              
+              console.log('[MessageProcessing] Zustand 스토어에 스트리밍 없는 메시지 추가:', assistantMessageObj.id);
             }
             
             setProcessing(false);
@@ -336,6 +457,24 @@ export function useMessageProcessing(
               isProcessing: false,
               elapsedStartTime: undefined
             });
+            
+            // useChatStore에서도 상태 메시지 업데이트
+            const storeMessages = chatStore.messages;
+            const updatedStoreMessages = storeMessages.map((msg: any) => {
+              if (msg.id === statusMessageObj.id) {
+                return {
+                  ...msg,
+                  content: `오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`,
+                  metadata: {
+                    ...msg.metadata,
+                    isProcessing: false,
+                  }
+                };
+              }
+              return msg;
+            });
+            chatStore.setMessages(updatedStoreMessages);
+            console.log('[MessageProcessing] Zustand 스토어에서 상태 메시지 오류 업데이트:', statusMessageObj.id);
             
             setProcessing(false);
             toast.error(`메시지 처리 중 오류: ${error.message || '알 수 없는 오류'}`);
@@ -387,4 +526,5 @@ export function useMessageProcessing(
   };
 }
 
-export default useMessageProcessing; 
+// 단일 내보내기 방식으로 수정
+export default useMessageProcessing;
