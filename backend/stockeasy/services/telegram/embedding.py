@@ -334,6 +334,11 @@ class TelegramEmbeddingService(CommonEmbeddingService):
                     if not isinstance(value, list):
                         logger.error(f"metadata[keywords]의 값이 list이 아닙니다: {key}={type(value)}")
                         return False
+                elif key == "message_created_at":
+                    # message_created_at은 int 또는 float 타입을 허용
+                    if not isinstance(value, (int, float)):
+                        logger.error(f"metadata[message_created_at]의 값이 숫자가 아닙니다: {key}={type(value)}")
+                        return False
                 elif not isinstance(value, str):
                     logger.error(f"metadata의 값이 문자열이 아닙니다: {key}={type(value)}")
                     return False

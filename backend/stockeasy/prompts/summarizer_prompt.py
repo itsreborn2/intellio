@@ -366,7 +366,7 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                 for report in searched_reports[:5]:
                     report_info = report.get("content", "")
                     report_source = report.get("source", "미상")
-                    report_date = report.get("published_date", "날짜 미상")
+                    report_date = report.get("publish_date", "날짜 미상")
                     report_page = f"{report.get('page', '페이지 미상')} p"
                     sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
 
@@ -381,7 +381,7 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                 for report in searched_reports[:5]:
                     report_info = report.get("content", "")
                     report_source = report.get("source", "미상")
-                    report_date = report.get("published_date", "날짜 미상")
+                    report_date = report.get("publish_date", "날짜 미상")
                     report_page = f"{report.get('page', '페이지 미상')} p"
                     sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
 
@@ -399,7 +399,6 @@ def create_prompt(query: str, stock_code: Optional[str], stock_name: Optional[st
                 for report in searched_reports[:5]:
                     report_info = report.get("content", "")
                     report_source = report.get("source", "미상")
-                    #report_date = report.get("published_date", "날짜 미상")
                     report_page = f"{report.get('page', '페이지 미상')} p"
                     #sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"         
                     sources_info += f"[출처: {report_source}, {report_page}]\n{report_info}\n\n"         

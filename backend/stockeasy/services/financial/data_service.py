@@ -230,7 +230,9 @@ class FinancialDataService:
                 
                 if local_path:
                     # 페이지 추출 및 데이터 추가
-                    revenue_breakdown_data += await self.extract_revenue_breakdown_data(local_path)
+                    extracted_data = await self.extract_revenue_breakdown_data(local_path)
+                    if extracted_data:  # None이나 빈 문자열이 아닌 경우에만 추가
+                        revenue_breakdown_data += extracted_data
 
             return revenue_breakdown_data
             
@@ -608,7 +610,7 @@ class FinancialDataService:
             #print(f"toc: {len(toc)}")
             if not toc:
                 logger.error("목차를 찾을 수 없습니다.")
-                return
+                return ""
             
             # 4. 목차에서 'II. 사업의 내용' 및 '매출 및 수주상황' 찾기
             business_content_start_page = None
@@ -663,7 +665,7 @@ class FinancialDataService:
                 logger.info(f"'II. 사업의 내용' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
             else:
                 logger.error("관련 섹션을 찾을 수 없습니다.")
-                return
+                return ""
             
             # 6. pdfplumber를 사용하여 해당 페이지 내용 추출
             extracted_text = f"-----------------------------\n\n"
@@ -686,7 +688,7 @@ class FinancialDataService:
             extracted_text += f"\n\n--- 데이터 끝 ---\n\n"
             if not extracted_text:
                 logger.error("추출된 텍스트가 없습니다.")
-                return
+                return ""
             return extracted_text
         except Exception as e:
             logger.exception(f"Error extracting revenue breakdown data: {str(e)}")

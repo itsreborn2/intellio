@@ -447,6 +447,38 @@ class VectorStoreManager:
         """현재 네임스페이스의 모든 데이터를 삭제합니다. (비동기 버전)"""
         await self.ensure_initialized()
         return self.delete_namespace()
+    
+    def vector_exists(self, vector_id: str) -> bool:
+        """지정된 벡터 ID가 벡터 스토어에 존재하는지 확인합니다.
+        
+        Args:
+            vector_id (str): 확인할 벡터 ID
+            
+        Returns:
+            bool: 벡터가 존재하면 True, 없으면 False
+        """
+        try:
+            # 특정 ID의 벡터 조회
+            result = self.index.fetch(ids=[vector_id], namespace=self.namespace)
+            
+            # 결과에 해당 ID가 있는지 확인
+            return vector_id in result.get('vectors', {})
+            
+        except Exception as e:
+            logger.error(f"[{self.namespace}] 벡터 존재 여부 확인 중 오류 발생: {str(e)}")
+            return False
+    
+    async def vector_exists_async(self, vector_id: str) -> bool:
+        """지정된 벡터 ID가 벡터 스토어에 존재하는지 확인합니다. (비동기 버전)
+        
+        Args:
+            vector_id (str): 확인할 벡터 ID
+            
+        Returns:
+            bool: 벡터가 존재하면 True, 없으면 False
+        """
+        await self.ensure_initialized()
+        return self.vector_exists(vector_id)
         
     def query(self, vector: List[float], top_k: int = 1, filters: Optional[Dict] = None):
         """Pinecone 인덱스에 직접 쿼리를 실행합니다.

@@ -231,6 +231,12 @@ class QuestionAnalyzerAgent(BaseAgent):
             )
             response.entities.stock_name = stock_name
             response.entities.stock_code = stock_code
+
+            # 모든 데이터 전부 on
+            response.data_requirements.reports_needed = True
+            response.data_requirements.telegram_needed = True
+            response.data_requirements.financial_statements_needed = True
+            response.data_requirements.industry_data_needed = True
             response.data_requirements.confidential_data_needed = True
             response.data_requirements.revenue_data_needed = True
             # 분석 결과 로깅

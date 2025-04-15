@@ -393,11 +393,11 @@ class CollectorService:
                 channel_username = f'@{channel_username}'
                 
             try:
-                logger.info(f"channel name으로 채널 검색 시도: {channel_username}")
+                logger.info(f"[{channel_name}] channel username으로 채널 검색 시도: {channel_username}")
                 channel = await self.client.get_entity(channel_username)
             except ValueError:
                 # username으로 실패하면 채널 ID로 시도
-                logger.info(f"채널 ID로 검색 시도: {channel_id}")
+                logger.info(f"[{channel_name}] 채널 ID로 검색 시도: {channel_id}")
                 # 채널 ID 처리 (음수로 변환)
                 numeric_channel_id = int(channel_id)
                 if numeric_channel_id > 0:

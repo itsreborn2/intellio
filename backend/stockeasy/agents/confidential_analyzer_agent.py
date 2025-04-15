@@ -273,6 +273,7 @@ class ConfidentialAnalyzerAgent(BaseAgent):
             
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["confidential_analyzer"] = "completed"
+            logger.info(f"ConfidentialAnalyzerAgent processing_status: {state['processing_status']}")
             
             # 메트릭 기록
             state["metrics"] = state.get("metrics", {})
