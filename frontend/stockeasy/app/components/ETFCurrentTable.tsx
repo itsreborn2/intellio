@@ -66,9 +66,6 @@ function parseCSV(csvText: string): { headers: string[]; rows: Record<string, an
       };
     }
     
-    // CSV 텍스트의 처음 500자 로깅 (디버깅용)
-    console.log('CSV 텍스트 샘플:', csvText.substring(0, 500));
-    
     // Papa Parse 옵션
     const results = Papa.parse(csvText, {
       header: true,       // 첫 번째 행을 헤더로 사용
@@ -76,12 +73,9 @@ function parseCSV(csvText: string): { headers: string[]; rows: Record<string, an
       dynamicTyping: false,  // 문자열 그대로 유지 (수동 변환)
     });
     
-    console.log('파싱 결과 헤더:', results.meta.fields);
-    // 오류 로깅 방식 변경 - 실제 오류가 있을 때만 로깅
+    // 실제 오류가 있을 때만 로깅
     if (results.errors && results.errors.length > 0) {
       console.error('파싱 중 실제 오류 발생:', results.errors);
-    } else {
-      console.log('CSV 파싱 성공, 오류 없음');
     }
     
     // 데이터가 없는 경우 처리
@@ -95,8 +89,9 @@ function parseCSV(csvText: string): { headers: string[]; rows: Record<string, an
       };
     }
     
-    // 첫 번째 행 로깅 (디버깅용)
-    console.log('첫 번째 파싱된 행:', results.data[0]);
+    // (불필요한 디버깅 로그 삭제)
+    // // (불필요한 로그 완전 제거)
+// console.log('첫 번째 파싱된 행:', results.data[0]);
 
     // 산업별로 그룹화
     const groupedData: GroupedData = results.data.reduce((acc: GroupedData, row: any) => {
@@ -108,8 +103,9 @@ function parseCSV(csvText: string): { headers: string[]; rows: Record<string, an
       // 업종 필드가 B열로 변경됨 (이전에는 E열로 잘못 설정)
       let industry = row['업종'] || row['산업'];
       if (!industry) {
-        // 모든 키 출력 (디버깅용)
-        console.log('업종 정보가 없는 행의 키:', Object.keys(row));
+        // (불필요한 디버깅 로그 삭제)
+        // // (불필요한 로그 완전 제거)
+// console.log('업종 정보가 없는 행의 키:', Object.keys(row));
         industry = '기타'; // 업종 정보가 없는 경우 '기타'로 분류
       }
       
@@ -125,8 +121,9 @@ function parseCSV(csvText: string): { headers: string[]; rows: Record<string, an
       return acc;
     }, {});
 
-    // 그룹화된 데이터 확인 (디버깅용)
-    console.log('그룹화된 산업 목록:', Object.keys(groupedData));
+    // (불필요한 디버깅 로그 삭제)
+    // // (불필요한 로그 완전 제거)
+// console.log('그룹화된 산업 목록:', Object.keys(groupedData));
     
     // 그룹 내에서 등락율 기준으로 정렬
     for (const industry in groupedData) {
@@ -257,14 +254,16 @@ export default function ETFCurrentTable() {
     try {
       // 티커가 없으면 빈 배열 반환
       if (!ticker || ticker === 'N/A') {
-        console.error(`유효하지 않은 티커: ${ticker}`);
+        // (불필요한 에러 로그 삭제)
+        // console.error(`유효하지 않은 티커: ${ticker}`);
         return [];
       }
       
       // CSV 파일 로드
       const response = await fetch(`/requestfile/rs_etf/${ticker}.csv?t=${Date.now()}`);
       if (!response.ok) {
-        console.error(`${ticker} CSV 파일을 불러오는데 실패했습니다: ${response.status}`);
+        // (불필요한 에러 로그 삭제)
+        // console.error(`${ticker} CSV 파일을 불러오는데 실패했습니다: ${response.status}`);
         return [];
       }
       
@@ -288,7 +287,8 @@ export default function ETFCurrentTable() {
       
       return closePrices;
     } catch (error) {
-      console.error(`${ticker} 종가 데이터 로드 중 오류 발생:`, error);
+      // (불필요한 에러 로그 삭제)
+      // console.error(`${ticker} 종가 데이터 로드 중 오류 발생:`, error);
       return [];
     }
   };
@@ -316,31 +316,20 @@ export default function ETFCurrentTable() {
           ticker.replace(/^0+/, '')
         ];
         
-        // groupedData의 모든 산업을 순회하며 해당 티커 찾기
-        let found = false;
-        for (const industry in csvData.groupedData) {
-          const industryData = csvData.groupedData[industry];
-          for (const sector in industryData) {
-            const sectorData = industryData[sector];
-            
-            // 모든 티커 변형에 대해 검색
-            for (const tickerVariant of tickerVariations) {
-              const matchingRow = sectorData.find((row: Record<string, any>) => 
-                row['티커'] === tickerVariant || 
-                row['티커']?.padStart(6, '0') === tickerVariant.padStart(6, '0')
-              );
-              
-              if (matchingRow) {
-                stockName = matchingRow['종목명'] || '';
-                stockNameMap[ticker] = stockName; // 종목명 저장
-                found = true;
-                break;
-              }
-            }
-            if (found) break;
+        // groupedData 전체를 순회하지 않고, rows에서 직접 종목명 매칭 (불필요한 반복 제거)
+        // rows는 parseCSV에서 이미 가공된 전체 데이터임
+        for (const tickerVariant of tickerVariations) {
+          const matchingRow = csvData.rows.find((row: Record<string, any>) =>
+            row['티커'] === tickerVariant ||
+            row['티커']?.padStart(6, '0') === tickerVariant.padStart(6, '0')
+          );
+          if (matchingRow) {
+            stockName = matchingRow['종목명'] || '';
+            stockNameMap[ticker] = stockName;
+            break;
           }
-          if (found) break;
-        }
+        } // 기존 groupedData 반복 제거, rows에서 바로 탐색하도록 변경 (성능 및 가독성 개선)
+
         
         // 티커 정규화
         const normalizedTicker = await normalizeTicker(ticker, stockName);
@@ -359,7 +348,8 @@ export default function ETFCurrentTable() {
         } else {
         }
       } catch (error) {
-        console.error(`${ticker} 처리 중 오류:`, error);
+        // (불필요한 에러 로그 삭제)
+        // console.error(`${ticker} 처리 중 오류:`, error);
       }
     }
     
@@ -380,7 +370,8 @@ export default function ETFCurrentTable() {
       cleaned.replace(/^0+/, '')         // 앞의 0 제거 (69500 -> 69500)
     ];
     
-    // console.log(`티커 변형 시도: ${variations.join(', ')}`);
+    // // (불필요한 로그 완전 제거)
+// console.log(`티커 변형 시도: ${variations.join(', ')}`);
     
     // 1. 티커 매핑 테이블에서 매핑된 티커를 찾음
     for (const variant of variations) {
@@ -443,7 +434,8 @@ export default function ETFCurrentTable() {
         // ETF 현재가 데이터 파일 경로 - 구글 드라이브 동기화 시스템과 일치
         const filePath = `${ETF_FILES.currentPrice.path}/${ETF_FILES.currentPrice.fileName}?t=${Date.now()}`;
         
-        console.log('파일 경로:', filePath);
+        // (불필요한 로그 완전 제거)
+// console.log('파일 경로:', filePath);
         
         // 로컬 캐시 파일 로드 - 직접 fetch 사용
         const response = await fetch(filePath);
@@ -455,9 +447,11 @@ export default function ETFCurrentTable() {
         const csvText = await response.text();
         
         // CSV 텍스트 로깅 (디버깅용)
-        console.log('CSV 파일 로드 완료, 크기:', csvText.length);
+        // (불필요한 로그 완전 제거)
+// console.log('CSV 파일 로드 완료, 크기:', csvText.length);
         if (csvText.length > 0) {
-          console.log('CSV 첫 줄:', csvText.split('\n')[0]);
+          // (불필요한 로그 완전 제거)
+// console.log('CSV 첫 줄:', csvText.split('\n')[0]);
         } else {
           console.error('CSV 텍스트가 비어 있습니다!');
           setError('CSV 파일이 비어 있습니다.');
@@ -563,10 +557,12 @@ export default function ETFCurrentTable() {
             if (formattedDate) {
               setUpdateDate(formattedDate);
             } else {
-              console.warn('날짜 형식을 변환할 수 없습니다:', dateString);
+              // (불필요한 경고 로그 완전 제거)
+// console.warn('날짜 형식을 변환할 수 없습니다:', dateString);
             }
           } else {
-            console.warn('CSV 데이터에 날짜 정보가 없습니다.');
+            // (불필요한 경고 로그 완전 제거)
+// console.warn('CSV 데이터에 날짜 정보가 없습니다.');
           }
         }
         
@@ -583,16 +579,19 @@ export default function ETFCurrentTable() {
 
   // 정렬 처리 함수
   const handleSort = (key: string) => {
-    console.log(`정렬 시도: 컴럼 = ${key}, 현재 정렬키 = ${sortKey}, 현재 방향 = ${sortDirection}`);
+    // (불필요한 로그 완전 제거)
+// console.log(`정렬 시도: 컴럼 = ${key}, 현재 정렬키 = ${sortKey}, 현재 방향 = ${sortDirection}`);
     
     if (sortKey === key) {
       // 같은 컴럼을 다시 클릭한 경우, 오름차순과 내림차순만 반복하도록 수정
       const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-      console.log(`같은 컴럼 클릭: 정렬 방향 변경 ${sortDirection} -> ${newDirection}`);
+      // (불필요한 로그 완전 제거)
+// console.log(`같은 컴럼 클릭: 정렬 방향 변경 ${sortDirection} -> ${newDirection}`);
       setSortDirection(newDirection);
     } else {
       // 다른 컴럼을 클릭한 경우, 해당 컴럼으로 오름차순 정렬
-      console.log(`새 컴럼 클릭: 정렬키 변경 ${sortKey} -> ${key}, 방향 = asc`);
+      // (불필요한 로그 완전 제거)
+// console.log(`새 컴럼 클릭: 정렬키 변경 ${sortKey} -> ${key}, 방향 = asc`);
       setSortKey(key);
       setSortDirection('asc');
     }
@@ -625,7 +624,8 @@ export default function ETFCurrentTable() {
         const aTicker = a['티커'];
         const bTicker = b['티커'];
         
-        console.log('포지션 정렬을 위한 티커:', aTicker, bTicker);
+        // (불필요한 로그 완전 제거)
+// console.log('포지션 정렬을 위한 티커:', aTicker, bTicker);
         
         // 포지션 값 추출 및 처리 - getPositionStatusText 함수 대신 직접 구현
         const extractPositionValue = (ticker: string): number => {
@@ -686,14 +686,16 @@ export default function ETFCurrentTable() {
             duration = isAboveMA ? 1 : -1; // 오류 발생 시 기본값
           }
           
-          console.log(`티커 ${ticker}의 포지션 값:`, duration);
+          // (불필요한 로그 완전 제거)
+// console.log(`티커 ${ticker}의 포지션 값:`, duration);
           return duration;
         };
         
         const aPositionValue = extractPositionValue(aTicker);
         const bPositionValue = extractPositionValue(bTicker);
         
-        console.log(`비교: ${aPositionValue} vs ${bPositionValue}, 정렬방향: ${sortDirection}`);
+        // (불필요한 로그 완전 제거)
+// console.log(`비교: ${aPositionValue} vs ${bPositionValue}, 정렬방향: ${sortDirection}`);
         
         if (aPositionValue < bPositionValue) return sortDirection === 'asc' ? -1 : 1;
         if (aPositionValue > bPositionValue) return sortDirection === 'asc' ? 1 : -1;
@@ -1023,24 +1025,8 @@ export default function ETFCurrentTable() {
     orderedIndustries.push('기타');
   }
 
-  // 디버깅: 각 산업 그룹별 종목 수 확인
-  const industryCounts: Record<string, number> = {};
-  Object.keys(sortedData).forEach(industry => {
-    industryCounts[industry] = sortedData[industry].length;
-  });
-
-  // 전체 종목 수 확인
-  const totalETFs = Object.values(sortedData).reduce((acc: number, curr: any[]) => acc + curr.length, 0);
-
-  // 모든 티커 목록 확인
-  const allTickers: string[] = [];
-  Object.values(sortedData).forEach((industryData: any[]) => {
-    industryData.forEach((item: any) => {
-      if (item.티커) {
-        allTickers.push(item.티커);
-      }
-    });
-  });
+  // (불필요한 디버깅용 변수 및 코드 완전 삭제)
+  // industryCounts, totalETFs, allTickers 등은 실제 렌더링/기능에 사용되지 않으므로 제거
 
   return (
     <div>

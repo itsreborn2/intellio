@@ -951,7 +951,9 @@ export default function IndustryCharts() {
     <div>
       <div className="mb-4">
         <h2 className="font-semibold whitespace-nowrap text-sm md:text-base">섹터별 주도종목 차트</h2>
+        {/* 20일 이동평균선 위에 10일 이상 유지중인 섹터별 ETF중 단기 RS_1M(한달)의 값이 90 이상의 대표종목 차트. 유지일이 긴 섹터 우선 정렬.
         <p className="text-gray-600 mr-2 hidden sm:inline text-[11px] md:text-xs">20일 이동평균선 위에 10일 이상 유지중인 섹터별 ETF중 단기 RS_1M(한달)의 값이 90 이상의 대표종목 차트. 유지일이 긴 섹터 우선 정렬.</p>
+        */}
       </div>
       
       {/* 로딩 상태 표시 */}

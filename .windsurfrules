@@ -60,7 +60,7 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
 - frontend/types/index.ts 파일은 모든 타입을 모아놓은 파일이다.
 - frontend에서 사용하는 모든 interface는 frontend/types/index.ts에 정의한다.
 - 주석문을 마음대로 삭제하지 말것.
-- 주석문은 최대한 자세하게 작성하고 코드 변경시 주석도 함께 변경할것.
+- 주석문은 자세하게 작성하고 코드 변경시 주석도 함께 변경할것.
 - 함수의 리턴값은 사용자가 명시적으로 요청하지 않는 이상 변경하지 말것. 필요하다면 사용자에게 질문할 것.
 
 ## FrontEnd Rules(반드시 지켜야할 조건)
@@ -79,3 +79,5 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
  다수의 수정이 복합적으로 진행되는 경우 아래와 같이 reedme.md 파일을 만들고 그안에 체크박스를 만들어서 하나씩 체크하며 확인해서 진행해.
  이작업의 필요 여부는 제가 판단하고. 보통 한두가지 수정에선 제외하고 여러가지 작업의 수정이 필요하면 반드시 이렇게 진행해.
  "Keep track of the progress by updating the README.md file using checkboxes"
+
+ 항상 chain of thoughts 로 모든 프로세스를 사전에 고민하고 진행해.
