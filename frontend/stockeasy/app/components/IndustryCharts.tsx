@@ -192,8 +192,9 @@ export default function IndustryCharts() {
         }
 
         // 3. 필터링된 종목 기반으로 초기 ChartInfo 생성 (포지션 정보 포함)
+        // 종목코드는 항상 6자리로 맞춰서 ChartInfo에 저장
         const initialChartInfo: ChartInfo[] = filteredStocks.map(stock => ({
-          code: stock.종목코드,
+          code: stock.종목코드.padStart(6, '0'),
           name: stock.종목명,
           sector: stock.섹터 || 'N/A',
           position: stock.포지션 || 'N/A', // 포지션 값 추가
@@ -212,7 +213,7 @@ export default function IndustryCharts() {
         const chartDataPromises = filteredStocks.map(async (stock) => {
           try {
             // 타임스탬프 추가하여 캐시 문제 방지
-            const chartResponse = await fetch(`/requestfile/rs_etf/${stock.종목코드}.csv?t=${Date.now()}`); 
+            const chartResponse = await fetch(`/requestfile/rs_etf/${stock.종목코드.padStart(6, '0')}.csv?t=${Date.now()}`); 
             if (!chartResponse.ok) {
               // 404 에러 등 명시적으로 처리
               throw new Error(`(${chartResponse.status}) ${stock.종목코드}.csv 파일을 찾을 수 없거나 로드할 수 없습니다.`);
@@ -235,7 +236,7 @@ export default function IndustryCharts() {
             }
             
             return { 
-              code: stock.종목코드, 
+              code: stock.종목코드.padStart(6, '0'), // 항상 6자리로 반환
               chartData, 
               error: null, 
               // 계산된 isAboveMA20 상태 추가
@@ -245,7 +246,7 @@ export default function IndustryCharts() {
             console.error(`차트 데이터 로드 오류 (${stock.종목코드}):`, error);
             // 개별 차트 로드 실패 시 에러 상태 반환
             return { 
-              code: stock.종목코드, 
+              code: stock.종목코드.padStart(6, '0'), 
               chartData: [], 
               error: error instanceof Error ? error.message : '차트 데이터 로드 실패',
               // 오류 시 상태는 undefined로 유지
