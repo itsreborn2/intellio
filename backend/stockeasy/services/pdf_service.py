@@ -358,7 +358,12 @@ class PDFService:
         
         # 로컬 파일 URL 생성 
         # /download_chat_session은 main.py에서 설정한 정적 파일 마운트 경로
-        base_url = settings.FASTAPI_URL
+        if settings.ENV == "production":
+            # 프로덕션 환경에서는 외부 도메인 사용
+            base_url = "https://stockeasy.intellio.kr"
+        else:
+            # 개발 환경에서는 기존 설정 사용
+            base_url = settings.FASTAPI_URL
         download_url = f"{base_url}/download_chat_session/{file_name}"
         
         # 만료 시간 설정 (24시간 - 실제로는 자동 삭제 없음)

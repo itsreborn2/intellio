@@ -21,25 +21,30 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # message_data 컬럼 추가 (JSONB 타입)
-    op.add_column(
-        'stockeasy_chat_messages', 
-        sa.Column('message_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True, 
-                  comment='메시지 타입별 구조화된 데이터 (차트 데이터, 카드 정보 등)'),
-        schema='stockeasy'
-    )
+    # 데이터베이스 연결 및 테이블 컬럼 정보 가져오기
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('stockeasy_chat_messages', schema='stockeasy')]
     
-    # data_url 컬럼 추가 (Text 타입)
-    op.add_column(
-        'stockeasy_chat_messages', 
-        sa.Column('data_url', sa.Text(), nullable=True, 
-                  comment='외부 리소스 URL (이미지, 차트 데이터 등)'),
-        schema='stockeasy'
-    )
+    # message_data 컬럼 추가 (JSONB 타입) - 존재하지 않을 때만
+    if 'message_data' not in columns:
+        op.add_column(
+            'stockeasy_chat_messages', 
+            sa.Column('message_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True, 
+                    comment='메시지 타입별 구조화된 데이터 (차트 데이터, 카드 정보 등)'),
+            schema='stockeasy'
+        )
+    
+    # data_url 컬럼 추가 (Text 타입) - 존재하지 않을 때만
+    if 'data_url' not in columns:
+        op.add_column(
+            'stockeasy_chat_messages', 
+            sa.Column('data_url', sa.Text(), nullable=True, 
+                    comment='외부 리소스 URL (이미지, 차트 데이터 등)'),
+            schema='stockeasy'
+        )
     
     # message_metadata 컬럼 타입 확인 및 필요시 변경
-    conn = op.get_bind()
-    
     # 데이터 타입 확인을 위한 쿼리
     result = conn.execute(text("""
         SELECT data_type 

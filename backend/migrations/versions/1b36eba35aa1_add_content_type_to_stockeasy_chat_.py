@@ -19,12 +19,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 누락된 content_type 컬럼 추가
-    op.add_column(
-        'stockeasy_chat_messages',
-        sa.Column('content_type', sa.String(50), nullable=False, server_default='text', comment='메시지 콘텐츠 타입 (text, image, chart, file, card 등)'),
-        schema='stockeasy'
-    )
+    # content_type 컬럼이 존재하는지 확인
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('stockeasy_chat_messages', schema='stockeasy')]
+    
+    # 컬럼이 없을 때만 추가
+    if 'content_type' not in columns:
+        op.add_column(
+            'stockeasy_chat_messages',
+            sa.Column('content_type', sa.String(50), nullable=False, server_default='text', comment='메시지 콘텐츠 타입 (text, image, chart, file, card 등)'),
+            schema='stockeasy'
+        )
 
 
 def downgrade() -> None:
