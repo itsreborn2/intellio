@@ -463,7 +463,7 @@ class StockAnalysisGraph:
             
             # 실제 데이터 포함 항목만 확인
             has_data = False
-            for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "revenue_breakdown"]:
+            for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "revenue_breakdown"]:
                 if key in retrieved_data and retrieved_data[key]:
                     has_data = True
                     logger.info(f"데이터가 검색됨: {key}에 {len(retrieved_data[key])}개 항목이 있습니다.")
