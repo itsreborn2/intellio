@@ -102,6 +102,23 @@ export function MessageBubble({
     messageIdRef.current = message.id;
   }, [message.id]);
   
+  // MessageBubble 컴포넌트의 render 부분에 디버깅 정보 추가
+  useEffect(() => {
+    // 1초 지연 후 컴포넌트 마운트 로그 출력 (렌더링 문제 확인용)
+    const timer = setTimeout(() => {
+      if (message.role === 'user') {
+        console.log('[MessageBubble] 사용자 메시지 디버깅:', {
+          id: message.id,
+          role: message.role,
+          content: message.content.substring(0, 30),
+          isRendered: document.getElementById(`message-${message.id}`) !== null
+        });
+      }
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [message.id, message.role, message.content]);
+  
   // 사용자 메시지 스타일
   const userMessageStyle: React.CSSProperties = {
     backgroundColor: '#3F424A', 
@@ -415,8 +432,6 @@ export function MessageBubble({
               />
             </div>
           )}
-
-          
         </div>
       </div>
     </div>

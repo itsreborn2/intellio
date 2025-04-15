@@ -95,7 +95,6 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
         const container = messagesContainerRef.current;
         window.requestAnimationFrame(() => {
           container.scrollTop = container.scrollHeight;
-          console.log('[MessageList] 스크롤 강제 이동 (scrollTop 설정):', container.scrollHeight);
           
           // 추가 안정성을 위해 약간의 지연 후 한 번 더 실행
           setTimeout(() => {
@@ -104,7 +103,6 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
         });
       }
       
-      console.log('[MessageList] 스크롤 맨 아래로 이동 시도 (scrollIntoView)');
     }
   }, [messages]);
   
@@ -225,8 +223,16 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
     const currentLength = messages.length;
     const prevLength = prevMessagesLengthRef.current;
     
+    // 현재 메시지 목록 로깅
+    console.log('[MessageList] 메시지 목록 변경:', messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content.substring(0, 20) + '...' // 내용 일부만 로깅
+    })));
+    
     // 현재 사용자 메시지 수 계산
     const userMessageCount = messages.filter(msg => msg.role === 'user').length;
+    console.log('[MessageList] 사용자 메시지 수:', userMessageCount);
     
     // 사용자 메시지가 2개 이상이면 자동 스크롤 활성화
     if (userMessageCount >= 2 && !autoScrollEnabled) {
@@ -296,8 +302,11 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
         </div>
       ) : (
         // 메시지 목록
-        messages.map(message => (
-          message.role === 'status' ? (
+        messages.map(message => {
+          // 메시지 렌더링 전 로깅
+          //console.log('[MessageList] 메시지 렌더링:', message.id, message.role, message.content.substring(0, 20));
+          
+          return message.role === 'status' ? (
             <div 
               key={message.id} 
               ref={el => {
@@ -317,8 +326,8 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
               onToggleExpertMode={onToggleExpertMode}
               windowWidth={windowWidth}
             />
-          )
-        ))
+          );
+        })
       )}
       
       {/* 스크롤 자동이동을 위한 참조 지점 */}

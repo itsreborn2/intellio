@@ -17,7 +17,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { useTokenUsageStore } from '@/stores/tokenUsageStore';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore } from '@/stores/userModeStore';
-import { StockOption } from './types';
+import { StockOption, ChatMessage } from './types';
 
 /**
  * AIChatArea 메인 컴포넌트
@@ -42,6 +42,9 @@ function AIChatAreaContent() {
 
   // 사용자 메시지 전송 상태 추가
   const [isUserSending, setIsUserSending] = useState<boolean>(false);
+  
+  // 전송 중 상태를 즉시 추적하기 위한 ref 추가
+  const isSendingRef = useRef<boolean>(false);
   
   // 상태 메시지 ID 참조 추가
   const statusMessageIdRef = useRef<string | null>(null);
@@ -72,7 +75,8 @@ function AIChatAreaContent() {
       updateMessage,
       removeMessage,
       setCurrentSession: setChatSession,
-      setProcessing
+      setProcessing,
+      getMessages: () => state.messages
     },
     state.currentChatSession,
     {
@@ -100,6 +104,15 @@ function AIChatAreaContent() {
   // Zustand 스토어와 동기화 하는 로직 추가 (필요한 경우)
   useEffect(() => {
     if (currentSession && storeMessages.length > 0) {
+      // console.log('[AIChatArea] 스토어 동기화 시작 - 세션:', currentSession.id, '메시지 수:', storeMessages.length);
+      // console.log('[AIChatArea] 동기화 전 상태 - ChatContext 메시지 수:', state.messages.length);
+      // console.log('[AIChatArea] 동기화 전 ChatContext 메시지:', 
+      //   state.messages.map(m => ({ id: m.id, role: m.role, content: m.content.substring(0, 20) }))
+      // );
+      // console.log('[AIChatArea] 동기화 전 ChatStore 메시지:', 
+      //   storeMessages.map(m => ({ id: m.id, role: m.role, content: m.content.substring(0, 20) }))
+      // );
+
       // 저장소에 메시지가 있으면 ChatContext 상태 업데이트
       const convertedMessages = storeMessages.map(msg => {
         const stockName = currentSession.stock_name || '';
@@ -124,7 +137,14 @@ function AIChatAreaContent() {
       
       // 레이아웃 설정 변경
       setInputCentered(false);
+      
+      // 메시지 목록 업데이트 전 로그
+      console.log('[AIChatArea] 메시지 설정 전:', convertedMessages.map(m => ({ id: m.id, role: m.role })));
+      
+      // 메시지 목록 업데이트
       setAllMessages(convertedMessages);
+      
+      console.log('[AIChatArea] 메시지 설정 후 - ChatContext 메시지 수:', state.messages.length);
       
       // 채팅 세션 정보 설정 - 이 부분이 누락되어 있었음
       setChatSession(currentSession);
@@ -140,6 +160,7 @@ function AIChatAreaContent() {
           display: currentSession.stock_name
         };
         setSelectedStock(stockOption);
+        console.log('[AIChatArea] 종목 정보 설정:', stockOption.stockName);
       }
     }
   }, [currentSession, storeMessages]);
@@ -336,17 +357,34 @@ function AIChatAreaContent() {
 
   // 메시지 전송 핸들러
   const handleSendMessage = async () => {
+    // ref를 사용하여 즉시 전송 상태 확인
+    if (isSendingRef.current || state.isProcessing) {
+      console.log('[AIChatAreaContent] 이미 메시지 전송 중입니다.');
+      return;
+    }
+
     console.log(`[AIChatAreaContent] 메시지 전송 요청 : ${stockState.searchTerm.trim()}`);
 
     // 선택된 종목과 입력 메시지 확인
-    if (!state.selectedStock || !stockState.searchTerm.trim()) {
-      console.error('종목이 선택되지 않았거나 메시지가 없습니다.');
+    if ((!state.selectedStock && !state.currentChatSession) || !stockState.searchTerm.trim()) {
+      console.error('종목이 선택되지 않았거나 활성 세션이 없거나 메시지가 없습니다.');
       return;
     }
     
+    // ref를 사용하여 전송 상태 즉시 설정
+    isSendingRef.current = true;
+    // UI 업데이트를 위한 state 설정
+    setIsUserSending(true);
+    
     try {
-      // 사용자 메시지 전송 플래그 설정
-      setIsUserSending(true);
+      // 현재 메시지와 종목 상태 저장
+      const currentMessage = stockState.searchTerm;
+      const currentStock = state.selectedStock;
+      const currentRecentStocks = stockState.recentStocks;
+      
+      // 메시지 전송 전 입력창 초기화
+      setSearchTerm('');
+
 
       // 메세지 전송 요청할때, 젤 아래로 한번 내려주자.
       if (messageListRef.current?.scrollToBottom) {
@@ -365,19 +403,77 @@ function AIChatAreaContent() {
       window.dispatchEvent(showToggleEvent);
       console.log('[AIChatAreaContent] 이벤트 발생: showToggleButton');
       
-      // useMessageProcessing 훅의 sendMessage 함수 호출
+      // 세션 정보 및 종목 정보 준비
+      const sessionId = state.currentChatSession?.id || '';
+      const stockName = currentStock?.stockName || state.currentChatSession?.stock_name || '';
+      const stockCode = currentStock?.stockCode || state.currentChatSession?.stock_code || '';
+      
+      // 메시지 ID 생성 (UUID 사용)
+      const userMessageId = `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      console.log('[AIChatAreaContent] 생성된 사용자 메시지 ID:', userMessageId);
+      
+      // ChatContext에 사용자 메시지 직접 추가 (동기화 보장)
+      const userMessageObj: ChatMessage = {
+        id: userMessageId,
+        role: 'user',
+        content: currentMessage,
+        timestamp: Date.now(),
+        stockInfo: (stockName && stockCode) ? {
+          stockName,
+          stockCode
+        } : undefined
+      };
+      
+      // ChatContext에 사용자 메시지 추가
+      addMessage(userMessageObj);
+      console.log('[AIChatAreaContent] ChatContext에 사용자 메시지 추가됨:', userMessageId);
+      
+      // ChatStore에도 직접 사용자 메시지 추가
+      const chatStore = useChatStore.getState();
+      chatStore.addMessage({
+        id: userMessageId,
+        role: 'user',
+        content: currentMessage,
+        created_at: new Date().toISOString(),
+        stock_name: stockName,
+        stock_code: stockCode,
+        chat_session_id: sessionId,
+        ok: true,
+        status_message: '',
+        metadata: {
+          stockInfo: userMessageObj.stockInfo
+        }
+      });
+      console.log('[AIChatAreaContent] ChatStore에 사용자 메시지 추가됨:', userMessageId);
+      
+      // useMessageProcessing 훅의 sendMessage 함수 호출 - 이제는 상태 메시지 생성만 담당
       await sendMessage(
-        stockState.searchTerm,
-        state.selectedStock,
-        stockState.recentStocks
+        currentMessage,
+        currentStock || null, // 종목이 선택되지 않아도 null로 전달
+        currentRecentStocks
       );
       
-      // 메시지 전송 후 입력창 초기화
-      setSearchTerm('');
+      // 기존 로그 대신 사용자 메시지 추적 로그 추가
+      console.log('[AIChatAreaContent] 메시지 전송 중 - chatStore 메시지 수:', useChatStore.getState().messages.length);
+      console.log('[AIChatAreaContent] 메시지 전송 중 - ChatContext 메시지 수:', state.messages.length);
       
-      // 최근 종목에 추가
-      if (state.selectedStock) {
-        addRecentStock(state.selectedStock);
+      // 세션이 없는 경우에는 종목 선택 초기화
+      if (!state.currentChatSession) {
+        setSelectedStock(null);
+      } else {
+        console.log('[AIChatAreaContent] 세션 있음 - 종목 선택 유지');
+      }
+      
+      // 세션 상태에 관계없이 종목 선택 초기화
+      // 후속 질문 모드에서는 종목 선택이 필요 없음
+      setSelectedStock(null);
+      console.log('[AIChatAreaContent] 메시지 전송 후 종목 선택 초기화');
+      
+      setSearchMode(false);
+      
+      // 종목이 선택된 경우에만 최근 종목에 추가
+      if (currentStock) {
+        addRecentStock(currentStock);
       }
       
       // 채팅 메시지 전송 이벤트 발생 - 채팅 세션 갱신을 위한 이벤트
@@ -385,13 +481,16 @@ function AIChatAreaContent() {
       window.dispatchEvent(chatMessageSentEvent);
       
       console.log('[AIChatAreaContent] 메시지 전송 완료');
-
       
       // 전송 플래그 리셋 (AI 응답이 완료된 후)
-      setTimeout(() => setIsUserSending(false), 1000);
+      setTimeout(() => {
+        setIsUserSending(false);
+        isSendingRef.current = false;
+      }, 1000);
     } catch (error) {
       console.error('[AIChatAreaContent] 메시지 전송 중 오류 발생:', error);
       setIsUserSending(false);
+      isSendingRef.current = false;
     }
   };
 
@@ -470,6 +569,7 @@ function AIChatAreaContent() {
         onClearRecentStocks={clearRecentStocks}
         scrollToBottom={() => messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom()}
         showTitle={state.showTitle}
+        currentChatSession={state.currentChatSession}
       />
       
       {/* 추천 질문 및 최신 업데이트 종목 영역 - 첫 진입 시 */}
@@ -605,6 +705,14 @@ function AIChatAreaContent() {
     setStoreSession, 
     clearMessages
   ]);
+
+  // 활성 세션이 있을 때 종목 선택 초기화
+  useEffect(() => {
+    if (state.currentChatSession) {
+      console.log('[AIChatAreaContent] 활성 세션 감지 - 종목 선택 초기화');
+      setSelectedStock(null);
+    }
+  }, [state.currentChatSession, setSelectedStock]);
 
   return (
     <>

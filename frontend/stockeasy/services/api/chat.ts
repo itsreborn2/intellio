@@ -237,7 +237,7 @@ export const streamChatMessage = async (
         if (line.trim() === '') continue
         
         try {
-          console.log('[STREAM_CHAT] 수신된 라인:', line);
+          //console.log('[STREAM_CHAT] 수신된 라인:', line);
           
           // ping 메시지 처리
           if (line.startsWith(': ping')) {
@@ -252,7 +252,7 @@ export const streamChatMessage = async (
             //console.log('[STREAM_CHAT] 파싱할 JSON:', jsonStr);
             
             if (jsonStr === '[DONE]' || jsonStr.trim() === '') {
-              console.log('[STREAM_CHAT] 스트리밍 완료 신호 수신');
+              //console.log('[STREAM_CHAT] 스트리밍 완료 신호 수신');
               continue;
             }
             let fixedJsonStr = jsonStr;
@@ -263,7 +263,7 @@ export const streamChatMessage = async (
             }
             
             const data = JSON.parse(fixedJsonStr);
-            console.log(`[STREAM_CHAT] 이벤트 수신: ${data.event}`);
+            //console.log(`[STREAM_CHAT] 이벤트 수신: ${data.event}`);
             
             // 이벤트 유형에 따른 처리
             switch (data.event) {
