@@ -585,42 +585,45 @@ function AIChatAreaContent() {
           flexDirection: 'column',
           gap: '8px'
         }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: isMobile ? 'column' : 'row',
-            gap: isMobile ? '6px' : '8px',
-            width: '100%',
-            justifyContent: 'center', // 중앙 정렬
-            alignItems: 'stretch', // 컴포넌트 높이 맞춤
-          }}>
-            {/* 추천 질문 컴포넌트 */}
-            <RecommendedQuestions 
-              questions={sampleRecommendedQuestions}
-              onSelectQuestion={handleSelectQuestion}
-            />
-            
-            {/* 최신 업데이트 종목 컴포넌트 */}
-            <LatestUpdates 
-              updates={sampleLatestUpdates}
-              onSelectUpdate={handleSelectUpdate}
-            />
-          </div>
+          {/* 데스크탑: 중앙정렬, 모바일: 기존 중앙정렬 유지 */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? '6px' : '8px',
+              width: '100%',
+              justifyContent: isMobile ? 'center' : 'center', // 항상 중앙정렬
+              alignItems: isMobile ? 'center' : 'flex-start', // 데스크탑은 위에서부터 시작
+            }}
+          >
+          {/* 추천 질문 컴포넌트 */}
+          <RecommendedQuestions 
+            questions={sampleRecommendedQuestions}
+            onSelectQuestion={handleSelectQuestion}
+          />
+          
+          {/* 최신 업데이트 종목 컴포넌트 */}
+          <LatestUpdates 
+            updates={sampleLatestUpdates}
+            onSelectUpdate={handleSelectUpdate}
+          />
         </div>
-      )}
-      
-      {/* 종목 제안 영역 */}
-      <StockSuggestions
-        isLoading={stockState.isLoading}
-        error={stockState.error}
-        filteredStocks={stockState.filteredStocks}
-        recentStocks={stockState.recentStocks}
-        stockOptions={stockState.stockOptions}
-        onSelectStock={(stock) => handleSelectStock(stock)}
-        onClearRecentStocks={clearRecentStocks}
-        isInputCentered={state.isInputCentered}
-      />
-    </>
-  );
+      </div>
+    )}
+    
+    {/* 종목 제안 영역 */}
+    <StockSuggestions
+      isLoading={stockState.isLoading}
+      error={stockState.error}
+      filteredStocks={stockState.filteredStocks}
+      recentStocks={stockState.recentStocks}
+      stockOptions={stockState.stockOptions}
+      onSelectStock={(stock) => handleSelectStock(stock)}
+      onClearRecentStocks={clearRecentStocks}
+      isInputCentered={state.isInputCentered}
+    />
+  </>
+);
 
   // 컴포넌트 마운트 시 종목 데이터 로드 (빈 의존성 배열로 최초 1회만 실행)
   useEffect(() => {
