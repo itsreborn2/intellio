@@ -17,6 +17,7 @@ import json
 import asyncio
 import time
 
+from common.utils.util import remove_null_chars
 from common.services.agent_llm import refresh_agent_llm_cache
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from common.core.database import get_db_async
@@ -901,7 +902,7 @@ async def stream_chat_message(
                     update_data = {}
                     
                     # agent_results 데이터를 해당 세션에 추가
-                    update_data["agent_results"] = agent_results
+                    update_data["agent_results"] = remove_null_chars(agent_results)
                     
                     # 기존 세션 데이터 확인
                     if not session_data.get("stock_code") and request.stock_code:
