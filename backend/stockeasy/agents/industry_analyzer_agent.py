@@ -246,7 +246,7 @@ class IndustryAnalyzerAgent(BaseAgent):
                 
                 state["processing_status"] = state.get("processing_status", {})
                 state["processing_status"]["industry_analyzer"] = "completed"
-                
+                logger.info(f"IndustryAnalyzerAgent processing_status: {state['processing_status']}")
                 # 메트릭 기록
                 state["metrics"] = state.get("metrics", {})
                 state["metrics"]["industry_analyzer"] = {

@@ -66,6 +66,7 @@ FINANCIAL_ANALYSIS_SYSTEM_PROMPT = """당신은 기업 재무제표 및 사업�
    - 장기(3년 이상): 장기적 성장 패턴과 재무 안정성 평가
 
 8. 분석 시 주의사항:
+   - 계산 과정은 반드시 생략하고, 결과만 제시하세요.
    - 모든 수치는 적절한 단위(억원, %, 원 등)를 명시하세요.
    - 산업 평균과 비교 관점을 제공하세요.
    - 재무 변화의 원인과 향후 전망에 대한 통찰을 제공하세요.
@@ -90,7 +91,7 @@ def format_financial_data(formatted_data: List[Dict[str, Any]]) -> str:
     # 원본 데이터 보존을 위해 복사본 생성
     result_strings = []
     
-    print(f"[FIN_FORMAT] 입력 데이터 길이: {len(formatted_data)}")
+    #print(f"[FIN_FORMAT] 입력 데이터 길이: {len(formatted_data)}")
     #print(f"[FIN_FORMAT] 입력 데이터 ID: {id(formatted_data)}")
     
     for idx, item in enumerate(formatted_data):

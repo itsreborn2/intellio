@@ -249,7 +249,7 @@ class AgentState(TypedDict, total=False):
     
     # 사용자 컨텍스트
     user_context: Dict[str, Any]    # 사용자 컨텍스트 정보
-    conversation_history: List[Dict[str, Any]]  # 대화 이력
+
     
     # 질문 분석 결과 (질문분류기에서 설정)
     question_analysis: QuestionAnalysisResult  # 질문 분석 결과
@@ -281,6 +281,7 @@ class AgentState(TypedDict, total=False):
     used_fallback: bool             # Fallback 사용 여부
     fallback_reason: Optional[str]  # Fallback 이유 
 
+    is_follow_up: bool              # 후속질문 여부
     conversation_history: List[Dict[str, Any]]  # 과거 대화 이력
     context_analysis: Optional[ConversationContextAnalysisResult]  # 대화 컨텍스트 분석 결과
     

@@ -140,6 +140,7 @@ type ChatContextType = {
   setCopyState: (id: string, state: boolean) => void;
   setChatSession: (session: IChatSession | null) => void;
   setAllMessages: (messages: ChatMessage[]) => void;
+  getMessages: () => ChatMessage[];
 };
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -196,7 +197,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     toggleExpertMode,
     setCopyState,
     setChatSession,
-    setAllMessages
+    setAllMessages,
+    getMessages: () => state.messages
   }), [
     state,
     addMessage,

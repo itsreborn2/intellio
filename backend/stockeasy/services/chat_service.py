@@ -16,6 +16,14 @@ from common.utils.db_utils import get_one_or_none
 from stockeasy.models.chat import StockChatSession, StockChatMessage
 
 
+# JSON 직렬화를 위한 커스텀 인코더 (datetime 객체 처리)
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
 class ChatService:
     """채팅 서비스 클래스.
     
@@ -26,7 +34,10 @@ class ChatService:
     async def create_chat_session(
         db: AsyncSession, 
         user_id: UUID, 
-        title: str = "새 채팅", 
+        title: str = "새 채팅",
+        stock_code: Optional[str] = None,
+        stock_name: Optional[str] = None,
+        stock_info: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """새 채팅 세션을 생성합니다.
         
@@ -36,6 +47,7 @@ class ChatService:
             title: 채팅 세션 제목 (기본값: "새 채팅")
             stock_code: 종목 코드 (선택)
             stock_name: 종목명 (선택)
+            stock_info: 종목 관련 추가 정보 (선택)
             
         Returns:
             Dict[str, Any]: 생성된 채팅 세션 정보
@@ -46,6 +58,9 @@ class ChatService:
                 user_id=user_id,
                 title=title,
                 is_active=True,
+                stock_code=stock_code,
+                stock_name=stock_name,
+                stock_info=stock_info
             )
             
             db.add(chat_session)
@@ -62,6 +77,9 @@ class ChatService:
                 "user_id": str(chat_session.user_id),
                 "title": chat_session.title,
                 "is_active": chat_session.is_active,
+                "stock_code": chat_session.stock_code,
+                "stock_name": chat_session.stock_name,
+                "stock_info": chat_session.stock_info,
                 "created_at": chat_session.created_at.isoformat() if chat_session.created_at else None,
                 "updated_at": chat_session.updated_at.isoformat() if chat_session.updated_at else None
             }
@@ -76,6 +94,9 @@ class ChatService:
                 "user_id": None,
                 "title": None,
                 "is_active": None,
+                "stock_code": None,
+                "stock_name": None,
+                "stock_info": None,
                 "created_at": chat_session.created_at.isoformat() if chat_session.created_at else None,
                 "updated_at": chat_session.updated_at.isoformat() if chat_session.updated_at else None
             }
@@ -121,6 +142,9 @@ class ChatService:
                     "user_id": str(chat_session.user_id),
                     "title": chat_session.title,
                     "is_active": chat_session.is_active,
+                    "stock_code": chat_session.stock_code,
+                    "stock_name": chat_session.stock_name,
+                    "stock_info": chat_session.stock_info,
                     "created_at": chat_session.created_at.isoformat() if chat_session.created_at else None,
                     "updated_at": chat_session.updated_at.isoformat() if chat_session.updated_at else None
                 }
@@ -137,6 +161,9 @@ class ChatService:
                     "user_id": None,
                     "title": None,
                     "is_active": None,
+                    "stock_code": None,
+                    "stock_name": None,
+                    "stock_info": None,
                     "created_at": None,
                     "updated_at": None
                 }
@@ -180,6 +207,9 @@ class ChatService:
                 "user_id": str(chat_session.user_id),
                 "title": chat_session.title,
                 "is_active": chat_session.is_active,
+                "stock_code": chat_session.stock_code,
+                "stock_name": chat_session.stock_name,
+                "stock_info": chat_session.stock_info,
                 "created_at": chat_session.created_at.isoformat() if chat_session.created_at else None,
                 "updated_at": chat_session.updated_at.isoformat() if chat_session.updated_at else None
             }
@@ -219,10 +249,16 @@ class ChatService:
                 return None
             
             # 업데이트 가능한 필드 목록
-            allowed_fields = {"title", "stock_code", "stock_name", "is_active"}
+            allowed_fields = {"title", "stock_code", "stock_name", "stock_info", "is_active", "agent_results"}
             
             # 허용된 필드만 업데이트
             update_values = {k: v for k, v in update_data.items() if k in allowed_fields}
+            
+            # agent_results 필드에 datetime 객체가 포함된 경우 처리
+            if "agent_results" in update_values and update_values["agent_results"] is not None:
+                update_values["agent_results"] = json.loads(
+                    json.dumps(update_values["agent_results"], cls=DateTimeEncoder)
+                )
             
             # 업데이트 실행
             update_stmt = (
@@ -244,6 +280,8 @@ class ChatService:
                 "title": session.title,
                 "stock_code": session.stock_code,
                 "stock_name": session.stock_name,
+                "stock_info": session.stock_info,
+                "agent_results": session.agent_results,
                 "is_active": session.is_active,
                 "created_at": session.created_at.isoformat() if session.created_at else None,
                 "updated_at": session.updated_at.isoformat() if session.updated_at else None
@@ -301,7 +339,8 @@ class ChatService:
         content_expert: Optional[str] = None,
         stock_code: Optional[str] = None,
         stock_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        agent_results: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """새 채팅 메시지를 생성합니다.
         
@@ -310,16 +349,24 @@ class ChatService:
             session_id: 채팅 세션 ID
             role: 메시지 역할 (user, assistant, system)
             content: 메시지 내용
+            message_id: 메시지 ID (선택, None이면 자동 생성)
+            content_expert: 전문가 모드 메시지 내용 (선택)
             stock_code: 종목 코드 (선택)
             stock_name: 종목명 (선택)
             metadata: 메시지 메타데이터 (선택)
+            agent_results: 에이전트 처리 결과 데이터 (선택)
             
         Returns:
             Dict[str, Any]: 생성된 채팅 메시지 정보
         """
         try:
-            # 메타데이터가 있으면 JSON 문자열로 변환
-            metadata_str = json.dumps(metadata) if metadata else None
+            # datetime 객체가 포함된 JSON 데이터 처리
+            if metadata is not None:
+                metadata = json.loads(json.dumps(metadata, cls=DateTimeEncoder))
+                
+            # agent_results에 datetime 객체가 포함되어 있는 경우 처리
+            if agent_results is not None:
+                agent_results = json.loads(json.dumps(agent_results, cls=DateTimeEncoder))
             
             # 메시지 생성
             message_params = {
@@ -329,7 +376,8 @@ class ChatService:
                 "content_expert": content_expert,
                 "stock_code": stock_code,
                 "stock_name": stock_name,
-                "message_metadata": metadata_str,
+                "message_metadata": metadata,
+                "agent_results": agent_results
             }
 
             # id가 있는 경우에만 추가
@@ -362,7 +410,8 @@ class ChatService:
                 "content_expert": message.content_expert,
                 "stock_code": message.stock_code,
                 "stock_name": message.stock_name,
-                "metadata": json.loads(message.message_metadata) if message.message_metadata else None,
+                "metadata": message.message_metadata,
+                "agent_results": message.agent_results,
                 "created_at": message.created_at.isoformat() if message.created_at else None,
                 "updated_at": message.updated_at.isoformat() if message.updated_at else None
             }
@@ -430,7 +479,8 @@ class ChatService:
                     "content_expert": message.content_expert,
                     "stock_code": message.stock_code,
                     "stock_name": message.stock_name,
-                    "metadata": json.loads(message.message_metadata) if message.message_metadata else None,
+                    "metadata": message.message_metadata,
+                    "agent_results": message.agent_results,
                     "created_at": message.created_at.isoformat() if message.created_at else None,
                     "updated_at": message.updated_at.isoformat() if message.updated_at else None
                 }
@@ -450,7 +500,47 @@ class ChatService:
                     "stock_code": None,
                     "stock_name": None,
                     "metadata": None,
+                    "agent_results": None,
                     "created_at": None,
                     "updated_at": None
                 }
             ]
+    
+    @staticmethod
+    async def get_chat_session_agent_results(
+        db: AsyncSession, 
+        session_id: UUID, 
+        user_id: Optional[UUID] = None
+    ) -> Dict[str, Any]:
+        """특정 채팅 세션의 agent_results만 조회합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            session_id: 채팅 세션 ID
+            user_id: 사용자 ID (권한 검증용, 선택)
+            
+        Returns:
+            Dict[str, Any]: 채팅 세션의 agent_results (세션이 없거나 결과가 없으면 빈 딕셔너리)
+        """
+        try:
+            # 쿼리 기본 설정 - agent_results 필드만 조회
+            query = select(StockChatSession.agent_results).where(StockChatSession.id == session_id)
+            
+            # 사용자 ID 필터 추가 (선택)
+            if user_id:
+                query = query.where(StockChatSession.user_id == user_id)
+            
+            # 쿼리 실행
+            result = await db.execute(query)
+            agent_results = result.scalar_one_or_none()
+            
+            if agent_results is None:
+                logger.warning(f"채팅 세션을 찾을 수 없음: {session_id}")
+                return {}
+            
+            logger.info(f"채팅 세션 {session_id}의 agent_results 조회 완료")
+            return agent_results or {}
+            
+        except Exception as e:
+            logger.error(f"채팅 세션 agent_results 조회 중 오류 발생: {str(e)}")
+            return {}

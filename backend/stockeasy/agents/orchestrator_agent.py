@@ -143,40 +143,45 @@ class OrchestratorAgent(BaseAgent):
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
             
+            # 계획 변경, 모든 에이전트 다 실행
             # LLM 호출로 계획 수립
-            #execution_plan = await self.llm.with_structured_output(ExecutionPlanModel,method="function_calling").ainvoke(
-            execution_plan = await self.agent_llm.with_structured_output(ExecutionPlanModel).ainvoke(
-                prompt,
-                user_id=user_id,
-                project_type=ProjectType.STOCKEASY,
-                db=self.db
-            )
+            # execution_plan = await self.agent_llm.with_structured_output(ExecutionPlanModel).ainvoke(
+            #     prompt,
+            #     user_id=user_id,
+            #     project_type=ProjectType.STOCKEASY,
+            #     db=self.db
+            # )
             
-            # 실행 계획 로깅
-            logger.info(f"Execution plan created: {execution_plan.dict()}")
+            # # 실행 계획 로깅
+            # logger.info(f"Execution plan created: {execution_plan.dict()}")
             
-            # 최종 실행 계획 구성
-            plan_id = str(uuid.uuid4())
-            final_plan = {
-                "plan_id": plan_id,
-                "created_at": datetime.now(),
-                "agents": [
-                    {
-                        "agent_name": agent.agent_name,
-                        "enabled": agent.enabled,
-                        "priority": agent.priority,
-                        "parameters": agent.parameters or {}
-                    } 
-                    for agent in execution_plan.agents
-                ],
-                "execution_order": execution_plan.execution_order,
-                "integration_strategy": execution_plan.integration_strategy,
-                "expected_output": execution_plan.expected_output,
-                "fallback_strategy": execution_plan.fallback_strategy
-            }
+            # # 최종 실행 계획 구성
+            # plan_id = str(uuid.uuid4())
+            # final_plan = {
+            #     "plan_id": plan_id,
+            #     "created_at": datetime.now(),
+            #     "agents": [
+            #         {
+            #             "agent_name": agent.agent_name,
+            #             "enabled": agent.enabled,
+            #             "priority": agent.priority,
+            #             "parameters": agent.parameters or {}
+            #         } 
+            #         for agent in execution_plan.agents
+            #     ],
+            #     "execution_order": execution_plan.execution_order,
+            #     "integration_strategy": execution_plan.integration_strategy,
+            #     "expected_output": execution_plan.expected_output,
+            #     "fallback_strategy": execution_plan.fallback_strategy
+            # }
             
-            # 상태 업데이트
+            # 기본 실행 계획 생성 및 상태 업데이트
+            final_plan = self._create_default_plan(state)
             state["execution_plan"] = final_plan
+            
+            # 처리 상태 업데이트
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["orchestrator"] = "completed_with_default_plan"
             
             # 성능 지표 업데이트
             end_time = datetime.now()
@@ -193,17 +198,22 @@ class OrchestratorAgent(BaseAgent):
                 "model_name": self.model_name
             }
             
-            # 처리 상태 업데이트
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["orchestrator"] = "completed"
-            
             logger.info(f"OrchestratorAgent completed in {duration:.2f} seconds")
             return state
             
         except Exception as e:
             logger.exception(f"Error in OrchestratorAgent: {str(e)}")
             self._add_error(state, f"오케스트레이터 에이전트 오류: {str(e)}")
-            return self._create_default_plan(state)
+            
+            # 기본 실행 계획 생성 및 상태 업데이트
+            execution_plan = self._create_default_plan(state)
+            state["execution_plan"] = execution_plan
+            
+            # 처리 상태 업데이트
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["orchestrator"] = "completed_with_default_plan"
+            
+            return state
     
     def _create_default_plan(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -213,48 +223,62 @@ class OrchestratorAgent(BaseAgent):
             state: 현재 상태
             
         Returns:
-            기본 계획이 추가된 상태
+            기본 계획 딕셔너리
         """
         logger.info("Creating default execution plan")
         
-        # 기본 계획 생성
+        # 모든 에이전트를 포함하는 기본 계획 생성
+        agents_list = []
+        
+        # 에이전트별 우선순위 설정
+        priority_map = {
+            "telegram_retriever": 10,
+            "report_analyzer": 9,
+            "financial_analyzer": 8,
+            "revenue_breakdown": 7,
+            "industry_analyzer": 6,
+            "confidential_analyzer": 5,
+            "knowledge_integrator": 4,
+            "summarizer": 3,
+            "response_formatter": 2,
+            "fallback_manager": 1
+        }
+        
+        # 모든 가용 에이전트를 포함
+        for agent_name in self.available_agents.keys():
+            agents_list.append({
+                "agent_name": agent_name,
+                "enabled": True,
+                "priority": priority_map.get(agent_name, 1),
+                "parameters": {}
+            })
+        
+        # 실행 순서 조정 (일반적인 흐름에 맞게)
+        execution_order = [
+            "telegram_retriever",
+            "report_analyzer",
+            "financial_analyzer",
+            "revenue_breakdown",
+            "industry_analyzer",
+            "confidential_analyzer",
+            "knowledge_integrator",
+            "summarizer",
+            "response_formatter",
+            "fallback_manager"
+        ]
+        
         default_plan = {
             "plan_id": str(uuid.uuid4()),
             "created_at": datetime.now(),
-            "agents": [
-                {
-                    "agent_name": "telegram_retriever",
-                    "enabled": True,
-                    "priority": 10,
-                    "parameters": {}
-                },
-                {
-                    "agent_name": "knowledge_integrator",
-                    "enabled": True,
-                    "priority": 5,
-                    "parameters": {}
-                },
-                {
-                    "agent_name": "response_formatter",
-                    "enabled": True,
-                    "priority": 1,
-                    "parameters": {}
-                }
-            ],
-            "execution_order": ["telegram_retriever", "knowledge_integrator", "response_formatter"],
-            "integration_strategy": "텔레그램 메시지를 기반으로 간단한 요약 생성",
-            "expected_output": "기본적인 질문 답변",
-            "fallback_strategy": "질문에 답변할 수 없는 경우 솔직하게 답변 불가 안내"
+            "agents": agents_list,
+            "execution_order": execution_order,
+            "integration_strategy": "모든 검색 결과를 종합하여 통합된 응답 생성",
+            "expected_output": "다양한 소스의 정보를 종합한 종합적인 분석 결과",
+            "fallback_strategy": "일부 에이전트 실패 시에도 가용한 데이터를 기반으로 최선의 답변 제공"
         }
         
-        # 상태 업데이트
-        state["execution_plan"] = default_plan
-        
-        # 처리 상태 업데이트
-        state["processing_status"] = state.get("processing_status", {})
-        state["processing_status"]["orchestrator"] = "completed_with_default_plan"
-        
-        return state
+        # 상태 객체를 직접 업데이트하지 않고 계획만 반환
+        return default_plan
     
     def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
         """

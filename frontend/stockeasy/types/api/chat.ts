@@ -46,6 +46,7 @@ export interface IChatSessionCreateRequest {
   title?: string;
   stock_code?: string;
   stock_name?: string;
+  stock_info?: any;
 }
 
 /**
@@ -55,6 +56,7 @@ export interface IChatSessionUpdateRequest {
   title?: string;
   stock_code?: string;
   stock_name?: string;
+  stock_info?: any;
   is_active?: boolean;
 }
 
@@ -76,6 +78,7 @@ export interface IChatSession  extends IBaseResponse {
   title: string;
   stock_code?: string;
   stock_name?: string;
+  stock_info?: any;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
@@ -87,7 +90,7 @@ export interface IChatSession  extends IBaseResponse {
 export interface IChatMessageDetail  extends IBaseResponse {
   id: string;
   chat_session_id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'status';
   content: string;
   content_expert?: string;
   stock_code: string;

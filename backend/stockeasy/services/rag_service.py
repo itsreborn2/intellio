@@ -119,7 +119,9 @@ class StockRAGService:
         user_id: Optional[Union[str, UUID]] = None,
         chat_session_id: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        streaming_callback: Optional[Callable] = None
+        streaming_callback: Optional[Callable] = None,
+        is_follow_up: bool = False,
+        agent_results: Optional[Dict[str, Any]] = {}
     ) -> Dict[str, Any]:
         """
         주식 정보 분석
@@ -133,6 +135,8 @@ class StockRAGService:
             chat_session_id: 채팅 세션 ID (선택적)
             conversation_history: 대화 이력 (선택적)
             streaming_callback: 스트리밍 응답을 받을 콜백 함수 (선택적)
+            is_follow_up: 후속질문 여부 (선택적)
+            agent_results : 후속질문에 사용할 이전 에이전트 결과물
 
         Returns:
             분석 결과
@@ -147,11 +151,12 @@ class StockRAGService:
                 "user_id": str(user_id) if user_id else None,
                 "session_id": session_id,
                 "stock_code": stock_code,
-                "stock_name": stock_name
+                "stock_name": stock_name,
+                "is_follow_up": is_follow_up
             }
 
             # 분석 실행
-            logger.info(f"[StockRAGService] 주식 분석 시작: 질문='{query}', 종목코드={stock_code}, 종목명={stock_name}")
+            logger.info(f"[StockRAGService] 주식 분석 시작: 질문='{query}', 종목코드={stock_code}, 종목명={stock_name}, 후속질문={is_follow_up}")
             
             # streaming_callback 로깅 추가
             callback_name = getattr(streaming_callback, '__name__', '이름 없음')
@@ -167,7 +172,9 @@ class StockRAGService:
                 user_context=user_context,
                 chat_session_id=chat_session_id,
                 conversation_history=conversation_history,
-                streaming_callback=streaming_callback  # 스트리밍 콜백 함수 전달
+                streaming_callback=streaming_callback,  # 스트리밍 콜백 함수 전달
+                is_follow_up=is_follow_up,  # 후속질문 여부 전달
+                agent_results=agent_results  # 후속질문에 사용할 이전 에이전트 결과물 전달
             )
             
             logger.info(f"[StockRAGService] 주식 분석 완료: 종목코드={stock_code}, 결과 크기={len(str(result))}자")

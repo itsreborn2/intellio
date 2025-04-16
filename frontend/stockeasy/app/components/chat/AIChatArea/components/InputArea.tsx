@@ -31,6 +31,7 @@ interface InputAreaProps {
   onClearRecentStocks: () => void;
   scrollToBottom?: () => void;
   showTitle?: boolean;
+  currentChatSession?: any; // 현재 채팅 세션 정보 추가
 }
 
 export function InputArea({
@@ -52,7 +53,8 @@ export function InputArea({
   onSearchModeChange,
   onClearRecentStocks,
   scrollToBottom,
-  showTitle = false
+  showTitle = false,
+  currentChatSession
 }: InputAreaProps) {
   const isMobile = useIsMobile();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +67,9 @@ export function InputArea({
   
   // 사이드바 너비 상수 (픽셀 단위)
   const SIDEBAR_WIDTH = 59;
+  
+  // 현재 채팅 세션이 존재하는지 확인
+  const hasActiveSession = Boolean(currentChatSession);
   
   // 입력 영역 스타일
   const inputAreaStyle: React.CSSProperties = {
@@ -185,16 +190,20 @@ export function InputArea({
           inputRef.current.focus();
         }
         
-        // 선택된 종목 해제하고 종목 추천 표시
+        // 선택된 종목 해제
         onStockSelect(null);
-        onShowStockSuggestions(true);
-        onSearchModeChange(true);
         
-        // 최근 조회 종목 표시
-        if (recentStocks.length > 0) {
-          setFilteredStocks(recentStocks);
-        } else {
-          setFilteredStocks(stockOptions.slice(0, 5));
+        // 활성 세션이 없는 경우에만 종목 추천 팝업 표시
+        if (!currentChatSession) {
+          onShowStockSuggestions(true);
+          onSearchModeChange(true);
+          
+          // 최근 조회 종목 표시
+          if (recentStocks.length > 0) {
+            setFilteredStocks(recentStocks);
+          } else {
+            setFilteredStocks(stockOptions.slice(0, 5));
+          }
         }
         
         // 이벤트 전파 방지
@@ -209,7 +218,7 @@ export function InputArea({
     return () => {
       document.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [inputMessage, selectedStock, onStockSelect, onShowStockSuggestions, onSearchModeChange, isProcessing, recentStocks, stockOptions]);
+  }, [inputMessage, selectedStock, onStockSelect, onShowStockSuggestions, onSearchModeChange, isProcessing, recentStocks, stockOptions, currentChatSession]);
   
   // 키보드 이벤트 처리 (추가 기능 포함)
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -252,7 +261,7 @@ export function InputArea({
     // Backspace 키이고, 입력창이 비어있고, 종목이 선택된 상태인지 확인
     if (e.key === 'Backspace' && inputMessage === '' && selectedStock) {
       e.preventDefault(); // 기본 Backspace 동작 방지
-      console.log('[InputArea] Backspace 누름 - 종목 선택 해제 및 팝업 표시');
+      console.log('[InputArea] Backspace 누름 - 종목 선택 해제');
       
       // 포커스 확인
       const activeElement = document.activeElement;
@@ -260,21 +269,26 @@ export function InputArea({
       console.log('[InputArea] Input Ref:', inputRef.current);
       console.log('[InputArea] 포커스 일치 여부:', activeElement === inputRef.current);
       
-      // 선택된 종목 해제하고 종목 추천 표시
+      // 선택된 종목 해제
       onStockSelect(null);
-      onShowStockSuggestions(true);
-      onSearchModeChange(true);
       
-      // 최근 조회 종목 표시
-      if (recentStocks.length > 0) {
-        setFilteredStocks(recentStocks);
-      } else {
-        setFilteredStocks(stockOptions.slice(0, 5));
+      // 활성 세션이 없는 경우에만 종목 추천 팝업 표시
+      if (!currentChatSession) {
+        onShowStockSuggestions(true);
+        onSearchModeChange(true);
+        
+        // 최근 조회 종목 표시
+        if (recentStocks.length > 0) {
+          setFilteredStocks(recentStocks);
+        } else {
+          setFilteredStocks(stockOptions.slice(0, 5));
+        }
       }
     }
     
-    // Enter 키 눌렀을 때 메시지 전송 (Shift+Enter는 줄바꿈) - 종목이 선택된 상태에서만
-    if (e.key === 'Enter' && !e.shiftKey && inputMessage.trim() !== '' && selectedStock) {
+    // Enter 키 눌렀을 때 메시지 전송 (Shift+Enter는 줄바꿈)
+    // 종목이 선택되어 있거나 현재 채팅 세션이 있는 경우 메시지 전송 가능
+    if (e.key === 'Enter' && !e.shiftKey && inputMessage.trim() !== '' && (selectedStock || hasActiveSession)) {
       e.preventDefault();
       setIsKeyPressed(true);
       onSendMessage();
@@ -282,10 +296,8 @@ export function InputArea({
       if (scrollToBottom) {
         scrollToBottom();
       }
-    } else if (e.key === 'Enter' && !e.shiftKey && inputMessage.trim() !== '' && !selectedStock) {
-      console.log('[InputArea] Enter 키 입력 - 종목 미선택으로 전송 불가');
-      // 필요하다면 사용자에게 종목 선택을 유도하는 메시지를 표시할 수 있습니다.
-      // 예: alert('메시지를 보내려면 먼저 종목을 선택해주세요.');
+    } else if (e.key === 'Enter' && !e.shiftKey && inputMessage.trim() !== '' && !selectedStock && !hasActiveSession) {
+      console.log('[InputArea] Enter 키 입력 - 종목 미선택이며 활성 세션도 없어 전송 불가');
     }
   }, [
     inputMessage, 
@@ -302,7 +314,9 @@ export function InputArea({
     showStockSuggestions,
     filteredStocks,
     focusedItemIndex,
-    handleSelectStock
+    handleSelectStock,
+    hasActiveSession,
+    currentChatSession
   ]);
   
   const handleKeyUp = useCallback((e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -313,6 +327,11 @@ export function InputArea({
   
   // 입력 필드 포커스 시 종목 추천 목록 표시
   const handleInputFocus = () => {
+    // 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
+    if (currentChatSession) {
+      return;
+    }
+    
     // 종목 선택 팝업이 이미 열려 있으면 검색 모드 활성화
     if (showStockSuggestions) {
       onSearchModeChange(true);
@@ -346,6 +365,11 @@ export function InputArea({
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const value = e.target.value;
     setInputMessage(value);
+    
+    // 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
+    if (currentChatSession) {
+      return;
+    }
     
     // 종목이 선택되지 않은 경우, 종목 추천 표시
     if (!selectedStock && !showStockSuggestions) {
@@ -387,10 +411,15 @@ export function InputArea({
         setFocusedItemIndex(0);
       }
     }
-  }, [setInputMessage, selectedStock, showStockSuggestions, onShowStockSuggestions, onSearchModeChange, searchMode, stockOptions, recentStocks]);
+  }, [setInputMessage, selectedStock, showStockSuggestions, onShowStockSuggestions, onSearchModeChange, searchMode, stockOptions, recentStocks, currentChatSession]);
   
   // 종목 배지 클릭 시 종목 선택 팝업 표시
   const handleStockBadgeClick = () => {
+    // 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
+    if (currentChatSession) {
+      return;
+    }
+    
     onShowStockSuggestions(true);
     onSearchModeChange(true);
     setInputMessage('');
@@ -413,18 +442,17 @@ export function InputArea({
   
   // 전송 버튼 클릭 핸들러
   const handleSendButtonClick = useCallback(() => {
-    if (selectedStock && inputMessage.trim() !== '' && !isProcessing) {
+    // 종목이 선택되어 있거나 현재 채팅 세션이 있는 경우 메시지 전송 가능
+    if ((selectedStock || hasActiveSession) && inputMessage.trim() !== '' && !isProcessing) {
       onSendMessage();
       // scrollToBottom이 제공되었다면 호출
       if (scrollToBottom) {
         scrollToBottom();
       }
-    } else if (!selectedStock) {
-      console.log('[InputArea] 전송 버튼 클릭 - 종목 미선택으로 전송 불가');
-      // 필요하다면 사용자에게 종목 선택을 유도하는 메시지를 표시할 수 있습니다.
-      // 예: alert('메시지를 보내려면 먼저 종목을 선택해주세요.');
+    } else if (!selectedStock && !hasActiveSession) {
+      console.log('[InputArea] 전송 버튼 클릭 - 종목 미선택이며 활성 세션도 없어 전송 불가');
     }
-  }, [selectedStock, inputMessage, isProcessing, onSendMessage, scrollToBottom]);
+  }, [selectedStock, inputMessage, isProcessing, onSendMessage, scrollToBottom, hasActiveSession]);
   
   // 최초 마운트 시 필터링 초기화
   useEffect(() => {
@@ -485,7 +513,7 @@ export function InputArea({
           boxShadow: '0 2px 6px rgba(0, 0, 0, 0.05)',
           border: '2px solid #282A2E',
         }}>
-          {selectedStock && (
+          {selectedStock && !currentChatSession && (
             <StockBadge
               stock={selectedStock}
               isProcessing={isProcessing}
@@ -497,19 +525,19 @@ export function InputArea({
             ref={inputRef}
             placeholder={showStockSuggestions || searchMode 
               ? "종목명 또는 종목코드 검색" 
-              : (selectedStock 
-                ? "이 종목, 뭔가 궁금하다면 지금 바로 질문해 보세요" 
-                : "어떤 종목이든 좋아요! 먼저 입력하거나 골라주세요.")}
+              : (selectedStock || hasActiveSession
+                ? "후속 질문을 해보세요." 
+                : "종목을 선택 후 분석을 요청하세요.")}
             className="integrated-input-field"
             type="text"
             value={inputMessage}
             onChange={handleInputChange}
             onFocus={(e) => {
-              console.log("[InputArea] Input 포커스 받음");
+              //console.log("[InputArea] Input 포커스 받음");
               handleInputFocus();
             }}
             onBlur={() => {
-              console.log("[InputArea] Input 포커스 잃음");
+              //console.log("[InputArea] Input 포커스 잃음");
             }}
             onKeyDown={handleKeyDown}
             onKeyUp={handleKeyUp}
@@ -531,7 +559,7 @@ export function InputArea({
           {/* 전송 아이콘 */}
           <SendButton
             onClick={handleSendButtonClick}
-            disabled={isProcessing || !inputMessage.trim() || !selectedStock}
+            disabled={isProcessing || !inputMessage.trim() || (!selectedStock && !hasActiveSession)}
             isProcessing={isProcessing}
           />
         </div>

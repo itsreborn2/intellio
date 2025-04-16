@@ -21,7 +21,7 @@ export default function StockEasyLandingPage() {
     const checkLoginWithDelay = setTimeout(() => {
       // 로그인 상태 확인
       const isUserLoggedIn = isLoggedIn()
-      console.log(`홈페이지 로드 (시도 ${loginCheckAttempt + 1}): 로그인 상태 = ${isUserLoggedIn}`)
+      //console.log(`홈페이지 로드 (시도 ${loginCheckAttempt + 1}): 로그인 상태 = ${isUserLoggedIn}`)
       
       if (isUserLoggedIn) {
         // 토큰 사용량 요약 정보 가져오기

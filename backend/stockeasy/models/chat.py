@@ -36,6 +36,25 @@ class StockChatSession(Base):
         server_default=text("true"),
         comment="활성화 여부"
     )
+    # 종목 정보 필드 추가
+    stock_code: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, index=True,
+        comment="종목 코드"
+    )
+    stock_name: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True,
+        comment="종목명"
+    )
+    # 추가 종목 정보를 JSON으로 저장
+    stock_info: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True,
+        comment="종목 관련 추가 정보 (업종, 시가총액 등)"
+    )
+    # 에이전트 처리 결과 데이터
+    agent_results: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True,
+        comment="세션의 에이전트 처리 결과 데이터"
+    )
     # 역참조 관계 (ChatMessage 모델에서 정의)
     messages: Mapped[List["StockChatMessage"]] = relationship(
         "StockChatMessage", 
@@ -46,6 +65,22 @@ class StockChatSession(Base):
 
     # 사용자 테이블과의 관계
     user = relationship("User", back_populates="stock_chat_sessions", lazy="joined")
+    
+    @property
+    def to_dict(self) -> dict:
+        """세션 객체를 딕셔너리로 변환"""
+        return {
+            "id": str(self.id),
+            "user_id": str(self.user_id),
+            "title": self.title,
+            "is_active": self.is_active,
+            "stock_code": self.stock_code,
+            "stock_name": self.stock_name,
+            "stock_info": self.stock_info,
+            "agent_results": self.agent_results,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+        }
 
 
 class StockChatMessage(Base):
@@ -123,6 +158,12 @@ class StockChatMessage(Base):
         comment="메시지 추가 메타데이터 (처리 정보, 컨텍스트 등)"
     )
     
+    # 에이전트 처리 결과 데이터
+    agent_results: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True,
+        comment="에이전트 처리 결과 데이터"
+    )
+    
     # 세션과의 관계
     session: Mapped["StockChatSession"] = relationship(
         "StockChatSession", 
@@ -140,11 +181,13 @@ class StockChatMessage(Base):
             "role": self.role,
             "content_type": self.content_type,
             "content": self.content,
+            "content_expert": self.content_expert,
             "stock_code": self.stock_code,
             "stock_name": self.stock_name,
             "message_data": self.message_data,
             "data_url": self.data_url,
             "message_metadata": self.message_metadata,
+            "agent_results": self.agent_results,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         } 

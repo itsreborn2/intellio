@@ -324,13 +324,17 @@ class StockAnalysisGraph:
         def question_analyzer_router(state: AgentState) -> str:
             """질문 분석기 이후 라우팅 결정"""
             # 컨텍스트 분석 결과 확인
+            is_follow_up = state.get("is_follow_up", False)
+            logger.info(f"[question_analyzer_router] 후속질문 여부: {is_follow_up}")
+            
             context_analysis = state.get("context_analysis", {})
             is_followup_question = context_analysis.get("is_followup_question", False)
             requires_context = context_analysis.get("requires_context", False)
             
             # 대화 컨텍스트가 필요한 경우 context_response로 라우팅
-            if requires_context:
-                logger.info(f"대화 컨텍스트가 필요한 질문으로 context_response 에이전트로 라우팅합니다.")
+            #if requires_context:
+            if is_follow_up:
+                logger.info(f"후속질문으로 context_response 에이전트로 라우팅합니다.")
                 # 처리 상태 업데이트
                 if "processing_status" not in state:
                     state["processing_status"] = {}
@@ -384,8 +388,14 @@ class StockAnalysisGraph:
                 
             # 실행 계획이 없으면 fallback으로
             execution_plan = state.get("execution_plan", {})
-            if not execution_plan or not execution_plan.get("execution_order"):
+            if not execution_plan:
                 logger.info("실행 계획이 없어 fallback_manager로 라우팅합니다.")
+                return "fallback_manager"
+                
+            # 실행 순서가 없거나 빈 배열이면 fallback으로
+            execution_order = execution_plan.get("execution_order", [])
+            if not execution_order:
+                logger.info("실행 순서가 비어있어 fallback_manager로 라우팅합니다.")
                 return "fallback_manager"
                 
             # 정상 흐름은 병렬 검색으로
@@ -405,8 +415,8 @@ class StockAnalysisGraph:
         def parallel_search_router(state: AgentState) -> str:
             """병렬 검색 이후 라우팅 결정"""
             # 로그에 전체 상태 출력 (디버깅용)
-            #logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
-            #logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
+            logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
+            logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
             
             # 타임스탬프 오류 재시작 플래그 확인 - 재시작 직후라면 knowledge_integrator로 바로 라우팅
             if state.get("restart_after_timestamp_error", False):
@@ -461,17 +471,34 @@ class StockAnalysisGraph:
             # 검색 결과가 있는지 확인
             retrieved_data = state.get("retrieved_data", {})
             
+            # 검색 데이터 키 로깅
+            logger.info(f"검색 데이터 키: {list(retrieved_data.keys())}")
+            
             # 실제 데이터 포함 항목만 확인
             has_data = False
-            for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "revenue_breakdown"]:
+            for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "revenue_breakdown"]:
                 if key in retrieved_data and retrieved_data[key]:
                     has_data = True
                     logger.info(f"데이터가 검색됨: {key}에 {len(retrieved_data[key])}개 항목이 있습니다.")
                     break
             
+            # 병렬 검색이 실행되었다면, 검색 결과가 없어도 계속 진행
+            # 이미 하위 에이전트가, 진행 중일 수 있기 때문에, 바로 fallback_manager로 가지 않음
             if not has_data:
-                logger.warning("검색 결과가 없어 fallback_manager로 라우팅합니다.")
-                return "fallback_manager"
+                # 모든 하위 에이전트가 실패했거나 완료되었는지 확인
+                all_agents_completed_or_failed = True
+                for agent_name in ["telegram_retriever", "report_analyzer", "financial_analyzer", "industry_analyzer", "confidential_analyzer", "revenue_breakdown"]:
+                    status = processing_status.get(agent_name)
+                    if status and status not in completed_statuses and status != "failed" and status != "error":
+                        all_agents_completed_or_failed = False
+                        break
+                
+                if all_agents_completed_or_failed:
+                    logger.warning("모든 검색 에이전트가 완료되었거나 실패했으며, 검색 결과가 없어 fallback_manager로 라우팅합니다.")
+                    return "fallback_manager"
+                else:
+                    logger.info("검색 결과가 아직 없지만 일부 에이전트가. 진행 중이므로 knowledge_integrator로 라우팅합니다.")
+                    return "knowledge_integrator"
             
             logger.info("데이터가 검색되어 knowledge_integrator로 라우팅합니다.")
             return "knowledge_integrator"
@@ -613,7 +640,7 @@ class StockAnalysisGraph:
         # 실행 순서 확인
         execution_order = execution_plan.get("execution_order", [])
         if not execution_order:
-            logger.info("실행 순서가 없어 fallback_manager로 라우팅합니다.")
+            logger.info("실행 순서가 비어있어 fallback_manager로 라우팅합니다.")
             return "fallback_manager"
         
         # 현재 상태에서 마지막으로 실행된 에이전트 확인
@@ -667,6 +694,10 @@ class StockAnalysisGraph:
             stock_code: 종목 코드 (선택적)
             stock_name: 종목명 (선택적)
             **kwargs: 추가 인자
+                is_follow_up: 후속질문 여부
+                streaming_callback: 스트리밍 콜백 함수
+                chat_session_id: 채팅 세션 ID
+                conversation_history: 대화 이력
 
         Returns:
             처리 결과를 담은 딕셔너리
@@ -680,6 +711,16 @@ class StockAnalysisGraph:
             trace_id = session_id or datetime.now().strftime("%Y%m%d%H%M%S")
             chat_session_id = kwargs.get("chat_session_id", None)
             logger.info(f"[process_query] chat_session_id: {chat_session_id}")
+
+            # 후속질문 여부 추출
+            is_follow_up = kwargs.get("is_follow_up", False)
+            logger.info(f"[process_query] 후속질문 여부: {is_follow_up}")
+
+            # 이전 에이전트 결과물 추출
+            agent_results = {}
+            if is_follow_up:
+                agent_results = kwargs.get("agent_results", {})
+                logger.info(f"[process_query] 이전 에이전트 결과물 샘플: {agent_results.get('report_analyzer', {}).get('data', {}).get('analysis', '').get('llm_response', '')}")
 
             # 스트리밍 콜백 함수 추출 및 클래스 멤버로 저장
             streaming_callback = kwargs.get("streaming_callback")
@@ -696,17 +737,18 @@ class StockAnalysisGraph:
                 "chat_session_id": chat_session_id,
                 "stock_code": stock_code,
                 "stock_name": stock_name,
+                "is_follow_up": is_follow_up,  # 후속질문 여부를 상태에 명시적으로 추가
                 "errors": [],
                 "processing_status": {},
                 "retrieved_data": {},  # 검색 결과를 담을 딕셔너리
-                "agent_results": {},   # 명시적으로 agent_results 초기화
+                "agent_results": agent_results,   # 이전 에이전트 결과를 넣어둠.
                 "parallel_search_executed": False,  # 병렬 검색 실행 여부 초기화
                 **kwargs_copy  # streaming_callback을 제외한 나머지 인자
             }
             chat_history = kwargs.get("conversation_history", [])
             if chat_history:
                 logger.info(f"[process_query] 과거 대화 이력: {chat_history[:300]}")
-            
+            #logger.info(f"[process_query] initial_state: {initial_state['stock_code']}, {initial_state['agent_results']}")
             # 재시작 플래그 확인
             restart_from_error = kwargs.get("restart_from_error", False)
             if restart_from_error:

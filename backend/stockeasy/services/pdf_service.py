@@ -43,7 +43,7 @@ def convert_markdown_to_html(text: str) -> str:
     md = MarkdownIt()
     
     # 필요한 확장 기능 활성화
-    # md.enable('table')  # 테이블 지원이 필요한 경우
+    md.enable('table')  # 테이블 지원 활성화
     
     # 마크다운을 HTML로 변환
     html = md.render(text)
@@ -154,7 +154,53 @@ def convert_html_to_reportlab(html_content: str) -> List[Dict[str, Any]]:
     
     return result
 
-# convert_markdown 함수를 간소화
+# 테이블 추출 및 변환 함수 추가
+def extract_tables_from_html(html_content: str) -> List[Dict[str, Any]]:
+    """
+    HTML 콘텐츠에서 테이블을 추출하고 ReportLab 테이블 데이터로 변환합니다.
+    
+    Args:
+        html_content: HTML 형식의 텍스트
+        
+    Returns:
+        ReportLab 테이블 정보 목록
+    """
+    tables = []
+    
+    # 정규식으로 테이블 태그 추출
+    table_pattern = re.compile(r'<table>(.*?)</table>', re.DOTALL)
+    table_matches = table_pattern.findall(html_content)
+    
+    for table_html in table_matches:
+        # 행 추출
+        rows = []
+        row_pattern = re.compile(r'<tr>(.*?)</tr>', re.DOTALL)
+        row_matches = row_pattern.findall(table_html)
+        
+        for row_html in row_matches:
+            # 헤더 셀 추출
+            cell_pattern = re.compile(r'<t[hd]>(.*?)</t[hd]>', re.DOTALL)
+            cell_matches = cell_pattern.findall(row_html)
+            
+            # 각 셀의 HTML 태그 제거
+            row = []
+            for cell_html in cell_matches:
+                # HTML 태그 제거
+                cell_text = re.sub(r'<[^>]+>', '', cell_html).strip()
+                row.append(cell_text)
+            
+            if row:  # 비어있지 않은 행만 추가
+                rows.append(row)
+        
+        if rows:  # 비어있지 않은 테이블만 추가
+            tables.append({
+                'data': rows,
+                'type': 'table'
+            })
+    
+    return tables
+
+# convert_markdown 함수를 확장해 테이블 지원 추가
 def convert_markdown(text: str) -> List[Dict[str, Any]]:
     """
     마크다운 텍스트를 HTML로 변환하여 ReportLab이 처리할 수 있는 형식으로 반환합니다.
@@ -163,7 +209,7 @@ def convert_markdown(text: str) -> List[Dict[str, Any]]:
         text: 마크다운 형식의 텍스트
         
     Returns:
-        HTML 형식의 단락 목록
+        HTML 형식의 단락 목록과 테이블 목록
     """
     if not text:
         return []
@@ -172,8 +218,19 @@ def convert_markdown(text: str) -> List[Dict[str, Any]]:
         # 마크다운을 HTML로 변환
         html = convert_markdown_to_html(text)
         
+        # 테이블 추출 (테이블 태그 포함된 부분)
+        tables = extract_tables_from_html(html)
+        
+        # 테이블을 제외한 HTML 처리 (테이블 태그를 임시 마커로 대체)
+        table_placeholders = {}
+        for i, table in enumerate(tables):
+            placeholder = f"__TABLE_PLACEHOLDER_{i}__"
+            table_html = re.search(r'(<table>.*?</table>)', html, re.DOTALL)
+            if table_html:
+                html = html.replace(table_html.group(1), placeholder, 1)
+                table_placeholders[placeholder] = table
+        
         # HTML을 단락으로 분리해 ReportLab 형식으로 변환
-        # 태그를 그대로 사용해 ReportLab이 처리하도록 함
         result = []
         
         # 단락 분리를 위해 p 태그로 구분
@@ -183,6 +240,29 @@ def convert_markdown(text: str) -> List[Dict[str, Any]]:
         
         for part in paragraphs:
             if not part.strip():
+                continue
+            
+            # 테이블 플레이스홀더 확인
+            table_match = None
+            for placeholder in table_placeholders:
+                if placeholder in part:
+                    # 이전 내용이 있으면 먼저 처리
+                    if buffer:
+                        result.append({'text': ''.join(buffer), 'style': current_style})
+                        buffer = []
+                    
+                    # 테이블 데이터 추가
+                    result.append(table_placeholders[placeholder])
+                    
+                    # 플레이스홀더를 제거한 나머지 부분 처리
+                    remaining = part.replace(placeholder, '')
+                    if remaining.strip():
+                        buffer.append(remaining)
+                    
+                    table_match = True
+                    break
+            
+            if table_match:
                 continue
                 
             # 헤더 태그 확인 - 스타일 설정 용도
@@ -539,7 +619,8 @@ class PDFService:
         # XML 태그를 허용하도록 설정 - HTML 태그 추가
         allowedTags = [
             'b', 'i', 'u', 'strong', 'em', 'strike', 'font', 'code', 'pre', 'a', 'link', 'br',
-            'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'span'
+            'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'span',
+            'table', 'tr', 'th', 'td', 'thead', 'tbody', 'tfoot'
         ]
         
         for style in styles.byName.values():
@@ -575,30 +656,6 @@ class PDFService:
         # 제목 추가
         elements.append(Paragraph(f"{chat_session['title']}", styles["Title"]))
         elements.append(Spacer(1, 12))
-        
-        # # 채팅 세션 정보 추가
-        # session_info = [
-        #     #["생성 일시", datetime.fromisoformat(chat_session["created_at"]).strftime("%Y-%m-%d %H:%M:%S")],
-        #     ["내보내기 일시", datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
-        # ]
-        
-        # if "stock_name" in chat_session and chat_session["stock_name"]:
-        #     session_info.append(["종목명", f"{chat_session['stock_name']} ({chat_session['stock_code']})"])
-        
-        # # 테이블 스타일 설정
-        # info_table = Table(session_info, colWidths=[100, 300])
-        # info_table.setStyle(TableStyle([
-        #     ('FONTNAME', (0, 0), (-1, -1), font_name),
-        #     ('FONTSIZE', (0, 0), (-1, -1), 9),
-        #     ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
-        #     ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-        #     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        #     ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        #     ('TOPPADDING', (0, 0), (-1, -1), 3),
-        # ]))
-        
-        # elements.append(info_table)
-        # elements.append(Spacer(1, 20))
         
         # 메시지 목록 추가
         elements.append(Paragraph("", styles["Heading1-KO"]))
@@ -638,6 +695,36 @@ class PDFService:
             # 변환된 마크다운 요소 추가
             for elem in markdown_elements:
                 try:
+                    # 테이블 요소인 경우 ReportLab 테이블로 변환
+                    if 'type' in elem and elem['type'] == 'table':
+                        # 테이블 데이터 가져오기
+                        table_data = elem['data']
+                        if table_data and len(table_data) > 0:
+                            # 열 너비 계산 (모든 열의 너비 동일하게 설정)
+                            col_width = 450 / max(1, len(table_data[0]))  # A4 용지 너비에 맞게 조정
+                            column_widths = [col_width] * len(table_data[0])
+                            
+                            # ReportLab 테이블 생성
+                            table = Table(table_data, colWidths=column_widths)
+                            
+                            # 테이블 스타일 설정
+                            table_style = [
+                                ('FONTNAME', (0, 0), (-1, -1), font_name),
+                                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),  # 헤더 배경색
+                                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                            ]
+                            
+                            table.setStyle(TableStyle(table_style))
+                            elements.append(table)
+                            elements.append(Spacer(1, 8))
+                        continue
+                    
+                    # 일반 텍스트 요소 처리
                     # <b> 태그를 굵은 폰트로 직접 변환
                     text = elem['text']
                     # <b> 태그에 폰트 이름을 명시적으로 지정
@@ -650,14 +737,15 @@ class PDFService:
                     if elem['style'] not in ['Heading1-KO', 'Heading2-KO', 'Heading3-KO', 'Heading4-KO', 'Heading5-KO', 'Heading6-KO']:
                         elements.append(Spacer(1, 4))
                 except Exception as e:
-                    logger.error(f"PDF 생성 중 오류 발생: {str(e)}, 내용: {elem['text'][:100]}...")
+                    logger.error(f"PDF 생성 중 오류 발생: {str(e)}, 내용: {elem['text'][:100] if 'text' in elem else str(elem)[:100]}...")
                     # 오류 발생 시 일반 텍스트로 시도
                     try:
-                        plain_text = re.sub(r'<[^>]+>', '', elem['text'])
-                        elements.append(Paragraph(plain_text, styles['Normal-KO']))
-                        elements.append(Spacer(1, 4))
+                        if 'text' in elem:
+                            plain_text = re.sub(r'<[^>]+>', '', elem['text'])
+                            elements.append(Paragraph(plain_text, styles['Normal-KO']))
+                            elements.append(Spacer(1, 4))
                     except:
-                        logger.error(f"일반 텍스트 변환도 실패: {elem['text'][:100]}...")
+                        logger.error(f"일반 텍스트 변환도 실패: {str(elem)[:100]}...")
                         # 계속 진행
             
             # 메시지 구분선 추가

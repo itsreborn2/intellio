@@ -202,55 +202,40 @@ class ConfidentialAnalyzerAgent(BaseAgent):
             # 검색 결과 가공
             processed_reports:List[ConfidentialData] = self._process_reports(reports)
             
-            # 상세한 분석이 필요한 경우 (primary_intent와 complexity 기반 판단)
-            primary_intent = classification.get("primary_intent", "")
-            complexity = classification.get("complexity", "")
-            
-            # primary_intent: Literal["종목기본정보", "성과전망", "재무분석", "산업동향", "기타"] # 주요 질문 의도
-            # complexity: Literal["단순", "중간", "복합", "전문가급"]                      # 질문 복잡도
-            # expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형"]  # 기대하는 답변 유형
-
-            # 성과전망, 복합, 전문가급 질문이 아니면. 그냥 벡터 DB 검색결과를 리턴함.
-            need_detailed_analysis = (
-                primary_intent in ["성과전망", "재무분석", "산업동향"] or 
-                complexity in ["복합", "전문가급"]
-            )
-            logger.info(f"need_detailed_analysis: {need_detailed_analysis}")
-            
-            if need_detailed_analysis:
-                # 리포트 내용에서 핵심 정보 추출 및 분석
-                try:
-                    # 커스텀 프롬프트 템플릿 확인
-                    # 1. 상태에서 커스텀 프롬프트 템플릿 확인
-                    custom_prompt_from_state = state.get("custom_prompt_template")
-                    # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
-                    custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
-                    # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
-                    system_prompt = None
-                    if custom_prompt_from_state:
-                        system_prompt = custom_prompt_from_state
-                        logger.info(f"ConfidentialAnalyzerAgent using custom prompt from state : {custom_prompt_from_state}")
-                    elif custom_prompt_from_attr:
-                        system_prompt = custom_prompt_from_attr
-                        logger.info(f"ConfidentialAnalyzerAgent using custom prompt from attribute")
-                        
-                    analysis = await self._generate_report_analysis(
-                        processed_reports, 
-                        query, 
-                        stock_code, 
-                        stock_name,
-                        state,
-                        system_prompt=system_prompt
-                    )
+            need_detailed_analysis = True
+            # 리포트 내용에서 핵심 정보 추출 및 분석
+            try:
+                # 커스텀 프롬프트 템플릿 확인
+                # 1. 상태에서 커스텀 프롬프트 템플릿 확인
+                custom_prompt_from_state = state.get("custom_prompt_template")
+                # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
+                custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
+                # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
+                system_prompt = None
+                if custom_prompt_from_state:
+                    system_prompt = custom_prompt_from_state
+                    logger.info(f"ConfidentialAnalyzerAgent using custom prompt from state : {custom_prompt_from_state}")
+                elif custom_prompt_from_attr:
+                    system_prompt = custom_prompt_from_attr
+                    logger.info(f"ConfidentialAnalyzerAgent using custom prompt from attribute")
                     
-                    # 핵심 정보가 추출된 경우, 이를 포함
-                    #if analysis:
-                        #processed_reports["analysis"] = analysis
-                        # for i, report in enumerate(processed_reports):
-                        #     if i < len(analysis) and analysis[i]:
-                        #         processed_reports[i]["analysis"] = analysis[i]
-                except Exception as e:
-                    logger.error(f"기업 리포트 분석 중 오류 발생: {str(e)}")
+                analysis = await self._generate_report_analysis(
+                    processed_reports, 
+                    query, 
+                    stock_code, 
+                    stock_name,
+                    state,
+                    system_prompt=system_prompt
+                )
+                
+                # 핵심 정보가 추출된 경우, 이를 포함
+                #if analysis:
+                    #processed_reports["analysis"] = analysis
+                    # for i, report in enumerate(processed_reports):
+                    #     if i < len(analysis) and analysis[i]:
+                    #         processed_reports[i]["analysis"] = analysis[i]
+            except Exception as e:
+                logger.error(f"기업 리포트 분석 중 오류 발생: {str(e)}")
             
             # 실행 시간 계산
             end_time = datetime.now()
@@ -288,6 +273,7 @@ class ConfidentialAnalyzerAgent(BaseAgent):
             
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["confidential_analyzer"] = "completed"
+            logger.info(f"ConfidentialAnalyzerAgent processing_status: {state['processing_status']}")
             
             # 메트릭 기록
             state["metrics"] = state.get("metrics", {})

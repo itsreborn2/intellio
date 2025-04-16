@@ -31,12 +31,18 @@ export const useChatStore = create<ChatState>((set) => ({
   setCurrentSession: (session) => set({ currentSession: session }),
   
   // 메시지 설정
-  setMessages: (messages) => set({ messages }),
+  setMessages: (messages) => {
+    console.log('[채팅 스토어] 메시지 목록 설정:', messages.length, '개');
+    set({ messages });
+  },
   
   // 메시지 추가
-  addMessage: (message) => set((state) => ({ 
-    messages: [...state.messages, message] 
-  })),
+  addMessage: (message) => {
+    console.log('[채팅 스토어] 새 메시지 추가:', message.role, message.id);
+    set((state) => ({ 
+      messages: [...state.messages, message] 
+    }));
+  },
   
   // 메시지 초기화
   clearMessages: () => set({ messages: [] }),
