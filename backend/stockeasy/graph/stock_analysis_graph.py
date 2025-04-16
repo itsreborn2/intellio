@@ -293,11 +293,11 @@ class StockAnalysisGraph:
         # 병렬 검색 에이전트 생성
         parallel_search_agent = ParallelSearchAgent({
             "telegram_retriever": self.agents.get("telegram_retriever"),
+            "revenue_breakdown": self.agents.get("revenue_breakdown"),
             "report_analyzer": self.agents.get("report_analyzer"),
             "financial_analyzer": self.agents.get("financial_analyzer"),
             "industry_analyzer": self.agents.get("industry_analyzer"),
             "confidential_analyzer": self.agents.get("confidential_analyzer"),
-            "revenue_breakdown": self.agents.get("revenue_breakdown")
         }, graph=self)  # 현재 그래프 인스턴스 전달
         
         # 그래프 초기화
@@ -679,8 +679,6 @@ class StockAnalysisGraph:
         # 등록된 에이전트들로 그래프 구축
         self.graph = self._build_graph(db)
         
-        # LangSmith 트레이싱 설정은 그래프 컴파일 시 이미 추가됨
-        logger.info("그래프 구축 완료")
     
     async def process_query(self, query: str, session_id: Optional[str] = None, 
                            stock_code: Optional[str] = None, stock_name: Optional[str] = None,
@@ -720,7 +718,6 @@ class StockAnalysisGraph:
             agent_results = {}
             if is_follow_up:
                 agent_results = kwargs.get("agent_results", {})
-                logger.info(f"[process_query] 이전 에이전트 결과물 샘플: {agent_results.get('report_analyzer', {}).get('data', {}).get('analysis', '').get('llm_response', '')}")
 
             # 스트리밍 콜백 함수 추출 및 클래스 멤버로 저장
             streaming_callback = kwargs.get("streaming_callback")

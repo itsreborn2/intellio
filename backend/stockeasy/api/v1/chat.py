@@ -66,8 +66,8 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
             "complete": "재무 분석 완료"
         },
         "revenue_breakdown": {
-            "start": "매출 및 수주 현황 분석 중...",
-            "complete": "매출 및 수주 현황 분석 완료"
+            "start": "재무 데이터 분석 중...",
+            "complete": "재무 데이터 분석 완료"
         },
         "industry_analyzer": {
             "start": "산업 및 경쟁사 분석 중...",
@@ -82,12 +82,12 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
             "complete": "정보 통합 완료"
         },
         "summarizer": {
-            "start": "결과 요약 생성 중...",
-            "complete": "요약 생성 완료"
+            "start": "결과 정리 중...",
+            "complete": "결과 정리 완료"
         },
         "response_formatter": {
-            "start": "답변 형식 최적화 중...",
-            "complete": "답변 형식화 완료"
+            "start": "답변 생성 중...",
+            "complete": "답변 생성 완료"
         },
         "fallback_manager": {
             "start": "대체 정보 탐색 중...",
@@ -98,8 +98,8 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
             "complete": "데이터 검색 완료"
         },
         "context_response": {
-            "start": "이전 대화 맥락 고려 중...",
-            "complete": "대화 맥락 분석 완료"
+            "start": "문서 내용 검색 중...",
+            "complete": "문서 내용 검색 완료"
         }
     }
     

@@ -171,10 +171,11 @@ class ContextResponseAgent(BaseAgent):
 대신 관련된 다른 정보를 짧게 제공하세요.
 """
             user_prompt = f"""
+오늘 일자: {datetime.now().strftime("%Y-%m-%d")}
 종목명: {stock_name}
 종목코드: {stock_code}
 현재 질문:
-{modified_query}
+{query}
 
 최초 분석내용:
 {formatted_agent_results}

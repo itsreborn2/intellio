@@ -118,14 +118,14 @@ class StockeasyRAGService:
         )
         logger.info(f"기업리포트 검색 결과: {len(all_chunks.documents)}개 문서 검색됨")
 
-        for idx, doc in enumerate(all_chunks.documents[:3]):
-            logger.warning(f"문서 #{idx}")
-            score_str = f"{doc.score:.4f}" if doc.score is not None else "0.0000"
-            logger.warning(f"- 유사도 점수: {score_str}")
-            meta = doc.metadata.copy()
-            meta.pop("coordinates")
-            logger.warning(f"- 메타데이터: {json.dumps(meta, ensure_ascii=False)}")
-            logger.warning(f"- 내용: {doc.page_content[:200]}...")  # 내용이 너무 길 수 있으므로 200자로 제한
+        # for idx, doc in enumerate(all_chunks.documents[:3]):
+        #     logger.warning(f"문서 #{idx}")
+        #     score_str = f"{doc.score:.4f}" if doc.score is not None else "0.0000"
+        #     logger.warning(f"- 유사도 점수: {score_str}")
+        #     meta = doc.metadata.copy()
+        #     meta.pop("coordinates")
+        #     logger.warning(f"- 메타데이터: {json.dumps(meta, ensure_ascii=False)}")
+        #     logger.warning(f"- 내용: {doc.page_content[:200]}...")  # 내용이 너무 길 수 있으므로 200자로 제한
         logger.info(f"검색된 총 청크 수: {len(all_chunks.documents)}")
 
 
