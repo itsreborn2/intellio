@@ -84,3 +84,19 @@ export interface IQuestionCountSummary {
     [key: string]: number; // 날짜별 질문 수 (YYYY-MM-DD: count)
   };
 } 
+
+// 20malist.csv 파일의 데이터 구조
+export interface MaListData {
+  종목코드: string;
+  종목명: string;
+  섹터?: string;
+  대표종목?: string;
+  등락률?: string; // 종목 등락률
+  변동일?: string;
+  포지션?: string;
+  '20일 이격'?: string;
+  산업?: string; // 산업명 필드 추가
+  '산업 등락률'?: string; // 산업 등락률 필드 추가
+  '대표종목(RS)'?: string;
+  // 필요에 따라 다른 필드 추가 가능
+}

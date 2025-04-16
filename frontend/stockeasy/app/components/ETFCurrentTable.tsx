@@ -833,30 +833,28 @@ export default function ETFCurrentTable() {
     return '#F3F4F6';
   };
 
-  // 산업별 평균 등락률 계산
-  const calculateIndustryAverage = useCallback((industry: string, data: Record<string, any[]>) => {
-    if (!data[industry] || data[industry].length === 0) return '0.00%';
-    
-    let sum = 0;
-    let count = 0;
-    
-    data[industry].forEach((item) => {
-      const changeRate = item['등락율'];
-      if (changeRate) {
-        const numValue = parseFloat(changeRate.replace('%', ''));
-        if (!isNaN(numValue)) {
-          sum += numValue;
-          count++;
+  // 산업별 등락률(20malist.csv 기반) 반환 함수
+  // maListMap에서 산업명을 찾아 해당 산업의 '산업 등락률' 값을 반환합니다.
+  const getIndustryChangeRate = useCallback((industry: string): string => {
+    // maListMap의 값들(MaListData 객체들)을 순회하며 산업명이 일치하는 첫 번째 행을 찾습니다.
+    for (const stockName in maListMap) {
+      const row = maListMap[stockName];
+      // 타입 가드 추가: row 객체 및 필요한 속성이 존재하는지 확인
+      if (row && typeof row === 'object' && '산업' in row && row['산업'] && typeof row['산업'] === 'string' && '산업 등락률' in row) {
+        // 산업명 비교 시, 공백을 제거하고 대소문자 구분 없이 비교합니다.
+        // maListMap의 '산업' 필드와 테이블의 industry 이름이 일치하는지 확인합니다.
+        if (row['산업'].replace(/\s/g, '').toLowerCase() === industry.replace(/\s/g, '').toLowerCase()) {
+          // 일치하는 행을 찾으면 해당 행의 '산업 등락률' 값을 반환합니다.
+          // 값이 없거나 빈 문자열이면 '-'를 반환합니다.
+          return typeof row['산업 등락률'] === 'string' ? row['산업 등락률'] || '-' : '-';
         }
       }
-    });
-    
-    if (count === 0) return '0.00%';
-    const average = sum / count;
-    return average.toFixed(2) + '%';
-  }, []);
+    }
+    // 일치하는 산업명을 찾지 못한 경우 '-'를 반환합니다.
+    return '-';
+  }, [maListMap]); // maListMap이 변경될 때만 함수를 재생성합니다.
 
-  // 변동률에 따른 색상 클래스 반환 함수 (평균용)
+  // 변동률에 따른 색상 클래스 반환 함수 (평균용 -> 산업 등락률용으로 재사용)
   const getAverageColorClass = (change: string) => {
     const numValue = parseFloat(change.replace('%', ''));
     if (numValue > 0) return 'text-red-400';
@@ -1227,8 +1225,8 @@ export default function ETFCurrentTable() {
                           <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ borderRadius: '4px' }}>
                             {industry === '소비재/음식료' ? '소비재/음식료' : industry}
                           </span>
-                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`} style={{ paddingLeft: '2px', width: '100%' }}>
-                            {calculateIndustryAverage(industry, sortedData)}
+                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(getIndustryChangeRate(industry))}`} style={{ paddingLeft: '2px', width: '100%' }}>
+                            {getIndustryChangeRate(industry)}
                           </span>
                         </div>
                       </td>
@@ -1286,7 +1284,10 @@ export default function ETFCurrentTable() {
                             // maListMap에서 20일 이격 데이터 가져오기
                             const stockName = row['종목명'] as string;
                             const maData = maListMap[stockName?.trim()];
-                            const maPositionText = maData ? maData['20일 이격'] : '-';
+                            // 타입 가드 추가: maData 객체 및 '20일 이격' 속성 존재 및 타입 확인
+                            const maPositionText = (maData && typeof maData === 'object' && '20일 이격' in maData && typeof maData['20일 이격'] === 'string')
+                              ? maData['20일 이격']
+                              : '-';
                             
                             let textColor = 'text-gray-500'; // 기본값
                             if (maPositionText?.startsWith('+')) {
@@ -1321,44 +1322,48 @@ export default function ETFCurrentTable() {
                             }
                             return <div className={`text-center tabular-nums ${textColor}`}>{displayDate}</div>;
                           } else if (header === '대표종목(RS)') {
-                            // 대표종목 데이터 표시
-                            const ticker = row['티커'];
-                            if (!ticker) return '-';
-                            
-                            // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
-                            const tickerVariations = [
-                              ticker,
-                              ticker.padStart(6, '0'),
-                              ticker.replace(/^0+/, '')
-                            ];
-                            
-                            // 모든 티커 변형에 대해 대표종목 검색
-                            let stockList = null;
-                            for (const variant of tickerVariations) {
-                              if (etfStockList[variant] && etfStockList[variant].length > 0) {
-                                stockList = etfStockList[variant];
-                                break;
-                              }
+                            // 대표종목(RS) 데이터 표시 (20malist.csv 기반)
+                            const stockName = row['종목명'] as string;
+                            const maData = maListMap[stockName?.trim()];
+                            // 타입 가드 추가: maData 객체 및 '대표종목(RS)' 속성 존재 및 타입 확인
+                            const representativeStocksRS = (maData && typeof maData === 'object' && '대표종목(RS)' in maData && typeof maData['대표종목(RS)'] === 'string')
+                              ? maData['대표종목(RS)']
+                              : null;
+
+                            if (!representativeStocksRS) {
+                              return '-'; // 20malist.csv에 해당 종목 데이터 없음
                             }
-                            
-                            // 대표종목이 없으면 '-' 반환
-                            if (!stockList || stockList.length === 0) {
-                              return '-';
+
+                            // 문자열 파싱: "종목명1(RS1), 종목명2(RS2), ..."
+                            const items = representativeStocksRS.split(',').map((item: string) => item.trim()).filter((item: string) => item);
+
+                            if (items.length === 0) {
+                              return '-'; // 문자열이 비어 있거나 형식이 잘못됨
                             }
-                            
-                            // 모든 대표종목 표시
+
                             return (
                               <div className="flex flex-wrap items-center gap-1">
-                                {stockList.map((item, index) => (
-                                  <div key={index} className="flex items-center">
-                                    <span className="text-xs">{item.name}</span>
-                                    {item.rs && (
-                                      <span className={`text-xs ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable">
-                                        ({item.rs})
-                                      </span>
-                                    )}
-                                  </div>
-                                ))}
+                                {items.map((itemString: string, index: number) => {
+                                  // 정규식을 사용하여 이름과 RS 값 추출 (예: "삼성전자(34)")
+                                  const match = itemString.match(/(.+)\s*\((\d+)\)/);
+                                  if (match && match.length === 3) {
+                                    const name = match[1].trim();
+                                    const rsValue = parseInt(match[2], 10);
+                                    const isBold = rsValue >= 90;
+
+                                    return (
+                                      <div key={index} className="flex items-center">
+                                        <span className="text-xs">{name}</span>
+                                        <span className={`text-xs ${isBold ? 'font-bold' : ''}`}>
+                                          ({rsValue})
+                                        </span>
+                                      </div>
+                                    );
+                                  }
+                                  // 형식 불일치 시 원본 문자열 표시 (오류 표시용)
+                                  // 타입 명시적 지정으로 린트 오류 방지
+                                  return <span key={index} className="text-xs text-red-500">?{itemString as string}?</span>;
+                                })}
                               </div>
                             );
                           }
