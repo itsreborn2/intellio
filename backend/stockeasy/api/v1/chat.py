@@ -168,7 +168,6 @@ class ChatMessageResponse(BaseResponse):
     stock_name: Optional[str] = None
     content: str
     content_expert: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
     agent_results: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
