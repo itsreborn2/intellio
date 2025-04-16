@@ -300,7 +300,7 @@ class ContextResponseAgent(BaseAgent):
 
 
 -----------------------------
------ 텔레그램 분석 결과 -----
+----- 내부DB 분석 결과 -----
 {telegram_analyzer_summary}
 
 
