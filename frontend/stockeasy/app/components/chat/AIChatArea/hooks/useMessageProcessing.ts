@@ -35,7 +35,8 @@ interface MessageProcessingHook {
   sendMessage: (
     inputMessage: string, 
     selectedStock: StockOption | null, 
-    recentStocks: StockOption[]
+    recentStocks: StockOption[],
+    isFollowUp?: boolean
   ) => Promise<void>;
   saveAsPdf: (sessionId: string, expertMode?: boolean) => Promise<void>;
   isPdfLoading: boolean;
@@ -126,7 +127,8 @@ function useMessageProcessing(
   const sendMessage = useCallback(async (
     inputMessage: string,
     selectedStock: StockOption | null,
-    recentStocks: StockOption[]
+    recentStocks: StockOption[],
+    isFollowUp: boolean = false
   ) => {
     // 입력값 검증 - 현재 세션이 있으면 종목이 없어도 가능
     if (!inputMessage.trim()) {
@@ -211,12 +213,30 @@ function useMessageProcessing(
             throw new Error('세션이 없는 상태에서 종목이 선택되지 않았습니다.');
           }
           
-          // 종목명(종목코드) : 질문내용 형식으로 세션명 생성
+          // 종목 정보 추출
           const stockName = selectedStock.stockName || '종목명';
-          const stockCode = selectedStock.stockCode || '000000';
+          const stockCode = selectedStock.value || selectedStock.stockCode || '000000';
+          
+          // 종목명(종목코드) : 질문내용 형식으로 세션명 생성
           const session_name = `${stockName}(${stockCode}) : ${inputMessage}`;
           
-          const newSession = await createChatSession(session_name);
+          // 종목 추가 정보 구성 (현재 StockOption 인터페이스의 필드만 사용)
+          const stockInfoData = {
+            value: selectedStock.value,
+            label: selectedStock.label,
+            stockName: selectedStock.stockName,
+            stockCode: selectedStock.stockCode,
+            display: selectedStock.display
+          };
+          
+          // 세션 생성 요청 (종목 정보 포함)
+          const newSession = await createChatSession(
+            session_name,
+            stockCode,
+            stockName,
+            stockInfoData
+          );
+          
           sessionId = newSession.id;
           setCurrentSession(newSession);
           
@@ -340,18 +360,18 @@ function useMessageProcessing(
             stopTimer();
             
             // 현재 메시지 목록 로깅
-            console.log('[MessageProcessing] 상태 메시지 제거 전 ChatContext 메시지 목록:', 
-              JSON.stringify(
-                Array.isArray(getMessages?.()) 
-                  ? getMessages?.().map(m => ({ id: m.id, role: m.role })) 
-                  : '메시지 목록 접근 불가'
-              )
-            );
+            // console.log('[MessageProcessing] 상태 메시지 제거 전 ChatContext 메시지 목록:', 
+            //   JSON.stringify(
+            //     Array.isArray(getMessages?.()) 
+            //       ? getMessages?.().map(m => ({ id: m.id, role: m.role })) 
+            //       : '메시지 목록 접근 불가'
+            //   )
+            // );
             
             // 상태 메시지가 아직 존재하는 경우에만 제거 (토큰이 없을 경우)
             try {
-              console.log('[MessageProcessing] 상태 메시지 제거 전 ChatContext 메시지 수:', getMessages?.()?.length || 0);
-              console.log('[MessageProcessing] 상태 메시지 제거 시도:', statusMessageObj.id);
+              //console.log('[MessageProcessing] 상태 메시지 제거 전 ChatContext 메시지 수:', getMessages?.()?.length || 0);
+              //console.log('[MessageProcessing] 상태 메시지 제거 시도:', statusMessageObj.id);
               
               // 제거 전 ID 문자열이 'status-'로 시작하는지 확인 (안전 검증)
               if (!statusMessageObj.id.startsWith('status-')) {
@@ -363,11 +383,11 @@ function useMessageProcessing(
               const currentMessages = getMessages?.() || [];
               // 사용자 메시지 수 확인
               const userMessageCount = currentMessages.filter(msg => msg.role === 'user').length;
-              console.log('[MessageProcessing] 상태 메시지 제거 전 사용자 메시지 수:', userMessageCount);
+              //console.log('[MessageProcessing] 상태 메시지 제거 전 사용자 메시지 수:', userMessageCount);
               
               // 메시지 목록에서 상태 메시지 삭제
               removeMessage(statusMessageObj.id);
-              console.log('[MessageProcessing] 상태 메시지 제거 완료:', statusMessageObj.id);
+              //console.log('[MessageProcessing] 상태 메시지 제거 완료:', statusMessageObj.id);
               
               // useChatStore에서도 상태 메시지 제거
               const messagesWithoutStatus = chatStore.messages.filter(
@@ -378,8 +398,8 @@ function useMessageProcessing(
               // 상태 메시지 제거 후 메시지 목록 확인
               const messagesAfterRemoval = getMessages?.() || [];
               const userMessageCountAfter = messagesAfterRemoval.filter(msg => msg.role === 'user').length;
-              console.log('[MessageProcessing] 상태 메시지 제거 후 ChatContext 메시지 수:', messagesAfterRemoval.length);
-              console.log('[MessageProcessing] 상태 메시지 제거 후 사용자 메시지 수:', userMessageCountAfter);
+              //console.log('[MessageProcessing] 상태 메시지 제거 후 ChatContext 메시지 수:', messagesAfterRemoval.length);
+              //console.log('[MessageProcessing] 상태 메시지 제거 후 사용자 메시지 수:', userMessageCountAfter);
               
               // 사용자 메시지가 줄어들었는지 확인 (문제 발견)
               if (userMessageCountAfter < userMessageCount) {
@@ -534,7 +554,8 @@ function useMessageProcessing(
             setProcessing(false);
             toast.error(`메시지 처리 중 오류: ${error.message || '알 수 없는 오류'}`);
           }
-        }
+        },
+        isFollowUp  // 후속질문 여부 전달
       );
 
       // 최근 조회 종목에 추가 (종목이 선택된 경우에만)

@@ -145,38 +145,38 @@ class OrchestratorAgent(BaseAgent):
             
             # 계획 변경, 모든 에이전트 다 실행
             # LLM 호출로 계획 수립
-            execution_plan = await self.agent_llm.with_structured_output(ExecutionPlanModel).ainvoke(
-                prompt,
-                user_id=user_id,
-                project_type=ProjectType.STOCKEASY,
-                db=self.db
-            )
+            # execution_plan = await self.agent_llm.with_structured_output(ExecutionPlanModel).ainvoke(
+            #     prompt,
+            #     user_id=user_id,
+            #     project_type=ProjectType.STOCKEASY,
+            #     db=self.db
+            # )
             
-            # 실행 계획 로깅
-            logger.info(f"Execution plan created: {execution_plan.dict()}")
+            # # 실행 계획 로깅
+            # logger.info(f"Execution plan created: {execution_plan.dict()}")
             
-            # 최종 실행 계획 구성
-            plan_id = str(uuid.uuid4())
-            final_plan = {
-                "plan_id": plan_id,
-                "created_at": datetime.now(),
-                "agents": [
-                    {
-                        "agent_name": agent.agent_name,
-                        "enabled": agent.enabled,
-                        "priority": agent.priority,
-                        "parameters": agent.parameters or {}
-                    } 
-                    for agent in execution_plan.agents
-                ],
-                "execution_order": execution_plan.execution_order,
-                "integration_strategy": execution_plan.integration_strategy,
-                "expected_output": execution_plan.expected_output,
-                "fallback_strategy": execution_plan.fallback_strategy
-            }
+            # # 최종 실행 계획 구성
+            # plan_id = str(uuid.uuid4())
+            # final_plan = {
+            #     "plan_id": plan_id,
+            #     "created_at": datetime.now(),
+            #     "agents": [
+            #         {
+            #             "agent_name": agent.agent_name,
+            #             "enabled": agent.enabled,
+            #             "priority": agent.priority,
+            #             "parameters": agent.parameters or {}
+            #         } 
+            #         for agent in execution_plan.agents
+            #     ],
+            #     "execution_order": execution_plan.execution_order,
+            #     "integration_strategy": execution_plan.integration_strategy,
+            #     "expected_output": execution_plan.expected_output,
+            #     "fallback_strategy": execution_plan.fallback_strategy
+            # }
             
             # 기본 실행 계획 생성 및 상태 업데이트
-            #execution_plan = self._create_default_plan(state)
+            final_plan = self._create_default_plan(state)
             state["execution_plan"] = final_plan
             
             # 처리 상태 업데이트

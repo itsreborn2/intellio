@@ -324,13 +324,17 @@ class StockAnalysisGraph:
         def question_analyzer_router(state: AgentState) -> str:
             """질문 분석기 이후 라우팅 결정"""
             # 컨텍스트 분석 결과 확인
+            is_follow_up = state.get("is_follow_up", False)
+            logger.info(f"[question_analyzer_router] 후속질문 여부: {is_follow_up}")
+            
             context_analysis = state.get("context_analysis", {})
             is_followup_question = context_analysis.get("is_followup_question", False)
             requires_context = context_analysis.get("requires_context", False)
             
             # 대화 컨텍스트가 필요한 경우 context_response로 라우팅
-            if requires_context:
-                logger.info(f"대화 컨텍스트가 필요한 질문으로 context_response 에이전트로 라우팅합니다.")
+            #if requires_context:
+            if is_follow_up:
+                logger.info(f"후속질문으로 context_response 에이전트로 라우팅합니다.")
                 # 처리 상태 업데이트
                 if "processing_status" not in state:
                     state["processing_status"] = {}
@@ -690,6 +694,10 @@ class StockAnalysisGraph:
             stock_code: 종목 코드 (선택적)
             stock_name: 종목명 (선택적)
             **kwargs: 추가 인자
+                is_follow_up: 후속질문 여부
+                streaming_callback: 스트리밍 콜백 함수
+                chat_session_id: 채팅 세션 ID
+                conversation_history: 대화 이력
 
         Returns:
             처리 결과를 담은 딕셔너리
@@ -703,6 +711,16 @@ class StockAnalysisGraph:
             trace_id = session_id or datetime.now().strftime("%Y%m%d%H%M%S")
             chat_session_id = kwargs.get("chat_session_id", None)
             logger.info(f"[process_query] chat_session_id: {chat_session_id}")
+
+            # 후속질문 여부 추출
+            is_follow_up = kwargs.get("is_follow_up", False)
+            logger.info(f"[process_query] 후속질문 여부: {is_follow_up}")
+
+            # 이전 에이전트 결과물 추출
+            agent_results = {}
+            if is_follow_up:
+                agent_results = kwargs.get("agent_results", {})
+                logger.info(f"[process_query] 이전 에이전트 결과물 샘플: {agent_results.get('report_analyzer', {}).get('data', {}).get('analysis', '').get('llm_response', '')}")
 
             # 스트리밍 콜백 함수 추출 및 클래스 멤버로 저장
             streaming_callback = kwargs.get("streaming_callback")
@@ -719,17 +737,18 @@ class StockAnalysisGraph:
                 "chat_session_id": chat_session_id,
                 "stock_code": stock_code,
                 "stock_name": stock_name,
+                "is_follow_up": is_follow_up,  # 후속질문 여부를 상태에 명시적으로 추가
                 "errors": [],
                 "processing_status": {},
                 "retrieved_data": {},  # 검색 결과를 담을 딕셔너리
-                "agent_results": {},   # 명시적으로 agent_results 초기화
+                "agent_results": agent_results,   # 이전 에이전트 결과를 넣어둠.
                 "parallel_search_executed": False,  # 병렬 검색 실행 여부 초기화
                 **kwargs_copy  # streaming_callback을 제외한 나머지 인자
             }
             chat_history = kwargs.get("conversation_history", [])
             if chat_history:
                 logger.info(f"[process_query] 과거 대화 이력: {chat_history[:300]}")
-            
+            #logger.info(f"[process_query] initial_state: {initial_state['stock_code']}, {initial_state['agent_results']}")
             # 재시작 플래그 확인
             restart_from_error = kwargs.get("restart_from_error", False)
             if restart_from_error:

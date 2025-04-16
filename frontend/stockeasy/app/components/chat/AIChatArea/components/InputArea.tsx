@@ -533,11 +533,11 @@ export function InputArea({
             value={inputMessage}
             onChange={handleInputChange}
             onFocus={(e) => {
-              console.log("[InputArea] Input 포커스 받음");
+              //console.log("[InputArea] Input 포커스 받음");
               handleInputFocus();
             }}
             onBlur={() => {
-              console.log("[InputArea] Input 포커스 잃음");
+              //console.log("[InputArea] Input 포커스 잃음");
             }}
             onKeyDown={handleKeyDown}
             onKeyUp={handleKeyUp}

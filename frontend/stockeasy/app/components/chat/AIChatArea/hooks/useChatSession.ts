@@ -20,7 +20,7 @@ interface ChatSessionHook {
   isLoading: boolean;
   messages: ChatMessage[];
   error: string | null;
-  createSession: (sessionName: string) => Promise<IChatSession>;
+  createSession: (sessionName: string, stockCode?: string, stockName?: string, stockInfo?: any) => Promise<IChatSession>;
   loadSession: (sessionId: string) => Promise<void>;
   loadMessages: (sessionId: string) => Promise<ChatMessage[]>;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -38,12 +38,22 @@ export function useChatSession(): ChatSessionHook {
   const [error, setError] = useState<string | null>(null);
 
   // 세션 생성
-  const createSession = useCallback(async (sessionName: string): Promise<IChatSession> => {
+  const createSession = useCallback(async (
+    sessionName: string, 
+    stockCode?: string, 
+    stockName?: string, 
+    stockInfo?: any
+  ): Promise<IChatSession> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const newSession = await createChatSession(sessionName);
+      const newSession = await createChatSession(
+        sessionName, 
+        stockCode, 
+        stockName, 
+        stockInfo
+      );
       setSession(newSession);
       return newSession;
     } catch (err: any) {

@@ -15,13 +15,22 @@ import {
 /**
  * 새 채팅 세션을 생성합니다.
  * @param title 세션 제목 (기본값: "새 채팅")
+ * @param stock_code 종목 코드 (선택)
+ * @param stock_name 종목명 (선택)
+ * @param stock_info 종목 관련 추가 정보 (선택)
  * @returns 생성된 채팅 세션 정보
  */
 export const createChatSession = async (
-  title: string = "새 채팅"
+  title: string = "새 채팅",
+  stock_code?: string,
+  stock_name?: string,
+  stock_info?: any
 ): Promise<IChatSession> => {
   const request: IChatSessionCreateRequest = {
-    title
+    title,
+    stock_code,
+    stock_name,
+    stock_info
   };
 
   const response = await apiFetch(`${API_ENDPOINT_STOCKEASY}/chat/sessions`, {
@@ -169,6 +178,7 @@ export const getChatMessages = async (
  * @param stockCode 종목 코드
  * @param stockName 종목명
  * @param callbacks 콜백 함수들
+ * @param isFollowUp 팔로우업 여부
  */
 export const streamChatMessage = async (
   sessionId: string,
@@ -183,7 +193,8 @@ export const streamChatMessage = async (
     onToken?: (data: { token: string, timestamp: number, message_id: string }) => void,
     onComplete?: (data: any) => void,
     onError?: (error: any) => void
-  }
+  },
+  isFollowUp: boolean = false
 ) => {
   try {
     console.log('[STREAM_CHAT] 스트리밍 시작');
@@ -192,7 +203,8 @@ export const streamChatMessage = async (
     const requestData = {
       message: message,
       stock_code: stockCode,
-      stock_name: stockName
+      stock_name: stockName,
+      is_follow_up: isFollowUp
     }
     
     // SSE 스트리밍 응답 처리

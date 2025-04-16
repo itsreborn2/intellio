@@ -90,7 +90,7 @@ def format_financial_data(formatted_data: List[Dict[str, Any]]) -> str:
     # 원본 데이터 보존을 위해 복사본 생성
     result_strings = []
     
-    print(f"[FIN_FORMAT] 입력 데이터 길이: {len(formatted_data)}")
+    #print(f"[FIN_FORMAT] 입력 데이터 길이: {len(formatted_data)}")
     #print(f"[FIN_FORMAT] 입력 데이터 ID: {id(formatted_data)}")
     
     for idx, item in enumerate(formatted_data):

@@ -135,6 +135,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                 self._add_error(state, "질문이 비어 있습니다.")
                 return state
 
+            #state["agent_results"] = state.get("agent_results", {})
             # user_id 추출
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
@@ -164,7 +165,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                 if context_analysis.requires_context:
                     logger.info("후속 질문으로 감지되어 상세 분석 생략하고 빠르게 리턴합니다.")
 
-                    state["agent_results"] = state.get("agent_results", {})
+                    
                     state["agent_results"]["question_analysis"] = context_analysis_result
                     
                     # 메트릭 기록 및 처리 상태 업데이트
@@ -258,11 +259,10 @@ class QuestionAnalyzerAgent(BaseAgent):
                 "keywords": response.keywords,
                 "detail_level": response.detail_level
             }
-            #question_analysis["entities"]["stock_name"] = stock_name
-            #question_analysis["entities"]["stock_code"] = stock_code
             
             # 상태에 저장
             state["question_analysis"] = question_analysis
+
             state["agent_results"]["question_analysis"] = question_analysis
             # 성능 지표 업데이트
             end_time = datetime.now()

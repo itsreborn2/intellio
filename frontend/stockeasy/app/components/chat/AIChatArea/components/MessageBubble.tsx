@@ -327,7 +327,9 @@ export function MessageBubble({
               color: message.role === 'user' ? '#4ECCA3' : '#10A37F',
               marginBottom: isMobile ? '3px' : '4px'
             }}>
-              {message.stockInfo.stockName} ({message.stockInfo.stockCode})
+              {message.stockInfo.stockName && message.stockInfo.stockName.trim() 
+                ? `${message.stockInfo.stockName} (${message.stockInfo.stockCode})`
+                : message.stockInfo.stockCode}
             </div>
           )}
           

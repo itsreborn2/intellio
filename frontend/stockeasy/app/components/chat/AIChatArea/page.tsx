@@ -450,7 +450,8 @@ function AIChatAreaContent() {
       await sendMessage(
         currentMessage,
         currentStock || null, // 종목이 선택되지 않아도 null로 전달
-        currentRecentStocks
+        currentRecentStocks,
+        state.currentChatSession !== null // 현재 세션이 있으면 후속질문으로 간주
       );
       
       // 기존 로그 대신 사용자 메시지 추적 로그 추가

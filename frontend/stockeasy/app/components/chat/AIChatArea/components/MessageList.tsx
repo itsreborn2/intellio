@@ -224,20 +224,20 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
     const prevLength = prevMessagesLengthRef.current;
     
     // 현재 메시지 목록 로깅
-    console.log('[MessageList] 메시지 목록 변경:', messages.map(m => ({
-      id: m.id,
-      role: m.role,
-      content: m.content.substring(0, 20) + '...' // 내용 일부만 로깅
-    })));
+    // console.log('[MessageList] 메시지 목록 변경:', messages.map(m => ({
+    //   id: m.id,
+    //   role: m.role,
+    //   content: m.content.substring(0, 20) + '...' // 내용 일부만 로깅
+    // })));
     
     // 현재 사용자 메시지 수 계산
     const userMessageCount = messages.filter(msg => msg.role === 'user').length;
-    console.log('[MessageList] 사용자 메시지 수:', userMessageCount);
+    //console.log('[MessageList] 사용자 메시지 수:', userMessageCount);
     
     // 사용자 메시지가 2개 이상이면 자동 스크롤 활성화
     if (userMessageCount >= 2 && !autoScrollEnabled) {
       setAutoScrollEnabled(true);
-      console.log('[MessageList] 사용자 메시지 2개 이상 감지, 자동 스크롤 활성화');
+      //console.log('[MessageList] 사용자 메시지 2개 이상 감지, 자동 스크롤 활성화');
     }
     
     // 새 메시지가 추가된 경우
