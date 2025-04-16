@@ -9,6 +9,8 @@ import ChartComponent from '../components/ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
 import html2canvas from 'html2canvas';
 import TableCopyButton from '../components/TableCopyButton';
+// 미니 캔들 SVG 컴포넌트 import
+import { CandleMini } from 'intellio-common/components/ui/CandleMini';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -80,7 +82,8 @@ export default function RSRankPage() {
   const [highData, setHighData] = useState<CSVData>({ headers: [], rows: [], errors: [] });
   const [highDataLoading, setHighDataLoading] = useState<boolean>(true);
   const [highDataError, setHighDataError] = useState<string | null>(null);
-  const [highSortKey, setHighSortKey] = useState<string>('RS');
+  // 52주 신고가 테이블의 기본 정렬 기준을 '등락률'로 설정 (기존: 'RS')
+  const [highSortKey, setHighSortKey] = useState<string>('등락률');
   const [highSortDirection, setHighSortDirection] = useState<SortDirection>('desc');
   
   // 업데이트 날짜 상태 추가
@@ -1392,7 +1395,7 @@ export default function RSRankPage() {
                   {/* 52주 신고/신저가 테이블 섹션 */}
                   <div className="flex-1">
                     <div ref={highHeaderRef} className="flex justify-between items-center mb-2">
-                      <h2 className="text-sm md:text-base font-semibold text-gray-700">52주 주요 종목</h2>
+                      <h2 className="text-sm md:text-base font-semibold text-gray-700">52주 신고가 주요 종목</h2>
                       <div className="flex items-center space-x-2">
                         {/* 업데이트 날짜 표시 */}
                         {updateDate && (
@@ -1403,7 +1406,7 @@ export default function RSRankPage() {
                         <TableCopyButton 
                           tableRef={highTableRef} 
                           headerRef={highHeaderRef} 
-                          tableName="52주 주요 종목"
+                          tableName="52주 신고가 주요 종목"
                           updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
                         />
                       </div>
@@ -1457,6 +1460,23 @@ export default function RSRankPage() {
                                     )}
                                   </div>
                                 </th>
+                                {/* 당일 캔들 컬럼 헤더 - 등락률 우측에 위치 */}
+                                <th 
+                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 text-center text-xs"
+                                  style={{ width: '90px', height: '35px' }}
+                                >
+                                  <div className="flex items-center justify-center">
+                                    <span>당일 캔들</span>
+                                  </div>
+                                </th>
+                                <th 
+                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 text-center text-xs"
+                                  style={{ width: '70px', height: '35px' }}
+                                >
+                                  <div className="flex items-center justify-center">
+                                    <span>종가(원)</span>
+                                  </div>
+                                </th>
                                 <th 
                                   className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center text-xs"
                                   style={{ width: '60px', height: '35px' }}
@@ -1506,12 +1526,40 @@ export default function RSRankPage() {
                                   <td 
                                     className={`py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis text-xs ${
                                       // 등락률 값에 따라 색상 클래스 적용
-                                      (Number(row['등락률']) || 0) > 0 ? 'text-red-500' : (Number(row['등락률']) || 0) < 0 ? 'text-blue-500' : ''
+                                      (Number(row['등락률']) >= 5)
+                                        ? 'text-red-500' // 5% 이상 빨강
+                                        : (Number(row['등락률']) <= -2)
+                                          ? 'text-blue-500' // -2% 이하 파랑
+                                          : '' // 2% 미만(절대값) 검정(기본)
                                     }`}
                                     style={{ height: '35px' }}
                                   >
                                     {/* RS 값을 숫자로 변환하고 toFixed 적용, 변환 실패 시 0으로 처리 */}
                                     {(Number(row['등락률']) > 0 ? '+' : '') + (Number(row['등락률']) || 0).toFixed(2)}%
+                                  </td>
+                                  {/* 당일 캔들(시가/고가/저가/종가) 셀 - 등락률 우측에 위치 */}
+                                  <td 
+                                    className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis text-xs"
+                                    style={{ height: '35px' }}
+                                  >
+                                    {/* CandleMini: 미니 캔들 SVG를 flex로 셀 중앙에 정렬 */}
+                                    <div className="flex items-center justify-center w-full h-full">
+                                      <CandleMini 
+                                        open={Number(row['시가'])}
+                                        high={Number(row['고가'])}
+                                        low={Number(row['저가'])}
+                                        close={Number(row['종가'])}
+                                        width={28}
+                                        height={44}
+                                      />
+                                    </div>
+                                  </td>
+                                  <td 
+                                    className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis text-xs"
+                                    style={{ height: '35px' }}
+                                  >
+                                    {/* 종가 값이 숫자일 경우 천 단위 콤마로 포맷 */}
+                                    {row['종가'] && !isNaN(Number(row['종가'])) ? Number(row['종가']).toLocaleString('ko-KR') : (row['종가'] || '')}
                                   </td>
                                   <td 
                                     className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis text-xs"

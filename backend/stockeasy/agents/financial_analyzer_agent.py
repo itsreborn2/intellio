@@ -652,6 +652,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             messages = [
                 SystemMessage(content=self.prompt_template),
                 HumanMessage(content=FINANCIAL_ANALYSIS_USER_PROMPT.format(
+                    today=datetime.now().strftime("%Y-%m-%d"),
                     query=query,
                     financial_data=financial_data_str,
                     stock_code=stock_code,

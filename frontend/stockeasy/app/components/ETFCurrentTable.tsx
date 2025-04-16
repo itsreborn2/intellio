@@ -32,11 +32,6 @@ interface ETFData {
   marketCap: number; // 시가총액
 }
 
-// 스파크라인 차트를 위한 인터페이스
-interface StockPriceData {
-  [ticker: string]: { date: string; price: number }[];
-}
-
 // 정렬 타입 정의
 type SortDirection = 'asc' | 'desc' | null;
 
@@ -46,9 +41,6 @@ const ETF_FILES = {
     fileId: '1u46PGtK4RY4vUOBIXzvrFsk_mUsxznbA',
     fileName: 'today_price_etf.csv',
     path: '/requestfile/today_price_etf'
-  },
-  stockList: {
-    path: '/requestfile/etf_stocklist/etf_stocklist.csv'
   }
 };
 
@@ -179,12 +171,12 @@ export default function ETFCurrentTable() {
   const [error, setError] = useState<string | null>(null);  
   const [sortKey, setSortKey] = useState<string>('산업');  // 정렬 상태 - 기본값으로 산업 컬럼 오름차순 설정
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [stockPriceData, setStockPriceData] = useState<StockPriceData>({});
+  // 개별 ETF 차트 데이터 관련 상태 제거됨
   const [tickerMappingInfo, setTickerMappingInfo] = useState<{
     tickerMap: {[key: string]: string},
     stockNameMap: {[key: string]: string}
   }>({ tickerMap: {}, stockNameMap: {} });
-  const [etfStockList, setEtfStockList] = useState<{[key: string]: Array<{name: string, rs: string}>}>({});
+
   const [updateDate, setUpdateDate] = useState<string | null>(null); // Add state for update date
   const [maListMap, setMaListMap] = useState<Record<string, MaListData>>({}); // 종목명 -> 20malist 데이터
   
@@ -192,237 +184,9 @@ export default function ETFCurrentTable() {
   const tableRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
-  // 사용 가능한 티커 목록 (rs_etf 폴더에 있는 파일 이름)
-  const availableTickers = [
-    '069500', '091160', '091170', '091180', '098560', '102970', '139220', 
-    '139240', '139250', '139270', '140700', '140710', '157490', '227540', 
-    '228790', '228800', '228810', '229200', '261070', '364980', 
-    '364990', '365000', '433500', '438900', '445290', '449450', '455860', 
-    '457990', '460280', '463050', '463250', '464600', '464610', '466920', 
-    '475050', '475300', '475310', '479850', '483020', '487240'
-  ];
+  // 개별 ETF 차트 데이터 관련 티커 목록 및 매핑 테이블 제거됨
   
-  // 티커 매핑 테이블 (today_price_etf 티커 -> rs_etf 파일 이름)
-  const tickerMappingTable: {[key: string]: string} = {
-    // 코스피/코스닥 ETF
-    '069500': '069500', // KODEX 200
-    '229200': '229200', // KODEX 코스닥150
-    '091180': '091180', // KODEX 자동차
-    '140710': '140710', // KODEX 운송
-    '227540': '227540', // TIGER 200 헬스케어
-    '261070': '261070', // TIGER 코스닥150바이오테크
-    '139240': '139240', // TIGER 200 철강소재
-    
-    // 산업/테마 ETF
-    '433500': '433500', // ACE 원자력테마딥서치
-    '457990': '457990', // PLUS 태양광&ESS
-    '460280': '460280', // KIWOOM Fn유전자혁신기술
-    '463050': '463050', // TIMEFOLIO K바이오액티브
-    '463250': '463250', // TIGER 우주방산
-    '464600': '464600', // SOL 자동차소부장Fn
-    '464610': '464610', // SOL 의료기기소부장Fn
-    '466920': '466920', // SOL 조선TOP3플러스
-    '483020': '483020', // KIWOOM 의료AI
-    '487240': '487240', // KODEX AI전력핵심설비
-    '449450': '449450', // PLUS K방산
-    
-    // 추가 매핑
-    '098560': '098560', // 키움글로벌클라우드플러스
-    '102970': '102970', // 신한BNPP코리아우량회사채
-    '139220': '139220', // 솔라엣지테크놀로지
-    '139250': '139250', // 미래에셋맵스아시아퍼시픽
-    '139270': '139270', // 미래에셋맵스미국블루칩
-    '140700': '140700', // 미래에셋맵스브라질
-    '157490': '157490', // 미래에셋맵스인디아
-    '228790': '228790', // 스마트베타유니버스
-    '228800': '228800', // 스마트베타모멘텀
-    '228810': '228810', // 스마트베타퀄리티
-    '364980': '364980', // 미래에셋글로벌리츠
-    '364990': '364990', // 미래에셋글로벌헬스케어
-    '365000': '365000', // 미래에셋글로벌인컴
-    '438900': '438900', // 한화글로벌메타버스
-    '445290': '445290', // 한화글로벌헬스케어
-    '455860': '455860', // 미래에셋글로벌테크
-    '475050': '475050', // 미래에셋글로벌클린에너지
-    '475300': '475300', // 미래에셋글로벌인프라
-    '475310': '475310', // 미래에셋글로벌리츠부동산
-    '479850': '479850'  // 미래에셋글로벌테크놀로지
-  };
-  
-  // 종가 데이터 로드 함수
-  const loadPriceData = async (ticker: string): Promise<{ date: string; price: number }[]> => {
-    try {
-      // 티커가 없으면 빈 배열 반환
-      if (!ticker || ticker === 'N/A') {
-        // (불필요한 에러 로그 삭제)
-        // console.error(`유효하지 않은 티커: ${ticker}`);
-        return [];
-      }
-      
-      // CSV 파일 로드
-      const response = await fetch(`/requestfile/rs_etf/${ticker}.csv?t=${Date.now()}`);
-      if (!response.ok) {
-        // (불필요한 에러 로그 삭제)
-        // console.error(`${ticker} CSV 파일을 불러오는데 실패했습니다: ${response.status}`);
-        return [];
-      }
-      
-      const csvText = await response.text();
-      const result = Papa.parse(csvText, { header: true });
-      
-      // 종가 데이터 추출 (CSV 파일은 이미 날짜순으로 정렬되어 있음 - 과거에서 현재로)
-      const closePrices = result.data
-        .filter((row: any) => row['종가'] && !isNaN(parseFloat(row['종가'])) && row['날짜'])
-        .map((row: any) => ({ 
-          date: row['날짜'], // YYYY-MM-DD 형식
-          price: parseFloat(row['종가']) 
-        }));
-      
-      // 날짜 기준으로 정렬 (과거 -> 현재)
-      closePrices.sort((a, b) => {
-        const dateA = new Date(a.date);
-        const dateB = new Date(b.date);
-        return dateA.getTime() - dateB.getTime();
-      });
-      
-      return closePrices;
-    } catch (error) {
-      // (불필요한 에러 로그 삭제)
-      // console.error(`${ticker} 종가 데이터 로드 중 오류 발생:`, error);
-      return [];
-    }
-  };
-  
-  // 모든 티커에 대한 종가 데이터 로드
-  const loadAllPriceData = async (tickers: string[]) => {
-    const priceData: StockPriceData = {};
-    const tickerMap: {[key: string]: string} = {}; // 원본 티커와 정규화된 티커 매핑
-    const stockNameMap: {[key: string]: string} = {}; // 티커와 종목명 매핑
-    
-    // 유효한 티커만 필터링
-    const validTickers = tickers.filter(ticker => ticker && ticker.trim().length > 0);
-    
-    // 티커별 데이터 로드 (순차적으로 처리하여 종목명 매칭 로직이 제대로 작동하도록 함)
-    for (const ticker of validTickers) {
-      try {
-        // 티커와 함께 종목명도 가져오기 (있는 경우)
-        // 원본 데이터에서 해당 티커의 종목명 찾기
-        let stockName = '';  // 기본값을 빈 문자열로 초기화
-        
-        // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
-        const tickerVariations = [
-          ticker,
-          ticker.padStart(6, '0'),
-          ticker.replace(/^0+/, '')
-        ];
-        
-        // groupedData 전체를 순회하지 않고, rows에서 직접 종목명 매칭 (불필요한 반복 제거)
-        // rows는 parseCSV에서 이미 가공된 전체 데이터임
-        for (const tickerVariant of tickerVariations) {
-          const matchingRow = csvData.rows.find((row: Record<string, any>) =>
-            row['티커'] === tickerVariant ||
-            row['티커']?.padStart(6, '0') === tickerVariant.padStart(6, '0')
-          );
-          if (matchingRow) {
-            stockName = matchingRow['종목명'] || '';
-            stockNameMap[ticker] = stockName;
-            break;
-          }
-        } // 기존 groupedData 반복 제거, rows에서 바로 탐색하도록 변경 (성능 및 가독성 개선)
-
-        
-        // 티커 정규화
-        const normalizedTicker = await normalizeTicker(ticker, stockName);
-        if(normalizedTicker !== null) {
-          tickerMap[ticker] = normalizedTicker;
-        } else {
-          tickerMap[ticker] = 'N/A';
-        }
-        
-        if (normalizedTicker) {
-          const prices = await loadPriceData(normalizedTicker);
-          if (prices && prices.length > 0) {
-            priceData[ticker] = prices; // 원래 티커 값을 키로 사용
-          } else {
-          }
-        } else {
-        }
-      } catch (error) {
-        // (불필요한 에러 로그 삭제)
-        // console.error(`${ticker} 처리 중 오류:`, error);
-      }
-    }
-    
-    return { priceData, tickerMap, stockNameMap };
-  };
-  
-  // 티커 정규화 함수
-  const normalizeTicker = async (ticker: string, stockName?: string): Promise<string | null> => {
-    if (!ticker) return null;
-    
-    // 공백 제거
-    const cleaned = ticker.trim();
-    
-    // 원본 티커와 앞에 0을 추가한 버전 모두 시도
-    const variations = [
-      cleaned,                           // 원본
-      cleaned.padStart(6, '0'),          // 6자리로 패딩 (069500 형식)
-      cleaned.replace(/^0+/, '')         // 앞의 0 제거 (69500 -> 69500)
-    ];
-    
-    // // (불필요한 로그 완전 제거)
-// console.log(`티커 변형 시도: ${variations.join(', ')}`);
-    
-    // 1. 티커 매핑 테이블에서 매핑된 티커를 찾음
-    for (const variant of variations) {
-      if (tickerMappingTable[variant]) {
-        const mappedTicker = tickerMappingTable[variant];
-        return mappedTicker;
-      }
-    }
-    
-    // 2. 정확히 일치하는 티커가 있는지 확인
-    for (const variant of variations) {
-      if (availableTickers.includes(variant)) {
-        return variant;
-      }
-    }
-    
-    // 3. 종목명을 사용하여 매핑 시도 (stockName이 제공된 경우)
-    if (stockName) {
-      // 종목명에서 공통 부분을 추출 (예: "KODEX", "TIGER" 등)
-      const stockNameParts = stockName.split(' ');
-      if (stockNameParts.length > 0) {
-        const prefix = stockNameParts[0]; // "KODEX", "TIGER" 등
-        
-        // 해당 접두사를 가진 티커 찾기
-        for (const availableTicker of availableTickers) {
-          // 해당 티커의 CSV 파일을 로드하여 종목명 확인
-          try {
-            const response = await fetch(`/requestfile/rs_etf/${availableTicker}.csv?t=${Date.now()}`);
-            if (response.ok) {
-              const csvText = await response.text();
-              const result = Papa.parse(csvText, { header: true });
-              
-              if (result.data && result.data.length > 0) {
-                const firstRow = result.data[0] as Record<string, unknown>;
-                const csvStockName = firstRow['종목명'] as string;
-                
-                if (csvStockName && csvStockName.includes(prefix)) {
-                  return availableTicker;
-                }
-              }
-            }
-          } catch (error) {
-            console.error(`종목명 매칭 시도 중 오류:`, error);
-          }
-        }
-      }
-    }
-    
-    // 매칭되는 티커가 없음
-    return null;
-  };
+  // 개별 ETF 차트 데이터 로딩 관련 함수들(loadPriceData, loadAllPriceData, normalizeTicker) 제거됨
   
   useEffect(() => {
     // 페이지 로드 시 데이터 로드
@@ -482,47 +246,25 @@ export default function ETFCurrentTable() {
           });
         });
         
-        // 티커별 종가 데이터 로드
-        const { priceData, tickerMap, stockNameMap } = await loadAllPriceData(tickers);
+        // 티커별 종가 데이터 로드 부분 제거됨 - 개별 ETF 차트 데이터 로딩 관련 코드
         
-        setStockPriceData(priceData);
-        setTickerMappingInfo({ tickerMap, stockNameMap });
+        // 종목명 매핑 정보만 생성
+        const stockNameMap: {[key: string]: string} = {};
         
-        // ETF 대표종목 데이터 로드
-        const stockListResponse = await fetch(ETF_FILES.stockList.path);
-        if (stockListResponse.ok) {
-          const stockListText = await stockListResponse.text();
-          const stockListResult = Papa.parse(stockListText, { header: true });
-          
-          // ETF 티커별 대표종목 매핑 생성
-          const stockListMap: {[key: string]: Array<{name: string, rs: string}>} = {};
-          stockListResult.data.forEach((row: any) => {
-            if (row['티커']) {
-              // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
-              const tickerVariations = [
-                row['티커'],
-                row['티커'].padStart(6, '0'),
-                row['티커'].replace(/^0+/, '')
-              ];
-              
-              const stockList = [
-                {name: row['대표 구성 종목 1'] || '', rs: row['대표 구성 종목 1rs'] || ''},
-                {name: row['대표 구성 종목 2'] || '', rs: row['대표 구성 종목 2rs'] || ''},
-                {name: row['대표 구성 종목 3'] || '', rs: row['대표 구성 종목 3rs'] || ''},
-                {name: row['대표 구성 종목 4'] || '', rs: row['대표 구성 종목 4rs'] || ''}
-              ].filter(item => item.name); // 빈 문자열 제거
-              
-              // 모든 티커 변형에 대해 매핑 추가
-              tickerVariations.forEach(variant => {
-                if (variant) {
-                  stockListMap[variant] = stockList;
-                }
-              });
-            }
-          });
-          
-          setEtfStockList(stockListMap);
-        }
+        // 티커에서 종목명 매핑 생성
+        tickers.forEach(ticker => {
+          const matchingRow = parsedData.rows.find((row: Record<string, any>) =>
+            row['티커'] === ticker ||
+            row['티커']?.padStart(6, '0') === ticker.padStart(6, '0')
+          );
+          if (matchingRow) {
+            stockNameMap[ticker] = matchingRow['종목명'] || '';
+          }
+        });
+        
+        setTickerMappingInfo({ tickerMap: {}, stockNameMap });
+        
+        // ETF 대표종목 데이터 로드 부분 제거됨 - 사용되지 않는 etf_stocklist.csv 파일
         
         // 20malist.csv 데이터 로드
         const maListResponse = await fetch('/requestfile/20ma_list/20malist.csv?t=' + Date.now());
@@ -627,68 +369,26 @@ export default function ETFCurrentTable() {
         // (불필요한 로그 완전 제거)
 // console.log('포지션 정렬을 위한 티커:', aTicker, bTicker);
         
-        // 포지션 값 추출 및 처리 - getPositionStatusText 함수 대신 직접 구현
+        // 포지션 값 추출 - maListMap에서 포지션 정보 가져오기
         const extractPositionValue = (ticker: string): number => {
-          if (!ticker || !stockPriceData[ticker] || stockPriceData[ticker].length < 20) return 0;
+          // 티커로 종목명 찾기
+          const stockName = tickerMappingInfo.stockNameMap[ticker] || '';
+          if (!stockName) return 0;
           
-          // 현재가와 20일 이동평균선 데이터 가져오기
-          const priceData = stockPriceData[ticker];
-          if (!priceData || priceData.length < 20) {
-            return 0;
+          // maListMap에서 포지션 정보 가져오기
+          const maData = maListMap[stockName.trim()];
+          if (!maData || !maData['포지션']) return 0;
+          
+          // 포지션 텍스트에 따라 값 할당
+          const positionText = maData['포지션'];
+          
+          if (positionText.includes('유지')) {
+            return 1; // 유지는 양수 값
+          } else if (positionText.includes('이탈')) {
+            return -1; // 이탈은 음수 값
           }
           
-          const currentPrice = priceData[priceData.length - 1].price;
-          const ma20 = priceData.slice(-20).reduce((acc, val) => acc + val.price, 0) / 20;
-          
-          // 현재 상태 (20일선 위 또는 아래)
-          const isAboveMA = currentPrice > ma20;
-          
-          // 유지 기간 계산 - 직접 구현
-          let duration = 0;
-          try {
-            if (!priceData || priceData.length < 2) return isAboveMA ? 1 : -1;
-            
-            // 역순으로 데이터 확인
-            const reversedData = [...priceData].reverse();
-            const ma20Values = [];
-            
-            // 20일 이동평균 계산
-            for (let i = 0; i < reversedData.length - 19; i++) {
-              const slice = reversedData.slice(i, i + 20);
-              const ma = slice.reduce((sum, item) => sum + item.price, 0) / 20;
-              ma20Values.push({
-                price: reversedData[i].price,
-                ma20: ma,
-                date: reversedData[i].date,
-                isAbove: reversedData[i].price > ma
-              });
-            }
-            
-            // 현재 상태
-            const currentStatus = ma20Values[0].isAbove;
-            
-            // 연속 유지 기간 계산
-            duration = 1; // 현재 일자 포함
-            for (let i = 1; i < ma20Values.length; i++) {
-              if (ma20Values[i].isAbove === currentStatus) {
-                duration++;
-              } else {
-                break;
-              }
-            }
-            
-            // 이탈이면 음수로 처리
-            if (!currentStatus) {
-              duration = -duration;
-            }
-          } catch (error) {
-            console.error('포지션 기간 계산 오류:', error);
-            duration = isAboveMA ? 1 : -1; // 오류 발생 시 기본값
-          }
-          
-          // (불필요한 로그 완전 제거)
-// console.log(`티커 ${ticker}의 포지션 값:`, duration);
-          return duration;
+          return 0; // 기타 경우
         };
         
         const aPositionValue = extractPositionValue(aTicker);
@@ -833,30 +533,28 @@ export default function ETFCurrentTable() {
     return '#F3F4F6';
   };
 
-  // 산업별 평균 등락률 계산
-  const calculateIndustryAverage = useCallback((industry: string, data: Record<string, any[]>) => {
-    if (!data[industry] || data[industry].length === 0) return '0.00%';
-    
-    let sum = 0;
-    let count = 0;
-    
-    data[industry].forEach((item) => {
-      const changeRate = item['등락율'];
-      if (changeRate) {
-        const numValue = parseFloat(changeRate.replace('%', ''));
-        if (!isNaN(numValue)) {
-          sum += numValue;
-          count++;
+  // 산업별 등락률(20malist.csv 기반) 반환 함수
+  // maListMap에서 산업명을 찾아 해당 산업의 '산업 등락률' 값을 반환합니다.
+  const getIndustryChangeRate = useCallback((industry: string): string => {
+    // maListMap의 값들(MaListData 객체들)을 순회하며 산업명이 일치하는 첫 번째 행을 찾습니다.
+    for (const stockName in maListMap) {
+      const row = maListMap[stockName];
+      // 타입 가드 추가: row 객체 및 필요한 속성이 존재하는지 확인
+      if (row && typeof row === 'object' && '산업' in row && row['산업'] && typeof row['산업'] === 'string' && '산업 등락률' in row) {
+        // 산업명 비교 시, 공백을 제거하고 대소문자 구분 없이 비교합니다.
+        // maListMap의 '산업' 필드와 테이블의 industry 이름이 일치하는지 확인합니다.
+        if (row['산업'].replace(/\s/g, '').toLowerCase() === industry.replace(/\s/g, '').toLowerCase()) {
+          // 일치하는 행을 찾으면 해당 행의 '산업 등락률' 값을 반환합니다.
+          // 값이 없거나 빈 문자열이면 '-'를 반환합니다.
+          return typeof row['산업 등락률'] === 'string' ? row['산업 등락률'] || '-' : '-';
         }
       }
-    });
-    
-    if (count === 0) return '0.00%';
-    const average = sum / count;
-    return average.toFixed(2) + '%';
-  }, []);
+    }
+    // 일치하는 산업명을 찾지 못한 경우 '-'를 반환합니다.
+    return '-';
+  }, [maListMap]); // maListMap이 변경될 때만 함수를 재생성합니다.
 
-  // 변동률에 따른 색상 클래스 반환 함수 (평균용)
+  // 변동률에 따른 색상 클래스 반환 함수 (평균용 -> 산업 등락률용으로 재사용)
   const getAverageColorClass = (change: string) => {
     const numValue = parseFloat(change.replace('%', ''));
     if (numValue > 0) return 'text-red-400';
@@ -1227,8 +925,8 @@ export default function ETFCurrentTable() {
                           <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ borderRadius: '4px' }}>
                             {industry === '소비재/음식료' ? '소비재/음식료' : industry}
                           </span>
-                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(calculateIndustryAverage(industry, sortedData))}`} style={{ paddingLeft: '2px', width: '100%' }}>
-                            {calculateIndustryAverage(industry, sortedData)}
+                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(getIndustryChangeRate(industry))}`} style={{ paddingLeft: '2px', width: '100%' }}>
+                            {getIndustryChangeRate(industry)}
                           </span>
                         </div>
                       </td>
@@ -1286,7 +984,10 @@ export default function ETFCurrentTable() {
                             // maListMap에서 20일 이격 데이터 가져오기
                             const stockName = row['종목명'] as string;
                             const maData = maListMap[stockName?.trim()];
-                            const maPositionText = maData ? maData['20일 이격'] : '-';
+                            // 타입 가드 추가: maData 객체 및 '20일 이격' 속성 존재 및 타입 확인
+                            const maPositionText = (maData && typeof maData === 'object' && '20일 이격' in maData && typeof maData['20일 이격'] === 'string')
+                              ? maData['20일 이격']
+                              : '-';
                             
                             let textColor = 'text-gray-500'; // 기본값
                             if (maPositionText?.startsWith('+')) {
@@ -1321,44 +1022,48 @@ export default function ETFCurrentTable() {
                             }
                             return <div className={`text-center tabular-nums ${textColor}`}>{displayDate}</div>;
                           } else if (header === '대표종목(RS)') {
-                            // 대표종목 데이터 표시
-                            const ticker = row['티커'];
-                            if (!ticker) return '-';
-                            
-                            // 티커 변형 생성 (원본, 앞에 0 추가, 앞의 0 제거)
-                            const tickerVariations = [
-                              ticker,
-                              ticker.padStart(6, '0'),
-                              ticker.replace(/^0+/, '')
-                            ];
-                            
-                            // 모든 티커 변형에 대해 대표종목 검색
-                            let stockList = null;
-                            for (const variant of tickerVariations) {
-                              if (etfStockList[variant] && etfStockList[variant].length > 0) {
-                                stockList = etfStockList[variant];
-                                break;
-                              }
+                            // 대표종목(RS) 데이터 표시 (20malist.csv 기반)
+                            const stockName = row['종목명'] as string;
+                            const maData = maListMap[stockName?.trim()];
+                            // 타입 가드 추가: maData 객체 및 '대표종목(RS)' 속성 존재 및 타입 확인
+                            const representativeStocksRS = (maData && typeof maData === 'object' && '대표종목(RS)' in maData && typeof maData['대표종목(RS)'] === 'string')
+                              ? maData['대표종목(RS)']
+                              : null;
+
+                            if (!representativeStocksRS) {
+                              return '-'; // 20malist.csv에 해당 종목 데이터 없음
                             }
-                            
-                            // 대표종목이 없으면 '-' 반환
-                            if (!stockList || stockList.length === 0) {
-                              return '-';
+
+                            // 문자열 파싱: "종목명1(RS1), 종목명2(RS2), ..."
+                            const items = representativeStocksRS.split(',').map((item: string) => item.trim()).filter((item: string) => item);
+
+                            if (items.length === 0) {
+                              return '-'; // 문자열이 비어 있거나 형식이 잘못됨
                             }
-                            
-                            // 모든 대표종목 표시
+
                             return (
                               <div className="flex flex-wrap items-center gap-1">
-                                {stockList.map((item, index) => (
-                                  <div key={index} className="flex items-center">
-                                    <span className="text-xs">{item.name}</span>
-                                    {item.rs && (
-                                      <span className={`text-xs ${parseInt(item.rs) >= 90 ? 'font-bold' : ''}`} data-component-name="ETFCurrentTable">
-                                        ({item.rs})
-                                      </span>
-                                    )}
-                                  </div>
-                                ))}
+                                {items.map((itemString: string, index: number) => {
+                                  // 정규식을 사용하여 이름과 RS 값 추출 (예: "삼성전자(34)")
+                                  const match = itemString.match(/(.+)\s*\((\d+)\)/);
+                                  if (match && match.length === 3) {
+                                    const name = match[1].trim();
+                                    const rsValue = parseInt(match[2], 10);
+                                    const isBold = rsValue >= 90;
+
+                                    return (
+                                      <div key={index} className="flex items-center">
+                                        <span className="text-xs">{name}</span>
+                                        <span className={`text-xs ${isBold ? 'font-bold' : ''}`}>
+                                          ({rsValue})
+                                        </span>
+                                      </div>
+                                    );
+                                  }
+                                  // 형식 불일치 시 원본 문자열 표시 (오류 표시용)
+                                  // 타입 명시적 지정으로 린트 오류 방지
+                                  return <span key={index} className="text-xs text-red-500">?{itemString as string}?</span>;
+                                })}
                               </div>
                             );
                           }

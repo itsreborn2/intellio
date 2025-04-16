@@ -192,8 +192,9 @@ export default function IndustryCharts() {
         }
 
         // 3. 필터링된 종목 기반으로 초기 ChartInfo 생성 (포지션 정보 포함)
+        // 종목코드는 항상 6자리로 맞춰서 ChartInfo에 저장
         const initialChartInfo: ChartInfo[] = filteredStocks.map(stock => ({
-          code: stock.종목코드,
+          code: stock.종목코드.padStart(6, '0'),
           name: stock.종목명,
           sector: stock.섹터 || 'N/A',
           position: stock.포지션 || 'N/A', // 포지션 값 추가
@@ -212,7 +213,7 @@ export default function IndustryCharts() {
         const chartDataPromises = filteredStocks.map(async (stock) => {
           try {
             // 타임스탬프 추가하여 캐시 문제 방지
-            const chartResponse = await fetch(`/requestfile/rs_etf/${stock.종목코드}.csv?t=${Date.now()}`); 
+            const chartResponse = await fetch(`/requestfile/rs_etf/${stock.종목코드.padStart(6, '0')}.csv?t=${Date.now()}`); 
             if (!chartResponse.ok) {
               // 404 에러 등 명시적으로 처리
               throw new Error(`(${chartResponse.status}) ${stock.종목코드}.csv 파일을 찾을 수 없거나 로드할 수 없습니다.`);
@@ -235,7 +236,7 @@ export default function IndustryCharts() {
             }
             
             return { 
-              code: stock.종목코드, 
+              code: stock.종목코드.padStart(6, '0'), // 항상 6자리로 반환
               chartData, 
               error: null, 
               // 계산된 isAboveMA20 상태 추가
@@ -245,7 +246,7 @@ export default function IndustryCharts() {
             console.error(`차트 데이터 로드 오류 (${stock.종목코드}):`, error);
             // 개별 차트 로드 실패 시 에러 상태 반환
             return { 
-              code: stock.종목코드, 
+              code: stock.종목코드.padStart(6, '0'), 
               chartData: [], 
               error: error instanceof Error ? error.message : '차트 데이터 로드 실패',
               // 오류 시 상태는 undefined로 유지
@@ -350,44 +351,70 @@ export default function IndustryCharts() {
                   {/* 헤더 왼쪽: 섹터, 종목명, 등락률 */}
                   {/* gap-2 -> gap-1 으로 수정하여 간격 줄임 */}
                   <div className="flex items-baseline gap-1">
-                    {/* 섹터 */} 
-                    {info.sector && (
-                      <span 
-                        className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1" 
-                        style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
-                      >
-                        {info.sector}
-                      </span>
-                    )}
-                    {/* 종목명 */} 
-                    <span className="font-medium" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>
-                      {info.name || info.code} 
-                    </span>
-                    {/* 등락률 (데이터 없으면 0.00% 표시) */} 
-                    <span 
-                      className={`px-1.5 py-0.5 rounded ${(info.changePercent || 0) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
-                      style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
-                    >
-                      {(info.changePercent || 0) >= 0 ? '+' : ''}{(info.changePercent || 0).toFixed(2)}%
-                    </span>
-                  </div>
-                  {/* 헤더 오른쪽: 상태 텍스트 */}
-                  <div className="flex items-baseline gap-1">
-                    {info.isLoading ? (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
-                        로딩 중...
-                      </span>
-                    ) : (
-                      // 상태 텍스트 -> info.position 값 직접 사용
-                      <span 
-                        // 배경색/텍스트색은 getHeaderBackgroundColor와 별개로 position 기반 적용
-                        className={`px-1.5 py-0.5 rounded ${info.position?.startsWith('유지') ? 'bg-[#D8EFE9] text-teal-800' : 'bg-gray-100 text-gray-800'}`}
-                        style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
-                      >
-                        {/* '유지 ' 또는 '이탈 ' 제거하고 일수만 표시 */}
-                        {info.position?.replace(/^(유지|이탈)\s*/, '') || 'N/A'}
-                      </span>
-                    )}
+                    <div className="flex items-baseline gap-1">
+                      {/* 한 줄에 섹터, 종목명, 등락률 모두 표시 (줄바꿈 방지) */}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', minWidth: 0, width: '100%' }}>
+                        {/* 섹터 */}
+                        {info.sector && (
+                          <span
+                            className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1"
+                            style={{
+                              fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '70px',
+                              display: 'inline-block',
+                              verticalAlign: 'bottom',
+                            }}
+                            title={info.sector}
+                          >
+                            {info.sector}
+                          </span>
+                        )}
+                        {/* ETF 제목: 줄바꿈 방지, ... 처리, 글자 작게 */}
+                        <span
+                          className="font-medium"
+                          style={{
+                            fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '120px',
+                            display: 'inline-block',
+                            verticalAlign: 'bottom',
+                          }}
+                          title={info.name || info.code}
+                        >
+                          {info.name || info.code}
+                        </span>
+                        {/* 등락률 */}
+                        <span
+                          className={`px-1.5 py-0.5 rounded ${(info.changePercent || 0) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                        >
+                          {(info.changePercent || 0) >= 0 ? '+' : ''}{(info.changePercent || 0).toFixed(2)}%
+                        </span>
+                      </div>
+                    </div>
+                    {/* 헤더 오른쪽: 상태 텍스트 */}
+                    <div className="flex items-baseline gap-1">
+                      {info.isLoading ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
+                          로딩 중...
+                        </span>
+                      ) : (
+                        // 상태 텍스트 -> info.position 값 직접 사용
+                        <span 
+                          // 배경색/텍스트색은 getHeaderBackgroundColor와 별개로 position 기반 적용
+                          className={`px-1.5 py-0.5 rounded ${info.position?.startsWith('유지') ? 'bg-[#D8EFE9] text-teal-800' : 'bg-gray-100 text-gray-800'}`}
+                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                        >
+                          {/* '유지 ' 또는 '이탈 ' 제거하고 일수만 표시 */}
+                          {info.position?.replace(/^(유지|이탈)\s*/, '') || 'N/A'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 

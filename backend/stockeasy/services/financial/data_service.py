@@ -588,7 +588,7 @@ class FinancialDataService:
         """
         try:
             base_file_name = os.path.basename(target_report)
-            logger.info(f" 사업보고서: {base_file_name}")
+            #logger.info(f" 사업보고서: {base_file_name}")
             #  20250320_메지온_140410_일반서비스_annual_DART.pdf
             year = base_file_name.split("_")[0]
             year = year[:4]
@@ -658,13 +658,13 @@ class FinancialDataService:
             if sales_section_start_page is not None and sales_section_end_page is not None:
                 start_page = sales_section_start_page
                 end_page = sales_section_end_page
-                logger.info(f"'매출 및 수주상황' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
+                #logger.info(f"'매출 및 수주상황' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
             elif business_content_start_page is not None and business_content_end_page is not None:
                 start_page = business_content_start_page
                 end_page = business_content_end_page
-                logger.info(f"'II. 사업의 내용' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
+                #logger.info(f"'II. 사업의 내용' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
             else:
-                logger.error("관련 섹션을 찾을 수 없습니다.")
+                logger.error("매출 및 수주상황, 사업의 내용 섹션을 찾을 수 없습니다.")
                 return ""
             
             # 6. pdfplumber를 사용하여 해당 페이지 내용 추출

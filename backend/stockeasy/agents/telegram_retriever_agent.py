@@ -805,7 +805,7 @@ class TelegramRetrieverAgent(BaseAgent):
                 normalized_content = re.sub(r'\s+', ' ', content).strip().lower()
                 # 중복 메시지 확인
                 if self._is_duplicate(normalized_content, seen_messages):
-                    logger.info(f"중복 메시지 제외: {normalized_content[:50]}")
+                    #logger.info(f"중복 메시지 제외: {normalized_content[:50]}")
                     continue
                     
                 seen_messages.add(self._get_message_hash(normalized_content))

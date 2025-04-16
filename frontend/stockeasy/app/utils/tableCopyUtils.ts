@@ -426,7 +426,46 @@ export const copyTableAsImage = async (
       }
     });
     
-    // 테이블 셀 정렬 스타일 적용
+    // --- 캔들(당일 캔들) 컬럼의 CandleMini SVG가 셀 중앙에 오도록 강제 스타일 적용 ---
+    // 1. '당일 캔들' 컬럼 인덱스 찾기
+    let candleColumnIndex = -1;
+    const ths = tableClone.querySelectorAll('thead th');
+    ths.forEach((th, idx) => {
+      if ((th.textContent || '').replace(/\s/g, '').includes('당일캔들')) {
+        candleColumnIndex = idx;
+      }
+    });
+    // 2. 해당 컬럼의 모든 셀 내부 div/SVG에 중앙정렬 스타일 강제 적용
+    if (candleColumnIndex !== -1) {
+      const rows = tableClone.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        const cell = row.children[candleColumnIndex] as HTMLElement;
+        if (cell) {
+          cell.style.verticalAlign = 'middle'; // 셀 자체 수직 중앙 정렬
+          // 내부 div (flex 컨테이너)
+          const flexDiv = cell.querySelector('div');
+          if (flexDiv) {
+            flexDiv.style.display = 'flex';
+            flexDiv.style.justifyContent = 'center';
+            flexDiv.style.alignItems = 'center';
+            flexDiv.style.height = '35px'; // 셀 높이와 동일하게 맞춤
+            flexDiv.style.minHeight = '35px';
+            flexDiv.style.width = '100%';
+          }
+          // 내부 SVG (CandleMini)
+          const svg = cell.querySelector('svg');
+          if (svg) {
+            // SVGSVGElement는 HTMLElement와 완전히 호환되지 않으므로, 타입스크립트 에러를 피하기 위해 unknown을 거쳐 변환
+            (svg as unknown as HTMLElement).style.display = 'block';
+            (svg as unknown as HTMLElement).style.margin = 'auto';
+            (svg as unknown as HTMLElement).style.height = '32px'; // 필요시 조정
+            (svg as unknown as HTMLElement).style.width = '28px';
+          } // SVG 중앙정렬 및 크기 강제 적용
+
+        }
+      });
+    }
+    // --- 기존 정렬 스타일 적용 코드 유지(2개월 차트 등) ---
     // 2개월 차트 가운데 정렬
     const chartCells = tableClone.querySelectorAll('td div.w-full.h-full.flex.items-center');
     chartCells.forEach(cell => {
@@ -444,6 +483,8 @@ export const copyTableAsImage = async (
       (cell as HTMLElement).style.alignItems = 'center';
       (cell as HTMLElement).style.height = '100%';
     });
+    // --- END 캔들 중앙정렬 패치 ---
+
     
     // 모든 td 요소에 수직 정렬 스타일 적용
     const allCells = tableClone.querySelectorAll('td');

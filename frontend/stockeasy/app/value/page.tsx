@@ -19,13 +19,13 @@ interface ValuationData {
   stockCode: string;      // C열 (Index 2)
   stockName: string;      // D열 (Index 3)
   industry: string;       // B열 (Index 1)
-  marketCap: string;      // E열 (Index 4 - 시가총액)
-  I: string;              // I열 (Index 8 - 2024 PER)
-  J: string;              // J열 (Index 9 - 2025(E) PER)
-  K: string;              // K열 (Index 10 - 2026(E) PER)
-  L: string;              // L열 (Index 11 - 2027(E) PER)
-  M: string;              // M열 (Index 12 - 2028(E) PER)
-  [key: string]: string | number; // 인덱스 시그니처 추가
+  marketCap: number | null;      // E열 (Index 4 - 시가총액)
+  I: number | null;              // I열 (Index 8 - 2024 PER)
+  J: number | null;              // J열 (Index 9 - 2025(E) PER)
+  K: number | null;              // K열 (Index 10 - 2026(E) PER)
+  L: number | null;              // L열 (Index 11 - 2027(E) PER)
+  M: number | null;              // M열 (Index 12 - 2028(E) PER)
+  [key: string]: string | number | null; // 인덱스 시그니처 추가
 }
 
 // 숫자에 3자리마다 콤마를 추가하는 함수
@@ -115,8 +115,10 @@ const TrendBarGraph: React.FC<TrendBarGraphProps> = ({ values }) => {
           return (
             <div key={`bar-${index}`} className="flex-1 h-full flex items-end justify-center">
               <div
-                className="w-full bg-blue-300 rounded-sm"
-                style={{ height: minHeightStyle }}
+                className="w-full bg-blue-300"
+                /* 추이 컬럼 막대그래프: 모서리를 6px radius로 둥글게 처리 */
+                /* 위쪽(좌상단, 우상단)만 4px radius, 아래쪽은 0px */
+                 style={{ height: minHeightStyle, borderTopLeftRadius: '4px', borderTopRightRadius: '4px', borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
                 title={`${value.toFixed(2)} (Max: ${maxValue.toFixed(2)})`}
               ></div>
             </div>
@@ -161,6 +163,16 @@ const TrendBarGraph: React.FC<TrendBarGraphProps> = ({ values }) => {
       )}
     </div>
   );
+};
+
+// Helper function to parse numeric CSV values
+const parseNumericValue = (value: string | undefined): number | null => {
+  if (value === undefined || value === null || value.trim() === '' || value.trim() === '-') {
+    return null; // Handle undefined, null, empty strings, and '-' as null
+  }
+  const cleanedValue = value.replace(/,/g, ''); // Remove commas
+  const num = parseFloat(cleanedValue);
+  return isNaN(num) ? null : num; // Return number or null if parsing failed
 };
 
 // 테이블 컬럼 정의 Helper
@@ -233,12 +245,12 @@ const ValuationPage = () => {
     stockCode: 83,    // 75 -> 83으로 10% 증가
     stockName: 126,   // 140 -> 126으로 10% 감소
     industry: 161,    // 146 -> 161로 10% 더 확장
-    marketCap: 72,    // 80 -> 72로 10% 더 감소
+    marketCap: 75,    // 80 -> 72로 10% 더 감소
     I: 75,             // 80 -> 75로 줄임
     J: 75,             // 80 -> 75로 줄임
     K: 75,             // 80 -> 75로 줄임
     L: 75,             // 80 -> 75로 줄임
-    M: 75,             // 80 -> 75로 줄임
+    M: 72,             // 80 -> 75로 줄임
   };
   
   const columns = useMemo(() => [
@@ -303,8 +315,12 @@ const ValuationPage = () => {
     columnHelper.accessor('marketCap', {
       header: () => <div style={{ textAlign: 'center' }}>시가총액(억)</div>, // 헤더명 고정
       cell: info => {
-        const value = info.getValue<number | string>() ?? 0;
-        return <div style={{ textAlign: 'right' }}>{Number(value).toLocaleString()}</div>;
+        const value = info.getValue();
+        if (value === null) return <div style={{ textAlign: 'right' }}></div>;
+        if (value === 0) return <div style={{ textAlign: 'right' }}>0.00</div>;
+        // 정수 콤마 포맷
+        const displayValue = value > 0 ? value.toLocaleString('en-US', { maximumFractionDigits: 0 }) : value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+        return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
       },
       size: fixedColumnWidths.marketCap,
       minSize: fixedColumnWidths.marketCap,
@@ -313,38 +329,73 @@ const ValuationPage = () => {
     // --- PER 컬럼 수정 시작 ---
     columnHelper.accessor('I', { // 필드명 변경
       header: () => csvHeaders[8] || '2024 PER', // CSV 헤더 사용 (Index 8)
-      cell: info => info.getValue(),
+      cell: info => {
+        const value = info.getValue();
+        if (value === null) return <div style={{ textAlign: 'right' }}></div>;
+        if (value === 0) return <div style={{ textAlign: 'right' }}>0.00</div>;
+        const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
+      },
       size: fixedColumnWidths.I, // 사이즈 키는 유지
       minSize: fixedColumnWidths.I,
       maxSize: fixedColumnWidths.I,
+      enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('J', { // 필드명 변경
       header: () => csvHeaders[9] || '2025(E) PER', // CSV 헤더 사용 (Index 9)
-      cell: info => info.getValue(),
+      cell: info => {
+        const value = info.getValue();
+        if (value === null) return <div style={{ textAlign: 'right' }}></div>;
+        if (value === 0) return <div style={{ textAlign: 'right' }}>0.00</div>;
+        const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
+      },
       size: fixedColumnWidths.J, // 사이즈 키는 유지
       minSize: fixedColumnWidths.J,
       maxSize: fixedColumnWidths.J,
+      enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('K', { // 필드명 변경
       header: () => csvHeaders[10] || '2026(E) PER', // CSV 헤더 사용 (Index 10)
-      cell: info => info.getValue(),
+      cell: info => {
+        const value = info.getValue();
+        if (value === null) return <div style={{ textAlign: 'right' }}></div>;
+        if (value === 0) return <div style={{ textAlign: 'right' }}>0.00</div>;
+        const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
+      },
       size: fixedColumnWidths.K, // 사이즈 키는 유지
       minSize: fixedColumnWidths.K,
       maxSize: fixedColumnWidths.K,
+      enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('L', { // 필드명 변경
       header: () => csvHeaders[11] || '2027(E) PER', // CSV 헤더 사용 (Index 11)
-      cell: info => info.getValue(),
+      cell: info => {
+        const value = info.getValue();
+        if (value === null) return <div style={{ textAlign: 'right' }}></div>;
+        if (value === 0) return <div style={{ textAlign: 'right' }}>0.00</div>;
+        const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
+      },
       size: fixedColumnWidths.L, // 사이즈 키는 유지
       minSize: fixedColumnWidths.L,
       maxSize: fixedColumnWidths.L,
+      enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('M', { // 필드명 변경
       header: () => csvHeaders[12] || '2028(E) PER', // CSV 헤더 사용 (Index 12)
-      cell: info => info.getValue() || '-', // 값이 없으면 '-' 표시
+      cell: info => {
+        const value = info.getValue();
+        if (value === null) return <div style={{ textAlign: 'right' }}></div>;
+        if (value === 0) return <div style={{ textAlign: 'right' }}>0.00</div>;
+        const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
+      },
       size: fixedColumnWidths.M, // 사이즈 키는 유지
       minSize: fixedColumnWidths.M,
       maxSize: fixedColumnWidths.M,
+      enableSorting: true, // 정렬 활성화
     }),
     // --- PER 컬럼 수정 끝 ---
     
@@ -353,15 +404,10 @@ const ValuationPage = () => {
       id: 'trend',
       header: () => '추이',
       cell: ({ row }) => {
-        // 새 필드명(I~M) 사용하도록 수정
-        const values = [
-          parseFloat(row.original.I) || 0,
-          // parseFloat(row.original.J) || 0, // J 값 제외
-          parseFloat(row.original.K) || 0,
-          parseFloat(row.original.L) || 0,
-          parseFloat(row.original.M) || 0,
-        ];
-        return <TrendBarGraph values={values} />;
+        const trendValues = ['I', 'K', 'L', 'M'].map(
+          (colId) => typeof row.original[colId as keyof ValuationData] === 'number' ? row.original[colId as keyof ValuationData] : 0
+        );
+        return <TrendBarGraph values={trendValues} />;
       },
       size: 200, // 추이 컬럼 너비 증가
       minSize: 150,
@@ -463,18 +509,19 @@ const ValuationPage = () => {
             setCsvHeaders(headers);
             
             // 첫 두 줄은 헤더 정보이므로 건너뜀 (데이터는 3번째 줄부터 시작)
-            const parsedData = (results.data as string[][]).slice(2).map((row) => ({
-              stockCode: row[2], // C열
-              stockName: row[3], // D열
-              industry: row[1], // B열
-              marketCap: row[4], // E열
-              I: row[8], // I열 (index 8)
-              J: row[9], // J열 (index 9)
-              K: row[10], // K열 (index 10)
-              L: row[11], // L열 (index 11)
-              M: row[12], // M열 (index 12)
+            // ValuationData 타입 적용 및 숫자 변환 로직 추가
+            const parsedData: ValuationData[] = (results.data as string[][]).slice(2).map((row) => ({
+              stockCode: row[2]?.padStart(6, '0') || '', // C열, 6자리 채우기 추가
+              stockName: row[3] || '', // D열
+              industry: row[1] || '', // B열
+              marketCap: parseNumericValue(row[4]), // E열 - parseNumericValue 적용
+              I: parseNumericValue(row[8]), // I열 (index 8) - parseNumericValue 적용
+              J: parseNumericValue(row[9]), // J열 (index 9) - parseNumericValue 적용
+              K: parseNumericValue(row[10]), // K열 (index 10) - parseNumericValue 적용
+              L: parseNumericValue(row[11]), // L열 (index 11) - parseNumericValue 적용
+              M: parseNumericValue(row[12]), // M열 (index 12) - parseNumericValue 적용
             }));
-            
+
             // 업종 목록 추출 (중복 제거 및 정렬)
             const uniqueIndustries = Array.from(new Set(parsedData.map(item => item.industry))).sort();
             setIndustries(uniqueIndustries);
@@ -509,24 +556,24 @@ const ValuationPage = () => {
   // 정렬 로직 구현 - 모든 데이터 기준으로 정렬
   useEffect(() => {
     if (sorting.length > 0) {
-      const sortedData = [...filteredData].sort((a, b) => {
+      const sorted = [...filteredData].sort((a, b) => {
         for (const { id, desc } of sorting) {
           const multiplier = desc ? -1 : 1;
-          const aValue = a[id];
-          const bValue = b[id];
+          const aValue = a[id as keyof ValuationData];
+          const bValue = b[id as keyof ValuationData];
 
-          // 숫자 컬럼인지 확인
-          const numericColumns = [
-            'marketCap', 'I', 'J', 'K', 'L', 'M'
-          ];
+          // 숫자 컬럼인지 확인 (타입이 number인 경우)
+          if (typeof aValue === 'number' || typeof bValue === 'number' || aValue === null || bValue === null) {
+            // null 값 처리: null은 가장 작은 값으로 간주
+            const aNum = aValue === null ? -Infinity : Number(aValue);
+            const bNum = bValue === null ? -Infinity : Number(bValue);
+            
+            if (aNum < bNum) return -1 * multiplier;
+            if (aNum > bNum) return 1 * multiplier;
 
-          if (numericColumns.includes(id)) {
-            const aNum = typeof aValue === 'number' ? aValue : parseFloat(aValue) || 0;
-            const bNum = typeof bValue === 'number' ? bValue : parseFloat(bValue) || 0;
-            if (aNum !== bNum) return (aNum - bNum) * multiplier;
           } else {
-            // 문자열 비교 (업종, 종목명, 종목코드 등)
-            const aStr = String(aValue || '').toLowerCase();
+            // 문자열 비교 (업종, 종목명, 종목코드 등 - null/undefined 안전 처리)
+            const aStr = String(aValue || '').toLowerCase(); 
             const bStr = String(bValue || '').toLowerCase();
             if (aStr < bStr) return -1 * multiplier;
             if (aStr > bStr) return 1 * multiplier;
@@ -534,9 +581,9 @@ const ValuationPage = () => {
         }
         return 0;
       });
-      setSortedData(sortedData);
+      setSortedData(sorted);
     } else {
-      setSortedData(filteredData);
+      setSortedData(filteredData); // 정렬 조건이 없으면 필터링된 데이터 사용
     }
   }, [sorting, filteredData]); // 의존성 배열에 filteredData 추가
 
@@ -857,7 +904,7 @@ const ValuationPage = () => {
                 </div>
               </div>
               
-              {/* 전 종목 출력 로딩 상태 표시 */}
+              {/* 전종목 출력 로딩 상태 표시 */}
               {showAllItems && isAllItemsLoading && (
                 <div className="flex items-center justify-center h-screen">
                   <div className="text-xl">전 종목 데이터를 불러오는 중...</div>

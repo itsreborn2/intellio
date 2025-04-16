@@ -375,7 +375,7 @@ class TokenUsageTracker:
         self.completion_tokens += completion_tokens
         self.total_tokens += total_tokens if total_tokens is not None else (prompt_tokens + completion_tokens)
         self.total_cost += cost
-        logger.info(f"[토큰 추적] 토큰 추가: prompt={prompt_tokens}, completion={completion_tokens}, total={self.total_tokens}, cost={self.total_cost}")
+        #logger.info(f"[토큰 추적] 토큰 추가: prompt={prompt_tokens}, completion={completion_tokens}, total={self.total_tokens}, cost={self.total_cost}")
         
     async def save(self, db: AsyncSession):
         """기록된 토큰 사용량을 데이터베이스에 저장"""
@@ -435,7 +435,7 @@ async def track_token_usage(
         
         # 컨텍스트 종료 시 DB에 저장
         if tracker.total_tokens > 0:
-            logger.info(f"[토큰 추적] 컨텍스트 종료 - DB 저장 시작: total_tokens={tracker.total_tokens}")
+            #logger.info(f"[토큰 추적] 컨텍스트 종료 - DB 저장 시작: total_tokens={tracker.total_tokens}")
             try:
                 # DB 세션 가져오기
                 db = None

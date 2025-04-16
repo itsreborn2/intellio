@@ -634,12 +634,12 @@ class ReportAnalyzerAgent(BaseAgent):
                 content = doc.page_content
                 metadata = doc.metadata
                 score = doc.score or 0.0
-                if i < 2:
-                    short_content = (content[:50] if len(content) > 50 else content).strip().replace("\n\n", "\n")
-                    logger.debug(f"문서 {i} 점수: {score:.3f}, 내용({len(content)}): {short_content}")
-                    short_metadata = {k: v for k, v in metadata.items() if k in ["stock_code", "stock_name", "sector_code", "sector_name", "document_date", "report_provider", "file_name", "page", "category"]}
-                    logger.debug(f"문서 {i} 메타데이터: {short_metadata}")
-                    logger.debug(f"---------------------------------------------------------------")
+                # if i < 2:
+                #     short_content = (content[:50] if len(content) > 50 else content).strip().replace("\n\n", "\n")
+                #     logger.debug(f"문서 {i} 점수: {score:.3f}, 내용({len(content)}): {short_content}")
+                #     short_metadata = {k: v for k, v in metadata.items() if k in ["stock_code", "stock_name", "sector_code", "sector_name", "document_date", "report_provider", "file_name", "page", "category"]}
+                #     logger.debug(f"문서 {i} 메타데이터: {short_metadata}")
+                #     logger.debug(f"---------------------------------------------------------------")
                 
                 # 내용 기반 중복 제거 (문서 일부가 중복되는 경우가 많음)
                 content_hash = hash(content[:100])  # 앞부분을 기준으로
