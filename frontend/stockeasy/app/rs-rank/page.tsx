@@ -370,7 +370,7 @@ export default function RSRankPage() {
       ];
       
       // 시장 지수 데이터 파일 경로
-      const kospiIndexPath = '/requestfile/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv';
+      const kospiIndexPath = '/requestfile/market-index/1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c.csv';
       const kosdaqIndexPath = '/requestfile/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
       
       // 시장 지수 데이터 로드
@@ -1080,7 +1080,7 @@ export default function RSRankPage() {
   const loadMarketIndexData = async () => {
     try {
       // 시장 지수 데이터 로드 (코스피, 코스닥)
-      const kospiIndexPath = '/requestfile/market-index/1dzf65fz6elq6b5znvhuaftn10hqjbe_c.csv';
+      const kospiIndexPath = '/requestfile/market-index/1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c.csv';
       const kosdaqIndexPath = '/requestfile/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
       
       // 시장 지수 데이터 로드

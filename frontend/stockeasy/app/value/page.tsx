@@ -16,15 +16,16 @@ import { formatDateMMDD } from '../utils/dateUtils'; // 날짜 포맷 유틸리�
 
 // CSV 데이터 타입 정의
 interface ValuationData {
-  stockCode: string;      // C열 (Index 2)
-  stockName: string;      // D열 (Index 3)
-  industry: string;       // B열 (Index 1)
-  marketCap: number | null;      // E열 (Index 4 - 시가총액)
-  I: number | null;              // I열 (Index 8 - 2024 PER)
-  J: number | null;              // J열 (Index 9 - 2025(E) PER)
-  K: number | null;              // K열 (Index 10 - 2026(E) PER)
-  L: number | null;              // L열 (Index 11 - 2027(E) PER)
-  M: number | null;              // M열 (Index 12 - 2028(E) PER)
+  stockCode: string;      // B열 (Index 1)
+  stockName: string;      // E열 (Index 4)
+  industry: string;       // F열 (Index 5)
+  middleCategory: string; // D열 (Index 3) - 중분류로 변경
+  marketCap: number | null;      // G열 (Index 6 - 시가총액)
+  per1: number | null;           // K열 (Index 10 - PER1)
+  per2: number | null;           // L열 (Index 11 - PER2)
+  per3: number | null;           // M열 (Index 12 - PER3)
+  per4: number | null;           // N열 (Index 13 - PER4)
+  per5: number | null;           // O열 (Index 14 - PER5)
   [key: string]: string | number | null; // 인덱스 시그니처 추가
 }
 
@@ -243,21 +244,22 @@ const ValuationPage = () => {
   // 고정 컬럼 너비 정의 (데스크탑 환경에서 가로 스크롤이 생기지 않도록 너비 조정)
   const fixedColumnWidths = {
     stockCode: 83,    // 75 -> 83으로 10% 증가
-    stockName: 126,   // 140 -> 126으로 10% 감소
-    industry: 161,    // 146 -> 161로 10% 더 확장
+    stockName: 146,   // 126 -> 146으로 증가 (20 증가)
+    industry: 100,    // 120 -> 100으로 감소 (20 감소)
+    middleCategory: 120, // 161 -> 120으로 줄여서 스크롤 방지
     marketCap: 75,    // 80 -> 72로 10% 더 감소
-    I: 75,             // 80 -> 75로 줄임
-    J: 75,             // 80 -> 75로 줄임
-    K: 75,             // 80 -> 75로 줄임
-    L: 75,             // 80 -> 75로 줄임
-    M: 72,             // 80 -> 75로 줄임
+    per1: 60,         // 75 -> 60으로 더 줄임
+    per2: 60,         // 75 -> 60으로 더 줄임
+    per3: 60,         // 75 -> 60으로 더 줄임
+    per4: 60,         // 75 -> 60으로 더 줄임
+    per5: 60,         // 75 -> 60으로 더 줄임
   };
   
   const columns = useMemo(() => [
     columnHelper.accessor('stockCode', {
-      header: () => csvHeaders[2] || '종목코드', // CSV 헤더 사용 (Index 2)
+      header: () => csvHeaders[4] || '종목코드', // CSV 헤더 사용 (Index 4)
       cell: info => {
-        // 종목코드가 있을 경우 6자리로 표시 (앞에 0 채우기)
+        // 종목코드가 항상 6자리로 표시되도록 수정
         const code = info.getValue();
         return code ? String(code).padStart(6, '0') : '';
       },
@@ -266,14 +268,14 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.stockCode,
     }),
     columnHelper.accessor('stockName', {
-      header: () => csvHeaders[3] || '종목명', // CSV 헤더 사용 (Index 3)
+      header: () => csvHeaders[5] || '종목명', // CSV 헤더 사용 (Index 5)
       cell: info => {
         const stockName = info.getValue();
         const stockCode = info.row.original.stockCode;
         
         return (
           <div 
-            className="cursor-pointer hover:bg-[#e8f4f1] hover:text-blue-700 transition-colors duration-150 w-full h-full flex items-center px-1 -mx-1"
+            className="cursor-pointer hover:bg-[#e8f4f1] hover:text-blue-700 transition-colors duration-150 w-full h-full flex items-center px-1 -mx-1 truncate" // truncate 클래스 추가
             style={{ borderRadius: '4px' }}
             onClick={() => handleSelectStock(stockCode, stockName)}
             title={`${stockName} 선택하기`}
@@ -293,7 +295,7 @@ const ValuationPage = () => {
         
         return (
           <div 
-            className="cursor-pointer hover:bg-[#e8f4f1] hover:text-blue-700 transition-colors duration-150 w-full h-full flex items-center px-1 -mx-1 overflow-hidden"
+            className="cursor-pointer hover:bg-[#e8f4f1] hover:text-blue-700 transition-colors duration-150 w-full h-full flex items-center px-1 -mx-1 truncate" // truncate 클래스 추가
             style={{ borderRadius: '4px' }}
             onClick={() => {
               if (industry) {
@@ -303,14 +305,20 @@ const ValuationPage = () => {
             }}
             title={`${industry} 업종 선택하기`}
           >
-            {/* 업종명이 길 경우 말줄임표(...) 처리 */}
-            <div className="truncate">{industry}</div>
+            {industry}
           </div>
         );
       },
       size: fixedColumnWidths.industry,
       minSize: fixedColumnWidths.industry,
       maxSize: fixedColumnWidths.industry,
+    }),
+    columnHelper.accessor('middleCategory', {
+      header: () => csvHeaders[3] || '중분류', // CSV 헤더 사용 (Index 3)
+      cell: info => <div className="truncate">{info.getValue()}</div>, // truncate 클래스 추가
+      size: fixedColumnWidths.middleCategory,
+      minSize: fixedColumnWidths.middleCategory,
+      maxSize: fixedColumnWidths.middleCategory,
     }),
     columnHelper.accessor('marketCap', {
       header: () => <div style={{ textAlign: 'center' }}>시가총액(억)</div>, // 헤더명 고정
@@ -327,8 +335,8 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.marketCap,
     }),
     // --- PER 컬럼 수정 시작 ---
-    columnHelper.accessor('I', { // 필드명 변경
-      header: () => csvHeaders[8] || '2024 PER', // CSV 헤더 사용 (Index 8)
+    columnHelper.accessor('per1', { // 필드명 변경
+      header: () => csvHeaders[10] || 'PER1', // CSV 헤더 사용 (Index 10)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -336,13 +344,13 @@ const ValuationPage = () => {
         const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
       },
-      size: fixedColumnWidths.I, // 사이즈 키는 유지
-      minSize: fixedColumnWidths.I,
-      maxSize: fixedColumnWidths.I,
+      size: fixedColumnWidths.per1, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.per1,
+      maxSize: fixedColumnWidths.per1,
       enableSorting: true, // 정렬 활성화
     }),
-    columnHelper.accessor('J', { // 필드명 변경
-      header: () => csvHeaders[9] || '2025(E) PER', // CSV 헤더 사용 (Index 9)
+    columnHelper.accessor('per2', { // 필드명 변경
+      header: () => csvHeaders[11] || 'PER2', // CSV 헤더 사용 (Index 11)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -350,13 +358,13 @@ const ValuationPage = () => {
         const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
       },
-      size: fixedColumnWidths.J, // 사이즈 키는 유지
-      minSize: fixedColumnWidths.J,
-      maxSize: fixedColumnWidths.J,
+      size: fixedColumnWidths.per2, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.per2,
+      maxSize: fixedColumnWidths.per2,
       enableSorting: true, // 정렬 활성화
     }),
-    columnHelper.accessor('K', { // 필드명 변경
-      header: () => csvHeaders[10] || '2026(E) PER', // CSV 헤더 사용 (Index 10)
+    columnHelper.accessor('per3', { // 필드명 변경
+      header: () => csvHeaders[12] || 'PER3', // CSV 헤더 사용 (Index 12)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -364,13 +372,13 @@ const ValuationPage = () => {
         const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
       },
-      size: fixedColumnWidths.K, // 사이즈 키는 유지
-      minSize: fixedColumnWidths.K,
-      maxSize: fixedColumnWidths.K,
+      size: fixedColumnWidths.per3, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.per3,
+      maxSize: fixedColumnWidths.per3,
       enableSorting: true, // 정렬 활성화
     }),
-    columnHelper.accessor('L', { // 필드명 변경
-      header: () => csvHeaders[11] || '2027(E) PER', // CSV 헤더 사용 (Index 11)
+    columnHelper.accessor('per4', { // 필드명 변경
+      header: () => csvHeaders[13] || 'PER4', // CSV 헤더 사용 (Index 13)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -378,13 +386,13 @@ const ValuationPage = () => {
         const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
       },
-      size: fixedColumnWidths.L, // 사이즈 키는 유지
-      minSize: fixedColumnWidths.L,
-      maxSize: fixedColumnWidths.L,
+      size: fixedColumnWidths.per4, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.per4,
+      maxSize: fixedColumnWidths.per4,
       enableSorting: true, // 정렬 활성화
     }),
-    columnHelper.accessor('M', { // 필드명 변경
-      header: () => csvHeaders[12] || '2028(E) PER', // CSV 헤더 사용 (Index 12)
+    columnHelper.accessor('per5', { // 필드명 변경
+      header: () => csvHeaders[14] || 'PER5', // CSV 헤더 사용 (Index 14)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -392,9 +400,9 @@ const ValuationPage = () => {
         const displayValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         return <div style={{ textAlign: 'right' }}>{displayValue}</div>;
       },
-      size: fixedColumnWidths.M, // 사이즈 키는 유지
-      minSize: fixedColumnWidths.M,
-      maxSize: fixedColumnWidths.M,
+      size: fixedColumnWidths.per5, // 사이즈 키는 유지
+      minSize: fixedColumnWidths.per5,
+      maxSize: fixedColumnWidths.per5,
       enableSorting: true, // 정렬 활성화
     }),
     // --- PER 컬럼 수정 끝 ---
@@ -404,7 +412,7 @@ const ValuationPage = () => {
       id: 'trend',
       header: () => '추이',
       cell: ({ row }) => {
-        const trendValues = ['I', 'K', 'L', 'M'].map(
+        const trendValues = ['per1', 'per3', 'per4', 'per5'].map(
           (colId) => typeof row.original[colId as keyof ValuationData] === 'number' ? row.original[colId as keyof ValuationData] : 0
         );
         return <TrendBarGraph values={trendValues} />;
@@ -493,9 +501,9 @@ const ValuationPage = () => {
         }
         
         // --- EUC-KR 인코딩 처리 수정 ---
-        // 응답을 ArrayBuffer로 받아 EUC-KR로 디코딩
+        // 응답을 ArrayBuffer로 받아 UTF-8로 디코딩
         const buffer = await response.arrayBuffer();
-        const decoder = new TextDecoder('euc-kr');
+        const decoder = new TextDecoder('utf-8');
         const csvText = decoder.decode(buffer);
         // --- EUC-KR 인코딩 처리 수정 끝 ---
         
@@ -503,23 +511,25 @@ const ValuationPage = () => {
         Papa.parse(csvText, {
           header: false, // 헤더 사용 안함
           skipEmptyLines: true,
+          encoding: 'UTF-8', // 인코딩 추가
           complete: (results) => {
             // 첫 번째 행을 헤더로 저장
             const headers = results.data[0] as string[] || [];
             setCsvHeaders(headers);
             
-            // 첫 두 줄은 헤더 정보이므로 건너뜀 (데이터는 3번째 줄부터 시작)
+            // 첫 번째 행은 헤더 정보이므로 건너뜀 (데이터는 두 번째 행부터 시작)
             // ValuationData 타입 적용 및 숫자 변환 로직 추가
-            const parsedData: ValuationData[] = (results.data as string[][]).slice(2).map((row) => ({
-              stockCode: row[2]?.padStart(6, '0') || '', // C열, 6자리 채우기 추가
-              stockName: row[3] || '', // D열
+            const parsedData: ValuationData[] = (results.data as string[][]).slice(1).map((row) => ({
+              stockCode: (row[4] || '').padStart(6, '0'), // 종목코드가 항상 6자리로 표시되도록 수정
+              stockName: row[5] || '', // E열
               industry: row[1] || '', // B열
-              marketCap: parseNumericValue(row[4]), // E열 - parseNumericValue 적용
-              I: parseNumericValue(row[8]), // I열 (index 8) - parseNumericValue 적용
-              J: parseNumericValue(row[9]), // J열 (index 9) - parseNumericValue 적용
-              K: parseNumericValue(row[10]), // K열 (index 10) - parseNumericValue 적용
-              L: parseNumericValue(row[11]), // L열 (index 11) - parseNumericValue 적용
-              M: parseNumericValue(row[12]), // M열 (index 12) - parseNumericValue 적용
+              middleCategory: row[3] || '', // D열 - 중분류로 변경
+              marketCap: parseNumericValue(row[6]), // G열 - parseNumericValue 적용
+              per1: parseNumericValue(row[10]), // K열 - parseNumericValue 적용
+              per2: parseNumericValue(row[11]), // L열 - parseNumericValue 적용
+              per3: parseNumericValue(row[12]), // M열 - parseNumericValue 적용
+              per4: parseNumericValue(row[13]), // N열 - parseNumericValue 적용
+              per5: parseNumericValue(row[14]), // O열 - parseNumericValue 적용
             }));
 
             // 업종 목록 추출 (중복 제거 및 정렬)
@@ -967,7 +977,7 @@ const ValuationPage = () => {
                               className={`px-1 md:px-2 py-1 whitespace-nowrap text-[9px] sm:text-[10px] md:text-xs border border-gray-200 ${
                                 // 컬럼별 정렬 방식 적용
                                 cell.column.id === 'stockCode' ? 'text-center' :
-                                cell.column.id === 'stockName' || cell.column.id === 'industry' ? 'text-left' :
+                                cell.column.id === 'stockName' || cell.column.id === 'industry' || cell.column.id === 'middleCategory' ? 'text-left' :
                                 'text-right'
                               } ${
                                 // 모바일에서 특정 컬럼 숨김 처리
