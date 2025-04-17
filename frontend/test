@@ -1,0 +1,462 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#     "pandas==2.2.0",
+#     "numpy==1.26.0",
+#     "python-dotenv==1.0.0",
+#     "google-api-python-client==2.108.0",
+#     "google-auth-httplib2==0.1.0",
+#     "google-auth-oauthlib==1.0.0",
+#     "paramiko==3.3.1",
+#     "requests==2.28.1",
+#     "holidays", # holidays 패키지 추가
+# ]
+# ///
+
+import os
+import io
+import json
+import logging
+import argparse
+import datetime
+import sys
+import time
+import requests
+import paramiko
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.errors import HttpError # HttpError import 추가
+import re
+import holidays
+import pandas as pd
+from dotenv import load_dotenv # load_dotenv import 추가
+
+# .env 파일 로드 (상위 디렉토리의 .env 파일 경로 지정)
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+# 로깅 설정 전에 logger 객체를 사용할 수 없으므로 print 사용 (또는 로깅 설정 이후로 이동)
+print(f"Attempting to load .env file from: {dotenv_path}") 
+load_dotenv(dotenv_path=dotenv_path)
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename='file_upload.log'
+)
+logger = logging.getLogger('file_uploader')
+
+# 콘솔 핸들러 추가 (터미널에 로그 출력)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s')
+console_handler.setFormatter(console_formatter)
+logger.addHandler(console_handler)
+
+# 텔레그램 알림 모듈 추가
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from telegram_notifier import TelegramNotifier
+    TELEGRAM_ENABLED = True
+except ImportError:
+    logging.warning("TelegramNotifier 모듈을 찾을 수 없어 텔레그램 알림 기능이 비활성화됩니다.")
+    TELEGRAM_ENABLED = False
+    # TelegramNotifier 클래스가 없을 경우를 대비한 더미 클래스 정의
+    class TelegramNotifier:
+        def send_message(self, message): pass
+        def send_error(self, error_message, context=""): pass
+
+# 텔레그램 알림 객체 초기화
+notifier = TelegramNotifier() if TELEGRAM_ENABLED else TelegramNotifier()
+
+# 구글 드라이브 API 설정
+SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+
+# 서버 설정
+SERVER_HOST = os.getenv('SERVER_HOST')
+SERVER_PORT = int(os.getenv('SERVER_PORT', '22'))
+SERVER_USER = os.getenv('SERVER_USERNAME') # Corrected key to match .env file
+SERVER_PASSWORD = os.getenv('SERVER_PASSWORD') # Also ensure this key matches .env if needed
+SSH_KEY_PATH = os.getenv('SSH_KEY_PATH')
+
+# 작업 실행 상태 플래그
+# is_task_running = threading.Event()
+
+def get_google_drive_service():
+    """구글 드라이브 API 서비스를 초기화합니다."""
+    credentials_path = 'C:\\Users\\Reborn\\dev_autobot\\dev_server\\credentials\\intellio-korea-google-embedding-and-storage.json'
+    
+    if not os.path.exists(credentials_path):
+        logger.error(f'Authentication file not found: {credentials_path}')
+        return None
+    
+    try:
+        credentials = service_account.Credentials.from_service_account_file(
+            credentials_path, scopes=SCOPES
+        )
+        service = build('drive', 'v3', credentials=credentials)
+        return service
+    except Exception as e:
+        logger.error(f'Error initializing Google Drive service: {str(e)}')
+        return None
+
+def upload_files_to_server(local_files, remote_dir, delete_existing: bool = False):
+    """로컬 파일들을 지정된 원격 서버 디렉토리로 업로드하고, 성공/실패 결과를 반환합니다.
+
+    Args:
+        local_files (list): 업로드할 로컬 파일 경로 리스트.
+        remote_dir (str): 파일을 업로드할 원격 서버 디렉토리 경로.
+        delete_existing (bool, optional): True이면 업로드 전에 원격 디렉토리의 모든 파일을 삭제합니다. Defaults to False.
+    
+    Returns:
+        tuple: (성공한 파일 개수, 실패한 파일 딕셔너리 {filename: error_reason})
+    """
+    if not local_files:
+        logger.info(f"업로드할 파일이 없습니다: {remote_dir}")
+        return 0, {} # 성공 0개, 실패 없음
+
+    host = os.getenv('SERVER_HOST')
+    port = 22
+    user = os.getenv('SERVER_USERNAME')
+    ssh_key_filepath = os.getenv('SSH_KEY_PATH')
+    password = os.getenv('SERVER_PASSWORD')
+
+    # 서버 접속 정보 유효성 검사 (변경 없음)
+    if not all([host, user]):
+        logger.error("서버 접속 정보(호스트, 사용자)가 .env 파일에 완전하게 설정되지 않았습니다.")
+        return 0, {"Connection Setup Error": "Missing host or user in .env"} # 실패로 처리
+    if not ssh_key_filepath and not password:
+        logger.error("SSH 키 경로 또는 비밀번호 중 하나는 .env 파일에 설정되어야 합니다.")
+        return 0, {"Connection Setup Error": "Missing SSH key path or password in .env"} # 실패로 처리
+    if ssh_key_filepath and not os.path.exists(ssh_key_filepath):
+         logger.warning(f"지정된 SSH 키 경로를 찾을 수 없습니다: {ssh_key_filepath}. 비밀번호 인증을 시도합니다.")
+         ssh_key_filepath = None
+
+    ssh = None
+    sftp = None
+    successful_files = []
+    failed_files = {} # 실패한 파일과 이유 저장
+
+    try:
+        # --- 삭제: 텔레그램 알림: 업로드 시작 ---
+        # task_name = os.path.basename(remote_dir)
+        # notifier.send_message(f"'{task_name}' ({len(local_files)}개) 서버 업로드 시작...")
+
+        logger.info(f"서버에 연결 중: {user}@{host}")
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        # SSH 연결 로직 (변경 없음)
+        if ssh_key_filepath:
+            ssh.connect(
+                hostname=host,
+                port=port,
+                username=user,
+                key_filename=ssh_key_filepath
+            )
+        else:
+            ssh.connect(
+                hostname=host,
+                port=port,
+                username=user,
+                password=password
+            )
+        logger.info(f'Connected to server: {host}:{port}')
+
+        sftp = ssh.open_sftp()
+        logger.info("SFTP 세션 열기 성공.")
+
+        # 원격 디렉토리 확인 및 생성 (변경 없음)
+        try:
+            sftp.stat(remote_dir)
+            logger.info(f"원격 디렉토리 확인됨: {remote_dir}")
+        except FileNotFoundError:
+            logger.info(f"원격 디렉토리가 존재하지 않아 생성합니다: {remote_dir}")
+            # mkdir 명령어는 상위 디렉토리가 존재해야 함. 필요시 재귀적으로 생성 필요.
+            # 단순화를 위해 일단 mkdir만 사용. 필요시 아래 로직 추가:
+            # current_dir = ''
+            # for part in remote_dir.strip('/').split('/'):
+            #     current_dir += '/' + part
+            #     try:
+            #         sftp.stat(current_dir)
+            #     except FileNotFoundError:
+            #         sftp.mkdir(current_dir)
+            sftp.mkdir(remote_dir)
+
+        # --- 추가: 기존 파일 삭제 로직 --- 
+        if delete_existing:
+            logger.info(f"기존 파일 삭제 요청됨: '{remote_dir}'의 모든 파일을 삭제합니다.")
+            try:
+                for filename in sftp.listdir(remote_dir):
+                    file_path = os.path.join(remote_dir, filename).replace('\\', '/')
+                    try:
+                        # 파일인지 확인 후 삭제 (디렉토리는 삭제하지 않음)
+                        if sftp.stat(file_path).st_mode & 0o170000 == 0o100000: # Check if it's a regular file
+                             logger.info(f"기존 파일 삭제 중: '{file_path}'")
+                             sftp.remove(file_path)
+                        else:
+                             logger.warning(f"'{file_path}'는 파일이 아니므로 삭제하지 않습니다.")
+                    except Exception as remove_err:
+                        logger.error(f"기존 파일 삭제 실패: '{file_path}', 오류: {remove_err}")
+                        # 실패해도 계속 진행 (업로드 시도)
+            except Exception as list_err:
+                logger.error(f"기존 파일 목록 조회 실패: '{remote_dir}', 오류: {list_err}")
+                # 실패해도 계속 진행 (업로드 시도)
+        # --- 기존 파일 삭제 로직 끝 --- 
+
+        logger.info(f"총 {len(local_files)}개 파일 업로드 시작...")
+        for local_path in local_files:
+            filename = os.path.basename(local_path)
+            remote_path = os.path.join(remote_dir, filename).replace('\\', '/')
+            try:
+                logger.info(f"업로드 중: '{local_path}' -> '{remote_path}'")
+                sftp.put(local_path, remote_path)
+                logger.info(f"업로드 성공: '{filename}'")
+                successful_files.append(filename)
+            except Exception as e:
+                error_msg = f"'{filename}' 업로드 실패: {e}"
+                logger.error(error_msg)
+                failed_files[filename] = str(e)
+
+        logger.info(f"총 {len(successful_files)}개 파일 업로드 완료.")
+        if failed_files:
+             logger.warning(f"업로드 실패한 파일 {len(failed_files)}개:\n" + "\n".join([f"- {fname}: {reason}" for fname, reason in failed_files.items()]))
+
+    except paramiko.AuthenticationException as auth_err:
+        logger.error("서버 인증 실패. 사용자 이름, 비밀번호 또는 SSH 키를 확인하세요.")
+        # --- 삭제: 인증 실패 시 오류 메시지 전송 ---
+        # notifier.send_error(f"서버 인증 실패 ({host})", "파일 업로드")
+        failed_files["Connection Error"] = f"Authentication Failed: {auth_err}" # 전체 실패로 기록
+
+    except Exception as e:
+        error_message = f"파일 업로드 중 오류 발생: {e}"
+        logger.error(error_message)
+        # --- 삭제: 일반 오류 발생 시 메시지 전송 ---
+        # notifier.send_error(str(e), f"파일 업로드 ({os.path.basename(remote_dir)})", )
+        failed_files["General Error"] = str(e) # 전체 실패로 기록
+
+    finally:
+        # --- 삭제: 텔레그램 알림: 결과 전송 로직 전체 --- 
+        # task_name = os.path.basename(remote_dir)
+        # if failed_files:
+        #     ...
+        # else:
+        #     notifier.send_message(f"'{task_name}' ({len(successful_files)}개) 서버 업로드 완료.")
+
+        if sftp:
+            sftp.close()
+            logger.info("SFTP 세션 닫힘.")
+        if ssh:
+            ssh.close()
+            logger.info("SSH 연결 닫힘.")
+
+    # 변경: 성공 개수와 실패 딕셔너리 반환
+    return len(successful_files), failed_files
+
+def is_business_day():
+    """오늘이 영업일(평일)인지 확인합니다."""
+    today = datetime.datetime.now()
+    # 주말 체크
+    if today.weekday() >= 5:  # 5: 토요일, 6: 일요일
+        logger.info(f"Today is a weekend ({today.strftime('%Y-%m-%d')}). Skipping tasks.")
+        return False
+    
+    # 공휴일 체크 (코스피 ETF 거래량 확인)
+    try:
+        # 네이버 금융에서 코스피 ETF(069500) 정보 가져오기
+        url = "https://finance.naver.com/item/main.naver?code=069500"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            logger.warning("Failed to retrieve data from Naver Finance. Skipping tasks.")
+            return False
+        
+        # 오늘 날짜 형식 변환 (YYYYMMDD)
+        today_str = today.strftime('%Y%m%d')
+        
+        # 페이지에서 오늘 날짜의 거래량 정보가 있는지 확인
+        if today_str not in response.text:
+            logger.info("No trading data found for today. Skipping tasks.")
+            return False
+        
+        # 거래량이 매우 적으면 휴일로 간주
+        if "거래량 0" in response.text or "거래정지" in response.text:
+            logger.info("Trading is suspended or volume is zero. Skipping tasks.")
+            return False
+        
+        logger.info("Today is a business day.")
+        return True
+    except Exception as e:
+        logger.error(f"Error checking business day: {str(e)}")
+        # 오류 발생 시 안전하게 휴일로 간주
+        return False
+
+def extract_id_from_url(url):
+    """Extracts the File or Folder ID from a Google Drive URL."""
+    # Tries to find ID for common /d/ or /folders/ formats
+    match_file = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
+    if match_file:
+        return match_file.group(1)
+    match_folder = re.search(r'/folders/([a-zA-Z0-9_-]+)', url)
+    if match_folder:
+        return match_folder.group(1)
+    # Tries to find ID from file view URL format or spreadsheet URL
+    match_id = re.search(r'(?:/d/|id=|/folders/)([a-zA-Z0-9_-]{20,})', url)
+    if match_id:
+        return match_id.group(1)
+
+    logger.error(f"Could not extract ID from URL: {url}")
+    return None
+
+def download_file_from_drive(service, file_id, local_filename):
+    """지정된 파일 ID의 파일을 Google Drive에서 로컬 경로로 다운로드합니다."""
+    try:
+        logger.info(f"Attempting to download file '{file_id}' to '{local_filename}'")
+        request = service.files().get_media(fileId=file_id)
+        fh = io.FileIO(local_filename, 'wb')
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            logger.debug(f"Download {int(status.progress() * 100)}% for {file_id}.")
+        logger.info(f"Successfully downloaded '{file_id}' to '{local_filename}'")
+        return local_filename, None
+    except HttpError as error:
+        logger.error(f"An API error occurred while downloading file {file_id}: {error}")
+        return None, f"API error: {error}"
+    except Exception as e:
+        logger.error(f"An error occurred downloading file {file_id}: {e}")
+        return None, str(e)
+
+def download_folder_from_drive(service, folder_id, local_folder_path):
+    """Google Drive 폴더 내의 모든 파일을 지정된 로컬 폴더 경로에 다운로드합니다."""
+    try:
+        if not os.path.exists(local_folder_path):
+            os.makedirs(local_folder_path)
+            logger.info(f"Created local directory: {local_folder_path}")
+
+        query = f"'{folder_id}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false"
+        fields = "files(id, name)"
+        results = service.files().list(q=query, fields=fields, pageSize=1000).execute()
+        items = results.get('files', [])
+
+        if not items:
+            logger.warning(f"No files found in the folder: {folder_id}")
+            return [], None
+
+        downloaded_files = []
+        for item in items:
+            file_id = item['id']
+            file_name = item['name']
+            local_file_path = os.path.join(local_folder_path, file_name)
+            logger.info(f"Attempting to download file '{file_name}' (ID: {file_id}) from folder '{folder_id}' to '{local_file_path}'")
+
+            request = service.files().get_media(fileId=file_id)
+            fh = io.FileIO(local_file_path, 'wb')
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+                logger.debug(f"Download {int(status.progress() * 100)}% for {file_name}.")
+            logger.info(f"Successfully downloaded '{file_name}' to '{local_file_path}'")
+            downloaded_files.append(local_file_path)
+
+        return downloaded_files, None
+    except HttpError as error:
+        logger.error(f"An API error occurred while listing/downloading folder {folder_id}: {error}")
+        return None, f"API error: {error}"
+    except Exception as e:
+        logger.error(f"An error occurred downloading folder {folder_id}: {e}")
+        return None, str(e)
+
+def download_spreadsheet_as_csv(service, file_id, local_filename):
+    """Google 스프레드시트를 CSV 파일로 다운로드합니다."""
+    try:
+        logger.info(f"Attempting to download spreadsheet '{file_id}' as CSV to '{local_filename}'")
+        request = service.files().export_media(fileId=file_id, mimeType='text/csv')
+        fh = io.FileIO(local_filename, 'wb')
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            if status:
+                 logger.debug(f"Download {int(status.progress() * 100)}% for spreadsheet {file_id}.")
+        logger.info(f"Successfully downloaded spreadsheet '{file_id}' as CSV to '{local_filename}'")
+        return local_filename, None
+    except HttpError as error:
+        logger.error(f"An API error occurred while exporting spreadsheet {file_id}: {error}")
+        # Check if the error is due to non-spreadsheet file type
+        if 'export' in str(error).lower() and 'not supported' in str(error).lower():
+             logger.error(f"File {file_id} might not be a Google Spreadsheet.")
+             return None, f"File is not a Google Spreadsheet or export failed: {error}"
+        return None, f"API error: {error}"
+    except Exception as e:
+        logger.error(f"An error occurred downloading spreadsheet {file_id}: {e}")
+        return None, str(e)
+
+# Main Execution Logic
+# ==============================================================================
+
+def main():
+    """per.csv만 구글 드라이브 폴더에서 다운로드하여 서버에 업로드하는 전용 스크립트."""
+    logger.info("per_updater 단일 파일 동작 시작.")
+    notifier = TelegramNotifier()
+    try:
+        # 구글 드라이브 서비스 초기화
+        service = get_google_drive_service()
+        if not service:
+            logger.error("Google Drive 서비스 초기화 실패. 종료.")
+            notifier.send_error("Google Drive 서비스 초기화 실패.", "per_updater")
+            sys.exit(1)
+
+        # 구글 드라이브 폴더에서 per.csv 다운로드
+        folder_id = extract_id_from_url('https://drive.google.com/drive/folders/1fH4_rWvE-Sd8tGGVwEd9-O5ypLVnw_cn?usp=sharing')
+        local_temp_dir = os.path.join(os.path.dirname(__file__), 'temp_downloads')
+        if not os.path.exists(local_temp_dir):
+            os.makedirs(local_temp_dir)
+        logger.info(f"임시 폴더 생성 또는 확인: {local_temp_dir}")
+
+        # 폴더 내 모든 파일 다운로드 (per.csv만 추출)
+        downloaded_files, error = download_folder_from_drive(service, folder_id, local_temp_dir)
+        if error:
+            logger.error(f"폴더 다운로드 실패: {error}")
+            notifier.send_error(f"per.csv 다운로드 실패: {error}", "per_updater")
+            sys.exit(1)
+        per_file_path = None
+        for file_path in downloaded_files:
+            if os.path.basename(file_path).lower() == 'per.csv':
+                per_file_path = file_path
+                break
+        if not per_file_path:
+            logger.error("다운로드 폴더 내에 per.csv 파일이 없습니다.")
+            notifier.send_error("다운로드 폴더 내에 per.csv 파일이 없습니다.", "per_updater")
+            sys.exit(1)
+
+        # 서버 경로 지정
+        server_dir = '/home/intellio_korea/intellio_prod/frontend/stockeasy/public/requestfile/value'
+        server_filename = 'per.csv'
+        logger.info(f"서버 업로드 경로: {server_dir}/{server_filename}")
+
+        # 서버 업로드 (기존 업로드 함수 활용, 단일 파일만)
+        upload_count, upload_errors = upload_files_to_server([per_file_path], server_dir, delete_existing=False)
+        if upload_count == 1 and not upload_errors:
+            notifier.send_message("per_update 서버 성공")
+            logger.info("per_update 서버 성공 (텔레그램 알림 전송)")
+        else:
+            logger.error(f"업로드 실패: {upload_errors}")
+            notifier.send_error(f"per.csv 서버 업로드 실패: {upload_errors}", "per_updater")
+
+    except Exception as e:
+        logger.exception(f"per_updater 실행 중 예외 발생: {e}")
+        notifier.send_error(f"per_updater 실행 중 예외 발생: {e}", "per_updater")
+    finally:
+        logger.info("per_updater 실행 종료.")
+
+if __name__ == "__main__":
+    main()

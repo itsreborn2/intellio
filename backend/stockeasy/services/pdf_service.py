@@ -48,6 +48,10 @@ def convert_markdown_to_html(text: str) -> str:
     # 마크다운을 HTML로 변환
     html = md.render(text)
     
+    # 변환된 HTML을 로그로 출력(디버깅용)
+    print("==== 변환된 HTML ====")
+    print(html)
+    
     # <strong> 태그가 ReportLab에서 잘 작동하도록 <b> 태그로 변환
     html = html.replace("<strong>", "<b>").replace("</strong>", "</b>")
     
@@ -652,11 +656,54 @@ class PDFService:
         
         # 문서 내용 구성
         elements = []
-        
-        # 제목 추가
+
+        # ===== [회사 정보 헤더] =====
+        # PDF 모든 문서 최상단에 회사 정보 고정 삽입
+        # ===== [회사 정보 헤더: 3줄 모두 동일 자간(leading) 적용] =====
+        # 자간(leading)은 두 번째 줄(부제목) 스타일의 14로 통일
+        COMMON_LEADING = 14
+        # 1. 메인 제목: 스탁이지 : StockEasy (좌측 정렬, 글자 크기 30% 축소, 동일 자간)
+        from reportlab.lib.enums import TA_LEFT
+        title_left_style = ParagraphStyle(
+            name="Title-Left-KO",
+            parent=styles["Title"],
+            fontName=bold_font,
+            fontSize=int(styles["Title"].fontSize * 0.7),  # 약 30% 축소
+            alignment=TA_LEFT,
+            leading=COMMON_LEADING,
+            spaceAfter=2
+        )
+        elements.append(Paragraph("스탁이지 : StockEasy", title_left_style))
+        # 2. 부제목: 금융 데이터 기반 AI 분석 에이전트 (작게, 동일 자간)
+        subtitle_style = ParagraphStyle(
+            name="SubTitle-KO",
+            fontName=font_name,
+            fontSize=11,
+            leading=COMMON_LEADING,
+            alignment=TA_LEFT,
+            spaceAfter=2
+        )
+        elements.append(Paragraph("금융 데이터 기반 AI 분석 에이전트", subtitle_style))
+        # 3. 회사명/URL: (주)인텔리오 https://www.intellio.kr (더 작게, 동일 자간)
+        company_style = ParagraphStyle(
+            name="Company-KO",
+            fontName=font_name,
+            fontSize=9,
+            leading=COMMON_LEADING,
+            alignment=TA_LEFT,
+            textColor=colors.gray,
+            spaceAfter=4
+        )
+        elements.append(Paragraph("(주)인텔리오 https://www.intellio.kr", company_style))
+        # 4. 구분선
+        from reportlab.platypus import HRFlowable
+        elements.append(HRFlowable(width="100%", thickness=0.7, color=colors.grey, spaceBefore=4, spaceAfter=8))
+        # 구분선 아래에 본문(채팅 제목)과의 충분한 여백 추가
+        elements.append(Spacer(1, 24))  # 기존보다 넉넉한 여백
+        # ===== [원래 제목 및 본문] =====
+        # 기존 채팅 세션 제목 추가(회사 정보 헤더 아래)
         elements.append(Paragraph(f"{chat_session['title']}", styles["Title"]))
         elements.append(Spacer(1, 12))
-        
         # 메시지 목록 추가
         elements.append(Paragraph("", styles["Heading1-KO"]))
         elements.append(Spacer(1, 10))
@@ -704,9 +751,19 @@ class PDFService:
                             col_width = 450 / max(1, len(table_data[0]))  # A4 용지 너비에 맞게 조정
                             column_widths = [col_width] * len(table_data[0])
                             
-                            # ReportLab 테이블 생성
-                            table = Table(table_data, colWidths=column_widths)
-                            
+                            # 셀 데이터를 Paragraph로 변환하여 컬럼 너비에 맞춰 자동 줄바꿈(wrap) 처리
+                            table_data_wrapped = []
+                            for row_idx, row in enumerate(table_data):
+                                wrapped_row = []
+                                for col_idx, cell in enumerate(row):
+                                    # 헤더(첫 행)는 굵은 글씨, 나머지는 일반 스타일 적용
+                                    if row_idx == 0:
+                                        wrapped_row.append(Paragraph(cell, styles['Heading5-KO']))
+                                    else:
+                                        wrapped_row.append(Paragraph(cell, styles['Normal-KO']))
+                                table_data_wrapped.append(wrapped_row)
+                            # ReportLab 테이블 생성 (셀 데이터는 모두 Paragraph)
+                            table = Table(table_data_wrapped, colWidths=column_widths)
                             # 테이블 스타일 설정
                             table_style = [
                                 ('FONTNAME', (0, 0), (-1, -1), font_name),
@@ -718,7 +775,6 @@ class PDFService:
                                 ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
                                 ('TOPPADDING', (0, 0), (-1, -1), 4),
                             ]
-                            
                             table.setStyle(TableStyle(table_style))
                             elements.append(table)
                             elements.append(Spacer(1, 8))

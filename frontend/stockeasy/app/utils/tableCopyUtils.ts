@@ -70,7 +70,7 @@ export const copyTableAsImage = async (
     scale: 2,
     backgroundColor: '#ffffff',
     watermark: {
-      text: '스탁이지\nby (주)인텔리오\nhttps://stockeasy.intellio.kr',
+      text: '스탁이지\nby (주)인텔리오\nhttps://intellio.kr',
       opacity: 0.08, // 10% 불투명도 (매우 흐리게)
       fontSize: '24px',
       color: '#000000'

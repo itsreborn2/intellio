@@ -734,7 +734,7 @@ export default function ETFCurrentTable() {
           {/* 업데이트 날짜 표시 */}
           {updateDate && (
             <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-              updated 16:30 {updateDate}
+              updated 16:40 {updateDate}
             </span>
           )}
           {/* 테이블 복사 버튼 */}
@@ -742,7 +742,7 @@ export default function ETFCurrentTable() {
             tableRef={tableRef}
             headerRef={headerRef}
             tableName="ETF 현황"
-            updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
+            updateDateText={updateDate ? `updated 16:40 ${updateDate}` : undefined}
             // className="p-1 text-xs" // 필요시 버튼 스타일 조정
           />
         </div>
