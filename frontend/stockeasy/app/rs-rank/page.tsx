@@ -1212,14 +1212,14 @@ export default function RSRankPage() {
                         {/* 업데이트 날짜 표시 */}
                         {updateDate && (
                           <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-                            updated 16:30 {updateDate}
+                            updated 16:40 {updateDate}
                           </span>
                         )}
                         <TableCopyButton 
                           tableRef={rsTableRef} 
                           headerRef={rsHeaderRef} 
                           tableName="RS 순위 TOP 200" 
-                          updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
+                          updateDateText={updateDate ? `updated 16:40 ${updateDate}` : undefined}
                         />
                       </div>
                     </div>
@@ -1400,14 +1400,14 @@ export default function RSRankPage() {
                         {/* 업데이트 날짜 표시 */}
                         {updateDate && (
                           <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-                            updated 16:30 {updateDate}
+                            updated 16:40 {updateDate}
                           </span>
                         )}
                         <TableCopyButton 
                           tableRef={highTableRef} 
                           headerRef={highHeaderRef} 
                           tableName="52주 신고가 주요 종목"
-                          updateDateText={updateDate ? `updated 16:30 ${updateDate}` : undefined}
+                          updateDateText={updateDate ? `updated 16:40 ${updateDate}` : undefined}
                         />
                       </div>
                     </div>

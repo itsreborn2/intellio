@@ -907,7 +907,7 @@ const ValuationPage = () => {
                   ) : errorDate ? (
                     <span className="text-red-500">{errorDate}</span>
                   ) : updateDate ? (
-                    <span>updated 20:00 {updateDate}</span>
+                    <span>updated 17:00 {updateDate}</span>
                   ) : (
                     <span>날짜 정보 없음</span> // 로딩 완료 후에도 날짜가 없을 경우
                   )}
