@@ -525,8 +525,8 @@ export function InputArea({
             ref={inputRef}
             placeholder={showStockSuggestions || searchMode 
               ? "종목명 또는 종목코드 검색" 
-              : (selectedStock || hasActiveSession
-                ? "후속 질문을 해보세요." 
+              : (hasActiveSession
+                ? "생성된 문서 내에서 이어지는 질문을 해보세요. 다른 종목은 새 채팅을 시작해주세요."
                 : "종목을 선택 후 분석을 요청하세요.")}
             className="integrated-input-field"
             type="text"
