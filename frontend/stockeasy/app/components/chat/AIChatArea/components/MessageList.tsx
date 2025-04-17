@@ -298,7 +298,7 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>((
           fontSize: '16px',
           display: 'none' // 안내 텍스트 숨기기
         }}>
-          종목을 선택 후 분석을 요청하세요.
+          종목 선택 후 분석을 요청하세요.
         </div>
       ) : (
         // 메시지 목록

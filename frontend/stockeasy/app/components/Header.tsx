@@ -295,7 +295,7 @@ const Header: React.FC = () => {
             <div className="flex items-center gap-0.5">
               <MessageSquare size={16} className="text-gray-600" />
               <Badge variant="outline" className="h-5 text-xs px-1.5 ml-0.5 rounded-md flex items-center justify-center">
-                {isQuestionLoading ? "..." : `${30 - (questionSummary?.total_questions || 0)}`}
+                {isQuestionLoading ? "..." : `${100 - (questionSummary?.total_questions || 0)}`}
               </Badge>
             </div>
           )}
