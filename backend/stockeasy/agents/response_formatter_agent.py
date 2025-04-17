@@ -77,8 +77,20 @@ class ResponseFormatterAgent(BaseAgent):
             if context_response_agent:
                 context_based_answer = context_response_agent.get("answer", "")
                 summary = context_based_answer
-                
+            
+            # 마무리 인사, 다른 종목 질문등 question_analyzer에서 바로 날아온 경우
+            # context_analysis = state.get("context_analysis", {})
+            # if context_analysis:
+            #     logger.info(f"Context analysis: {context_analysis}")
 
+            #     is_conversation_closing = context_analysis.get("is_conversation_closing", False)
+            #     is_different_stock = context_analysis.get("is_different_stock", False)
+            #     stock_relation = context_analysis.get("stock_relation", "")
+
+            #     if is_conversation_closing:
+            #         logger.info(f"대화 마무리 인사로 감지: 유형={context_analysis.closing_type}")
+            #     elif is_different_stock and stock_relation == "다른종목":
+            #         logger.info(f"완전히 다른종목 질문")
             # 통합된 응답이 없는 경우 처리
             if not context_based_answer and (not summary or summarizer_status != "completed"):
                 logger.warning(f"No summary response available.")

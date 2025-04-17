@@ -14,6 +14,7 @@ from loguru import logger
 
 from common.utils.db_utils import get_one_or_none
 from stockeasy.models.chat import StockChatSession, StockChatMessage
+from common.utils.util import remove_null_chars
 
 
 # JSON 직렬화를 위한 커스텀 인코더 (datetime 객체 처리)
@@ -254,8 +255,11 @@ class ChatService:
             # 허용된 필드만 업데이트
             update_values = {k: v for k, v in update_data.items() if k in allowed_fields}
             
-            # agent_results 필드에 datetime 객체가 포함된 경우 처리
+            # NULL 문자(\u0000) 제거
             if "agent_results" in update_values and update_values["agent_results"] is not None:
+                update_values["agent_results"] = remove_null_chars(update_values["agent_results"])
+                
+                # datetime 객체 처리
                 update_values["agent_results"] = json.loads(
                     json.dumps(update_values["agent_results"], cls=DateTimeEncoder)
                 )

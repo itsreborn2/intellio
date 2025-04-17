@@ -76,7 +76,7 @@ class ContextResponseAgent(BaseAgent):
                 self._add_error(state, "컨텍스트 분석 결과가 없습니다.")
                 return state
             
-            if not is_follow_up:
+            if not is_follow_up: # state['is_follow_up] 은 프론트에서 후속질문인지 판단해서 전송한값. question_analyzer_agent에서 설정한 값이 아님.
                 logger.warning("후속질문이 아님")
                 self._add_error(state, "후속질문이 아닙니다.")
                 return state

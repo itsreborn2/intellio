@@ -472,7 +472,7 @@ Root
         # 응답 형식 - 요약 쿼리인 경우 특별 처리
         if is_summary_query:
             #response_format = self._get_summary_response_format() #요약 전용 프롬프트.
-            response_format = self._get_response_format(analysis_types)
+            response_format = self.get_general_document_summary_format()
         else:
             response_format = self._get_response_format(analysis_types)
         
@@ -480,7 +480,7 @@ Root
         parts = [
             base_prompt,
             f"\n문서 내용:\n{content}",
-            #f"\n질문:\n{query}" # 사용자의 질문 제외.
+
         ]
         
         # 분석 지침 결합
@@ -508,3 +508,20 @@ Root
 4. 결론: 문서의 결론이나 시사점이 있다면 요약하세요.
 
 답변은 간결하고 명확하게 작성하되, 중요한 정보는 모두 포함시키세요. 문서에 없는 내용은 추가하지 마세요."""
+
+    def get_general_document_summary_format(self) -> str:
+        """문서 유형에 맞는, 자연스럽고 심층적인 요약 프롬프트"""
+        return """문서의 특성과 내용을 고려하여 자연스럽고 통찰력 있는 요약을 작성해주세요.
+
+요약 시 고려사항:
+- 문서의 유형과 목적에 적합한 자연스러운 흐름으로 작성하세요
+- 미리 정의된 구조에 얽매이지 말고, 문서 자체의 논리적 흐름을 따르세요
+- 핵심 메시지와 중요 정보를 종합적으로 파악하여 제시하세요
+- 문서에 담긴 주요 통찰, 추세, 관계성을 심층적으로 해석하세요
+- 단순 내용 요약을 넘어 문서의 맥락과 의미를 포착하세요
+- 상충되는 관점이 있다면 균형 있게 다루세요
+- 중요한 데이터와 수치는 그 의미와 함께 포함하세요
+- 불필요한 세부사항은 과감히 생략하고 핵심에 집중하세요
+
+분량은 원문의 10~15% 수준을 유지하되, 복잡한 주제의 경우 충분한 설명을 포함하세요.
+문서에 없는 내용은 추가하지 말고, 사실에 근거한 객관적 요약을 제공하세요."""
