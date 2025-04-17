@@ -70,27 +70,33 @@ export function NoticePopup({ notice, onClose }: NoticePopupProps) {
 
   // 항상 최상위(z-9999)로 팝업이 뜨도록 z-index 강화 및 fixed 적용
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 relative animate-fadeIn">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-2 sm:px-0">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md sm:max-w-md md:max-w-lg p-4 sm:p-6 relative animate-fadeIn mx-auto"
+        style={{ minWidth: 0 }}>
         <button
-          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+          className="absolute top-2 right-2 sm:top-3 sm:right-3 text-gray-400 hover:text-gray-600 text-2xl sm:text-xl"
           onClick={onClose}
           aria-label="닫기"
         >
           ×
         </button>
-        <h2 className="text-xl font-bold mb-2">{notice.title}</h2>
-        <div className="text-base mb-4 whitespace-pre-line">{notice.content}</div>
-        <div className="flex gap-2 justify-end">
+        <h2 className="text-lg sm:text-xl font-bold mb-2 break-words">{notice.title}</h2>
+        <div
+          className="text-sm sm:text-base mb-4 whitespace-pre-line break-words
+            max-h-[50vh] overflow-y-auto sm:max-h-none sm:overflow-visible"
+        >
+          {notice.content}
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 justify-end">
           <button
             onClick={() => hideFor(todayStr())}
-            className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm"
+            className="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-xs sm:text-sm"
           >
             오늘 하루 안보기
           </button>
           <button
             onClick={() => hideFor(weekLaterStr())}
-            className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm"
+            className="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-xs sm:text-sm"
           >
             1주일 동안 안보기
           </button>
