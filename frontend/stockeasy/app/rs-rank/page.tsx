@@ -1470,7 +1470,7 @@ export default function RSRankPage() {
                                   </div>
                                 </th>
                                 <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 text-center text-xs"
+                                  className="hidden sm:table-cell px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 text-center text-xs"
                                   style={{ width: '70px', height: '35px' }}
                                 >
                                   <div className="flex items-center justify-center">
@@ -1483,7 +1483,7 @@ export default function RSRankPage() {
                                   onClick={() => handleHighSort('시가총액')}
                                 >
                                   <div className="flex items-center justify-center">
-                                    <span>시가총액</span>
+                                    <span>시가총액(억)</span>
                                     {highSortKey === '시가총액' && (
                                       <span className="ml-1">
                                         {highSortDirection === 'asc' ? '↑' : '↓'}
@@ -1497,7 +1497,7 @@ export default function RSRankPage() {
                                   onClick={() => handleHighSort('거래대금')}
                                 >
                                   <div className="flex items-center justify-center">
-                                    <span>거래대금</span>
+                                    <span>거래대금(억)</span>
                                     {highSortKey === '거래대금' && (
                                       <span className="ml-1">
                                         {highSortDirection === 'asc' ? '↑' : '↓'}
@@ -1555,10 +1555,10 @@ export default function RSRankPage() {
                                     </div>
                                   </td>
                                   <td 
-                                    className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis text-xs"
+                                    className="hidden sm:table-cell py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis text-xs"
                                     style={{ height: '35px' }}
                                   >
-                                    {/* 종가 값이 숫자일 경우 천 단위 콤마로 포맷 */}
+                                    {/* (모바일 숨김) 종가 값이 숫자일 경우 천 단위 콤마로 포맷 */}
                                     {row['종가'] && !isNaN(Number(row['종가'])) ? Number(row['종가']).toLocaleString('ko-KR') : (row['종가'] || '')}
                                   </td>
                                   <td 
@@ -1572,8 +1572,8 @@ export default function RSRankPage() {
                                     className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis text-xs"
                                     style={{ height: '35px' }}
                                   >
-                                    {/* 거래대금 값을 숫자로 변환하고 '억' 단위 추가, 변환 실패 시 0으로 처리 */}
-                                    {(Number(row['거래대금']) || 0).toLocaleString()}억
+                                    {/* 거래대금 값을 숫자로 변환하여 천 단위 콤마로만 표시, '억' 단위 텍스트 제거 */}
+                                    {(Number(row['거래대금']) || 0).toLocaleString()}
                                   </td>
                                 </tr>
                               ))}
