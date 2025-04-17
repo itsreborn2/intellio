@@ -81,3 +81,5 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
  "Keep track of the progress by updating the README.md file using checkboxes"
 
  항상 chain of thoughts 로 모든 프로세스를 사전에 고민하고 진행해.
+
+ backend 수정할 때 코드오류는 서버쪽 다커나 fastapi쪽 오류는 무시해. 잘 잘동중이니까. 린트에러나 등등의 오류만 수정해.
