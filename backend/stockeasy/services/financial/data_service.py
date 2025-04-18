@@ -500,9 +500,10 @@ class FinancialDataService:
         try:
             loop = asyncio.get_event_loop()
             fs_pages = []
-            keywords = ["연결재무상태표", "연결손익계산서", "연결포괄손익계산서", 
-                      "연결현금흐름표", "재무상태표", "손익계산서", "포괄손익계산서",
-                      "재무에 관한 사항", "연결재무제표", "요약재무정보"]
+            # keywords = ["연결재무상태표", "연결손익계산서", "연결포괄손익계산서", 
+            #           "연결현금흐름표", "재무상태표", "손익계산서", "포괄손익계산서",
+            #           "재무에 관한 사항", "연결재무제표", "요약재무정보"]
+            keywords = ["요약재무정보"]
             
             # 1. fitz로 목차 페이지 찾기
             doc = await loop.run_in_executor(None, partial(fitz.open, pdf_path))

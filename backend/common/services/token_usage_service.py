@@ -151,7 +151,7 @@ def track_token_usage_bg(
     user_id: Optional[UUID] = None,
     project_type: Optional[str] = None,
     token_type: Optional[str] = None,
-    model_name: Optional[str] = None
+    model_name: Optional[str] = 'default_model'
 ):
     """
     토큰 사용량을 비동기적으로 백그라운드에서 추적하기 위한 데코레이터
@@ -171,7 +171,7 @@ def track_token_usage_bg(
                 _user_id = kwargs.get('user_id', user_id)
                 _project_type = kwargs.get('project_type', project_type)
                 _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
-                _model_name = kwargs.get('model_name', None)
+                _model_name = kwargs.get('model_name', 'default_model')
                 logger.info(f"[track_token_usage_bg][async] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
                 # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
                 if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
