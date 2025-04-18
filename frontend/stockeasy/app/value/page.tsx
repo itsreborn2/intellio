@@ -188,7 +188,13 @@ const ValuationPage = () => {
   const [searchFilter, setSearchFilter] = useState('');
   const [industryFilter, setIndustryFilter] = useState('');
   const [industries, setIndustries] = useState<string[]>([]);
-  
+  // [중분류] 입력값 상태
+  const [middleCategoryFilter, setMiddleCategoryFilter] = useState('');
+  // [중분류] 목록 상태
+  const [middleCategories, setMiddleCategories] = useState<string[]>([]);
+  // [중분류] 선택된 값 상태
+  const [selectedMiddleCategory, setSelectedMiddleCategory] = useState<string | null>(null);
+
   // 선택된 종목과 업종 상태
   const [selectedStock, setSelectedStock] = useState<{code: string, name: string} | null>(null);
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
@@ -535,7 +541,10 @@ const ValuationPage = () => {
             // 업종 목록 추출 (중복 제거 및 정렬)
             const uniqueIndustries = Array.from(new Set(parsedData.map(item => item.industry))).sort();
             setIndustries(uniqueIndustries);
-            
+            // [중분류] 목록 추출 (중복 제거 및 정렬)
+            const uniqueMiddleCategories = Array.from(new Set(parsedData.map(item => item.middleCategory))).sort();
+            setMiddleCategories(uniqueMiddleCategories);
+
             setData(parsedData);
             setFilteredData(parsedData); // 초기 필터링 데이터 설정
             setLoading(false);
@@ -599,7 +608,7 @@ const ValuationPage = () => {
 
   // 필터 적용 효과
   useEffect(() => {
-    // 필터링 로직
+    // 필터링 로직 (종목명/코드, 업종, 중분류 순서로 적용)
     let result = [...data];
     
     // 종목명 또는 종목코드 필터 적용
@@ -630,9 +639,18 @@ const ValuationPage = () => {
       );
     }
     
+    // [중분류] 필터 적용
+    if (selectedMiddleCategory) {
+      // 선택된 중분류가 있는 경우
+      result = result.filter(item => item.middleCategory === selectedMiddleCategory);
+    } else if (middleCategoryFilter) {
+      // 중분류 검색어가 있는 경우
+      result = result.filter(item => item.middleCategory.toLowerCase().includes(middleCategoryFilter.toLowerCase()));
+    }
+
     setFilteredData(result);
     setCurrentPage(1); // 필터 변경 시 첫 페이지로 이동
-  }, [data, searchFilter, industryFilter, selectedStock, selectedIndustry]);
+  }, [data, searchFilter, industryFilter, selectedStock, selectedIndustry, middleCategoryFilter, selectedMiddleCategory]);
 
   // 종목 선택 기능
   const handleSelectStock = (stockCode: string, stockName: string) => {
@@ -658,6 +676,21 @@ const ValuationPage = () => {
     }
   }, [industryFilter, industries]);
 
+  // [중분류] 선택 기능
+  useEffect(() => {
+    if (middleCategoryFilter.trim()) {
+      // 정확히 일치하는 중분류 찾기
+      const foundMiddleCategory = middleCategories.find(category => 
+        category.toLowerCase().includes(middleCategoryFilter.toLowerCase())
+      );
+      
+      if (foundMiddleCategory) {
+        setSelectedMiddleCategory(foundMiddleCategory);
+        setMiddleCategoryFilter(''); // 선택 후 검색어 초기화
+      }
+    }
+  }, [middleCategoryFilter, middleCategories]);
+
   // 선택된 종목 해제 핸들러
   const handleClearSelectedStock = () => {
     setSelectedStock(null);
@@ -670,6 +703,12 @@ const ValuationPage = () => {
     setIndustryFilter('');
   };
   
+  // [중분류] 선택 해제 핸들러
+  const handleClearSelectedMiddleCategory = () => {
+    setSelectedMiddleCategory(null);
+    setMiddleCategoryFilter('');
+  };
+
   // 컬럼 너비 상태 추가 - 고정 너비 사용
   const [columnSizes, setColumnSizes] = useState<Record<string, number>>(() => {
     // 초기 컬럼 너비 설정
@@ -837,6 +876,7 @@ const ValuationPage = () => {
                         value={industryFilter}
                         onChange={(e) => setIndustryFilter(e.target.value)}
                         placeholder="업종 선택 또는 입력..."
+                        autoComplete="off" // 브라우저 자동완성(검색 기록) 비활성화
                         className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent"
                         style={{ 
                           width: 'clamp(100px, 12vw, 150px)',
@@ -856,6 +896,48 @@ const ValuationPage = () => {
                   )}
                 </div>
                 
+                {/* [중분류] 선택 필터 */}
+                <div className="flex flex-row items-center ml-1 sm:ml-2">
+                  <label htmlFor="middleCategoryFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+                    중분류
+                  </label>
+                  {selectedMiddleCategory ? (
+                    <button
+                      onClick={handleClearSelectedMiddleCategory}
+                      className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
+                      style={{ height: '35px', borderRadius: '4px' }}
+                    >
+                      <span>{selectedMiddleCategory}</span>
+                      <span className="ml-1">×</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center">
+                      <input
+                        list="middleCategoryOptions"
+                        id="middleCategoryFilter"
+                        value={middleCategoryFilter}
+                        onChange={(e) => setMiddleCategoryFilter(e.target.value)}
+                        placeholder="중분류 선택 또는 입력..."
+                        autoComplete="off" // 브라우저 자동완성(검색 기록) 비활성화
+                        className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent"
+                        style={{ 
+                          width: 'clamp(100px, 12vw, 150px)',
+                          height: '35px',
+                          borderRadius: '4px'
+                        }}
+                      />
+                      <datalist id="middleCategoryOptions">
+                        <option value="">전체 중분류</option>
+                        {middleCategories.map((category, index) => (
+                          <option key={index} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </datalist>
+                    </div>
+                  )}
+                </div>
+                
                 {/* 필터 초기화 버튼 */}
                 <div className="flex items-center ml-1 sm:ml-2">
                   <button
@@ -864,6 +946,8 @@ const ValuationPage = () => {
                       setIndustryFilter('');
                       setSelectedStock(null);
                       setSelectedIndustry(null);
+                      setMiddleCategoryFilter('');
+                      setSelectedMiddleCategory(null);
                     }}
                     className="px-2 sm:px-3 bg-gray-200 text-gray-700 text-[10px] sm:text-xs hover:bg-gray-300 focus:outline-none"
                     style={{ 
