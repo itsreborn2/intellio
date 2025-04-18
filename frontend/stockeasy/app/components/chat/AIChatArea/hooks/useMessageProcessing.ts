@@ -61,7 +61,7 @@ function useMessageProcessing(
     onQuestionLimitExceeded = () => toast.error('오늘의 질문 할당량을 모두 소진하였습니다. 내일 다시 이용해주세요.'),
     onProcessingStart = () => {},
     onProcessingComplete = () => {},
-    maxQuestions = 30
+    maxQuestions = 100
   } = options;
 
   // PDF 로딩 상태
