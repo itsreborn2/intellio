@@ -26,11 +26,17 @@ class UserService:
 
     async def create(self, user_in: UserCreate) -> User:
         """새 사용자 생성"""
+        # 문자열 길이 제한 적용 (PostgreSQL varchar 500 제한)
+        email = self._truncate_string(user_in.email, 500)
+        name = self._truncate_string(user_in.name, 500)
+        hashed_password = get_password_hash(user_in.password)
+        hashed_password = self._truncate_string(hashed_password, 500)
+        
         db_user = User(
             id=uuid4(),  # UUID 자동 생성
-            email=user_in.email,
-            name=user_in.name,
-            hashed_password=get_password_hash(user_in.password),
+            email=email,
+            name=name,
+            hashed_password=hashed_password,
             is_active=True,
             is_superuser=False
         )
@@ -82,7 +88,13 @@ class UserService:
 
         update_data = user_in.model_dump(exclude_unset=True)
         if "password" in update_data:
-            update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
+            hashed_pwd = get_password_hash(update_data.pop("password"))
+            update_data["hashed_password"] = self._truncate_string(hashed_pwd, 500)
+
+        # 문자열 필드 길이 제한 적용
+        for field, value in update_data.items():
+            if isinstance(value, str) and field in ["email", "name", "oauth_provider", "oauth_provider_id", "profile_image"]:
+                update_data[field] = self._truncate_string(value, 500)
 
         for field, value in update_data.items():
             setattr(user, field, value)
@@ -107,22 +119,38 @@ class UserService:
         if not user_data.get("name"):
             user_data["name"] = user_data["email"].split("@")[0]
 
+        # 문자열 길이 제한 적용
+        email = self._truncate_string(user_data["email"], 500)
+        name = self._truncate_string(user_data["name"], 500)
+        oauth_provider = self._truncate_string(user_data["oauth_provider"], 500)
+        oauth_provider_id = self._truncate_string(user_data["oauth_provider_id"], 500)
+        profile_image = self._truncate_string(user_data.get("profile_image", ""), 500)
+
         user = User(
             id=uuid4(),
-            email=user_data["email"],
+            email=email,
             hashed_password=None,
             is_active=True,
             is_superuser=False,
-            name=user_data["name"],
-            oauth_provider=user_data["oauth_provider"],
-            oauth_provider_id=user_data["oauth_provider_id"],
-            profile_image=user_data.get("profile_image")
+            name=name,
+            oauth_provider=oauth_provider,
+            oauth_provider_id=oauth_provider_id,
+            profile_image=profile_image if profile_image else None
         )
 
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
         return user
+
+    def _truncate_string(self, value: Optional[str], max_length: int) -> Optional[str]:
+        """문자열을 최대 길이로 제한"""
+        if value is None:
+            return None
+        if len(value) > max_length:
+            logger.warning(f"문자열이 최대 길이({max_length})를 초과하여 잘렸습니다: {value[:30]}...")
+            return value[:max_length]
+        return value
 
     async def create_session(self, session_in: SessionBase) -> Session:
         """새 세션 생성"""

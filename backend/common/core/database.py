@@ -19,7 +19,7 @@ engine = create_engine(
     pool_size=30,
     max_overflow=35,
     pool_timeout=30,
-    pool_recycle=600   # 30분마다 연결 재사용 (세션 누적 방지
+    pool_recycle=300   # 30분마다 연결 재사용 (세션 누적 방지
 )
 
 # asyncpg는 자체 커넥션 풀을 사용하고, pool_size는 asyncpg.Pool과 충돌할 수 있음

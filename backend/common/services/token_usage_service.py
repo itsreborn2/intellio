@@ -171,7 +171,7 @@ def track_token_usage_bg(
                 _user_id = kwargs.get('user_id', user_id)
                 _project_type = kwargs.get('project_type', project_type)
                 _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
-                _model_name = kwargs.get('model_name', 'default_model')
+                _model_name = kwargs.get('model_name', 'default_model')  # NULL 대신 기본값 설정
                 logger.info(f"[track_token_usage_bg][async] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
                 # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
                 if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
@@ -228,7 +228,7 @@ def track_token_usage_bg(
                 _user_id = kwargs.get('user_id', user_id)
                 _project_type = kwargs.get('project_type', project_type)
                 _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
-                _model_name = kwargs.get('model_name', None)
+                _model_name = kwargs.get('model_name', 'default_model')  # NULL 대신 기본값 설정
                 logger.info(f"[track_token_usage_bg][sync] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
                 # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
                 if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
@@ -771,28 +771,38 @@ def track_token_usage_sync(
                     logger.warning(f"[토큰 추적][동기] db_getter가 None - 토큰 저장 불가")
                     return
                 
+                # 외부에서 전달된 세션인지 확인 (트랜잭션 관리를 호출자에게 맡김)
+                is_external_session = not callable(db_getter)
+                
                 # db_getter가 callable인 경우 함수 호출
                 if callable(db_getter):
-                    logger.debug(f"[토큰 추적][동기] 콜러블 db_getter 사용")
+                    logger.debug(f"[토큰 추적][동기] 콜러블 db_getter 사용, 새 세션 생성")
                     db = db_getter()
                 else:
                     # 이미 세션인 경우
-                    logger.debug(f"[토큰 추적][동기] 기존 세션 사용")
+                    logger.debug(f"[토큰 추적][동기] 기존 세션 재사용")
                     db = db_getter
                     
                 if db:
-                    logger.debug(f"[토큰 추적][동기] DB 세션 획득 성공, tracker.save() 호출")
+                    logger.debug(f"[토큰 추적][동기] DB 세션 사용, tracker.save() 호출")
                     tracker.save(db)
+                    
+                    # 외부 세션을 사용하는 경우 커밋하지 않음 (호출자가 관리)
+                    if not is_external_session:
+                        logger.debug(f"[토큰 추적][동기] 내부 세션이므로 커밋 실행")
+                        db.commit()
                 else:
                     logger.warning("[토큰 추적][동기] DB 세션을 가져올 수 없어 토큰 사용량을 저장하지 못했습니다.")
             except Exception as e:
                 logger.error(f"[토큰 추적][동기] 토큰 사용량 저장 중 오류 발생: {str(e)}")
+                if db and not is_external_session:
+                    db.rollback()
         else:
             logger.info(f"[토큰 추적][동기] 토큰이 0개이므로 저장하지 않음")
     except Exception as e:
         logger.error(f"[토큰 추적][동기] 토큰 사용량 추적 중 오류 발생: {str(e)}")
         # 예외를 다시 발생시켜 호출자에게 전파
-        raise 
+        raise
 
 async def get_user_question_count(
     db: AsyncSession,

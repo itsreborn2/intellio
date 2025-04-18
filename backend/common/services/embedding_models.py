@@ -426,7 +426,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         texts: List[str], 
         embeddings_task_type: str = "RETRIEVAL_QUERY", 
         user_id: Optional[UUID] = None, 
-        project_type: Optional[str] = None
+        project_type: Optional[str] = None,
+        existing_db_session = None
     ) -> List[List[float]]:
         """동기적으로 임베딩 생성"""
         if not texts:
@@ -437,15 +438,16 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         
         # 토큰 사용량 추적을 위한 컨텍스트 매니저 사용
         if user_id and project_type:
-            # 동기 DB 세션 팩토리
+            # 기존 세션이 있으면 사용, 없으면 세션 팩토리 사용
             from common.core.database import SessionLocal
+            db_getter = existing_db_session if existing_db_session else SessionLocal
             
             with track_token_usage_sync(
                 user_id=user_id,
                 project_type=project_type,
                 token_type="embedding",
                 model_name=self.model_name,
-                db_getter=SessionLocal  # 동기 세션 팩토리 직접 전달
+                db_getter=db_getter  # 기존 세션 또는 세션 팩토리 전달
             ) as tracker:
                 # 토큰 사용량 누적을 위한 변수들
                 total_tokens = 0
