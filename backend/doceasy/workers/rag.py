@@ -13,16 +13,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from common.core.config import settings
 
-# DB 엔진 및 세션 팩토리 생성
-#engine = create_engine(settings.DATABASE_URL)
+# 기본 엔진 설정
+engine_args = {
+    "pool_pre_ping": True,
+    "pool_use_lifo": True,     # 중요: LIFO 방식으로 유휴 연결 감소
+}
 engine = create_engine(
     settings.DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=30,
-    max_overflow=35,
-    pool_timeout=30,
-    pool_recycle=1800   # 30분마다 연결 재사용 (세션 누적 방지
+    **engine_args
 )
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @worker_ready.connect

@@ -41,12 +41,14 @@ class CommonSettings(BaseSettings):
     POSTGRES_DB: str
     POSTGRES_HOST: str
     POSTGRES_PORT: str
-    
+    PGBOUNCER_HOST:str
+    PGBOUNCER_PORT:str
+    #DATABASE_URL:str
     @property
     def DATABASE_URL(self) -> str:
         """데이터베이스 URL을 동적으로 생성"""
         # 환경변수에서 직접 읽지 않고 항상 현재 설정된 값들을 사용
-        return f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.PGBOUNCER_HOST}:{self.PGBOUNCER_PORT}/{self.POSTGRES_DB}"
 
     # Security
     SECRET_KEY: str = "your-secret-key-here"
@@ -226,7 +228,7 @@ class CommonSettings(BaseSettings):
 def get_settings() -> CommonSettings:
     logger.info(f"Loading settings for environment: {os.getenv('ENV', 'development')}")
     settings = CommonSettings()
-    #logger.info(f"Generated DATABASE_URL: {settings.DATABASE_URL}")
+    logger.info(f"Generated DATABASE_URL: {settings.DATABASE_URL}")
     return settings
 
 settings = get_settings()
@@ -254,6 +256,8 @@ logger.info(f"POSTGRES_SERVER: {settings.POSTGRES_SERVER}")
 logger.info(f"POSTGRES_USER: {settings.POSTGRES_USER}")
 logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
 logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
+logger.info(f"PGBOUNCER_HOST: {settings.PGBOUNCER_HOST}")
+logger.info(f"PGBOUNCER_PORT: {settings.PGBOUNCER_PORT}")
 logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
 
 # 캐시 디렉토리 설정

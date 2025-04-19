@@ -132,7 +132,7 @@ async def logout(
 @router.get("/{provider}/login")
 async def oauth_login(provider: str, request: Request, redirectTo: Optional[str] = None):
     """소셜 로그인 시작점"""
-        # 요청 출처 확인
+    # 요청 출처 확인
     referer = request.headers.get('referer')
     origin = request.headers.get('origin')
     # 로그 출력
@@ -143,19 +143,38 @@ async def oauth_login(provider: str, request: Request, redirectTo: Optional[str]
     # DOCEASY_URL =https://doceasy.intellio.kr
     # INTELLIO_URL=http://localhost:3000
     # DOCEASY_URL =http://localhost:3010
-    redirect_domain = referer.split('/')[2]
-    redirect_to = redirect_domain
-    logger.info(f"referer domain_only: {redirect_domain}")
-
-    # 요청 보낸곳으로 되돌리기.
-    if redirect_domain in settings.INTELLIO_URL: # https://www.intellio.kr
-        redirect_to = f"{settings.INTELLIO_URL}"
-    elif redirect_domain in settings.DOCEASY_URL: # https://www.intellio.kr:
-        redirect_to = f"{settings.DOCEASY_URL}"
-    elif redirect_domain in settings.STOCKEASY_URL: # https://stockeasy.intellio.kr
-        redirect_to = f"{settings.STOCKEASY_URL}"
+    
+    # referer가 None인 경우 처리
+    if not referer:
+        logger.warning("Referer 헤더가 없음. redirectTo 파라미터 확인")
+        if redirectTo:
+            if redirectTo == "doceasy":
+                redirect_to = f"{settings.DOCEASY_URL}"
+            elif redirectTo == "stockeasy":
+                redirect_to = f"{settings.STOCKEASY_URL}"
+            elif redirectTo == "intellio" or redirectTo == "/":
+                redirect_to = f"{settings.INTELLIO_URL}"
+            else:
+                raise HTTPException(status_code=400, detail="유효하지 않은 redirectTo 값")
+        else:
+            # 기본값으로 INTELLIO_URL 사용
+            redirect_to = f"{settings.INTELLIO_URL}"
+        
+        logger.info(f"Referer 없음, 기본 redirect_to 설정: {redirect_to}")
     else:
-        raise HTTPException(status_code=400, detail="Your domain is not valid")
+        redirect_domain = referer.split('/')[2]
+        redirect_to = redirect_domain
+        logger.info(f"referer domain_only: {redirect_domain}")
+
+        # 요청 보낸곳으로 되돌리기.
+        if redirect_domain in settings.INTELLIO_URL: # https://www.intellio.kr
+            redirect_to = f"{settings.INTELLIO_URL}"
+        elif redirect_domain in settings.DOCEASY_URL: # https://www.intellio.kr:
+            redirect_to = f"{settings.DOCEASY_URL}"
+        elif redirect_domain in settings.STOCKEASY_URL: # https://stockeasy.intellio.kr
+            redirect_to = f"{settings.STOCKEASY_URL}"
+        else:
+            raise HTTPException(status_code=400, detail="Your domain is not valid")
     
     # redirectTo가 명시적으로 있다면, 거기로 리다이렉트.
     if redirectTo:

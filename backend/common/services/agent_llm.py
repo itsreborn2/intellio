@@ -386,6 +386,7 @@ class AgentLLM:
         
         # 토큰 추적 설정
         use_token_tracking = user_id is not None and project_type is not None and db is not None
+        use_token_tracking = False
         
         if use_token_tracking:
             from common.services.token_usage_service import track_token_usage
