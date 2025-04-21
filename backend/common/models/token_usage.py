@@ -24,7 +24,7 @@ class TokenUsage(Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     project_type: Mapped[ProjectType] = mapped_column(SQLEnum(ProjectType))
     token_type: Mapped[TokenType] = mapped_column(SQLEnum(TokenType))
-    model_name: Mapped[str] = mapped_column(String(100))
+    model_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)

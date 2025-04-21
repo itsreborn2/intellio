@@ -550,28 +550,31 @@ function AIChatAreaContent() {
       )}
 
       {/* 입력 영역 (상단 중앙 또는 하단에 위치) */}
-      <InputArea
-        inputMessage={stockState.searchTerm || ''}
-        setInputMessage={setSearchTerm}
-        selectedStock={state.selectedStock}
-        isProcessing={state.isProcessing}
-        isInputCentered={state.isInputCentered}
-        showStockSuggestions={stockState.showStockSuggestions}
-        stockOptions={stockState.stockOptions}
-        recentStocks={stockState.recentStocks}
-        searchMode={stockState.searchMode}
-        isLoading={stockState.isLoading}
-        error={stockState.error}
-        windowWidth={windowWidth}
-        onSendMessage={handleSendMessage}
-        onStockSelect={handleSelectStock}
-        onShowStockSuggestions={showSuggestions}
-        onSearchModeChange={setSearchMode}
-        onClearRecentStocks={clearRecentStocks}
-        scrollToBottom={() => messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom()}
-        showTitle={state.showTitle}
-        currentChatSession={state.currentChatSession}
-      />
+      {/* 후속 질문 일단 차단.*/}
+      {!state.currentChatSession && (
+        <InputArea
+          inputMessage={stockState.searchTerm || ''}
+          setInputMessage={setSearchTerm}
+          selectedStock={state.selectedStock}
+          isProcessing={state.isProcessing}
+          isInputCentered={state.isInputCentered}
+          showStockSuggestions={stockState.showStockSuggestions}
+          stockOptions={stockState.stockOptions}
+          recentStocks={stockState.recentStocks}
+          searchMode={stockState.searchMode}
+          isLoading={stockState.isLoading}
+          error={stockState.error}
+          windowWidth={windowWidth}
+          onSendMessage={handleSendMessage}
+          onStockSelect={handleSelectStock}
+          onShowStockSuggestions={showSuggestions}
+          onSearchModeChange={setSearchMode}
+          onClearRecentStocks={clearRecentStocks}
+          scrollToBottom={() => messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom()}
+          showTitle={state.showTitle}
+          currentChatSession={state.currentChatSession}
+        />
+      )}
       
       {/* 추천 질문 및 최신 업데이트 종목 영역 - 첫 진입 시 */}
       {state.isInputCentered && state.messages.length === 0 && (

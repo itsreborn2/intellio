@@ -258,7 +258,7 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
                       {isQuestionLoading ? (
                         '로딩 중...'
                       ) : (
-                        `${formatNumber(questionSummary?.total_questions)} / 30`
+                        `${formatNumber(questionSummary?.total_questions)} / 100`
                       )}
                     </div>
                   </div>

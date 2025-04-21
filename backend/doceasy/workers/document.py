@@ -412,56 +412,52 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
         batch_start_idx: 배치 시작 인덱스
         user_id: 사용자 ID
     """
-    try:
-        logger.info(f"청크 배치 처리 시작: document_id={document_id}, batch_start_idx={batch_start_idx}, user_id={user_id}")
-        # Redis에서 배치 처리 상태 확인
-        key = f"chunk_batch:{document_id}:{batch_start_idx}"
-        if redis_client_for_document.get_key(key):
-            logger.info(f"배치 {batch_start_idx}는 이미 처리 중입니다.")
-            return {"status": "ALREADY_PROCESSING"}
+    # 연결 풀에 부담을 줄이기 위해 한 번의 세션으로 모든 작업 처리
+    with SessionLocal() as db:
+        try:
+            logger.info(f"청크 배치 처리 시작: document_id={document_id}, batch_start_idx={batch_start_idx}, user_id={user_id}")
+            # Redis에서 배치 처리 상태 확인
+            key = f"chunk_batch:{document_id}:{batch_start_idx}"
+            if redis_client_for_document.get_key(key):
+                logger.info(f"배치 {batch_start_idx}는 이미 처리 중입니다.")
+                return {"status": "ALREADY_PROCESSING"}
+                
+            # 처리 시작 표시
+            redis_client_for_document.set_key(key, "1", expire=1800)  # 30분 후 만료
+            embedding_service = EmbeddingService()
             
-        # 처리 시작 표시
-        redis_client_for_document.set_key(key, "1", expire=1800)  # 30분 후 만료
-        embedding_service = EmbeddingService()
-        
-        # 임포트
-        from common.services.token_usage_service import track_token_usage_sync
-        from common.core.database import SessionLocal
-        
-        # 먼저 모든 청크의 임베딩을 생성
-        embeddings = embedding_service.create_embeddings_batch_sync(
-            texts=chunks, 
-            user_id=UUID(user_id) if user_id else None, 
-            project_type=ProjectType.DOCEASY
-        )
+            # 먼저 모든 청크의 임베딩을 생성 - 기존 세션 전달
+            embeddings = embedding_service.create_embeddings_batch_sync(
+                texts=chunks, 
+                user_id=UUID(user_id) if user_id else None, 
+                project_type=ProjectType.DOCEASY,
+                existing_db_session=db  # 기존 세션 전달
+            )
 
-        if not embeddings:
-            raise ValueError("임베딩 생성 실패")
+            if not embeddings:
+                raise ValueError("임베딩 생성 실패")
+                
+            # 벡터 저장용 데이터 준비
+            vectors = []
+            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+                chunk_id = f"{document_id}_chunk_{batch_start_idx + i}"
+                vectors.append({
+                    "id": chunk_id,
+                    "values": embedding,
+                    "metadata": {
+                        "document_id": document_id,
+                        "chunk_index": batch_start_idx + i,
+                        "text": chunk
+                    }
+                })
             
-        # 벡터 저장용 데이터 준비
-        vectors = []
-        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-            chunk_id = f"{document_id}_chunk_{batch_start_idx + i}"
-            vectors.append({
-                "id": chunk_id,
-                "values": embedding,
-                "metadata": {
-                    "document_id": document_id,
-                    "chunk_index": batch_start_idx + i,
-                    "text": chunk
-                }
-            })
-        
-       
-        
-        # 벡터 저장 (동기)
-        vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(), 
-                                        project_name="doceasy",
-                                        namespace=settings.PINECONE_NAMESPACE_DOCEASY)
-        vs_manager.store_vectors(vectors)
-            
-        # 모든 청크가 처리되었는지 확인
-        with SessionLocal() as db:
+            # 벡터 저장 (동기)
+            vs_manager = VectorStoreManager(embedding_model_type=embedding_service.get_model_type(), 
+                                            project_name="doceasy",
+                                            namespace=settings.PINECONE_NAMESPACE_DOCEASY)
+            vs_manager.store_vectors(vectors)
+                
+            # 문서 상태 업데이트 (같은 세션 계속 사용)
             doc = db.query(Document).filter(Document.id == UUID(document_id)).first()
             if doc:
                 # 문서의 총 청크 수 먼저 확인 및 설정
@@ -497,7 +493,6 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
                     logger.info(f"문서 {document_id} 처리 완료: {current_processed}/{total_chunks} 청크")
                     doc.status = DOCUMENT_STATUS_COMPLETED
                     doc.updated_at = datetime.now()
-                    db.commit()
                     
                     update_document_status(
                         document_id,
@@ -513,7 +508,6 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
                     logger.info(f"문서 {document_id} 처리 중: {current_processed}/{total_chunks} 청크")
                     doc.status = DOCUMENT_STATUS_PARTIAL
                     doc.updated_at = datetime.now()
-                    db.commit()
                     
                     update_document_status(
                         document_id,
@@ -525,26 +519,28 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
                             "embedding_ids": doc.embedding_ids
                         }
                     )
+                    
+                # 모든 작업 완료 후 한 번에 커밋
+                db.commit()
 
-        return {
-            "status": "SUCCESS",
-            "chunk_ids": [v["id"] for v in vectors],
-            "batch_index": batch_start_idx,
-            "processed_chunks": current_processed if 'current_processed' in locals() else 0,
-            "total_chunks": total_chunks if 'total_chunks' in locals() else 0
-        }
-        
-    except Exception as e:
-        logger.exception(f"청크 배치 처리 실패 (문서: {document_id}, 배치: {batch_start_idx}): {str(e)}")
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=e)
-        raise
-    finally:
-        # 처리 완료 표시 제거
-        redis_client_for_document.delete_key(key)
-        # if bApplyAsync:
-            #     loop.close()
-
+            return {
+                "status": "SUCCESS",
+                "chunk_ids": [v["id"] for v in vectors],
+                "batch_index": batch_start_idx,
+                "processed_chunks": current_processed if 'current_processed' in locals() else 0,
+                "total_chunks": total_chunks if 'total_chunks' in locals() else 0
+            }
+            
+        except Exception as e:
+            db.rollback()  # 오류 발생 시 롤백
+            logger.exception(f"청크 배치 처리 실패 (문서: {document_id}, 배치: {batch_start_idx}): {str(e)}")
+            if self.request.retries < self.max_retries:
+                raise self.retry(exc=e)
+            raise
+        finally:
+            # 세션은 with 블록에서 자동으로 닫힘
+            # 처리 완료 표시 제거
+            redis_client_for_document.delete_key(key)
 
 @celery.task(
     name="process_documents_batch",

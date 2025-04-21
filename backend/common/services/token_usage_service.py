@@ -151,7 +151,7 @@ def track_token_usage_bg(
     user_id: Optional[UUID] = None,
     project_type: Optional[str] = None,
     token_type: Optional[str] = None,
-    model_name: Optional[str] = None
+    model_name: Optional[str] = 'default_model'
 ):
     """
     토큰 사용량을 비동기적으로 백그라운드에서 추적하기 위한 데코레이터
@@ -171,7 +171,7 @@ def track_token_usage_bg(
                 _user_id = kwargs.get('user_id', user_id)
                 _project_type = kwargs.get('project_type', project_type)
                 _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
-                _model_name = kwargs.get('model_name', None)
+                _model_name = kwargs.get('model_name', 'default_model')  # NULL 대신 기본값 설정
                 logger.info(f"[track_token_usage_bg][async] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
                 # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
                 if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
@@ -228,7 +228,7 @@ def track_token_usage_bg(
                 _user_id = kwargs.get('user_id', user_id)
                 _project_type = kwargs.get('project_type', project_type)
                 _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
-                _model_name = kwargs.get('model_name', None)
+                _model_name = kwargs.get('model_name', 'default_model')  # NULL 대신 기본값 설정
                 logger.info(f"[track_token_usage_bg][sync] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
                 # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
                 if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
@@ -375,7 +375,7 @@ class TokenUsageTracker:
         self.completion_tokens += completion_tokens
         self.total_tokens += total_tokens if total_tokens is not None else (prompt_tokens + completion_tokens)
         self.total_cost += cost
-        logger.info(f"[토큰 추적] 토큰 추가: prompt={prompt_tokens}, completion={completion_tokens}, total={self.total_tokens}, cost={self.total_cost}")
+        #logger.info(f"[토큰 추적] 토큰 추가: prompt={prompt_tokens}, completion={completion_tokens}, total={self.total_tokens}, cost={self.total_cost}")
         
     async def save(self, db: AsyncSession):
         """기록된 토큰 사용량을 데이터베이스에 저장"""
@@ -435,7 +435,7 @@ async def track_token_usage(
         
         # 컨텍스트 종료 시 DB에 저장
         if tracker.total_tokens > 0:
-            logger.info(f"[토큰 추적] 컨텍스트 종료 - DB 저장 시작: total_tokens={tracker.total_tokens}")
+            #logger.info(f"[토큰 추적] 컨텍스트 종료 - DB 저장 시작: total_tokens={tracker.total_tokens}")
             try:
                 # DB 세션 가져오기
                 db = None

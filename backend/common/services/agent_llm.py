@@ -34,11 +34,11 @@ class AgentLLM:
         self.streaming_callback: Optional[Callable[[str], None]] = None
         self.fallback_settings = llm_config_manager.get_fallback_settings()
         
-        logger.info(f"AgentLLM 초기화: {agent_name}, provider={self.llm_config.get('provider')}, model={self.llm_config.get('model_name')}")
+        #logger.info(f"AgentLLM 초기화: {agent_name}, provider={self.llm_config.get('provider')}, model={self.llm_config.get('model_name')}")
         
         # 폴백 설정 로그
-        if self.fallback_settings.get("enabled", False):
-            logger.debug(f"폴백 활성화됨: 최대 재시도 횟수={self.fallback_settings.get('max_retries', 3)}, 폴백 제공자 수={len(self.fallback_settings.get('providers', []))}")
+        # if self.fallback_settings.get("enabled", False):
+        #     logger.debug(f"폴백 활성화됨: 최대 재시도 횟수={self.fallback_settings.get('max_retries', 3)}, 폴백 제공자 수={len(self.fallback_settings.get('providers', []))}")
     
     def get_model_name(self) -> str:
         """
@@ -386,6 +386,7 @@ class AgentLLM:
         
         # 토큰 추적 설정
         use_token_tracking = user_id is not None and project_type is not None and db is not None
+        use_token_tracking = False
         
         if use_token_tracking:
             from common.services.token_usage_service import track_token_usage
@@ -676,7 +677,6 @@ class AgentLLM:
                     if isinstance(args[0], str):
                         args = ([HumanMessage(content=args[0]+ json_instruction )],) + args[1:]
                 
-                logger.info(f"[구조화된 출력][ainvoke]  원본 응답 획득을 위한 LLM 호출")
                 
                 raw_response = await self.agent_llm.ainvoke_with_fallback(
                     *args,
@@ -685,7 +685,6 @@ class AgentLLM:
                     db=db,
                     **kwargs
                 )
-                logger.info(f"[구조화된 출력][ainvoke] type : {type(raw_response)}")
                 # 2단계: 응답 내용을 수동으로 Pydantic 모델로 파싱
                 try:
                     content = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
@@ -701,7 +700,7 @@ class AgentLLM:
                     # 문자열 앞뒤 공백 제거
                     content = content.strip()
                     
-                    logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}")
+                    #logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}")
                     
                     # Pydantic 모델로 파싱
                     if hasattr(self.schema, 'model_validate_json'):
@@ -773,7 +772,7 @@ class AgentLLM:
                     # 문자열 앞뒤 공백 제거
                     content = content.strip()
                     
-                    logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}")
+                    #logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}")
                     
                     # Pydantic 모델로 파싱
                     if hasattr(self.schema, 'model_validate_json'):

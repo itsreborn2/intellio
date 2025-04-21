@@ -6,6 +6,7 @@ import asyncio
 import os
 import sys
 import time
+import warnings
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from loguru import logger
@@ -27,15 +28,16 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 # markdown을 html로 변환하는 라이브러리 추가
 import markdown
 
+# 경고 메시지 억제 설정
+# PyMuPDF 경고 메시지 필터링
+warnings.filterwarnings("ignore", category=UserWarning)
+
+# fitz 라이브러리의 경고 출력 레벨 변경 (0: 모든 출력, 1: 경고만, 2: 오류만, 3: 모두 억제)
+# 모든 경고 메시지 억제
+fitz.TOOLS.mupdf_warnings_handler = lambda warn_level, message: None
+
 # 환경 변수 로드
 load_dotenv()
-# 설정 의존성 제거
-# from dotenv import load_dotenv
-# from common.core.config import settings
-# from common.services.retrievers.models import DocumentWithScore
-
-# 환경 변수 로드 대신 API 키 직접 설정 (실제 API 키로 교체해야 함)
-# load_dotenv()
 # GEMINI_API_KEY를 사용자가 입력해야 합니다
 GEMINI_API_KEY = settings.GEMINI_API_KEY
 # OpenAI API 키 설정
@@ -50,7 +52,7 @@ async def test_all():
     # 049880 우진플람
     # 214450 파마리서치, 010140 삼성중공업, 112610 씨에스윈드, 014620 성광벤드, 329180 현대중공업
     #code_list = ["112610", "014620", "329180"]
-    code_list = ["278470"]
+    code_list = ["103590"]
 
     result = ""
     for code in code_list:
@@ -167,6 +169,8 @@ async def extract_분기별데이터(target_report: str):
     business_content_end_page = None
     sales_section_start_page = None
     sales_section_end_page = None
+    materials_equipment_start_page = None  # 원재료 및 생산설비 시작 페이지
+    materials_equipment_end_page = None    # 원재료 및 생산설비 끝 페이지
     
     for i, item in enumerate(toc):
         level, title, page_num = item
@@ -187,6 +191,21 @@ async def extract_분기별데이터(target_report: str):
             if business_content_end_page is None:
                 business_content_end_page = len(doc) - 1
         
+        # '원재료 및 생산설비' 목차 찾기
+        if business_content_start_page is not None and ("원재료" in title or "생산설비" in title):
+            materials_equipment_start_page = page_num - 1  # 0-based 페이지 번호로 변환
+            
+            # 다음 동일 레벨 또는 상위 레벨 목차를 찾아 끝 페이지 결정
+            for next_item in toc[i+1:]:
+                next_level, next_title, next_page = next_item
+                if next_level <= level:
+                    materials_equipment_end_page = next_page - 2  # 다음 섹션 시작 전 페이지
+                    break
+            
+            # 다음 섹션이 없으면 사업의 내용 끝까지를 범위로 설정
+            if materials_equipment_end_page is None and business_content_end_page is not None:
+                materials_equipment_end_page = business_content_end_page
+        
         # '매출 및 수주상황' 목차 찾기 (II. 사업의 내용 아래에 있어야 함)
         if business_content_start_page is not None and "매출" in title and "수주" in title:
             sales_section_start_page = page_num - 1  # 0-based 페이지 번호로 변환
@@ -201,47 +220,85 @@ async def extract_분기별데이터(target_report: str):
             # 다음 섹션이 없으면 사업의 내용 끝까지를 범위로 설정
             if sales_section_end_page is None and business_content_end_page is not None:
                 sales_section_end_page = business_content_end_page
-            
-            break  # 매출 및 수주상황 섹션을 찾았으므로 검색 종료
     
-    # 5. 페이지 범위 결정 (매출 및 수주상황을 찾지 못했다면 사업의 내용 전체를 사용)
-    if sales_section_start_page is not None and sales_section_end_page is not None:
-        start_page = sales_section_start_page
-        end_page = sales_section_end_page
-        logger.info(f"'매출 및 수주상황' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
-    elif business_content_start_page is not None and business_content_end_page is not None:
-        start_page = business_content_start_page
-        end_page = business_content_end_page
-        logger.info(f"'II. 사업의 내용' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
-    else:
-        logger.error("관련 섹션을 찾을 수 없습니다.")
-        doc.close()
-        return
-    
-    # 6. pdfplumber를 사용하여 해당 페이지 내용 추출
+    # 추출한 텍스트를 저장할 변수
     extracted_text = f"-----------------------------\n\n"
     extracted_text += f"## {year}년 {quater} 데이터\n\n"
     print(f"{extracted_text}")
+    subtext = ""
+    # PDF 열기
     with pdfplumber.open(target_report) as pdf:
-        # 페이지 범위가 너무 크면 최대 10페이지로 제한
+        # 페이지 제한 설정
         max_pages = 30
-        if end_page - start_page > max_pages:
-            logger.warning(f"페이지 범위가 너무 큽니다. 처음 {max_pages}페이지만 추출합니다.")
-            end_page = start_page + max_pages
         
-        for page_num in range(start_page, end_page + 1):
-            if page_num < len(pdf.pages):
-                page = pdf.pages[page_num]
-                text = page.extract_text()
-                if text:
-                    extracted_text += f"\n\n--- 페이지 {page_num + 1} ---\n\n{text}"
+        # 5. '원재료 및 생산설비' 섹션 내용 추출
+        if materials_equipment_start_page is not None and materials_equipment_end_page is not None:
+            start_page = materials_equipment_start_page
+            end_page = materials_equipment_end_page
+            
+            if end_page - start_page > max_pages:
+                logger.warning(f"'원재료 및 생산설비' 페이지 범위가 너무 큽니다. 처음 {max_pages}페이지만 추출합니다.")
+                end_page = start_page + max_pages
+            
+            logger.info(f"'원재료 및 생산설비' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
+            extracted_text += f"\n\n### 원재료 및 생산설비 섹션\n\n"
+            subtext = f"### 원재료 및 생산설비 섹션\n\n"
+            
+            for page_num in range(start_page, end_page + 1):
+                if page_num < len(pdf.pages):
+                    page = pdf.pages[page_num]
+                    text = page.extract_text()
+                    if text:
+                        extracted_text += f"\n\n--- 페이지 {page_num + 1} ---\n\n{text}"
+                        subtext += f"\n\n--- 페이지 {page_num + 1} ---\n\n{text}"
+        
+        # 6. '매출 및 수주상황' 섹션 내용 추출
+        if sales_section_start_page is not None and sales_section_end_page is not None:
+            start_page = sales_section_start_page
+            end_page = sales_section_end_page
+            
+            if end_page - start_page > max_pages:
+                logger.warning(f"'매출 및 수주상황' 페이지 범위가 너무 큽니다. 처음 {max_pages}페이지만 추출합니다.")
+                end_page = start_page + max_pages
+            
+            logger.info(f"'매출 및 수주상황' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
+            extracted_text += f"\n\n### 매출 및 수주상황 섹션\n\n"
+            
+            for page_num in range(start_page, end_page + 1):
+                if page_num < len(pdf.pages):
+                    page = pdf.pages[page_num]
+                    text = page.extract_text()
+                    if text:
+                        extracted_text += f"\n\n--- 페이지 {page_num + 1} ---\n\n{text}"
+        
+        # 두 섹션 모두 찾지 못했을 경우 사업의 내용 전체 내용 추출
+        if (materials_equipment_start_page is None or materials_equipment_end_page is None) and \
+           (sales_section_start_page is None or sales_section_end_page is None) and \
+           business_content_start_page is not None and business_content_end_page is not None:
+            
+            start_page = business_content_start_page
+            end_page = business_content_end_page
+            
+            if end_page - start_page > max_pages:
+                logger.warning(f"'II. 사업의 내용' 페이지 범위가 너무 큽니다. 처음 {max_pages}페이지만 추출합니다.")
+                end_page = start_page + max_pages
+            
+            logger.info(f"'II. 사업의 내용' 섹션을 사용합니다: 페이지 {start_page+1}~{end_page+1}")
+            
+            for page_num in range(start_page, end_page + 1):
+                if page_num < len(pdf.pages):
+                    page = pdf.pages[page_num]
+                    text = page.extract_text()
+                    if text:
+                        extracted_text += f"\n\n--- 페이지 {page_num + 1} ---\n\n{text}"
     
     extracted_text += f"\n\n--- 데이터 끝 ---\n\n"
+    
     if not extracted_text:
         logger.error("추출된 텍스트가 없습니다.")
-        doc.close()
-        return
-    return extracted_text
+    
+    doc.close()
+    return extracted_text, subtext
 async def test_find매출_수주현황_사업부별매출(dir_path: str):
     """
     """
@@ -260,7 +317,9 @@ async def test_find매출_수주현황_사업부별매출(dir_path: str):
     file_list = annual_reports[:4]
     extracted_text = ""
     for file in file_list:
-        extracted_text += await extract_분기별데이터(file)
+        a, b = await extract_분기별데이터(file)
+        extracted_text += a
+        #print(b)
 
     print(f"length: {len(extracted_text)}")
 
@@ -289,12 +348,14 @@ async def test_find매출_수주현황_사업부별매출(dir_path: str):
 5. 제품별 매출 현황과 지난 분기 대비 증감율(QoQ)
 6. 지역별 매출 현황과 지난 분기 대비 증감율(QoQ)
 7. 사업부문별 매출 비중 (전체 매출 대비 각 사업부의 비율, %)
+8. 생산능력 및 가동률 현황 (제품별/사업부문별 생산능력, 생산실적, 가동률)
 
 **요청 사항:**
 - 위 정보를 간결한 **표** 형태로 정리해주세요.
 - 정보가 없는 항목은 생략합니다.
 - 항목 4~6번은 각각 별도의 표로 구분하여 작성해주세요.
 - 항목 7번은 항목 4번의 매출을 기반으로 비중을 계산해주세요.
+- 항목 8번 생산능력 및 가동률은 별도 표로 표시하고 가능하면 분기별로 정리해주세요.
 - 4~6번 표는 다음 형식으로 출력해주세요:
 
 [📊 표 예시: 제품별 매출]
@@ -315,7 +376,7 @@ async def test_find매출_수주현황_사업부별매출(dir_path: str):
 
 ※ 모든 금액 단위는 **백만원**, 괄호 안은 전 분기 대비 증감율(QoQ)입니다.
 ※ 매출 비중(%)은 각 분기 총 매출 기준으로 계산된 비율입니다.
-※ 매출액이 없는 항목은 ‘-’로 표기해주세요.
+※ 매출액이 없는 항목은 '-'로 표기해주세요.
 
         """
         

@@ -79,7 +79,14 @@ class ConversationContextAnalysis(BaseModel):
     is_followup_question: bool = Field(..., description="이전 질문에 대한 후속 질문인지 여부")
     referenced_context: PydanticOptional[str] = Field(None, description="참조하는 대화 컨텍스트 (있는 경우)")
     relation_to_previous: Literal["독립적", "직접참조", "간접참조", "확장", "수정"] = Field(..., description="이전 대화와의 관계")
+    is_conversation_closing: bool = Field(False, description="대화 마무리를 뜻하는 인사말인지 여부")
+    closing_type: PydanticOptional[Literal["긍정적", "중립적", "부정적"]] = Field(None, description="마무리 인사 유형")
+    closing_response: PydanticOptional[str] = Field(None, description="마무리 인사에 대한 응답 메시지")
     reasoning: str = Field(..., description="판단에 대한 이유 설명")
+    is_different_stock: bool = Field(False, description="이전 질문과 다른 종목에 관한 질문인지 여부")
+    previous_stock_name: PydanticOptional[str] = Field(None, description="이전 질문에서 언급된 종목명")
+    previous_stock_code: PydanticOptional[str] = Field(None, description="이전 질문에서 언급된 종목코드")
+    stock_relation: PydanticOptional[Literal["동일종목", "종목비교", "다른종목", "알수없음"]] = Field(None, description="이전 종목과의 관계")
 
 
 class QuestionAnalyzerAgent(BaseAgent):
@@ -149,19 +156,77 @@ class QuestionAnalyzerAgent(BaseAgent):
             has_valid_history = (
                 conversation_history and 
                 isinstance(conversation_history, list) and 
-                len(conversation_history) > 1
+                len(conversation_history) >= 1
             )
             
             if has_valid_history:
                 logger.info(f"대화 기록 있음: {len(conversation_history)}개 메시지")
-                context_analysis = await self.analyze_conversation_context(query, conversation_history, user_id)
+                context_analysis = await self.analyze_conversation_context(query, conversation_history, stock_name, stock_code, user_id)
                 context_analysis_result = context_analysis.model_dump() # dict
                 
                 # 분석 결과 상태에 저장
                 state["context_analysis"] = context_analysis_result
                 
+                # 대화 마무리 인사인지 확인
+                if context_analysis.is_conversation_closing:
+                    logger.info(f"대화 마무리 인사로 감지: 유형={context_analysis.closing_type}")
+                    
+                    # 상태 업데이트
+                    state["agent_results"]["question_analysis"] = context_analysis_result
+                    state["summary"] = context_analysis.closing_response
+                    state["formatted_response"] = state["summary"]
+                    state["answer"] = state["summary"]
+
+                    # 메트릭 기록 및 처리 상태 업데이트
+                    end_time = datetime.now()
+                    duration = (end_time - start_time).total_seconds()
+                    
+                    state["metrics"] = state.get("metrics", {})
+                    state["metrics"]["question_analyzer"] = {
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "duration": duration,
+                        "status": "completed",
+                        "error": None,
+                        "model_name": self.model_name
+                    }
+                    
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["question_analyzer"] = "completed"
+                    
+                    logger.info(f"대화 마무리 감지, QuestionAnalyzerAgent 빠른 처리 완료: {duration:.2f}초 소요")
+                    logger.info(f"마무리 유형: {context_analysis.closing_type}, 응답: {context_analysis.closing_response}")
+                    return state
+                
+                if context_analysis.is_different_stock and context_analysis.stock_relation == "다른종목":
+                    logger.info(f"완전히 다른종목 질문")
+                    # 상태 업데이트
+                    state["agent_results"]["question_analysis"] = context_analysis_result
+                    state["summary"] = "현재 종목과 관련이 없는 질문입니다.\n다른 종목에 관한 질문은 새 채팅에서 해주세요"
+                    state["formatted_response"] = state["summary"]
+                    state["answer"] = state["summary"]
+                    # 메트릭 기록 및 처리 상태 업데이트
+                    end_time = datetime.now()
+                    duration = (end_time - start_time).total_seconds()
+                    
+                    state["metrics"] = state.get("metrics", {})
+                    state["metrics"]["question_analyzer"] = {
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "duration": duration,
+                        "status": "completed",
+                        "error": None,
+                        "model_name": self.model_name
+                    }
+                    
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["question_analyzer"] = "completed"
+                    
+                    logger.info(f"대화 마무리 감지, QuestionAnalyzerAgent 빠른 처리 완료: {duration:.2f}초 소요")
+                    logger.info(f"마무리 유형: {context_analysis.closing_type}, 응답: {context_analysis.closing_response}")
+                    return state
+                
                 # 후속 질문인 경우 빠르게 처리하고 리턴
-                #if context_analysis.is_followup_question and context_analysis.requires_context:
                 if context_analysis.requires_context:
                     logger.info("후속 질문으로 감지되어 상세 분석 생략하고 빠르게 리턴합니다.")
 
@@ -199,6 +264,13 @@ class QuestionAnalyzerAgent(BaseAgent):
                     "requires_context": False,
                     "is_followup_question": False,
                     "relation_to_previous": "독립적",
+                    "is_conversation_closing": False,
+                    "closing_type": None,
+                    "closing_response": None,
+                    "is_different_stock": False,
+                    "previous_stock_name": None,
+                    "previous_stock_code": None,
+                    "stock_relation": "알수없음",
                     "reasoning": "대화 기록이 없습니다."
                 }
             
@@ -291,7 +363,7 @@ class QuestionAnalyzerAgent(BaseAgent):
             self._add_error(state, f"질문 분석기 에이전트 오류: {str(e)}")
             return state 
 
-    async def analyze_conversation_context(self, query: str, conversation_history: List[Any], user_id: Optional[str] = None) -> ConversationContextAnalysis:
+    async def analyze_conversation_context(self, query: str, conversation_history: List[Any], stock_name: str, stock_code: str, user_id: Optional[str] = None) -> ConversationContextAnalysis:
         """
         현재 질문이 이전 대화 컨텍스트에 의존하는지 분석합니다.
         
@@ -310,6 +382,13 @@ class QuestionAnalyzerAgent(BaseAgent):
                 requires_context=False,
                 is_followup_question=False,
                 relation_to_previous="독립적",
+                is_conversation_closing=False,
+                closing_type=None,
+                closing_response=None,
+                is_different_stock=False,
+                previous_stock_name=None,
+                previous_stock_code=None,
+                stock_relation="알수없음",
                 reasoning="대화 기록이 충분하지 않습니다."
             )
         
@@ -323,19 +402,45 @@ class QuestionAnalyzerAgent(BaseAgent):
         
         # 대화 컨텍스트 분석 프롬프트
         system_prompt = """
-당신은 대화 흐름 분석 전문가입니다. 현재 질문이 이전 대화 컨텍스트에 의존하는지, 독립적인 새 질문인지 판단해야 합니다.
+당신은 대화 흐름 분석 전문가입니다. 현재 질문이 이전 대화 컨텍스트에 의존하는지, 독립적인 새 질문인지, 또는 대화 마무리를 뜻하는 인사말인지 판단해야 합니다.
 
 다음 사항을 고려하세요:
 1. 대명사(이것, 그것, 저것 등)나 생략된 주어가 있는지
 2. 이전 대화에서 언급된 특정 정보를 참조하는지
 3. 이전 응답에 대한 후속 질문인지
 4. 이전 응답 내용을 확장하거나 수정하려는 의도가 있는지
+5. "고마워", "감사합니다", "알겠습니다", "정보가 없네", "바보야" 등 대화 마무리를 뜻하는 표현인지
+6. 현재 질문이 이전 질문들에서 언급된 종목과 다른 종목에 관한 것인지 판단하세요
+
+예시)
+ - 고마워. 감사합니다 : 대화 마무리
+ - 고마워, 그럼 24년 영업이익은 어떻게 되는거지? : 후속 질문
+ - 정보가 없네. 다른 경쟁사들은 어떻게 하는지 찾아봐 : 후속 질문
+ - 바보야 : 대화 마무리
+
+종목 관계 분석 가이드:
+- 종목명이나 종목코드가 명시적으로 언급되지 않은 경우, 맥락을 통해 동일 종목에 관한 질문인지 추론하세요.
+- 질문에서 새로운 종목이 언급되었지만 이전 종목과의 비교를 위한 것이라면, "종목비교"로 판단하세요.
+- 이전 대화와 전혀 관련 없는 새로운 종목에 대한 질문이면 "다른종목"으로 판단하세요.
+- 같은 종목에 대한 후속 질문이면 "동일종목"으로 판단하세요.
+
+대화 마무리로 판단된 경우, 마무리 유형(긍정적/중립적/부정적)에 따라 적절한 응답 메시지를 생성해 주세요:
+- 긍정적 마무리(예: "감사합니다", "고마워"): 친절하고 도움이 되었다는 메시지로 응답
+- 중립적 마무리(예: "알겠습니다", "끝내자"): 간결하고 정중한 마무리 메시지로 응답
+- 부정적 마무리(예: "정보가 없네", "바보야"): 공손하게 사과하고 더 나은 서비스를 약속하는 메시지로 응답
 
 분석 결과를 다음 형식으로 제공하세요:
 - requires_context: 이전 대화 컨텍스트가 필요한지 여부(true/false)
 - is_followup_question: 이전 질문에 대한 후속 질문인지 여부(true/false)
 - referenced_context: 참조하는 특정 대화 내용(있는 경우)
 - relation_to_previous: 이전 대화와의 관계("독립적", "직접참조", "간접참조", "확장", "수정" 중 하나)
+- is_conversation_closing: 대화 마무리를 뜻하는 인사말인지 여부(true/false)
+- closing_type: 마무리 인사의 유형("긍정적", "중립적", "부정적" 중 하나, is_conversation_closing이 true인 경우에만 값 제공)
+- closing_response: 마무리 인사에 대한 응답 메시지(is_conversation_closing이 true인 경우에만 값 제공)
+- is_different_stock: 이전 질문과 다른 종목에 관한 질문인지 여부(true/false)
+- previous_stock_name: 이전 질문에서 언급된 종목명(있는 경우)
+- previous_stock_code: 이전 질문에서 언급된 종목코드(있는 경우)
+- stock_relation: 이전 종목과의 관계("동일종목", "종목비교", "다른종목", "알수없음" 중 하나)
 - reasoning: 판단 이유 설명(3-4문장으로 간결하게)
 """
         
@@ -346,7 +451,9 @@ class QuestionAnalyzerAgent(BaseAgent):
 현재 질문:
 {query}
 
-위 대화에서 현재 질문이 이전 대화 컨텍스트에 의존하는지 분석해주세요.
+현재 종목 정보: [종목명: {stock_name}, 종목코드: {stock_code}]
+
+위 대화에서 현재 질문이 이전 대화 컨텍스트에 의존하는지, 대화 마무리 표현인지, 종목 관계는 어떤지 분석해주세요.
 """
 
         try:
@@ -373,6 +480,13 @@ class QuestionAnalyzerAgent(BaseAgent):
                 requires_context=False,
                 is_followup_question=False,
                 relation_to_previous="독립적",
+                is_conversation_closing=False,
+                closing_type=None,
+                closing_response=None,
+                is_different_stock=False,
+                previous_stock_name=None,
+                previous_stock_code=None,
+                stock_relation="알수없음",
                 reasoning=f"분석 중 오류 발생: {str(e)}"
             )
     

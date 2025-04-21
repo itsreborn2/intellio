@@ -8,6 +8,25 @@ import asyncio
 # 로거 설정
 logger = logging.getLogger(__name__)
 
+def remove_null_chars(obj):
+    """
+    JSON 객체에서 NULL 문자(\u0000)를 제거합니다.
+    
+    Args:
+        obj: 문자열, 딕셔너리, 리스트 등 JSON으로 변환될 수 있는 객체
+        
+    Returns:
+        NULL 문자가 제거된 객체
+    """
+    if isinstance(obj, str):
+        return obj.replace('\u0000', '')
+    elif isinstance(obj, dict):
+        return {k: remove_null_chars(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [remove_null_chars(item) for item in obj]
+    else:
+        return obj
+    
 def measure_time_async(func: Callable) -> Callable:
     """
     함수의 실행 시간을 측정하고 로깅하는 데코레이터

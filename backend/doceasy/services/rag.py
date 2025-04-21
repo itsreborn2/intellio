@@ -10,6 +10,7 @@ import time
 import json
 from loguru import logger
 from requests import Session as RequestsSession
+from common.services.reranker import PineconeRerankerConfig, Reranker, RerankerConfig, RerankerType
 from common.services.vector_store_manager import VectorStoreManager
 from common.core.config import settings
 from common.services.retrievers.tablemode_semantic import TableModeSemanticRetriever
@@ -523,8 +524,15 @@ class RAGService:
                 if is_summary_query:
                     logger.warning(f"요약 의도 감지: '{normalized_query}' - min_score를 {min_score}로 설정")
                     # 요약 쿼리의 경우 검색 범위 확대
-                    top_k = max(top_k * 3, 15)  # 최소 15개 이상 결과 확보 (기존 2배에서 3배로 증가)
+                    #top_k는 문서 x 5 로 넘어옴. 10개문서의 경우 top_k = 50
+                    # 3배로 뽑으면 150개.
+                    top_k_adjusted = max(top_k * 3, 15)  # 최소 15개 이상 결과 확보 (기존 2배에서 3배로 증가)
+                    
                     logger.warning(f"요약 쿼리를 위해 top_k를 {top_k}로 증가")
+                else: # 일반쿼리
+                    # 사업보고서 가정.
+                    top_k_adjusted = max(top_k * 8, 15)  # 문서당 x 5 x 6 (40개) 10개 -> 400개
+                    logger.warning(f"일반 쿼리를 위해 top_k를 {top_k}로 증가")
                 #Chat Mode
                 semantic_retriever = SemanticRetriever(config=SemanticRetrieverConfig(
                                                         min_score=min_score,
@@ -535,60 +543,74 @@ class RAGService:
                 # 기본 시맨틱 검색 (벡터 검색)
                 all_chunks:RetrievalResult = await semantic_retriever.retrieve(
                     query=normalized_query, 
-                    top_k=top_k,
+                    top_k=top_k_adjusted,
                     filters=filtersMetadata
                 )
+
+                if not is_summary_query: #요약이 아닌 경우.
+                    # 2. 리랭킹 수행
+                    reranker = Reranker(
+                        RerankerConfig(
+                            reranker_type=RerankerType.PINECONE,
+                            pinecone_config=PineconeRerankerConfig(
+                                api_key=settings.PINECONE_API_KEY_DOCEASY,
+                                min_score=0.1  # 낮은 임계값으로 더 많은 결과 포함
+                            )
+                        )
+                    )
+                    
+                    # Pinecone 리랭커는 한 번에 최대 100개 문서만 처리 가능
+                    max_batch_size = 100
+                    all_documents = all_chunks.documents
+                    total_docs = len(all_documents)
+                    
+                    if total_docs <= max_batch_size:
+                        # 문서가 100개 이하면 한 번에 처리
+                        reranked_results = await reranker.rerank(
+                            query=normalized_query,
+                            documents=all_documents,
+                            top_k=min(top_k_adjusted, total_docs),
+                        )
+                        logger.info(f"리랭킹 완료 - 결과: {len(all_documents)} -> {len(reranked_results.documents)} 문서")
+                        all_chunks = reranked_results  # 리랭킹 결과로 대체
+                    else:
+                        # 문서가 100개 이상이면 배치로 나누어 처리
+                        logger.warning(f"문서가 {total_docs}개로 많아 {max_batch_size}개씩 배치 처리합니다.")
+                        batches = [all_documents[i:i+max_batch_size] for i in range(0, total_docs, max_batch_size)]
+                        
+                        all_reranked_docs = []
+                        for i, batch in enumerate(batches):
+                            try:
+                                batch_size = len(batch)
+                                logger.info(f"배치 {i+1}/{len(batches)} 리랭킹 시작 (문서 {batch_size}개)")
+                                
+                                batch_results = await reranker.rerank(
+                                    query=normalized_query,
+                                    documents=batch,
+                                    top_k=batch_size,  # 배치 내 모든 문서 유지
+                                )
+                                
+                                all_reranked_docs.extend(batch_results.documents)
+                                logger.info(f"배치 {i+1} 리랭킹 완료: {batch_size} -> {len(batch_results.documents)} 문서")
+                            except Exception as e:
+                                logger.error(f"배치 {i+1} 리랭킹 실패: {str(e)}")
+                                # 리랭킹 실패시 원본 문서 유지
+                                all_reranked_docs.extend(batch)
+                        
+                        # 전체 리랭킹된 문서 중에서 상위 K개 선택
+                        # 점수 기준으로 내림차순 정렬
+                        all_reranked_docs.sort(key=lambda x: x.score if x.score is not None else 0, reverse=True)
+                        top_docs = all_reranked_docs[:top_k_adjusted]
+                        
+                        # 새로운 RetrievalResult 생성
+                        from copy import deepcopy
+                        reranked_results = deepcopy(all_chunks)
+                        reranked_results.documents = top_docs
+                        
+                        logger.info(f"전체 리랭킹 완료 - 결과: {total_docs} -> {len(top_docs)} 문서")
+                        all_chunks = reranked_results  # 리랭킹 결과로 대체
+                    
                 
-                # # 벡터-BM25 순차 검색 (새로운 방식) - 실험 중이므로 주석 처리
-                # hybrid_config = HybridRetrieverConfig(
-                #     semantic_config=SemanticRetrieverConfig(
-                #         min_score=min_score,
-                #         user_id=user_id, 
-                #         project_type=ProjectType.DOCEASY
-                #     ),
-                #     contextual_bm25_config=ContextualBM25Config(
-                #         min_score=0.3,
-                #         bm25_weight=0.6,
-                #         context_weight=0.4,
-                #         context_window_size=3,
-                #         user_id=user_id,
-                #         project_type=ProjectType.DOCEASY
-                #     ),
-                #     semantic_weight=0.6,
-                #     contextual_bm25_weight=0.4,
-                #     vector_weight=0.7,
-                #     keyword_weight=0.3,
-                #     vector_multiplier=3,
-                #     user_id=user_id,
-                #     project_type=ProjectType.DOCEASY
-                # )
-                # hybrid_retriever = HybridRetriever(config=hybrid_config, vs_manager=vs_manager)
-                # all_chunks = await hybrid_retriever.retrieve_vector_then_bm25(
-                #     query=normalized_query, 
-                #     top_k=top_k,
-                #     filters=filtersMetadata
-                # )
-                
-                # # 기존 병렬 하이브리드 검색 방식 (현재 주석 처리됨)
-                # hybrid_config = HybridRetrieverConfig(
-                #     semantic_config=SemanticRetrieverConfig(min_score=0.6),
-                #     contextual_bm25_config=ContextualBM25Config(
-                #         min_score=0.3,
-                #         bm25_weight=0.6,
-                #         context_weight=0.4,
-                #         context_window_size=3
-                #     ),
-                #     semantic_weight=0.6,
-                #     contextual_bm25_weight=0.4
-                # )
-                # hybrid_retriever = HybridRetriever(config=hybrid_config, vs_manager=vs_manager)
-                # hybrid_retriever.contextual_bm25_retriever.db = self.db  # db 세션 전달
-                
-                # all_chunks = await hybrid_retriever.retrieve(
-                #     query=normalized_query, 
-                #     top_k=top_k,
-                #     filters=filtersMetadata
-                # )
                 # 요약 쿼리이고 결과가 부족한 경우
                 if is_summary_query and document_ids:
                     # 모든 문서의 첫 번째 청크 가져오기 (충분한 청크가 있더라도 문서의 시작 부분은 중요)

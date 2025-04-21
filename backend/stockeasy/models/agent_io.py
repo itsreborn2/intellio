@@ -76,6 +76,13 @@ class ConversationContextAnalysisResult(TypedDict, total=False):
     is_followup_question: bool
     referenced_context: Optional[str]
     relation_to_previous: Literal["독립적", "직접참조", "간접참조", "확장", "수정"]
+    is_conversation_closing: bool   # 대화 마무리를 뜻하는 인사말인지 여부
+    closing_type: Optional[Literal["긍정적", "중립적", "부정적"]]  # 마무리 인사의 유형
+    closing_response: Optional[str] # 마무리 인사에 대한 응답 메시지
+    is_different_stock: bool        # 이전 질문과 다른 종목에 관한 질문인지 여부
+    previous_stock_name: Optional[str]  # 이전 질문에서 언급된 종목명
+    previous_stock_code: Optional[str]  # 이전 질문에서 언급된 종목코드
+    stock_relation: Optional[Literal["동일종목", "종목비교", "다른종목", "알수없음"]]  # 이전 종목과의 관계
     reasoning: str
 
 # 오케스트레이터 관련 데이터 모델들

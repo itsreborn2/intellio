@@ -97,7 +97,7 @@ class EmbeddingService:
         wait=wait_exponential(multiplier=1, min=4, max=10),  # 지수 백오프
         retry=retry_if_exception_type(Timeout)  # 타임아웃 예외 시 재시도
     )
-    def create_embeddings_batch_sync(self, texts: List[str], user_id: str = None, project_type: str = None) -> List[List[float]]:
+    def create_embeddings_batch_sync(self, texts: List[str], user_id: str = None, project_type: str = None, existing_db_session = None) -> List[List[float]]:
         """텍스트 배치의 임베딩을 생성 (동기 버전)"""
         try:
             if not texts:
@@ -114,10 +114,14 @@ class EmbeddingService:
             if not validated_texts:
                 return []
             
-            # 제공자를 통해 임베딩 생성
-            embeddings = self.provider.create_embeddings(texts=validated_texts, 
-                                                         embeddings_task_type="RETRIEVAL_DOCUMENT", 
-                                                         user_id=user_id, project_type=project_type)
+            # 제공자를 통해 임베딩 생성 - 기존 세션 전달
+            embeddings = self.provider.create_embeddings(
+                texts=validated_texts, 
+                embeddings_task_type="RETRIEVAL_DOCUMENT", 
+                user_id=user_id, 
+                project_type=project_type,
+                existing_db_session=existing_db_session
+            )
             
             # 임베딩 품질 검사
             for i, emb in enumerate(embeddings):

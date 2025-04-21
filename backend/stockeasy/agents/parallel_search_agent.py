@@ -33,11 +33,12 @@ class ParallelSearchAgent(BaseAgent):
         self.graph = graph  # 그래프 인스턴스 저장
         self.search_agent_names = [
             "telegram_retriever", 
+            "revenue_breakdown",
             "report_analyzer", 
             "financial_analyzer", 
             "industry_analyzer",
             "confidential_analyzer",
-            "revenue_breakdown"
+            
         ]
     
     async def process(self, state: AgentState) -> AgentState:

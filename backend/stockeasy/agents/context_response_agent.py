@@ -76,7 +76,7 @@ class ContextResponseAgent(BaseAgent):
                 self._add_error(state, "컨텍스트 분석 결과가 없습니다.")
                 return state
             
-            if not is_follow_up:
+            if not is_follow_up: # state['is_follow_up] 은 프론트에서 후속질문인지 판단해서 전송한값. question_analyzer_agent에서 설정한 값이 아님.
                 logger.warning("후속질문이 아님")
                 self._add_error(state, "후속질문이 아닙니다.")
                 return state
@@ -171,10 +171,11 @@ class ContextResponseAgent(BaseAgent):
 대신 관련된 다른 정보를 짧게 제공하세요.
 """
             user_prompt = f"""
+오늘 일자: {datetime.now().strftime("%Y-%m-%d")}
 종목명: {stock_name}
 종목코드: {stock_code}
 현재 질문:
-{modified_query}
+{query}
 
 최초 분석내용:
 {formatted_agent_results}
@@ -299,7 +300,7 @@ class ContextResponseAgent(BaseAgent):
 
 
 -----------------------------
------ 텔레그램 분석 결과 -----
+----- 내부DB 분석 결과 -----
 {telegram_analyzer_summary}
 
 

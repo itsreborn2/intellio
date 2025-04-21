@@ -52,40 +52,56 @@ class StockRAGService:
         
         self._user_contexts = {}  # 사용자별 컨텍스트 저장
         
-        # 백그라운드 세션 정리 시작
-        self._start_cleanup_thread()
-        
         #logger.info("멀티에이전트 기반 주식 분석 RAG 서비스가 초기화되었습니다.")
-
-    def _start_cleanup_thread(self):
-        """백그라운드 세션 정리 스레드 시작"""
-        if self._cleanup_thread is None or not self._cleanup_thread.is_alive():
-            self._stop_event.clear()
-            self._cleanup_thread = threading.Thread(
-                target=self._cleanup_worker,
-                daemon=True
-            )
-            self._cleanup_thread.start()
-            logger.info("세션 정리 백그라운드 작업이 시작되었습니다.")
-    
-    def _cleanup_worker(self):
-        """백그라운드 세션 정리 작업"""
-        cleanup_interval = 3600  # 1시간마다 정리
-        while not self._stop_event.is_set():
+    async def close(self):
+        """
+        리소스 정리 - DB 세션 닫기
+        """
+        if hasattr(self, 'db') and self.db:
             try:
-                time.sleep(cleanup_interval)
-                if not self._stop_event.is_set():
-                    cleaned_count = self.cleanup_old_contexts()
-                    logger.info(f"정기 세션 정리 완료: {cleaned_count}개 정리됨")
+                
+                # DB 세션 닫기
+                logger.info("StockRAGService DB 세션 닫기")
+                await self.db.close()
+                self.db = None
             except Exception as e:
-                logger.error(f"세션 정리 작업 중 오류 발생: {e}")
+                logger.error(f"DB 세션 닫기 중 오류 발생: {str(e)}")
     
-    def stop_cleanup_thread(self):
-        """백그라운드 정리 스레드 중지"""
-        if self._cleanup_thread and self._cleanup_thread.is_alive():
-            self._stop_event.set()
-            self._cleanup_thread.join(timeout=5)
-            logger.info("세션 정리 백그라운드 작업이 중지되었습니다.")
+    def __del__(self):
+        """
+        소멸자 - 리소스 정리
+        """
+        if hasattr(self, 'db') and self.db:
+            try:
+                
+                # DB 세션 닫기 (비동기 함수를 동기적으로 호출)
+                logger.warning("소멸자에서 DB 세션 닫기 시도 - 비추천 방식")
+                
+                # 주의: 소멸자에서 비동기 함수를 실행하는 것은 문제가 있으므로
+                # 가능하면 명시적 close() 호출을 권장
+                try:
+                    import asyncio
+                    # 이미 이벤트 루프가 있는 경우와 없는 경우 모두 처리
+                    loop = asyncio.get_event_loop() if asyncio.get_event_loop_policy().get_event_loop().is_running() else None
+                    if loop and loop.is_running():
+                        # 현재 실행 중인 이벤트 루프가 있으면 future로 처리
+                        asyncio.run_coroutine_threadsafe(self.db.close(), loop)
+                    else:
+                        # 없으면 새 루프 생성
+                        asyncio.run(self.db.close())
+                except Exception as e:
+                    logger.error(f"소멸자에서 DB 세션 닫기 실패: {str(e)}")
+            except Exception as e:
+                logger.error(f"소멸자에서 리소스 정리 중 오류: {str(e)}")
+    
+    # 비동기 컨텍스트 매니저 메소드 (선택 사항)
+    async def __aenter__(self):
+        """비동기 컨텍스트 매니저 진입점"""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """비동기 컨텍스트 매니저 종료점"""
+        await self.close()
     
     def configure_for_user(self, session_id: str, user_id: Optional[str] = None) -> None:
         """특정 사용자/세션에 대한 컨텍스트 설정
@@ -217,107 +233,5 @@ class StockRAGService:
         
         return len(old_sessions)
 
+    
 
-class TelegramRAGLangraphService:
-    """Langgraph 기반 텔레그램 RAG 서비스"""
-    
-    def __init__(self, db: Optional[AsyncSession] = None):
-        """
-        서비스 초기화
-        
-        Args:
-            db: 데이터베이스 세션 객체 (선택적)
-        """
-        self.stock_rag_service = StockRAGService(db)
-        logger.info("Langgraph 기반 텔레그램 RAG 서비스가 초기화되었습니다.")
-    
-    async def search_and_summarize(self, 
-                                  query: str, 
-                                  stock_code: Optional[str] = None, 
-                                  stock_name: Optional[str] = None,
-                                  session_id: Optional[str] = None,
-                                  user_id: Optional[str] = None,
-                                  classification: Optional[QuestionClassification] = None) -> Dict[str, Any]:
-        """
-        텔레그램 메시지 검색 및 요약
-        
-        최신 멀티에이전트 아키텍처를 사용하여 텔레그램 메시지와 다양한
-        금융 데이터 소스에서 정보를 검색하고 요약합니다.
-        
-        Args:
-            query: 검색 쿼리
-            stock_code: 종목 코드 (선택적)
-            stock_name: 종목명 (선택적)
-            session_id: 세션 ID (선택적)
-            user_id: 사용자 ID (선택적)
-            classification: 질문 분류 결과 (선택적)
-            
-        Returns:
-            검색 및 요약 결과
-        """
-        try:
-            logger.info(f"검색 및 요약 시작: {query}")
-            
-            # 세션 ID가 없는 경우 인증 오류 반환
-            if not session_id:
-                logger.warning("세션 ID가 제공되지 않았습니다. 인증이 필요합니다.")
-                return {
-                    "summary": "인증이 필요합니다. 로그인 후 이용해주세요.",
-                    "telegram_messages": [],
-                    "question_classification": classification.model_dump() if classification else {},
-                    "processing_time": 0,
-                    "authentication_required": True,
-                    "error": "인증이 필요합니다. 로그인 후 이용해주세요."
-                }
-            
-            # StockRAGService를 통해 멀티에이전트 분석 수행
-            result = await self.stock_rag_service.analyze_stock(
-                query=query,
-                stock_code=stock_code,
-                stock_name=stock_name,
-                session_id=session_id,
-                user_id=user_id,
-                classification=classification
-            )
-            
-            # 인증 필요한 경우 처리
-            if result.get("authentication_required", False):
-                return {
-                    "summary": result.get("summary", "인증이 필요합니다. 로그인 후 이용해주세요."),
-                    "telegram_messages": [],
-                    "question_classification": classification.model_dump() if classification else {},
-                    "processing_time": 0,
-                    "authentication_required": True,
-                    "error": result.get("errors", [{}])[0].get("error", "인증이 필요합니다. 로그인 후 이용해주세요.")
-                }
-            
-            # 결과 구조화
-            summary = result.get("summary", "")
-            formatted_response = result.get("formatted_response", "")
-            
-            # 실제 사용할 최종 응답 선택 (formatted_response가 있으면 사용, 없으면 summary 사용)
-            final_response = formatted_response or summary
-            
-            # 메트릭 수집
-            processing_status = result.get("processing_status", {})
-            
-            return {
-                "summary": final_response,
-                "telegram_messages": result.get("retrieved_data", {}).get("telegram_messages", []),
-                "question_classification": result.get("question_classification", {}),
-                "processing_time": processing_status.get("total_time", 0),
-                "session_id": session_id,
-                "user_id": user_id
-            }
-            
-        except Exception as e:
-            logger.error(f"검색 및 요약 중 오류 발생: {str(e)}", exc_info=True)
-            return {
-                "summary": f"죄송합니다. 검색 중 오류가 발생했습니다: {str(e)}",
-                "telegram_messages": [],
-                "question_classification": classification.model_dump() if classification else {},
-                "processing_time": 0,
-                "error": str(e),
-                "session_id": session_id,
-                "user_id": user_id
-            } 

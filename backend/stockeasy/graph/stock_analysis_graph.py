@@ -293,11 +293,11 @@ class StockAnalysisGraph:
         # 병렬 검색 에이전트 생성
         parallel_search_agent = ParallelSearchAgent({
             "telegram_retriever": self.agents.get("telegram_retriever"),
+            "revenue_breakdown": self.agents.get("revenue_breakdown"),
             "report_analyzer": self.agents.get("report_analyzer"),
             "financial_analyzer": self.agents.get("financial_analyzer"),
             "industry_analyzer": self.agents.get("industry_analyzer"),
             "confidential_analyzer": self.agents.get("confidential_analyzer"),
-            "revenue_breakdown": self.agents.get("revenue_breakdown")
         }, graph=self)  # 현재 그래프 인스턴스 전달
         
         # 그래프 초기화
@@ -325,13 +325,33 @@ class StockAnalysisGraph:
             """질문 분석기 이후 라우팅 결정"""
             # 컨텍스트 분석 결과 확인
             is_follow_up = state.get("is_follow_up", False)
-            logger.info(f"[question_analyzer_router] 후속질문 여부: {is_follow_up}")
+            context_analysis = state.get("context_analysis", False)
+            is_conversation_closing = context_analysis.get("is_conversation_closing", False)
+
+            logger.info(f"[question_analyzer_router] 후속질문 여부: {is_follow_up}, 대화마무리 : {is_conversation_closing}")
             
-            context_analysis = state.get("context_analysis", {})
             is_followup_question = context_analysis.get("is_followup_question", False)
             requires_context = context_analysis.get("requires_context", False)
             
+
+            if is_conversation_closing:
+                logger.info(f"대화 마무리로 에이전트를 종료합니다. END")
+                if "processing_status" not in state:
+                    state["processing_status"] = {}
+                state["processing_status"]["question_analyzer"] = "completed"
+                return END
+            
+            is_different_stock = context_analysis.get("is_different_stock", False)
+            # stock_relation: Optional[Literal["동일종목", "종목비교", "다른종목", "알수없음"]]  # 이전 종목과의 관계
+            stock_relation = context_analysis.get("stock_relation", "알수없음")
+            logger.info(f"[question_analyzer_router] 다른종목 여부: {is_different_stock}, 종목관계 : {stock_relation}")
+            if is_different_stock and stock_relation == "다른종목":
+                logger.info(f"다른종목에 관란 질문이므로,  에이전트를 종료합니다. END")
+                
+                state["processing_status"]["question_analyzer"] = "completed"
+                return END
             # 대화 컨텍스트가 필요한 경우 context_response로 라우팅
+
             #if requires_context:
             if is_follow_up:
                 logger.info(f"후속질문으로 context_response 에이전트로 라우팅합니다.")
@@ -351,7 +371,9 @@ class StockAnalysisGraph:
             question_analyzer_router,
             {
                 "context_response": "context_response",
-                "orchestrator": "orchestrator"
+                #"response_formatter": "response_formatter",
+                "orchestrator": "orchestrator",
+                END: END
             }
         )
         
@@ -585,8 +607,13 @@ class StockAnalysisGraph:
                 # 원본 프로세스 호출
                 result = await original_process(state)
                 
+                # result가 None인 경우 빈 딕셔너리로 처리
+                if result is None:
+                    logger.warning(f"에이전트 {agent_name}에서 None 결과가 반환되었습니다. 빈 딕셔너리로 대체합니다.")
+                    result = {}
+                
                 # streaming_callback 함수 제거 (직렬화 불가능)
-                if 'streaming_callback' in result:
+                if result and 'streaming_callback' in result:
                     del result['streaming_callback']
                 
                 # 에이전트 완료 콜백 실행
@@ -679,8 +706,6 @@ class StockAnalysisGraph:
         # 등록된 에이전트들로 그래프 구축
         self.graph = self._build_graph(db)
         
-        # LangSmith 트레이싱 설정은 그래프 컴파일 시 이미 추가됨
-        logger.info("그래프 구축 완료")
     
     async def process_query(self, query: str, session_id: Optional[str] = None, 
                            stock_code: Optional[str] = None, stock_name: Optional[str] = None,
@@ -720,7 +745,6 @@ class StockAnalysisGraph:
             agent_results = {}
             if is_follow_up:
                 agent_results = kwargs.get("agent_results", {})
-                logger.info(f"[process_query] 이전 에이전트 결과물 샘플: {agent_results.get('report_analyzer', {}).get('data', {}).get('analysis', '').get('llm_response', '')}")
 
             # 스트리밍 콜백 함수 추출 및 클래스 멤버로 저장
             streaming_callback = kwargs.get("streaming_callback")
