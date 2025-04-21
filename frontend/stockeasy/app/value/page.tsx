@@ -959,30 +959,35 @@ const ValuationPage = () => {
                   </button>
                 </div>
                 
-                {/* 전 종목 출력 버튼 */}
-                <div className="flex items-center ml-1 sm:ml-2">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showAllItems}
-                      onChange={handleShowAllItems}
-                      className="sr-only"
-                    />
-                    <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ease-in-out ${showAllItems ? 'bg-[#D8EFE9]' : 'bg-gray-300'}`}>
-                      <div className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${showAllItems ? 'translate-x-4' : ''}`}></div>
-                    </div>
-                    <span className="ml-2 text-[10px] sm:text-xs text-gray-700">전 종목 출력</span>
-                  </label>
-                  {/* 로딩 스피너 추가 */}
-                  {isAllItemsLoading && (
-                    <div className="ml-2 animate-spin h-4 w-4">
-                      <svg className="h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    </div>
-                  )}
-                </div>
+                {/* [숨김처리] '전 종목 출력' 토글 스위치: 사용자 요청에 따라 조건부 렌더링(false)로 완전 숨김 처리
+    - 기존 코드는 유지하며, 향후 복구나 참고를 위해 주석으로 남겨둠
+    - showAllItems 관련 로딩 스피너도 함께 숨김 처리
+*/}
+{false && (
+  <div className="flex items-center ml-1 sm:ml-2">
+    <label className="flex items-center cursor-pointer">
+      <input
+        type="checkbox"
+        checked={showAllItems}
+        onChange={handleShowAllItems}
+        className="sr-only"
+      />
+      <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ease-in-out ${showAllItems ? 'bg-[#D8EFE9]' : 'bg-gray-300'}`}>
+        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${showAllItems ? 'translate-x-4' : ''}`}></div>
+      </div>
+      <span className="ml-2 text-[10px] sm:text-xs text-gray-700">전 종목 출력</span>
+    </label>
+    {/* 로딩 스피너 추가 */}
+    {isAllItemsLoading && (
+      <div className="ml-2 animate-spin h-4 w-4">
+        <svg className="h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    )}
+  </div>
+)}
                 
                 {/* 업데이트 날짜 표시 영역 추가 - ml-auto 적용, self-end 추가 */}
                 <div className="text-gray-600 text-xs ml-auto self-end" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
