@@ -36,7 +36,6 @@ interface LazyExpertModeToggleProps {
 }
 
 export function LazyExpertModeToggle({ expertMode, onChange }: LazyExpertModeToggleProps) {
-  // pill-style Speak/Listen 토글 UI를 lazy로 로드
   return (
     <Suspense fallback={<ExpertToggleFallback />}>
       <ExpertModeToggle isExpertMode={expertMode} onToggle={() => onChange(!expertMode)} />
