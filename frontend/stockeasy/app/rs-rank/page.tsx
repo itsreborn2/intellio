@@ -789,28 +789,43 @@ export default function RSRankPage() {
   //   return 'text-gray-900'; // 그 외는 검정색
   // };
 
-  // 현재 페이지에 표시할 데이터 계산
-  const currentPageData = useMemo(() => {
-    if (!csvData || !csvData.rows) {
-      return [];
+  // [검색 및 필터] selectedStock, searchFilter, 시가총액 2천억 이상 필터 적용
+  const filteredData = useMemo(() => {
+    if (!csvData || !csvData.rows) return [];
+    // 1. 선택된 종목이 있으면 해당 종목만 반환
+    if (selectedStock) {
+      return csvData.rows.filter(row =>
+        row['종목코드'] === selectedStock.code &&
+        row['종목명'] === selectedStock.name
+      );
     }
-    
-    // 시가총액 2천억 이상 필터링 적용
-    const filteredByMarketCap = csvData.rows.filter((row: any) => {
-      const marketCap = Number(row['시가총액'] || 0);
-      const isAboveThreshold = marketCap >= 200000000000; // 2천억 이상
-      
-      return isAboveThreshold;
-    });
-    
-    // 정렬된 데이터 가져오기
+    // 2. 검색어가 있으면 종목명/종목코드 부분 일치(대소문자 무시)
+    let result = csvData.rows;
+    if (searchFilter.trim()) {
+      const keyword = searchFilter.trim().toLowerCase();
+      result = result.filter(row =>
+        (row['종목명'] && String(row['종목명']).toLowerCase().includes(keyword)) ||
+        (row['종목코드'] && String(row['종목코드']).toLowerCase().includes(keyword))
+      );
+    }
+    // 3. 시가총액 2천억 이상 필터
+    result = result.filter(row => Number(row['시가총액'] || 0) >= 200000000000);
+    return result;
+  }, [csvData, selectedStock, searchFilter]);
+
+  // [페이지네이션+정렬] 실제 테이블에 표시할 데이터 (filteredData 기준)
+  const currentPageData = useMemo(() => {
     const sortedData = sortDirection 
-      ? sortData(filteredByMarketCap, sortKey, sortDirection)
-      : filteredByMarketCap;
-    
+      ? sortData(filteredData, sortKey, sortDirection)
+      : filteredData;
     const startIndex = (currentPage - 1) * 20;
     return sortedData.slice(startIndex, startIndex + 20);
-  }, [csvData, currentPage, sortKey, sortDirection]);
+  }, [filteredData, currentPage, sortKey, sortDirection]);
+
+  // [페이지네이션] 총 페이지 수 계산 (filteredData 기준)
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredData.length / 20);
+  }, [filteredData]);
 
   // 52주 신고가 데이터 정렬
   const sortedHighData = useMemo(() => {
@@ -844,18 +859,7 @@ export default function RSRankPage() {
     });
   }, [highData.rows, highSortKey, highSortDirection]);
 
-  // 총 페이지 수 계산 - 필터링된 데이터 기준으로 계산
-  const totalPages = useMemo(() => {
-    if (!csvData || !csvData.rows) return 0;
-    
-    // 시가총액 2천억 이상 필터링 적용
-    const filteredCount = csvData.rows.filter((row: any) => {
-      const marketCap = Number(row['시가총액'] || 0);
-      return marketCap >= 200000000000; // 2천억 이상
-    }).length;
-    
-    return Math.ceil(filteredCount / 20);
-  }, [csvData]);
+  
 
   // 페이지 변경 핸들러
   const handlePageChange = useCallback((page: number) => {

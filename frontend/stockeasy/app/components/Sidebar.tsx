@@ -58,7 +58,7 @@ function SidebarContent() {
   // 버튼 참조 객체
   const buttonRefs = {
     home: useRef<HTMLButtonElement>(null),
-    // analyst: useRef<HTMLButtonElement>(null), // AI 애널리스트 버튼 참조 추가 (주석 처리)
+    trendFollowing: useRef<HTMLButtonElement>(null), // 추세추종 버튼 참조 추가
     chart: useRef<HTMLButtonElement>(null),
     etfSector: useRef<HTMLButtonElement>(null), // ETF/섹터 버튼 참조 추가
     value: useRef<HTMLButtonElement>(null), // 밸류에이션 버튼 참조 추가
@@ -647,7 +647,7 @@ function SidebarContent() {
         <div 
           className="fixed left-[63px] bg-[#111827] text-[#ececf1] py-0.5 px-2 rounded-[6px] text-xs shadow-md z-[2000] border border-gray-700 pointer-events-none"
           style={{ 
-            top: showLoginTooltip 
+            top: showLoginTooltip
               ? `${tooltipPosition['settings'] ? tooltipPosition['settings'] + 10 : 0}px`
               : tooltipPosition[hoveredButton!] ? `${tooltipPosition[hoveredButton!] + 10}px` : '0px',
             transition: 'opacity 0.2s',
@@ -655,7 +655,7 @@ function SidebarContent() {
           }}
         >
           {hoveredButton === 'home' && '스탁이지'}
-          {/* {hoveredButton === 'analyst' && 'AI 애널리스트'} */}
+          {hoveredButton === 'trendFollowing' && '추세추종'}
           {hoveredButton === 'chart' && 'RS순위'}
           {hoveredButton === 'etfSector' && 'ETF/섹터'}
           {hoveredButton === 'value' && '밸류에이션'}
@@ -719,6 +719,25 @@ function SidebarContent() {
                     {isMobile && <span className="ml-2 text-sm text-[#ececf1]">스탁이지</span>}
                   </button>
                 </div>
+                
+                {/* 추세추종(Trend Following) 버튼 개발 중 - 임시 숨김 */}
+                {/* <div className="sidebar-button-container">
+                  <button
+                    ref={buttonRefs.trendFollowing}
+                    className="sidebar-button"
+                    onClick={() => {
+                      if (window.location.pathname !== '/trend-following') {
+                        router.push('/trend-following', { scroll: false });
+                        if (isMobile) setIsMenuOpen(false);
+                      }
+                    }}
+                    onMouseEnter={() => handleMouseEnter('trendFollowing')}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <LineChart className="icon" />
+                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">추세추종</span>}
+                  </button>
+                </div> */}
                 
                 {/* 차트 버튼 - RS순위 페이지로 이동 */}
                 <div className="sidebar-button-container">
