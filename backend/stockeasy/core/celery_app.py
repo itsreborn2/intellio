@@ -41,11 +41,13 @@ celery.conf.timezone = "Asia/Seoul"  # 서울 시간으로 설정
 # Exchange 정의
 telegram_exchange = Exchange('telegram-processing', type='direct')
 embedding_exchange = Exchange('embedding-processing', type='direct')
+general_periodic_exchange = Exchange('general-periodic', type='direct')
 
 # 큐 정의
 celery.conf.task_queues = [
     Queue('telegram-processing', telegram_exchange, routing_key='telegram-processing'),
     Queue('embedding-processing', embedding_exchange, routing_key='embedding-processing'),
+    Queue('general-periodic', general_periodic_exchange, routing_key='general-periodic'),
 ]
 
 # 라우팅 설정
@@ -57,6 +59,10 @@ celery.conf.task_routes = {
     "stockeasy.workers.telegram.embedding_tasks.*": {
         "queue": "embedding-processing",
         "routing_key": "embedding-processing"
+    },
+    "stockeasy.workers.statistics.daily_tasks.*": {
+        "queue": "general-periodic",
+        "routing_key": "general-periodic"
     }
 }
 
@@ -113,6 +119,6 @@ celery.conf.beat_schedule = {
     },
     'generate-daily-statistics': {
         'task': 'stockeasy.workers.statistics.daily_tasks.generate_daily_stats',
-        'schedule': crontab(hour=23, minute=55),  # 매일 23:55에 실행
+        'schedule': crontab(minute='*/10'),  # 10분마다 실행 
     }
 }
