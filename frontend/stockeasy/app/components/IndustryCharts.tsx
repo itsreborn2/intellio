@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Papa from 'papaparse';
 import ChartComponent from './ChartComponent'; // ChartComponent 경로 확인 필요
+import { ChartCopyButton } from './ChartCopyButton';
 
 // 차트 데이터 타입 정의
 interface CandleData {
@@ -137,6 +138,19 @@ export default function IndustryCharts() {
   const [stockChartData, setStockChartData] = useState<ChartInfo[]>([]);
   const [isLoadingInitial, setIsLoadingInitial] = useState<boolean>(true); // 초기 필터링 및 로딩 상태
   const [initialError, setInitialError] = useState<string | null>(null); // 초기 데이터 로드 에러
+  // 캡처(복사) 중 여부 상태
+  const [isCapturing, setIsCapturing] = useState(false);
+  // 차트 전체 컨테이너 ref (제목+차트 전체 캡처용)
+  const chartsContainerRef = useRef<HTMLDivElement>(null);
+  // updated 날짜 (예시: 오늘 날짜)
+  const [updateDate, setUpdateDate] = useState<string>('');
+  useEffect(() => {
+    // 오늘 날짜를 MM/DD 형식으로 세팅
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    setUpdateDate(`${mm}/${dd}`);
+  }, []);
 
   useEffect(() => {
     const loadAndFilterData = async () => {
@@ -323,16 +337,42 @@ export default function IndustryCharts() {
 
   // 차트 렌더링 (원본 디자인 완전 복제)
   return (
-    // 3열 그리드 및 gap 적용 (sm, md 브레이크포인트 포함)
-    // -> `div`로 감싸고 제목/설명 추가
-    <div>
-      {/* 차트 제목 및 설명 추가 (백업에서 복원) */}
-      <div className="mb-4">
+    // 제목+복사버튼+updated 영역과 전체 차트 그리드를 하나의 ref로 감쌈
+    <div ref={chartsContainerRef}>
+      {/* 제목+복사버튼+updated 영역 */}
+      {/* 제목+updated+복사버튼만 flex-row, 설명은 아래에 분리 */}
+      {/* 제목(좌) / updated+복사버튼(우)로 분리, flex justify-between */}
+      <div className="mb-1 flex flex-row items-center justify-between w-full">
         <h2 className="font-semibold whitespace-nowrap text-sm md:text-base">산업별 주도ETF 차트</h2>
-        <p className="text-gray-600 mr-2 hidden sm:inline text-[11px] md:text-xs"> 
-          산업별 ETF의 20일 이동평균선 위에 위치한 ETF종목들만 표시합니다.
-        </p>
+        <div className="flex flex-row items-center ml-auto">
+          {/* updated: 평소에는 버튼 왼쪽, 캡처 중에는 오른쪽 끝 */}
+          {!isCapturing && updateDate && (
+            <span
+              className="text-gray-600 text-xs mr-2"
+              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}
+            >
+              updated 16:40 {updateDate}
+            </span>
+          )}
+          <ChartCopyButton
+            chartRef={chartsContainerRef}
+            chartName="산업별 주도ETF 차트 전체"
+            onStartCapture={() => setIsCapturing(true)}
+            onEndCapture={() => setIsCapturing(false)}
+            updateDateText={updateDate}
+          />
+          {isCapturing && updateDate && (
+            <span
+              className="text-gray-600 text-xs ml-2"
+              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}
+            >
+              updated 16:40 {updateDate}
+            </span>
+          )}
+        </div>
       </div>
+      {/* 설명은 제목 아래 한 줄로 분리 */}
+      <p className="text-gray-600 mr-2 hidden sm:inline text-[11px] md:text-xs mb-2">산업별 ETF의 20일 이동평균선 위에 위치한 ETF종목들만 표시합니다.</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
         {[...stockChartData] // 복사본 사용

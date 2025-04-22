@@ -66,6 +66,33 @@ interface CandleData {
 
 // RS순위 페이지 컴포넌트
 export default function RSRankPage() {
+  // 종목명/종목코드 검색 상태 및 선택 상태 추가 (밸류에이션 페이지와 동일하게)
+  const [searchFilter, setSearchFilter] = useState('');
+  const [selectedStock, setSelectedStock] = useState<{ code: string; name: string } | null>(null);
+
+  // 종목명/종목코드 검색 핸들러 (밸류에이션 페이지와 동일하게)
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      // 검색어가 있고, 필터링된 결과가 1개인 경우
+      const filtered = csvData.rows.filter(row => {
+        const stockName = row['종목명'] || '';
+        const stockCode = row['종목코드'] || '';
+        return (
+          stockName.includes(searchFilter) ||
+          stockCode.includes(searchFilter)
+        );
+      });
+      if (searchFilter.trim() && filtered.length === 1) {
+        setSelectedStock({ code: filtered[0]['종목코드'], name: filtered[0]['종목명'] });
+      }
+    }
+  };
+  // 선택 해제 핸들러
+  const handleClearSelectedStock = () => {
+    setSelectedStock(null);
+    setSearchFilter('');
+  };
+
   // 상태 관리
   const [csvData, setCsvData] = useState<CSVData>({ headers: [], rows: [], errors: [] });
   const [loading, setLoading] = useState<boolean>(true);
@@ -1209,19 +1236,66 @@ export default function RSRankPage() {
                     <div ref={rsHeaderRef} className="flex justify-between items-center mb-2">
                       <h2 className="text-sm md:text-base font-semibold text-gray-700">RS 순위</h2>
                       <div className="flex items-center space-x-2">
-                        {/* 업데이트 날짜 표시 */}
-                        {updateDate && (
-                          <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-                            updated 16:40 {updateDate}
-                          </span>
-                        )}
-                        <TableCopyButton 
-                          tableRef={rsTableRef} 
-                          headerRef={rsHeaderRef} 
-                          tableName="RS 순위 TOP 200" 
-                          updateDateText={updateDate ? `updated 16:40 ${updateDate}` : undefined}
-                        />
-                      </div>
+  {/* 종목명/종목코드 검색 input - 밸류에이션과 동일한 디자인 */}
+  <div className="flex items-center">
+    <label htmlFor="rsSearchFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+      종목명/종목코드
+    </label>
+    {selectedStock ? (
+      <button
+        onClick={handleClearSelectedStock}
+        className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
+        style={{
+          height: '35px',
+          borderRadius: '4px',
+          width: 'clamp(120px, 15vw, 180px)',
+          minWidth: 120,
+          maxWidth: 180,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        <span className="truncate">{selectedStock.name} ({selectedStock.code})</span>
+        <span className="ml-1">×</span>
+      </button>
+    ) : (
+      <div className="flex items-center">
+        <input
+          id="rsSearchFilter"
+          type="text"
+          value={searchFilter}
+          onChange={e => setSearchFilter(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
+          placeholder="종목명/종목코드 입력"
+          className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent truncate"
+          style={{
+            width: 'clamp(120px, 15vw, 180px)',
+            minWidth: 120,
+            maxWidth: 180,
+            height: '35px',
+            borderRadius: '4px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        />
+      </div>
+    )}
+  </div>
+  {/* 업데이트 날짜 표시 */}
+  {updateDate && (
+    <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+      updated 16:40 {updateDate}
+    </span>
+  )}
+  <TableCopyButton 
+    tableRef={rsTableRef} 
+    headerRef={rsHeaderRef} 
+    tableName="RS 순위 TOP 200" 
+    updateDateText={updateDate ? `updated 16:40 ${updateDate}` : undefined}
+  />
+</div>
                     </div>
                     <div className="relative">
                       <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" ref={rsTableRef}>

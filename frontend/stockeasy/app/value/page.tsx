@@ -18,7 +18,7 @@ import { formatDateMMDD } from '../utils/dateUtils'; // 날짜 포맷 유틸리�
 interface ValuationData {
   stockCode: string;      // B열 (Index 1)
   stockName: string;      // E열 (Index 4)
-  industry: string;       // F열 (Index 5)
+  industry: string;       // C열 (Index 2) - 대분류로 변경
   middleCategory: string; // D열 (Index 3) - 중분류로 변경
   marketCap: number | null;      // G열 (Index 6 - 시가총액)
   per1: number | null;           // K열 (Index 10 - PER1)
@@ -295,7 +295,7 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.stockName,
     }),
     columnHelper.accessor('industry', {
-      header: () => csvHeaders[1] || '업종', // CSV 헤더 사용 (Index 1)
+      header: () => csvHeaders[2] || '대분류', // CSV 헤더 사용 (Index 2)
       cell: info => {
         const industry = info.getValue();
         
@@ -309,7 +309,7 @@ const ValuationPage = () => {
                 setIndustryFilter(''); // 선택 후 검색어 초기화
               }
             }}
-            title={`${industry} 업종 선택하기`}
+            title={`${industry} 대분류 선택하기`}
           >
             {industry}
           </div>
@@ -528,7 +528,7 @@ const ValuationPage = () => {
             const parsedData: ValuationData[] = (results.data as string[][]).slice(1).map((row) => ({
               stockCode: (row[4] || '').padStart(6, '0'), // 종목코드가 항상 6자리로 표시되도록 수정
               stockName: row[5] || '', // E열
-              industry: row[1] || '', // B열
+              industry: row[2] || '', // C열 - 대분류로 변경
               middleCategory: row[3] || '', // D열 - 중분류로 변경
               marketCap: parseNumericValue(row[6]), // G열 - parseNumericValue 적용
               per1: parseNumericValue(row[10]), // K열 - parseNumericValue 적용
@@ -827,29 +827,43 @@ const ValuationPage = () => {
                   </label>
                   {selectedStock ? (
                     <button
-                      onClick={handleClearSelectedStock}
-                      className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
-                      style={{ height: '35px', borderRadius: '4px' }}
-                    >
-                      <span>{selectedStock.name} ({selectedStock.code})</span>
-                      <span className="ml-1">×</span>
-                    </button>
+  onClick={handleClearSelectedStock}
+  className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
+  style={{
+    height: '35px',
+    borderRadius: '4px',
+    width: 'clamp(120px, 15vw, 180px)',
+    minWidth: 120,
+    maxWidth: 180,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  }}
+>
+  <span className="truncate">{selectedStock.name} ({selectedStock.code})</span>
+  <span className="ml-1">×</span>
+</button>
                   ) : (
                     <div className="flex items-center">
                       <input
-                        id="searchFilter"
-                        type="text"
-                        value={searchFilter}
-                        onChange={(e) => setSearchFilter(e.target.value)}
-                        onKeyDown={handleSearchKeyDown}
-                        placeholder="종목명/종목코드 입력"
-                        className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent"
-                        style={{ 
-                          width: 'clamp(120px, 15vw, 180px)',
-                          height: '35px',
-                          borderRadius: '4px'
-                        }}
-                      />
+  id="searchFilter"
+  type="text"
+  value={searchFilter}
+  onChange={(e) => setSearchFilter(e.target.value)}
+  onKeyDown={handleSearchKeyDown}
+  placeholder="종목명/종목코드 입력"
+  className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent truncate"
+  style={{
+    width: 'clamp(120px, 15vw, 180px)',
+    minWidth: 120,
+    maxWidth: 180,
+    height: '35px',
+    borderRadius: '4px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  }}
+/>
                     </div>
                   )}
                 </div>
@@ -857,41 +871,53 @@ const ValuationPage = () => {
                 {/* 업종 선택 필터 */}
                 <div className="flex flex-row items-center ml-1 sm:ml-2">
                   <label htmlFor="industryFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
-                    업종
+                    대분류
                   </label>
                   {selectedIndustry ? (
                     <button
-                      onClick={handleClearSelectedIndustry}
-                      className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
-                      style={{ height: '35px', borderRadius: '4px' }}
-                    >
-                      <span>{selectedIndustry}</span>
-                      <span className="ml-1">×</span>
-                    </button>
+  onClick={handleClearSelectedIndustry}
+  className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
+  style={{
+    height: '35px',
+    borderRadius: '4px',
+    width: 'clamp(100px, 12vw, 150px)',
+    minWidth: 100,
+    maxWidth: 150,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  }}
+>
+  <span className="truncate">{selectedIndustry}</span>
+  <span className="ml-1">×</span>
+</button>
                   ) : (
                     <div className="flex items-center">
-                      <input
-                        list="industryOptions"
-                        id="industryFilter"
-                        value={industryFilter}
-                        onChange={(e) => setIndustryFilter(e.target.value)}
-                        placeholder="업종 선택 또는 입력..."
-                        autoComplete="off" // 브라우저 자동완성(검색 기록) 비활성화
-                        className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent"
-                        style={{ 
-                          width: 'clamp(100px, 12vw, 150px)',
-                          height: '35px',
-                          borderRadius: '4px'
-                        }}
-                      />
-                      <datalist id="industryOptions">
-                        <option value="">전체 업종</option>
-                        {industries.map((industry, index) => (
-                          <option key={index} value={industry}>
-                            {industry}
-                          </option>
-                        ))}
-                      </datalist>
+                      {/* 대분류(업종)도 중분류와 동일하게 select 드롭다운으로 구현, 입력 불가, 선택만 가능 */}
+<select
+  id="industryFilter"
+  value={selectedIndustry || ''}
+  onChange={e => setSelectedIndustry(e.target.value || null)}
+  className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent bg-white truncate"
+  style={{
+    width: 'clamp(100px, 12vw, 150px)',
+    minWidth: 100,
+    maxWidth: 150,
+    height: '35px',
+    borderRadius: '4px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    paddingLeft: '0.5rem' // px-2와 동일 (sm:px-3은 0.75rem)
+  }}
+>
+  <option value="">전체 대분류</option>
+  {industries.filter(industry => industry && industry.trim() !== '').map((industry, idx) => (
+    <option key={idx} value={industry}>
+      {industry}
+    </option>
+  ))}
+</select>
                     </div>
                   )}
                 </div>
@@ -903,37 +929,59 @@ const ValuationPage = () => {
                   </label>
                   {selectedMiddleCategory ? (
                     <button
-                      onClick={handleClearSelectedMiddleCategory}
-                      className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
-                      style={{ height: '35px', borderRadius: '4px' }}
-                    >
-                      <span>{selectedMiddleCategory}</span>
-                      <span className="ml-1">×</span>
-                    </button>
+  onClick={handleClearSelectedMiddleCategory}
+  className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
+  style={{
+    height: '35px',
+    borderRadius: '4px',
+    width: 'clamp(100px, 12vw, 150px)',
+    minWidth: 100,
+    maxWidth: 150,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  }}
+>
+  <span className="truncate">{selectedMiddleCategory}</span>
+  <span className="ml-1">×</span>
+</button>
                   ) : (
                     <div className="flex items-center">
-                      <input
-                        list="middleCategoryOptions"
-                        id="middleCategoryFilter"
-                        value={middleCategoryFilter}
-                        onChange={(e) => setMiddleCategoryFilter(e.target.value)}
-                        placeholder="중분류 선택 또는 입력..."
-                        autoComplete="off" // 브라우저 자동완성(검색 기록) 비활성화
-                        className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent"
-                        style={{ 
-                          width: 'clamp(100px, 12vw, 150px)',
-                          height: '35px',
-                          borderRadius: '4px'
-                        }}
-                      />
-                      <datalist id="middleCategoryOptions">
-                        <option value="">전체 중분류</option>
-                        {middleCategories.map((category, index) => (
-                          <option key={index} value={category}>
-                            {category}
-                          </option>
-                        ))}
-                      </datalist>
+                      {/* 중분류는 대분류(=selectedIndustry)가 선택된 경우에만 활성화, 입력 불가, 선택만 가능 */}
+<select
+  id="middleCategoryFilter"
+  value={selectedMiddleCategory || ''}
+  onChange={e => setSelectedMiddleCategory(e.target.value || null)}
+  disabled={!selectedIndustry}
+  className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent bg-white truncate"
+  style={{
+    width: 'clamp(100px, 12vw, 150px)',
+    minWidth: 100,
+    maxWidth: 150,
+    height: '35px',
+    borderRadius: '4px',
+    color: !selectedIndustry ? '#aaa' : undefined,
+    backgroundColor: !selectedIndustry ? '#f3f3f3' : undefined,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    paddingLeft: '0.5rem' // px-2와 동일 (sm:px-3은 0.75rem)
+  }}
+>
+  <option value="">전체 중분류</option>
+  {/* 대분류가 선택된 경우에만 해당 대분류에 속한 중분류만 노출 */}
+  {selectedIndustry &&
+    data
+      .filter(item => item.industry === selectedIndustry)
+      .map(item => item.middleCategory)
+      .filter((v, i, arr) => arr.indexOf(v) === i) // 중복 제거
+      .sort()
+      .map((category, idx) => (
+        <option key={idx} value={category}>
+          {category}
+        </option>
+      ))}
+</select>
                     </div>
                   )}
                 </div>
