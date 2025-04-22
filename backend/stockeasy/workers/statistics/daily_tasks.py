@@ -35,6 +35,9 @@ def generate_daily_stats(self):
     매일 정해진 시간에 실행되는 태스크
     하루 동안의 데이터 통계를 생성하고 Google Sheets에 업데이트합니다.
     """
+    # 개발환경에서는 기록하지 않음.
+    if settings.ENV == "development":
+        return
     # 10분마다 실행
     dtNow = datetime.now()
     if dtNow.minute < 50: # 50~59분에 실행하도록.
