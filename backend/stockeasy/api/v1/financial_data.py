@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict, Any
 
 from common.core.database import get_db
-from stockeasy.services.financial.data_service import FinancialDataService
+from stockeasy.services.financial.data_service import FinancialDataServicePDF
 from stockeasy.schemas.financial_data_schema import (
     ProcessFinancialReportRequest,
     FinancialDataQueryParams
@@ -28,7 +28,7 @@ async def process_financial_summary(
     - **report_year**: 보고서 연도
     - **report_quarter**: 보고서 분기 (null, 1, 2, 3, 4)
     """
-    service = FinancialDataService(db)
+    service = FinancialDataServicePDF(db)
     result = await service.process_financial_summary(
         company_code=request.company_code,
         report_file_path=request.report_file_path,
@@ -65,7 +65,7 @@ async def get_summary_financial_data(
     - **limit**: 최대 조회 개수 (기본값: 100)
     - **offset**: 조회 시작 위치 (기본값: 0)
     """
-    service = FinancialDataService(db)
+    service = FinancialDataServicePDF(db)
     result = await service.get_summary_financial_data(
         company_code=company_code,
         item_codes=item_codes,
@@ -97,7 +97,7 @@ async def get_company_financial_summary(
     - **item_codes**: 항목 코드 목록 (선택)
     - **latest_only**: 최신 데이터만 조회 여부 (기본값: false)
     """
-    service = FinancialDataService(db)
+    service = FinancialDataServicePDF(db)
     result = await service.get_company_financial_summary(
         company_code=company_code,
         item_codes=item_codes,

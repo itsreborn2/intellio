@@ -17,7 +17,7 @@ from langchain.prompts import PromptTemplate
 from langchain_core.messages import AIMessage
 
 from common.core.config import settings
-from stockeasy.services.financial.data_service import FinancialDataService
+from stockeasy.services.financial.data_service import FinancialDataServicePDF
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from stockeasy.prompts.financial_prompts import (
     FINANCIAL_ANALYSIS_SYSTEM_PROMPT,
@@ -44,7 +44,7 @@ class FinancialAnalyzerAgent(BaseAgent):
         super().__init__(name, db)
         self.agent_llm = get_agent_llm("financial_analyzer_agent")
         logger.info(f"FinancialAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
-        self.financial_service = FinancialDataService()
+        self.financial_service = FinancialDataServicePDF()
         self.stock_service = StockInfoService()
         self.prompt_template = FINANCIAL_ANALYSIS_SYSTEM_PROMPT
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:

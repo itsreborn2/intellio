@@ -85,7 +85,13 @@ securities_mapping = {
     
     # BNP파리바
     "BNP Paribas": "BNP파리바",
-    "BNPParibas": "BNP파리바"
+    "BNPParibas": "BNP파리바",
+    
+    # BOA(Bank of America)
+    "BOA": "뱅크오브아메리카",
+    "Bank of America": "뱅크오브아메리카",
+    "BankofAmerica": "뱅크오브아메리카",
+    "BofA": "뱅크오브아메리카"
 }
 
 

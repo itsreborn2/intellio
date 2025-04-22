@@ -204,3 +204,84 @@ class GoogleCloudStorageService:
             blob.download_as_bytes
         )
         return content
+    
+    async def move_file(self, source_blob_name: str, destination_blob_name: str) -> str:
+        """
+        GCS 버킷 내에서 파일을 이동시킵니다 (복사 후 원본 삭제).
+        
+        Args:
+            source_blob_name (str): 이동할 원본 파일 경로
+            destination_blob_name (str): 이동 대상 경로
+            
+        Returns:
+            str: 이동 전 원본 파일 경로
+            
+        Raises:
+            RuntimeError: 원본 파일이 존재하지 않는 경우
+        """
+        if source_blob_name == destination_blob_name:
+            print(f"원본 파일과 대상 파일이 동일합니다. {source_blob_name}")
+            return source_blob_name
+        # 원본 파일 확인
+        source_blob = self.bucket.blob(source_blob_name)
+        loop = asyncio.get_event_loop()
+        
+        # 원본 파일 존재 여부 확인
+        exists = await loop.run_in_executor(None, source_blob.exists)
+        if not exists:
+            raise RuntimeError(f"원본 파일 {source_blob_name}이(가) 스토리지에 존재하지 않습니다")
+        
+        # 대상 파일 객체 생성
+        destination_blob = self.bucket.blob(destination_blob_name)
+        
+        # 복사 작업 수행
+        await loop.run_in_executor(
+            None,
+            self.bucket.copy_blob,
+            source_blob,
+            self.bucket,
+            destination_blob_name
+        )
+        
+        # 원본 파일 삭제
+        await loop.run_in_executor(None, source_blob.delete)
+        
+        print(f"파일 이동 완료: {source_blob_name} -> {destination_blob_name}")
+        return source_blob_name
+    
+    def move_file_sync(self, source_blob_name: str, destination_blob_name: str, bLog: bool = True) -> str:
+        """
+        GCS 버킷 내에서 파일을 이동시킵니다 (복사 후 원본 삭제).
+        
+        Args:
+            source_blob_name (str): 이동할 원본 파일 경로
+            destination_blob_name (str): 이동 대상 경로
+            
+        Returns:
+            str: 이동 전 원본 파일 경로
+            
+        Raises:
+            RuntimeError: 원본 파일이 존재하지 않는 경우
+        """
+        if source_blob_name == destination_blob_name:
+            print(f"원본 파일과 대상 파일이 동일합니다. {source_blob_name}")
+            return source_blob_name
+        
+        # 원본 파일 확인
+        source_blob = self.bucket.blob(source_blob_name)
+        
+        # 원본 파일 존재 여부 확인 (동기 방식)
+        if not source_blob.exists():
+            raise RuntimeError(f"원본 파일 {source_blob_name}이(가) 스토리지에 존재하지 않습니다")
+        
+        # 대상 파일 객체 생성
+        destination_blob = self.bucket.blob(destination_blob_name)
+        
+        # 복사 작업 수행 (동기 방식)
+        self.bucket.copy_blob(source_blob, self.bucket, destination_blob_name)
+        
+        # 원본 파일 삭제 (동기 방식)
+        source_blob.delete()
+        if bLog:
+            print(f"파일 이동 완료: {source_blob_name} -> {destination_blob_name}")
+        return source_blob_name

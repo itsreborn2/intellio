@@ -291,6 +291,7 @@ class FinancialRepository:
             period_value = value
         
         if data:
+            #print("기존값 업데이트")
             # 기존 데이터 업데이트
             data.value = value
             data.display_unit = display_unit
@@ -299,6 +300,7 @@ class FinancialRepository:
             data.is_cumulative = is_cumulative
             data.statement_type = statement_type
         else:
+            #print("새 데이터 생성")
             # 새 데이터 생성
             data = IncomeStatementData(
                 report_id=report_id,

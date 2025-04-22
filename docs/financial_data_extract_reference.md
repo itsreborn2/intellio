@@ -286,7 +286,7 @@ async def save_summary_financial_data(company_code: str, report_type: str, repor
                 if not item_mapping:
                     item_mapping = FinancialItemMapping(
                         item_code=item_code,
-                        category="요약재무정보",
+                        category="요약재무정보", 
                         standard_name=item_name
                     )
                     db_session.add(item_mapping)
