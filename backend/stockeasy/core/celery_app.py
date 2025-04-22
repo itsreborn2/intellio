@@ -16,7 +16,8 @@ celery = Celery(
     backend=stockeasy_settings.REDIS_URL,
     include=[
         "stockeasy.workers.telegram.collector_tasks",
-        "stockeasy.workers.telegram.embedding_tasks"
+        "stockeasy.workers.telegram.embedding_tasks",
+        "stockeasy.workers.statistics.daily_tasks"
     ]
 )
 
@@ -109,5 +110,9 @@ celery.conf.beat_schedule = {
     'cleanup-daily-messages': {
         'task': 'stockeasy.workers.telegram.collector_tasks.cleanup_daily_messages',
         'schedule': crontab(hour=23, minute=59),  # 매일 23:59에 실행
+    },
+    'generate-daily-statistics': {
+        'task': 'stockeasy.workers.statistics.daily_tasks.generate_daily_stats',
+        'schedule': crontab(hour=23, minute=55),  # 매일 23:55에 실행
     }
 }

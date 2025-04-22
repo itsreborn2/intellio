@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 from datetime import datetime, timedelta
 
+from common.services.user import UserService
 from doceasy.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -41,6 +42,9 @@ async def create_project(
     try:
         project = await project_service.create(project_in, session)
         logger.info(f"프로젝트 생성 성공 - ID: {project.id}")
+
+
+
         return project
     except Exception as e:
         logger.error(f"프로젝트 생성 실패: {str(e)}", exc_info=True)
@@ -300,7 +304,10 @@ async def delete_column(
             )
         
         logger.info(f"컬럼 삭제 시도: 프로젝트 {project_id}, 컬럼 {column_name}")
-        
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(session.user_id)
+
         # 1. 프로젝트 존재 확인
         stmt = select(Project).where(Project.id == project_id)
         result = await db.execute(stmt)

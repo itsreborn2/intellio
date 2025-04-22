@@ -26,6 +26,7 @@ from common.core.deps import get_current_session
 from stockeasy.services.chat_service import ChatService
 from stockeasy.services.rag_service import StockRAGService
 from common.core.memory import chat_memory_manager
+from common.services.user import UserService
 
 
 # 챗 라우터 정의 위에 도우미 함수 추가
@@ -224,6 +225,10 @@ async def create_chat_session(
             stock_info=request.stock_info
         )
         
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(current_session.user_id)
+        
         return ChatSessionResponse(**session_data)
         
     except Exception as e:
@@ -282,6 +287,10 @@ async def get_chat_session(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="채팅 세션을 찾을 수 없습니다."
             )
+        
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(current_session.user_id)
         
         return ChatSessionResponse(**session_data)
         
@@ -351,6 +360,10 @@ async def delete_chat_session(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="채팅 세션을 찾을 수 없습니다."
             )
+        
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(current_session.user_id)
         
         return BaseResponse(
             ok=True,
@@ -575,6 +588,10 @@ async def stream_chat_message(
         
         refresh_agent_llm_cache()
         async with AsyncSessionLocal() as db:
+            # 사용자 활동 시간 업데이트
+            user_service = UserService(db)
+            await user_service.update_user_last_activity(current_session.user_id)
+            
             # test code
             # stock_info_service = StockInfoService()
             # stock_info = await stock_info_service.get_stock_by_code(request.stock_code)
@@ -1131,6 +1148,10 @@ async def save_chat_to_pdf(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="채팅 세션을 찾을 수 없습니다."
             )
+        
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(current_session.user_id)
         
         # 메시지 목록 조회 (모든 메시지)
         messages = await ChatService.get_chat_messages(

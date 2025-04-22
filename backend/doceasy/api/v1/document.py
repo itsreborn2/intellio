@@ -3,6 +3,7 @@ from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, BackgroundTasks, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
+from common.services.user import UserService
 from common.models.user import Session
 from sse_starlette import EventSourceResponse
 import json
@@ -46,7 +47,10 @@ async def upload_documents(
         
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
-
+    
+    # 사용자 활동 시간 업데이트
+    user_service = UserService(db)
+    await user_service.update_user_last_activity(session.user_id)
     # 프로젝트의 updated_at 갱신
     project = await project_service.get(project_id, session.user_id)
     if project:

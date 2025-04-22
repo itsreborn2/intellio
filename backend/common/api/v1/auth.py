@@ -270,6 +270,9 @@ async def oauth_callback(
         else:
             logger.info(f"Existing user with ID: {provider}, {user.id}, {user.email}, {profile_image}")
             
+            # 사용자 활동 시간 업데이트
+            user_service = UserService(db)
+            await user_service.update_user_last_activity(user.id)
             # 프로필 이미지가 변경되었다면 업데이트
             if profile_image and profile_image != user.profile_image:
                 logger.info(f"Updating profile image for user {user.id} from {user.profile_image} to {profile_image}")
@@ -367,6 +370,7 @@ async def oauth_callback(
         # 쿠키 설정 후 리다이렉션
         response.headers["Location"] = redirect_to
         response.status_code = status.HTTP_302_FOUND
+
 
         return response
         
