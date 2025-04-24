@@ -81,7 +81,7 @@ def generate_daily_stats(self):
         # Google Sheet에 기록할 데이터 행 준비
         # 컬럼 순서: 일자, 전체사용자, 신규사용자, 오늘사용자, 전체 채팅세션, 오늘 신규 채팅세션, 전체세션/전체사용자, 오늘세션/오늘사용자
         data_row = [
-            report_date.strftime('%Y-%m-%d %H:%M'),
+            dtNow.strftime('%Y-%m-%d %H:%M'),
             total_users,
             new_users_today,
             active_users_today,
