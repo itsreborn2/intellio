@@ -11,6 +11,8 @@ import html2canvas from 'html2canvas';
 import TableCopyButton from '../components/TableCopyButton';
 // 미니 캔들 SVG 컴포넌트 import
 import { CandleMini } from 'intellio-common/components/ui/CandleMini';
+// RS 컬럼 툴팁용 GuideTooltip 컴포넌트 import
+import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -49,6 +51,11 @@ type SortDirection = 'asc' | 'desc' | null;
 
 // CSV 데이터를 파싱한 결과를 위한 인터페이스
 interface CSVData {
+
+// --- RS 테이블 캡처 상태 변수 추가 ---
+// 이미지 복사(캡처) 중일 때 true, 아닐 때 false
+// 캡처 중에는 종목명/종목코드 검색 입력 박스를 숨긴다.
+
   headers: string[];
   rows: any[];
   errors: any[]; // 파싱 오류 정보 추가
@@ -66,6 +73,10 @@ interface CandleData {
 
 // RS순위 페이지 컴포넌트
 export default function RSRankPage() {
+  // --- RS 테이블 캡처 상태 변수 ---
+  // 이미지 복사(캡처) 중일 때 true, 아닐 때 false
+  // 캡처 중에는 종목명/종목코드 검색 입력 박스를 숨긴다.
+  const [isRsTableCapturing, setIsRsTableCapturing] = useState(false);
   // 종목명/종목코드 검색 상태 및 선택 상태 추가 (밸류에이션 페이지와 동일하게)
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedStock, setSelectedStock] = useState<{ code: string; name: string } | null>(null);
@@ -649,9 +660,6 @@ export default function RSRankPage() {
       const chartData: CandleData[] = parsedData.data
         .filter((row: any) => {
           const isValid = row && row['날짜'] && row['시가'] && row['고가'] && row['저가'] && row['종가'];
-          if (!isValid) {
-            console.warn(`유효하지 않은 데이터 행:`, row);
-          }
           return isValid;
         })
         .map((row: any) => {
@@ -1238,67 +1246,85 @@ export default function RSRankPage() {
                   {/* RS 순위 테이블 섹션 */}
                   <div className="flex-1">
                     <div ref={rsHeaderRef} className="flex justify-between items-center mb-2">
-                      <h2 className="text-sm md:text-base font-semibold text-gray-700">RS 순위</h2>
+                      <GuideTooltip
+  title="RS (Relative Strength)란?"
+  description={`RS는 '상대강도'를 의미하며, 특정 종목의 주가 수익률이 시장 전체(예: 코스피, 코스닥 지수)의 수익률과 비교하여 얼마나 강한지 또는 약한지를 나타내는 지표입니다.\n시가총액 2천억 미만은 제외된 리스트입니다.`}
+  side="top"
+  width={360}
+  collisionPadding={{ left: 260 }}
+>
+  <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help">
+    RS 순위
+  </h2>
+</GuideTooltip>
                       <div className="flex items-center space-x-2">
-  {/* 종목명/종목코드 검색 input - 밸류에이션과 동일한 디자인 */}
-  <div className="flex items-center">
-    <label htmlFor="rsSearchFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
-      종목명/종목코드
-    </label>
-    {selectedStock ? (
-      <button
-        onClick={handleClearSelectedStock}
-        className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
-        style={{
-          height: '35px',
-          borderRadius: '4px',
-          width: 'clamp(120px, 15vw, 180px)',
-          minWidth: 120,
-          maxWidth: 180,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap'
-        }}
-      >
-        <span className="truncate">{selectedStock.name} ({selectedStock.code})</span>
-        <span className="ml-1">×</span>
-      </button>
-    ) : (
-      <div className="flex items-center">
-        <input
-          id="rsSearchFilter"
-          type="text"
-          value={searchFilter}
-          onChange={e => setSearchFilter(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
-          placeholder="종목명/종목코드 입력"
-          className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent truncate"
+   {/* 종목명/종목코드 검색 input - 밸류에이션과 동일한 디자인 */}
+   {/* 이미지 복사(캡처) 중에는 입력 박스를 숨긴다 */}
+   {!isRsTableCapturing && (
+    <div className="flex items-center">
+      <label htmlFor="rsSearchFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+        종목명/종목코드
+      </label>
+      {selectedStock ? (
+        <button
+          onClick={handleClearSelectedStock}
+          className="px-2 sm:px-3 py-1 bg-[#D8EFE9] text-gray-700 rounded text-[10px] sm:text-xs hover:bg-[#c5e0da] focus:outline-none flex items-center"
           style={{
+            height: '35px',
+            borderRadius: '4px',
             width: 'clamp(120px, 15vw, 180px)',
             minWidth: 120,
             maxWidth: 180,
-            height: '35px',
-            borderRadius: '4px',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap'
           }}
-        />
-      </div>
-    )}
-  </div>
+        >
+          <span className="truncate">{selectedStock.name} ({selectedStock.code})</span>
+          <span className="ml-1">×</span>
+        </button>
+      ) : (
+        <div className="flex items-center">
+          <input
+            id="rsSearchFilter"
+            type="text"
+            value={searchFilter}
+            onChange={e => setSearchFilter(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="종목명/종목코드 입력"
+            className="px-2 sm:px-3 border border-gray-300 text-[10px] sm:text-xs focus:outline-none focus:ring-2 focus:ring-[#D8EFE9] focus:border-transparent truncate"
+            style={{
+              width: 'clamp(120px, 15vw, 180px)',
+              minWidth: 120,
+              maxWidth: 180,
+              height: '35px',
+              borderRadius: '4px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          />
+        </div>
+      )}
+    </div>
+   )}
   {/* 업데이트 날짜 표시 */}
   {updateDate && (
     <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-      updated 16:40 {updateDate}
+      updated 17:00 {updateDate}
     </span>
   )}
-  <TableCopyButton 
-    tableRef={rsTableRef} 
-    headerRef={rsHeaderRef} 
-    tableName="RS 순위 TOP 200" 
-    updateDateText={updateDate ? `updated 16:40 ${updateDate}` : undefined}
-  />
+  <div className="hidden md:block">
+    <TableCopyButton 
+      tableRef={rsTableRef} 
+      headerRef={rsHeaderRef} 
+      tableName="RS 순위 TOP 200" 
+      updateDateText={updateDate ? `updated 17:00 ${updateDate}` : undefined}
+      // --- 복사(캡처) 시작/종료 시 입력 박스 숨김/표시를 위한 핸들러 연결 ---
+      onStartCapture={() => setIsRsTableCapturing(true)}
+      onEndCapture={() => setIsRsTableCapturing(false)}
+    />
+  </div>
 </div>
                     </div>
                     <div className="relative">
@@ -1338,7 +1364,89 @@ export default function RSRankPage() {
                                     onClick={() => requestSort(header)}
                                   >
                                     <div className={`flex items-center ${header === '업종' ? 'justify-center' : 'justify-center'}`}> {/* 헤더 텍스트 정렬 */} 
-                                      <span>{formatHeaderName(header)}</span>
+                                      {header === 'RS' ? (
+  // RS 컬럼에만 툴팁 적용 (아이콘 없이 텍스트 전체에 마우스 오버)
+  <GuideTooltip
+    title="RS란?"
+    description={`RS (상대강도, Relative Strength)\n1년 동안의 주가 변화를 평가합니다.\n최근 1분기, 2분기, 3분기, 4분기 전의 종가를 각각 비교하여 점수를 산출합니다.\n\n실제 생활 예시\n1년 동안 네 번의 건강검진을 받는다고 생각해보세요.\n최근 건강검진(3개월 전) 결과가 이전보다 좋아졌다면, 이 부분을 두 배로 평가합니다(최근 변화가 중요하니까요).\n그 외에도 3개월 단위로 건강이 얼마나 좋아졌는지 각각 평가해서 모두 합산합니다.\n즉, 최근 변화에 더 큰 비중을 두고, 1년간의 건강 변화 전체를 종합적으로 판단하는 방식입니다.`}
+    side="top"
+    width={340}
+    collisionPadding={{ left: 260 }}
+  >
+    <span
+      className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
+      style={{ minWidth: 36 }}
+    >
+      {formatHeaderName(header)}
+    </span>
+  </GuideTooltip>
+) : header === 'RS_1M' ? (
+  // RS_1M 컬럼에도 동일한 방식으로 툴팁 적용
+  <GuideTooltip
+    title="RS_1M (1개월 상대강도)"
+    description={`RS_1M (1개월 상대강도)\n코드 로직\n최근 1개월(21거래일) 동안의 주가 변화를 평가합니다.\n\n실제 생활 예시\n한 달 전과 지금의 몸무게를 비교하는 것과 같습니다.\n예를 들어, 한 달 전에 70kg이었고 지금 72kg이라면, 72/70 = 1.028, 즉 2.8% 증가한 셈입니다.`}
+    side="top"
+    width={340}
+    collisionPadding={{ left: 260 }}
+  >
+    <span
+      className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
+      style={{ minWidth: 36 }}
+    >
+      {formatHeaderName(header)}
+    </span>
+  </GuideTooltip>
+) : header === 'RS_3M' ? (
+  // RS_3M 컬럼에도 동일한 방식으로 툴팁 적용
+  <GuideTooltip
+    title="RS_3M (3개월 상대강도)"
+    description={`RS_3M (3개월 상대강도)\n코드 로직\n최근 3개월(63거래일, 1분기) 동안의 주가 변화를 평가합니다.\n\n실제 생활 예시\n3개월 전과 지금의 체력(예: 100m 달리기 기록)을 비교하는 것과 같습니다.\n3개월 전보다 빨라졌다면, 점수가 1보다 크고, 느려졌다면 1보다 작게 나옵니다.`}
+    side="top"
+    width={340}
+    collisionPadding={{ left: 260 }}
+  >
+    <span
+      className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
+      style={{ minWidth: 36 }}
+    >
+      {formatHeaderName(header)}
+    </span>
+  </GuideTooltip>
+) : header === 'RS_6M' ? (
+  // RS_6M 컬럼에도 동일한 방식으로 툴팁 적용
+  <GuideTooltip
+    title="RS_6M (6개월 상대강도)"
+    description={`RS_6M (6개월 상대강도)\n코드 로직\n최근 6개월(126거래일) 동안의 주가 변화를 평가합니다.\n\n실제 생활 예시\n6개월 전과 지금의 저축액을 비교하는 것과 같습니다.\n6개월 전에 100만 원이었고 지금 120만 원이라면, 120/100 = 1.2, 즉 20% 늘어난 것입니다.`}
+    side="top"
+    width={340}
+    collisionPadding={{ left: 260 }}
+  >
+    <span
+      className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
+      style={{ minWidth: 36 }}
+    >
+      {formatHeaderName(header)}
+    </span>
+  </GuideTooltip>
+) : header === 'MTT' ? (
+  // MTT 컬럼에도 동일한 방식으로 툴팁 적용
+  <GuideTooltip
+    title="MTT란?"
+    description={`MTT는 윌리엄 오닐의 CAN SLIM 전략에서 \"추세(Trend)\"를 반영한 지표입니다.\n단순히 RS(상대강도) 점수가 높은 종목 중에서, 여러 이동평균선(5일, 20일, 60일, 120일 등) 위에 주가가 모두 위치한, 즉 상승 추세가 뚜렷한 종목만을 선별합니다.\n이 조건을 만족하는 종목만 RS 점수를 인정받아 MTT 점수가 부여되고, 그렇지 않으면 0점이 됩니다.\n\n비유:\n공부(성적, RS)는 잘하지만, 생활습관(규칙적인 운동, 이동평균선 위 주가)이 좋은 학생만 상(MTT 점수)을 받는 것과 같습니다.`}
+    side="top"
+    width={340}
+    collisionPadding={{ left: 260 }}
+  >
+    <span
+      className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
+      style={{ minWidth: 36 }}
+    >
+      {formatHeaderName(header)}
+    </span>
+  </GuideTooltip>
+) : (
+  <span>{formatHeaderName(header)}</span>
+)}
                                       {sortKey === header && (
                                         <span className="ml-1">
                                           {sortDirection === 'asc' ? '▲' : '▼'}
@@ -1473,20 +1581,32 @@ export default function RSRankPage() {
                   {/* 52주 신고/신저가 테이블 섹션 */}
                   <div className="flex-1">
                     <div ref={highHeaderRef} className="flex justify-between items-center mb-2">
-                      <h2 className="text-sm md:text-base font-semibold text-gray-700">52주 신고가 주요 종목</h2>
+                      <GuideTooltip
+  title="52주 신고가 주요 종목"
+  description={`52주 신고가를 기록한 종목들 중, 종가가 고가 대비 특정 비율을 유지한 종목만을 선별합니다.\n시가총액 2천억 미만은 제외합니다.`}
+  side="top"
+  width={360}
+  collisionPadding={{ left: 260 }}
+>
+  <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help">
+    52주 신고가 주요 종목
+  </h2>
+</GuideTooltip>
                       <div className="flex items-center space-x-2">
                         {/* 업데이트 날짜 표시 */}
                         {updateDate && (
                           <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-                            updated 16:40 {updateDate}
+                            updated 17:00 {updateDate}
                           </span>
                         )}
-                        <TableCopyButton 
-                          tableRef={highTableRef} 
-                          headerRef={highHeaderRef} 
-                          tableName="52주 신고가 주요 종목"
-                          updateDateText={updateDate ? `updated 16:40 ${updateDate}` : undefined}
-                        />
+                        <div className="hidden md:block">
+                          <TableCopyButton 
+                            tableRef={highTableRef} 
+                            headerRef={highHeaderRef} 
+                            tableName="52주 신고가 주요 종목"
+                            updateDateText={updateDate ? `updated 17:00 ${updateDate}` : undefined}
+                          />
+                        </div>
                       </div>
                     </div>
                     <div className="relative">
@@ -1680,7 +1800,19 @@ export default function RSRankPage() {
               <div className="p-2 md:p-4">
                 <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
                   <div className="mb-3">
-                    <h2 className="text-sm md:text-base font-semibold">RS상위 시장 비교차트</h2>
+                    <GuideTooltip
+  title="RS상위 시장 비교차트"
+  description={`RS 상위 21개 종목의 차트를 해당 종목이 속한 시장 지수(KOSPI, KOSDAQ)와 함께, 주봉 기준으로 52주간의 가격 변화를 비교합니다.`}
+  side="top"
+  width={360}
+  collisionPadding={{ left: 260 }}
+>
+  <span className="inline-flex items-center">
+    <h2 className="text-sm md:text-base font-semibold cursor-help">
+      RS상위 시장 비교차트
+    </h2>
+  </span>
+</GuideTooltip>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Array.from({length: 21}).map((_, index) => (

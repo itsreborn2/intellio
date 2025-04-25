@@ -1,7 +1,8 @@
 // trend-following 페이지 전체 레이아웃 및 섹션 컴포넌트 배치 (임시)
 import MarketSignalSection from './components/MarketSignalSection';
 import SectorLeaderSection from './components/SectorLeaderSection';
-import High52wSection from './components/High52wSection';
+// 52주 신고가 주요 종목 섹션 (rs-rank/page.tsx와 100% 동일)
+import High52Section from './components/High52Section';
 import TrendChartSection from './components/TrendChartSection';
 import BreakoutCandidatesSection from './components/BreakoutCandidatesSection';
 import BreakoutSustainSection from './components/BreakoutSustainSection';
@@ -27,12 +28,10 @@ export default function TrendFollowingMain() {
             </div>
           </div>
         </div>
-        {/* 52주 신고가 주요종목 섹션 */}
+        {/* 52주 신고가 주요 종목 섹션 - rs-rank/page.tsx와 완전히 동일하게 동작 */}
         <div className="mb-2 md:mb-4">
           <div className="bg-white rounded-[6px] shadow p-2 md:p-4 border border-gray-200">
-            <div className="bg-white rounded border border-gray-100 p-2 md:p-4">
-              <High52wSection />
-            </div>
+            <High52Section />
           </div>
         </div>
         {/* 트렌드 차트 섹션 */}

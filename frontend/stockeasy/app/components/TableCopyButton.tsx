@@ -11,6 +11,14 @@ import { ClipboardCopy } from 'lucide-react'; // ClipboardCopy 아이콘 import
  */
 interface ExtendedTableCopyButtonProps extends TableCopyButtonProps {
   updateDateText?: string; // 선택적 업데이트 날짜 텍스트
+  /**
+   * 이미지 복사(캡처) 시작 시 호출되는 콜백
+   */
+  onStartCapture?: () => void;
+  /**
+   * 이미지 복사(캡처) 종료 시 호출되는 콜백
+   */
+  onEndCapture?: () => void;
 }
 
 export const TableCopyButton: React.FC<ExtendedTableCopyButtonProps> = ({
@@ -20,13 +28,17 @@ export const TableCopyButton: React.FC<ExtendedTableCopyButtonProps> = ({
   options,
   className = "",
   buttonText = "이미지복사",
-  updateDateText
+  updateDateText,
+  onStartCapture,
+  onEndCapture
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   
   // 이미지 복사 핸들러
   const handleCopyImage = async () => {
+    // --- 복사(캡처) 시작 시 콜백 호출 ---
+    if (onStartCapture) onStartCapture();
     // 즉시 로딩 상태로 변경
     setIsLoading(true);
     
@@ -41,6 +53,8 @@ export const TableCopyButton: React.FC<ExtendedTableCopyButtonProps> = ({
       setTimeout(() => {
         setIsLoading(false);
         setShowSuccess(true);
+        // --- 복사(캡처) 종료 시 콜백 호출 ---
+        if (onEndCapture) onEndCapture();
         setTimeout(() => setShowSuccess(false), 2000); // 2초 후 성공 메시지 숨김
       }, 500); // 로딩 상태 해제 후 0.5초 지연
     }

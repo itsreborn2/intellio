@@ -7,6 +7,7 @@ import { Sparklines, SparklinesLine, SparklinesSpots, SparklinesReferenceLine, S
 import { copyTableAsImage } from '../utils/tableCopyUtils';
 import TableCopyButton from './TableCopyButton';
 import { formatDateMMDD } from '../utils/dateUtils';
+import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip'; // GuideTooltip 컴포넌트 임포트 경로 수정
 
 // CSV 데이터를 파싱한 결과를 위한 인터페이스
 interface CSVData {
@@ -729,22 +730,36 @@ export default function ETFCurrentTable() {
   return (
     <div>
       <div ref={headerRef} className="flex justify-start items-center mb-2">
-        <h2 className="text-sm md:text-base font-semibold text-gray-700">ETF 주요섹터</h2>
+        <GuideTooltip
+          title="ETF 주요섹터"
+          description={`산업 및 주요 섹터별로 분류하여 엄선한 ETF 목록입니다.\n이 목록을 통해 현재 강세인 산업과 그 안의 주요 섹터, 그리고 해당 섹터를 이끄는 대표 종목까지 한눈에 파악하실 수 있습니다.\n시장을 주도하는 섹터 중심의 투자 기회를 발견하는 데 도움을 드립니다.`}
+          side="top"
+          width="min(90vw, 360px)" // 너비를 반응형으로 수정
+          collisionPadding={{ left: 260 }} // 왼쪽 여백 추가
+        >
+          <span className="inline-flex items-center"> {/* Tooltip 트리거 영역 확장을 위한 span */}
+            <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help"> {/* 도움말 커서 추가 */}
+              ETF 주요섹터
+            </h2>
+          </span>
+        </GuideTooltip>
         <div className="flex items-center space-x-2 ml-auto">
           {/* 업데이트 날짜 표시 */}
           {updateDate && (
             <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-              updated 16:40 {updateDate}
+              updated 17:00 {updateDate}
             </span>
           )}
           {/* 테이블 복사 버튼 */}
-          <TableCopyButton
-            tableRef={tableRef}
-            headerRef={headerRef}
-            tableName="ETF 현황"
-            updateDateText={updateDate ? `updated 16:40 ${updateDate}` : undefined}
-            // className="p-1 text-xs" // 필요시 버튼 스타일 조정
-          />
+          <div className="hidden md:block">
+            <TableCopyButton
+              tableRef={tableRef}
+              headerRef={headerRef}
+              tableName="ETF 현황"
+              updateDateText={updateDate ? `updated 17:00 ${updateDate}` : undefined}
+              // className="p-1 text-xs" // 필요시 버튼 스타일 조정
+            />
+          </div>
         </div>
       </div>
 
@@ -819,10 +834,10 @@ export default function ETFCurrentTable() {
                     width: '60px', // 너비 복원
                     height: '35px'
                   }}
-                  onClick={() => handleSort(header)}
+                  onClick={() => handleSort(header)} // 정렬 함수에는 데이터 키 "등락율" 전달
                 >
                   <div className="flex justify-center items-center">
-                    {header}
+                    등락률 {/* 표시 텍스트만 변경 */}
                     {sortKey === header && (
                       <span className="ml-1">
                         {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
@@ -834,35 +849,84 @@ export default function ETFCurrentTable() {
               <th
                 key="포지션"
                 scope="col"
-                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                // className 수정: cursor-help 추가
+                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-help border border-gray-200" // cursor-help 추가
                 style={{
                   width: '78px',
                   height: '35px'
                 }}
+                // onClick은 Tooltip 트리거 내부 요소가 아닌 th 자체에 두어 클릭 영역 유지
                 onClick={() => handleSort('포지션')}
               >
-                <div className="flex justify-center items-center">
-                  포지션
-                  {sortKey === '포지션' && (
-                    <span className="ml-1">
-                      {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
-                    </span>
-                  )}
-                </div>
+                <GuideTooltip
+                  title="포지션이란?"
+                  description="해당 ETF가 20일 이동평균선 위에서 유지된 기간을 나타냅니다. 이 기간이 길수록 해당 섹터가 강한 상승 추세에 있음을 시사합니다."
+                  side="top"
+                  width="min(90vw, 360px)" // 반응형 너비
+                  collisionPadding={{ left: 260 }} // 왼쪽 여백
+                >
+                  {/* 기존 div 내용을 Tooltip의 자식으로 이동 */}
+                  <div className="flex justify-center items-center">
+                    포지션
+                    {sortKey === '포지션' && (
+                      <span className="ml-1">
+                        {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                      </span>
+                    )}
+                  </div>
+                </GuideTooltip>
               </th>
               {['20일 이격', '돌파/이탈', '대표종목(RS)'].map((header) => (
                 <th
                   key={header}
                   scope="col"
-                  className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 hidden md:table-cell`}
+                  // className 수정: '20일 이격'일 때 cursor-help 추가
+                  className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 ${header === '20일 이격' || header === '돌파/이탈' || header === '대표종목(RS)' ? 'cursor-help' : ''} hidden md:table-cell`} // cursor-help 추가
                   style={{
                     width: header === '20일 이격' ? '80px' : header === '돌파/이탈' ? '80px' : header === '대표종목(RS)' ? '380px' : '80px',
                     height: '35px'
                   }}
                 >
-                  <div className="flex justify-center items-center">
-                    {header === '돌파/이탈' ? <>돌파/<br />이탈</> : header}
-                  </div>
+                  {/* '20일 이격' 헤더일 경우 GuideTooltip으로 감싸기 */}
+                  {header === '20일 이격' ? (
+                    <GuideTooltip
+                      title="20일 이격이란?"
+                      description="현재가와 *20일 이동평균선 간의 차이(이격률)*를 보여줍니다. 20일선 위에 위치하면 양수(+), 아래에 위치하면 음수(-)로 표시됩니다. 섹터의 단기 위치를 참고하는데 도움이 됩니다."
+                      side="top"
+                      width="min(90vw, 360px)" // 반응형 너비
+                      collisionPadding={{ left: 260 }} // 왼쪽 여백
+                    >
+                      <div className="flex justify-center items-center">{header}</div>
+                    </GuideTooltip>
+                  ) : /* '돌파/이탈' 헤더일 경우 GuideTooltip으로 감싸기 */
+                  header === '돌파/이탈' ? (
+                    <GuideTooltip
+                      title="돌파/이탈이란?"
+                      // description에서 마크다운 처리 (템플릿 리터럴 사용)
+                      description={`가장 최근에 **20일 이동평균선을 위로 돌파(붉은색)**하거나 아래로 이탈(푸른색)한 날짜를 표시합니다. 기간을 확인하여 추세의 지속 여부를 판단합니다.`}
+                      side="top"
+                      width="min(90vw, 360px)" // 반응형 너비
+                      collisionPadding={{ left: 260 }} // 왼쪽 여백
+                    >
+                      <div className="flex justify-center items-center">
+                        <>돌파/<br />이탈</> {/* 툴팁 내부 텍스트 */}
+                      </div>
+                    </GuideTooltip>
+                  ) : /* '대표종목(RS)' 헤더일 경우 GuideTooltip으로 감싸기 */
+                  header === '대표종목(RS)' ? (
+                    <GuideTooltip
+                      title="대표 종목 (RS)이란?"
+                      description="각 섹터를 대표하는 주요 종목과 해당 종목의 상대강도(RS) 값을 함께 보여주어 섹터 내 주도주를 쉽게 확인할 수 있습니다."
+                      side="top"
+                      width="min(90vw, 360px)" // 반응형 너비
+                      collisionPadding={{ left: 260 }} // 왼쪽 여백
+                    >
+                      <div className="flex justify-center items-center">{header}</div>
+                    </GuideTooltip>
+                  ) : (
+                    // '20일 이격' 및 '돌파/이탈' 외 헤더는 그대로 유지
+                    <div className="flex justify-center items-center">{header}</div>
+                  )}
                 </th>
               ))}
             </tr>
