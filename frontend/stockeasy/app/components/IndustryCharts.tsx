@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Papa from 'papaparse';
 import ChartComponent from './ChartComponent'; // ChartComponent 경로 확인 필요
 import { ChartCopyButton } from './ChartCopyButton';
+import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip'; // GuideTooltip 추가
 
 // 차트 데이터 타입 정의
 interface CandleData {
@@ -342,8 +343,21 @@ export default function IndustryCharts() {
       {/* 제목+복사버튼+updated 영역 */}
       {/* 제목+updated+복사버튼만 flex-row, 설명은 아래에 분리 */}
       {/* 제목(좌) / updated+복사버튼(우)로 분리, flex justify-between */}
-      <div className="mb-1 flex flex-row items-center justify-between w-full">
-        <h2 className="font-semibold whitespace-nowrap text-sm md:text-base">산업별 주도ETF 차트</h2>
+      <div className="mb-2 flex flex-row items-center justify-between w-full"> {/* mb-1 -> mb-2 */}
+        {/* 제목 영역을 GuideTooltip으로 감쌈 */}
+        <GuideTooltip
+          title="산업별 주도 ETF 차트"
+          description={`각 산업을 대표하는 ETF 중 20일 이동평균선 위에 위치한 종목만을 선별하여 보여줍니다. 이를 통해 현재 상승 추세에 있는 주도 산업 및 ETF를 쉽게 파악할 수 있습니다.\n\n**차트 헤더 안내:**\n차트 제목 우측의 숫자는 해당 ETF가 **20일 이동평균선 위에서 연속으로 머무른 기간(일수)**을 나타냅니다.\n(이 차트에는 20일선 아래 종목은 표시되지 않습니다.)\n유지 기간(숫자)이 길수록 해당 ETF의 상승 추세가 견조함을 의미할 수 있습니다.`}
+          side="bottom" // 제목 아래에 표시되도록 side 조정
+          width="min(90vw, 450px)" // 너비 조정 (내용이 길어서 조금 늘림)
+          collisionPadding={{ top: 10, left: 260, right: 10, bottom: 10 }} // 왼쪽 여백 260px 추가
+        >
+          {/* 기존 h2 태그를 Tooltip의 자식으로 이동하고 스타일 추가 */}
+          <h2 className="font-semibold whitespace-nowrap text-sm md:text-base cursor-help"> {/* cursor-help 추가 */}
+            산업별 주도ETF 차트
+          </h2>
+        </GuideTooltip>
+
         <div className="flex flex-row items-center ml-auto">
           {/* updated: 평소에는 버튼 왼쪽, 캡처 중에는 오른쪽 끝 */}
           {!isCapturing && updateDate && (
@@ -351,16 +365,19 @@ export default function IndustryCharts() {
               className="text-gray-600 text-xs mr-2"
               style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}
             >
-              updated 16:40 {updateDate}
+              updated 17:00 {updateDate}
             </span>
           )}
-          <ChartCopyButton
-            chartRef={chartsContainerRef}
-            chartName="산업별 주도ETF 차트 전체"
-            onStartCapture={() => setIsCapturing(true)}
-            onEndCapture={() => setIsCapturing(false)}
-            updateDateText={updateDate}
-          />
+          {/* 모바일에서 숨기기 위한 div 추가 */}
+          <div className="hidden md:block">
+            <ChartCopyButton
+              chartRef={chartsContainerRef}
+              chartName="산업별 주도ETF 차트 전체"
+              onStartCapture={() => setIsCapturing(true)}
+              onEndCapture={() => setIsCapturing(false)}
+              updateDateText={updateDate}
+            />
+          </div>
           {isCapturing && updateDate && (
             <span
               className="text-gray-600 text-xs ml-2"
@@ -371,8 +388,6 @@ export default function IndustryCharts() {
           )}
         </div>
       </div>
-      {/* 설명은 제목 아래 한 줄로 분리 */}
-      <p className="text-gray-600 mr-2 hidden sm:inline text-[11px] md:text-xs mb-2">산업별 ETF의 20일 이동평균선 위에 위치한 ETF종목들만 표시합니다.</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
         {[...stockChartData] // 복사본 사용
@@ -389,12 +404,9 @@ export default function IndustryCharts() {
                   style={{ borderRadius: '0.375rem 0.375rem 0 0' }} 
                 >
                   {/* 헤더 왼쪽: 섹터, 종목명, 등락률 */}
-                  {/* gap-2 -> gap-1 으로 수정하여 간격 줄임 */}
                   <div className="flex items-baseline gap-1">
                     <div className="flex items-baseline gap-1">
-                      {/* 한 줄에 섹터, 종목명, 등락률 모두 표시 (줄바꿈 방지) */}
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', minWidth: 0, width: '100%' }}>
-                        {/* 섹터 */}
                         {info.sector && (
                           <span
                             className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1"
@@ -412,7 +424,6 @@ export default function IndustryCharts() {
                             {info.sector}
                           </span>
                         )}
-                        {/* ETF 제목: 줄바꿈 방지, ... 처리, 글자 작게 */}
                         <span
                           className="font-medium"
                           style={{
@@ -428,7 +439,6 @@ export default function IndustryCharts() {
                         >
                           {info.name || info.code}
                         </span>
-                        {/* 등락률 */}
                         <span
                           className={`px-1.5 py-0.5 rounded ${(info.changePercent || 0) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
                           style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
@@ -437,25 +447,20 @@ export default function IndustryCharts() {
                         </span>
                       </div>
                     </div>
-                    {/* 헤더 오른쪽: 상태 텍스트 */}
-                    <div className="flex items-baseline gap-1">
-                      {info.isLoading ? (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
-                          로딩 중...
-                        </span>
-                      ) : (
-                        // 상태 텍스트 -> info.position 값 직접 사용
-                        <span 
-                          // 배경색/텍스트색은 getHeaderBackgroundColor와 별개로 position 기반 적용
-                          className={`px-1.5 py-0.5 rounded ${info.position?.startsWith('유지') ? 'bg-[#D8EFE9] text-teal-800' : 'bg-gray-100 text-gray-800'}`}
-                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
-                        >
-                          {/* '유지 ' 또는 '이탈 ' 제거하고 일수만 표시 */}
-                          {info.position?.replace(/^(유지|이탈)\s*/, '') || 'N/A'}
-                        </span>
-                      )}
-                    </div>
                   </div>
+                  {/* 헤더 오른쪽: 상태 텍스트 */}
+                  {info.isLoading ? (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
+                      로딩 중...
+                    </span>
+                  ) : (
+                    <span 
+                      className={`px-1.5 py-0.5 rounded ${info.position?.startsWith('유지') ? 'bg-[#D8EFE9] text-teal-800' : 'bg-gray-100 text-gray-800'}`}
+                      style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                    >
+                      {info.position?.replace(/^(유지|이탈)\s*/, '') || 'N/A'}
+                    </span>
+                  )}
                 </div>
                 
                 {/* 차트 컴포넌트 컨테이너 (원본 클래스, 인라인 스타일) */}
