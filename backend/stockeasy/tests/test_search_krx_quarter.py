@@ -310,7 +310,7 @@ async def test_find매출(stock_code: str, query:str, time_range:str):
     #logger.info(f"year_range: {year_range}")
     # 재무 데이터 조회 (GCS에서 PDF 파일을 가져와서 처리)
     year_range = 1
-    financial_data = await financial_analyzer_agent.financial_service.get_financial_data(stock_code, date_range)
+    financial_data = await financial_analyzer_agent.financial_service_pdf.get_financial_data(stock_code, date_range)
     
     required_metrics = financial_analyzer_agent._identify_required_metrics(classification, query)
     # 추출된 재무 데이터를 LLM에 전달할 형식으로 변환

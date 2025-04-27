@@ -9,32 +9,62 @@ import os
 import json
 import asyncio
 import logging
+from pprint import pprint
 import warnings
 from datetime import datetime, timedelta
 from functools import partial
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 import re
 from pathlib import Path
+from decimal import Decimal
 
 from google.cloud import storage
 from common.services.storage import GoogleCloudStorageService
 from common.core.config import settings
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import fitz  # PyMuPDF 라이브러리
 import pdfplumber  # pdfplumber 추가
+
+from common.core.database import get_db
+from stockeasy.repositories.financial_repository import FinancialRepository
+from stockeasy.services.financial.pdf_extractor import FinancialPDFExtractor
+from stockeasy.services.llm_service import FinancialLLMService
+from stockeasy.utils.cache_util import FinancialCacheUtil, cached
+from sqlalchemy import select, and_
+from stockeasy.models.financial_data import SummaryFinancialData
+from stockeasy.models.financial_reports import FinancialReport
+from stockeasy.models.income_statement_data import IncomeStatementData
+from stockeasy.models.balance_sheet_data import BalanceSheetData
+from stockeasy.models.cash_flow_data import CashFlowData
+from stockeasy.models.equity_change_data import EquityChangeData
 
 # PDF 관련 모든 경고 메시지 숨기기
 warnings.filterwarnings('ignore', category=UserWarning, module='pdfminer')
 warnings.filterwarnings('ignore', category=UserWarning, module='pdfplumber')
 
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # 콘솔 출력용 핸들러
+    ]
+)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
-class FinancialDataService:
+class FinancialDataServicePDF:
     """재무 데이터 서비스 클래스"""
     
-    def __init__(self):
+    def __init__(self, db_session: AsyncSession = None):
         """서비스 초기화"""
+        self._db = db_session
+        
+        # 로거 초기화 메시지 출력
+        logger.info("FinancialDataServicePDF 초기화 중...")
+        
         self.storage_service = GoogleCloudStorageService(
             project_id=settings.GOOGLE_CLOUD_PROJECT,
             bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET_STOCKEASY,
@@ -64,6 +94,27 @@ class FinancialDataService:
             "annual": "연간"
         }
         
+        self.pdf_extractor = FinancialPDFExtractor()
+        self.llm_service = FinancialLLMService()
+        self.cache_util = FinancialCacheUtil()
+        
+        logger.info("FinancialDataServicePDF 초기화 완료")
+        
+    @property
+    async def db(self) -> AsyncSession:
+        """데이터베이스 세션 가져오기"""
+        if self._db is None:
+            async with get_db() as session:
+                self._db = session
+                return self._db
+        return self._db
+    
+    @property
+    async def repository(self) -> FinancialRepository:
+        """저장소 인스턴스 가져오기"""
+        db = await self.db
+        return FinancialRepository(db)
+    
     async def get_financial_data(self, stock_code: str, date_range: Dict[str, datetime] = None) -> Dict[str, Any]:
         """
         주어진 종목 코드에 대한 재무 데이터를 가져옵니다.
@@ -154,6 +205,7 @@ class FinancialDataService:
             
             return {
                 "stock_code": stock_code,
+                "count": len(sorted_data),
                 "reports": sorted_data,
                 "date_range": {
                     "start_date": start_date.strftime("%Y-%m-%d"),
@@ -427,8 +479,9 @@ class FinancialDataService:
                 date = datetime.strptime(date_str, "%Y%m%d")
                 formatted_date = date.strftime("%Y-%m-%d")
                 year = date.year
-                if report_type.lower() == "annual":
-                    year = date.year -1
+                # 삽질.
+                # if report_type.lower() == "annual":
+                #     year = date.year -1
             except ValueError:
                 logger.warning(f"Invalid date format in filename: {date_str}")
                 year = int(date_str[:4]) if len(date_str) >= 4 else 0
@@ -594,8 +647,9 @@ class FinancialDataService:
             year = base_file_name.split("_")[0]
             year = year[:4]
             quater_file = base_file_name.split("_")[4]
-            if quater_file == "annual":
-                year = int(year) - 1
+            # 삽질
+            # if quater_file == "annual":
+            #     year = int(year) - 1
             report_type_map = {
                     "Q1": "1분기",
                     "Q3": "3분기",
@@ -685,6 +739,7 @@ class FinancialDataService:
                         text = page.extract_text()
                         if text:
                             extracted_text += f"\n\n--- 페이지 {page_num + 1} ---\n\n{text}"
+                            #extracted_text += text
             
             extracted_text += f"\n\n--- 데이터 끝 ---\n\n"
             if not extracted_text:
@@ -697,4 +752,3 @@ class FinancialDataService:
         finally:
             doc.close()
     
-

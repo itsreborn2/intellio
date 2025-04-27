@@ -37,6 +37,20 @@ from common.models.token_usage import TokenUsage
 from stockeasy.models.telegram_message import TelegramMessage
 from stockeasy.models.chat import StockChatSession, StockChatMessage
 
+# 재무 데이터 모델 임포트
+from stockeasy.models.companies import Company
+from stockeasy.models.financial_reports import FinancialReport
+from stockeasy.models.financial_data import (
+    FinancialItemMapping, 
+    FinancialItemRawMapping,
+    SummaryFinancialData,
+
+)
+from stockeasy.models.income_statement_data import IncomeStatementData
+from stockeasy.models.balance_sheet_data import BalanceSheetData
+from stockeasy.models.cash_flow_data import CashFlowData
+from stockeasy.models.equity_change_data import EquityChangeData
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

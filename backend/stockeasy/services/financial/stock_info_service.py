@@ -26,11 +26,19 @@ class StockInfoService:
     _stock_info_cache = None  # 메모리 캐시
     _last_update_date = None  # 마지막 업데이트 날짜
     _update_task = None  # 자동 업데이트 태스크
+    _initialized = None  # 초기화 완료 이벤트
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._initialized = asyncio.Event()  # 초기화 이벤트 생성
+            # 기본 빈 데이터 구조로 초기화 (최소한의 동작 보장)
+            cls._instance._stock_info_cache = {"by_code": {}, "by_name": {}, "sector": {}}
+            # 백그라운드에서 초기화 진행
             asyncio.create_task(cls._instance._initialize())
+            # 바로 사용 가능하도록 초기화 완료 이벤트 설정
+            cls._instance._initialized.set()
+            print("기본 구조로 초기화 완료, 백그라운드에서 전체 데이터 로딩 중...")
         return cls._instance
     
     async def _initialize(self) -> None:
@@ -38,6 +46,7 @@ class StockInfoService:
         주식 정보를 초기화하고 캐싱합니다.
         """
         logger.info("주식 정보 서비스 초기화 시작")
+        print("주식 정보 서비스 초기화 시작")
         
         # 종목 정보 캐시 경로
         self.cache_dir = Path(settings.STOCKEASY_LOCAL_CACHE_DIR)
@@ -93,9 +102,11 @@ class StockInfoService:
         # 자동 업데이트 태스크 시작
         self._update_task = asyncio.create_task(self._start_auto_update())
         logger.info("주식 정보 서비스 초기화 완료")
+        print("주식 정보 서비스 초기화 완료1")
         try:
             stocks = await self.search_stocks("삼성전", limit=5)
             logger.info(f"샘플 종목 검색 결과: {len(stocks)}개")
+            print(f"샘플 종목 검색 결과: {len(stocks)}개")
             for i, stock in enumerate(stocks):
                 sector_info = stock.get('sector', '정보 없음')
                 logger.info(f"[{i+1}] 종목명: {stock['name']}, 종목코드: {stock['code']}, 업종: {sector_info}")
@@ -107,6 +118,17 @@ class StockInfoService:
         except Exception as e:
             logger.error(f"샘플 종목 및 섹터 조회 중 오류 발생: {str(e)}")
         
+        # 초기화 완료 이벤트 설정
+        self._initialized.set()
+        logger.info("주식 정보 서비스 초기화 이벤트 설정 완료")
+        print("주식 정보 서비스 초기화 완료2")
+    
+    async def wait_for_initialization(self) -> None:
+        """
+        초기화가 완료될 때까지 기다립니다.
+        """
+        await self._initialized.wait()
+    
     async def _start_auto_update(self):
         """자동 업데이트 태스크를 시작합니다."""
         logger.info("주식 정보 자동 업데이트 태스크 시작")
@@ -282,6 +304,8 @@ class StockInfoService:
         Returns:
             종목 정보 딕셔너리
         """
+        # 초기화 완료 이벤트는 이미 설정되어 있으므로 바로 반환
+        # await self._initialized.wait()
         return self._stock_info_cache or {"by_code": {}, "by_name": {}}
         
     async def _fetch_stock_info_from_krx(self) -> Dict[str, Any]:
@@ -351,27 +375,66 @@ class StockInfoService:
             Dict[str, Any]: 종목코드:섹터 딕셔너리
         """
         try:
+            print("구글 시트에서 섹터 정보 가져오기 시작")
+            logger.info("구글 시트에서 섹터 정보 가져오기 시작")
+            
             from stockeasy.services.google_sheet_service import GoogleSheetService
             
             # 구글 시트 서비스 초기화
             sheet_service = GoogleSheetService(credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS)
-             # 스프레드시트 URL로 열기
-            sheet_url = "https://docs.google.com/spreadsheets/d/1AgbEpblhoqSBTmryDjSSraqc5lRdgWKNwBUA4VYk2P4/edit"
-            # 섹터 딕셔너리 가져오기 (get_sector_dict 메서드가 GoogleSheetService에 구현되어 있어야 함)
-            # 시트 이름을 지정하거나 기본 시트 사용
-
-            sector_dict = sheet_service.get_sector_dict(url=sheet_url,worksheet_name="섹터")
             
-            if sector_dict:
-                logger.info(f"구글 시트에서 {len(sector_dict)}개 종목의 섹터 정보를 가져왔습니다.")
-            else:
-                logger.warning("구글 시트에서 섹터 정보를 가져오지 못했습니다.")
+            # 최대 60초 타임아웃 설정 (기존 요청을 래핑)
+            import concurrent.futures
+            import asyncio
             
-            return sector_dict
+            executor = concurrent.futures.ThreadPoolExecutor()
+            loop = asyncio.get_event_loop()
+            
+            # 처리 함수 정의
+            def get_sector_from_sheet():
+                # 스프레드시트 URL로 열기
+                sheet_url = "https://docs.google.com/spreadsheets/d/1AgbEpblhoqSBTmryDjSSraqc5lRdgWKNwBUA4VYk2P4/edit"
+                # 섹터 딕셔너리 가져오기
+                return sheet_service.get_sector_dict(url=sheet_url, worksheet_name="섹터")
+            
+            # 타임아웃과 함께 실행
+            try:
+                print("구글 시트 요청 시작 (60초 타임아웃)")
+                logger.info("구글 시트 요청 시작 (60초 타임아웃)")
+                
+                # ThreadPoolExecutor로 실행하고 타임아웃 설정
+                future = executor.submit(get_sector_from_sheet)
+                sector_dict = {}
+                
+                # 최대 60초 기다림
+                try:
+                    sector_dict = future.result(timeout=60)
+                except concurrent.futures.TimeoutError:
+                    print("구글 시트 요청 타임아웃 (60초 초과)")
+                    logger.warning("구글 시트 요청 타임아웃 (60초 초과)")
+                    return {}  # 타임아웃 시 빈 딕셔너리 반환
+                finally:
+                    executor.shutdown(wait=False)
+                
+                if sector_dict:
+                    print(f"구글 시트에서 {len(sector_dict)}개 종목의 섹터 정보를 가져왔습니다.")
+                    logger.info(f"구글 시트에서 {len(sector_dict)}개 종목의 섹터 정보를 가져왔습니다.")
+                else:
+                    print("구글 시트에서 섹터 정보를 가져오지 못했습니다.")
+                    logger.warning("구글 시트에서 섹터 정보를 가져오지 못했습니다.")
+                
+                return sector_dict
+            except Exception as inner_e:
+                print(f"구글 시트 요청 처리 중 오류: {str(inner_e)}")
+                logger.error(f"구글 시트 요청 처리 중 오류: {str(inner_e)}")
+                return {}
+            
         except ImportError as e:
+            print(f"GoogleSheetService 가져오기 실패 (gspread 라이브러리 설치 필요): {str(e)}")
             logger.error(f"GoogleSheetService 가져오기 실패 (gspread 라이브러리 설치 필요): {str(e)}")
             return {}
         except Exception as e:
+            print(f"구글 시트에서 섹터 정보 가져오기 실패: {str(e)}")
             logger.error(f"구글 시트에서 섹터 정보 가져오기 실패: {str(e)}")
             return {}
 
@@ -400,3 +463,17 @@ class StockInfoService:
             return code_map[stock_code]["sector"]
             
         return None
+        
+    async def get_all_stock_codes(self) -> List[str]:
+        """
+        모든 종목코드 리스트를 반환합니다.
+        
+        Returns:
+            List[str]: 오름차순으로 정렬된 모든 종목코드 리스트
+        """
+        stock_info = await self._load_stock_info()
+        if not stock_info:
+            return []
+            
+        # by_code 키에서 모든 종목코드(키) 추출 후 오름차순 정렬
+        return sorted(list(stock_info.get("by_code", {}).keys()))
