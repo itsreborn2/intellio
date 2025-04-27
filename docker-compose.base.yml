@@ -28,7 +28,7 @@ services:
       - DB_NAME=${POSTGRES_DB}
       - POOL_MODE=transaction
       - MAX_CLIENT_CONN=500
-      - DEFAULT_POOL_SIZE=20
+      - DEFAULT_POOL_SIZE=40
       - ADMIN_USERS=${POSTGRES_USER}
       - LISTEN_PORT=6432
       - AUTH_TYPE=scram-sha-256   # 또는 md5
@@ -57,7 +57,7 @@ services:
   redis:
     image: redis:latest
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     networks:
       - app-network
 

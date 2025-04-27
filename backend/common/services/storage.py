@@ -285,3 +285,65 @@ class GoogleCloudStorageService:
         if bLog:
             print(f"파일 이동 완료: {source_blob_name} -> {destination_blob_name}")
         return source_blob_name
+    
+    async def list_files_in_folder(self, folder_path):
+        """
+        GCS 버킷의 특정 폴더 내 모든 파일 목록을 반환합니다.
+        
+        Args:
+            folder_path (str): 파일 목록을 가져올 폴더 경로 (예: 'data/')
+                              폴더 경로는 항상 '/'로 끝나야 합니다.
+        
+        Returns:
+            list: 폴더 내 파일 경로 목록
+        """
+        # 폴더 경로가 '/'로 끝나는지 확인
+        if not folder_path.endswith('/'):
+            folder_path += '/'
+        
+        # 스토리지 클라이언트 초기화
+        from google.cloud import storage
+        
+        # 폴더 내 모든 블롭(파일) 목록 가져오기
+        blobs = list(self.bucket.list_blobs(prefix=folder_path))
+        
+        # 폴더 자체를 제외하고 실제 파일만 목록에 추가
+        file_list = []
+        for blob in blobs:
+            # 폴더 자체는 제외 (폴더 경로와 동일하거나 하위 폴더인 경우)
+            if blob.name != folder_path and not blob.name.endswith('/'):
+                file_list.append(blob.name)
+        
+        print(f"'{folder_path}' 폴더에서 {len(file_list)}개의 파일을 찾았습니다.")
+        return file_list
+    
+    async def list_folders_in_folder(self, folder_path):
+        """
+        GCS 버킷의 특정 폴더 내 모든 폴더 목록을 반환합니다.
+        
+        Args:
+            folder_path (str): 파일 목록을 가져올 폴더 경로 (예: 'data/')
+                              폴더 경로는 항상 '/'로 끝나야 합니다.
+        
+        Returns:
+            list: 폴더 내 파일 경로 목록
+        """
+        # 폴더 경로가 '/'로 끝나는지 확인
+        if not folder_path.endswith('/'):
+            folder_path += '/'
+        
+        # 스토리지 클라이언트 초기화
+        from google.cloud import storage
+        
+        # 폴더 내 모든 블롭(파일) 목록 가져오기
+        blobs = list(self.bucket.list_blobs(prefix=folder_path))
+        
+        # 폴더 자체를 제외하고 실제 파일만 목록에 추가
+        file_list = []
+        for blob in blobs:
+            # 폴더만.
+            if blob.name.endswith('/'):
+                file_list.append(blob.name)
+        
+        print(f"'{folder_path}' 폴더에서 {len(file_list)}개의 파일을 찾았습니다.")
+        return file_list

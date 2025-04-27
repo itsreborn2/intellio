@@ -63,7 +63,7 @@ class FinancialDataServicePDF:
         self._db = db_session
         
         # 로거 초기화 메시지 출력
-        logger.info("FinancialDataService 초기화 중...")
+        logger.info("FinancialDataServicePDF 초기화 중...")
         
         self.storage_service = GoogleCloudStorageService(
             project_id=settings.GOOGLE_CLOUD_PROJECT,
@@ -98,7 +98,7 @@ class FinancialDataServicePDF:
         self.llm_service = FinancialLLMService()
         self.cache_util = FinancialCacheUtil()
         
-        logger.info("FinancialDataService 초기화 완료")
+        logger.info("FinancialDataServicePDF 초기화 완료")
         
     @property
     async def db(self) -> AsyncSession:
@@ -205,6 +205,7 @@ class FinancialDataServicePDF:
             
             return {
                 "stock_code": stock_code,
+                "count": len(sorted_data),
                 "reports": sorted_data,
                 "date_range": {
                     "start_date": start_date.strftime("%Y-%m-%d"),

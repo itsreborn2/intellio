@@ -16,11 +16,12 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import PromptTemplate
 from langchain_core.messages import AIMessage
 
+from stockeasy.services.financial.data_service_db import FinancialDataServiceDB
 from common.core.config import settings
-from stockeasy.services.financial.data_service import FinancialDataServicePDF
+from stockeasy.services.financial.data_service_pdf import FinancialDataServicePDF
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from stockeasy.prompts.financial_prompts import (
-    FINANCIAL_ANALYSIS_SYSTEM_PROMPT,
+    FINANCIAL_ANALYSIS_SYSTEM_PROMPT,   
     FINANCIAL_ANALYSIS_USER_PROMPT,
     format_financial_data
 )
@@ -44,7 +45,9 @@ class FinancialAnalyzerAgent(BaseAgent):
         super().__init__(name, db)
         self.agent_llm = get_agent_llm("financial_analyzer_agent")
         logger.info(f"FinancialAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
-        self.financial_service = FinancialDataServicePDF()
+        self.financial_service_pdf = FinancialDataServicePDF()
+        self.financial_service_db = FinancialDataServiceDB(db_session=db)
+
         self.stock_service = StockInfoService()
         self.prompt_template = FINANCIAL_ANALYSIS_SYSTEM_PROMPT
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -101,7 +104,8 @@ class FinancialAnalyzerAgent(BaseAgent):
             logger.info(f"date_range: {date_range}")
             
             # 재무 데이터 조회 (GCS에서 PDF 파일을 가져와서 처리)
-            financial_data = await self.financial_service.get_financial_data(stock_code, date_range)
+            financial_data = await self.financial_service_pdf.get_financial_data(stock_code, date_range)
+            db_search_data = await self.financial_service_db.get_financial_data_with_qoq(stock_code, date_range)
             
             # content를 제외한 메타데이터만 로깅
             log_data = {
@@ -170,7 +174,8 @@ class FinancialAnalyzerAgent(BaseAgent):
 
             # 추출된 재무 데이터를 LLM에 전달할 형식으로 변환
             formatted_data = await self._prepare_financial_data_for_llm(
-                financial_data, 
+                financial_data,
+                db_search_data,
                 query, 
                 required_metrics,
                 data_requirements
@@ -180,6 +185,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             # 재무 데이터 분석 수행
             analysis_results = await self._analyze_financial_data(
                 formatted_data,
+                db_search_data,
                 query,
                 stock_code,
                 stock_name or "",
@@ -492,6 +498,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             
     async def _prepare_financial_data_for_llm(self, 
                                      financial_data: Dict[str, Any],
+                                     db_search_data: Dict[str, Any],
                                      query: str,
                                      required_metrics: List[str],
                                      data_requirements: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -507,6 +514,30 @@ class FinancialAnalyzerAgent(BaseAgent):
         Returns:
             LLM에 전달할 형식의 재무 데이터 리스트
         """
+# """
+# db_search_data 형식
+# {  'stock_code': '000660',
+# 	'period': {'end_date': '2025-04-25', 'start_date': '2023-12-01'},
+#    'quarters': {  202312: {  'net_income': {  'cumulative_value': -9137547.0,
+#                                               'display_unit': '백만원',
+#                                               'period_value': -1379450.0},
+#                              'operating_income': {  'cumulative_value': -7730313.0,
+#                                                     'display_unit': '백만원',
+#                                                     'period_value': 346034.0},
+#                              'revenue': {  'cumulative_value': 32765719.0,
+#                                            'display_unit': '백만원',
+#                                            'period_value': 11305505.0}},
+#                   202403: {  'net_income': {  'cumulative_value': 1917039.0,
+#                                               'display_unit': '백만원',
+#                                               'period_value': 1917039.0},
+#                              'operating_income': {  'cumulative_value': 2886029.0,
+#                                                     'display_unit': '백만원',
+#                                                     'period_value': 2886029.0},
+#                              'revenue': {  'cumulative_value': 12429598.0,
+#                                            'display_unit': '백만원',
+#                                            'period_value': 12429598.0}},
+
+# """        
         reports = financial_data.get("reports", {})
         stock_code = financial_data.get("stock_code", "")
         formatted_data = []
@@ -611,6 +642,7 @@ class FinancialAnalyzerAgent(BaseAgent):
     
     async def _analyze_financial_data(self, 
                                      formatted_data: List[Dict[str, Any]],
+                                     db_search_data: Dict[str, Any],
                                      query: str,
                                      stock_code: str,
                                      stock_name: str,
@@ -655,6 +687,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     today=datetime.now().strftime("%Y-%m-%d"),
                     query=query,
                     financial_data=financial_data_str,
+                    db_search_data=json.dumps(db_search_data, ensure_ascii=False, indent=2),
                     stock_code=stock_code,
                     stock_name=stock_name,
                     classification=classification.get("primary_intent", "")

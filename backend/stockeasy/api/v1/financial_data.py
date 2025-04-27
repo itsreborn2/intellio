@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict, Any
 
 from common.core.database import get_db
-from stockeasy.services.financial.data_service import FinancialDataServicePDF
+from stockeasy.services.financial.data_service_pdf import FinancialDataServicePDF
 from stockeasy.schemas.financial_data_schema import (
     ProcessFinancialReportRequest,
     FinancialDataQueryParams

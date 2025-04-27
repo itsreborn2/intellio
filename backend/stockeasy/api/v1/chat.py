@@ -647,7 +647,7 @@ async def stream_chat_message(
         async def streaming_callback(chunk: str):
             nonlocal full_response
             # 로깅 추가
-            print(f"[{chunk}]", end="", flush=True)
+            #print(f"[{chunk}]", end="", flush=True)
             logger.info(f"[STREAM_CHAT] streaming_callback 호출됨: 청크 길이={len(chunk)}")
             # 청크 내용을 큐에 추가
             await streaming_queue.put(json.dumps({
@@ -824,7 +824,7 @@ async def stream_chat_message(
                             # 0.1초 대기 후 큐에서 토큰 가져오기 시도
                             try:
                                 event_data = await asyncio.wait_for(streaming_queue.get(), timeout=0.1)
-                                print(f"{event_data}", end="", flush=True)
+                                #print(f"{event_data}", end="", flush=True)
                                 # SSE 형식으로 데이터 전송 (data: 접두사 추가)
                                 yield f"{event_data}\n\n"
                                 streaming_queue.task_done()

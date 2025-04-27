@@ -18,7 +18,7 @@ from langchain_core.messages import AIMessage
 
 from stockeasy.prompts.revenue_breakdown_prompt import REVENUE_BREAKDOWN_SYSTEM_PROMPT, REVENUE_BREAKDOWN_USER_PROMPT, REVENUE_BREAKDOWN_SYSTEM_PROMPT2
 from common.core.config import settings
-from stockeasy.services.financial.data_service import FinancialDataServicePDF
+from stockeasy.services.financial.data_service_pdf import FinancialDataServicePDF
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from stockeasy.models.agent_io import RetrievedAllAgentData, FinancialData
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm

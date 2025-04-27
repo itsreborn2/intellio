@@ -4,6 +4,9 @@ from sqlalchemy.orm import selectinload
 from typing import List, Dict, Any, Optional, Tuple, Union
 import logging
 from decimal import Decimal
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.future import select
+import sqlalchemy.exc
 
 from stockeasy.models.companies import Company
 from stockeasy.models.financial_reports import FinancialReport
@@ -75,9 +78,8 @@ class FinancialRepository:
     # 항목 매핑 관련 메서드
     async def get_item_mapping_by_code(self, item_code: str) -> Optional[FinancialItemMapping]:
         """항목 코드로 항목 매핑 조회"""
-        result = await self.db.execute(
-            select(FinancialItemMapping).where(FinancialItemMapping.item_code == item_code)
-        )
+        stmt = select(FinancialItemMapping).where(FinancialItemMapping.item_code == item_code)
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
     
     async def get_item_mapping_by_raw_name(self, raw_name: str) -> Optional[FinancialItemMapping]:
@@ -90,20 +92,34 @@ class FinancialRepository:
         return result.scalar_one_or_none()
     
     async def create_item_mapping(
-        self, item_code: str, category: str, standard_name: str, 
+        self, item_code: str, category: str, standard_name: str,
         description: Optional[str] = None, display_order: Optional[int] = None
     ) -> FinancialItemMapping:
-        """항목 매핑 생성"""
-        item_mapping = FinancialItemMapping(
+        """
+        항목 매핑 생성. item_code가 이미 존재하면 아무 작업도 하지 않고
+        기존 또는 새로 생성된 매핑 객체를 반환합니다.
+        """
+        insert_stmt = insert(FinancialItemMapping).values(
             item_code=item_code,
             category=category,
             standard_name=standard_name,
             description=description,
             display_order=display_order,
             is_active=True
+        ).on_conflict_do_nothing(
+            index_elements=['item_code']
         )
-        self.db.add(item_mapping)
-        await self.db.flush()
+
+        # ON CONFLICT DO NOTHING 실행
+        await self.db.execute(insert_stmt)
+
+        # 삽입되었거나 기존에 있던 매핑 객체를 조회하여 반환
+        item_mapping = await self.get_item_mapping_by_code(item_code)
+
+        if item_mapping is None:
+            logger.error(f"매핑 생성 또는 조회 실패: {item_code}")
+            raise Exception(f"Failed to create or find item mapping for code: {item_code}")
+
         return item_mapping
     
     async def create_raw_mapping(self, mapping_id: int, raw_name: str) -> FinancialItemRawMapping:
@@ -271,52 +287,92 @@ class FinancialRepository:
         
     ) -> IncomeStatementData:
         """손익계산서 데이터 저장"""
-        # 이미 존재하는지 확인
-        result = await self.db.execute(
-            select(IncomeStatementData).where(
-                and_(
-                    IncomeStatementData.report_id == report_id,
-                    IncomeStatementData.company_id == company_id,
-                    IncomeStatementData.item_id == item_id,
-                    IncomeStatementData.year_month == year_month
+        try:
+            # 이미 존재하는지 확인
+            result = await self.db.execute(
+                select(IncomeStatementData).where(
+                    and_(
+                        IncomeStatementData.report_id == report_id,
+                        IncomeStatementData.company_id == company_id,
+                        IncomeStatementData.item_id == item_id,
+                        IncomeStatementData.year_month == year_month
+                    )
                 )
             )
-        )
-        data = result.scalar_one_or_none()
-        
-        # 기본값 설정
-        if cumulative_value is None:
-            cumulative_value = value
-        if period_value is None:
-            period_value = value
-        
-        if data:
-            #print("기존값 업데이트")
-            # 기존 데이터 업데이트
-            data.value = value
-            data.display_unit = display_unit
-            data.cumulative_value = cumulative_value
-            data.period_value = period_value
-            data.is_cumulative = is_cumulative
-            data.statement_type = statement_type
-        else:
-            #print("새 데이터 생성")
-            # 새 데이터 생성
-            data = IncomeStatementData(
-                report_id=report_id,
-                company_id=company_id,
-                item_id=item_id,
-                year_month=year_month,
-                value=value,
-                display_unit=display_unit,
-                cumulative_value=cumulative_value,
-                period_value=period_value,
-                is_cumulative=is_cumulative,
-                statement_type=statement_type
-            )
-            self.db.add(data)
+            data = result.scalar_one_or_none()
             
-        await self.db.flush()
+            # 기본값 설정
+            if cumulative_value is None:
+                cumulative_value = value
+            if period_value is None:
+                period_value = value
+            
+            if data:
+                # 기존 데이터 업데이트
+                data.value = value
+                data.display_unit = display_unit
+                data.cumulative_value = cumulative_value
+                data.period_value = period_value
+                data.is_cumulative = is_cumulative
+                data.statement_type = statement_type
+                try:
+                    await self.db.flush()
+                except Exception as e:
+                    logger.error(f"손익계산서 데이터 업데이트 중 오류 발생: {e}")
+                    await self.db.rollback()
+                    raise
+            else:
+                try:
+                    # 새 데이터 생성
+                    data = IncomeStatementData(
+                        report_id=report_id,
+                        company_id=company_id,
+                        item_id=item_id,
+                        year_month=year_month,
+                        value=value,
+                        display_unit=display_unit,
+                        cumulative_value=cumulative_value,
+                        period_value=period_value,
+                        is_cumulative=is_cumulative,
+                        statement_type=statement_type
+                    )
+                    self.db.add(data)
+                    await self.db.flush()
+                except sqlalchemy.exc.IntegrityError as e:
+                    # 중복 키 에러 발생 시 데이터 조회 후 업데이트
+                    await self.db.rollback()
+                    logger.warning(f"중복 키 제약 조건 발생. 기존 데이터를 업데이트합니다: {e}")
+                    
+                    # 다시 데이터 조회
+                    result = await self.db.execute(
+                        select(IncomeStatementData).where(
+                            and_(
+                                IncomeStatementData.report_id == report_id,
+                                IncomeStatementData.company_id == company_id,
+                                IncomeStatementData.item_id == item_id,
+                                IncomeStatementData.year_month == year_month
+                            )
+                        )
+                    )
+                    data = result.scalar_one_or_none()
+                    
+                    if data:
+                        # 기존 데이터 업데이트
+                        data.value = value
+                        data.display_unit = display_unit
+                        data.cumulative_value = cumulative_value
+                        data.period_value = period_value
+                        data.is_cumulative = is_cumulative
+                        data.statement_type = statement_type
+                        await self.db.flush()
+                    else:
+                        # 여전히 없다면 다른 문제이므로 예외 발생
+                        logger.error(f"데이터 저장 중 알 수 없는 오류 발생: {e}")
+                        raise
+        except Exception as e:
+            logger.error(f"손익계산서 데이터 저장 중 오류 발생: {e}")
+            raise
+            
         return data
     
     async def save_balance_sheet_data(
@@ -473,4 +529,96 @@ class FinancialRepository:
             self.db.add(data)
             
         await self.db.flush()
-        return data 
+        return data
+    
+    async def compare_income_statement_data(
+        self, report_id: int, company_id: int, item_id: int, year_month: int, 
+        value: Union[Decimal, float], display_unit: str,
+        statement_type: str,
+        cumulative_value: Optional[Union[Decimal, float]] = None,
+        period_value: Optional[Union[Decimal, float]] = None,
+        is_cumulative: bool = True,
+        
+    ) -> Dict[str, Any]:
+        """
+        손익계산서 데이터를 DB의 기존 값과 비교
+        
+        Returns:
+            Dict[str, Any]: 비교 결과 정보
+            {
+                "exists": bool, # DB에 데이터 존재 여부
+                "matches": bool, # 모든 값이 일치하는지 여부
+                "differences": Dict[str, Dict[str, Any]] # 일치하지 않는 항목과 그 값 비교
+            }
+        """
+        # 기본값 설정
+        if cumulative_value is None:
+            cumulative_value = value
+        if period_value is None:
+            period_value = value
+            
+        # 이미 존재하는지 확인
+        result = await self.db.execute(
+            select(IncomeStatementData).where(
+                and_(
+                    IncomeStatementData.report_id == report_id,
+                    IncomeStatementData.company_id == company_id,
+                    IncomeStatementData.item_id == item_id,
+                    IncomeStatementData.year_month == year_month
+                )
+            )
+        )
+        db_data = result.scalar_one_or_none()
+        
+        # 비교 결과 초기화
+        comparison_result = {
+            "exists": db_data is not None,
+            "matches": True,
+            "differences": {}
+        }
+        
+        if not db_data:
+            # DB에 데이터가 없는 경우
+            comparison_result["matches"] = False
+            comparison_result["differences"] = {
+                "value": {"expected": value, "actual": None},
+                "display_unit": {"expected": display_unit, "actual": None},
+                "cumulative_value": {"expected": cumulative_value, "actual": None},
+                "period_value": {"expected": period_value, "actual": None},
+                "is_cumulative": {"expected": is_cumulative, "actual": None},
+                "statement_type": {"expected": statement_type, "actual": None}
+            }
+            return comparison_result
+        
+        # 각 필드 비교
+        # Decimal 타입의 경우 정확한 비교를 위해 float로 변환
+        db_value = float(db_data.value) if db_data.value else None
+        db_cumulative = float(db_data.cumulative_value) if db_data.cumulative_value else None
+        db_period = float(db_data.period_value) if db_data.period_value else None
+        
+        # 값 비교 및 차이점 기록
+        if db_value != float(value):
+            comparison_result["matches"] = False
+            comparison_result["differences"]["value"] = {"expected": value, "actual": db_value}
+            
+        if db_data.display_unit != display_unit:
+            comparison_result["matches"] = False
+            comparison_result["differences"]["display_unit"] = {"expected": display_unit, "actual": db_data.display_unit}
+            
+        if db_cumulative != float(cumulative_value):
+            comparison_result["matches"] = False
+            comparison_result["differences"]["cumulative_value"] = {"expected": cumulative_value, "actual": db_cumulative}
+            
+        if db_period != float(period_value):
+            comparison_result["matches"] = False
+            comparison_result["differences"]["period_value"] = {"expected": period_value, "actual": db_period}
+            
+        if db_data.is_cumulative != is_cumulative:
+            comparison_result["matches"] = False
+            comparison_result["differences"]["is_cumulative"] = {"expected": is_cumulative, "actual": db_data.is_cumulative}
+            
+        if db_data.statement_type != statement_type:
+            comparison_result["matches"] = False
+            comparison_result["differences"]["statement_type"] = {"expected": statement_type, "actual": db_data.statement_type}
+        
+        return comparison_result
