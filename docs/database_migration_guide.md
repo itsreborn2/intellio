@@ -16,6 +16,38 @@
 - 사용자명: `intellio_user`
 - 스키마: `stockeasy`
 
+## 서버 DB 전체 백업 (안전 조치)
+
+마이그레이션 전에 서버 DB를 전체 백업해두는 것이 좋습니다. 다음과 같이 진행합니다:
+
+```powershell
+# 1. SSH로 서버에 접속
+ssh -i C:\Users\blues\id_intellio intellio.korea@128.199.172.222
+
+# 2. 백업 디렉토리 생성
+mkdir -p ~/db_backups
+
+# 3. 전체 DB 백업 수행
+docker exec -t intellio_prod-postgres-1 pg_dump -U intellio_user -d intellio -F c -f /tmp/intellio_full_backup_$(date +%Y%m%d).dump
+
+# 4. 백업 파일을 컨테이너 밖으로 복사
+# 추가 확장한 저장소에 저장.
+# ~/mounted_volume/db_backups/ 
+docker cp intellio_prod-postgres-1:/tmp/intellio_full_backup_$(date +%Y%m%d).dump ~/mounted_volume/db_backups/
+
+# 5. (선택사항) 로컬 컴퓨터로 백업 파일 다운로드
+# 로컬 PowerShell에서 실행:
+scp -i C:\Users\blues\id_intellio intellio.korea@128.199.172.222:~/db_backups/intellio_full_backup_*.dump ./db_backups/
+```
+
+만약 오류가 발생할 경우 백업에서 복원하는 방법:
+
+```powershell
+# 서버에서 실행
+docker exec -it intellio_prod-postgres-1 pg_restore -U intellio_user -d intellio --clean --if-exists ~/db_backups/intellio_full_backup_YYYYMMDD.dump
+```
+
+
 ## 마이그레이션 대상 테이블
 다음 테이블들만 마이그레이션합니다:
 - stockeasy.companies
@@ -70,15 +102,14 @@ scp -i C:\Users\blues\id_intellio ./db_dumps/stockeasy_backup.dump intellio.kore
 ```powershell
 # 웹서버에서 실행 (SSH로 접속 후)
 ssh -i C:\Users\blues\id_intellio intellio.korea@128.199.172.222
-docker cp /tmp/stockeasy_backup.dump intellio-postgres-1:/tmp/
+docker cp db_dumps/stockeasy_backup.dump intellio_prod-postgres-1:/tmp/
 ```
 
 ### 5. 웹서버에서 데이터베이스 복원
 
 ```powershell
 # 웹서버의 Docker 컨테이너에서 실행
-docker exec -it intellio-postgres-1 pg_restore -U intellio_user -d intellio `
---no-owner --no-acl --clean --if-exists /tmp/stockeasy_backup.dump
+docker exec -it intellio_prod-postgres-1 pg_restore -U intellio_user -d intellio --no-owner --no-acl --clean --if-exists /tmp/stockeasy_backup.dump
 ```
 
 ## 한 번에 실행하는 방법 (리눅스/Mac 환경)

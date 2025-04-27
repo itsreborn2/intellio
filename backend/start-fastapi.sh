@@ -48,13 +48,14 @@ if [ "$RELOAD" = "true" ] || [ "$CURRENT_ENV" != "production" ]; then
     echo "개발 환경(reload=true 또는 개발환경)에서 실행 중: 워커 수 = $WORKERS"
 else
     # 프로덕션 환경에서는 CPU 코어 수와 Celery 워커 수를 고려하여 설정
-    # 전체 CPU 코어 수에서 Celery 워커가 사용할 코어 수를 고려하여 계산
-    AVAILABLE_CORES=$((CPU_COUNT - TOTAL_CELERY_WORKERS))
+    # FastAPI에 먼저 필요한 코어 할당
+    FASTAPI_CORES=${FASTAPI_MIN_CORES:-2}
+    AVAILABLE_CORES=$((CPU_COUNT - FASTAPI_CORES))
     
     # 최소 1개 이상의 코어 사용 보장
     if [ $AVAILABLE_CORES -lt 1 ]; then
         AVAILABLE_CORES=1
-        echo "경고: 시스템 리소스가 제한적입니다. Celery 워커와 FastAPI 서버가 리소스를 공유합니다."
+        echo "경고: 시스템 리소스가 제한적입니다..."
     fi
     
     # I/O 바운드 워크로드 (벡터DB 검색, LLM 호출) 최적화 설정
