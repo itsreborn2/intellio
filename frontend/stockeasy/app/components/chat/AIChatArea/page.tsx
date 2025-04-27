@@ -199,10 +199,10 @@ function AIChatAreaContent() {
     },
     {
       stock: { 
-        value: '051910', 
+        value: '373220', 
         label: 'LG에너지솔루션', 
         stockName: 'LG에너지솔루션', 
-        stockCode: '051910' 
+        stockCode: '373220' 
       },
       question: '배터리 기술 개발 현황은?'
     },
@@ -221,10 +221,10 @@ function AIChatAreaContent() {
   const sampleLatestUpdates = [
     {
       stock: { 
-        value: '051910', 
+        value: '373220', 
         label: 'LG에너지솔루션', 
         stockName: 'LG에너지솔루션', 
-        stockCode: '051910' 
+        stockCode: '373220' 
       },
       updateInfo: '배터리 생산량 증대'
     },
