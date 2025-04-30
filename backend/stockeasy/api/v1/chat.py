@@ -17,6 +17,7 @@ import json
 import asyncio
 import time
 
+from common.schemas.chat_components import StructuredChatResponse
 from common.utils.util import remove_null_chars
 from common.services.agent_llm import refresh_agent_llm_cache
 from stockeasy.services.financial.stock_info_service import StockInfoService
@@ -916,6 +917,8 @@ async def stream_chat_message(
                             stock_code=request.stock_code,
                             stock_name=request.stock_name,
                             metadata=metadata,
+                            agent_results=agent_results,
+                            components=result.get("components", [])  # 구조화된 컴포넌트 저장
                         )
                         # 어시스턴트 메시지 ID 저장
                         assistant_message_id = str(assistant_message["id"])
@@ -952,18 +955,25 @@ async def stream_chat_message(
                         
                         # 완료 이벤트 전송
                         logger.info("[STREAM_CHAT] 완료 이벤트 전송")
+                        logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
+                        # 구조화된 채팅 응답 구성
+                        structured_response = StructuredChatResponse(
+                            message_id=assistant_message_id,
+                            components=result.get("components", []),  # 에이전트에서 반환된 구조화된 컴포넌트
+                            metadata=metadata,
+                            timestamp=time.time(),
+                            elapsed=total_time
+                        )
+                        
+                        # 직렬화를 위해 모델을 딕셔너리로 변환
+                        response_dict = structured_response.dict()
+                        
+                        # 완료 이벤트 JSON 생성
                         complete_data = json.dumps({
                             'event': 'complete',
-                            'data': {
-                                'message': '처리가 완료되었습니다.',
-                                'response': answer,
-                                'response_expert': summary,
-                                'message_id': assistant_message_id,
-                                'metadata': metadata,
-                                'timestamp': time.time(),
-                                'elapsed': total_time
-                            }
+                            'data': response_dict
                         }, cls=DateTimeEncoder)
+                        
                         yield f"{complete_data}\n\n"
                         
                 except Exception as e:

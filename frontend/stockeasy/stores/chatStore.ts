@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { IChatMessageDetail, IChatSession, IChatMessage } from '@/types/api/chat'
+import { StockOption } from '@/app/components/chat/AIChatArea/types/stock'
+import { ChatMessage, MessageComponent } from '@/app/components/chat/AIChatArea/types/chat'
 
 interface ChatState {
   // 현재 채팅 세션 상태
@@ -9,6 +11,14 @@ interface ChatState {
   // 메시지 로딩 상태
   isLoading: boolean
   
+  // ChatContext에서 가져온 추가 상태들
+  selectedStock: StockOption | null
+  isInputCentered: boolean
+  showTitle: boolean
+  copyStates: Record<string, boolean>
+  expertMode: Record<string, boolean>
+  elapsedTime: number
+  
   // 액션들
   setCurrentSession: (session: IChatSession | null) => void
   setMessages: (messages: IChatMessageDetail[]) => void
@@ -16,16 +26,40 @@ interface ChatState {
   clearMessages: () => void
   setIsLoading: (isLoading: boolean) => void
   
+  // ChatContext에서 가져온 추가 액션들
+  updateMessage: (id: string, message: Partial<IChatMessageDetail>) => void
+  removeMessage: (id: string) => void
+  setSelectedStock: (stock: StockOption | null) => void
+  setInputCentered: (isCentered: boolean) => void
+  setShowTitle: (show: boolean) => void
+  resetChat: () => void
+  toggleExpertMode: (messageId: string) => void
+  setCopyState: (id: string, state: boolean) => void
+  setElapsedTime: (time: number) => void
+  
   // 채팅 세션 로드 함수
   loadChatSession: (sessionId: string, title: string, messages: IChatMessageDetail[]) => void
+  
+  // 타입 변환 유틸리티
+  convertToUiMessage: (message: IChatMessageDetail) => ChatMessage
+  convertToApiMessage: (message: ChatMessage) => IChatMessageDetail
+  getUiMessages: () => ChatMessage[]
 }
 
 // 채팅 스토어 생성
-export const useChatStore = create<ChatState>((set) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   // 초기 상태
   currentSession: null,
   messages: [],
   isLoading: false,
+  
+  // ChatContext에서 가져온 초기 상태
+  selectedStock: null,
+  isInputCentered: true,
+  showTitle: true,
+  copyStates: {},
+  expertMode: {},
+  elapsedTime: 0,
   
   // 세션 설정
   setCurrentSession: (session) => set({ currentSession: session }),
@@ -49,6 +83,119 @@ export const useChatStore = create<ChatState>((set) => ({
   
   // 로딩 상태 설정
   setIsLoading: (isLoading) => set({ isLoading }),
+  
+  // ChatContext에서 가져온 추가 액션들
+  updateMessage: (id, messageUpdate) => {
+    console.log('[채팅 스토어] 메시지 업데이트:', id);
+    set((state) => ({
+      messages: state.messages.map(msg => 
+        msg.id === id ? { ...msg, ...messageUpdate } : msg
+      )
+    }));
+  },
+  
+  removeMessage: (id) => {
+    console.log('[채팅 스토어] 메시지 제거:', id);
+    set((state) => ({
+      messages: state.messages.filter(msg => msg.id !== id)
+    }));
+  },
+  
+  setSelectedStock: (stock) => set({ selectedStock: stock }),
+  
+  setInputCentered: (isCentered) => set({ isInputCentered: isCentered }),
+  
+  setShowTitle: (show) => set({ showTitle: show }),
+  
+  resetChat: () => {
+    const { copyStates, expertMode } = get();
+    console.log('[채팅 스토어] 채팅 초기화');
+    set({
+      currentSession: null,
+      messages: [],
+      selectedStock: null,
+      isInputCentered: true,
+      showTitle: true,
+      elapsedTime: 0,
+      // 아래 항목들은 초기화하지 않음
+      copyStates,
+      expertMode
+    });
+  },
+  
+  toggleExpertMode: (messageId) => {
+    // 기존 expertMode 객체 복사
+    const currentExpertMode = { ...get().expertMode };
+    // 토글 상태 업데이트
+    currentExpertMode[messageId] = !currentExpertMode[messageId];
+    // 상태 설정
+    set({ expertMode: currentExpertMode });
+  },
+  
+  setCopyState: (id, state) => {
+    // 기존 copyStates 객체 복사
+    const currentCopyStates = { ...get().copyStates };
+    // 상태 업데이트
+    currentCopyStates[id] = state;
+    // 상태 설정
+    set({ copyStates: currentCopyStates });
+  },
+  
+  setElapsedTime: (time) => set({ elapsedTime: time }),
+  
+  // API 메시지를 UI 메시지로 변환
+  convertToUiMessage: (message) => {
+    const stockInfo = message.stock_name && message.stock_code ? {
+      stockName: message.stock_name,
+      stockCode: message.stock_code
+    } : undefined;
+    
+    // metadata에서 컴포넌트 정보 추출
+    const components = message.metadata?.components as MessageComponent[] | undefined;
+    
+    return {
+      id: message.id,
+      role: message.role as 'user' | 'assistant' | 'status',
+      content: message.content,
+      content_expert: message.content_expert,
+      timestamp: message.created_at ? new Date(message.created_at).getTime() : Date.now(),
+      stockInfo,
+      components,
+      responseId: message.metadata?.responseId,
+      isProcessing: message.metadata?.isProcessing,
+      agent: message.metadata?.agent,
+      elapsed: message.metadata?.elapsed
+    };
+  },
+  
+  // UI 메시지를 API 메시지로 변환
+  convertToApiMessage: (message) => {
+    return {
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      content_expert: message.content_expert,
+      chat_session_id: get().currentSession?.id || "",
+      stock_name: message.stockInfo?.stockName || "",
+      stock_code: message.stockInfo?.stockCode || "",
+      created_at: new Date(message.timestamp).toISOString(),
+      ok: true,
+      status_message: "",
+      metadata: {
+        components: message.components,
+        responseId: message.responseId,
+        isProcessing: message.isProcessing,
+        agent: message.agent,
+        elapsed: message.elapsed,
+        stockInfo: message.stockInfo
+      }
+    };
+  },
+  
+  // UI용 메시지 배열 반환
+  getUiMessages: () => {
+    return get().messages.map(get().convertToUiMessage);
+  },
   
   // 채팅 세션 로드 함수
   loadChatSession: (sessionId, title, messages) => {
@@ -140,7 +287,10 @@ export const useChatStore = create<ChatState>((set) => ({
         stock_code: stockCode  // 종목코드 설정
       },
       messages: enhancedMessages,
-      isLoading: false
+      isLoading: false,
+      // 세션 로드 시 UI 상태도 업데이트
+      isInputCentered: false,
+      showTitle: true
     })
     
     console.log('[채팅 스토어] 채팅 세션 로드 완료')

@@ -7,7 +7,7 @@
 
 import json
 from loguru import logger
-from typing import Dict, Any, Optional, Callable, AsyncGenerator
+from typing import Dict, Any, List, Optional, Callable, AsyncGenerator
 
 from langchain_core.messages import HumanMessage, AIMessage
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
@@ -16,6 +16,12 @@ from langchain_core.output_parsers import StrOutputParser
 from common.models.token_usage import ProjectType
 from stockeasy.agents.base import BaseAgent
 from sqlalchemy.ext.asyncio import AsyncSession
+from common.schemas.chat_components import (
+    HeadingComponent, ParagraphComponent, ListComponent, ListItemComponent,
+    CodeBlockComponent, BarChartComponent, LineChartComponent, ImageComponent,
+    TableComponent, TableHeader, TableData, BarChartData, LineChartData
+)
+import re
 
 class ResponseFormatterAgent(BaseAgent):
     """
@@ -78,19 +84,6 @@ class ResponseFormatterAgent(BaseAgent):
                 context_based_answer = context_response_agent.get("answer", "")
                 summary = context_based_answer
             
-            # 마무리 인사, 다른 종목 질문등 question_analyzer에서 바로 날아온 경우
-            # context_analysis = state.get("context_analysis", {})
-            # if context_analysis:
-            #     logger.info(f"Context analysis: {context_analysis}")
-
-            #     is_conversation_closing = context_analysis.get("is_conversation_closing", False)
-            #     is_different_stock = context_analysis.get("is_different_stock", False)
-            #     stock_relation = context_analysis.get("stock_relation", "")
-
-            #     if is_conversation_closing:
-            #         logger.info(f"대화 마무리 인사로 감지: 유형={context_analysis.closing_type}")
-            #     elif is_different_stock and stock_relation == "다른종목":
-            #         logger.info(f"완전히 다른종목 질문")
             # 통합된 응답이 없는 경우 처리
             if not context_based_answer and (not summary or summarizer_status != "completed"):
                 logger.warning(f"No summary response available.")
@@ -202,6 +195,13 @@ class ResponseFormatterAgent(BaseAgent):
             # 포맷팅된 응답 저장
             state["formatted_response"] = formatted_response
             state["answer"] = formatted_response
+
+            # 구조화된 컴포넌트 생성
+            components = await self.make_components(state)
+            
+            # 결과 저장
+            state["components"] = [comp.dict() for comp in components]
+            state["answer"] = formatted_response  # 기졸 방식과의 호환성 유지
             
             # 오류 제거 (성공적으로 처리됨)
             if "error" in state:
@@ -219,3 +219,197 @@ class ResponseFormatterAgent(BaseAgent):
             state["formatted_response"] = "죄송합니다. 응답을 포맷팅하는 중 오류가 발생했습니다."
             state["answer"] = state["formatted_response"]
             return state 
+
+    async def make_components(self, state: Dict[str, Any]):
+        """
+        포맷팅된 응답을 구조화된 컴포넌트로 변환합니다.
+        """
+        components = []
+        
+        # 상태에서 정보 추출
+        stock_name = state.get("stock_name", "삼성전자")
+        stock_code = state.get("stock_code", "005930")
+        formatted_response = state.get("formatted_response", "")
+        
+        # 1. 헤딩 컴포넌트 (여러 레벨)
+        components.append(HeadingComponent(
+            level=1,
+            content=f"{stock_name}({stock_code}) 분석 결과"
+        ))
+        
+        # 2. 단락 컴포넌트
+        components.append(ParagraphComponent(
+            content=f"{stock_name}의 최근 실적과 시장 동향을 분석한 결과입니다. 아래 데이터를 참고하여 투자 결정에 활용하시기 바랍니다."
+        ))
+        
+        # 3. 부제목 (2단계 헤딩)
+        components.append(HeadingComponent(
+            level=2,
+            content="주요 재무 지표"
+        ))
+        
+        # 4. 목록 컴포넌트 (순서 없는 목록)
+        components.append(ListComponent(
+            ordered=False,
+            items=[
+                ListItemComponent(content="최근 분기 매출액: 7.8조원 (전년 대비 5.2% 증가)"),
+                ListItemComponent(content="영업이익률: 15.3% (전년 대비 2.1%p 상승)"),
+                ListItemComponent(content="ROE: 12.7% (업계 평균 대비 양호)"),
+                ListItemComponent(content="부채비율: 45.2% (안정적인 재무구조 유지)")
+            ]
+        ))
+        
+        # 5. 두 번째 부제목
+        components.append(HeadingComponent(
+            level=2,
+            content="실적 추이"
+        ))
+        
+        # 6. 바차트 컴포넌트
+        components.append(BarChartComponent(
+            title="분기별 매출 및 영업이익 추이",
+            data=BarChartData(
+                labels=["1Q 2023", "2Q 2023", "3Q 2023", "4Q 2023", "1Q 2024"],
+                datasets=[
+                    {
+                        "label": "매출액(조원)",
+                        "data": [63.7, 67.4, 71.2, 74.8, 78.5],
+                        "backgroundColor": "#4C9AFF"
+                    },
+                    {
+                        "label": "영업이익(조원)",
+                        "data": [8.2, 9.1, 10.3, 11.2, 12.0],
+                        "backgroundColor": "#FF5630"
+                    }
+                ]
+            )
+        ))
+        
+        # 7. 차트 설명 단락
+        components.append(ParagraphComponent(
+            content=f"위 차트는 {stock_name}의 최근 5개 분기 매출액과 영업이익 추이를 보여줍니다. 지속적인 성장세를 유지하고 있습니다."
+        ))
+        
+        # 8. 세 번째 부제목
+        components.append(HeadingComponent(
+            level=2,
+            content="주가 동향"
+        ))
+        
+        # 9. 라인차트 컴포넌트
+        components.append(LineChartComponent(
+            title="최근 6개월 주가 추이",
+            data=LineChartData(
+                labels=["11월", "12월", "1월", "2월", "3월", "4월"],
+                datasets=[
+                    {
+                        "label": "주가(원)",
+                        "data": [67000, 70200, 72800, 69500, 74200, 76800],
+                        "borderColor": "#36B37E",
+                        "tension": 0.1
+                    },
+                    {
+                        "label": "KOSPI(pt)",
+                        "data": [2450, 2520, 2580, 2510, 2650, 2700],
+                        "borderColor": "#FF8B00",
+                        "tension": 0.1,
+                        "borderDash": [5, 5]
+                    }
+                ]
+            )
+        ))
+        
+        # 10. 네 번째 부제목
+        components.append(HeadingComponent(
+            level=2,
+            content="주요 재무제표"
+        ))
+        
+        # 11. 테이블 컴포넌트
+        components.append(TableComponent(
+            title="요약 재무제표",
+            data=TableData(
+                headers=[
+                    TableHeader(key="item", label="항목"),
+                    TableHeader(key="2022", label="2022년"),
+                    TableHeader(key="2023", label="2023년"),
+                    TableHeader(key="yoy", label="증감률(%)")
+                ],
+                rows=[
+                    {"item": "매출액", "2022": "280조원", "2023": "302조원", "yoy": "+7.9%"},
+                    {"item": "영업이익", "2022": "36.5조원", "2023": "42.8조원", "yoy": "+17.3%"},
+                    {"item": "당기순이익", "2022": "28.1조원", "2023": "33.7조원", "yoy": "+19.9%"},
+                    {"item": "자산총계", "2022": "420.2조원", "2023": "456.8조원", "yoy": "+8.7%"},
+                    {"item": "부채총계", "2022": "187.5조원", "2023": "195.2조원", "yoy": "+4.1%"},
+                    {"item": "자본총계", "2022": "232.7조원", "2023": "261.6조원", "yoy": "+12.4%"}
+                ]
+            )
+        ))
+        
+        # 12. 다섯 번째 부제목
+        components.append(HeadingComponent(
+            level=2,
+            content="산업 비교 분석"
+        ))
+        
+        # 13. 순서 있는 목록
+        components.append(ListComponent(
+            ordered=True,
+            items=[
+                ListItemComponent(content="시장점유율: 글로벌 시장에서 1위 유지 (점유율 22.3%)"),
+                ListItemComponent(content="기술 경쟁력: 주요 경쟁사 대비 R&D 투자금액 15% 이상 높음"),
+                ListItemComponent(content="수익성: 업계 평균 영업이익률 9.7% 대비 5.6%p 높은 수준"),
+                ListItemComponent(content="성장성: 2024년 예상 성장률 8.5%로 업계 평균(5.2%) 상회")
+            ]
+        ))
+        
+        # 14. 여섯 번째 부제목
+        components.append(HeadingComponent(
+            level=2,
+            content="코드 예시"
+        ))
+        
+        # 15. 코드 블록 컴포넌트
+        components.append(CodeBlockComponent(
+            language="python",
+            content="""
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 삼성전자 재무데이터 로드
+df = pd.read_csv('samsung_financial.csv')
+
+# 분기별 매출 추이 차트
+plt.figure(figsize=(12, 6))
+plt.plot(df['quarter'], df['revenue'], marker='o')
+plt.title('삼성전자 분기별 매출 추이')
+plt.grid(True)
+plt.show()
+            """
+        ))
+        
+        # 16. 일곱 번째 부제목
+        components.append(HeadingComponent(
+            level=2,
+            content="투자 의견"
+        ))
+        
+        # 17. 마지막 단락
+        components.append(ParagraphComponent(
+            content=f"{stock_name}는 안정적인 재무구조와 지속적인 성장세를 보이고 있으며, 업계 내 경쟁우위를 유지하고 있습니다. 단기적인 시장 변동성에도 불구하고 중장기 성장 잠재력이 높다고 판단됩니다. 다만, 글로벌 경제 불확실성과 산업 내 경쟁 심화는 리스크 요인으로 작용할 수 있습니다."
+        ))
+        
+        # 18. 이미지 컴포넌트 (샘플)
+        components.append(ImageComponent(
+            url="https://example.com/chart_image.png",
+            alt="삼성전자 사업부문별 매출 비중",
+            caption="2023년 사업부문별 매출 비중"
+        ))
+        
+        # 19. 면책조항
+        components.append(ParagraphComponent(
+            content="※ 위 정보는 투자 참고 목적으로 제공되며, 투자 결정은 개인의 판단에 따라 신중하게 이루어져야 합니다."
+        ))
+        
+        return components
+

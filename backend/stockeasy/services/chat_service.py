@@ -344,13 +344,14 @@ class ChatService:
         stock_code: Optional[str] = None,
         stock_name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        agent_results: Optional[Dict[str, Any]] = None
+        agent_results: Optional[Dict[str, Any]] = None,
+        components: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """새 채팅 메시지를 생성합니다.
         
         Args:
             db: 데이터베이스 세션
-            session_id: 채팅 세션 ID
+            chat_session_id: 채팅 세션 ID
             role: 메시지 역할 (user, assistant, system)
             content: 메시지 내용
             message_id: 메시지 ID (선택, None이면 자동 생성)
@@ -359,6 +360,7 @@ class ChatService:
             stock_name: 종목명 (선택)
             metadata: 메시지 메타데이터 (선택)
             agent_results: 에이전트 처리 결과 데이터 (선택)
+            components: 구조화된 메시지 컴포넌트 배열 (선택)
             
         Returns:
             Dict[str, Any]: 생성된 채팅 메시지 정보
@@ -371,6 +373,10 @@ class ChatService:
             # agent_results에 datetime 객체가 포함되어 있는 경우 처리
             if agent_results is not None:
                 agent_results = json.loads(json.dumps(agent_results, cls=DateTimeEncoder))
+                
+            # components에 datetime 객체가 포함되어 있는 경우 처리
+            if components is not None:
+                components = json.loads(json.dumps(components, cls=DateTimeEncoder))
             
             # 메시지 생성
             message_params = {
@@ -381,7 +387,8 @@ class ChatService:
                 "stock_code": stock_code,
                 "stock_name": stock_name,
                 "message_metadata": metadata,
-                "agent_results": agent_results
+                "agent_results": agent_results,
+                "components": components
             }
 
             # id가 있는 경우에만 추가
@@ -412,6 +419,7 @@ class ChatService:
                 "role": message.role,
                 "content": message.content,
                 "content_expert": message.content_expert,
+                "components": message.components,
                 "stock_code": message.stock_code,
                 "stock_name": message.stock_name,
                 "metadata": message.message_metadata,

@@ -276,6 +276,7 @@ class AgentState(TypedDict, total=False):
     formatted_response: Optional[str]  # 최종 응답
     answer: Optional[str]           # 최종 답변
     answer_expert: Optional[str]    # 전문가형 답변
+    components: Optional[List[Dict[str, Any]]]  # 구조화된 응답 컴포넌트
     
     # 에러 및 메트릭
     errors: List[AgentError]        # 발생한 오류 목록

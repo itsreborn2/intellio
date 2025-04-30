@@ -14,6 +14,8 @@ import { CopyButton } from './CopyButton';
 import { toast } from 'sonner';
 import ExpertModeToggle from './ExpertModeToggle';
 import { useUserModeStore, useIsClient } from '@/stores/userModeStore';
+// @ts-ignore: Type 선언 오류 무시
+import MessageComponentRenderer from './MessageComponentRenderer';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -24,50 +26,7 @@ interface MessageBubbleProps {
   windowWidth: number;
 }
 
-// 마크다운 텍스트를 일반 텍스트로 변환하는 함수
-function stripMarkdown(text: string): string {
-  // 코드 블록 처리 (```code``` -> code)
-  let plainText = text.replace(/```[\s\S]*?```/g, (match) => {
-    return match.replace(/```(?:\w+)?\n([\s\S]*?)```/g, '$1');
-  });
-  
-  // 인라인 코드 처리 (`code` -> code)
-  plainText = plainText.replace(/`([^`]+)`/g, '$1');
-  
-  // 헤더 처리 (# Header -> Header)
-  plainText = plainText.replace(/^(#+)\s+(.*)$/gm, '$2');
-  
-  // 볼드/이탤릭 처리 (**bold** -> bold, *italic* -> italic)
-  plainText = plainText.replace(/(\*\*|__)(.*?)\1/g, '$2');
-  plainText = plainText.replace(/(\*|_)(.*?)\1/g, '$2');
-  
-  // 링크 처리 ([text](url) -> text)
-  plainText = plainText.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-  
-  // 이미지 처리 (![alt](url) -> alt)
-  plainText = plainText.replace(/!\[([^\]]+)\]\([^)]+\)/g, '$1');
-  
-  // 목록 처리 (- item -> item, * item -> item, 1. item -> item)
-  plainText = plainText.replace(/^\s*[-*]\s+(.*)$/gm, '$1');
-  plainText = plainText.replace(/^\s*\d+\.\s+(.*)$/gm, '$1');
-  
-  // 인용구 처리 (> quote -> quote)
-  plainText = plainText.replace(/^\s*>\s+(.*)$/gm, '$1');
-  
-  // 수평선 제거 (--- or *** or ___ -> 빈줄)
-  plainText = plainText.replace(/^\s*([-*_])\1{2,}\s*$/gm, '');
-  
-  // 테이블 포맷팅 제거 (|---|---| -> 빈줄)
-  plainText = plainText.replace(/^\|.*\|$/gm, (match) => {
-    if (match.includes('---')) return '';
-    return match.replace(/\|/g, ' ').trim();
-  });
-  
-  // 다중 줄바꿈을 하나로 통일
-  plainText = plainText.replace(/\n{3,}/g, '\n\n');
-  
-  return plainText.trim();
-}
+
 
 export function MessageBubble({
   message,
@@ -240,63 +199,91 @@ export function MessageBubble({
     }
   };
 
-  // 복사 핸들러
-  const handleCopy = () => {
-    console.log('MessageBubble: CopyButton 클릭됨, 복사 처리 시작 (ID:', messageIdRef.current, ')');
+  // 어시스턴트 메시지의 컴포넌트 렌더링 처리
+  const renderAssistantMessage = () => {
+    console.log('[MessageBubble] 렌더링 시작, 컴포넌트 확인:', message.components);
     
-    try {
-      // 복사할 내용 결정
-      const contentToCopy = getContentToCopy();
-      
-      // 복사할 내용이 없을 경우 처리
-      if (!contentToCopy || contentToCopy.trim() === '') {
-        toast.error('복사할 내용이 없습니다.');
-        return;
-      }
-      
-      // 마크다운 제거
-      const plainTextContent = stripMarkdown(contentToCopy);
-      
-      // Clipboard API 사용
-      if (navigator.clipboard && window.isSecureContext) {
-        if (message.role === 'assistant') {
-          navigator.clipboard.writeText(contentToCopy + '\n\n(주)인텔리오 - : https://wwww.intellio.kr/');
-        } else {
-          navigator.clipboard.writeText(contentToCopy);
-        }
-      } else {
-        // Fallback: 텍스트 영역을 생성
-        const textArea = document.createElement('textarea');
-        textArea.value = message.role === 'assistant' 
-          ? plainTextContent + '\n\n(주)인텔리오 - : https://wwww.intellio.kr/'
-          : plainTextContent;
-        
-        textArea.style.position = 'absolute';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        
-        document.body.removeChild(textArea);
-      }
-      
-      // UI용 복사 상태 변경 - CopyButton이 자체적으로 처리하므로 여기서는 true만 설정
-      setIsCopied(true);
-      
-      // 메시지 ID를 사용하여 상위 컴포넌트에 복사 완료 알림
-      if (onCopy) {
-        onCopy(messageIdRef.current);
-      }
-      
-    } catch (error) {
-      console.error('MessageBubble: 복사 실패:', error);
-      toast.error('복사 중 오류가 발생했습니다.');
+    // 구조화된 컴포넌트가 있는지 확인
+    if (message.role === 'assistant' && message.components && message.components.length > 0) {
+      return (
+        <div className="structured-message">
+          {message.components.map((component, index) => (
+            <MessageComponentRenderer 
+              key={`${message.id}-comp-${index}`} 
+              component={component} 
+            />
+          ))}
+        </div>
+      );
     }
+    
+    // 구조화된 컴포넌트가 없으면 기존 마크다운 렌더링 사용
+    return (
+      <ReactMarkdown
+        className="markdown-content"
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        components={{
+          pre({ node, ...props }) {
+            return <pre style={{ 
+              overflow: 'auto', 
+              background: '#f8f8f8', 
+              padding: '12px 16px', 
+              borderRadius: '6px', 
+              margin: '12px 0',
+              border: '1px solid #e8e8e8',
+              fontSize: '0.9em'
+            }} {...props} />;
+          },
+          code({ node, inline, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || '');
+            if (inline) {
+              return <code style={{ 
+                backgroundColor: '#f0f0f0', 
+                padding: '0.2em 0.4em', 
+                borderRadius: '3px', 
+                fontFamily: 'Consolas, Monaco, "Andale Mono", monospace',
+                fontSize: '0.9em'
+              }} {...props}>{children}</code>;
+            }
+            return (
+              <code
+                className={className}
+                style={{ 
+                  display: 'block', 
+                  overflow: 'auto',
+                  fontFamily: 'Consolas, Monaco, "Andale Mono", monospace',
+                  fontSize: '0.9em',
+                  color: '#333'
+                }}
+                {...props}
+              >
+                {children}
+              </code>
+            );
+          },
+          a({ node, children, ...props }) {
+            return <a style={{ 
+              color: '#2563eb', 
+              textDecoration: 'underline',
+              fontWeight: 500
+            }} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
+          }
+        }}
+      >
+        {getMessageContent()}
+      </ReactMarkdown>
+    );
   };
-  
+
+  // MessageBubble.tsx 내에 디버깅 로그 추가
+  console.log('[MessageBubble] 컴포넌트 객체 확인:', {
+    id: message.id,
+    role: message.role,
+    hasComponents: Boolean(message.components),
+    componentCount: message.components?.length || 0,
+    firstComponent: message.components?.[0]
+  });
+
   return (
     <div
       style={{
@@ -306,6 +293,8 @@ export function MessageBubble({
         alignItems: message.role === 'user' ? 'flex-end' : 'flex-start',
         width: '100%'
       }}
+      id={`message-${message.id}`}
+      className={`chat-message ${message.role}-message`}
     >
       <style jsx>{markdownStyles}</style>
       
@@ -336,8 +325,20 @@ export function MessageBubble({
           <div style={{
             position: 'relative',
           }}>
-            {/* 여기서 getMessageContent 함수를 호출하여 적절한 내용을 표시 */}
-            {message.role === 'user' ? (
+            {/* 어시스턴트 메시지의 컴포넌트 렌더링 처리 */}
+            {message.role === 'assistant' && message.components && message.components.length > 0 ? (
+              <div className="structured-message">
+                <div style={{border: '1px solid blue', padding: '5px', margin: '5px'}}>
+                테스트 컴포넌트 (렌더러 검증용)
+              </div>
+                {message.components.map((component, index) => (
+                  <MessageComponentRenderer 
+                    key={`${message.id}-comp-${index}`} 
+                    component={component} 
+                  />
+                ))}
+              </div>
+            ) : message.role === 'user' ? (
               <div style={{
                 whiteSpace: 'pre-wrap',
                 fontSize: isMobile ? '0.85rem' : (windowWidth < 768 ? '0.9rem' : '0.95rem'),
@@ -426,16 +427,60 @@ export function MessageBubble({
             >
               {/* CopyButton 컴포넌트 사용 */}
               <CopyButton 
-                onClick={handleCopy}
+                onClick={() => {
+                  const contentToCopy = getContentToCopy();
+                  navigator.clipboard.writeText(contentToCopy);
+                  setIsCopied(true);
+                  if (onCopy) {
+                    onCopy(message.id);
+                  }
+                }}
                 isCopied={isCopied}
                 size="sm"
-                label=""
                 variant={message.role === 'user' ? 'user' : 'assistant'}
+              />
+            </div>
+          )}
+          
+          {/* 전문가 모드 토글 버튼 (AI 메시지이면서 전문가 내용이 있는 경우에만 표시) */}
+          {message.role === 'assistant' && message.content_expert && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '3px',
+                right: '5px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <ExpertModeToggle
+                isExpertMode={isExpertMode}
+                onToggle={handleToggleExpertMode}
               />
             </div>
           )}
         </div>
       </div>
+      
+      <style jsx>{`
+        ${markdownStyles}
+        
+        .message-content {
+          font-size: ${isMobile ? '0.9rem' : (windowWidth < 768 ? '0.95rem' : '1rem')};
+          line-height: 1.6;
+          max-width: 100%;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+        }
+        
+        .structured-message {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+      `}</style>
     </div>
   );
 }
