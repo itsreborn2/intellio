@@ -87,9 +87,8 @@ export function MessageBubble({
     paddingBottom: '25px', // 버튼 공간 확보
     borderRadius: isMobile ? '10px' : '12px',
     maxWidth: isMobile ? '95%' : (windowWidth < 768 ? '90%' : '85%'),
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
+    boxShadow: 'none',
     position: 'relative',
-    border: '1px solid #3F424A',
     wordBreak: 'break-word',
     color: 'white'
   };
@@ -110,7 +109,8 @@ export function MessageBubble({
     wordBreak: 'break-word',
     boxSizing: 'border-box',
     maxWidth: '100%', // 최대 너비 제한
-    position: 'relative'
+    position: 'relative',
+    border: 'none'
   };
   
   // 상태 메시지 스타일
@@ -122,7 +122,8 @@ export function MessageBubble({
     paddingRight: '12px',
     paddingBottom: '8px',
     paddingLeft: '12px',
-    marginBottom: '10px'
+    marginBottom: '10px',
+    border: 'none'
   };
   
   // 마크다운 스타일
@@ -201,10 +202,15 @@ export function MessageBubble({
 
   // 어시스턴트 메시지의 컴포넌트 렌더링 처리
   const renderAssistantMessage = () => {
-    console.log('[MessageBubble] 렌더링 시작, 컴포넌트 확인:', message.components);
+    console.log('[MessageBubble] 렌더링 시작, 메시지 ID:', message.id);
     
     // 구조화된 컴포넌트가 있는지 확인
-    if (message.role === 'assistant' && message.components && message.components.length > 0) {
+    if (message.role === 'assistant' && message.components && 
+        Array.isArray(message.components) && message.components.length > 0) {
+      
+      console.log('[MessageBubble] 컴포넌트 데이터 발견:', message.components.length + '개');
+      console.log('[MessageBubble] 첫 번째 컴포넌트 타입:', message.components[0].type);
+      
       return (
         <div className="structured-message">
           {message.components.map((component, index) => (
@@ -216,6 +222,9 @@ export function MessageBubble({
         </div>
       );
     }
+    
+    // 컴포넌트가 없는 경우 로그
+    console.log('[MessageBubble] 컴포넌트 데이터 없음, 일반 마크다운 사용');
     
     // 구조화된 컴포넌트가 없으면 기존 마크다운 렌더링 사용
     return (
@@ -276,13 +285,13 @@ export function MessageBubble({
   };
 
   // MessageBubble.tsx 내에 디버깅 로그 추가
-  console.log('[MessageBubble] 컴포넌트 객체 확인:', {
-    id: message.id,
-    role: message.role,
-    hasComponents: Boolean(message.components),
-    componentCount: message.components?.length || 0,
-    firstComponent: message.components?.[0]
-  });
+  // console.log('[MessageBubble] 컴포넌트 객체 확인:', {
+  //   id: message.id,
+  //   role: message.role,
+  //   hasComponents: Boolean(message.components),
+  //   componentCount: message.components?.length || 0,
+  //   firstComponent: message.components?.[0]
+  // });
 
   return (
     <div
@@ -296,7 +305,37 @@ export function MessageBubble({
       id={`message-${message.id}`}
       className={`chat-message ${message.role}-message`}
     >
-      <style jsx>{markdownStyles}</style>
+      <style jsx>{`
+        ${markdownStyles}
+        
+        .message-content {
+          font-size: ${isMobile ? '0.9rem' : (windowWidth < 768 ? '0.95rem' : '1rem')};
+          line-height: 1.6;
+          max-width: 100%;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+        }
+        
+        .structured-message {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          border: none;
+        }
+
+        .chat-message {
+          border: none !important;
+        }
+
+        #message-${message.id} {
+          border: none !important;
+        }
+
+        #message-${message.id} * {
+          border-color: transparent;
+        }
+      `}</style>
       
       <div
         style={{
@@ -326,11 +365,11 @@ export function MessageBubble({
             position: 'relative',
           }}>
             {/* 어시스턴트 메시지의 컴포넌트 렌더링 처리 */}
-            {message.role === 'assistant' && message.components && message.components.length > 0 ? (
+            {message.role === 'assistant' && 
+             message.components && 
+             Array.isArray(message.components) && 
+             message.components.length > 0 ? (
               <div className="structured-message">
-                <div style={{border: '1px solid blue', padding: '5px', margin: '5px'}}>
-                테스트 컴포넌트 (렌더러 검증용)
-              </div>
                 {message.components.map((component, index) => (
                   <MessageComponentRenderer 
                     key={`${message.id}-comp-${index}`} 
@@ -462,25 +501,6 @@ export function MessageBubble({
           )}
         </div>
       </div>
-      
-      <style jsx>{`
-        ${markdownStyles}
-        
-        .message-content {
-          font-size: ${isMobile ? '0.9rem' : (windowWidth < 768 ? '0.95rem' : '1rem')};
-          line-height: 1.6;
-          max-width: 100%;
-          overflow-wrap: break-word;
-          word-wrap: break-word;
-        }
-        
-        .structured-message {
-          width: 100%;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-      `}</style>
     </div>
   );
 }

@@ -170,6 +170,7 @@ class ChatMessageResponse(BaseResponse):
     stock_name: Optional[str] = None
     content: str
     content_expert: Optional[str] = None
+    components: Optional[List[Dict[str, Any]]] = None
     agent_results: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -529,7 +530,7 @@ async def get_chat_messages(
 ) -> ChatMessageListResponse:
     """특정 채팅 세션의 메시지 목록을 조회합니다."""
     try:
-        # DB이 실제 세션이 있는지 확인.
+        # DB에 실제 세션이 있는지 확인.
         session_data = await ChatService.get_chat_session(
             db=db,
             session_id=chat_session_id,
@@ -551,7 +552,10 @@ async def get_chat_messages(
             offset=offset
         )
         
-        logger.debug(f"{session_data['title']} :총  {len(messages)} 메세지")
+        logger.info(f"{session_data['title']} :총  {len(messages)} 메세지")
+        for m in messages:
+            if m['role'] == "assistant" and m.get('components'):
+                logger.info(f"어시스턴트 메시지 컴포넌트 : {m.get('components', [])}")
         
         return ChatMessageListResponse(
             messages=[ChatMessageResponse(**message) for message in messages],
@@ -920,6 +924,7 @@ async def stream_chat_message(
                             agent_results=agent_results,
                             components=result.get("components", [])  # 구조화된 컴포넌트 저장
                         )
+                        
                         # 어시스턴트 메시지 ID 저장
                         assistant_message_id = str(assistant_message["id"])
                         logger.info(f"[STREAM_CHAT] 어시스턴트 응답 저장 완료: {assistant_message_id}")

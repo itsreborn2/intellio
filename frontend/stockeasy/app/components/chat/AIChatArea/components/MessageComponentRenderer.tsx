@@ -55,7 +55,11 @@ export function MessageComponentRenderer({ component }: MessageComponentRenderer
         return (
           <ol style={{ paddingLeft: '1.5em', margin: '0.5em 0' }}>
             {items.map((item: any, index: number) => (
-              <li key={index} style={{ margin: '0.25em 0' }}>{item.content}</li>
+              <li key={index} style={{ margin: '0.25em 0' }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                  {item.content}
+                </ReactMarkdown>
+              </li>
             ))}
           </ol>
         );
@@ -64,7 +68,11 @@ export function MessageComponentRenderer({ component }: MessageComponentRenderer
       return (
         <ul style={{ paddingLeft: '1.5em', margin: '0.5em 0' }}>
           {items.map((item: any, index: number) => (
-            <li key={index} style={{ margin: '0.25em 0' }}>{item.content}</li>
+            <li key={index} style={{ margin: '0.25em 0' }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                {item.content}
+              </ReactMarkdown>
+            </li>
           ))}
         </ul>
       );

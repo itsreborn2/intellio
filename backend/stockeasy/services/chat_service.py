@@ -372,11 +372,11 @@ class ChatService:
                 
             # agent_results에 datetime 객체가 포함되어 있는 경우 처리
             if agent_results is not None:
-                agent_results = json.loads(json.dumps(agent_results, cls=DateTimeEncoder))
+                agent_results = remove_null_chars(json.loads(json.dumps(agent_results, cls=DateTimeEncoder)))
                 
             # components에 datetime 객체가 포함되어 있는 경우 처리
             if components is not None:
-                components = json.loads(json.dumps(components, cls=DateTimeEncoder))
+                components = remove_null_chars(json.loads(json.dumps(components, cls=DateTimeEncoder)))
             
             # 메시지 생성
             message_params = {
@@ -489,6 +489,7 @@ class ChatService:
                     "role": message.role,
                     "content": message.content,
                     "content_expert": message.content_expert,
+                    "components": message.components,
                     "stock_code": message.stock_code,
                     "stock_name": message.stock_name,
                     "metadata": message.message_metadata,
@@ -509,6 +510,7 @@ class ChatService:
                     "session_id": None,
                     "role": None,
                     "content": None,
+                    "components": None,
                     "stock_code": None,
                     "stock_name": None,
                     "metadata": None,

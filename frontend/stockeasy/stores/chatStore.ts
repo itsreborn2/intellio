@@ -86,7 +86,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   // ChatContext에서 가져온 추가 액션들
   updateMessage: (id, messageUpdate) => {
-    console.log('[채팅 스토어] 메시지 업데이트:', id);
+    //console.log('[채팅 스토어] 메시지 업데이트:', id);
     set((state) => ({
       messages: state.messages.map(msg => 
         msg.id === id ? { ...msg, ...messageUpdate } : msg
@@ -150,9 +150,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       stockCode: message.stock_code
     } : undefined;
     
-    // metadata에서 컴포넌트 정보 추출
-    const components = message.metadata?.components as MessageComponent[] | undefined;
-    
+    // components 직접 사용 또는 metadata에서 추출
+    const components = message.components || message.metadata?.components as MessageComponent[] | undefined;
+    // components 데이터가 있는 경우 콘솔에 출력 (디버깅용)
+    if (components && components.length > 0) {
+      console.log('[채팅 스토어] 메시지 컴포넌트 변환:', message.id, components.length, '개');
+    }
+
     return {
       id: message.id,
       role: message.role as 'user' | 'assistant' | 'status',
@@ -217,7 +221,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (titleMatch && titleMatch.length >= 3) {
       stockName = titleMatch[1].trim()
       stockCode = titleMatch[2].trim()
-      console.log('[채팅 스토어] 세션 제목에서 종목 정보 추출:', stockName, stockCode)
     }
     
     // 메시지에서 종목 정보 찾기

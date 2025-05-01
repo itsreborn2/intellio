@@ -6,6 +6,7 @@
 """
 
 import json
+import re
 from loguru import logger
 from typing import Dict, Any, List, Optional, Callable, AsyncGenerator
 
@@ -21,7 +22,6 @@ from common.schemas.chat_components import (
     CodeBlockComponent, BarChartComponent, LineChartComponent, ImageComponent,
     TableComponent, TableHeader, TableData, BarChartData, LineChartData
 )
-import re
 
 class ResponseFormatterAgent(BaseAgent):
     """
@@ -221,6 +221,242 @@ class ResponseFormatterAgent(BaseAgent):
             return state 
 
     async def make_components(self, state: Dict[str, Any]):
+        """
+        포맷팅된 응답을 구조화된 컴포넌트로 변환합니다.
+        마크다운 형식의 텍스트를 구조화된 컴포넌트(헤딩, 단락, 목록 등)로 파싱합니다.
+        """
+        components = []
+        
+        # 상태에서 정보 추출
+        stock_name = state.get("stock_name", "삼성전자")
+        stock_code = state.get("stock_code", "005930")
+        formatted_response = state.get("formatted_response", "")
+        
+        # 헤더 컴포넌트 추가
+        components.append(HeadingComponent(
+            level=1,
+            content=f"{stock_name}({stock_code}) 분석 결과"
+        ))
+        
+        # 빈 응답이면 기본 컴포넌트만 반환
+        if not formatted_response.strip():
+            components.append(ParagraphComponent(
+                content="분석 결과를 찾을 수 없습니다."
+            ))
+            return components
+        
+        # 마크다운을 줄 단위로 분리
+        lines = formatted_response.split('\n')
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # 빈 줄 건너뛰기
+            if not line:
+                i += 1
+                continue
+            
+            # 1. 헤딩 처리 (# 헤딩)
+            heading_match = re.match(r'^(#{1,6})\s+(.+)$', line)
+            if heading_match:
+                level = len(heading_match.group(1))
+                content = heading_match.group(2).strip()
+                components.append(HeadingComponent(
+                    level=level,
+                    content=content
+                ))
+                i += 1
+                continue
+            
+            # 2. 테이블 처리 (| 구분 | 컬럼1 | 컬럼2 | ... |)
+            if line.startswith('|') and '|' in line[1:]:
+                # 테이블 시작 감지
+                table_lines = []
+                table_title = ""
+                
+                # 테이블 제목이 있는지 확인 (이전 줄이 단락이고 테이블에 관한 내용인 경우)
+                if i > 0 and components and components[-1].type == 'paragraph':
+                    paragraph_content = components[-1].content
+                    if '표' in paragraph_content or '데이터' in paragraph_content or '재무' in paragraph_content:
+                        table_title = paragraph_content
+                        # 이미 추가된 제목 단락을 제거 (테이블 컴포넌트에 제목으로 포함될 예정)
+                        components.pop()
+                
+                # 테이블 줄 수집
+                while i < len(lines) and lines[i].strip().startswith('|'):
+                    table_lines.append(lines[i].strip())
+                    i += 1
+                
+                # 테이블 파싱 시도
+                try:
+                    # 최소 2줄 이상 있어야 테이블로 인식 (헤더, 구분선)
+                    if len(table_lines) >= 2:
+                        # 헤더 파싱
+                        header_line = table_lines[0]
+                        header_cells = [cell.strip() for cell in header_line.split('|')[1:-1]]
+                        
+                        # 구분선 확인 (두 번째 줄이 구분선인지 확인)
+                        separator_line = table_lines[1]
+                        # 구분선이 있으면 테이블로 처리
+                        if any('-' in cell for cell in separator_line.split('|')[1:-1]):
+                            # 데이터 행 파싱
+                            data_rows = []
+                            # 구분선 다음 줄부터 데이터 행
+                            for row_line in table_lines[2:]:
+                                row_cells = [cell.strip() for cell in row_line.split('|')[1:-1]]
+                                if len(row_cells) == len(header_cells):
+                                    row_data = {}
+                                    for idx, _ in enumerate(header_cells):
+                                        # 숫자 데이터인 경우 숫자로 변환 시도
+                                        cell_value = row_cells[idx] if idx < len(row_cells) else ""
+                                        try:
+                                            # 콤마 제거 후 숫자 변환 시도
+                                            cell_value_clean = cell_value.replace(',', '')
+                                            if '.' in cell_value_clean and cell_value_clean.replace('.', '').replace('-', '').isdigit():
+                                                cell_value = float(cell_value_clean)
+                                            elif cell_value_clean.replace('-', '').isdigit():
+                                                cell_value = int(cell_value_clean)
+                                        except (ValueError, TypeError):
+                                            # 숫자 변환 실패 시 텍스트 그대로 사용
+                                            pass
+                                        row_data[f"col{idx}"] = cell_value
+                                    data_rows.append(row_data)
+                            
+                            # 테이블 컴포넌트 생성
+                            # 데이터 행이 비어있더라도 테이블 컴포넌트 생성
+                            table_component = TableComponent(
+                                title=table_title,
+                                data=TableData(
+                                    headers=[TableHeader(key=f"col{idx}", label=header) for idx, header in enumerate(header_cells)],
+                                    rows=data_rows if data_rows else [{}]
+                                )
+                            )
+                            components.append(table_component)
+                            continue
+                except Exception as e:
+                    logger.error(f"테이블 파싱 오류: {e}")
+                    # 테이블 파싱 실패 시에도 테이블 컴포넌트로 처리
+                    try:
+                        # 간단한 테이블 컴포넌트로 변환 시도
+                        if len(table_lines) >= 2:
+                            header_line = table_lines[0]
+                            header_cells = [cell.strip() for cell in header_line.split('|')[1:-1]]
+                            
+                            # 기본 빈 데이터라도 테이블 컴포넌트 생성
+                            table_component = TableComponent(
+                                title=table_title,
+                                data=TableData(
+                                    headers=[TableHeader(key=f"col{idx}", label=header) for idx, header in enumerate(header_cells)],
+                                    rows=[{}]
+                                )
+                            )
+                            components.append(table_component)
+                            continue
+                    except Exception as e2:
+                        logger.error(f"테이블 컴포넌트 생성 오류: {e2}")
+                
+                # 위의 모든 파싱 시도가 실패하더라도 단락으로 변환하지 않고 기본 테이블 컴포넌트 생성
+                if table_lines:
+                    try:
+                        # 가장 기본적인 테이블 컴포넌트 생성 시도
+                        first_line = table_lines[0]
+                        header_count = first_line.count('|') - 1
+                        header_cells = ["열 " + str(i+1) for i in range(header_count)]
+                        
+                        table_component = TableComponent(
+                            title=table_title,
+                            data=TableData(
+                                headers=[TableHeader(key=f"col{idx}", label=header) for idx, header in enumerate(header_cells)],
+                                rows=[{}]
+                            )
+                        )
+                        components.append(table_component)
+                    except Exception as e3:
+                        logger.error(f"기본 테이블 컴포넌트 생성 오류: {e3}")
+                        # 정말 실패한 경우만 텍스트로 처리
+                        table_text = '\n'.join(table_lines)
+                        components.append(ParagraphComponent(
+                            content="[테이블 형식] " + table_title
+                        ))
+                continue
+            
+            # 3. 코드 블록 처리 (```언어 ... ```)
+            if line.startswith('```'):
+                code_content = []
+                language = line[3:].strip()
+                i += 1
+                
+                while i < len(lines) and not lines[i].strip().startswith('```'):
+                    code_content.append(lines[i])
+                    i += 1
+                
+                if i < len(lines):  # 코드 블록 종료 확인
+                    i += 1  # '```' 다음 줄로 이동
+                
+                components.append(CodeBlockComponent(
+                    language=language if language else None,
+                    content='\n'.join(code_content)
+                ))
+                continue
+            
+            # 4. 순서 있는 목록 처리 (1. 항목)
+            if re.match(r'^\d+\.\s+', line):
+                list_items = []
+                ordered = True
+                
+                while i < len(lines) and re.match(r'^\d+\.\s+', lines[i].strip()):
+                    content = re.sub(r'^\d+\.\s+', '', lines[i].strip())
+                    list_items.append(ListItemComponent(content=content))
+                    i += 1
+                
+                components.append(ListComponent(
+                    ordered=ordered,
+                    items=list_items
+                ))
+                continue
+            
+            # 5. 순서 없는 목록 처리 (-, *, •)
+            if re.match(r'^[\-\*\•]\s+', line):
+                list_items = []
+                ordered = False
+                
+                while i < len(lines) and re.match(r'^[\-\*\•]\s+', lines[i].strip()):
+                    content = re.sub(r'^[\-\*\•]\s+', '', lines[i].strip())
+                    list_items.append(ListItemComponent(content=content))
+                    i += 1
+                
+                components.append(ListComponent(
+                    ordered=ordered,
+                    items=list_items
+                ))
+                continue
+            
+            # 6. 단락 처리
+            paragraph_lines = []
+            
+            while i < len(lines) and lines[i].strip() and not (
+                    re.match(r'^(#{1,6})\s+', lines[i]) or  # 헤딩이 아님
+                    re.match(r'^\d+\.\s+', lines[i]) or  # 순서 있는 목록이 아님
+                    re.match(r'^[\-\*\•]\s+', lines[i]) or  # 순서 없는 목록이 아님
+                    lines[i].strip().startswith('```') or  # 코드 블록이 아님
+                    lines[i].strip().startswith('|')  # 테이블이 아님
+            ):
+                paragraph_lines.append(lines[i])
+                i += 1
+            
+            if paragraph_lines:
+                components.append(ParagraphComponent(
+                    content=' '.join([line.strip() for line in paragraph_lines])
+                ))
+                continue
+            
+            # 그 외의 경우 다음 줄로 이동
+            i += 1
+        
+        return components
+    
+    async def make_components_sample(self, state: Dict[str, Any]):
         """
         포맷팅된 응답을 구조화된 컴포넌트로 변환합니다.
         """

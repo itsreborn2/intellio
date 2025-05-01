@@ -622,7 +622,6 @@ function AIChatAreaContent() {
       
       // homeButtonClick 이벤트 리스너 함수 정의
       const handleHomeButtonClick = () => {
-        console.log('[AIChatArea] homeButtonClick 이벤트 캡처');
         resetChatArea();
       };
       

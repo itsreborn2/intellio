@@ -10,7 +10,26 @@ import {
   IChatMessageListResponse
 } from '@/types/api/chat';
 
+/**
+ * 널 문자를 제거하는 유틸리티 함수
+ * @param str 처리할 문자열
+ * @returns 널 문자가 제거된 문자열
+ */
+const removeNullCharacters = (str: string): string => {
+  if (!str) return str;
+  // 널 문자(\u0000)를 모두 제거
+  return str.replace(/\0/g, '');
+};
 
+/**
+ * JSON 문자열에서 널 문자를 제거
+ * @param jsonStr JSON 문자열
+ * @returns 널 문자가 제거된 JSON 문자열
+ */
+const sanitizeJsonString = (jsonStr: string): string => {
+  if (!jsonStr) return jsonStr;
+  return removeNullCharacters(jsonStr);
+};
 
 /**
  * 새 채팅 세션을 생성합니다.
@@ -260,104 +279,74 @@ export const streamChatMessage = async (
           // SSE 형식 확인 (data: 로 시작하는지)
           if (line.startsWith('data:')) {
             // 'data:' 접두사 제거 후 JSON 파싱
-            const jsonStr = line.substring(5);
+            const jsonStr = line.substring(5).trim();
             //console.log('[STREAM_CHAT] 파싱할 JSON:', jsonStr);
             
             if (jsonStr === '[DONE]' || jsonStr.trim() === '') {
               //console.log('[STREAM_CHAT] 스트리밍 완료 신호 수신');
               continue;
             }
+            
+            // 중복된 'data:' 접두사 처리
             let fixedJsonStr = jsonStr;
-            if (jsonStr.startsWith('data:')) {
-              fixedJsonStr = jsonStr.substring(5);
-              console.log('[STREAM_CHAT] 재파싱 JSON:')
-              console.log(fixedJsonStr);
+            // 'data:' 접두사가 다시 있으면 추가로 제거
+            if (fixedJsonStr.startsWith('data:')) {
+              fixedJsonStr = fixedJsonStr.substring(5).trim();
+              console.log('[STREAM_CHAT] 중복된 데이터 접두사 발견, 재처리:', fixedJsonStr);
             }
             
-            const data = JSON.parse(fixedJsonStr);
-            //console.log(`[STREAM_CHAT] 이벤트 수신: ${data.event}`);
+            // 널 문자 제거
+            fixedJsonStr = sanitizeJsonString(fixedJsonStr);
             
-            // 이벤트 유형에 따른 처리
-            switch (data.event) {
-              case 'start':
-                console.log('[STREAM_CHAT] 처리 시작:', data.data)
-                callbacks.onStart?.()
-                break
-                
-              case 'agent_status':
-                //console.log('[STREAM_CHAT] 에이전트 상태 변경:', data.data)
-                callbacks.onAgentStatus?.(data.data)
-                break
-                
-              case 'agent_start':
-                //console.log('[STREAM_CHAT] 에이전트 처리 시작:', data.data)
-                callbacks.onAgentStart?.(data.data)
-                break
-                
-              case 'agent_complete':
-                //console.log('[STREAM_CHAT] 에이전트 처리 완료:', data.data)
-                callbacks.onAgentComplete?.(data.data)
-                break
-                
-              case 'token':
-                //console.log('[STREAM_CHAT] 토큰 수신:', data.data?.token)
-                // 토큰 이벤트 처리 추가
-                const tokenData = {
-                  token: data.data?.token,
-                  timestamp: data.data?.timestamp,
-                  message_id: data.data?.message_id
-                }
-                callbacks.onToken?.(tokenData)
-                break
-                
-              case 'complete':
-                console.log('[STREAM_CHAT] 처리 완료:', data.data)
-                callbacks.onComplete?.(data.data)
-                break
-                
-              case 'error':
-                console.error('[STREAM_CHAT] 처리 중 오류:', data.data)
-                callbacks.onError?.(data.data)
-                break
-                
-              default:
-                console.log('[STREAM_CHAT] 알 수 없는 이벤트:', data)
-            }
-          } else {
-            // 'data:' 접두사가 없는 경우 그대로 파싱 시도
             try {
-              console.log('[STREAM_CHAT] 비표준 SSE 형식:', line);
-              // JSON 형식인지 확인 (event와 data 객체가 있는지)
-              if (line.includes('"event"') && line.includes('"data"')) {
-                const data = JSON.parse(line);
-                console.log('[STREAM_CHAT] 비표준 데이터 처리:', data);
-                
-                // 이벤트 정보가 있는 경우에만 처리
-                if (data.event) {
-                  switch (data.event) {
-                    case 'start':
-                      callbacks.onStart?.()
-                      break
-                    case 'agent_status':
-                      callbacks.onAgentStatus?.(data.data)
-                      break
-                    case 'agent_start':
-                      callbacks.onAgentStart?.(data.data)
-                      break
-                    case 'agent_complete':
-                      callbacks.onAgentComplete?.(data.data)
-                      break
-                    case 'token':
-                      callbacks.onToken?.(data.data)
-                      break
-                    case 'complete':
-                      callbacks.onComplete?.(data.data)
-                      break
-                    case 'error':
-                      callbacks.onError?.(data.data)
-                      break
+              const data = JSON.parse(fixedJsonStr);
+              //console.log(`[STREAM_CHAT] 이벤트 수신: ${data.event}`);
+              
+              // 이벤트 유형에 따른 처리
+              switch (data.event) {
+                case 'start':
+                  console.log('[STREAM_CHAT] 처리 시작:', data.data)
+                  callbacks.onStart?.()
+                  break
+                  
+                case 'agent_status':
+                  //console.log('[STREAM_CHAT] 에이전트 상태 변경:', data.data)
+                  callbacks.onAgentStatus?.(data.data)
+                  break
+                  
+                case 'agent_start':
+                  //console.log('[STREAM_CHAT] 에이전트 처리 시작:', data.data)
+                  callbacks.onAgentStart?.(data.data)
+                  break
+                  
+                case 'agent_complete':
+                  //console.log('[STREAM_CHAT] 에이전트 처리 완료:', data.data)
+                  callbacks.onAgentComplete?.(data.data)
+                  break
+                  
+                case 'token':
+                  //console.log('[STREAM_CHAT] 토큰 수신:', data.data?.token)
+                  // 토큰 이벤트 처리 추가
+                  const tokenData = {
+                    token: data.data?.token ? removeNullCharacters(data.data.token) : '',
+                    timestamp: data.data?.timestamp,
+                    message_id: data.data?.message_id
                   }
-                }
+                  callbacks.onToken?.(tokenData)
+                  break
+                  
+                case 'complete':
+                  console.log('[STREAM_CHAT] 처리 완료:', data.data)
+                  callbacks.onComplete?.(data.data)
+                  break
+                  
+                case 'error':
+                  console.error('[STREAM_CHAT] 처리 중 오류:', data.data)
+                  callbacks.onError?.(data.data)
+                  break
+                  
+                default:
+                  console.log('[STREAM_CHAT] 알 수 없는 이벤트:', data)
               }
             } catch (err) {
               console.error('[STREAM_CHAT] 비표준 SSE 데이터 파싱 오류:', err, '원본 라인:', line)

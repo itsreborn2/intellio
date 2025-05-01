@@ -113,6 +113,7 @@ export interface IChatMessageDetail  extends IBaseResponse {
   content_expert?: string;
   stock_code: string;
   stock_name: string;
+  components?: any[]; // 구조화된 메시지 컴포넌트 배열
   metadata?: any;
   created_at?: string;
   updated_at?: string;
