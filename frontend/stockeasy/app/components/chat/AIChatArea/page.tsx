@@ -220,9 +220,15 @@ function AIChatAreaContent() {
     setSelectedStock(null);
     setSearchTerm('');
     
+    // searchMode를 true로 설정하여 "종목명 또는 종목코드 검색" 표시
+    setSearchMode(true);
+    
     // Zustand 스토어 상태도 초기화
     setStoreSession(null);
     clearMessages();
+    
+    // isLoading 상태 초기화 추가
+    setProcessing(false);
     
     // homeButtonClick 이벤트 리스너 등록 - 한 번만 등록되도록 함
     const handleHomeButtonClick = (event: Event) => {
@@ -246,12 +252,18 @@ function AIChatAreaContent() {
         clearMessages();
         //console.log('[AIChatArea] 메시지 초기화 후:', useChatStore.getState().messages.length);
         
+        // isLoading 상태 초기화 추가
+        setProcessing(false);
+        
         // 함수형 업데이트를 사용하여 최신 상태 참조
         setInputCentered(true);
         setMessages([]);
         setStoreSession(null);
         setSelectedStock(null);
         setSearchTerm('');
+        
+        // searchMode를 true로 설정하여 "종목명 또는 종목코드 검색" 표시
+        setSearchMode(true);
         
         console.log('[AIChatArea] 모든 상태 초기화 완료');
       } catch (error) {
@@ -602,11 +614,17 @@ function AIChatAreaContent() {
           setStoreSession(null);
           clearMessages();
           
+          // isLoading 상태 초기화 추가
+          setProcessing(false);
+          
           // 리액트 상태 초기화
           setInputCentered(true);
           setMessages([]);
           setSelectedStock(null);
           setSearchTerm('');
+          
+          // searchMode를 true로 설정하여 "종목명 또는 종목코드 검색" 표시
+          setSearchMode(true);
           
           console.log('[AIChatArea] 초기화 후 상태:', 
             'useChatStore 세션:', useChatStore.getState().currentSession,
