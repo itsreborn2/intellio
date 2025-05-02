@@ -4,7 +4,7 @@
  */
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { StockOption } from '../types';
 import { useIsMobile } from '../hooks';
 
@@ -18,6 +18,7 @@ interface StockSuggestionsProps {
   onClearRecentStocks: () => void;
   isInputCentered?: boolean;
   focusedItemIndex?: number; // 현재 포커스된 아이템 인덱스 추가
+  searchTerm?: string; // 검색어 추가
 }
 
 export function StockSuggestions({
@@ -29,7 +30,8 @@ export function StockSuggestions({
   onSelectStock,
   onClearRecentStocks,
   isInputCentered = false,
-  focusedItemIndex = 0 // 기본값은 첫 번째 아이템
+  focusedItemIndex = 0, // 기본값은 첫 번째 아이템
+  searchTerm = ''
 }: StockSuggestionsProps) {
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -103,8 +105,8 @@ export function StockSuggestions({
   
   // 포커스된 아이템이 뷰에 보이도록 자동 스크롤
   const scrollToFocusedItem = (focusedIndex: number) => {
-    if (containerRef.current && filteredStocks.length > 0 && 
-        focusedIndex >= 0 && focusedIndex < filteredStocks.length) {
+    if (containerRef.current && displayedStocks.length > 0 && 
+        focusedIndex >= 0 && focusedIndex < displayedStocks.length) {
       const container = containerRef.current;
       const focusedItem = container.querySelector(`[data-index="${focusedIndex}"]`) as HTMLElement;
       
@@ -113,8 +115,8 @@ export function StockSuggestions({
         const containerBottom = containerTop + container.clientHeight;
         
         // 헤더의 높이를 계산 (헤더가 있는 경우)
-        const headerHeight = recentStocks.length > 0 && 
-                            JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) ? 41 : 0;
+        const shouldShowHeader = searchTerm === '' && recentStocks.length > 0;
+        const headerHeight = shouldShowHeader ? 41 : 0;
         
         const itemTop = focusedItem.offsetTop;
         const itemBottom = itemTop + focusedItem.clientHeight;
@@ -131,9 +133,37 @@ export function StockSuggestions({
   };
   
   // 포커스된 아이템이 변경될 때 스크롤 조정
-  React.useEffect(() => {
+  useEffect(() => {
     scrollToFocusedItem(focusedItemIndex);
   }, [focusedItemIndex]);
+  
+  // 강제로 재렌더링 방지하기 위한 메모이제이션 추가
+  const displayedStocks = useMemo(() => {
+    const trimmedSearchTerm = searchTerm.trim();
+    
+    // 검색어가 있으면 검색 결과만 표시 (검색어가 최우선)
+    if (trimmedSearchTerm.length > 0) {
+      // 검색어와 관련된 종목만 직접 필터링
+      const searchResults = stockOptions
+        .filter(stock => {
+          const stockName = stock.stockName.toLowerCase();
+          const stockCode = stock.stockCode;
+          return stockName.includes(trimmedSearchTerm.toLowerCase()) || 
+                 stockCode.includes(trimmedSearchTerm);
+        })
+        .slice(0, 30);
+      
+      return searchResults;
+    }
+    
+    // 검색어가 없고 최근 조회 종목이 있으면 최근 종목 표시
+    if (recentStocks.length > 0) {
+      return recentStocks;
+    }
+    
+    // 그 외의 경우 (검색어 없고 최근 종목도 없음) 기본 필터링 결과 표시
+    return filteredStocks;
+  }, [searchTerm, filteredStocks, recentStocks, stockOptions]);
   
   // 최근 조회 종목 헤더 렌더링
   const renderRecentStocksHeader = () => {
@@ -179,24 +209,52 @@ export function StockSuggestions({
     );
   };
   
+  // 검색 결과 헤더 렌더링 추가
+  const renderSearchResultsHeader = () => {
+    // 검색어가 있을 때 직접 계산된 displayedStocks 개수 사용
+    const resultCount = displayedStocks.length;
+    
+    return (
+      <div className="search-results-header" style={headerStyle}>
+        <span style={{ 
+          fontSize: '14px',
+          fontWeight: 'bold', 
+          color: '#333' 
+        }}>
+          "{searchTerm}" 검색 결과 ({resultCount}개)
+        </span>
+      </div>
+    );
+  };
+  
+  // 검색어가 있는지와 최근 조회종목을 표시해야 하는지 확인
+  const shouldShowRecentHeader = searchTerm === '' && recentStocks.length > 0 && 
+                                displayedStocks.some(stock => recentStocks.some(r => r.value === stock.value));
+                                
+  // 검색 결과 헤더를 표시해야 하는지 확인
+  const shouldShowSearchHeader = searchTerm !== '' && displayedStocks.length > 0;
+  
   return (
     <div
       style={stockSuggestionsStyle}
       ref={containerRef}
     >
-      {filteredStocks.length === 0 ? (
+      {displayedStocks.length === 0 ? (
         noResultsMessage()
       ) : (
         <div className="stock-suggestions" style={{ position: 'relative' }}>
-          {/* 최근 조회 종목 헤더 - 필터링된 종목이 최근 종목과 동일하면 표시 */}
-          {filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) && renderRecentStocksHeader()}
+          {/* 검색 결과 헤더 - 검색어가 있을 때만 표시 */}
+          {shouldShowSearchHeader && renderSearchResultsHeader()}
+          
+          {/* 최근 조회 종목 헤더 - 검색어가 없을 때만 표시 */}
+          {shouldShowRecentHeader && renderRecentStocksHeader()}
 
           <div style={{ 
-            paddingTop: filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) ? '8px' : '4px', // 패딩 감소
+            paddingTop: (shouldShowRecentHeader || shouldShowSearchHeader) ? '8px' : '4px', // 패딩 감소
             paddingBottom: '4px', // 패딩 감소
-            borderTop: filteredStocks.length > 0 && JSON.stringify(filteredStocks) === JSON.stringify(recentStocks) ? '1px solid #f0f0f0' : 'none'
+            borderTop: (shouldShowRecentHeader || shouldShowSearchHeader) ? '1px solid #f0f0f0' : 'none'
           }}>
-            {filteredStocks.map((stock, index) => (
+            {displayedStocks.map((stock, index) => (
               <div
                 key={stock.value}
                 data-index={index}
@@ -215,7 +273,7 @@ export function StockSuggestions({
                   marginLeft: '4px',
                   marginRight: '6px',
                   marginTop: focusedItemIndex === index && index === 0 ? '2px' : index === 0 ? '2px' : '0', // 마진 감소
-                  marginBottom: focusedItemIndex === index && index === filteredStocks.length - 1 ? '4px' : '0', // 마진 감소
+                  marginBottom: focusedItemIndex === index && index === displayedStocks.length - 1 ? '4px' : '0', // 마진 감소
                   zIndex: focusedItemIndex === index ? 1 : 'auto',
                   position: 'relative',
                   outline: 'none',

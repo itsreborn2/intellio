@@ -482,213 +482,232 @@ function AIChatAreaContent() {
   const uiMessages = useMemo(() => getUiMessages(), [storeMessages]);
 
   // 채팅 컨텐츠 렌더링
-  const renderChatContent = () => (
-    <>
-      {/* 메시지 목록 영역 */}
-      {!isInputCentered && uiMessages.length > 0 && (
-        <MessageList
-          ref={messageListRef}
-          messages={uiMessages}
-          copyStates={copyStates}
-          expertMode={expertMode}
-          timerState={{}}
-          isInputCentered={isInputCentered}
-          isUserSending={isUserSending}
-          onCopy={(id) => setCopyState(id, true)}
-          onToggleExpertMode={(id) => toggleExpertMode(id)}
-        />
-      )}
+  const renderChatContent = () => {
+    // 메모이제이션된 StockSuggestions Props 생성
+    const stockSuggestionsProps = useMemo(() => ({
+      isLoading: stockState.isLoading,
+      error: stockState.error,
+      filteredStocks: stockState.filteredStocks,
+      recentStocks: stockState.recentStocks,
+      stockOptions: stockState.stockOptions,
+      onSelectStock: (stock: StockOption) => {
+        //console.log(`[디버깅:AIChatArea] 종목 제안에서 선택: ${stock.stockName}(${stock.stockCode})`);
+        handleSelectStock(stock);
+      },
+      onClearRecentStocks: clearRecentStocks,
+      isInputCentered: isInputCentered,
+      searchTerm: stockState.searchTerm
+    }), [
+      stockState.isLoading,
+      stockState.error,
+      stockState.filteredStocks,
+      stockState.recentStocks,
+      stockState.stockOptions,
+      stockState.searchTerm,
+      isInputCentered,
+      handleSelectStock,
+      clearRecentStocks
+    ]);
 
-      {/* 입력 영역 (상단 중앙 또는 하단에 위치) */}
-      {/* 후속 질문 일단 차단.*/}
-      {!currentSession && (
-        <InputArea
-          inputMessage={stockState.searchTerm || ''}
-          setInputMessage={setSearchTerm}
-          selectedStock={selectedStock}
-          isProcessing={isLoading}
-          isInputCentered={isInputCentered}
-          showStockSuggestions={stockState.showStockSuggestions}
-          stockOptions={stockState.stockOptions}
-          recentStocks={stockState.recentStocks}
-          searchMode={stockState.searchMode}
-          isLoading={stockState.isLoading}
-          error={stockState.error}
-          windowWidth={windowWidth}
-          onSendMessage={handleSendMessage}
-          onStockSelect={handleSelectStock}
-          onShowStockSuggestions={showSuggestions}
-          onSearchModeChange={setSearchMode}
-          onClearRecentStocks={clearRecentStocks}
-          scrollToBottom={() => messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom()}
-          showTitle={showTitle}
-          currentChatSession={currentSession}
-        />
-      )}
-      
-      {/* 추천 질문 및 최신 업데이트 종목 영역 - 첫 진입 시 */}
-      {isInputCentered && uiMessages.length === 0 && (
-        <div style={{
-          width: isMobile ? '100%' : 'min(85%, 1000px)',
-          minWidth: isMobile ? 'unset' : '280px',
-          maxWidth: '1000px',
-          margin: isMobile ? '50px auto 0' : '12px auto 0',
-          padding: isMobile ? '0 0' : '0',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px'
-        }}>
-          {/* 데스크탑: 중앙정렬, 모바일: 기존 중앙정렬 유지 */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: isMobile ? 'column' : 'row',
-              gap: isMobile ? '6px' : '8px',
-              width: '100%',
-              justifyContent: isMobile ? 'center' : 'center', // 항상 중앙정렬
-              alignItems: isMobile ? 'center' : 'flex-start', // 데스크탑은 위에서부터 시작
-            }}
-          >
-          {/* 추천 질문 컴포넌트 */}
-          <RecommendedQuestions 
-            questions={sampleRecommendedQuestions}
-            onSelectQuestion={handleSelectQuestion}
+    return (
+      <>
+        {/* 메시지 목록 영역 */}
+        {!isInputCentered && uiMessages.length > 0 && (
+          <MessageList
+            ref={messageListRef}
+            messages={uiMessages}
+            copyStates={copyStates}
+            expertMode={expertMode}
+            timerState={{}}
+            isInputCentered={isInputCentered}
+            isUserSending={isUserSending}
+            onCopy={(id) => setCopyState(id, true)}
+            onToggleExpertMode={(id) => toggleExpertMode(id)}
           />
-          
-          {/* 최신 업데이트 종목 컴포넌트 */}
-          <LatestUpdates 
-            updates={sampleLatestUpdates}
-            onSelectUpdate={handleSelectUpdate}
+        )}
+
+        {/* 입력 영역 (상단 중앙 또는 하단에 위치) */}
+        {/* 후속 질문 일단 차단.*/}
+        {!currentSession && (
+          <InputArea
+            inputMessage={stockState.searchTerm || ''}
+            setInputMessage={setSearchTerm}
+            selectedStock={selectedStock}
+            isProcessing={isLoading}
+            isInputCentered={isInputCentered}
+            showStockSuggestions={stockState.showStockSuggestions}
+            stockOptions={stockState.stockOptions}
+            recentStocks={stockState.recentStocks}
+            searchMode={stockState.searchMode}
+            isLoading={stockState.isLoading}
+            error={stockState.error}
+            windowWidth={windowWidth}
+            onSendMessage={handleSendMessage}
+            onStockSelect={handleSelectStock}
+            onShowStockSuggestions={showSuggestions}
+            onSearchModeChange={setSearchMode}
+            onClearRecentStocks={clearRecentStocks}
+            scrollToBottom={() => messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom()}
+            showTitle={showTitle}
+            currentChatSession={currentSession}
           />
-        </div>
-      </div>
-    )}
-    
-    {/* 종목 제안 영역 */}
-    <StockSuggestions
-      isLoading={stockState.isLoading}
-      error={stockState.error}
-      filteredStocks={stockState.filteredStocks}
-      recentStocks={stockState.recentStocks}
-      stockOptions={stockState.stockOptions}
-      onSelectStock={(stock) => handleSelectStock(stock)}
-      onClearRecentStocks={clearRecentStocks}
-      isInputCentered={isInputCentered}
-    />
-  </>
-);
-
-  // 컴포넌트 마운트 시 종목 데이터 로드 (빈 의존성 배열로 최초 1회만 실행)
-  useEffect(() => {
-    // 로컬 상태 변수로 이미 실행 여부 확인
-    let isFirstLoad = true;
-
-    if (isFirstLoad) {
-      console.log('[AIChatAreaContent] 컴포넌트 마운트 - 종목 데이터 로드 검사');
-      const { stockOptions } = stockState;
-      if (stockOptions.length === 0) {
-        console.log('[AIChatAreaContent] 종목 데이터 없음 - 로드 시작');
-        fetchStockList();
-      } else {
-        console.log('[AIChatAreaContent] 종목 데이터 이미 로드됨 (', stockOptions.length, '개)');
-      }
-      isFirstLoad = false;
-    }
-  }, []); // 빈 의존성 배열로 최초 한 번만 실행
-
-  // window 객체에 디버깅 함수 추가 (개발용)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // 전역 초기화 함수 정의
-      const resetChatArea = () => {
-        console.log('[AIChatArea] 직접 초기화 함수 호출');
+        )}
         
-        try {
-          // 스토어 상태 초기화 전 상태 확인
-          console.log('[AIChatArea] 초기화 전 상태:', 
-            'useChatStore 세션:', useChatStore.getState().currentSession?.id,
-            'useChatStore 메시지 수:', useChatStore.getState().messages.length
-          );
-          
-          // Zustand 스토어 상태 초기화
-          setStoreSession(null);
-          clearMessages();
-          
-          // isLoading 상태 초기화 추가
-          setProcessing(false);
-          
-          // 리액트 상태 초기화
-          setInputCentered(true);
-          setMessages([]);
-          setSelectedStock(null);
-          setSearchTerm('');
-          
-          // searchMode를 true로 설정하여 "종목명 또는 종목코드 검색" 표시
-          setSearchMode(true);
-          
-          console.log('[AIChatArea] 초기화 후 상태:', 
-            'useChatStore 세션:', useChatStore.getState().currentSession,
-            'useChatStore 메시지 수:', useChatStore.getState().messages.length
-          );
-        } catch (error) {
-          console.error('[AIChatArea] 초기화 중 오류:', error);
-        }
-      };
-      
-      // @ts-ignore - 디버깅용 메서드 추가
-      window.__debug_resetAIChatArea = resetChatArea;
-      
-      // homeButtonClick 이벤트 리스너 함수 정의
-      const handleHomeButtonClick = () => {
-        resetChatArea();
-      };
-      
-      // 이벤트 리스너 등록
-      window.addEventListener('homeButtonClick', handleHomeButtonClick);
-      
-      // 클린업
-      return () => {
-        if (typeof window !== 'undefined') {
-          // @ts-ignore - 디버깅용 메서드 제거
-          delete window.__debug_resetAIChatArea;
-          
-          // 이벤트 리스너 제거
-          window.removeEventListener('homeButtonClick', handleHomeButtonClick);
-        }
-      };
-    }
-  }, [
-    setInputCentered, 
-    setMessages, 
-    setStoreSession, 
-    setSelectedStock, 
-    setSearchTerm, 
-    clearMessages
-  ]);
-
-  // 활성 세션이 있을 때 종목 선택 초기화
-  useEffect(() => {
-    if (currentSession) {
-      console.log('[AIChatAreaContent] 활성 세션 감지 - 종목 선택 초기화');
-      setSelectedStock(null);
-    }
-  }, [currentSession, setSelectedStock]);
-
-  return (
-    <>
-      {isMobile ? (
-        // 모바일 레이아웃
-        <MobileChatLayout>
-          {renderChatContent()}
-        </MobileChatLayout>
-      ) : (
-        // 데스크톱 레이아웃
-        <ChatLayout>
-          {renderChatContent()}
-        </ChatLayout>
+        {/* 추천 질문 및 최신 업데이트 종목 영역 - 첫 진입 시 */}
+        {isInputCentered && uiMessages.length === 0 && (
+          <div style={{
+            width: isMobile ? '100%' : 'min(85%, 1000px)',
+            minWidth: isMobile ? 'unset' : '280px',
+            maxWidth: '1000px',
+            margin: isMobile ? '50px auto 0' : '12px auto 0',
+            padding: isMobile ? '0 0' : '0',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}>
+            {/* 데스크탑: 중앙정렬, 모바일: 기존 중앙정렬 유지 */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: isMobile ? '6px' : '8px',
+                width: '100%',
+                justifyContent: isMobile ? 'center' : 'center', // 항상 중앙정렬
+                alignItems: isMobile ? 'center' : 'flex-start', // 데스크탑은 위에서부터 시작
+              }}
+            >
+            {/* 추천 질문 컴포넌트 */}
+            <RecommendedQuestions 
+              questions={sampleRecommendedQuestions}
+              onSelectQuestion={handleSelectQuestion}
+            />
+            
+            {/* 최신 업데이트 종목 컴포넌트 */}
+            <LatestUpdates 
+              updates={sampleLatestUpdates}
+              onSelectUpdate={handleSelectUpdate}
+            />
+          </div>
+        </div>
       )}
+      
+      {/* 종목 제안 영역 - 메모이제이션된 props 사용 */}
+      <StockSuggestions {...stockSuggestionsProps} />
     </>
   );
+};
+
+// 컴포넌트 마운트 시 종목 데이터 로드 (빈 의존성 배열로 최초 1회만 실행)
+useEffect(() => {
+  // 로컬 상태 변수로 이미 실행 여부 확인
+  let isFirstLoad = true;
+
+  if (isFirstLoad) {
+    console.log('[AIChatAreaContent] 컴포넌트 마운트 - 종목 데이터 로드 검사');
+    const { stockOptions } = stockState;
+    if (stockOptions.length === 0) {
+      console.log('[AIChatAreaContent] 종목 데이터 없음 - 로드 시작');
+      fetchStockList();
+    } else {
+      console.log('[AIChatAreaContent] 종목 데이터 이미 로드됨 (', stockOptions.length, '개)');
+    }
+    isFirstLoad = false;
+  }
+}, []); // 빈 의존성 배열로 최초 한 번만 실행
+
+// window 객체에 디버깅 함수 추가 (개발용)
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    // 전역 초기화 함수 정의
+    const resetChatArea = () => {
+      console.log('[AIChatArea] 직접 초기화 함수 호출');
+      
+      try {
+        // 스토어 상태 초기화 전 상태 확인
+        console.log('[AIChatArea] 초기화 전 상태:', 
+          'useChatStore 세션:', useChatStore.getState().currentSession?.id,
+          'useChatStore 메시지 수:', useChatStore.getState().messages.length
+        );
+        
+        // Zustand 스토어 상태 초기화
+        setStoreSession(null);
+        clearMessages();
+        
+        // isLoading 상태 초기화 추가
+        setProcessing(false);
+        
+        // 리액트 상태 초기화
+        setInputCentered(true);
+        setMessages([]);
+        setSelectedStock(null);
+        setSearchTerm('');
+        
+        // searchMode를 true로 설정하여 "종목명 또는 종목코드 검색" 표시
+        setSearchMode(true);
+        
+        console.log('[AIChatArea] 초기화 후 상태:', 
+          'useChatStore 세션:', useChatStore.getState().currentSession,
+          'useChatStore 메시지 수:', useChatStore.getState().messages.length
+        );
+      } catch (error) {
+        console.error('[AIChatArea] 초기화 중 오류:', error);
+      }
+    };
+    
+    // @ts-ignore - 디버깅용 메서드 추가
+    window.__debug_resetAIChatArea = resetChatArea;
+    
+    // homeButtonClick 이벤트 리스너 함수 정의
+    const handleHomeButtonClick = () => {
+      resetChatArea();
+    };
+    
+    // 이벤트 리스너 등록
+    window.addEventListener('homeButtonClick', handleHomeButtonClick);
+    
+    // 클린업
+    return () => {
+      if (typeof window !== 'undefined') {
+        // @ts-ignore - 디버깅용 메서드 제거
+        delete window.__debug_resetAIChatArea;
+        
+        // 이벤트 리스너 제거
+        window.removeEventListener('homeButtonClick', handleHomeButtonClick);
+      }
+    };
+  }
+}, [
+  setInputCentered, 
+  setMessages, 
+  setStoreSession, 
+  setSelectedStock, 
+  setSearchTerm, 
+  clearMessages
+]);
+
+// 활성 세션이 있을 때 종목 선택 초기화
+useEffect(() => {
+  if (currentSession) {
+    console.log('[AIChatAreaContent] 활성 세션 감지 - 종목 선택 초기화');
+    setSelectedStock(null);
+  }
+}, [currentSession, setSelectedStock]);
+
+return (
+  <>
+    {isMobile ? (
+      // 모바일 레이아웃
+      <MobileChatLayout>
+        {renderChatContent()}
+      </MobileChatLayout>
+    ) : (
+      // 데스크톱 레이아웃
+      <ChatLayout>
+        {renderChatContent()}
+      </ChatLayout>
+    )}
+  </>
+);
 }
 
 /**

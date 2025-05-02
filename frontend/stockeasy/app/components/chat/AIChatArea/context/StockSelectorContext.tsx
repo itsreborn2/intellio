@@ -24,62 +24,103 @@ const initialState: StockSearchState = {
 // 리듀서 함수 정의
 function stockSearchReducer(state: StockSearchState, action: StockSearchAction): StockSearchState {
   switch (action.type) {
-    case 'SET_SEARCH_TERM':
+    case 'SET_SEARCH_TERM': {
+      // 상태 업데이트만 하고 filteredStocks에는 영향 주지 않음
       return {
         ...state,
         searchTerm: action.payload
       };
-    case 'SET_FILTERED_STOCKS':
+    }
+    
+    case 'SET_FILTERED_STOCKS': {
+      // 검색어 상태에 따른 필터링 결과 처리 로직 강화
+      // 1. 검색어가 있는 경우: 필터링 결과 적용 (검색 결과가 우선)
+      if (state.searchTerm.trim()) {
+        return {
+          ...state,
+          filteredStocks: action.payload
+        };
+      }
+      
+      // 2. 검색어가 없고 최근 종목이 있는 경우: 최근 종목 표시
+      if (!state.searchTerm.trim() && state.recentStocks.length > 0) {
+        return {
+          ...state,
+          filteredStocks: action.payload.length > 0 ? action.payload : state.recentStocks
+        };
+      }
+      
+      // 3. 그 외의 경우: 제공된 필터링 결과 적용
       return {
         ...state,
         filteredStocks: action.payload
       };
+    }
+    
     case 'SET_RECENT_STOCKS':
       return {
         ...state,
         recentStocks: action.payload
       };
+      
     case 'SHOW_SUGGESTIONS':
       return {
         ...state,
         showStockSuggestions: action.payload
       };
+      
     case 'SET_LOADING':
       return {
         ...state,
         isLoading: action.payload
       };
+      
     case 'SET_ERROR':
       return {
         ...state,
         error: action.payload
       };
+      
     case 'SET_SEARCH_MODE':
       return {
         ...state,
         searchMode: action.payload
       };
+      
     case 'ADD_RECENT_STOCK': {
       const updatedRecentStocks = [
         action.payload,
         ...state.recentStocks.filter(stock => stock.value !== action.payload.value)
       ].slice(0, 5); // 최대 5개 항목
       
+      // 검색어가 없고, 새로운 종목이 추가된 경우에만 filteredStocks를 갱신
+      // 검색어가 있는 경우에는 검색 결과를 유지
+      if (!state.searchTerm.trim()) {
+        return {
+          ...state,
+          recentStocks: updatedRecentStocks,
+          filteredStocks: state.searchTerm.trim() ? state.filteredStocks : updatedRecentStocks
+        };
+      }
+      
       return {
         ...state,
         recentStocks: updatedRecentStocks
       };
     }
+    
     case 'CLEAR_RECENT_STOCKS':
       return {
         ...state,
         recentStocks: []
       };
+      
     case 'SET_STOCK_OPTIONS':
       return {
         ...state,
         stockOptions: action.payload
       };
+      
     default:
       return state;
   }
@@ -121,13 +162,11 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
   const fetchStockList = useCallback(async () => {
     // 이미 로드 중이면 중복 호출 방지
     if (isLoadingRef.current) {
-      console.log('이미 종목 데이터를 로드 중입니다');
       return;
     }
     
     // 이미 데이터가 있으면 다시 로드하지 않음
     if (state.stockOptions.length > 0) {
-      console.log('이미 종목 데이터가 로드되어 있음');
       return;
     }
 
@@ -135,7 +174,6 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
     const now = Date.now();
     const oneHour = 60 * 60 * 1000;
     if (lastFetchTime > 0 && now - lastFetchTime < oneHour) {
-      console.log('최근에 종목 데이터를 로드했습니다. 캐시된 데이터 사용');
       if (cachedStockData.length > 0) {
         dispatch({ type: 'SET_STOCK_OPTIONS', payload: cachedStockData });
         return;
@@ -167,8 +205,6 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
         skipEmptyLines: true
       });
 
-      console.log('파싱된 데이터 샘플:', parsedData.data.slice(0, 3));
-
       // 중복 제거를 위한 Set 생성
       const uniqueStocks = new Set();
 
@@ -194,7 +230,6 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
       if (stockData.length > 0) {
         // 한 번만 로그 출력 (세션당)
         if (!hasLoggedRef.current) {
-          console.log(`종목 데이터 ${stockData.length}개 로드 완료`);
           hasLoggedRef.current = true;
         }
         dispatch({ type: 'SET_STOCK_OPTIONS', payload: stockData });
@@ -202,12 +237,10 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
         setLastFetchTime(Date.now());
       } else {
         const errorMsg = '유효한 종목 데이터를 받지 못했습니다.';
-        console.error(errorMsg);
         dispatch({ type: 'SET_ERROR', payload: errorMsg });
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : '종목 리스트를 가져오는 중 오류가 발생했습니다.';
-      console.error('종목 리스트 가져오기 오류:', error);
       dispatch({ type: 'SET_ERROR', payload: errorMsg });
     } finally {
       isLoadingRef.current = false;
@@ -229,7 +262,6 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('최근 종목 로드 실패:', error);
     }
   }, []);
 
@@ -244,11 +276,9 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
       (StockSelectorProvider as any).hasInitialized = true;
       
       if (state.stockOptions.length === 0 && cachedStockData.length === 0) {
-        console.log('[StockSelectorProvider] 최초 마운트 시 종목 데이터 로드');
         fetchStockList();
       } else if (cachedStockData.length > 0 && state.stockOptions.length === 0) {
         // 캐시된 데이터가 있으면 사용
-        console.log('[StockSelectorProvider] 캐시된 종목 데이터 사용');
         dispatch({ type: 'SET_STOCK_OPTIONS', payload: cachedStockData });
       }
     }
@@ -258,10 +288,12 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => ({
     state,
     dispatch,
-    setSearchTerm: (term: string) => 
-      dispatch({ type: 'SET_SEARCH_TERM', payload: term }),
-    setFilteredStocks: (stocks: StockOption[]) => 
-      dispatch({ type: 'SET_FILTERED_STOCKS', payload: stocks }),
+    setSearchTerm: (term: string) => {
+      dispatch({ type: 'SET_SEARCH_TERM', payload: term });
+    },
+    setFilteredStocks: (stocks: StockOption[]) => {
+      dispatch({ type: 'SET_FILTERED_STOCKS', payload: stocks });
+    },
     setRecentStocks: (stocks: StockOption[]) => 
       dispatch({ type: 'SET_RECENT_STOCKS', payload: stocks }),
     showSuggestions: (show: boolean) => 
@@ -285,7 +317,6 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
       try {
         localStorage.setItem(LOCAL_STORAGE_RECENT_STOCKS_KEY, JSON.stringify(updatedRecentStocks));
       } catch (error) {
-        console.error('최근 종목 저장 실패:', error);
       }
     },
     clearRecentStocks: () => {

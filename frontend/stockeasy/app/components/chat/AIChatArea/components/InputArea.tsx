@@ -114,8 +114,9 @@ export function InputArea({
   
   // 종목 필터링 함수
   const filterStocks = useCallback((searchValue: string) => {
+    // 검색어가 없는 경우
     if (!searchValue.trim()) {
-      // 검색어가 없으면 최근 조회 종목 표시
+      // 최근 조회 종목이 있으면 표시
       if (recentStocks.length > 0) {
         setFilteredStocks(recentStocks);
       } else {
@@ -125,16 +126,20 @@ export function InputArea({
       return;
     }
 
-    // 종목명이나 종목코드로 검색
+    // 검색어가 있는 경우 - 종목명이나 종목코드로 검색
+    // 검색어 정리 및 소문자 변환
+    const searchTerm = searchValue.toLowerCase().trim();
+    
+    // 전체 종목 목록에서 검색 수행
     const filtered = stockOptions
       .filter(stock => {
         const stockName = stock.stockName.toLowerCase();
         const stockCode = stock.stockCode;
-        const searchTerm = searchValue.toLowerCase();
         return stockName.includes(searchTerm) || stockCode.includes(searchTerm);
       })
-      .slice(0, 20); // 최대 10개 결과만 표시
+      .slice(0, 30); // 최대 30개 결과로 확장
 
+    // 검색어가 있을 때는 무조건 검색 결과를 적용
     setFilteredStocks(filtered);
     
     // 필터링된 결과가 바뀌면 포커스 인덱스를 초기화
@@ -183,8 +188,6 @@ export function InputArea({
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // Backspace 키를 감지하여 종목 선택 해제 처리
       if (e.key === 'Backspace' && inputMessage === '' && selectedStock && !isProcessing) {
-        console.log('[InputArea] 글로벌 Backspace 감지 - 종목 선택 해제');
-        
         // input 요소에 포커스 설정
         if (inputRef.current) {
           inputRef.current.focus();
@@ -255,19 +258,9 @@ export function InputArea({
       return;
     }
     
-    // 전체 키 이벤트 로깅
-    //console.log(`[InputArea] KeyDown: ${e.key}, inputMessage: "${inputMessage}", selectedStock: ${selectedStock ? selectedStock.stockName : 'none'}`);
-    
     // Backspace 키이고, 입력창이 비어있고, 종목이 선택된 상태인지 확인
     if (e.key === 'Backspace' && inputMessage === '' && selectedStock) {
       e.preventDefault(); // 기본 Backspace 동작 방지
-      console.log('[InputArea] Backspace 누름 - 종목 선택 해제');
-      
-      // 포커스 확인
-      const activeElement = document.activeElement;
-      console.log('[InputArea] Active Element:', activeElement);
-      console.log('[InputArea] Input Ref:', inputRef.current);
-      console.log('[InputArea] 포커스 일치 여부:', activeElement === inputRef.current);
       
       // 선택된 종목 해제
       onStockSelect(null);
@@ -297,7 +290,7 @@ export function InputArea({
         scrollToBottom();
       }
     } else if (e.key === 'Enter' && !e.shiftKey && inputMessage.trim() !== '' && !selectedStock && !hasActiveSession) {
-      console.log('[InputArea] Enter 키 입력 - 종목 미선택이며 활성 세션도 없어 전송 불가');
+      // 전송 불가 상태
     }
   }, [
     inputMessage, 
@@ -364,6 +357,8 @@ export function InputArea({
   // 입력 필드 값 변경 처리
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const value = e.target.value;
+    
+    // 입력값을 먼저 설정하여 UI가 즉시 업데이트되도록 함
     setInputMessage(value);
     
     // 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
@@ -372,46 +367,44 @@ export function InputArea({
     }
     
     // 종목이 선택되지 않은 경우, 종목 추천 표시
-    if (!selectedStock && !showStockSuggestions) {
-      onShowStockSuggestions(true);
-      onSearchModeChange(true);
+    if (!selectedStock) {
+      if (!showStockSuggestions) {
+        onShowStockSuggestions(true);
+      }
+      
+      // 검색 모드 활성화
+      if (!searchMode) {
+        onSearchModeChange(true);
+      }
     }
     
-    // 종목 선택 팝업이 열려 있거나 검색 모드인 경우 종목 검색 로직
+    // 종목 선택 팝업이 열려 있거나 검색 모드인 경우만 종목 검색 로직 실행
     if (showStockSuggestions || searchMode) {
-      // 검색 모드 활성화
-      onSearchModeChange(true);
-      
-      // 종목 필터링 로직 추가
-      const searchValue = value.trim();
-      
-      // 종목 필터링 수행
-      if (searchValue.length > 0) {
-        // 종목 검색 로직
-        const filtered = stockOptions.filter(stock => {
-          const stockName = stock.stockName.toLowerCase();
-          const stockCode = stock.stockCode;
-          const searchTerm = searchValue.toLowerCase();
-          return stockName.includes(searchTerm) || stockCode.includes(searchTerm);
-        }).slice(0, 30);
-        
-        setFilteredStocks(filtered);
-        
-        // 필터링된 결과가 바뀌면 포커스 인덱스 초기화
-        setFocusedItemIndex(0);
+      // 검색어가 있을 때만 필터링 수행, 없으면 최근 종목 표시
+      if (value.trim().length > 0) {
+        filterStocks(value);
       } else {
-        // 입력값이 없으면 최근 조회 종목 표시
+        // 검색어가 없을 때는 최근 조회 종목 또는 기본 종목 표시
         if (recentStocks.length > 0) {
           setFilteredStocks(recentStocks);
         } else {
           setFilteredStocks(stockOptions.slice(0, 5));
         }
-        
-        // 필터링된 결과가 바뀌면 포커스 인덱스 초기화
-        setFocusedItemIndex(0);
       }
     }
-  }, [setInputMessage, selectedStock, showStockSuggestions, onShowStockSuggestions, onSearchModeChange, searchMode, stockOptions, recentStocks, currentChatSession]);
+  }, [
+    setInputMessage, 
+    selectedStock, 
+    showStockSuggestions, 
+    searchMode, 
+    onShowStockSuggestions, 
+    onSearchModeChange, 
+    currentChatSession, 
+    filterStocks,
+    recentStocks,
+    stockOptions,
+    filteredStocks
+  ]);
   
   // 종목 배지 클릭 시 종목 선택 팝업 표시
   const handleStockBadgeClick = () => {
@@ -450,7 +443,7 @@ export function InputArea({
         scrollToBottom();
       }
     } else if (!selectedStock && !hasActiveSession) {
-      console.log('[InputArea] 전송 버튼 클릭 - 종목 미선택이며 활성 세션도 없어 전송 불가');
+      // 전송 불가 상태
     }
   }, [selectedStock, inputMessage, isProcessing, onSendMessage, scrollToBottom, hasActiveSession]);
   
@@ -543,11 +536,9 @@ export function InputArea({
             value={inputMessage}
             onChange={handleInputChange}
             onFocus={(e) => {
-              //console.log("[InputArea] Input 포커스 받음");
               handleInputFocus();
             }}
             onBlur={() => {
-              //console.log("[InputArea] Input 포커스 잃음");
             }}
             onKeyDown={handleKeyDown}
             onKeyUp={handleKeyUp}
@@ -587,6 +578,7 @@ export function InputArea({
               onClearRecentStocks={onClearRecentStocks}
               isInputCentered={isInputCentered}
               focusedItemIndex={focusedItemIndex}
+              searchTerm={inputMessage}
             />
           </div>
         )}
