@@ -454,8 +454,18 @@ export function InputArea({
     }
   }, [selectedStock, inputMessage, isProcessing, onSendMessage, scrollToBottom, hasActiveSession]);
   
-  // 최초 마운트 시 필터링 초기화
+  // 컴포넌트 마운트 시 초기 상태 설정
   useEffect(() => {
+    // 초기 마운트 시 종목이 선택되어 있지 않고 활성 세션도 없는 경우 검색 모드 활성화
+    if (!selectedStock && !currentChatSession && !isInputCentered) {
+      onSearchModeChange(true);
+
+      // 종목 추천 팝업도 표시
+      if (!showStockSuggestions) {
+        onShowStockSuggestions(true);
+      }
+    }
+    
     if (showStockSuggestions) {
       // 최근 조회 종목이 있으면 표시
       if (recentStocks.length > 0) {
@@ -468,7 +478,7 @@ export function InputArea({
       // 초기 포커스 인덱스 설정
       setFocusedItemIndex(0);
     }
-  }, [showStockSuggestions, recentStocks, stockOptions]);
+  }, [showStockSuggestions, recentStocks, stockOptions, selectedStock, currentChatSession, isInputCentered, onSearchModeChange, onShowStockSuggestions]);
   
   return (
     <div className="input-area" ref={inputBoxRef} style={inputAreaStyle}>
