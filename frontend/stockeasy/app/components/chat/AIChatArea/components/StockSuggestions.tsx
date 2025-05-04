@@ -19,6 +19,7 @@ interface StockSuggestionsProps {
   isInputCentered?: boolean;
   focusedItemIndex?: number; // 현재 포커스된 아이템 인덱스 추가
   searchTerm?: string; // 검색어 추가
+  onDisplayedStocksChange?: (stocks: StockOption[]) => void; // 표시되는 종목 목록 변경 콜백 추가
 }
 
 export function StockSuggestions({
@@ -31,7 +32,8 @@ export function StockSuggestions({
   onClearRecentStocks,
   isInputCentered = false,
   focusedItemIndex = 0, // 기본값은 첫 번째 아이템
-  searchTerm = ''
+  searchTerm = '',
+  onDisplayedStocksChange // 콜백 함수 추가
 }: StockSuggestionsProps) {
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -164,6 +166,13 @@ export function StockSuggestions({
     // 그 외의 경우 (검색어 없고 최근 종목도 없음) 기본 필터링 결과 표시
     return filteredStocks;
   }, [searchTerm, filteredStocks, recentStocks, stockOptions]);
+  
+  // 표시되는 종목 목록이 변경될 때마다 부모 컴포넌트에 알림
+  useEffect(() => {
+    if (onDisplayedStocksChange) {
+      onDisplayedStocksChange(displayedStocks);
+    }
+  }, [displayedStocks, onDisplayedStocksChange]);
   
   // 최근 조회 종목 헤더 렌더링
   const renderRecentStocksHeader = () => {

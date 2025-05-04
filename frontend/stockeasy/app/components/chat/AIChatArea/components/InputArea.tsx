@@ -64,6 +64,7 @@ export function InputArea({
   const [isKeyPressed, setIsKeyPressed] = useState(false);
   const [filteredStocks, setFilteredStocks] = useState<StockOption[]>([]);
   const [focusedItemIndex, setFocusedItemIndex] = useState<number>(0);
+  const [displayedStocks, setDisplayedStocks] = useState<StockOption[]>([]);
   
   // 사이드바 너비 상수 (픽셀 단위)
   const SIDEBAR_WIDTH = 59;
@@ -226,11 +227,11 @@ export function InputArea({
   // 키보드 이벤트 처리 (추가 기능 포함)
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     // 검색 모드이고 종목 제안이 표시되고 있는 경우 방향키 및 엔터키 감지 처리
-    if ((searchMode || showStockSuggestions) && filteredStocks.length > 0) {
+    if ((searchMode || showStockSuggestions) && displayedStocks.length > 0) {
       // 아래쪽 화살표 키: 다음 항목으로 포커스 이동
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setFocusedItemIndex(prev => (prev < filteredStocks.length - 1 ? prev + 1 : prev));
+        setFocusedItemIndex(prev => (prev < displayedStocks.length - 1 ? prev + 1 : prev));
         return;
       }
       
@@ -242,11 +243,11 @@ export function InputArea({
       }
       
       // Enter 키: 현재 포커스된 종목 선택
-      if (e.key === 'Enter' && !e.shiftKey && filteredStocks.length > 0) {
+      if (e.key === 'Enter' && !e.shiftKey && displayedStocks.length > 0) {
         // 포커스된 아이템이 있으면 선택
-        if (focusedItemIndex >= 0 && focusedItemIndex < filteredStocks.length) {
+        if (focusedItemIndex >= 0 && focusedItemIndex < displayedStocks.length) {
           e.preventDefault();
-          handleSelectStock(filteredStocks[focusedItemIndex]);
+          handleSelectStock(displayedStocks[focusedItemIndex]);
           return;
         }
       }
@@ -309,7 +310,8 @@ export function InputArea({
     focusedItemIndex,
     handleSelectStock,
     hasActiveSession,
-    currentChatSession
+    currentChatSession,
+    displayedStocks
   ]);
   
   const handleKeyUp = useCallback((e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -473,6 +475,11 @@ export function InputArea({
     }
   }, [showStockSuggestions, recentStocks, stockOptions, selectedStock, currentChatSession, isInputCentered, onSearchModeChange, onShowStockSuggestions]);
   
+  // displayedStocks 변경 핸들러
+  const handleDisplayedStocksChange = useCallback((stocks: StockOption[]) => {
+    setDisplayedStocks(stocks);
+  }, []);
+  
   return (
     <div className="input-area" ref={inputBoxRef} style={inputAreaStyle}>
       <div className="integrated-input" style={integratedInputStyle}>
@@ -579,6 +586,7 @@ export function InputArea({
               isInputCentered={isInputCentered}
               focusedItemIndex={focusedItemIndex}
               searchTerm={inputMessage}
+              onDisplayedStocksChange={handleDisplayedStocksChange}
             />
           </div>
         )}
