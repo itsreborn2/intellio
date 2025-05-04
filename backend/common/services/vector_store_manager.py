@@ -321,7 +321,7 @@ class VectorStoreManager:
         # 비동기 초기화 확실히 기다리기
         try:
             await self.ensure_initialized()
-            
+            await self.get_async_index()
         except RuntimeError as e:
             # 런타임 에러가 발생하면 이벤트 루프가 없는 상황일 수 있음
             if "no running event loop" in str(e):
@@ -352,7 +352,7 @@ class VectorStoreManager:
         
         try:
             # 비동기 인덱스가 초기화되었는지 확인 (다시 한 번 명시적으로 확인)
-            await self.get_async_index()
+            
             if hasattr(self, 'async_index') and self.async_index is not None:
                 # Pinecone 비동기 클라이언트 직접 사용
                 print(f"[{self.namespace}] Pinecone 비동기 클라이언트 직접 사용")
@@ -525,7 +525,9 @@ class VectorStoreManager:
                 return self.create_embeddings_single_query(query)
             raise
         finally:
-            await self.embedding_model_provider.aclose()
+            # embedding_model_provider는 EmbeddingService 에 속해있기 때문에 개별적으로 해제하면 안됨
+            #await self.embedding_model_provider.aclose()
+            pass
             
         # 임베딩 결과 검증
         if not embeddings or len(embeddings) == 0:
@@ -1229,21 +1231,21 @@ class VectorStoreManager:
                 logger.error(f"Pinecone 클라이언트 세션을 닫는 중 오류 발생: {str(e)}")
         
         # 임베딩 모델 제공자의 리소스 정리
-        try:
-            if hasattr(self, 'embedding_model_provider') and self.embedding_model_provider:
-                # 비동기 리소스 정리 (다양한 메서드명 시도)
-                if hasattr(self.embedding_model_provider, 'aclose') and callable(getattr(self.embedding_model_provider, 'aclose')):
-                    await self.embedding_model_provider.aclose()
-                    logger.info("임베딩 모델 제공자의 비동기 리소스를 정상적으로 닫았습니다.")
-                elif hasattr(self.embedding_model_provider, 'close_async') and callable(getattr(self.embedding_model_provider, 'close_async')):
-                    await self.embedding_model_provider.close_async()
-                    logger.info("임베딩 모델 제공자의 비동기 리소스를 정상적으로 닫았습니다.")
-                elif hasattr(self.embedding_model_provider, 'close') and callable(getattr(self.embedding_model_provider, 'close')):
-                    # 동기 close 메서드를 비동기적으로 실행
-                    await asyncio.to_thread(self.embedding_model_provider.close)
-                    logger.info("임베딩 모델 제공자의 리소스를 정상적으로 닫았습니다.")
-        except Exception as e:
-            logger.error(f"임베딩 모델 제공자의 리소스 정리 중 오류 발생: {str(e)}")
+        # try:
+        #     if hasattr(self, 'embedding_model_provider') and self.embedding_model_provider:
+        #         # 비동기 리소스 정리 (다양한 메서드명 시도)
+        #         if hasattr(self.embedding_model_provider, 'aclose') and callable(getattr(self.embedding_model_provider, 'aclose')):
+        #             await self.embedding_model_provider.aclose()
+        #             logger.info("임베딩 모델 제공자의 비동기 리소스를 정상적으로 닫았습니다.")
+        #         elif hasattr(self.embedding_model_provider, 'close_async') and callable(getattr(self.embedding_model_provider, 'close_async')):
+        #             await self.embedding_model_provider.close_async()
+        #             logger.info("임베딩 모델 제공자의 비동기 리소스를 정상적으로 닫았습니다.")
+        #         elif hasattr(self.embedding_model_provider, 'close') and callable(getattr(self.embedding_model_provider, 'close')):
+        #             # 동기 close 메서드를 비동기적으로 실행
+        #             await asyncio.to_thread(self.embedding_model_provider.close)
+        #             logger.info("임베딩 모델 제공자의 리소스를 정상적으로 닫았습니다.")
+        # except Exception as e:
+        #     logger.error(f"임베딩 모델 제공자의 리소스 정리 중 오류 발생: {str(e)}")
             
         # 임베딩 객체의 리소스 정리 - embedding_obj_async
         try:

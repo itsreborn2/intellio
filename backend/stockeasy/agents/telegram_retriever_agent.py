@@ -253,7 +253,7 @@ class TelegramRetrieverAgent(BaseAgent):
             state["processing_status"]["telegram_retriever"] = "error"
             
             return state
-    @async_retry(retries=2, delay=2.0, exceptions=(Exception,))
+    @async_retry(retries=0, delay=2.0, exceptions=(Exception,))
     async def summarize(self, query:str, stock_code: str, stock_name: str, 
                         found_messages: List[RetrievedTelegramMessage], 
                         classification: Dict[str, Any], 
@@ -679,7 +679,7 @@ class TelegramRetrieverAgent(BaseAgent):
         
         return enhanced_query
     
-    @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
+    @async_retry(retries=0, delay=1.0, exceptions=(Exception,))
     async def _search_messages(self, search_query: str, k: int, threshold: float, user_id: Optional[Union[str, UUID]] = None, subgroup: Optional[List[str]] = None) -> List[RetrievedTelegramMessage]:
         """
         텔레그램 메시지 검색을 수행합니다.

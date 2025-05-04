@@ -385,8 +385,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         try:
             if hasattr(self.client_async, 'close'):
                 await self.client_async.close()
+                logger.warning("OpenAI 비동기 클라이언트 세션 정리 완료1")
             elif hasattr(self.client_async, 'aclose'):
                 await self.client_async.aclose()
+                logger.warning("OpenAI 비동기 클라이언트 세션 정리 완료2")
             # http 또는 aiohttp 세션 직접 접근 시도
             elif hasattr(self.client_async, 'http_client') and hasattr(self.client_async.http_client, 'aclose'):
                 await self.client_async.http_client.aclose()
@@ -440,7 +442,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 logger.info(f"OpenAI[Async] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
                 
             except Exception as e:
-                logger.error(f"OpenAI 임베딩 생성 실패: {str(e)}")
+                logger.error(f"OpenAI 임베딩 생성 실패[create_embeddings_async]: {str(e)}")
                 raise
         
         # 마지막 토큰 사용량 저장 (호환성 유지)
@@ -508,7 +510,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                         logger.info(f"OpenAI[Sync] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
                     
                     except Exception as e:
-                        logger.error(f"OpenAI 임베딩 생성 실패: {str(e)}")
+                        logger.error(f"OpenAI 임베딩 생성 실패[create_embeddings]: {str(e)}")
                         raise
                 
                 # 마지막 토큰 사용량 저장 (호환성 유지)
@@ -540,7 +542,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                     logger.info(f"OpenAI[Sync] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
                 
                 except Exception as e:
-                    logger.error(f"OpenAI 임베딩 생성 실패: {str(e)}")
+                    logger.error(f"OpenAI 임베딩 생성 실패[create_embeddings2]: {str(e)}")
                     raise
             
             # 토큰 사용량 저장
