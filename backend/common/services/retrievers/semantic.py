@@ -43,7 +43,7 @@ class SemanticRetriever(BaseRetriever):
             _top_k = top_k or self.config.top_k
             
             # VectorStoreManager 사용
-            search_results = self.vs_manager.search(
+            search_results = await self.vs_manager.search_async(
                 query=query,
                 #top_k=_top_k * self.config.search_multiplier,  # 더 많은 결과를 가져와서 필터링
                 top_k = _top_k,

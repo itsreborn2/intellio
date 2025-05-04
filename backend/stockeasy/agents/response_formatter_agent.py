@@ -22,6 +22,7 @@ from common.schemas.chat_components import (
     CodeBlockComponent, BarChartComponent, LineChartComponent, ImageComponent,
     TableComponent, TableHeader, TableData, BarChartData, LineChartData
 )
+from langchain_core.tools import tool
 
 class ResponseFormatterAgent(BaseAgent):
     """
@@ -93,20 +94,35 @@ class ResponseFormatterAgent(BaseAgent):
                 state["answer"] = "죄송합니다. 현재 요청에 대한 정보를 찾을 수 없습니다. 다른 질문을 해 주시거나 나중에 다시 시도해 주세요."
                 return state
             
-            # 1. 상태에서 커스텀 프롬프트 템플릿 확인
+            # 프롬프트 준비 (Tool Calling을 위한 지시사항 추가)
+            tool_calling_system_prompt = """
+당신은 금융 정보를 구조화된 컴포넌트로 변환하는 전문가입니다.
+사용자의 쿼리에 대한 응답을 다음 도구들을 사용하여 구조화된 형식으로 생성해주세요:
+
+1. create_heading: 제목과 소제목 생성
+2. create_paragraph: 설명 텍스트 생성
+3. create_list: 순서 있는/없는 항목 목록 생성
+4. create_table: 표 형식 데이터 생성 - 재무제표, 분기별 실적, 시장 점유율 등 표 형태의 데이터는 반드시 이 도구를 사용하세요!
+5. create_bar_chart: 바 차트 데이터 시각화
+6. create_line_chart: 라인 차트 데이터 시각화
+7. create_image: 이미지 참조
+
+응답을 생성할 때 다음 사항을 지켜주세요:
+- 항상 제목(level 1)부터 시작하세요.
+- 내용의 흐름이 논리적이고 이해하기 쉽게 구성하세요.
+- 테이블과 차트는 적절한 데이터가 있을 때만 사용하세요.
+- 가능한 한 시각적으로 풍부하고 사용자가 이해하기 쉬운 형식으로 구성하세요.
+
+각 도구의 정확한 형식과 파라미터를 따라 호출하세요.
+"""
+            
+            # 프롬프트에 Tool Calling 시스템 프롬프트 추가
             custom_prompt_from_state = state.get("custom_prompt_template")
-            # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
-            custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
-            # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
-            system_prompt = None
             if custom_prompt_from_state:
                 system_prompt = custom_prompt_from_state
-                logger.info(f"ResponseFormatterAgent using custom prompt from state : {custom_prompt_from_state}")
-            elif custom_prompt_from_attr:
-                system_prompt = custom_prompt_from_attr
-                logger.info(f"ResponseFormatterAgent using custom prompt from attribute")
-
-            # 프롬프트 준비
+            else:
+                system_prompt = tool_calling_system_prompt
+            
             prompt = format_response_formatter_prompt(
                 query=query,
                 stock_name=stock_name,
@@ -121,96 +137,67 @@ class ResponseFormatterAgent(BaseAgent):
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
             
-            # 스트리밍 콜백 확인 또는 생성
-            streaming_callback = state.get("streaming_callback")
-            #logger.info(f"상태에서 전달받은 streaming_callback: {streaming_callback}, 타입: {type(streaming_callback).__name__ if streaming_callback else 'None'}")
+            # Tool Calling 설정
+            tools = [
+                create_heading,
+                create_paragraph,
+                create_list,
+                create_table,
+                create_bar_chart,
+                create_line_chart,
+                #create_code_block,
+                create_image
+            ]
             
-            # 스트리밍 콜백이 없으면 더미 콜백 생성
-            if not streaming_callback or not callable(streaming_callback):
-                logger.info("스트리밍 콜백이 없어 더미 콜백을 생성합니다.")
-                # 더미 스트리밍 콜백 - 실제로는 아무것도 하지 않음
-                async def dummy_streaming_callback(chunk: str):
-                    pass
-                streaming_callback = dummy_streaming_callback
-                logger.warning("주의: 더미 콜백을 사용하여 실제 스트리밍이 클라이언트에게 전달되지 않습니다.")
-            else:
-                logger.info(f"유효한 스트리밍 콜백 함수가 발견되었습니다: {streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else '이름 없는 함수'}")
+            # LLM에 도구 바인딩
+            llm_with_tools = self.agent_llm.get_llm().bind_tools(tools)
             
-            #logger.info("스트리밍 모드로 응답 생성 시작")
-            # 스트리밍 모드로 호출
-            isStreaming = False
-            formatted_response = ""
+            # LLM 호출
+            response = await llm_with_tools.ainvoke(
+                input=prompt.format_prompt().to_string(),
+                # user_id=user_id,
+                # project_type=ProjectType.STOCKEASY,
+                # db=self.db
+            )
             
-            try:
-                if not isStreaming:
-                    logger.info("일반 모드로 폴백")
-                    response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
-                        input=prompt.format_prompt(),
-                        user_id=user_id,
-                        project_type=ProjectType.STOCKEASY,
-                        db=self.db
-                    )
-                    formatted_response = response.content
-                else:
-                    # 새로 구현된 stream 메서드 사용
-                    async for chunk in self.agent_llm.stream(
-                        input=prompt.format_prompt().to_string(),
-                        user_id=user_id,
-                        project_type=ProjectType.STOCKEASY,
-                        db=self.db
-                    ):
-                        # 청크 내용 추출
-                        if hasattr(chunk, 'content'):
-                            chunk_content = chunk.content
-                        else:
-                            chunk_content = str(chunk)
-                        
-                        # 콜백 호출하여 청크 전송
-                        try:
-                            #print(chunk_content, end="", flush=True)
-                            #logger.info(f"스트리밍 콜백 호출: 청크 길이={len(chunk_content)}, callback={streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else type(streaming_callback).__name__}")
-                            await streaming_callback(chunk_content)
-                            #logger.info(f"스트리밍 콜백 호출 완료: 청크 길이={len(chunk_content)}")
-                        except Exception as callback_error:
-                            logger.error(f"스트리밍 콜백 호출 중 오류: {str(callback_error)}", exc_info=True)
-                        
-                        # 전체 응답 누적
-                        formatted_response += chunk_content
-                
-                #logger.info("스트리밍 응답 생성 완료")
-            except Exception as e:
-                # 스트리밍 중 오류 발생 시 간단한 오류 처리
-                logger.error(f"스트리밍 응답 생성 중 오류 발생: {str(e)}")
-                # 부분 응답이 없으면 일반 모드로 폴백
-                if not formatted_response:
-                    logger.info("일반 모드로 폴백")
-                    response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
-                        input=prompt.format_prompt(),
-                        user_id=user_id,
-                        project_type=ProjectType.STOCKEASY,
-                        db=self.db
-                    )
-                    formatted_response = response.content
-            
-            # 포맷팅된 응답 저장
+            # 응답 텍스트 저장
+            formatted_response = response.content
             state["formatted_response"] = formatted_response
             state["answer"] = formatted_response
-
-            # 구조화된 컴포넌트 생성
-            components = await self.make_components(state)
+            
+            # Tool Calls 확인 및 컴포넌트 생성
+            components = []
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tool_call in response.tool_calls:
+                    # 도구 함수를 직접 호출하여 컴포넌트 생성
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+                    
+                    # level 값이 float이면 int로 변환
+                    if 'level' in tool_args and isinstance(tool_args['level'], float):
+                        tool_args['level'] = int(tool_args['level'])
+                    
+                    # 도구 이름에 맞는 함수 찾기
+                    tool_func = next((t for t in tools if t.name == tool_name), None)
+                    
+                    if tool_func:
+                        # 신규 방식: invoke() 메서드 사용
+                        component_dict = tool_func.invoke(tool_args)
+                        components.append(component_dict)
+            
+            # 컴포넌트가 없으면 텍스트 응답을 기반으로 기존 방식으로 컴포넌트 생성
+            if not components:
+                logger.info("Tool Calls이 없어 기존 방식으로 컴포넌트를 생성합니다.")
+                components = await self.make_components(state)
+                components = [comp.dict() for comp in components]
             
             # 결과 저장
-            state["components"] = [comp.dict() for comp in components]
-            state["answer"] = formatted_response  # 기졸 방식과의 호환성 유지
+            state["components"] = components
             
-            # 오류 제거 (성공적으로 처리됨)
-            if "error" in state:
-                del state["error"]
-                
             # 처리 상태 업데이트
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["response_formatter"] = "completed"
-                
+            
             return state
             
         except Exception as e:
@@ -648,4 +635,65 @@ plt.show()
         ))
         
         return components
+
+# 각 컴포넌트에 대한 도구 함수 정의
+@tool
+def create_heading(level: int, content: str) -> Dict:
+    """제목 컴포넌트를 생성합니다. level은 1-6 사이의 정수, content는 제목 내용입니다."""
+    return HeadingComponent(level=level, content=content).dict()
+
+@tool
+def create_paragraph(content: str) -> Dict:
+    """단락 컴포넌트를 생성합니다. content는 단락 내용입니다."""
+    return ParagraphComponent(content=content).dict()
+
+@tool
+def create_list(ordered: bool, items: List[str]) -> Dict:
+    """목록 컴포넌트를 생성합니다. ordered는 순서가 있는지 여부, items는 목록 항목입니다."""
+    list_items = [ListItemComponent(content=item) for item in items]
+    return ListComponent(ordered=ordered, items=list_items).dict()
+
+@tool
+def create_table(title: str, headers: List[Dict[str, str]], rows: List[Dict[str, Any]]) -> Dict:
+    """테이블 컴포넌트를 생성합니다. 
+    title은 테이블 제목, 
+    headers는 [{"key": "col0", "label": "항목명"}] 형식의 헤더 목록, 
+    rows는 테이블 데이터입니다."""
+    table_headers = [TableHeader(**header) for header in headers]
+    return TableComponent(
+        title=title, 
+        data=TableData(headers=table_headers, rows=rows)
+    ).dict()
+
+@tool
+def create_bar_chart(title: str, labels: List[str], datasets: List[Dict[str, Any]]) -> Dict:
+    """바 차트 컴포넌트를 생성합니다.
+    title은 차트 제목,
+    labels은 x축 라벨,
+    datasets는 [{"label": "매출액", "data": [100, 200], "backgroundColor": "#4C9AFF"}] 형식의 데이터셋 목록입니다."""
+    return BarChartComponent(
+        title=title,
+        data=BarChartData(labels=labels, datasets=datasets)
+    ).dict()
+
+@tool
+def create_line_chart(title: str, labels: List[str], datasets: List[Dict[str, Any]]) -> Dict:
+    """라인 차트 컴포넌트를 생성합니다.
+    title은 차트 제목,
+    labels은 x축 라벨,
+    datasets는 [{"label": "주가(원)", "data": [67000, 70200], "borderColor": "#36B37E"}] 형식의 데이터셋 목록입니다."""
+    return LineChartComponent(
+        title=title,
+        data=LineChartData(labels=labels, datasets=datasets)
+    ).dict()
+
+@tool
+def create_code_block(language: Optional[str], content: str) -> Dict:
+    """코드 블록 컴포넌트를 생성합니다. language는 언어(선택), content는 코드 내용입니다."""
+    return CodeBlockComponent(language=language, content=content).dict()
+
+@tool
+def create_image(url: str, alt: str, caption: Optional[str] = None) -> Dict:
+    """이미지 컴포넌트를 생성합니다. url은 이미지 주소, alt는 대체 텍스트, caption은 캡션(선택)입니다."""
+    return ImageComponent(url=url, alt=alt, caption=caption).dict()
 

@@ -33,13 +33,14 @@ from enum import Enum
 from typing import List, Dict, Optional, Any, Union, Tuple
 from pydantic import BaseModel, Field, model_validator
 import os
+from langchain_core.documents import Document as LangchainDocument
 from loguru import logger
 
 from common.services.retrievers.models import DocumentWithScore, RetrievalResult
 
 # Pinecone 리랭킹 의존성
 try:
-    from pinecone import Pinecone
+    from pinecone import Pinecone, PineconeAsyncio
 except ImportError:
     Pinecone = None
 
@@ -113,13 +114,27 @@ class BaseReranker(ABC):
         self.config = config
 
     @abstractmethod
-    async def rerank(
+    def rerank(
         self,
         query: str,
         documents: List[DocumentWithScore],
         top_k: Optional[int] = None
     ) -> RetrievalResult:
         """문서를 리랭킹하는 메서드"""
+        pass
+    @abstractmethod
+    async def rerank_async(
+        self,
+        query: str,
+        documents: List[DocumentWithScore],
+        top_k: Optional[int] = None
+    ) -> RetrievalResult:
+        """문서를 리랭킹하는 메서드"""
+        pass    
+        
+    @abstractmethod
+    async def close(self):
+        """리소스를 정리하는 메서드"""
         pass
 
 
@@ -132,9 +147,25 @@ class PineconeReranker(BaseReranker):
             raise ImportError("pinecone-client 패키지가 설치되지 않았습니다. pip install pinecone-client를 실행하세요.")
         
         self.client = Pinecone(api_key=config.api_key) if config.api_key else Pinecone()
+        self.async_client = PineconeAsyncio(api_key=config.api_key) if config.api_key else PineconeAsyncio()
         self.model_name = config.model_name
+        self._closed = False
 
-    async def rerank(
+    async def close(self):
+        """리소스를 정리하고 클라이언트 세션을 닫습니다."""
+        if self._closed:
+            return
+            
+        try:
+            # Pinecone 비동기 클라이언트 세션 닫기
+            if hasattr(self.async_client, 'close'):
+                await self.async_client.close()
+        except Exception as e:
+            logger.error(f"Pinecone 비동기 클라이언트 세션을 닫는 중 오류 발생: {str(e)}")
+            
+        self._closed = True
+
+    def rerank(
         self,
         query: str,
         documents: List[DocumentWithScore],
@@ -149,6 +180,69 @@ class PineconeReranker(BaseReranker):
 
             # Pinecone 리랭킹 API 호출
             rerank_results = self.client.inference.rerank(
+                model=self.model_name,
+                query=query,
+                documents=doc_texts,
+                top_n=_top_k,
+                return_documents=True,
+                parameters=self.config.parameters
+            )
+
+            # 결과 변환
+            result_documents = []
+            for item in rerank_results.data:
+                # 원본 문서 찾기
+                original_doc = next(
+                    (doc for doc in documents if doc.page_content == item.document.text),
+                    None
+                )
+
+                if original_doc and item.score >= self.config.min_score:
+                    # 원본 메타데이터 유지하면서 새 점수 설정
+                    result_doc = DocumentWithScore(
+                        page_content=item.document.text,
+                        metadata={
+                            **original_doc.metadata,
+                            "rerank_score": item.score
+                        },
+                        score=item.score
+                    )
+                    result_documents.append(result_doc)
+
+            logger.info(f"Pinecone 리랭킹 완료: {len(result_documents)}/{len(documents)} 문서")
+
+            return RetrievalResult(
+                documents=result_documents,
+                query_analysis={
+                    "type": "pinecone_rerank",
+                    "model": self.model_name,
+                    "total_candidates": len(documents),
+                    "returned": len(result_documents)
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Pinecone 리랭킹 중 오류 발생: {str(e)}")
+            # 오류 발생 시 원본 문서 그대로 반환
+            return RetrievalResult(documents=documents[:_top_k])
+
+    async def rerank_async(
+        self,
+        query: str,
+        documents: List[DocumentWithScore],
+        top_k: Optional[int] = None
+    ) -> RetrievalResult:
+        """Pinecone API를 사용한 리랭킹"""
+        _top_k = top_k or self.config.top_k
+
+        try:
+            from pinecone import PineconeAsyncio
+            print(f"Pinecone 리랭킹:{query}, 문서:{len(documents)}")
+            # 문서 텍스트 추출
+            doc_texts = [doc.page_content for doc in documents]
+
+            # Pinecone 리랭킹 API 호출
+            rerank_results = await self.async_client.inference.rerank(
                 model=self.model_name,
                 query=query,
                 documents=doc_texts,
@@ -210,6 +304,15 @@ class CrossEncoderReranker(BaseReranker):
             device=config.device
         )
         self.batch_size = config.batch_size
+        self._closed = False
+        
+    async def close(self):
+        """리소스를 정리합니다."""
+        if self._closed:
+            return
+            
+        # CrossEncoder는 특별히 닫을 리소스가 없지만, 일관성을 위해 메서드 구현
+        self._closed = True
 
     async def rerank(
         self,
@@ -272,6 +375,7 @@ class Reranker:
     def __init__(self, config: RerankerConfig = None):
         self.config = config or RerankerConfig()
         self._reranker = self._create_reranker()
+        self._closed = False
 
     def _create_reranker(self) -> BaseReranker:
         """설정에 따라 적절한 리랭커 구현체 생성"""
@@ -294,63 +398,25 @@ class Reranker:
             return RetrievalResult(documents=[])
 
         logger.info(f"리랭킹 시작 - 쿼리: '{query}', 문서 수: {len(documents)}")
-        return await self._reranker.rerank(query, documents, top_k)
+        return await self._reranker.rerank_async(query, documents, top_k)
 
-
-# 사용 예제
-async def example_usage():
-    """사용 예제"""
-    from common.services.retrievers.models import DocumentWithScore
-    
-    # 예제 문서
-    documents = [
-        DocumentWithScore(
-            page_content="Apple은 인기 있는 과일로 단맛과 바삭한 식감으로 알려져 있습니다.",
-            metadata={"id": "1"},
-            score=0.8
-        ),
-        DocumentWithScore(
-            page_content="Apple은 iPhone과 같은 혁신적인 제품으로 유명합니다.",
-            metadata={"id": "2"},
-            score=0.7
-        ),
-        DocumentWithScore(
-            page_content="많은 사람들이 건강한 간식으로 사과를 즐깁니다.",
-            metadata={"id": "3"},
-            score=0.6
-        ),
-        DocumentWithScore(
-            page_content="Apple Inc.는 세련된 디자인과 사용자 친화적인 인터페이스로 기술 산업에 혁명을 일으켰습니다.",
-            metadata={"id": "4"},
-            score=0.5
-        ),
-    ]
-    
-    # Pinecone 리랭커 설정
-    config = RerankerConfig(
-        reranker_type=RerankerType.PINECONE,
-        pinecone_config=PineconeRerankerConfig(
-            model_name="bge-reranker-v2-m3",
-            min_score=0.1
-        )
-    )
-    
-    # 리랭커 초기화
-    reranker = Reranker(config)
-    
-    # 리랭킹 수행
-    results = await reranker.rerank(
-        query="Apple 회사에 대해 알려주세요",
-        documents=documents,
-        top_k=2
-    )
-    
-    # 결과 출력
-    print(f"리랭킹 결과: {len(results.documents)} 문서")
-    for i, doc in enumerate(results.documents):
-        print(f"{i+1}. 점수: {doc.score:.3f}, 내용: {doc.page_content[:50]}...")
-    
-    return results
+    async def close(self):
+        """리소스를 정리하고 리랭커 세션을 닫습니다."""
+        if self._closed:
+            return
+            
+        if self._reranker:
+            await self._reranker.close()
+            
+        self._closed = True
+        
+    async def __aenter__(self):
+        """비동기 컨텍스트 매니저 진입"""
+        return self
+        
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """비동기 컨텍스트 매니저 종료"""
+        await self.close()
 
 
 if __name__ == "__main__":

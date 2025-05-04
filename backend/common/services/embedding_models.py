@@ -314,6 +314,16 @@ class EmbeddingProvider(ABC):
             
         return batches
     @abstractmethod
+    def close(self):
+        """동기 리소스를 정리하는 메서드"""
+        pass
+        
+    @abstractmethod
+    async def aclose(self):
+        """비동기 리소스를 정리하는 메서드"""
+        pass
+    
+    @abstractmethod
     def get_embeddings_obj(self) -> Tuple[Embeddings, Embeddings]:
         """임베딩 객체 반환, [Sync, Async]"""
         pass
@@ -352,9 +362,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self.client = OpenAI(
             api_key=settings.OPENAI_API_KEY
         )
-        self.async_client = AsyncOpenAI(
-            api_key=settings.OPENAI_API_KEY
-        )
+
+        self.client_async = None
         self.encoder = tiktoken.encoding_for_model(model_name)
         
         # 마지막 토큰 사용량 저장 속성
@@ -362,6 +371,27 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         
         # 임베딩 요청 배치 크기 제한
         self.max_batch_size = 100  # OpenAI 권장 배치 크기
+
+    def close(self):
+        """동기 클라이언트 리소스 정리"""
+        try:
+            if hasattr(self.client, 'close'):
+                self.client.close()
+        except Exception as e:
+            logger.error(f"OpenAI 동기 클라이언트 세션 정리 중 오류 발생: {str(e)}")
+            
+    async def aclose(self):
+        """비동기 클라이언트 리소스 정리"""
+        try:
+            if hasattr(self.client_async, 'close'):
+                await self.client_async.close()
+            elif hasattr(self.client_async, 'aclose'):
+                await self.client_async.aclose()
+            # http 또는 aiohttp 세션 직접 접근 시도
+            elif hasattr(self.client_async, 'http_client') and hasattr(self.client_async.http_client, 'aclose'):
+                await self.client_async.http_client.aclose()
+        except Exception as e:
+            logger.error(f"OpenAI 비동기 클라이언트 세션 정리 중 오류 발생: {str(e)}")
 
     def count_tokens(self, text: str) -> int:
         return TokenCounter.count_tokens_openai(text, self.model_name)
@@ -381,6 +411,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         """비동기적으로 임베딩 생성"""
         if not texts:
             return []
+        
+        if not self.client_async:
+            self.client_async = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
             
         all_embeddings = []
         batches = [texts[i:i + self.max_batch_size] for i in range(0, len(texts), self.max_batch_size)]
@@ -392,7 +425,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         for batch in batches:
             try:
                 # 비동기 클라이언트로 임베딩 생성
-                response = await self.async_client.embeddings.create(
+                response = await self.client_async.embeddings.create(
                     model=self.model_name,
                     input=batch
                 )

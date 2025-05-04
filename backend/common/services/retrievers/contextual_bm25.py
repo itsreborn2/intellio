@@ -2,9 +2,8 @@ from typing import List, Dict, Optional
 from uuid import UUID
 import numpy as np
 from rank_bm25 import BM25Okapi
-from llama_index.retrievers.bm25 import BM25Retriever as LlamaBM25Retriever
 from langchain_community.retrievers import BM25Retriever as LangchainBM25Retriever
-from llama_index.core.schema import Document as LlamaDocument, NodeWithScore, BaseNode, TextNode
+
 from transformers import AutoTokenizer, AutoModel
 from common.services.embedding_models import EmbeddingModelType
 from common.core.config import settings
