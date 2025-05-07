@@ -5,6 +5,7 @@ import Papa from 'papaparse';
 import ChartComponent from './ChartComponent'; // ChartComponent 경로 확인 필요
 import { ChartCopyButton } from './ChartCopyButton';
 import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip'; // GuideTooltip 추가
+import { formatDateMMDD } from '../utils/dateUtils'; // formatDateMMDD import 추가
 
 // 차트 데이터 타입 정의
 interface CandleData {
@@ -148,14 +149,46 @@ export default function IndustryCharts() {
   // 차트 전체 컨테이너 ref (제목+차트 전체 캡처용)
   const chartsContainerRef = useRef<HTMLDivElement>(null);
   // updated 날짜 (예시: 오늘 날짜)
-  const [updateDate, setUpdateDate] = useState<string>('');
-  useEffect(() => {
-    // 오늘 날짜를 MM/DD 형식으로 세팅
-    const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    setUpdateDate(`${mm}/${dd}`);
-  }, []);
+  const [updateDate, setUpdateDate] = useState<string | null>(null); // 타입을 string | null로 변경
+  
+  // 업데이트 날짜를 로드하는 함수 추가 (IndisrtongrsChart.tsx와 동일 로직)
+  const loadUpdateDate = async () => {
+    try {
+      const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+      const response = await fetch(cacheFilePath, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`날짜 데이터 파일 로드 실패: ${response.status}`);
+      }
+      const csvText = await response.text();
+      const parsedResult = Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+      });
+
+      if (parsedResult.data && parsedResult.data.length > 0) {
+        const firstRow = parsedResult.data[0] as Record<string, string>; 
+        const dateString = firstRow['날짜']; 
+        if (dateString) {
+          const formatted = formatDateMMDD(dateString);
+          if (formatted) {
+            setUpdateDate(formatted);
+          } else {
+            console.error('IndustryCharts: 날짜 포맷 실패.');
+            setUpdateDate(null); // 포맷 실패 시 null로 설정
+          }
+        } else {
+          console.error('IndustryCharts: CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.');
+          setUpdateDate(null);
+        }
+      } else {
+        console.error('IndustryCharts: 날짜 CSV 파싱에 실패했거나 데이터가 없습니다.');
+        setUpdateDate(null);
+      }
+    } catch (err) {
+      console.error('IndustryCharts: 업데이트 날짜 로드 중 오류 발생:', err);
+      setUpdateDate(null);
+    }
+  };
 
   useEffect(() => {
     const loadFileListAndData = async () => {
@@ -217,6 +250,7 @@ export default function IndustryCharts() {
       }
     };
     loadFileListAndData();
+    loadUpdateDate(); // 업데이트 날짜 로드 함수 호출
   }, []);
 
   // 로딩 및 에러 상태 표시
@@ -249,7 +283,7 @@ export default function IndustryCharts() {
           collisionPadding={{ top: 10, left: 260, right: 10, bottom: 10 }} // 왼쪽 여백 260px 추가
         >
           {/* 기존 h2 태그를 Tooltip의 자식으로 이동하고 스타일 추가 */}
-          <h2 className="font-semibold whitespace-nowrap text-sm md:text-base cursor-help" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}> {/* cursor-help 추가 및 fontSize 추가 */}
+          <h2 className="font-semibold whitespace-nowrap text-sm md:text-base cursor-help"> 
             산업별 주도ETF 차트
           </h2>
         </GuideTooltip>
@@ -265,13 +299,13 @@ export default function IndustryCharts() {
             </span>
           )}
           {/* 모바일에서 숨기기 위한 div 추가 */}
-          <div className="hidden md:block">
+          <div className="hidden"> {/* md:block 클래스 제거, hidden만 남김 */}
             <ChartCopyButton
               chartRef={chartsContainerRef}
               chartName="산업별 주도ETF 차트 전체"
               onStartCapture={() => setIsCapturing(true)}
               onEndCapture={() => setIsCapturing(false)}
-              updateDateText={updateDate}
+              updateDateText={updateDate || ''} // updateDate가 null이면 빈 문자열 전달
             />
           </div>
           {isCapturing && updateDate && (
@@ -279,7 +313,7 @@ export default function IndustryCharts() {
               className="text-gray-600 text-xs ml-2"
               style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
             >
-              updated 16:40 {updateDate}
+              updated 17:00 {updateDate}
             </span>
           )}
         </div>

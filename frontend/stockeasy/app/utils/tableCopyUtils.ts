@@ -111,31 +111,9 @@ export const copyTableAsImage = async (
     // 헤더 복제
     const headerClone = headerRef.current.cloneNode(true) as HTMLElement;
     
-    // 헤더 너비 조정
-    headerClone.style.width = '100%';
-    headerClone.style.marginBottom = '0'; // 헤더 아래 여백 제거
-    headerClone.style.paddingBottom = '0'; // 헤더 아래 패딩 제거
-    headerClone.style.paddingRight = '20px'; // 우측 여백 추가로 잘림 방지
-    
-    // 헤더 내 제목 텍스트 크기 및 중앙 정렬
-    const headerTitles = headerClone.querySelectorAll('h2');
-    headerTitles.forEach(title => {
-      (title as HTMLElement).style.fontSize = '11px';
-      (title as HTMLElement).style.textAlign = 'center'; // 헤더 텍스트 중앙 정렬
-    });
-
-    // 테이블 행의 텍스트 상하 가운데 정렬
-    const tableRows = headerClone.querySelectorAll('tr');
-    tableRows.forEach(row => {
-      const cells = row.querySelectorAll('td, th');
-      cells.forEach(cell => {
-        (cell as HTMLElement).style.verticalAlign = 'middle';
-      });
-    });
-    
-    // 버튼 제거
-    const buttons = headerClone.querySelectorAll('button');
-    buttons.forEach(button => button.remove());
+    // 헤더 복제본에서 'js-remove-for-capture' 클래스를 가진 요소 제거
+    const elementsToRemove = headerClone.querySelectorAll('.js-remove-for-capture');
+    elementsToRemove.forEach(el => el.remove());
     
     // 업데이트 날짜 텍스트 추가 (updateDateText가 있을 경우)
     if (updateDateText) {
@@ -159,6 +137,32 @@ export const copyTableAsImage = async (
       if (parent) {
         parent.removeChild(desc);
       }
+    });
+    
+    // 버튼 제거
+    const buttons = headerClone.querySelectorAll('button');
+    buttons.forEach(button => button.remove());
+    
+    // 헤더 너비 조정
+    headerClone.style.width = '100%';
+    headerClone.style.marginBottom = '0'; // 헤더 아래 여백 제거
+    headerClone.style.paddingBottom = '0'; // 헤더 아래 패딩 제거
+    headerClone.style.paddingRight = '20px'; // 우측 여백 추가로 잘림 방지
+    
+    // 헤더 내 제목 텍스트 크기 및 중앙 정렬
+    const headerTitles = headerClone.querySelectorAll('h2');
+    headerTitles.forEach(title => {
+      (title as HTMLElement).style.fontSize = '11px';
+      (title as HTMLElement).style.textAlign = 'center'; // 헤더 텍스트 중앙 정렬
+    });
+
+    // 테이블 행의 텍스트 상하 가운데 정렬
+    const tableRows = headerClone.querySelectorAll('tr');
+    tableRows.forEach(row => {
+      const cells = row.querySelectorAll('td, th');
+      cells.forEach(cell => {
+        (cell as HTMLElement).style.verticalAlign = 'middle';
+      });
     });
     
     // 헤더를 컨테이너에 추가

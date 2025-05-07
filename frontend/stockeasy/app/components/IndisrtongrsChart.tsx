@@ -6,6 +6,7 @@ import { fetchCSVData } from '../utils/fetchCSVData'
 import Papa from 'papaparse'
 import { copyTableAsImage } from '../utils/tableCopyUtils'
 import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip';
+import { formatDateMMDD } from '../utils/dateUtils';
 
 // 차트 데이터 타입 정의
 interface CandleData {
@@ -29,24 +30,11 @@ interface ETFInfo {
   isAboveMA20: boolean;  // null 타입 제거
   durationDays: number;  // null 타입 제거
   changePercent: number; // ETF 자체의 등락률
-  etfChangePercent: string; // 20malist.csv에서 가져온 ETF 등락률
   대표종목?: string;  // 대표 종목 정보 추가
   포지션?: string;      // 포지션 정보 추가 (유지 +N일 등, CSV 기준)
   변동일?: string;      // 변동일 정보 추가 - 추가된 필드
   selectedStocks?: (RepresentativeStock & { chartData: CandleData[] })[];  // 선택된 대표 종목 정보 - RepresentativeStock 인터페이스 사용
   selectedStock?: RepresentativeStock;  // 선택된 대표 종목 정보 (단수형 유지 - 호환성)
-}
-
-// 20malist.csv 파일의 행 타입 정의
-interface ETFListRow {
-  종목코드: string;
-  종목명: string;
-  섹터: string;
-  대표종목: string;
-  등락률: string;
-  변동일: string;
-  포지션: string; // 유지 +N일 등 실제 유지 기간 정보 (CSV 컬럼명과 일치)
-  // 20일 이격률 등 추가 컬럼이 필요하다면 별도 필드로 확장
 }
 
 // ETF 데이터 타입 정의
@@ -84,6 +72,7 @@ export default function IndustryCharts() {
   const [processedStocks, setProcessedStocks] = useState<string[]>([]);
   const [selectedStockCodes, setSelectedStockCodes] = useState<string[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true); // 초기 로딩 상태 추가
+  const [updateDate, setUpdateDate] = useState<string | null>(null); // 새로운 업데이트 날짜 상태
   
   useEffect(() => {
     // 초기 ETF 정보 설정
@@ -91,8 +80,77 @@ export default function IndustryCharts() {
     
     // 모든 ETF 데이터 로드
     loadAllETFData();
+    // 업데이트 날짜 로드
+    loadUpdateDate();
+
+    // 업데이트 시간 설정은 chartDataMap과 isInitialLoading을 기반으로 하는 별도의 useEffect에서 처리합니다.
   }, []);
-  
+
+  // 업데이트 날짜를 로드하는 함수 추가
+  const loadUpdateDate = async () => {
+    try {
+      const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+      const response = await fetch(cacheFilePath, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`날짜 데이터 파일 로드 실패: ${response.status}`);
+      }
+      const csvText = await response.text();
+      const parsedResult = Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+      });
+
+      if (parsedResult.data && parsedResult.data.length > 0) {
+        const firstRow = parsedResult.data[0] as Record<string, string>; 
+        const dateString = firstRow['날짜']; 
+        if (dateString) {
+          const formatted = formatDateMMDD(dateString);
+          if (formatted) {
+            setUpdateDate(formatted);
+          } else {
+            console.error('IndisrtongrsChart: 날짜 포맷 실패.');
+          }
+        } else {
+          console.error('IndisrtongrsChart: CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.');
+        }
+      } else {
+        console.error('IndisrtongrsChart: 날짜 CSV 파싱에 실패했거나 데이터가 없습니다.');
+      }
+    } catch (err) {
+      console.error('IndisrtongrsChart: 업데이트 날짜 로드 중 오류 발생:', err);
+    }
+  };
+
+  // chartDataMap에서 가장 최근 날짜를 추출하는 헬퍼 함수
+  const getLatestDataDateFromMap = (dataMap: Record<string, CandleData[]>): string | null => {
+    let latestDateObj: Date | null = null;
+
+    Object.values(dataMap).forEach(chartDataArray => {
+      if (chartDataArray.length > 0) {
+        const lastDataPoint = chartDataArray[chartDataArray.length - 1];
+        if (lastDataPoint && lastDataPoint.time) {
+          try {
+            const currentDateObj: Date = new Date(lastDataPoint.time);
+            if (!isNaN(currentDateObj.getTime())) {
+              if (!latestDateObj || currentDateObj > latestDateObj) {
+                latestDateObj = currentDateObj;
+              }
+            }
+          } catch (e) {
+            console.error(`Error parsing date: ${lastDataPoint.time}`, e);
+          }
+        }
+      }
+    });
+
+    if (latestDateObj) {
+      // Workaround for potential type inference issue: explicitly cast to Date.
+      // TypeScript should infer latestDateObj as Date here, but the linter reports 'never'.
+      return formatDateMMDD((latestDateObj as Date).toISOString());
+    }
+    return null;
+  };
+
   // 모든 ETF 데이터 로드 함수 - file_list.json을 사용하도록 완전히 재작성
   const loadAllETFData = async () => {
     setIsInitialLoading(true); // 로딩 시작 시 상태 설정
@@ -191,7 +249,6 @@ export default function IndustryCharts() {
           isAboveMA20: false,
           durationDays: 0,
           changePercent: parseFloat(maxRs1mStock.lastChangePercent),
-          etfChangePercent: maxRs1mStock.originalEtfChange + '%',
           포지션: `유지 +${maxRs1mStock.position}일`,
           selectedStocks: [] as (RepresentativeStock & { chartData: CandleData[] })[]
         } as ETFInfo;
@@ -636,7 +693,6 @@ export default function IndustryCharts() {
           isLoading: false,
           error: '',
           changePercent, // 계산된 숫자 값은 필요 시 유지
-          etfChangePercent: prevEtfInfo.etfChangePercent, // CSV 원본 값을 유지 (명시적 업데이트 제거)
           selectedStocks: loadedStocksData, // 로드된 주식 데이터 설정
           selectedStock: loadedStocksData.length > 0 ? loadedStocksData[0] : undefined // 첫 번째 종목 정보 저장 (호환성 유지) - 모든 필드 포함
         };
@@ -1044,16 +1100,23 @@ export default function IndustryCharts() {
   
   return (
     <div>
-      <div className="mb-4 flex items-center"> {/* flex items-center 추가 */}
+      <div className="mb-4 flex items-center justify-between"> 
         <GuideTooltip
           title="섹터별 주도종목 차트"
           description={`이 차트는 각 섹터를 이끄는 주도 종목들을 한눈에 비교하고 파악할 수 있도록 설계되었습니다.\n\n*차트 구성*\n녹색 헤더: 해당 섹터가 속한 산업 분류, 관련 대표 ETF 명칭, 그리고 해당 ETF가 *20일 이동평균선 위에 머무른 기간(일수)*이 표시됩니다. 이를 통해 섹터 자체의 추세 강도를 참고할 수 있습니다.\n개별 종목 차트: 헤더 아래에는 해당 섹터 내에서 상대적으로 강한 흐름을 보이는 주요 종목들의 차트가 나열됩니다.\n\n각 종목 차트는 *일일 가격 변동(일봉)*을 기준으로 최근 약 2개월간의 가격 추세를 보여줍니다.`}
           side="bottom"
           width="min(90vw, 450px)"
-          collisionPadding={{ top: 10, left: 260, right: 10, bottom: 10 }} // 사이드바 침범 방지
+          collisionPadding={{ top: 10, left: 260, right: 10, bottom: 10 }} 
         >
           <h2 className="font-semibold whitespace-nowrap text-sm md:text-base cursor-help">섹터별 주도종목 차트</h2>
         </GuideTooltip>
+        <div className="flex items-center space-x-2">
+          {updateDate && (
+            <div className="text-xs text-gray-500">
+              updated 17:00 {updateDate}
+            </div>
+          )}
+        </div>
       </div>
       
       {/* 로딩 상태 표시 */}
@@ -1092,16 +1155,16 @@ export default function IndustryCharts() {
                         className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1 shrink"
                         title={etf.섹터}
                         style={{
-                          fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', // 수정된 부분
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          minWidth: '40px', // 최소 너비 설정
+                          fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', 
+                          minWidth: '40px', 
                           maxWidth: '120px',
+                          overflow: 'hidden', 
+                          textOverflow: 'ellipsis', 
+                          whiteSpace: 'nowrap',
                           display: 'inline-block',
-                          verticalAlign: 'middle',
-                          textAlign: 'center', // 텍스트 중앙 정렬 추가
-                          width: 'auto' // 너비를 콘텐츠에 맞게 자동 조정
+                          verticalAlign: 'middle', 
+                          textAlign: 'center', 
+                          width: 'auto' 
                         }}
                       >
                         {etf.섹터}
@@ -1110,29 +1173,28 @@ export default function IndustryCharts() {
                         className="font-medium shrink mr-1" 
                         title={etf.종목명} 
                         style={{
-                          fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', // 수정된 부분
+                          fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', 
+                          minWidth: '60px', 
+                          overflow: 'hidden', 
+                          textOverflow: 'ellipsis', 
                           whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          minWidth: '60px', // 최소 너비 설정
-                          maxWidth: '200px',
                           display: 'inline-block',
-                          verticalAlign: 'middle' // bottom에서 middle로 변경하여 수직 중앙 정렬
+                          verticalAlign: 'middle'
                         }}
                       >
                         {etf.종목명}
                       </span>
                       <span 
-                        className={`px-1.5 py-0.5 rounded shrink-0 ${parseFloat(etf.etfChangePercent.replace('%', '')) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
-                        style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }} // 수정된 부분
+                        className={`px-0 py-0.5 rounded shrink-0 ${etf.changePercent >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                        style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }} 
                       >
-                        {etf.etfChangePercent}
+                        {etf.changePercent}%
                       </span>
                     </div>
                     {/* shrink-0으로 오른쪽 버튼이 항상 필요한 너비만 유지하도록 함 */}
                     <span 
                       className={`px-1.5 py-0.5 rounded bg-[#D8EFE9] text-teal-800 shrink-0`}
-                      style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }} // 수정된 부분
+                      style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }} 
                     >
                       {getStatusText(etf)}
                     </span>
@@ -1149,16 +1211,16 @@ export default function IndustryCharts() {
                             className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1 shrink" 
                             title={stock.industry}
                             style={{ 
-                              fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', // 수정된 부분
-                              minWidth: '40px', // 최소 너비 설정
+                              fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', 
+                              minWidth: '40px', 
                               maxWidth: '120px', 
                               overflow: 'hidden', 
                               textOverflow: 'ellipsis', 
                               whiteSpace: 'nowrap',
                               display: 'inline-block',
-                              verticalAlign: 'middle', // bottom에서 middle로 변경
-                              textAlign: 'center', // 텍스트 중앙 정렬 추가
-                              width: 'auto' // 너비를 콘텐츠에 맞게 자동 조정
+                              verticalAlign: 'middle', 
+                              textAlign: 'center', 
+                              width: 'auto' 
                             }}
                           >
                             {stock.industry}
@@ -1168,8 +1230,8 @@ export default function IndustryCharts() {
                           <span className="font-medium mr-1 shrink" 
                             title={stock.name}
                             style={{ 
-                              fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', // 수정된 부분
-                              minWidth: '40px', // 최소 너비 설정
+                              fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', 
+                              minWidth: '40px', 
                               overflow: 'hidden', 
                               textOverflow: 'ellipsis', 
                               whiteSpace: 'nowrap',
@@ -1183,7 +1245,7 @@ export default function IndustryCharts() {
                           {/* 마지막등락률 - shrink-0으로 항상 필요한 너비 유지 */}
                           <span 
                             className={`px-0 py-0.5 rounded shrink-0 ${parseFloat(stock.lastChangePercent) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
-                            style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }} // 수정된 부분
+                            style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }} 
                           >
                             {parseFloat(stock.lastChangePercent) >= 0 ? '+' : ''}{stock.lastChangePercent}%
                           </span>

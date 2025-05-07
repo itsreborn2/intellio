@@ -163,6 +163,7 @@ export default function ETFCurrentTable() {
   const [error, setError] = useState<string | null>(null);  
   const [sortKey, setSortKey] = useState<string>('산업');  // 정렬 상태 - 기본값으로 산업 컬럼 오름차순 설정
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [updateDate, setUpdateDate] = useState<string | null>(null); // 새로운 업데이트 날짜 상태
   // 개별 ETF 차트 데이터 관련 상태 제거됨
   const [tickerMappingInfo, setTickerMappingInfo] = useState<{
     tickerMap: {[key: string]: string},
@@ -179,11 +180,53 @@ export default function ETFCurrentTable() {
   
   // 개별 ETF 차트 데이터 로딩 관련 함수들(loadPriceData, loadAllPriceData, normalizeTicker) 제거됨
   
+  // 업데이트 날짜를 로드하는 함수 추가
+  const loadUpdateDate = async () => {
+    try {
+      const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+      const response = await fetch(cacheFilePath, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`날짜 데이터 파일 로드 실패: ${response.status}`);
+      }
+      const csvText = await response.text();
+      // Papa.parse 직접 사용 (기존 parseCSV 함수와는 별개로 처리)
+      const parsedResult = Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+      });
+
+      if (parsedResult.data && parsedResult.data.length > 0) {
+        const firstRow = parsedResult.data[0] as Record<string, string>; // 타입 단언
+        const dateString = firstRow['날짜']; 
+        if (dateString) {
+          const formatted = formatDateMMDD(dateString);
+          if (formatted) {
+            setUpdateDate(formatted);
+          } else {
+            console.error('ETFCurrentTable: 날짜 포맷 실패.');
+            // setError('날짜 포맷에 실패했습니다.'); // 필요시 에러 상태 업데이트
+          }
+        } else {
+          console.error('ETFCurrentTable: CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.');
+          // setError('CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.'); // 필요시 에러 상태 업데이트
+        }
+      } else {
+        console.error('ETFCurrentTable: 날짜 CSV 파싱에 실패했거나 데이터가 없습니다.');
+        // setError('날짜 CSV 파싱에 실패했거나 데이터가 없습니다.'); // 필요시 에러 상태 업데이트
+      }
+    } catch (err) {
+      console.error('ETFCurrentTable: 업데이트 날짜 로드 중 오류 발생:', err);
+      // setError(err instanceof Error ? err.message : '업데이트 날짜 로드 중 알 수 없는 오류'); // 필요시 에러 상태 업데이트
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       setError(null);
       
+      await loadUpdateDate(); // 새로운 업데이트 날짜 로드 함수 호출
+
       try {
         // etf_table.csv만 로드하여 테이블 구성
         const response = await fetch('/requestfile/etf_sector/etf_table.csv?t=' + Date.now());
@@ -499,13 +542,13 @@ export default function ETFCurrentTable() {
 
     if (positionText === '-') {
       // 기본값 또는 데이터 없는 경우 스타일 (이전 로직에 맞춰 회색 계열 사용)
-      containerClasses += ' bg-gray-200 text-gray-700'; 
+      containerClasses += ' bg-gray-200 text-gray-700 border border-gray-200 shadow-sm'; 
     } else if (positionText.includes('유지')) {
       // '유지' 포함 시 녹색 스타일 (이전 스타일)
       containerClasses += ' bg-green-100 text-green-800';
     } else {
       // '이탈' 포함 시 또는 기타 경우 회색 스타일 (이전 스타일)
-      containerClasses += ' bg-gray-200 text-gray-700';
+      containerClasses += ' bg-gray-200 text-gray-700 border border-gray-200 shadow-sm';
     }
 
     return (
@@ -604,12 +647,24 @@ const orderedIndustries = Object.keys(sortedData);
           </span>
         </GuideTooltip>
         <div className="flex items-center space-x-2 ml-auto">
-          {/* Removed updateDate display */}
+          {/* 기존 업데이트 시간 표시 부분 수정 */}
+          {/* 
+          <div className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+            {updateTime}
+          </div>
+          */}
+          {/* 새로운 업데이트 시간/날짜 표시 */} 
+          {updateDate && (
+            <div className="text-gray-600 text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+              updated 17:00 {updateDate}
+            </div>
+          )}
           <div className="hidden md:block">
             <TableCopyButton
               tableRef={tableRef}
               headerRef={headerRef}
               tableName="ETF 현황"
+              updateDateText={updateDate ? `updated 17:00 ${updateDate}` : undefined}
             />
           </div>
         </div>

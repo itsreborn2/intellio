@@ -222,11 +222,11 @@ const Header: React.FC = () => {
           {/* 헤더 메뉴 */}
           <nav>
             <ul className="flex items-center ml-4 space-x-4 text-[#3F424A] text-sm">
-              <li><Link href="/trend-following"><span className="hover:text-gray-900 transition-colors">메인</span></Link></li>
-              <li><Link href="/analyst"><span className="hover:text-gray-900 transition-colors">스탁AI</span></Link></li>
-              <li><Link href="/rs-rank"><span className="hover:text-gray-900 transition-colors">RS순위</span></Link></li>
-              <li><Link href="/etf-sector"><span className="hover:text-gray-900 transition-colors">ETF섹터</span></Link></li>
-              <li><Link href="/value"><span className="hover:text-gray-900 transition-colors">밸류에이션</span></Link></li>
+              {/* <li><Link href="/trend-following"><span className="hover:text-gray-900 transition-colors font-bold">메인</span></Link></li> */}
+              <li><Link href="/"><span className="hover:text-gray-900 transition-colors font-bold">스탁AI</span></Link></li>
+              <li><Link href="/rs-rank"><span className="hover:text-gray-900 transition-colors font-bold">RS순위</span></Link></li>
+              <li><Link href="/etf-sector"><span className="hover:text-gray-900 transition-colors font-bold">ETF섹터</span></Link></li>
+              <li><Link href="/value"><span className="hover:text-gray-900 transition-colors font-bold">밸류에이션</span></Link></li>
             </ul>
           </nav>
         </div>
