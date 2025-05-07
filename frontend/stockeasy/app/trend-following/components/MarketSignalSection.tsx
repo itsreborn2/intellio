@@ -38,21 +38,26 @@ export default function MarketSignalSection() {
   const longTermColors: [string, string, string] = ['#ef4444', '#e5e7eb', '#e5e7eb']; // 활성(빨강), 비활성, 비활성
 
   return (
-    <section className="flex items-center w-full">
-      {/* 시장 신호등+등락률: 좌우 분할 배치 */}
-      <div className="flex flex-row items-center justify-between w-full">
-        <div className="flex flex-row items-center gap-2">
-          <h2 className="font-semibold text-gray-700 mt-4 mb-4" style={{ fontSize: '18px' }}>시장 신호</h2>
-          {/* 단기/장기 신호등을 각각 표시 */}
-          <SignalLight label="단기" colors={shortTermColors} />
-          <SignalLight label="장기" colors={longTermColors} />
+    <div className="bg-white rounded border border-gray-100 px-2 md:px-4 py-1 md:py-2">
+      <section className="flex items-center w-full">
+        <div className="flex flex-row items-center justify-between w-full">
+          <div className="flex flex-row items-center gap-2">
+            <h2 className="text-lg font-semibold text-gray-700 my-2">
+              시장 신호
+            </h2>
+            <SignalLight label="단기" colors={shortTermColors} />
+            <SignalLight label="장기" colors={longTermColors} />
+          </div>
+          <div className="flex flex-row items-center gap-6">
+            <span className="text-base text-gray-700">
+              KOSPI <span className="font-semibold text-red-500">+0.82%</span>
+            </span>
+            <span className="text-base text-gray-700">
+              KOSDAQ <span className="font-semibold text-blue-600">-1.12%</span>
+            </span>
+          </div>
         </div>
-        {/* KOSPI/KOSDAQ 등락률 정보: 우측 끝 */}
-        <div className="flex flex-row gap-6 items-center">
-          <span className="text-[16px] text-gray-700">KOSPI <span className="font-semibold text-red-500">+0.82%</span></span>
-          <span className="text-[16px] text-gray-700">KOSDAQ <span className="font-semibold text-blue-600">-1.12%</span></span>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }

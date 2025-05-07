@@ -440,14 +440,14 @@ const ValuationPage = () => {
       setLoadingDate(true);
       setErrorDate(null);
       try {
-        // fetch 경로를 사용자의 원래 요청대로 today_price_etf.csv로 되돌림
-        const response = await fetch('/requestfile/today_price_etf/today_price_etf.csv'); 
+        // fetch 경로를 stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv로 변경
+        const response = await fetch('/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv'); 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const csvText = await response.text();
         
-        // PapaParse를 사용하여 CSV 파싱
+        // PapaParse를 사용하여 CSV 파싱 (stock-data 기준)
         Papa.parse(csvText, {
           header: true,
           skipEmptyLines: true,
@@ -820,7 +820,7 @@ const ValuationPage = () => {
                 <div className="font-semibold whitespace-nowrap" style={{ fontSize: 'clamp(0.9rem, 0.5vw + 0.85rem, 1rem)' }}> 
                   <GuideTooltip
                     title="밸류에이션 (Valuation)이란?"
-                    description={`밸류에이션은 기업, 자산 또는 금융 상품의 **내재가치(Intrinsic Value)**를 평가하는 과정입니다.\n\n과거 추세 파악: 과거 PER 데이터를 통해 해당 기업의 과거 수익성 대비 주가 수준이 어떠했는지 파악할 수 있습니다. 과거 평균 PER과 비교하여 현재 PER이 높은지 낮은지 확인해볼 수 있습니다.\n\n미래 전망 비교: 미래 예상 PER 데이터(예: 2025~2027년 (E))는 증권사 등에서 예상하는 해당 기업의 미래 이익 수준에 따른 주가 수준을 보여줍니다. 미래 PER이 낮아진다는 것은 이익이 증가하거나 주가 상승이 제한적일 것으로 예상될 수 있음을 시사합니다.\n\n추세 변화 확인: PER이 시간이 지남에 따라 증가하는지 감소하는지 추세를 살펴봄으로써 기업의 성장성이나 이익 안정성에 대한 시장의 기대 변화를 엿볼 수 있습니다. PER이 꾸준히 높아진다면 성장 기대감이 높을 수 있고, 낮아진다면 그 반대일 수 있습니다.\n\n상대 가치 비교: 다른 기업이나 산업 평균 PER과 비교하여 해당 기업의 PER이 상대적으로 높은지 낮은지 판단합니다. 일반적으로 유사 기업 대비 PER이 낮으면 저평가, 높으면 고평가되었다고 해석될 수 있으나, 이는 기업의 성장성, 산업 특성 등을 종합적으로 고려해야 합니다.\n\n여러 해의 PER 데이터를 통해 기업의 과거와 미래 예상 밸류에이션 수준, 추세 변화, 그리고 경쟁사 대비 상대적 위치를 파악하여 투자 판단에 참고할 수 있습니다. 다만, PER은 하나의 지표일 뿐이므로 다른 밸류에이션 지표 및 기업 분석과 함께 활용하는 것이 중요합니다.`}
+                    description={`밸류에이션은 기업, 자산 또는 금융 상품의 *내재가치(Intrinsic Value)*를 평가하는 과정입니다.\n\n과거 추세 파악: 과거 PER 데이터를 통해 해당 기업의 과거 수익성 대비 주가 수준이 어떠했는지 파악할 수 있습니다. 과거 평균 PER과 비교하여 현재 PER이 높은지 낮은지 확인해볼 수 있습니다.\n\n미래 전망 비교: 미래 예상 PER 데이터(예: 2025~2027년 (E))는 증권사 등에서 예상하는 해당 기업의 미래 이익 수준에 따른 주가 수준을 보여줍니다.\n\n추세 변화 확인: PER이 시간이 지남에 따라 증가하는지 감소하는지 추세를 살펴봄으로써 기업의 성장성이나 이익 안정성에 대한 시장의 기대 변화를 엿볼 수 있습니다.\n\n상대 가치 비교: 다른 기업이나 산업 평균 PER과 비교하여 해당 기업의 PER이 상대적으로 높은지 낮은지 판단합니다. 일반적으로 유사 기업 대비 PER이 낮으면 저평가, 높으면 고평가되었다고 해석될 수 있으나, 이는 기업의 성장성, 산업 특성 등을 종합적으로 고려해야 합니다.\n\n여러 해의 PER 데이터를 통해 기업의 과거와 미래 예상 밸류에이션 수준, 추세 변화, 그리고 경쟁사 대비 상대적 위치를 파악하여 투자 판단에 참고할 수 있습니다. 다만, PER은 하나의 지표일 뿐이므로 다른 밸류에이션 지표 및 기업 분석과 함께 활용하는 것이 중요합니다.`}
                     side="top"
                     width={420} // 내용 길이에 맞게 너비 조정
                     collisionPadding={{ left: 260 }} // 사이드바 침범 방지

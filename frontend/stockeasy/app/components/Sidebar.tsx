@@ -703,7 +703,7 @@ function SidebarContent() {
         >
           <div className="flex-1 overflow-hidden">
             <div className="pt-4">
-              <div className="w-full flex flex-col items-center">
+              <div className="w-full flex flex-col items-end text-[#3F424A]">
                 
                 {/* 홈 버튼 - 스탁이지 메인 페이지로 이동 */}
                 <div className="sidebar-button-container">
@@ -716,7 +716,7 @@ function SidebarContent() {
                   >
                     <Home className="icon" />
                     {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">스탁이지</span>}
+                    {isMobile && <span className="ml-2 text-sm text-[#3F424A]">스탁이지</span>}
                   </button>
                 </div>
                 
@@ -735,7 +735,7 @@ function SidebarContent() {
                     onMouseLeave={handleMouseLeave}
                   >
                     <LineChart className="icon" />
-                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">추세추종</span>}
+                    {isMobile && <span className="ml-2 text-sm text-[#3F424A]">추세추종</span>}
                   </button>
                 </div> */}
                 
@@ -750,7 +750,7 @@ function SidebarContent() {
                   >
                     <ChartColumn className="icon" />
                     {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">RS순위</span>}
+                    {isMobile && <span className="ml-2 text-sm text-[#3F424A]">RS순위</span>}
                   </button>
                 </div>
                 
@@ -765,7 +765,7 @@ function SidebarContent() {
                   >
                     <PieChart className="icon" />
                     {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">ETF/섹터</span>}
+                    {isMobile && <span className="ml-2 text-sm text-[#3F424A]">ETF/섹터</span>}
                   </button>
                 </div>
                 
@@ -780,7 +780,7 @@ function SidebarContent() {
                   >
                     <Scale className="icon" />
                     {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">밸류에이션</span>}
+                    {isMobile && <span className="ml-2 text-sm text-[#3F424A]">밸류에이션</span>}
                   </button>
                 </div>
                 
@@ -802,7 +802,7 @@ function SidebarContent() {
                     >
                       <History className="icon" />
                       {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                      {isMobile && <span className="ml-2 text-sm text-[#ececf1]">검색 히스토리</span>}
+                      {isMobile && <span className="ml-2 text-sm text-[#3F424A]">검색 히스토리</span>}
                     </button>
                   </div>
                 )}
@@ -812,7 +812,7 @@ function SidebarContent() {
           
           {/* 하단 영역 - 설정 버튼만 남김 */}
           <div className="mt-auto pb-4">
-            <div className="w-full flex flex-col items-center gap-y-2"> 
+            <div className="w-full flex flex-col items-end gap-y-2"> 
               {/* 문서 버튼 - DocEasy로 이동 */}
               <div className="sidebar-button-container">
                 <button 
@@ -824,7 +824,7 @@ function SidebarContent() {
                 >
                   <FileStack className="icon" />
                   {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#ececf1]">닥이지</span>}
+                  {isMobile && <span className="ml-2 text-sm text-[#3F424A]">닥이지</span>}
                 </button>
               </div>
               
@@ -860,7 +860,7 @@ function SidebarContent() {
                       </AvatarFallback>
                     </Avatar>
                     {/* Apply same text style as DocEasy button */}
-                    <span className="ml-2 text-sm text-[#ececf1]">마이페이지</span> 
+                    <span className="ml-2 text-sm text-[#3F424A]">마이페이지</span> 
                   </>
                 ) : ( 
                    <> {/* 데스크탑: 아바타만 표시 */}

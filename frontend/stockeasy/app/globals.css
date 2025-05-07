@@ -43,7 +43,7 @@ main {
 /* 내부 콘텐츠 컨테이너 스타일 */
 .content-container {
   width: 100%;
-  max-width: 1152px; /* 최대 너비 1152px로 제한 */
+  max-width: 1280px; /* 최대 너비 1280px로 제한 */
   margin: 0 auto; /* 가운데 정렬 */
   padding: 0 16px; /* 좌우 여백 추가 */
 }
