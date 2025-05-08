@@ -112,8 +112,8 @@ const ChartComponent: React.FC<ChartProps> = ({
       
       // 시장 지수 로컬 캐시 파일 경로 설정
       const marketIndexPath = normalizedMarketType === 'KOSPI' 
-        ? '/requestfile/market-index/1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c.csv'
-        : '/requestfile/market-index/1ks9QkdZMsxV-qEnV6udZZIDfWgYKC1qg.csv';
+        ? '/requestfile/market-index/kospiwk.csv'
+        : '/requestfile/market-index/kosdaqwk.csv';
       
       // 로컬 캐시 파일에서 데이터 가져오기
       const response = await fetch(marketIndexPath, { cache: 'no-store' });

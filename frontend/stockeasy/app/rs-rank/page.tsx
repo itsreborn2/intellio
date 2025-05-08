@@ -991,7 +991,7 @@ export default function RSRankPage() {
             </div>
             {chartRsValues[index] && (
               <div className="flex items-center">
-                <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+                <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>RS</span>
                 <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartRsValues[index]}</span>
               </div>
             )}
@@ -1018,7 +1018,7 @@ export default function RSRankPage() {
             </div>
             {chartRsValues[index] && (
               <div className="flex items-center">
-                <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+                <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>RS</span>
                 <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartRsValues[index]}</span>
               </div>
             )}
@@ -1042,7 +1042,7 @@ export default function RSRankPage() {
             </div>
             {chartRsValues[index] && (
               <div className="flex items-center">
-                <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+                <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>RS</span>
                 <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartRsValues[index]}</span>
               </div>
             )}
@@ -1074,7 +1074,7 @@ export default function RSRankPage() {
           </div>
           {chartRsValues[index] && (
             <div className="flex items-center">
-              <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.55rem, 0.65vw, 0.65rem)' }}>RS</span>
+              <span className="text-xs text-gray-500 mr-1" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>RS</span>
               <span className="font-medium text-xs text-blue-600" style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>{chartRsValues[index]}</span>
             </div>
           )}

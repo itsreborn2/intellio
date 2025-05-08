@@ -15,9 +15,7 @@ export default function TrendFollowingMain() {
         {/* 시장 신호 섹션 */}
         <div className="mb-2 md:mb-4">
           <div className="bg-white rounded-[6px] shadow p-2 md:p-4 border border-gray-200">
-            <div className="bg-white rounded border border-gray-100 p-2 md:p-4">
-              <MarketSignalSection />
-            </div>
+            <MarketSignalSection />
           </div>
         </div>
         {/* 섹터 리더 섹션 */}

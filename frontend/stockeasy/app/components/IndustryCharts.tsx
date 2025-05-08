@@ -5,6 +5,7 @@ import Papa from 'papaparse';
 import ChartComponent from './ChartComponent'; // ChartComponent 경로 확인 필요
 import { ChartCopyButton } from './ChartCopyButton';
 import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip'; // GuideTooltip 추가
+import { formatDateMMDD } from '../utils/dateUtils'; // formatDateMMDD import 추가
 
 // 차트 데이터 타입 정의
 interface CandleData {
@@ -31,15 +32,19 @@ interface ChartInfo {
   changePercent?: number;
 }
 
-// 20malist.csv 행 데이터 타입 (CSV 헤더와 일치하도록 수정)
-interface MaListItem {
-  종목코드: string; // stockCode -> 종목코드
-  종목명: string;   // stockName -> 종목명
-  섹터: string;    // 섹터 정보 추가
-  포지션: string;   // position -> 포지션
-  등락률: string;   // 등락률 추가
-  // 필요한 다른 컬럼들... (CSV에 있다면 추가)
-}
+// etf_table.csv 행 데이터 타입 (CSV 헤더와 일치하도록 수정)
+interface EtfTableRow {
+  산업: string;
+  섹터: string;
+  '산업 등락률': string;
+  종목코드: string;
+  종목명: string;
+  등락률: string;
+  포지션: string;
+  '20일 이격': string;
+  '돌파/이탈': string;
+  '대표종목(RS)': string;
+} // etf_table.csv 헤더 기준
 
 // CSV 차트 데이터 행 타입 (파싱 시 사용)
 interface CsvChartRow {
@@ -144,184 +149,109 @@ export default function IndustryCharts() {
   // 차트 전체 컨테이너 ref (제목+차트 전체 캡처용)
   const chartsContainerRef = useRef<HTMLDivElement>(null);
   // updated 날짜 (예시: 오늘 날짜)
-  const [updateDate, setUpdateDate] = useState<string>('');
-  useEffect(() => {
-    // 오늘 날짜를 MM/DD 형식으로 세팅
-    const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    setUpdateDate(`${mm}/${dd}`);
-  }, []);
+  const [updateDate, setUpdateDate] = useState<string | null>(null); // 타입을 string | null로 변경
+  
+  // 업데이트 날짜를 로드하는 함수 추가 (IndisrtongrsChart.tsx와 동일 로직)
+  const loadUpdateDate = async () => {
+    try {
+      const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+      const response = await fetch(cacheFilePath, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`날짜 데이터 파일 로드 실패: ${response.status}`);
+      }
+      const csvText = await response.text();
+      const parsedResult = Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+      });
+
+      if (parsedResult.data && parsedResult.data.length > 0) {
+        const firstRow = parsedResult.data[0] as Record<string, string>; 
+        const dateString = firstRow['날짜']; 
+        if (dateString) {
+          const formatted = formatDateMMDD(dateString);
+          if (formatted) {
+            setUpdateDate(formatted);
+          } else {
+            console.error('IndustryCharts: 날짜 포맷 실패.');
+            setUpdateDate(null); // 포맷 실패 시 null로 설정
+          }
+        } else {
+          console.error('IndustryCharts: CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.');
+          setUpdateDate(null);
+        }
+      } else {
+        console.error('IndustryCharts: 날짜 CSV 파싱에 실패했거나 데이터가 없습니다.');
+        setUpdateDate(null);
+      }
+    } catch (err) {
+      console.error('IndustryCharts: 업데이트 날짜 로드 중 오류 발생:', err);
+      setUpdateDate(null);
+    }
+  };
 
   useEffect(() => {
-    const loadAndFilterData = async () => {
+    const loadFileListAndData = async () => {
       setIsLoadingInitial(true);
       setInitialError(null);
-      setStockChartData([]); // 이전 데이터 초기화
+      setStockChartData([]);
 
       try {
-        // 1. 20malist.csv 파일 로드
-        const maListResponse = await fetch('/requestfile/20ma_list/20malist.csv');
-        if (!maListResponse.ok) {
-          throw new Error('20malist.csv 파일을 찾을 수 없습니다.');
-        }
-        const maListCsvText = await maListResponse.text();
+        const listRes = await fetch('/requestfile/etf_industry/file_list.json');
+        if (!listRes.ok) throw new Error('file_list.json 파일을 찾을 수 없습니다.');
+        const { files }: { files: string[] } = await listRes.json();
 
-        // 2. CSV 파싱 및 필터링
-        const parsedMaList = Papa.parse<MaListItem>(maListCsvText, {
-          header: true,
-          skipEmptyLines: true,
+        // 파일명에서 코드, 종목명, 등락률, 섹터, 유지일 추출
+        const initialInfos: ChartInfo[] = files.map(filename => {
+          const [code, name, changeStr, sector, durationStr] = filename.split('_');
+          const durationDays = parseInt(durationStr.replace('.csv', ''), 10);
+          const changePercent = parseFloat(changeStr);
+          return {
+            code,
+            name,
+            sector,
+            chartData: [],
+            isLoading: true,
+            error: null,
+            changePercent,
+            durationDays,
+            position: `유지 ${durationDays}일` // 유지일을 position 속성에 할당
+          };
         });
+        setStockChartData(initialInfos);
 
-        if (parsedMaList.errors.length > 0) {
-          throw new Error('CSV 파싱 오류 발생');
-        }
-
-        // 원본 CSV 데이터를 메모리에 저장 (포지션 정보 접근 위함)
-        const allMaListData = parsedMaList.data;
-        const maListMap = new Map(allMaListData.map(item => [item.종목코드, item]));
-
-        // 2. '유지 +숫자일' 조건으로 필터링
-        const positionRegex = /^유지\s*\+\d+일$/;
-        const filteredStocks = allMaListData
-          .filter(row => 
-            row.포지션 && 
-            positionRegex.test(row.포지션.trim()) && 
-            row.종목코드 && 
-            row.종목코드.trim() !== ''
-          )
-          // 등락률 기준으로 내림차순 정렬 추가
-          .sort((a, b) => {
-            // 등락률 문자열에서 '%' 제거하고 숫자로 변환
-            const changeA = parseFloat(a.등락률.replace('%', ''));
-            const changeB = parseFloat(b.등락률.replace('%', ''));
-            // 숫자가 아닌 경우 0으로 처리 (오류 방지)
-            return (isNaN(changeB) ? 0 : changeB) - (isNaN(changeA) ? 0 : changeA);
-          });
-
-        if (filteredStocks.length === 0) {
-          console.log("'유지' 키워드를 포함하고 유효한 등락률을 가진 종목이 없습니다."); // 로그 메시지 변경
-          setStockChartData([]); // 데이터 없으면 빈 배열로 초기화
-          setIsLoadingInitial(false);
-          return; // 필터링된 데이터 없으면 여기서 종료
-        }
-
-        // 3. 필터링된 종목 기반으로 초기 ChartInfo 생성 (포지션 정보 포함)
-        // 종목코드는 항상 6자리로 맞춰서 ChartInfo에 저장
-        const initialChartInfo: ChartInfo[] = filteredStocks.map(stock => ({
-          code: stock.종목코드.padStart(6, '0'),
-          name: stock.종목명,
-          sector: stock.섹터 || 'N/A',
-          position: stock.포지션 || 'N/A', // 포지션 값 추가
-          chartData: [],
-          isLoading: true,
-          error: null,
-          // 등락률 추가 (타입 변환 및 오류 처리)
-          changePercent: parseFloat(stock.등락률) || 0, 
-          // isAboveMA20은 position 기반으로 임시 설정 (배경색 위함)
-          isAboveMA20: stock.포지션?.startsWith('유지'),
-        }));
-        setStockChartData(initialChartInfo);
-        setIsLoadingInitial(false); // 초기 데이터 로딩 및 필터링 완료
-
-        // 4. 각 종목의 상세 차트 데이터 비동기 로드
-        const chartDataPromises = filteredStocks.map(async (stock) => {
+        // 각 CSV 파일 로드
+        const dataPromises = files.map(async filename => {
           try {
-            // 타임스탬프 추가하여 캐시 문제 방지
-            const chartResponse = await fetch(`/requestfile/rs_etf/${stock.종목코드.padStart(6, '0')}.csv?t=${Date.now()}`); 
-            if (!chartResponse.ok) {
-              // 404 에러 등 명시적으로 처리
-              throw new Error(`(${chartResponse.status}) ${stock.종목코드}.csv 파일을 찾을 수 없거나 로드할 수 없습니다.`);
-            }
-            const chartCsvText = await chartResponse.text();
-            const chartData = parseChartData(chartCsvText);
-
-            // MA20 계산 및 최신 상태 판단 추가
-            let isAboveMA20Calculated: boolean | undefined = undefined;
-            if (chartData && chartData.length >= 20) {
-              const ma20Values = calculateMA(chartData, 20);
-              const lastIndex = chartData.length - 1;
-              const lastClose = chartData[lastIndex]?.close;
-              const lastMA20 = ma20Values[lastIndex];
-              // 마지막 종가와 MA20 값이 모두 유효한 숫자인 경우에만 비교
-              if (typeof lastClose === 'number' && !isNaN(lastClose) && 
-                  typeof lastMA20 === 'number' && !isNaN(lastMA20)) {
-                isAboveMA20Calculated = lastClose >= lastMA20;
-              }
-            }
-            
-            return { 
-              code: stock.종목코드.padStart(6, '0'), // 항상 6자리로 반환
-              chartData, 
-              error: null, 
-              // 계산된 isAboveMA20 상태 추가
-              isAboveMA20: isAboveMA20Calculated 
-            }; 
-          } catch (error) {
-            console.error(`차트 데이터 로드 오류 (${stock.종목코드}):`, error);
-            // 개별 차트 로드 실패 시 에러 상태 반환
-            return { 
-              code: stock.종목코드.padStart(6, '0'), 
-              chartData: [], 
-              error: error instanceof Error ? error.message : '차트 데이터 로드 실패',
-              // 오류 시 상태는 undefined로 유지
-              isAboveMA20: undefined 
-            };
+            const res = await fetch(`/requestfile/etf_industry/${filename}?t=${Date.now()}`);
+            if (!res.ok) throw new Error(`${filename} 로드 실패`);
+            const text = await res.text();
+            const data = parseChartData(text);
+            return { filename, data };
+          } catch (e) {
+            console.error(e);
+            return { filename, data: [] as CandleData[] };
           }
         });
+        const results = await Promise.all(dataPromises);
 
-        // 모든 차트 데이터 로드 완료 후 상태 업데이트
-        const results = await Promise.allSettled(chartDataPromises);
-
-        setStockChartData(prevData => 
-          prevData.map(prevInfo => {
-            const result = results.find(r => r.status === 'fulfilled' && r.value.code === prevInfo.code);
-            if (result && result.status === 'fulfilled') {
-              const { chartData, error, isAboveMA20 } = result.value;
-              const updatedInfo = {
-                ...prevInfo,
-                chartData: chartData,
-                isLoading: false,
-                error: error,
-                // CSV position 값은 유지, 계산된 isAboveMA20 업데이트
-                isAboveMA20: isAboveMA20 
-              };
-              return updatedInfo;
-            } else {
-              // 실패한 경우 또는 해당 코드를 찾지 못한 경우 처리
-              const failedResult = results.find(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.code === prevInfo.code));
-              let errorMessage = '차트 데이터 처리 중 오류 발생';
-              if (failedResult) {
-                if (failedResult.status === 'rejected') {
-                  errorMessage = failedResult.reason instanceof Error ? failedResult.reason.message : String(failedResult.reason);
-                } else if (failedResult.status === 'fulfilled' && failedResult.value.error) {
-                  errorMessage = failedResult.value.error;
-                }
-              }
-              const updatedInfo = {
-                ...prevInfo,
-                chartData: [],
-                isLoading: false,
-                error: errorMessage,
-                // 오류 시 isAboveMA20은 undefined로 설정
-                isAboveMA20: undefined 
-              };
-              return updatedInfo;
-            }
+        setStockChartData(prev =>
+          prev.map(info => {
+            const match = results.find(r => r.filename.startsWith(`${info.code}_`));
+            return match
+              ? { ...info, chartData: match.data, isLoading: false }
+              : info;
           })
         );
-
-      } catch (error) {
-        console.error('초기 데이터 로드 또는 필터링 오류:', error);
-        setStockChartData([]); // 오류 발생 시 데이터 초기화
-        setInitialError(error instanceof Error ? error.message : '데이터 로드 중 오류 발생');
+      } catch (e: any) {
+        setInitialError(e.message || '데이터 로드 중 오류 발생');
       } finally {
         setIsLoadingInitial(false);
       }
     };
-
-    loadAndFilterData();
-  }, []); // 컴포넌트 마운트 시 1회 실행
+    loadFileListAndData();
+    loadUpdateDate(); // 업데이트 날짜 로드 함수 호출
+  }, []);
 
   // 로딩 및 에러 상태 표시
   if (isLoadingInitial) {
@@ -347,13 +277,13 @@ export default function IndustryCharts() {
         {/* 제목 영역을 GuideTooltip으로 감쌈 */}
         <GuideTooltip
           title="산업별 주도 ETF 차트"
-          description={`각 산업을 대표하는 ETF 중 20일 이동평균선 위에 위치한 종목만을 선별하여 보여줍니다. 이를 통해 현재 상승 추세에 있는 주도 산업 및 ETF를 쉽게 파악할 수 있습니다.\n\n**차트 헤더 안내:**\n차트 제목 우측의 숫자는 해당 ETF가 **20일 이동평균선 위에서 연속으로 머무른 기간(일수)**을 나타냅니다.\n(이 차트에는 20일선 아래 종목은 표시되지 않습니다.)\n유지 기간(숫자)이 길수록 해당 ETF의 상승 추세가 견조함을 의미할 수 있습니다.`}
+          description={`각 산업을 대표하는 ETF 중 20일 이동평균선 위에 위치한 종목만을 선별하여 보여줍니다. 이를 통해 현재 상승 추세에 있는 주도 산업 및 ETF를 쉽게 파악할 수 있습니다.\n\n*차트 헤더 안내:*\n차트 제목 우측의 숫자는 해당 ETF가 *20일 이동평균선 위에서 연속으로 머무른 기간(일수)*을 나타냅니다.\n(이 차트에는 20일선 아래 종목은 표시되지 않습니다.)\n유지 기간(숫자)이 길수록 해당 ETF의 상승 추세가 견조함을 의미할 수 있습니다.`}
           side="bottom" // 제목 아래에 표시되도록 side 조정
           width="min(90vw, 450px)" // 너비 조정 (내용이 길어서 조금 늘림)
           collisionPadding={{ top: 10, left: 260, right: 10, bottom: 10 }} // 왼쪽 여백 260px 추가
         >
           {/* 기존 h2 태그를 Tooltip의 자식으로 이동하고 스타일 추가 */}
-          <h2 className="font-semibold whitespace-nowrap text-sm md:text-base cursor-help"> {/* cursor-help 추가 */}
+          <h2 className="font-semibold whitespace-nowrap text-sm md:text-base cursor-help"> 
             산업별 주도ETF 차트
           </h2>
         </GuideTooltip>
@@ -363,27 +293,27 @@ export default function IndustryCharts() {
           {!isCapturing && updateDate && (
             <span
               className="text-gray-600 text-xs mr-2"
-              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}
+              style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
             >
               updated 17:00 {updateDate}
             </span>
           )}
           {/* 모바일에서 숨기기 위한 div 추가 */}
-          <div className="hidden md:block">
+          <div className="hidden"> {/* md:block 클래스 제거, hidden만 남김 */}
             <ChartCopyButton
               chartRef={chartsContainerRef}
               chartName="산업별 주도ETF 차트 전체"
               onStartCapture={() => setIsCapturing(true)}
               onEndCapture={() => setIsCapturing(false)}
-              updateDateText={updateDate}
+              updateDateText={updateDate || ''} // updateDate가 null이면 빈 문자열 전달
             />
           </div>
           {isCapturing && updateDate && (
             <span
               className="text-gray-600 text-xs ml-2"
-              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}
+              style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
             >
-              updated 16:40 {updateDate}
+              updated 17:00 {updateDate}
             </span>
           )}
         </div>
@@ -398,67 +328,74 @@ export default function IndustryCharts() {
             // 개별 차트 아이템 래퍼 (둥근 모서리, 패딩)
             <div key={info.code} className="flex-1 rounded-md p-1"> 
               <div> {/* 내부 래퍼 */} 
-                {/* 헤더 (원본 클래스, 인라인 스타일, 배경색 함수 적용) */}
+                {/* 헤더 - 반응형 레이아웃으로 개선 */}
                 <div 
-                  className={`px-3 py-1 border flex justify-between items-baseline ${getHeaderBackgroundColor(info)}`}
+                  className={`px-3 py-1 border flex justify-between items-center flex-wrap ${getHeaderBackgroundColor(info)}`}
                   style={{ borderRadius: '0.375rem 0.375rem 0 0' }} 
                 >
-                  {/* 헤더 왼쪽: 섹터, 종목명, 등락률 */}
-                  <div className="flex items-baseline gap-1">
-                    <div className="flex items-baseline gap-1">
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', minWidth: 0, width: '100%' }}>
-                        {info.sector && (
-                          <span
-                            className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1"
-                            style={{
-                              fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              maxWidth: '70px',
-                              display: 'inline-block',
-                              verticalAlign: 'bottom',
-                            }}
-                            title={info.sector}
-                          >
-                            {info.sector}
-                          </span>
-                        )}
-                        <span
-                          className="font-medium"
-                          style={{
-                            fontSize: 'clamp(0.6rem, 0.7vw, 0.7rem)',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: '120px',
-                            display: 'inline-block',
-                            verticalAlign: 'bottom',
-                          }}
-                          title={info.name || info.code}
-                        >
-                          {info.name || info.code}
-                        </span>
-                        <span
-                          className={`px-1.5 py-0.5 rounded ${(info.changePercent || 0) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
-                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
-                        >
-                          {(info.changePercent || 0) >= 0 ? '+' : ''}{(info.changePercent || 0).toFixed(2)}%
-                        </span>
-                      </div>
-                    </div>
+                  {/* 헤더 왼쪽: 섹터, 종목명, 등락률 - 구조 단순화 및 반응형 개선 */}
+                  <div className="flex items-center flex-1 min-w-0 overflow-hidden mr-2">
+                    {/* 섹터 */}
+                    {info.sector && (
+                      <span
+                        className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1 shrink"
+                        style={{
+                          fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', // 수정된 부분
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          minWidth: '40px',
+                          maxWidth: '120px',
+                          display: 'inline-block',
+                          verticalAlign: 'middle',
+                          textAlign: 'center',
+                          width: 'auto',
+                        }}
+                        title={info.sector}
+                      >
+                        {info.sector}
+                      </span>
+                    )}
+                    
+                    {/* 종목명 */}
+                    <span
+                      className="font-medium shrink mr-1"
+                      style={{
+                        fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', // 수정된 부분
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        minWidth: '60px',
+                        maxWidth: '200px',
+                        display: 'inline-block',
+                        verticalAlign: 'middle',
+                      }}
+                      title={info.name || info.code}
+                    >
+                      {info.name || info.code}
+                    </span>
+                    
+                    {/* 등락률 - shrink-0으로 항상 필요한 너비 유지 */}
+                    <span
+                      className={`px-1.5 py-0.5 rounded shrink-0 ${(info.changePercent || 0) >= 0 ? 'text-red-600' : 'text-blue-600'}`}
+                      style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+                    >
+                      {(info.changePercent || 0) >= 0 ? '+' : ''}{(info.changePercent || 0).toFixed(2)}%
+                    </span>
                   </div>
-                  {/* 헤더 오른쪽: 상태 텍스트 */}
+                  
+                  {/* 헤더 오른쪽: 상태 텍스트 - shrink-0으로 항상 필요한 너비만 유지 */}
                   {info.isLoading ? (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-800">
+                    <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-800 shrink-0" 
+                          style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}>
                       로딩 중...
                     </span>
                   ) : (
                     <span 
-                      className={`px-1.5 py-0.5 rounded ${info.position?.startsWith('유지') ? 'bg-[#D8EFE9] text-teal-800' : 'bg-gray-100 text-gray-800'}`}
+                      className={`px-1.5 py-0.5 rounded shrink-0 ${info.durationDays ? 'bg-[#D8EFE9] text-teal-800' : 'bg-gray-100 text-gray-800'}`}
                       style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
                     >
-                      {info.position?.replace(/^(유지|이탈)\s*/, '') || 'N/A'}
+                      {info.durationDays ? `${info.durationDays > 0 ? '+' : ''}${info.durationDays}일` : 'N/A'}
                     </span>
                   )}
                 </div>
@@ -481,8 +418,8 @@ export default function IndustryCharts() {
                       showVolume={true} 
                       showMA20={true} 
                       title={`${info.name} (${info.code})`} 
-                      // subtitle에 포지션 값과 등락률 포함 ('유지'/'이탈' 제거)
-                      subtitle={`${info.position?.replace(/^(유지|이탈)\s*/, '') || 'N/A'} | 등락률: ${(info.changePercent || 0) >= 0 ? '+' : ''}${(info.changePercent || 0).toFixed(2)}%`} 
+                      // subtitle에 유지일과 등락률 포함
+                      subtitle={`${info.durationDays ? `${info.durationDays}일` : 'N/A'} | 등락률: ${(info.changePercent || 0) >= 0 ? '+' : ''}${(info.changePercent || 0).toFixed(2)}%`} 
                       parentComponent="IndustryCharts"
                     />
                   ) : (

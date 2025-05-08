@@ -83,3 +83,5 @@ Follow Next.js docs for Data Fetching, Rendering, and Routing.
  항상 chain of thoughts 로 모든 프로세스를 사전에 고민하고 진행해.
 
  backend 수정할 때 코드오류는 서버쪽 다커나 fastapi쪽 오류는 무시해. 잘 잘동중이니까. 린트에러나 등등의 오류만 수정해.
+
+ 코드를 직접 확인하라고 하면 절대 서치베이스로 코드를 찾지말고 직접 코드를 다 확인해.

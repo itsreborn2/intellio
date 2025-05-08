@@ -9,6 +9,7 @@ import { useUserModeStore, useIsClient } from '@/stores/userModeStore';
 import { MessageSquare, Download, Loader2 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { useChatStore } from '@/stores/chatStore';
 import { toast } from 'sonner';
 import { usePdfExport } from '@/services/api/usePdfExport';
@@ -215,65 +216,74 @@ const Header: React.FC = () => {
     >
       {/* 헤더 내용 - 로고와 아바타 배치 */}
       <div className="flex justify-between items-center w-full">
-        {/* 로고 텍스트 */}
-        <div className="text-lg font-semibold pl-[25px] md:pl-0">StockEasy</div>
-        
-        {/* 중앙 영역: 모드 선택 토글 - 채팅 메시지가 있을 때만 표시 */}
-        <div 
-          className={`
-            flex items-center 
-            transition-opacity duration-300 ease-in-out
-            ${toggleVisible ? 'opacity-100' : 'opacity-0'}
-          `}
-          style={{ 
-            display: toggleVisible ? '' : 'none',
-            height: '44px',
-            visibility: toggleVisible ? 'visible' : 'hidden'
-          }}
-        >
-          {/* 토글 스위치 버튼 */}
-          <div className="flex items-center">
-            {/* 각 라벨에 고정 너비를 적용하고 텍스트 정렬을 중앙으로 설정 */}
-            <div className="w-16 text-center">
-              <span className={`${userMode === 'beginner' ? 'text-lg font-semibold text-[#10A37F]' : 'text-xs text-gray-500'}`}>
-                주린이
-              </span>
-            </div>
-            
-            {/* 토글 스위치 */}
-            <div className="flex justify-center items-center mx-1">
-              <button 
-                onClick={handleModeToggle}
-                className="relative inline-flex h-6 w-11 items-center rounded-full"
-                role="switch"
-                aria-checked={userMode === 'expert'}
-              >
-                <span 
-                  className={`
-                    absolute w-full h-full rounded-full transition-colors duration-200 ease-in-out
-                    ${userMode === 'expert' ? 'bg-[#4A72B0]' : 'bg-[#10A37F]'}
-                  `}
-                ></span>
-                <span 
-                  className={`
-                    pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform duration-200
-                    ${userMode === 'expert' ? 'translate-x-5' : 'translate-x-1'}
-                  `}
-                ></span>
-              </button>
-            </div>
-            
-            {/* 각 라벨에 고정 너비를 적용하고 텍스트 정렬을 중앙으로 설정 */}
-            <div className="w-16 text-center">
-              <span className={`${userMode === 'expert' ? 'text-lg font-semibold text-[#4A72B0]' : 'text-xs text-gray-500'}`}>
-                전문가
-              </span>
+        <div className="flex items-center">
+          {/* 로고 텍스트 */}
+          <div className="text-lg font-semibold pl-[25px] md:pl-0">StockEasy</div>
+          {/* 헤더 메뉴 */}
+          <nav>
+            <ul className="flex items-center ml-4 space-x-4 text-[#3F424A] text-sm">
+              {/* <li><Link href="/trend-following"><span className="hover:text-gray-900 transition-colors font-bold">메인</span></Link></li> */}
+              <li><Link href="/"><span className="hover:text-gray-900 transition-colors font-bold">스탁AI</span></Link></li>
+              <li><Link href="/rs-rank"><span className="hover:text-gray-900 transition-colors font-bold">RS순위</span></Link></li>
+              <li><Link href="/etf-sector"><span className="hover:text-gray-900 transition-colors font-bold">ETF섹터</span></Link></li>
+              <li><Link href="/value"><span className="hover:text-gray-900 transition-colors font-bold">밸류에이션</span></Link></li>
+            </ul>
+          </nav>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* 중앙 영역: 모드 선택 토글 - 채팅 메시지가 있을 때만 표시 */}
+          <div 
+            className={`
+              flex items-center 
+              transition-opacity duration-300 ease-in-out
+              ${toggleVisible ? 'opacity-100' : 'opacity-0'}
+            `}
+            style={{ 
+              display: toggleVisible ? '' : 'none',
+              height: '44px',
+              visibility: toggleVisible ? 'visible' : 'hidden'
+            }}
+          >
+            {/* 토글 스위치 버튼 */}
+            <div className="flex items-center">
+              {/* 각 라벨에 고정 너비를 적용하고 텍스트 정렬을 중앙으로 설정 */}
+              <div className="w-16 text-center">
+                <span className={`${userMode === 'beginner' ? 'text-lg font-semibold text-[#10A37F]' : 'text-xs text-gray-500'}`}>
+                  주린이
+                </span>
+              </div>
+              
+              {/* 토글 스위치 */}
+              <div className="flex justify-center items-center mx-1">
+                <button 
+                  onClick={handleModeToggle}
+                  className="relative inline-flex h-6 w-11 items-center rounded-full"
+                  role="switch"
+                  aria-checked={userMode === 'expert'}
+                >
+                  <span 
+                    className={`
+                      absolute w-full h-full rounded-full transition-colors duration-200 ease-in-out
+                      ${userMode === 'expert' ? 'bg-[#4A72B0]' : 'bg-[#10A37F]'}
+                    `}
+                  ></span>
+                  <span 
+                    className={`
+                      pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform duration-200
+                      ${userMode === 'expert' ? 'translate-x-5' : 'translate-x-1'}
+                    `}
+                  ></span>
+                </button>
+              </div>
+              
+              {/* 각 라벨에 고정 너비를 적용하고 텍스트 정렬을 중앙으로 설정 */}
+              <div className="w-16 text-center">
+                <span className={`${userMode === 'expert' ? 'text-lg font-semibold text-[#4A72B0]' : 'text-xs text-gray-500'}`}>
+                  전문가
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-        
-        {/* 우측 영역: 질문 개수 + 아바타 */}
-        <div className="flex items-center gap-3">
           {/* PDF 내보내기 버튼 - 채팅 메시지가 있고 세션이 있을 때만 표시 */}
           {isUserLoggedIn && hasChatMessages && currentSession && (
             <button
@@ -289,7 +299,6 @@ const Header: React.FC = () => {
               <span className="hidden sm:inline">PDF</span>
             </button>
           )}
-          
           {/* 질문 개수 표시 */}
           {isUserLoggedIn && (
             <div className="flex items-center gap-0.5">
@@ -299,7 +308,6 @@ const Header: React.FC = () => {
               </Badge>
             </div>
           )}
-          
           {/* 아바타 */}
           {isUserLoggedIn && (
             <div 
