@@ -182,7 +182,7 @@ export default function RSRankPage() {
         try {
           // 로컬 캐시 파일 경로
           const cacheFilePath = '/requestfile/stock-data/stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv';
-          const rsDataFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
+          // const rsDataFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv'; // RS 데이터 파일 로드 로직 제거
           
           // 로컬 캐시 파일 로드
           const response = await fetch(cacheFilePath, { cache: 'no-store' });
@@ -193,59 +193,59 @@ export default function RSRankPage() {
           
           const csvText = await response.text();
           
-          // RS 데이터 파일 로드
-          const rsResponse = await fetch(rsDataFilePath, { cache: 'no-store' });
-          
-          if (!rsResponse.ok) {
-            console.error(`RS 데이터 파일 로드 실패: ${response.status}`);
-            throw new Error(`RS 데이터 파일 로드 실패: ${response.status}`);
-          }
-          
-          const rsCsvText = await rsResponse.text();
+          // RS 데이터 파일 로드 로직 제거
+          // const rsResponse = await fetch(rsDataFilePath, { cache: 'no-store' });
+          // 
+          // if (!rsResponse.ok) {
+          //   console.error(`RS 데이터 파일 로드 실패: ${response.status}`);
+          //   throw new Error(`RS 데이터 파일 로드 실패: ${response.status}`);
+          // }
+          // 
+          // const rsCsvText = await rsResponse.text();
           
           // CSV 파싱 및 데이터 처리
           const parsedData = parseCSV(csvText);
-          const rsParsedData = parseCSV(rsCsvText);
+          // const rsParsedData = parseCSV(rsCsvText); // RS 데이터 파싱 로직 제거
           
-          // RS 데이터를 종목명으로 매핑하여 빠르게 검색할 수 있도록 Map 생성
-          const rsDataMap = new Map();
-          rsParsedData.rows.forEach(row => {
-            if (row['종목명']) {
-              // 시가총액을 억 단위로 변환
-              let marketCapBillion = 0;
-              if (row['시가총액']) {
-                const marketCap = String(row['시가총액']).replace(/,/g, '');
-                marketCapBillion = Math.floor(Number(marketCap) / 100000000); // 억 단위로 변환
-              }
-              
-              rsDataMap.set(row['종목명'], {
-                RS: row['RS'] || '',
-                시가총액: marketCapBillion,
-                테마명: row['테마명'] || ''
-              });
-            }
-          });
+          // RS 데이터를 종목명으로 매핑하여 빠르게 검색할 수 있도록 Map 생성 로직 제거
+          // const rsDataMap = new Map();
+          // rsParsedData.rows.forEach(row => {
+          //   if (row['종목명']) {
+          //     // 시가총액을 억 단위로 변환 로직 제거
+          //     // let marketCapBillion = 0;
+          //     // if (row['시가총액']) {
+          //     //   const marketCap = String(row['시가총액']).replace(/,/g, '');
+          //     //   marketCapBillion = Math.floor(Number(marketCap) / 100000000); // 억 단위로 변환
+          //     // }
+          //     
+          //     rsDataMap.set(row['종목명'], {
+          //       RS: row['RS'] || '',
+          //       시가총액: row['시가총액'], // 시가총액 직접 사용
+          //       테마명: row['테마명'] || ''
+          //     });
+          //   }
+          // });
           
-          // 데이터 변환 - 컬럼명 매핑 (종목명 -> stockName, RS -> rs)
-          const transformedData = {
-            headers: parsedData.headers,
-            rows: parsedData.rows.map(row => {
-              // 종목명으로 RS 데이터 매핑
-              const stockName = row['종목명'];
-              
-              const rsData = rsDataMap.get(stockName) || { RS: '', 시가총액: '', 테마명: '' }; // 테마명 추가
-              
-              return {
-                stockName: stockName,
-                rs: rsData.RS || row['거래대금'], // RS 데이터가 있으면 사용, 없으면 거래대금 사용
-                시가총액: rsData.시가총액,
-                ...row
-              };
-            }),
-            errors: parsedData.errors
-          };
+          // 데이터 변환 로직 제거 - stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv 파일의 데이터를 그대로 사용
+          // const transformedData = {
+          //   headers: parsedData.headers,
+          //   rows: parsedData.rows.map(row => {
+          //     // 종목명으로 RS 데이터 매핑 로직 제거
+          //     // const stockName = row['종목명'];
+          //     // 
+          //     // const rsData = rsDataMap.get(stockName) || { RS: '', 시가총액: '', 테마명: '' }; // 테마명 추가
+          //     // 
+          //     return {
+          //       // stockName: stockName, // 필요시 종목명 컬럼명 변경 가능
+          //       // rs: rsData.RS || row['거래대금'], // RS 데이터가 있으면 사용, 없으면 거래대금 사용
+          //       // 시가총액: rsData.시가총액,
+          //       ...row
+          //     };
+          //   }),
+          //   errors: parsedData.errors
+          // };
           
-          setHighData(transformedData);
+          setHighData(parsedData); // parsedData를 직접 사용
         } catch (error) {
           console.error('서버 캐시 파일 로드 실패:', error);
           throw new Error(`서버 캐시 파일 로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
