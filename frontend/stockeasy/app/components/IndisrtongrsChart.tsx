@@ -179,54 +179,45 @@ export default function IndustryCharts() {
       
       // 파일명에서 정보 추출하여 주식 데이터 객체로 변환
       const stocksData: RepresentativeStock[] = fileList
-        .filter((fileName: string) => fileName !== 'file_list.json')
+        .filter((fileName: string) => fileName !== 'file_list.json' && fileName.endsWith('.csv')) // .csv로 끝나는 파일만 처리하고 file_list.json 제외
         .map((fileName: string) => {
-          const parts = fileName.split('_');
-          
-          if (parts.length >= 10) {
-            const code = parts[0];
-            const name = parts[1];
-            const lastChangePercent = parts[2];
-            const rs1m = parseInt(parts[3] || '0');
-            const etfName = parts[4] || '알 수 없음';
-            const industry = parts[5] || '알 수 없음';
-            const sector = parts[6] || '알 수 없음';
-            const originalEtfChange = parts[7] || '0.00';
-            const position = parts[8] || '0';
-            // .csv 확장자 제거
-            const rsValueStr = parts[9]?.replace(/\.csv$/, '') || '0';
-            const rsValue = parseInt(rsValueStr);
-            
-            return {
-              code,
-              name,
-              lastChangePercent,
-              rs1m,
-              etfName,
-              industry,
-              sector,
-              originalEtfChange,
-              position,
-              rsValue
-            };
-          } else {
-            // 파일명 형식이 다른 경우 기본값 설정
-            return {
-              code: '000000',
-              name: '알 수 없음',
-              lastChangePercent: '0.00',
-              rs1m: 0,
-              etfName: '알 수 없음',
-              industry: '알 수 없음',
-              sector: '알 수 없음',
-              originalEtfChange: '0.00',
-              position: '0',
-              rsValue: 0
-            };
+          const parts = fileName.replace(/\.csv$/, '').split('_'); // .csv 확장자 먼저 제거 후 split
+
+          // 파일명 구조에 따른 최소 parts 개수 (예: 10개로 가정)
+          if (parts.length < 10) { // 최소한 10개 부분은 있어야 유효한 데이터로 간주
+            console.warn(`IndisrtongrsChart: Skipping file due to unexpected format: ${fileName}`);
+            return null; // 유효하지 않은 형식의 파일은 건너뛰기
           }
+
+          const code = parts[0] || 'N/A';
+          const name = parts[1] || '알 수 없음';
+          const lastChangePercent = parts[2] || '0';
+          const rs1m = parseInt(parts[3]?.replace(/[^0-9.-]/g, '') || '0', 10); // 숫자, '.', '-' 외 문자 제거
+          const etfName = parts[4] || '알 수 없음';
+          const industry = parts[5] || '알 수 없음';
+          const sector = parts[6] || '알 수 없음';
+          const originalEtfChange = parts[7] || '0';
+
+          // position과 rsValue는 parts 배열의 끝에서부터 가져오도록 수정
+          const rsValueStr = parts[parts.length - 1]; // 마지막 segment
+          const position = parts.length > 1 ? parts[parts.length - 2] : '0일'; // 마지막에서 두 번째 segment
+
+          const rsValue = parseInt(rsValueStr?.replace(/[^0-9-]/g, '') || '0', 10); // 숫자, '-' 외 문자 제거
+            
+          return {
+            code,
+            name,
+            lastChangePercent,
+            rs1m,
+            etfName,
+            industry,
+            sector,
+            originalEtfChange,
+            position: position || '0일', // position도 기본값 설정
+            rsValue
+          };
         })
-        // RS_1M 기준 내림차순 정렬
-        .sort((a: RepresentativeStock, b: RepresentativeStock) => b.rs1m - a.rs1m);
+        .filter((stock: RepresentativeStock | null): stock is RepresentativeStock => stock !== null); // null 값 제거
       
       // 고유한 ETF 목록 추출 (중복 제거)
       const uniqueEtfs = Array.from(
@@ -1153,7 +1144,7 @@ export default function IndustryCharts() {
                     <div className="flex items-center flex-1 min-w-0 overflow-hidden mr-2">
                       <span 
                         className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1 shrink"
-                        title={etf.섹터}
+                        title={etf.selectedStocks && etf.selectedStocks.length > 0 ? etf.selectedStocks[0].industry : '정보 없음'}
                         style={{
                           fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', 
                           minWidth: '40px', 
@@ -1167,7 +1158,7 @@ export default function IndustryCharts() {
                           width: 'auto' 
                         }}
                       >
-                        {etf.섹터}
+                        {etf.selectedStocks && etf.selectedStocks.length > 0 ? etf.selectedStocks[0].industry : '정보 없음'}
                       </span>
                       <span 
                         className="font-medium shrink mr-1" 
@@ -1200,7 +1191,10 @@ export default function IndustryCharts() {
                     </span>
                   </div>
                   
-                  {etf.selectedStocks && etf.selectedStocks.slice(0, 2).map((stock, stockIndex) => (
+                  {etf.selectedStocks && [...etf.selectedStocks]
+                    .sort((a, b) => parseFloat(b.lastChangePercent) - parseFloat(a.lastChangePercent))
+                    .slice(0, 2)
+                    .map((stock, stockIndex) => (
                     <div key={stockIndex}>
                       {/* 종목 헤더 - 반응형 레이아웃으로 개선 */}
                       <div className="bg-gray-100 px-3 py-1 border border-t-0 border-gray-200 flex justify-between items-center flex-wrap">
@@ -1209,7 +1203,7 @@ export default function IndustryCharts() {
                           {/* 산업 - shrink 클래스 추가하여 화면 소툰 시 법위 안에서 자동 축소되도록 설정 */}
                           <span 
                             className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 mr-1 shrink" 
-                            title={stock.industry}
+                            title={stock.sector}
                             style={{ 
                               fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)', 
                               minWidth: '40px', 
@@ -1223,7 +1217,7 @@ export default function IndustryCharts() {
                               width: 'auto' 
                             }}
                           >
-                            {stock.industry}
+                            {stock.sector}
                           </span>
                           
                           {/* 종목명 - shrink 클래스 추가 */}
