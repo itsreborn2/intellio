@@ -482,7 +482,7 @@ export function MessageBubble({
           )}
           
           {/* 전문가 모드 토글 버튼 (AI 메시지이면서 전문가 내용이 있는 경우에만 표시) */}
-          {message.role === 'assistant' && message.content_expert && (
+          {/* {message.role === 'assistant' && message.content_expert && (
             <div
               style={{
                 position: 'absolute',
@@ -498,7 +498,7 @@ export function MessageBubble({
                 onToggle={handleToggleExpertMode}
               />
             </div>
-          )}
+          )} */}
         </div>
       </div>
     </div>
