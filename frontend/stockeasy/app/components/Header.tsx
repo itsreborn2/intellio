@@ -220,15 +220,15 @@ const Header: React.FC = () => {
           {/* 로고 텍스트 */}
           <div className="text-lg font-semibold pl-[25px] md:pl-0">StockEasy</div>
           {/* 헤더 메뉴 */}
-          <nav>
+          {/* <nav>
             <ul className="flex items-center ml-4 space-x-4 text-[#3F424A] text-sm">
-              {/* <li><Link href="/trend-following"><span className="hover:text-gray-900 transition-colors font-bold">메인</span></Link></li> */}
+              <li><Link href="/trend-following"><span className="hover:text-gray-900 transition-colors font-bold">메인</span></Link></li>
               <li><Link href="/"><span className="hover:text-gray-900 transition-colors font-bold">스탁AI</span></Link></li>
               <li><Link href="/rs-rank"><span className="hover:text-gray-900 transition-colors font-bold">RS순위</span></Link></li>
               <li><Link href="/etf-sector"><span className="hover:text-gray-900 transition-colors font-bold">ETF섹터</span></Link></li>
               <li><Link href="/value"><span className="hover:text-gray-900 transition-colors font-bold">밸류에이션</span></Link></li>
             </ul>
-          </nav>
+          </nav> */}
         </div>
         <div className="flex items-center gap-3">
           {/* 중앙 영역: 모드 선택 토글 - 채팅 메시지가 있을 때만 표시 */}
