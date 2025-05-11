@@ -158,7 +158,7 @@ class FinancialDataServicePDF:
                 #print(f"filedate type : {type(file_date)}, {type(start_date)}, {type(end_date)}")
                 # 날짜 또는 연도 기반으로 필터링
                 if file_date and start_date <= file_date <= end_date:
-                    print(f"append file_date: {file_date}")
+                    #print(f"append file_date: {file_date}")
                     filtered_files.append(file)
                 # elif file.get("year", 0) >= start_date.year and file.get("year", 0) <= end_date.year:
                 #     print(f"append file_date2: {file_date}")
@@ -260,7 +260,7 @@ class FinancialDataServicePDF:
                 #print(f"filedate type : {type(file_date)}, {type(start_date)}, {type(end_date)}")
                 # 날짜 또는 연도 기반으로 필터링
                 if file_date and start_date <= file_date <= end_date:
-                    print(f"append file_date: {file_date}")
+                    #print(f"append file_date: {file_date}")
                     filtered_files.append(file)
                 # elif file.get("year", 0) >= start_date.year and file.get("year", 0) <= end_date.year:
                 #     print(f"append file_date2: {file_date}")

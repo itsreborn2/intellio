@@ -163,6 +163,71 @@ PROMPT_GENERATE_SECTION_CONTENT = """
 이제 "{section_title}" 섹션의 내용을 작성해주세요.
 """
 
+# --- START: 핵심 요약 생성 프롬프트 정의 ---
+PROMPT_GENERATE_EXECUTIVE_SUMMARY = """
+당신은 투자 리서치 보고서의 전문 분석가이자 통합적 사고를 가진 요약 전문가입니다.
+이미 작성된 보고서의 각 섹션 내용을 바탕으로, 사용자의 질문에 대한 핵심 인사이트를 담은 '핵심 요약' 섹션을 작성해야 합니다.
+
+# 작업 목표
+아래 제공된 사용자 질문, 보고서 제목, 그리고 이미 생성된 보고서의 다른 섹션들 내용을 바탕으로, '핵심 요약' 섹션을 작성하세요.
+각 섹션의 핵심 내용을 추출하고 연관관계를 정리하여, 사용자가 전체 보고서를 읽지 않고도 질문에 대한 통찰력 있는 답변을 얻을 수 있도록 합니다.
+
+# 입력 정보
+원본 사용자 질문: {original_query}
+보고서 제목: {report_title}
+
+<이미 생성된 보고서 섹션별 내용>
+{sections_summary}
+</이미 생성된 보고서 섹션별 내용>
+
+# "핵심 요약" 섹션 작성 지침
+1.  **질문 중심 접근**: 사용자의 원래 질문에 초점을 맞추어, 그 질문에 대한 명확한 답변을 제공하세요. 이 질문이 핵심 요약의 기준점입니다.
+
+2.  **각 섹션의 핵심 요소 통합**:
+    - 각 섹션의 가장 중요한 정보와 인사이트를 식별하세요
+    - 이러한 요소들이 어떻게 사용자 질문과 관련되는지 명확히 하세요
+    - 단순히 내용을 줄이는 것이 아니라, 각 섹션의 핵심 가치를 유지하세요
+
+3.  **연관관계 분석**:
+    - 다양한 섹션에서 발견된 정보 간의 연결점과 패턴을 찾으세요
+    - 인과관계, 상호의존성, 상충점 또는 보완점을 강조하세요
+    - "섹션 A의 기술 발전은 섹션 B의 시장 기회에 영향을 미치며..." 같은 방식으로 연결하세요
+
+4.  **통찰력 있는 관점 제시**:
+    - 단순 사실 나열을 넘어, 데이터와 정보가 시사하는 더 큰 의미를 제시하세요
+    - "따라서..." "이는...를 의미합니다" "이러한 맥락에서..." 같은 표현으로 통찰력을 드러내세요
+    - 다양한 데이터 포인트를 종합하여 새로운 시각을 제공하세요
+
+5.  **명확한 구조화**:
+    - 핵심 요약은 5-6개의 핵심 포인트로 구성하는 것이 이상적입니다
+    - 각 포인트는 간결한 제목과 2-3문장의 설명으로 구성하세요
+    - 글머리 기호, 숫자 목록, 또는 짧은 단락을 사용하여 가독성을 높이세요
+    - 기울임체나 굵은 글씨를 사용하여 핵심 용어나 중요 결론을 강조하세요
+
+6.  **이해하기 쉬운 언어**:
+    - 복잡한 개념을 명확하고 접근하기 쉬운 방식으로 설명하세요
+    - 필요한 전문 용어는 유지하되, 가능한 간결하고 직관적인 표현을 사용하세요
+    - 필요시 비유나 유사성을 활용하여 복잡한 개념을 설명하세요
+
+7.  **균형 잡힌 관점**:
+    - 긍정적 측면과 도전/리스크 요소를 균형 있게 다루세요
+    - 확실한 정보와 가능성 있는 추측을 명확히 구분하세요
+    - 다양한 관점이나 해석이 있다면 간략히 언급하세요
+
+8.  **실행 가능한 인사이트**:
+    - 요약은 독자가 "그래서 어떻게 해야 하는가?"라는 질문에 답할 수 있어야 합니다
+    - 주요 발견이 투자자, 기업 또는 관련 이해관계자에게 갖는 실질적 의미를 언급하세요
+    - 적절한 경우, 향후 모니터링이 필요한 주요 지표나 이벤트를 제안하세요
+
+9.  **출력 형식**: 
+    - 보고서 형태로 작성하되, 하위 목차는 생성하지 않습니다
+    - 글머리 기호(•)나 숫자 목록을 적절히 활용하여 핵심 포인트를 구분하세요
+    - 1-2개 문단의 일반적 개요로 시작한 후, 5-6개의 주요 포인트를 구조화하여 제시하세요
+
+이제 "{section_title}" 섹션의 내용을 작성해주세요. 이 섹션은 보고서의 가장 첫 부분에 위치하여 독자에게 질문에 대한 통찰력 있는 답변과 전체 보고서의 핵심 가치를 제공합니다.
+"""
+# --- END: 핵심 요약 생성 프롬프트 정의 ---
+
 DEEP_RESEARCH_USER_PROMPT = """
 사용자 질문: {query}
 오늘일자: {query_date}
@@ -364,20 +429,14 @@ def format_other_agent_data(agent_results: Dict[str, Any],
           sources_info_parts.append(part)
 
       # Telegram Retriever 데이터
-      telegram_data_list = agent_results.get("telegram_retriever", {}).get("data", [])
-      if telegram_data_list and isinstance(telegram_data_list, dict):
-          # format_telegram_messages는 RetrievedTelegramMessage 객체의 리스트를 기대할 수 있으나,
-          # create_all_section_content는 telegram_data: Dict[str, Any]를 받음.
-          # agent_results의 telegram_retriever 데이터가 메시지 문자열 리스트거나 객체 리스트일 수 있음.
-          # format_telegram_messages 내부에서 이를 처리한다고 가정.
-          # 지금은 create_all_section_content의 파라미터 타입(Dict)과 agent_results의 구조(List)가 불일치하여,
-          # telegram_data_list (List)를 그대로 전달. format_telegram_messages가 이를 처리해야 함.
-          formatted_msgs = format_telegram_messages(telegram_data_list, stock_code, stock_name)
-          if formatted_msgs and formatted_msgs.strip(): # 메시지가 있을 경우에만 추가
-              part = "------\n<내부DB>\n"
-              part += f"{formatted_msgs}\n\n"
-              part += "</내부DB>\n"
-              sources_info_parts.append(part)
+    #   telegram_data_list = agent_results.get("telegram_retriever", {}).get("data", [])
+    #   if telegram_data_list and isinstance(telegram_data_list, dict):
+    #       formatted_msgs = format_telegram_messages(telegram_data_list, stock_code, stock_name)
+    #       if formatted_msgs and formatted_msgs.strip(): # 메시지가 있을 경우에만 추가
+    #           part = "------\n<내부DB>\n"
+    #           part += f"{formatted_msgs}\n\n"
+    #           part += "</내부DB>\n"
+    #           sources_info_parts.append(part)
 
       # Web Search 데이터
       # create_all_section_content는 web_search_data.get("summary", "") 를 사용.

@@ -82,7 +82,8 @@ class TelegramRetrieverAgent(BaseAgent):
                     dt = datetime.strptime(date_part, "%Y-%m-%d")
                 else:
                     dt = datetime.strptime(date_part, "%Y%m%d")
-                return ZoneInfo("Asia/Seoul").localize(dt) # Asia/Seoul로 localize
+                # ZoneInfo는 localize 메서드가 없으므로 replace 사용
+                return dt.replace(tzinfo=ZoneInfo("Asia/Seoul"))
             except ValueError:
                 logger.warning(f"소스 문자열에서 날짜 파싱 실패: '{source_str}' -> '{date_part}'")
                 return None
@@ -256,11 +257,7 @@ class TelegramRetrieverAgent(BaseAgent):
                         system_prompt_override: Optional[str] = None,
                         final_report_toc: Optional[Dict[str, Any]] = None
                         ) -> Dict[str, Any]:
-        """
-        메시지 목록을 요약하고, 목차별로 관련 메시지를 추출하여 구조화된 딕셔너리로 반환합니다.
-        TELEGRAM_SUMMARY_PROMPT_2는 LLM이 JSON 형식으로 응답하도록 수정되었다고 가정합니다.
-        LLM은 title을 키로 사용하지만, 이 함수는 title을 final_report_toc에서 일치하는 section_id로 변환합니다.
-        """
+        
         default_overall_summary = "텔레그램 메시지에 대한 전체 요약 정보가 생성되지 않았습니다. 목차별 세부 내용을 참고하세요."
         default_summary_output = {
             "overall_summary": default_overall_summary,
@@ -268,33 +265,76 @@ class TelegramRetrieverAgent(BaseAgent):
             "main_query_results": found_messages 
         }
 
-        if not found_messages and not final_report_toc:
-             logger.warning("요약을 위한 메시지 및 최종 목차가 제공되지 않았습니다.")
-             return default_summary_output
         if not found_messages:
-            logger.warning("요약을 위한 메시지가 제공되지 않았습니다. 목차 기반으로 빈 결과를 생성할 수 있습니다.")
+            logger.warning("요약을 위한 메시지가 제공되지 않았습니다.")
+            return default_summary_output
+        
+        # final_report_toc 로깅 - 디버깅용
+        if final_report_toc:
+            logger.info(f"final_report_toc 제공됨: {len(str(final_report_toc))}자")
+        else:
+            logger.warning("final_report_toc이 제공되지 않았습니다.")
 
         try:
-            # final_report_toc에서 title과 section_id 매핑 생성
+            # title과 section_id 매핑 생성
             title_to_section_id = {}
-            if final_report_toc and isinstance(final_report_toc, dict) and "sections" in final_report_toc:
-                # 최상위 섹션 매핑
-                for section in final_report_toc["sections"]:
-                    if isinstance(section, dict) and "title" in section and "section_id" in section:
-                        title_to_section_id[section["title"]] = section["section_id"]
-                        
-                        # 하위 섹션 매핑
-                        if "subsections" in section and isinstance(section["subsections"], list):
-                            for subsection in section["subsections"]:
-                                if isinstance(subsection, dict) and "title" in subsection and "subsection_id" in subsection:
-                                    title_to_section_id[subsection["title"]] = subsection["subsection_id"]
+            section_id_to_title = {}
             
+            if final_report_toc and isinstance(final_report_toc, dict) and "sections" in final_report_toc:
+                sections = final_report_toc.get("sections", [])
+                if isinstance(sections, list):
+                    # 최상위 섹션 매핑
+                    for section in sections:
+                        if isinstance(section, dict):
+                            title = section.get("title")
+                            section_id = section.get("section_id")
+                            if title and section_id:
+                                title_to_section_id[title] = section_id
+                                section_id_to_title[section_id] = title
+                            
+                            # 하위 섹션 매핑
+                            subsections = section.get("subsections", [])
+                            if isinstance(subsections, list):
+                                for subsection in subsections:
+                                    if isinstance(subsection, dict):
+                                        sub_title = subsection.get("title")
+                                        sub_id = subsection.get("subsection_id")
+                                        if sub_title and sub_id:
+                                            title_to_section_id[sub_title] = sub_id
+                                            section_id_to_title[sub_id] = sub_title
+                
                 logger.info(f"TOC title -> section_id 매핑 생성 완료: {len(title_to_section_id)}개 항목")
+                if title_to_section_id:
+                    logger.info(f"매핑 예시: {list(title_to_section_id.items())[:2]}")
+                
+                # 메시지가 있고 TOC가 있지만 매핑이 없는 경우 - 폴백으로 기본 목차 구조 생성
+                if not title_to_section_id and isinstance(sections, list) and sections:
+                    logger.warning("유효한 title과 section_id 매핑을 생성할 수 없어 기본 매핑 생성")
+                    # 최소한 기본 section_id를 생성
+                    for i, section in enumerate(sections):
+                        if isinstance(section, dict) and "title" in section:
+                            title = section["title"]
+                            default_id = f"s{i+1}"
+                            title_to_section_id[title] = default_id
+                            section_id_to_title[default_id] = title
+                            logger.info(f"기본 매핑 생성: '{title}' -> '{default_id}'")
+
+            # 매핑이 없는 경우에 대한 폴백 처리
+            if not title_to_section_id and found_messages:
+                logger.warning("TOC 매핑이 없어 기본 목차 구조 생성")
+                # 간단한 기본 목차 생성
+                title_to_section_id = {
+                    "종목 관련 주요 소식": "s1",
+                    "실적 및 전망": "s2",
+                    "투자 의견": "s3",
+                    "기타 정보": "s4"
+                }
+                section_id_to_title = {v: k for k, v in title_to_section_id.items()}
 
             # LLM에 전달할 메시지 포맷팅
             formatted_messages_for_llm = []
             if found_messages:
-                for msg in found_messages:
+                for i, msg in enumerate(found_messages):
                     created_at_dt = msg.get("message_created_at")
                     created_at_str = created_at_dt.strftime("%Y-%m-%d") if isinstance(created_at_dt, datetime) else "날짜정보없음"
                     content = msg.get("content", "")
@@ -304,11 +344,11 @@ class TelegramRetrieverAgent(BaseAgent):
                     except (ValueError, TypeError):
                         score = 0.0
 
-                    formatted_messages_for_llm.append(f"--- 메세지 시작 ---")
-                    formatted_messages_for_llm.append(f"- 메세지 일자: {created_at_str}\n- 내부점수: {score:.2f}\n- 메세지 내용:\n {content}")
-                    formatted_messages_for_llm.append(f"--- 메세지 끝 ---")
+                    formatted_messages_for_llm.append(f"--- 메시지 인덱스: {i} ---")
+                    formatted_messages_for_llm.append(f"- 메시지 일자: {created_at_str}\n- 내부점수: {score:.2f}\n- 메시지 내용:\n {content}")
+                    formatted_messages_for_llm.append(f"--- 메시지 끝 ---")
             
-            messages_text_for_llm = "\n".join(formatted_messages_for_llm) if formatted_messages_for_llm else "제공된 메시지 없음"
+            messages_text_for_llm = "\n".join(formatted_messages_for_llm)
             
             if system_prompt_override:
                 prompt_context = system_prompt_override
@@ -316,6 +356,8 @@ class TelegramRetrieverAgent(BaseAgent):
                 prompt_context = self.MakeSummaryPrompt2(stock_code, stock_name, final_report_toc)
             
             combined_prompt = f"{prompt_context}\n\n<메세지모음>\n{messages_text_for_llm}\n</메세지모음>\n\n"
+            # 프롬프트 길이 로깅
+            logger.info(f"LLM 요청 프롬프트 길이: {len(combined_prompt)}자")
 
             parsed_user_id = None
             if user_id and user_id != "test_user":
@@ -327,23 +369,33 @@ class TelegramRetrieverAgent(BaseAgent):
 
             if not response or not response.content or not isinstance(response.content, str):
                 logger.error("LLM이 빈 응답 또는 문자열이 아닌 응답을 반환했습니다.")
-                return default_summary_output
+                return self._fallback_toc_results(default_overall_summary, found_messages, section_id_to_title)
 
             llm_output_str = response.content
+            # 응답 길이 로깅
+            logger.info(f"LLM 응답 길이: {len(llm_output_str)}자")
+            
             match = re.search(r"```json\s*([\s\S]*?)\s*```", llm_output_str, re.IGNORECASE)
             json_str = match.group(1) if match else llm_output_str
 
             try:
                 parsed_llm_output = json.loads(json_str)
+                if not parsed_llm_output:
+                    logger.warning("LLM이 빈 JSON 객체를 반환했습니다.")
+                    return self._fallback_toc_results(default_overall_summary, found_messages, section_id_to_title)
             except json.JSONDecodeError as json_e:
                 logger.error(f"LLM 응답 JSON 파싱 실패: {json_e}. 응답 내용 (앞 500자): {llm_output_str[:500]}")
-                return {
-                    "overall_summary": f"JSON 파싱 실패. 원본 LLM 응답: {llm_output_str}", 
-                    "toc_results": {}, "main_query_results": found_messages
-                }
+                return self._fallback_toc_results(default_overall_summary, found_messages, section_id_to_title)
             
             # LLM의 출력은 title을 키로 사용
             llm_toc_data = parsed_llm_output
+            logger.info(f"LLM 응답 구조: {len(llm_toc_data)} 최상위 키, type:{type(llm_toc_data)}")
+            
+            # LLM 응답 키 로깅
+            if isinstance(llm_toc_data, dict):
+                top_keys = list(llm_toc_data.keys())
+                if top_keys:
+                    logger.info(f"LLM 응답 최상위 키 예시: {top_keys[:3]}")
 
             toc_results_structured: Dict[str, List[RetrievedTelegramMessage]] = {}
             if isinstance(llm_toc_data, dict):
@@ -352,7 +404,7 @@ class TelegramRetrieverAgent(BaseAgent):
                     # title_key를 section_id로 변환 (매핑에 없으면 title_key 그대로 사용)
                     section_id = title_to_section_id.get(title_key, title_key)
                     
-                    # 변환 로그 기록 (디버깅용)
+                    # 변환 로그 기록
                     if section_id != title_key:
                         logger.info(f"Title '{title_key}' -> section_id '{section_id}' 매핑됨")
                     else:
@@ -362,6 +414,7 @@ class TelegramRetrieverAgent(BaseAgent):
                         messages_for_this_section: List[RetrievedTelegramMessage] = []
                         for item in content_items:
                             if isinstance(item, dict):
+                                logger.info(f"item: {item}")
                                 content = item.get("content", "내용 없음")
                                 source = item.get("source", "")
                                 msg_date = self._parse_source_date(source) or datetime.now(ZoneInfo("Asia/Seoul"))
@@ -374,24 +427,103 @@ class TelegramRetrieverAgent(BaseAgent):
                                         "source_type": item.get("type", "unknown"),
                                         "original_source_string": source,
                                         "llm_generated_for_toc": True,
-                                        "toc_key": section_id,  # section_id 사용
-                                        "original_title": title_key  # 원본 title 유지 (참조용)
+                                        "toc_key": section_id,
+                                        "original_title": title_key
                                     }
                                 }
                                 messages_for_this_section.append(structured_msg)
                         if messages_for_this_section:
-                           toc_results_structured[section_id] = messages_for_this_section  # section_id를 키로 사용
+                            toc_results_structured[section_id] = messages_for_this_section
+            
+            # 결과가 비어있는지 확인
+            # if not toc_results_structured:
+            #     logger.warning("LLM이 생성한 TOC 결과가 비어있어 대체 결과 생성")
+            #     return self._fallback_toc_results(default_overall_summary, found_messages, section_id_to_title)
+            
+            logger.info(f"TOC 결과 생성 완료: {len(toc_results_structured)}개 섹션")
             
             return {
                 "overall_summary": default_overall_summary,
-                "toc_results": toc_results_structured,  # section_id를 키로 사용한 결과
+                "toc_results": toc_results_structured,
                 "main_query_results": found_messages
             }
             
         except Exception as e:
             error_msg = f"메시지 요약 및 구조화 중 오류 발생: {str(e)}"
             logger.error(error_msg, exc_info=True)
-            return default_summary_output
+            return self._fallback_toc_results(default_overall_summary, found_messages, {})
+
+    def _fallback_toc_results(
+        self, summary: str, messages: List[RetrievedTelegramMessage], 
+        section_id_to_title: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """LLM 응답이 실패했을 때 대체 결과를 생성합니다"""
+        logger.info("폴백 TOC 결과 생성 시작")
+        
+        fallback_toc_results: Dict[str, List[RetrievedTelegramMessage]] = {}
+        
+        # 섹션 ID가 없으면 기본 섹션 생성
+        if not section_id_to_title:
+            section_id_to_title = {
+                "s1": "종목 관련 주요 소식",
+                "s2": "실적 및 전망",
+                "s3": "투자 의견",
+                "s4": "기타 정보"
+            }
+        
+        # 메시지가 없으면 빈 결과 반환
+        if not messages:
+            logger.warning("폴백 생성을 위한 메시지가 없습니다")
+            return {
+                "overall_summary": summary,
+                "toc_results": {},
+                "main_query_results": []
+            }
+        
+        # 1. 메시지를 시간순으로 정렬
+        sorted_msgs = sorted(messages, 
+                            key=lambda x: x.get("message_created_at", datetime.now()) 
+                            if isinstance(x.get("message_created_at"), datetime) 
+                            else datetime.now())
+        
+        # 2. 전체 메시지 수
+        total_msgs = len(sorted_msgs)
+        
+        # 3. 각 섹션에 메시지 할당
+        section_ids = list(section_id_to_title.keys())
+        msgs_per_section = max(1, total_msgs // len(section_ids))
+        
+        for i, section_id in enumerate(section_ids):
+            start_idx = i * msgs_per_section
+            end_idx = (i + 1) * msgs_per_section if i < len(section_ids) - 1 else total_msgs
+            
+            if start_idx >= total_msgs:
+                continue
+                
+            section_msgs = sorted_msgs[start_idx:end_idx]
+            
+            if section_msgs:
+                # 각 메시지에 메타데이터 추가
+                enhanced_msgs = []
+                for msg in section_msgs:
+                    msg_copy = msg.copy()
+                    if "metadata" not in msg_copy:
+                        msg_copy["metadata"] = {}
+                    
+                    msg_copy["metadata"]["llm_generated_for_toc"] = False
+                    msg_copy["metadata"]["toc_key"] = section_id
+                    msg_copy["metadata"]["assigned_by_fallback"] = True
+                    enhanced_msgs.append(msg_copy)
+                
+                fallback_toc_results[section_id] = enhanced_msgs
+        
+        logger.info(f"폴백 TOC 결과 생성 완료: {len(fallback_toc_results)}개 섹션")
+        
+        return {
+            "overall_summary": summary,
+            "toc_results": fallback_toc_results,
+            "main_query_results": messages
+        }
 
     def MakeSummaryPrompt2(self,stock_code: str, stock_name: str, final_report_toc: Optional[Dict[str, Any]]) -> str:
         """
@@ -575,13 +707,15 @@ class TelegramRetrieverAgent(BaseAgent):
             시간 기반 가중치 (0.4 ~ 1.0)
         """
         try:
-            aware_created_at = created_at
-            if created_at.tzinfo is None or created_at.tzinfo.utcoffset(created_at) is None:
-                aware_created_at = ZoneInfo("Asia/Seoul").localize(created_at)
-            else:
-                aware_created_at = created_at.astimezone(ZoneInfo("Asia/Seoul"))
-            now = datetime.now(ZoneInfo("Asia/Seoul"))
-            delta = now - aware_created_at
+            seoul_tz = timezone(timedelta(hours=9), 'Asia/Seoul')
+        
+            # naive datetime인 경우 서버 로컬 시간(Asia/Seoul)으로 간주
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=ZoneInfo("Asia/Seoul"))
+                
+            # now도 timezone 정보를 포함하도록 수정
+            now = datetime.now(seoul_tz)
+            delta = now - created_at
             
             # 시간 차이에 따른 가중치 설정
             if delta.days < 1:  # 24시간 이내
@@ -596,7 +730,7 @@ class TelegramRetrieverAgent(BaseAgent):
                 return 0.4
                 
         except Exception as e:
-            logger.warning(f"시간 가중치 계산 오류: {str(e)} - created_at: {created_at}, type: {type(created_at)}")
+            logger.warning(f"시간 가중치 계산 오류: {str(e)}")
             return 0.5  # 오류 시 중간값 반환
     
     def _make_search_query(self, query: str, stock_code: Optional[str], 

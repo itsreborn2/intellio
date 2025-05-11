@@ -342,7 +342,7 @@ class VectorStoreManager:
             start_time = time.time()
             embedding = await self.create_embeddings_single_query_async(query)
             end_time = time.time()
-            print(f"[{self.namespace}] 임베딩 생성 시간: {end_time - start_time}초, 쿼리: {query}")
+            print(f"[{self.namespace}] 임베딩 생성 시간: {(end_time - start_time):.3f}초, 쿼리: {query}")
         except RuntimeError as e:
             # 런타임 에러가 발생하면 동기 메서드로 폴백
             if "no running event loop" in str(e):

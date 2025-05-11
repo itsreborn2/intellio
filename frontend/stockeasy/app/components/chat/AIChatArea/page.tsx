@@ -161,7 +161,7 @@ function AIChatAreaContent() {
         stockName: '우진플라임', 
         stockCode: '049800' 
       },
-      updateInfo: '월별 전망, 잠정치, 실적 등의 통계, 앞으로 전망'
+      updateInfo: '월별 수출데이터, 잠정치, 실적 등의 통계, 앞으로 전망'
     }
   ];
   

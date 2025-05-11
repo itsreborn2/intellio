@@ -787,6 +787,13 @@ def create_heading(level: int, content: str) -> Dict:
     - level=3: 하위 섹션 제목 (예: 1.1, 1.2, 2.1)
     - level=4: 필요한 경우 추가적인 하위 제목 (넘버링 없음)
     """
+    if content.startswith("# "):
+        content = content[2:]
+    elif content.startswith("## "):
+        content = content[3:]
+    elif content.startswith("### "):
+        content = content[4:]
+    
     return HeadingComponent(level=level, content=content).dict()
 
 @tool
