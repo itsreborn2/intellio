@@ -123,6 +123,8 @@ class SummarizerAgent(BaseAgent):
         try:
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
+            #state["agent_results"]["financial_analyzer"]["competitor_info"] = competitor_info
+            competitors_infos = state.get("agent_results", {}).get("financial_analyzer", {}).get("competitor_infos", [])
             
             summary, summary_by_section = await self.generate_sectioned_summary_v2(
                 query=query, 
@@ -131,6 +133,7 @@ class SummarizerAgent(BaseAgent):
                 toc_data_company_report=toc_data_report_agent,
                 toc_data_telegram_agent=toc_data_telegram_agent,
                 other_agents_context_str=other_agents_context_str,
+                competitors_infos=competitors_infos,
                 stock_name=stock_name,
                 stock_code=stock_code
             )
@@ -160,6 +163,7 @@ class SummarizerAgent(BaseAgent):
                                          toc_data_company_report: Dict[str, List[CompanyReportData]],
                                          toc_data_telegram_agent: Dict[str, List[RetrievedTelegramMessage]],
                                          other_agents_context_str: str,
+                                         competitors_infos: List[Dict[str, Any]],
                                          stock_name: Optional[str] = None,
                                          stock_code: Optional[str] = None
                                          ):
@@ -170,6 +174,7 @@ class SummarizerAgent(BaseAgent):
         3. 모든 섹션 내용을 통합하여 최종 보고서와 섹션별 내용 맵을 반환.
         """
         logger.info("[SummarizerAgent] 동적 목차 기반 섹션별 요약 생성 시작 (v2: 핵심요약 후생성)")
+        competitor_keywords = ["경쟁사", "경쟁업체", "경쟁기업", "라이벌", "경쟁자", "업계 경쟁", "경쟁 업체"]
         
         toc_reports_summary_for_log = {k: len(v) for k, v in toc_data_company_report.items()}
         logger.info(f"[SummarizerAgent] 전달받은 toc_data_company_report (키: 리포트 수): {toc_reports_summary_for_log}")
@@ -251,6 +256,12 @@ class SummarizerAgent(BaseAgent):
             
             combined_context_for_current_section = f"{formatted_report_docs}\n\n{formatted_telegram_msgs}\n\n{other_agents_context_str}"
             
+            # 경쟁사 목차이면, 경쟁사의 최근 분기별 재무데이터 추가.
+            if any(keyword in current_section_title.lower() for keyword in competitor_keywords):
+                logger.info(f"[SummarizerAgent] 경쟁사 목차 - 경쟁사의 최근 분기별 재무데이터 추가")
+                formatted_data = self._format_competitor_financial_data(competitors_infos)
+                combined_context_for_current_section += f"\n<경쟁사 분기별 재무데이터>\n{formatted_data}\n</경쟁사 분기별 재무데이터>"
+
             prompt_str_current = PROMPT_GENERATE_SECTION_CONTENT.format(
                 query=query,
                 section_title=current_section_title,
@@ -425,5 +436,63 @@ class SummarizerAgent(BaseAgent):
             text += f"</자료 {i+1}>\n"
         text += "</내부DB>"
         return text
+        
+    def _format_competitor_financial_data(self, competitors_infos: List[Dict[str, Any]]) -> str:
+        """
+        경쟁사의 재무 데이터를 포맷팅하여 문자열로 반환합니다.
+        
+        Args:
+            competitors_infos: 경쟁사 정보 리스트
+            
+        Returns:
+            포맷팅된 경쟁사 재무 데이터 문자열
+        """
+        formatted_data = ""
+        if isinstance(competitors_infos, list) and competitors_infos:
+            for competitor_info in competitors_infos:
+                stock_name = competitor_info.get("stock_name", "경쟁사")
+                stock_code = competitor_info.get("stock_code", "")
+                logger.info(f" 경쟁사 재무 데이터 포맷팅 시작: {stock_name} ({stock_code})")
+                formatted_data += f"## {stock_name} ({stock_code}) 분기별 재무 데이터\n\n"
+                
+                if "db_search_data" in competitor_info:
+                    db_data = competitor_info["db_search_data"]
+                    if "quarters" in db_data:
+                        quarters = db_data["quarters"]
+                        # 분기 데이터를 시간순으로 정렬
+                        sorted_quarters = sorted(quarters.items(), reverse=True)
+                        
+                        # 각 분기별 데이터 추가 (텍스트 형식)
+                        for quarter_key, quarter_data in sorted_quarters[:4]:  # 최근 4분기만 표시
+                            year = quarter_data.get("year", 0)
+                            if year == 0:
+                                qk = int(quarter_key) // 100
+                                year = qk
+                            quarter_num = quarter_data.get("quarter", 0)
+                            if quarter_num == 0:
+                                qk = int(quarter_key) % 100
+                                quarter_num = qk / 3
+                            quarter_display = f"{year}년 {quarter_num}분기"
+                            
+                            revenue = quarter_data.get("revenue", {}).get("period_value", "-")
+                            revenue_unit = quarter_data.get("revenue", {}).get("display_unit", "")
+                            
+                            op_income = quarter_data.get("operating_income", {}).get("period_value", "-")
+                            op_income_unit = quarter_data.get("operating_income", {}).get("display_unit", "")
+                            
+                            net_income = quarter_data.get("net_income", {}).get("period_value", "-")
+                            net_income_unit = quarter_data.get("net_income", {}).get("display_unit", "")
+                            
+                            formatted_data += f"{quarter_display}: 매출액 {revenue}{revenue_unit}, 영업이익 {op_income}{op_income_unit}, 당기순이익 {net_income}{net_income_unit}\n"
+                        
+                        formatted_data += "\n"
+                    else:
+                        formatted_data += "분기별 재무 데이터를 찾을 수 없습니다.\n\n"
+                else:
+                    formatted_data += "경쟁사 재무 데이터를 찾을 수 없습니다.\n\n"
+        else:
+            formatted_data = "경쟁사 재무 데이터를 찾을 수 없습니다."
+            
+        return formatted_data
         
     

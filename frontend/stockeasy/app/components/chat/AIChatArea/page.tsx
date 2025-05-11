@@ -184,7 +184,7 @@ function AIChatAreaContent() {
       onQuestionLimitExceeded: () => {
         console.log('질문 할당량 초과');
         // 할당량 초과 시 안내 메시지
-        toast.error('오늘의 질문 할당량(30개)을 모두 소진하였습니다. 내일 다시 이용해주세요.');
+        toast.error('오늘의 질문 할당량(10개)을 모두 소진하였습니다. 내일 다시 이용해주세요.');
       },
       onProcessingStart: () => {
         // 첫 메시지 전송 시 중앙 정렬 해제

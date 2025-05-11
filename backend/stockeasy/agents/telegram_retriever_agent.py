@@ -414,7 +414,7 @@ class TelegramRetrieverAgent(BaseAgent):
                         messages_for_this_section: List[RetrievedTelegramMessage] = []
                         for item in content_items:
                             if isinstance(item, dict):
-                                logger.info(f"item: {item}")
+                                #logger.info(f"item: {item}")
                                 content = item.get("content", "내용 없음")
                                 source = item.get("source", "")
                                 msg_date = self._parse_source_date(source) or datetime.now(ZoneInfo("Asia/Seoul"))

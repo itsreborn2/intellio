@@ -10,7 +10,8 @@ import json
 import asyncio
 import hashlib
 from datetime import datetime, timezone, timedelta
-from langchain_tavily import TavilySearch
+#from langchain_tavily import TavilySearch
+from common.services.tavily import TavilyService
 from loguru import logger
 from typing import Dict, List, Any, Optional, Set, cast, Union
 
@@ -60,7 +61,8 @@ class WebSearchAgent(BaseAgent):
         self.agent_llm_lite = get_agent_llm("gemini-lite")
         self.parser = JsonOutputParser()
 
-        self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
+        #self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
+        self.tavily_service = TavilyService()
         
         # 최대 쿼리 개수 및 최대 결과 개수 설정
         self.max_queries = 9
@@ -365,13 +367,21 @@ class WebSearchAgent(BaseAgent):
             검색 결과 목록
         """
         try:
-            search_results = await self.tavily_search.ainvoke({"query": query, 
-                                                "search_depth": "advanced",
+            # search_results = await self.tavily_search.ainvoke({"query": query, 
+            #                                     "search_depth": "advanced",
+            #                                     #"search_depth": "basic",
+            #                                     "max_results": max_results, 
+            #                                     "topic": "general",
+            #                                     "time_range" : "year",
+            #                                     })
+            search_results = await self.tavily_service.search_async(query=query, 
+                                                search_depth="advanced",
                                                 #"search_depth": "basic",
-                                                "max_results": max_results, 
-                                                "topic": "general",
-                                                "time_range" : "year",
-                                                })
+                                                max_results=max_results, 
+                                                topic="general",
+                                                time_range="year",
+                                                )
+            
             # print(f"검색결과 : {search_results}")
             # print(f"검색결과 시간 : {search_results.get('response_time', '0')}")
             # print(f"검색결과 응답 : {search_results.get('answer', 'None')}")

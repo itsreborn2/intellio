@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, Callable, List, Tuple, Union, Awaitable,
 from loguru import logger
 from functools import lru_cache
 import asyncio
-
+from common.core.config import settings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.callbacks import BaseCallbackHandler
 
@@ -390,8 +390,8 @@ class AgentLLM:
         
         if use_token_tracking:
             from common.services.token_usage_service import track_token_usage
-            
-            logger.info(f"[토큰 추적][비동기] ainvoke_with_fallback 토큰 추적 활성화: agent:{self.agent_name}, user_id={user_id}, project_type={project_type}")
+            if settings.ENV == "development":
+                logger.info(f"[토큰 추적][비동기] ainvoke_with_fallback 토큰 추적 활성화: agent:{self.agent_name}, user_id={user_id}, project_type={project_type}")
         
         # 폴백이 비활성화되어 있으면 그냥 호출
         if not self.fallback_settings.get("enabled", False):

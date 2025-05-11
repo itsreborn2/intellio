@@ -265,7 +265,7 @@ class AgentState(TypedDict, total=False):
     
     # 사용자 컨텍스트
     user_context: Dict[str, Any]    # 사용자 컨텍스트 정보
-
+    competitor_info: Optional[Dict[str, Any]]  # 경쟁사 정보
     
     # 질문 분석 결과 (질문분류기에서 설정)
     question_analysis: QuestionAnalysisResult  # 질문 분석 결과

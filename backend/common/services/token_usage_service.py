@@ -12,6 +12,7 @@ from common.models.token_usage import TokenUsage, ProjectType, TokenType
 from stockeasy.models.chat import StockChatMessage, StockChatSession
 # 순환 참조를 방지하기 위해 get_db 임포트를 제거하고 지연 임포트를 사용
 # from common.core.deps import get_db
+from common.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -347,8 +348,8 @@ async def save_token_usage(
         db.add(token_usage)
         await db.commit()
         await db.refresh(token_usage)
-        
-        logger.info(f"[토큰 추적] DB 저장 성공: ID={token_usage.id}, 토큰 합계={total_tokens}")
+        if settings.ENV == "development":
+            logger.info(f"[토큰 추적] DB 저장 성공: ID={token_usage.id}, 토큰 합계={total_tokens}")
         return token_usage
     except Exception as e:
         logger.error(f"[토큰 추적] DB 저장 실패: {str(e)}")

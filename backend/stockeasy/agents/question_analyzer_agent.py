@@ -28,8 +28,8 @@ from stockeasy.models.agent_io import (
 from langchain_core.prompts import ChatPromptTemplate
 from stockeasy.agents.base import BaseAgent
 from sqlalchemy.ext.asyncio import AsyncSession
-from langchain_tavily import TavilySearch
-
+#from langchain_tavily import TavilySearch
+from common.services.tavily import TavilyService
 
 class Entities(BaseModel):
     """추출된 엔티티 정보"""
@@ -157,7 +157,8 @@ class QuestionAnalyzerAgent(BaseAgent):
         logger.info(f"QuestionAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.prompt_template = SYSTEM_PROMPT
 
-        self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
+        #self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
+        self.tavily_service = TavilyService()
         self.redis_client = AsyncRedisClient()
     
         
@@ -800,14 +801,23 @@ class QuestionAnalyzerAgent(BaseAgent):
             #                                                 "include_raw_content": True,
             #                                                 "include_answer":True
             #                                                 })
-            search_results = await self.tavily_search.ainvoke({"query": query, 
-                                                "search_depth": "advanced", # "basic",
+            # search_results = await self.tavily_search.ainvoke({"query": query, 
+            #                                     "search_depth": "advanced", # "basic",
+            #                                     #"search_depth": "basic", # "basic",
+            #                                     "max_results": 14, 
+            #                                     "topic": "general",
+            #                                     #"topic":"finance",
+            #                                     "time_range" : "year",
+            #                                     })
+            search_results = await self.tavily_service.search_async(query=query, 
+                                                search_depth="advanced", # "basic",
                                                 #"search_depth": "basic", # "basic",
-                                                "max_results": 14, 
-                                                "topic": "general",
+                                                max_results=14, 
+                                                topic="general",
                                                 #"topic":"finance",
-                                                "time_range" : "year",
-                                                })
+                                                time_range="year",
+                                                )
+            
             print(f"검색결과 : {search_results}")
             print(f"검색결과 시간 : {search_results.get('response_time', '0')}")
             print(f"검색결과 응답 : {search_results.get('answer', 'None')}")

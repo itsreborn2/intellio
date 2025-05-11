@@ -232,7 +232,8 @@ const Header: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           {/* 중앙 영역: 모드 선택 토글 - 채팅 메시지가 있을 때만 표시 */}
-          <div 
+          {/* 토글 버튼 일시적으로 비활성화 */}
+          {/* <div 
             className={`
               flex items-center 
               transition-opacity duration-300 ease-in-out
@@ -244,16 +245,16 @@ const Header: React.FC = () => {
               visibility: toggleVisible ? 'visible' : 'hidden'
             }}
           >
-            {/* 토글 스위치 버튼 */}
+            토글 스위치 버튼
             <div className="flex items-center">
-              {/* 각 라벨에 고정 너비를 적용하고 텍스트 정렬을 중앙으로 설정 */}
+              각 라벨에 고정 너비를 적용하고 텍스트 정렬을 중앙으로 설정
               <div className="w-16 text-center">
                 <span className={`${userMode === 'beginner' ? 'text-lg font-semibold text-[#10A37F]' : 'text-xs text-gray-500'}`}>
                   주린이
                 </span>
               </div>
               
-              {/* 토글 스위치 */}
+              토글 스위치
               <div className="flex justify-center items-center mx-1">
                 <button 
                   onClick={handleModeToggle}
@@ -276,14 +277,14 @@ const Header: React.FC = () => {
                 </button>
               </div>
               
-              {/* 각 라벨에 고정 너비를 적용하고 텍스트 정렬을 중앙으로 설정 */}
+              각 라벨에 고정 너비를 적용하고 텍스트 정렬을 중앙으로 설정
               <div className="w-16 text-center">
                 <span className={`${userMode === 'expert' ? 'text-lg font-semibold text-[#4A72B0]' : 'text-xs text-gray-500'}`}>
                   전문가
                 </span>
               </div>
             </div>
-          </div>
+          </div> */}
           {/* PDF 내보내기 버튼 - 채팅 메시지가 있고 세션이 있을 때만 표시 */}
           {isUserLoggedIn && hasChatMessages && currentSession && (
             <button
@@ -304,7 +305,7 @@ const Header: React.FC = () => {
             <div className="flex items-center gap-0.5">
               <MessageSquare size={16} className="text-gray-600" />
               <Badge variant="outline" className="h-5 text-xs px-1.5 ml-0.5 rounded-md flex items-center justify-center">
-                {isQuestionLoading ? "..." : `${100 - (questionSummary?.total_questions || 0)}`}
+                {isQuestionLoading ? "..." : `${10 - (questionSummary?.total_questions || 0)}`}
               </Badge>
             </div>
           )}
