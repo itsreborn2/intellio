@@ -104,12 +104,27 @@ def generate_daily_stats(self):
              raise ValueError("Google Sheets 설정이 누락되었습니다.")
 
         sheet_service = GoogleSheetService(credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS)
-        worksheet_name = "사용자통계" # 대상 워크시트 이름
         sheet_url = "https://docs.google.com/spreadsheets/d/1AgbEpblhoqSBTmryDjSSraqc5lRdgWKNwBUA4VYk2P4/edit"
+        
+        # 기본 시트 업데이트
+        worksheet_name = "사용자통계" # 대상 워크시트 이름
         worksheet = sheet_service.open_sheet_by_url(sheet_url, worksheet_name=worksheet_name)
         worksheet.append_row(data_row, value_input_option='USER_ENTERED')
-
+        
         logger.info(f"{report_date} 기준 통계 Google Sheet 업데이트 완료 (워크시트: {worksheet_name})")
+        
+        # 23시 50분 이후에만 일별 통계시트에도 기록
+        if dtNow.hour == 23 and dtNow.minute >= 50:
+            # 일별 통계용 데이터 행 준비 (날짜 형식을 '년.월.일'로 변경)
+            daily_data_row = data_row.copy()
+            daily_data_row[0] = dtNow.strftime('%Y.%m.%d')  # 날짜 형식 변경
+            
+            # 일별 통계 시트 업데이트
+            daily_worksheet_name = "사용자통계-일별"
+            daily_worksheet = sheet_service.open_sheet_by_url(sheet_url, worksheet_name=daily_worksheet_name)
+            daily_worksheet.append_row(daily_data_row, value_input_option='USER_ENTERED')
+            
+            logger.info(f"{report_date} 기준 일별 통계 Google Sheet 업데이트 완료 (워크시트: {daily_worksheet_name})")
 
         return {"status": "success", "date": report_date.isoformat(), "stats_written": data_row}
 
