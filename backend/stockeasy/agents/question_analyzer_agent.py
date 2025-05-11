@@ -11,21 +11,24 @@ from typing import Dict, List, Any, Optional, Literal, cast, Union
 from datetime import datetime
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import List, Optional as PydanticOptional
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from common.models.token_usage import ProjectType
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
-from stockeasy.prompts.question_analyzer_prompts import SYSTEM_PROMPT, format_question_analyzer_prompt
+from stockeasy.prompts.question_analyzer_prompts import PROMPT_DYNAMIC_TOC, SYSTEM_PROMPT, format_question_analyzer_prompt
 from common.core.config import settings
+from common.core.redis import AsyncRedisClient
 from stockeasy.models.agent_io import (
     QuestionAnalysisResult, ExtractedEntity, QuestionClassification, 
     DataRequirement, pydantic_to_typeddict
 )
+from langchain_core.prompts import ChatPromptTemplate
 from stockeasy.agents.base import BaseAgent
 from sqlalchemy.ext.asyncio import AsyncSession
+from langchain_tavily import TavilySearch
 
 
 class Entities(BaseModel):
@@ -89,7 +92,7 @@ class DataRequirements(BaseModel):
     industry_data_needed: bool = Field(..., description="산업 데이터 필요 여부")
     confidential_data_needed: bool = Field(..., description="비공개 자료 필요 여부")
     revenue_data_needed: bool = Field(False, description="매출 및 수주 현황 데이터 필요 여부")
-
+    web_search_needed: bool = Field(False, description="웹 검색 데이터 필요 여부,기본False")
 
 class QuestionAnalysis(BaseModel):
     """질문 분석 결과"""
@@ -116,6 +119,18 @@ class ConversationContextAnalysis(BaseModel):
     stock_relation: PydanticOptional[Literal["동일종목", "종목비교", "다른종목", "알수없음"]] = Field(None, description="이전 종목과의 관계")
 
 
+# 새로운 모델 클래스 추가
+class DynamicTocOutput(BaseModel):
+    """
+    동적 목차 생성 결과를 위한 구조화된 출력 포맷
+    """
+    title: str = Field(
+        description="보고서 제목 (질문과 기업명을 반영)"
+    )
+    sections: List[Dict[str, Any]] = Field(
+        description="보고서 섹션 정보"
+    )
+
 class QuestionAnalyzerAgent(BaseAgent):
     """
     사용자 질문을 분석하는 에이전트
@@ -141,7 +156,9 @@ class QuestionAnalyzerAgent(BaseAgent):
         self.agent_llm_lite = get_agent_llm("gemini-2.0-flash-lite")
         logger.info(f"QuestionAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.prompt_template = SYSTEM_PROMPT
-        
+
+        self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
+        self.redis_client = AsyncRedisClient()
     
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -318,51 +335,97 @@ class QuestionAnalyzerAgent(BaseAgent):
                 system_prompt = custom_prompt_from_attr
                 logger.info(f"QuestionAnalyzerAgent using custom prompt from attribute")
             
-            # 프롬프트 준비
-            prompt = format_question_analyzer_prompt(query=query, stock_name=stock_name, stock_code=stock_code, system_prompt=system_prompt)
-
+            import asyncio
             
-            # LLM 호출로 분석 수행 - structured output 사용
-            response:QuestionAnalysis = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
-                prompt, # input=prompt 하면 안됨. 그냥 prompt 전달
-                user_id=user_id,
-                project_type=ProjectType.STOCKEASY,
-                db=self.db
+            # 1. 사용자 질문 의도 분석 및 2. 최근 이슈 검색/목차 생성을 병렬로 실행
+            logger.info("사용자 질문 분석과 최근 이슈 검색을 병렬로 실행")
+            
+            # 1. 사용자 질문 의도 분석 비동기 함수
+            async def analyze_question_intent():
+                # 프롬프트 준비
+                prompt = format_question_analyzer_prompt(query=query, stock_name=stock_name, stock_code=stock_code, system_prompt=system_prompt)
+                
+                # LLM 호출로 분석 수행 - structured output 사용
+                response:QuestionAnalysis = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
+                    prompt, # input=prompt 하면 안됨. 그냥 prompt 전달
+                    user_id=user_id,
+                    project_type=ProjectType.STOCKEASY,
+                    db=self.db
+                )
+                response.entities.stock_name = stock_name
+                response.entities.stock_code = stock_code
+
+                # 모든 데이터 전부 on
+                response.data_requirements.reports_needed = True
+                response.data_requirements.telegram_needed = True
+                response.data_requirements.financial_statements_needed = True
+                response.data_requirements.industry_data_needed = True
+                response.data_requirements.confidential_data_needed = True
+                response.data_requirements.revenue_data_needed = True
+                # 분석 결과 로깅
+                logger.info(f"Analysis result: {response}")
+
+                # 서브그룹 가져오기
+                stock_info_service = StockInfoService()
+                subgroup_list = await stock_info_service.get_sector_by_code(stock_code)
+                logger.info(f"subgroup_info: {subgroup_list}")
+
+                if subgroup_list and len(subgroup_list) > 0:
+                    response.entities.subgroup = subgroup_list
+                
+                # QuestionAnalysisResult 객체 생성 - 유틸리티 함수 사용
+                question_analysis: QuestionAnalysisResult = {
+                    "entities": response.entities.dict(),
+                    "classification": response.classification.dict(),
+                    "data_requirements": response.data_requirements.dict(),
+                    "keywords": response.keywords,
+                    "detail_level": response.detail_level
+                }
+                
+                return question_analysis
+            
+            # 2. 최근 이슈 검색 및 목차 생성 비동기 함수
+            async def search_issues_and_generate_toc():
+                redis_client = self.redis_client
+                cache_key_prefix = "recent_issues_summary"
+                # user_id를 캐시 키에서 제외하여 종목별로 공통 캐시 사용
+                cache_key = f"{cache_key_prefix}:{stock_name}:{stock_code}"
+
+                # 1. 캐시에서 데이터 조회
+                cached_summary = await redis_client.get_key(cache_key)
+
+                if cached_summary:
+                    logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시된 최근 이슈 요약 사용: {cache_key}")
+                    recent_issues_summary = cached_summary
+                else:
+                    logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시 없음, 최근 이슈 요약 생성: {cache_key}")
+                    recent_issues_summary = await self.summarize_recent_issues(stock_name, stock_code, user_id)
+                    # 2. 생성된 요약을 캐시에 저장 (만료 시간: 1일 = 86400초)
+                    await redis_client.set_key(cache_key, recent_issues_summary, expire=86400)
+                    logger.info(f"종목 [{stock_name}/{stock_code}]에 최근 이슈 요약 캐시 저장 (만료: 1일): {cache_key}")
+
+                final_report_toc = await self.generate_dynamic_toc(query, recent_issues_summary, user_id)
+                return {
+                    "recent_issues_summary": recent_issues_summary,
+                    "final_report_toc": final_report_toc.model_dump()
+                }
+            
+            # 두 작업 병렬 실행
+            question_analysis_task = analyze_question_intent()
+            issues_and_toc_task = search_issues_and_generate_toc()
+            
+            # 병렬 작업 실행 및 결과 수집
+            question_analysis_result, issues_and_toc_result = await asyncio.gather(
+                question_analysis_task,
+                issues_and_toc_task
             )
-            response.entities.stock_name = stock_name
-            response.entities.stock_code = stock_code
-
-            # 모든 데이터 전부 on
-            response.data_requirements.reports_needed = True
-            response.data_requirements.telegram_needed = True
-            response.data_requirements.financial_statements_needed = True
-            response.data_requirements.industry_data_needed = True
-            response.data_requirements.confidential_data_needed = True
-            response.data_requirements.revenue_data_needed = True
-            # 분석 결과 로깅
-            logger.info(f"Analysis result: {response}")
-
-                        # 서브그룹 가져오기
-            stock_info_service = StockInfoService()
-            subgroup_list = await stock_info_service.get_sector_by_code(stock_code)
-            logger.info(f"subgroup_info: {subgroup_list}")
-
-            if subgroup_list and len(subgroup_list) > 0:
-                response.entities.subgroup = subgroup_list
             
-            # QuestionAnalysisResult 객체 생성 - 유틸리티 함수 사   용
-            question_analysis: QuestionAnalysisResult = {
-                "entities": response.entities.dict(),
-                "classification": response.classification.dict(),
-                "data_requirements": response.data_requirements.dict(),
-                "keywords": response.keywords,
-                "detail_level": response.detail_level
-            }
-            
-            # 상태에 저장
-            state["question_analysis"] = question_analysis
+            # 병렬 처리 결과 저장
+            state["question_analysis"] = question_analysis_result
+            state["agent_results"]["question_analysis"] = question_analysis_result
+            state["recent_issues_summary"] = issues_and_toc_result["recent_issues_summary"]
+            state["final_report_toc"] = issues_and_toc_result["final_report_toc"]
 
-            state["agent_results"]["question_analysis"] = question_analysis
             # 성능 지표 업데이트
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -537,3 +600,231 @@ class QuestionAnalyzerAgent(BaseAgent):
         # 처리 상태 업데이트
         state["processing_status"] = state.get("processing_status", {})
         state["processing_status"]["question_analyzer"] = "failed" 
+    
+        
+    # 동적 목차 생성 함수 추가
+    async def generate_dynamic_toc(self, query: str, recent_issues_summary: str, user_id: str) -> DynamicTocOutput:
+        """
+        사용자의 질문과 최근 이슈 요약을 바탕으로 동적인 목차를 생성하는 함수
+        
+        Args:
+            query (str): 사용자의 초기 질문
+            recent_issues_summary (str): 최근 이슈 요약
+
+        Returns:
+            DynamicTocOutput: 생성된 목차 구조
+        """
+        print("\n📋 동적 목차 생성 중...")
+        
+        #llm_lite = get_llm_for_agent("gemini-lite")
+
+        prompt_template = ChatPromptTemplate.from_template(PROMPT_DYNAMIC_TOC).partial(
+            query=query,
+            recent_issues_summary=recent_issues_summary,
+            today_date=datetime.now().strftime("%Y-%m-%d")
+        )
+        formatted_prompt = prompt_template.format_prompt()
+        
+        response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
+                formatted_prompt,
+                project_type=ProjectType.STOCKEASY,
+                user_id=user_id,
+                db=self.db
+            )
+        
+        # # 구조화된 출력 대신 일반 텍스트 응답으로 받음
+        # chain = prompt_template | llm_lite | StrOutputParser()
+        
+        # # LLM에 요청 보내기
+        # response_text = await chain.ainvoke({
+        #     "query": query, 
+        #     "recent_issues_summary": recent_issues_summary
+        # })
+        
+
+        response_text = response.content
+        print("\n📄 LLM 원본 응답:")
+        print(response_text[:200]) # 응답 일부 출력 (디버깅용)
+        
+        # JSON 문자열을 파싱
+        try:
+            # JSON 부분 추출 (LLM이 JSON 외에 다른 텍스트를 포함할 수 있음)
+            import re
+            import json
+            
+            # JSON 패턴 찾기 (중괄호로 감싸진 부분)
+            json_pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}))*\}'
+            json_match = re.search(json_pattern, response_text, re.DOTALL)
+            
+            if json_match:
+                json_str = json_match.group(0)
+                # JSON 문자열 파싱
+                toc_data = json.loads(json_str)
+                print("\n✅ JSON 파싱 성공")
+            else:
+                # JSON 패턴을 찾지 못한 경우
+                print("\n⚠️ JSON 패턴을 찾을 수 없음, 기본 목차 구조 사용")
+                toc_data = {
+                    "title": f"투자 리서치 보고서: {query}",
+                    "sections": [
+                        {
+                            "section_id": "section_1",
+                            "title": "핵심 요약 (Executive Summary)",
+                            "description": "주요 발견과 결론을 요약",
+                            "subsections": []
+                        },
+                        {
+                            "section_id": "section_2", 
+                            "title": "기업 개요 및 사업 모델",
+                            "description": "기업의 기본 정보와 비즈니스 모델 분석",
+                            "subsections": []
+                        },
+                        {
+                            "section_id": "section_3",
+                            "title": "산업/시장 동향 분석",
+                            "description": "기업이 속한 산업의 현황과 전망",
+                            "subsections": []
+                        }
+                    ],
+                    "rationale": "기본 목차 구조 사용"
+                }
+        except Exception as e:
+            print(f"\n⚠️ JSON 파싱 오류: {str(e)}, 기본 목차 구조 사용")
+            # 오류 시 기본 목차 구조 사용
+            toc_data = {
+                "title": f"투자 리서치 보고서: {query}",
+                "sections": [
+                    {
+                        "section_id": "section_1",
+                        "title": "핵심 요약 (Executive Summary)",
+                        "description": "주요 발견과 결론을 요약",
+                        "subsections": []
+                    },
+                    {
+                        "section_id": "section_2", 
+                        "title": "기업 개요 및 사업 모델",
+                        "description": "기업의 기본 정보와 비즈니스 모델 분석",
+                        "subsections": []
+                    },
+                    {
+                        "section_id": "section_3",
+                        "title": "산업/시장 동향 분석",
+                        "description": "기업이 속한 산업의 현황과 전망",
+                        "subsections": []
+                    }
+                ],
+            }
+        
+        # 파싱된 데이터로 DynamicTocOutput 객체 생성
+        result = DynamicTocOutput(
+            title=toc_data.get("title", f"투자 리서치 보고서: {query}"),
+            sections=toc_data.get("sections", []),
+            rationale=toc_data.get("rationale", "")
+        )
+        
+        print(f"\n✅ 동적 목차 생성 완료. 총 {len(result.sections)}개 섹션 포함")
+        print(f"📚 보고서 제목: {result.title}")
+        
+        # 섹션 정보 상세 출력
+        print(f"📑 목차 구조:")
+        for i, section in enumerate(result.sections, 1):
+            # 섹션 제목과 설명 출력
+            section_title = section.get('title', '제목 없음')
+            section_desc = section.get('description', '')
+            print(f"  {section_title}")
+            if section_desc:
+                print(f"     - {section_desc}")
+                
+            # 하위 섹션이 있으면 출력
+            if 'subsections' in section and section['subsections']:
+                for j, subsection in enumerate(section['subsections'], 1):
+                    subsection_title = subsection.get('title', '제목 없음')
+                    print(f"     {subsection_title}")
+        
+        return result
+    
+    async def summarize_recent_issues(self, stock_name: str, stock_code: str, user_id: str) -> str:
+        """LLM을 사용하여 검색된 최근 이슈 결과를 요약합니다."""
+
+        search_results = await self.search_recent_issues(stock_name, stock_code) # 최근 이슈 검색
+
+        print(f"\n📝 {stock_name}의 최근 이슈 요약 중...")
+        prompt = f"""
+    다음은 '{stock_name}'에 대한 최근 주요 뉴스 및 이슈 검색 결과입니다. 이 내용을 바탕으로 주요 뉴스 제목, 핵심 이슈, 반복적으로 언급되는 키워드를 간결하게 요약해주세요. 요약은箇条書き(불릿 포인트) 형식을 사용하고, 가장 중요한 순서대로 정렬해주세요.
+
+    검색 결과:
+    {search_results}
+
+    최근 주요 뉴스 및 이슈 검색 결과 키워드 요약:
+    """
+        try:
+            response = await self.agent_llm_lite.ainvoke_with_fallback(
+                prompt,
+                project_type=ProjectType.STOCKEASY,
+                user_id=user_id,
+                db=self.db
+            )
+
+            summary = response.content
+            print(f"  📝 {stock_name} 최근 이슈 요약 완료.")
+            #print(f"=== 요약 내용 ===\\n{summary}\\n===========") # 디버깅용
+            return summary
+        except Exception as e:
+            print(f"  ⚠️ {stock_name} 최근 이슈 요약 중 오류: {str(e)}")
+            return f"{stock_name} 최근 이슈 요약 중 오류 발생: {str(e)}"
+    # --- END: 최근 이슈 검색 및 요약 함수 ---
+
+    async def search_recent_issues(self, stock_name: str, stock_code: str) -> str:
+        """Tavily API를 사용하여 특정 종목의 최근 6개월간 주요 뉴스 및 이슈를 검색합니다."""
+        print(f"\n🔍 {stock_name}의 최근 주요 이슈 검색 중...")
+        query = f"{stock_name} 최근  주요 뉴스 및 핵심 이슈"
+        try:
+            # search_with_tavily 함수를 재사용하거나 직접 Tavily 호출 로직 구현
+            search_results = await self.search_with_tavily(query) 
+            print(f"  📊 {stock_name} 최근 이슈 검색 완료.\n[{search_results[:200]}]")
+            return search_results
+        except Exception as e:
+            print(f"  ⚠️ {stock_name} 최근 이슈 검색 중 오류: {str(e)}")
+            return f"{stock_name} 최근 이슈 검색 중 오류 발생: {str(e)}"
+
+    async def search_with_tavily(self, query: str) -> str:
+        """Tavily API를 사용하여 웹 검색을 수행합니다."""
+        try:
+            # search_results = await self.tavily_search.ainvoke({"query": query, 
+            #                                                    "search_depth":"basic",# "advanced",
+            #                                                 "max_results": 10, 
+            #                                                 "topic": "general",
+            #                                                 #"topic":"finance",
+            #                                                 "time_range" : "6m",
+            #                                                 "chunks_per_source": 3,
+            #                                                 "include_raw_content": True,
+            #                                                 "include_answer":True
+            #                                                 })
+            search_results = await self.tavily_search.ainvoke({"query": query, 
+                                                "search_depth": "advanced", # "basic",
+                                                #"search_depth": "basic", # "basic",
+                                                "max_results": 14, 
+                                                "topic": "general",
+                                                #"topic":"finance",
+                                                "time_range" : "year",
+                                                })
+            print(f"검색결과 : {search_results}")
+            print(f"검색결과 시간 : {search_results.get('response_time', '0')}")
+            print(f"검색결과 응답 : {search_results.get('answer', 'None')}")
+            formatted_results = "검색 결과:\n\n"
+            for i, result_item in enumerate(search_results.get('results', []), 1):
+                # result_item이 딕셔너리인지 확인 후 처리합니다.
+                if isinstance(result_item, dict):
+                    formatted_results += f"{i}. 제목: {result_item.get('title', '제목 없음')}\n"
+                    formatted_results += f"   URL: {result_item.get('url', '링크 없음')}\n"
+                    formatted_results += f"   내용: {result_item.get('content', '내용 없음')}\n\n"
+                else:
+                    # result_item이 딕셔너리가 아닌 경우 로그를 남기거나 다른 처리를 할 수 있습니다.
+                    logger.warning(f"검색 결과 항목이 예상된 딕셔너리 타입이 아닙니다: {result_item}")
+                    formatted_results += f"{i}. 처리할 수 없는 결과 항목입니다.\n\n"
+            return formatted_results
+        except Exception as e:
+            print(f"검색 중 오류가 발생했습니다: {str(e)}")
+            print(search_results)
+            return f"검색 중 오류가 발생했습니다: {str(e)}"
+        

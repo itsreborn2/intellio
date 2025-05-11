@@ -1,4 +1,5 @@
 from enum import Enum
+import time
 from typing import Dict, Optional, List, Union, Tuple, Any, Callable, Awaitable
 from pydantic import BaseModel, Field, ConfigDict
 from abc import ABC, abstractmethod
@@ -427,6 +428,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         for batch in batches:
             try:
                 # 비동기 클라이언트로 임베딩 생성
+                start_time = time.time()
                 response = await self.client_async.embeddings.create(
                     model=self.model_name,
                     input=batch
@@ -439,7 +441,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 # 토큰 사용량 누적 (내부 추적용)
                 total_tokens += response.usage.total_tokens
                 total_prompt_tokens += response.usage.prompt_tokens
-                logger.info(f"OpenAI[Async] 임베딩 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
+                end_time = time.time()
+                logger.info(f"OpenAI[Async] 시간: {(end_time - start_time):.3f}초, 토큰 사용량: {response.usage.total_tokens} (누적 {total_tokens})")
                 
             except Exception as e:
                 logger.error(f"OpenAI 임베딩 생성 실패[create_embeddings_async]: {str(e)}")

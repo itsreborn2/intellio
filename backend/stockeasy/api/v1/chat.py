@@ -55,6 +55,10 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
             "start": "질문 의도 파악 중...",
             "complete": "질문 분석 완료"
         },
+        "web_search": {
+            "start": "웹 검색 중...",
+            "complete": "웹 검색 완료"
+        },
         "telegram_retriever": {
             "start": "내부 데이터 정보 검색 중...",
             "complete": "내부 데이터 검색 완료"

@@ -237,7 +237,7 @@ class PineconeReranker(BaseReranker):
 
         try:
             from pinecone import PineconeAsyncio
-            print(f"Pinecone 리랭킹:{query}, 문서:{len(documents)}")
+            print(f"Pinecone 리랭킹:{query[:100]}, 문서:{len(documents)}")
             # 문서 텍스트 추출
             doc_texts = [doc.page_content for doc in documents]
 
@@ -397,7 +397,7 @@ class Reranker:
             logger.warning("리랭킹할 문서가 없습니다.")
             return RetrievalResult(documents=[])
 
-        logger.info(f"리랭킹 시작 - 쿼리: '{query}', 문서 수: {len(documents)}")
+        #logger.info(f"리랭킹 시작 - 쿼리: '{query[:100]}', 문서 수: {len(documents)}")
         return await self._reranker.rerank_async(query, documents, top_k)
 
     async def close(self):
@@ -417,8 +417,3 @@ class Reranker:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """비동기 컨텍스트 매니저 종료"""
         await self.close()
-
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(example_usage()) 

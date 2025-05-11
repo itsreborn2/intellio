@@ -29,7 +29,9 @@ class SemanticRetriever(BaseRetriever):
         logger.info(f"[SemanticRetriever][init] user:{config.user_id}, project_type:{config.project_type}")
         self.vs_manager.user_id = config.user_id
         self.vs_manager.project_type = config.project_type
-        
+    
+    async def aclose(self):
+        await self.vs_manager.close()
 
     async def retrieve(
         self,
@@ -67,7 +69,7 @@ class SemanticRetriever(BaseRetriever):
             score_list = []
             for i, (doc, score) in enumerate(filtered_results):
                 # 기존 Document 객체의 속성을 복사하여 새로운 Document 생성
-                if i < 5:
+                if i < 3:
                     if settings.ENV == "development":
                         logger.info(f"[{i}] score: {score}, min_score: {self.config.min_score}")
                         cont = doc.page_content[:100]

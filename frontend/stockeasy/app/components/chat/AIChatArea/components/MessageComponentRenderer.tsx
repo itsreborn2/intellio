@@ -23,12 +23,12 @@ export function MessageComponentRenderer({ component }: MessageComponentRenderer
       // 헤딩 레벨에 따라 적절한 스타일 적용
       const styles: React.CSSProperties = {
         fontWeight: 'bold',
-        lineHeight: 1.2,
-        margin: '1em 0 0.5em 0',
-        fontSize: level === 1 ? '1.8em' :
-                 level === 2 ? '1.5em' :
-                 level === 3 ? '1.3em' :
-                 level === 4 ? '1.2em' :
+        lineHeight: 1,
+        margin: '0.4em 0 0.2em 0',
+        fontSize: level === 1 ? '2em' :
+                 level === 2 ? '1.75em' :
+                 level === 3 ? '1.45em' :
+                 level === 4 ? '1.25em' :
                  level === 5 ? '1.1em' : '1em'
       };
       
@@ -38,7 +38,10 @@ export function MessageComponentRenderer({ component }: MessageComponentRenderer
     case 'paragraph': {
       const { content } = component as any;
       return (
-        <div style={{ margin: '0.5em 0' }}>
+        <div style={{  
+                    fontSize: '1.1em',
+                    paddingLeft: '0.5em',
+                   }}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
           >
@@ -53,7 +56,7 @@ export function MessageComponentRenderer({ component }: MessageComponentRenderer
       
       if (ordered) {
         return (
-          <ol style={{ paddingLeft: '1.5em', margin: '0.5em 0' }}>
+          <ol style={{ paddingLeft: '1.5em', margin: '0.5em 0',fontSize: '1.1em' }}>
             {items.map((item: any, index: number) => (
               <li key={index} style={{ margin: '0.25em 0' }}>
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
@@ -66,9 +69,19 @@ export function MessageComponentRenderer({ component }: MessageComponentRenderer
       }
       
       return (
-        <ul style={{ paddingLeft: '1.5em', margin: '0.5em 0' }}>
+        <ul style={{ listStyleType: 'none', paddingLeft: '1.5em', margin: '0.25em 0',fontSize: '1.1em' }}>
           {items.map((item: any, index: number) => (
-            <li key={index} style={{ margin: '0.25em 0' }}>
+            <li key={index} style={{ 
+              margin: '0.15em 0',
+              position: 'relative',
+              paddingLeft: '1.2em'
+            }}>
+              <span style={{
+                position: 'absolute',
+                left: '0',
+                top: '0',
+                fontWeight: 'bold',
+              }}>•</span>
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
                 {item.content}
               </ReactMarkdown>
@@ -175,7 +188,7 @@ export function MessageComponentRenderer({ component }: MessageComponentRenderer
       
       return (
         <div style={{ margin: '1em 0', width: '100%', overflowX: 'auto' }}>
-          {title && <div style={{ fontWeight: 'bold', marginBottom: '0.5em' }}>{title}</div>}
+          {title && <div style={{ fontWeight: 'bold', marginBottom: '0.5em', paddingLeft: '0.3em' }}>{title}</div>}
           <table style={{ 
             width: '100%', 
             borderCollapse: 'collapse',
@@ -209,7 +222,9 @@ export function MessageComponentRenderer({ component }: MessageComponentRenderer
                         borderBottom: '1px solid #ddd'
                       }}
                     >
-                      {row[header.key]}
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                        {row[header.key]}
+                      </ReactMarkdown>
                     </td>
                   ))}
                 </tr>

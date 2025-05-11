@@ -5,7 +5,9 @@ from langchain_core.documents import Document as LangchainDocument
 from pinecone import Pinecone as PineconeClient, PodSpec, ServerlessSpec
 from pinecone import PineconeAsyncio  # 비동기 지원을 위해 추가
 import pinecone
-import time  # 성능 측정을 위해 추가
+import time
+
+from common.utils.util import measure_time_async  # 성능 측정을 위해 추가
 
 from .embedding_models import EmbeddingModelType
 import logging
@@ -20,8 +22,8 @@ from datetime import datetime
 import os
 import aiohttp  # 명시적으로 aiohttp 임포트 추가
 
-#logger = logging.getLogger(__name__)
-from loguru import logger
+logger = logging.getLogger(__name__)
+#from loguru import logger
 
 # aiohttp 세션을 정리하기 위한 유틸리티 함수
 async def cleanup_aiohttp_sessions():
@@ -99,11 +101,11 @@ class VectorStoreManager:
             # 현재 이벤트 루프가 실행 중인지 확인
             loop = asyncio.get_running_loop()
             self._initialized_future = asyncio.Future()
-            #logger.info(f"[{self.namespace}] 이벤트 루프 감지됨, 비동기 초기화 태스크 생성 시작")
+            logger.info(f"[{self.namespace}] 이벤트 루프 감지됨, 비동기 초기화 태스크 생성 시작")
             asyncio.create_task(self._async_initialize())
         except RuntimeError:
             # 이벤트 루프가 실행 중이 아님 (동기 컨텍스트)
-            #logger.info(f"[{self.namespace}] 이벤트 루프가 없음, 비동기 초기화는 필요시 나중에 수행")
+            logger.info(f"[{self.namespace}] 이벤트 루프가 없음, 비동기 초기화는 필요시 나중에 수행")
             self._initialized_future = None  # 초기화되지 않은 상태로 유지
 
     def _sync_initialize(self):
@@ -210,7 +212,7 @@ class VectorStoreManager:
                     logger.info(f"[{self.namespace}] 비동기 인덱스 객체 생성 시작")
                     index_details = self.pinecone_client.describe_index(self.embedding_model_config.name)
                     host_url = index_details.host
-                    logger.info(f"[{self.namespace}] 비동기 인덱스 호스트 URL: {host_url}")
+                    #logger.info(f"[{self.namespace}] 비동기 인덱스 호스트 URL: {host_url}")
                     
                     # 비동기 인덱스 객체 생성
                     self.async_index = self.pinecone_client.IndexAsyncio(host=host_url)
@@ -316,6 +318,7 @@ class VectorStoreManager:
         )
         return results
 
+    @measure_time_async
     async def search_async(self, query: str, top_k: int, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
         """벡터 스토어에서 검색 수행 (비동기)"""
         # 비동기 초기화 확실히 기다리기
@@ -339,7 +342,7 @@ class VectorStoreManager:
             start_time = time.time()
             embedding = await self.create_embeddings_single_query_async(query)
             end_time = time.time()
-            #print(f"[{self.namespace}] 임베딩 생성 시간: {end_time - start_time}초")
+            print(f"[{self.namespace}] 임베딩 생성 시간: {end_time - start_time}초, 쿼리: {query}")
         except RuntimeError as e:
             # 런타임 에러가 발생하면 동기 메서드로 폴백
             if "no running event loop" in str(e):
@@ -355,7 +358,7 @@ class VectorStoreManager:
             
             if hasattr(self, 'async_index') and self.async_index is not None:
                 # Pinecone 비동기 클라이언트 직접 사용
-                print(f"[{self.namespace}] Pinecone 비동기 클라이언트 직접 사용")
+                print(f"[{self.namespace}] Pinecone 비동기 클라이언트(async_index) 직접 사용")
                 
                 start_time = time.time()
                 # Pinecone 6.0+ 비동기 API 사용
@@ -373,12 +376,20 @@ class VectorStoreManager:
                     if "no running event loop" in str(e):
                         logger.warning(f"[{self.namespace}] 쿼리 중 이벤트 루프 없음, 동기 메서드로 폴백")
                         return self.search(query, top_k, filters)
-                    raise
+                    else:
+                        logger.warning(f"[{self.namespace}] 비동기 클라이언트 중 오류 발생: {str(e)}")
+                        raise
                 finally:
-                    await self.async_index.close()
+                    end_time = time.time()
+                    print(f"[{self.namespace}] Pinecone 비동기 쿼리 시간: {end_time - start_time}초")
+                    logger.info(f"[{self.namespace}] Pinecone 비동기 쿼리 시간: {end_time - start_time}초")
+                    # 비동기 클라이언트는 vector_store_manager 에서 관리하면 안됨
+                    # retirver에서 search 함수를 여러번 호출할 수 있음.
+                    #await self.async_index.close()
+                    pass
                 
-                end_time = time.time()
-                print(f"[{self.namespace}] Pinecone 비동기 쿼리 시간: {end_time - start_time}초")
+                #end_time = time.time()
+                #print(f"[{self.namespace}] Pinecone 비동기 쿼리 시간: {end_time - start_time}초")
 
                 # LangChain Document 형식으로 결과 변환
                 docs = []
@@ -1216,9 +1227,9 @@ class VectorStoreManager:
             try:
                 # Pinecone 6.0+ 비동기 인덱스 세션 닫기
                 await self.async_index.close()
-                logger.info("Pinecone 비동기 인덱스 세션을 정상적으로 닫았습니다.")
+                #logger.info(f"[{self.namespace}] Pinecone 비동기 인덱스 세션을 정상적으로 닫았습니다.")
             except Exception as e:
-                logger.error(f"Pinecone 비동기 인덱스 세션을 닫는 중 오류 발생: {str(e)}")
+                logger.error(f"[{self.namespace}] Pinecone 비동기 인덱스 세션을 닫는 중 오류 발생: {str(e)}")
         
         # 동기 클라이언트 닫기
         if self.pinecone_client is not None:
@@ -1226,9 +1237,9 @@ class VectorStoreManager:
                 # Pinecone 클라이언트 세션 닫기
                 if hasattr(self.pinecone_client, 'close'):
                     self.pinecone_client.close()
-                    logger.info("Pinecone 클라이언트 세션을 정상적으로 닫았습니다.")
+                    logger.info(f"[{self.namespace}] Pinecone 클라이언트 세션을 정상적으로 닫았습니다.")
             except Exception as e:
-                logger.error(f"Pinecone 클라이언트 세션을 닫는 중 오류 발생: {str(e)}")
+                logger.error(f"[{self.namespace}] Pinecone 클라이언트 세션을 닫는 중 오류 발생: {str(e)}")
         
         # 임베딩 모델 제공자의 리소스 정리
         # try:
@@ -1253,21 +1264,21 @@ class VectorStoreManager:
             if hasattr(self, 'embedding_obj_async') and self.embedding_obj_async:
                 if hasattr(self.embedding_obj_async, 'aclose') and callable(getattr(self.embedding_obj_async, 'aclose')):
                     await self.embedding_obj_async.aclose()
-                    logger.info("비동기 임베딩 객체의 리소스를 정상적으로 닫았습니다.")
+                    #logger.info(f"[{self.namespace}] 비동기 임베딩 객체의 리소스를 정상적으로 닫았습니다.")
                 elif hasattr(self.embedding_obj_async, 'client') and hasattr(self.embedding_obj_async.client, 'aclose'):
                     await self.embedding_obj_async.client.aclose()
-                    logger.info("비동기 임베딩 객체 클라이언트 리소스를 정상적으로 닫았습니다.")
+                    #logger.info(f"[{self.namespace}] 비동기 임베딩 객체 클라이언트 리소스를 정상적으로 닫았습니다.")
                     
             # 동기 임베딩 객체 정리
             if hasattr(self, 'embedding_obj') and self.embedding_obj:
                 if hasattr(self.embedding_obj, 'close') and callable(getattr(self.embedding_obj, 'close')):
                     self.embedding_obj.close()
-                    logger.info("동기 임베딩 객체의 리소스를 정상적으로 닫았습니다.")
+                    #logger.info(f"[{self.namespace}] 동기 임베딩 객체의 리소스를 정상적으로 닫았습니다.")
                 elif hasattr(self.embedding_obj, 'client') and hasattr(self.embedding_obj.client, 'close'):
                     self.embedding_obj.client.close()
-                    logger.info("동기 임베딩 객체 클라이언트 리소스를 정상적으로 닫았습니다.")
+                    #logger.info(f"[{self.namespace}] 동기 임베딩 객체 클라이언트 리소스를 정상적으로 닫았습니다.")
         except Exception as e:
-            logger.error(f"임베딩 객체의 리소스 정리 중 오류 발생: {str(e)}")
+            logger.error(f"[{self.namespace}] 임베딩 객체의 리소스 정리 중 오류 발생: {str(e)}")
         
         # aiohttp 세션 정리 시도 (주요 클라이언트 객체에 직접 접근)
         try:
@@ -1285,7 +1296,7 @@ class VectorStoreManager:
                                     await client_obj.session.close()
                                 else:
                                     client_obj.session.close()
-                                logger.info(f"{attr_name}의 클라이언트 세션을 정상적으로 닫았습니다.")
+                                logger.info(f"[{self.namespace}] {attr_name}의 클라이언트 세션을 정상적으로 닫았습니다.")
         except Exception as e:
             logger.error(f"aiohttp 세션 정리 중 오류 발생: {str(e)}")
         
@@ -1300,10 +1311,10 @@ class VectorStoreManager:
             try:
                 if hasattr(self.embedding_service, 'aclose'):
                     await self.embedding_service.aclose()
-                    logger.info("임베딩 서비스 비동기 리소스 정리 완료")
+                    logger.info(f"[{self.namespace}] 임베딩 서비스 비동기 리소스 정리 완료")
                 elif hasattr(self.embedding_service, 'close'):
                     self.embedding_service.close()
-                    logger.info("임베딩 서비스 리소스 정리 완료")
+                    logger.info(f"[{self.namespace}] 임베딩 서비스 리소스 정리 완료")
             except Exception as e:
                 logger.error(f"임베딩 서비스 정리 중 오류 발생: {str(e)}")
         
@@ -1364,6 +1375,7 @@ class VectorStoreManager:
                 host_url = index_details.host
                 self.async_index = self.pinecone_client.IndexAsyncio(host=host_url)
                 logger.info(f"[{self.namespace}] 비동기 Pinecone 인덱스 생성 성공")
+                print(f"[{self.namespace}] 비동기 Pinecone 인덱스 생성 성공.print")
             except Exception as e:
                 logger.error(f"[{self.namespace}] 비동기 인덱스 생성 실패: {str(e)}")
                 return None

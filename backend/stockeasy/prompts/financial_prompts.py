@@ -258,7 +258,7 @@ def format_financial_data(formatted_data: List[Dict[str, Any]]) -> str:
         indicators = item.get("financial_indicators", {})
         
         data_str = f"[출처: {source} ({date})]\n"
-        print(f"[FIN_FORMAT] 출처: {source} ({date})")
+        #print(f"[FIN_FORMAT] 출처: {source} ({date})")
         
         # 주요 재무 지표가 있으면 먼저 표시
       #   if indicators:

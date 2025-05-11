@@ -85,6 +85,12 @@ class ConfidentialAnalyzerAgent(BaseAgent):
         self.parser = JsonOutputParser()
         self.prompt_template = CONFIDENTIAL_ANALYSIS_SYSTEM_PROMPT
         logger.info(f"ConfidentialAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
+        # VectorStoreManager 초기화
+        self.vs_manager = VectorStoreManager(
+            embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+            project_name="stockeasy",
+            namespace=settings.PINECONE_NAMESPACE_STOCKEASY_CONFIDENTIAL_NOTE
+        )
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -567,11 +573,11 @@ class ConfidentialAnalyzerAgent(BaseAgent):
         """
         try:
             # 벡터 스토어 연결
-            vs_manager = VectorStoreManager(
-                embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
-                project_name="stockeasy",
-                namespace=settings.PINECONE_NAMESPACE_STOCKEASY_CONFIDENTIAL_NOTE   
-            )
+            # vs_manager = VectorStoreManager(
+            #     embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+            #     project_name="stockeasy",
+            #     namespace=settings.PINECONE_NAMESPACE_STOCKEASY_CONFIDENTIAL_NOTE   
+            # )
 
             # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
             if user_id != "test_user":
@@ -579,20 +585,26 @@ class ConfidentialAnalyzerAgent(BaseAgent):
             else:
                 parsed_user_id = None
 
-            # 시맨틱 검색 설정
-            semantic_retriever = SemanticRetriever(
-                config=SemanticRetrieverConfig(min_score=threshold,
-                                               user_id=parsed_user_id,
-                                               project_type=ProjectType.STOCKEASY),
-                vs_manager=vs_manager
-            )
-            
-            # 검색 수행
-            retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
-                query=query, 
-                top_k=k * 2,  # 중복 제거를 고려하여 2배로 검색
-                filters=metadata_filter
-            )
+            try:
+                # 시맨틱 검색 설정
+                semantic_retriever = SemanticRetriever(
+                    config=SemanticRetrieverConfig(min_score=threshold,
+                                                user_id=parsed_user_id,
+                                                project_type=ProjectType.STOCKEASY),
+                    vs_manager=self.vs_manager
+                )
+                
+                # 검색 수행
+                retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
+                    query=query, 
+                    top_k=k * 2,  # 중복 제거를 고려하여 2배로 검색
+                    filters=metadata_filter
+                )
+            except Exception as e:
+                logger.warning(f"[비공개자료 검색] retriever 실행 중 오류 발생: {str(e)}")
+                raise
+            finally:
+                await semantic_retriever.aclose()
             
             # 검색 결과 처리
             results = []

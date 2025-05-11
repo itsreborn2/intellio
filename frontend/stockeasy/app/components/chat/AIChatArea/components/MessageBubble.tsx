@@ -348,11 +348,11 @@ export function MessageBubble({
       >
         <div style={getMessageStyle()}>
           {/* 종목 정보 표시 */}
-          {message.stockInfo && (
+          {message.role === 'user' && message.stockInfo && (
             <div style={{
               fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'),
               fontWeight: 'bold',
-              color: message.role === 'user' ? '#4ECCA3' : '#10A37F',
+              color: '#4ECCA3',
               marginBottom: isMobile ? '3px' : '4px'
             }}>
               {message.stockInfo.stockName && message.stockInfo.stockName.trim() 

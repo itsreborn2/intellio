@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import logging
 from functools import wraps
@@ -26,7 +27,18 @@ def remove_null_chars(obj):
         return [remove_null_chars(item) for item in obj]
     else:
         return obj
-    
+
+def remove_json_block(content:str):
+    # 전체 문자열이 코드 블록으로 감싸진 경우
+    content = re.sub(r'^```(?:json)?\s*\n?(.*?)\n?```\s*$', r'\1', content, flags=re.DOTALL)
+    # 시작 부분에 ```json이 있는 경우
+    content = re.sub(r'^```(?:json)?\s*\n?', '', content, flags=re.DOTALL)
+    # 끝 부분에 ``` 가 있는 경우
+    content = re.sub(r'\n?```\s*$', '', content, flags=re.DOTALL)
+    # 문자열 앞뒤 공백 제거
+    content = content.strip()
+    return content
+
 def measure_time_async(func: Callable) -> Callable:
     """
     함수의 실행 시간을 측정하고 로깅하는 데코레이터
@@ -40,7 +52,7 @@ def measure_time_async(func: Callable) -> Callable:
     @wraps(func)
     async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
         start_time = time.time()
-        print(f"measure_time")
+        #print(f"measure_time")
         #start_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         
         try:
