@@ -8,13 +8,18 @@
 import json
 import uuid
 from loguru import logger
-from typing import Dict, List, Any, Optional, Literal
-from datetime import datetime
+from typing import Dict, List, Any, Optional, Literal, Union
+from datetime import datetime, timedelta
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field, field_validator
+from common.utils.util import measure_time_async
+from common.services.embedding_models import EmbeddingModelType
+from common.services.retrievers.models import RetrievalResult
+from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
+from common.services.vector_store_manager import VectorStoreManager
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
 from stockeasy.models.agent_io import QuestionAnalysisResult
 from stockeasy.prompts.orchestrator_prompts import format_orchestrator_prompt
@@ -82,8 +87,10 @@ class OrchestratorAgent(BaseAgent):
         self.agent_llm = get_agent_llm("orchestrator_agent")
         logger.info(f"OrchestratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
         
+        self.web_search_threshold = 3
         # 사용 가능한 에이전트 목록
         self.available_agents = {
+            "web_search": "웹 검색 에이전트",
             "telegram_retriever": "내부DB 검색 에이전트",
             "report_analyzer": "기업 리포트 검색 및 분석 에이전트",
             "financial_analyzer": "재무 데이터 분석 에이전트",
@@ -95,6 +102,12 @@ class OrchestratorAgent(BaseAgent):
             "response_formatter": "응답 형식화 에이전트",
             "fallback_manager": "오류 처리 에이전트"
         }
+        # VectorStoreManager 초기화
+        self.vs_manager = VectorStoreManager(
+            embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+            project_name="stockeasy",
+            namespace=settings.PINECONE_NAMESPACE_STOCKEASY
+        )
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -113,6 +126,8 @@ class OrchestratorAgent(BaseAgent):
             
             # 질문 분석 결과 추출
             query = state.get("query", "")
+            stock_code = state.get("stock_code", "")
+            stock_name = state.get("stock_name", "")
             question_analysis:QuestionAnalysisResult = state.get("question_analysis", {})
             
             if not question_analysis:
@@ -133,11 +148,11 @@ class OrchestratorAgent(BaseAgent):
             logger.info(f"Data requirements: {data_requirements}")
             
             # 프롬프트 준비 (새로운 프롬프트 포맷 필요)
-            prompt = format_orchestrator_prompt(
-                query=query,
-                question_analysis=question_analysis,
-                available_agents=self.available_agents
-            )
+            # prompt = format_orchestrator_prompt(
+            #     query=query,
+            #     question_analysis=question_analysis,
+            #     available_agents=self.available_agents
+            # )
             
             # user_id 추출
             user_context = state.get("user_context", {})
@@ -174,9 +189,20 @@ class OrchestratorAgent(BaseAgent):
             #     "expected_output": execution_plan.expected_output,
             #     "fallback_strategy": execution_plan.fallback_strategy
             # }
-            
+            start_time = datetime.now()
+            report_cnt = await self.get_report_cnt(query, stock_code, stock_name, user_id)
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            logger.info(f"[오케스트레이터] 기업리포트 검색 시간: {duration:.2f} 초")
+            logger.info(f"[오케스트레이터] Report count: {report_cnt}")
             # 기본 실행 계획 생성 및 상태 업데이트
-            final_plan = self._create_default_plan(state)
+            if report_cnt >= self.web_search_threshold:
+                final_plan = self._create_default_plan(report_cnt)
+                state["question_analysis"]["data_requirements"]["web_search_needed"] = False
+            else:
+                logger.info("[오케스트레이터] 웹 검색 에이전트를 활성화합니다.")
+                final_plan = self._create_default_plan(report_cnt) # 웹검색 모드 On
+                state["question_analysis"]["data_requirements"]["web_search_needed"] = True
             state["execution_plan"] = final_plan
             
             # 처리 상태 업데이트
@@ -215,7 +241,7 @@ class OrchestratorAgent(BaseAgent):
             
             return state
     
-    def _create_default_plan(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_default_plan(self,report_cnt: int) -> Dict[str, Any]:
         """
         기본 실행 계획을 생성합니다 (오류 발생 시 fallback).
         
@@ -227,46 +253,87 @@ class OrchestratorAgent(BaseAgent):
         """
         logger.info("Creating default execution plan")
         
+        web_search_mode = True if report_cnt < self.web_search_threshold else False
+
         # 모든 에이전트를 포함하는 기본 계획 생성
         agents_list = []
-        
-        # 에이전트별 우선순위 설정
-        priority_map = {
-            "telegram_retriever": 10,
-            "report_analyzer": 9,
-            "financial_analyzer": 8,
-            "revenue_breakdown": 7,
-            "industry_analyzer": 6,
-            "confidential_analyzer": 5,
-            "knowledge_integrator": 4,
-            "summarizer": 3,
-            "response_formatter": 2,
-            "fallback_manager": 1
-        }
-        
-        # 모든 가용 에이전트를 포함
-        for agent_name in self.available_agents.keys():
-            agents_list.append({
-                "agent_name": agent_name,
-                "enabled": True,
-                "priority": priority_map.get(agent_name, 1),
-                "parameters": {}
-            })
+
+        # 에이전트별 우선순위 설정        
+        if web_search_mode:
+            priority_map = {
+                "web_search": 10,
+                "telegram_retriever": 9,
+                "financial_analyzer": 8,
+                "revenue_breakdown": 7,
+                "knowledge_integrator": 4,
+                "summarizer": 3,
+                "response_formatter": 2,
+                "fallback_manager": 1
+            }
+            
+            # report_cnt > 0인 경우 report_analyzer 추가
+            if report_cnt > 0:
+                priority_map["report_analyzer"] = 9.5  # telegram_retriever와 financial_analyzer 사이 우선순위
+        else:
+            priority_map = {
+                "telegram_retriever": 10,
+                "report_analyzer": 9,
+                "financial_analyzer": 8,
+                "revenue_breakdown": 7,
+                "industry_analyzer": 6,
+                "knowledge_integrator": 4,
+                "summarizer": 3,
+                "response_formatter": 2,
+                "fallback_manager": 1
+            }
+            if report_cnt < 7: # 리포트가 6개 이하이면, 비공개 자료도 검색
+                priority_map["confidential_analyzer"] = 5
         
         # 실행 순서 조정 (일반적인 흐름에 맞게)
-        execution_order = [
-            "telegram_retriever",
-            "report_analyzer",
-            "financial_analyzer",
-            "revenue_breakdown",
-            "industry_analyzer",
-            "confidential_analyzer",
-            "knowledge_integrator",
-            "summarizer",
-            "response_formatter",
-            "fallback_manager"
-        ]
+        if web_search_mode:
+            execution_order = [
+                "web_search",
+                "telegram_retriever",
+                "financial_analyzer",
+                "revenue_breakdown",
+                "knowledge_integrator",
+                "summarizer",
+                "response_formatter",
+                "fallback_manager"
+            ]
+            
+            # report_cnt > 0인 경우 report_analyzer 추가
+            if report_cnt > 0:
+                # telegram_retriever 다음에 report_analyzer 삽입
+                execution_order.insert(execution_order.index("telegram_retriever") + 1, "report_analyzer")
+        else:
+            execution_order = [
+                "telegram_retriever",
+                "report_analyzer",
+                "financial_analyzer",
+                "revenue_breakdown",
+                "industry_analyzer",
+                "knowledge_integrator",
+                "summarizer",
+                "response_formatter",
+                "fallback_manager"
+            ]
+            if report_cnt < 7: # 리포트가 6개 이하이면, 비공개 자료도 검색
+                execution_order.insert(execution_order.index("industry_analyzer") + 1, "confidential_analyzer")
+
         
+         # execution_order에 있는 것만 포함.
+        for agent_name in self.available_agents.keys():
+            if agent_name in execution_order:
+                agents_list.append({
+                    "agent_name": agent_name,
+                    "enabled": True,
+                    "priority": priority_map.get(agent_name, 1),
+                    "parameters": {}
+                })
+        
+        
+
         default_plan = {
             "plan_id": str(uuid.uuid4()),
             "created_at": datetime.now(),
@@ -298,4 +365,75 @@ class OrchestratorAgent(BaseAgent):
                 "query": state.get("query", ""),
                 "question_analysis": state.get("question_analysis", {})
             }
-        }) 
+        })
+
+    @measure_time_async
+    async def get_report_cnt(self, query: str, stock_code: str, stock_name: str,
+                             user_id: Optional[Union[str, uuid.UUID]] = None) -> int:
+        """
+        파인콘 DB에서 기업리포트 검색
+        
+        Args:
+            query: 검색 쿼리
+            k: 검색할 최대 결과 수
+            threshold: 유사도 임계값
+            metadata_filter: 메타데이터 필터
+            
+        Returns:
+            검색된 리포트 목록
+        """
+        try:
+            metadata_filter = {}
+            # 벡터 스토어 연결
+            # vs_manager = VectorStoreManager(
+            #     embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+            #     project_name="stockeasy",
+            #     namespace=settings.PINECONE_NAMESPACE_STOCKEASY
+            # )
+
+            # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
+            if user_id != "test_user":
+                parsed_user_id = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+            else:
+                parsed_user_id = None
+
+            try:
+                # 시맨틱 검색 설정. 조건 느슨하게
+                semantic_retriever = SemanticRetriever(
+                    config=SemanticRetrieverConfig(min_score=0.05,
+                                                user_id=parsed_user_id,
+                                                project_type=ProjectType.STOCKEASY),
+                    vs_manager=self.vs_manager
+                )
+                
+                metadata_filter["stock_code"] = {"$eq": stock_code}
+                # 오늘로부터 6개월 이전까지.
+                six_months_ago = datetime.now() - timedelta(days=180)
+                six_months_ago_str = six_months_ago.strftime('%Y%m%d')
+                six_months_ago_int = int(six_months_ago_str)
+                metadata_filter["document_date"] = {"$gte": six_months_ago_int}
+                # 검색 수행
+                retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
+                    query=query, 
+                    top_k=200,
+                    filters=metadata_filter
+                )
+
+                # 문서의 개수 카운트. 중복 제거
+                unique_file_names = set()
+                for doc in retrieval_result.documents:
+                    if hasattr(doc, 'metadata') and 'file_name' in doc.metadata:
+                        unique_file_names.add(doc.metadata['file_name'])
+                
+                logger.info(f"{stock_name}({stock_code}) 기업리포트 청크 수 : {len(retrieval_result.documents)} 청크, 문서 개수 : {len(unique_file_names)} 개")
+
+                return len(unique_file_names)
+            except Exception as e:
+                logger.warning(f"[오케스트레이터, 기업리포트 검색] retriever 실행 중 오류 발생: {str(e)}")
+                raise
+            finally:
+                await semantic_retriever.aclose()
+
+        except Exception as e:
+            logger.error(f"오케스트레이터, 기업리포트 검색 중 오류 발생: {str(e)}", exc_info=True)
+            raise

@@ -15,8 +15,10 @@ interface StatusMessageProps {
 
 export function StatusMessage({ message }: StatusMessageProps) {
   const isMobile = useIsMobile();
-  const [elapsedTime, setElapsedTime] = useState<number>(message.elapsed || 0);
-  const startTime = message.elapsedStartTime || Date.now();
+  // 실시간 경과 시간 계산을 위한 내부 상태
+  const [internalElapsedTime, setInternalElapsedTime] = useState<number>(message.elapsed || 0);
+  // 시작 시간은 컴포넌트 마운트 시점으로 설정
+  const [startTime] = useState<number>(Date.now());
   
   // 애니메이션 처리를 위한 코드
   const [dots, setDots] = useState<string>('');
@@ -24,11 +26,12 @@ export function StatusMessage({ message }: StatusMessageProps) {
   useEffect(() => {
     // 매초마다 경과 시간 업데이트
     const timer = setInterval(() => {
-      if (message.isProcessing && message.elapsedStartTime) {
-        // 처음 타이머가 시작된 시간부터 현재까지의 경과 시간 계산 (초 단위)
+      // message.isProcessing을 직접 확인 (chatStore의 메타데이터에서 가져옴)
+      if (message.isProcessing) {
+        // 현재 시간에서 시작 시간을 빼서 경과 시간 계산 (초 단위)
         const currentTime = Date.now();
         const elapsedFromStart = (currentTime - startTime) / 1000;
-        setElapsedTime(elapsedFromStart);
+        setInternalElapsedTime(elapsedFromStart);
       }
     }, 1000);
     
@@ -41,7 +44,10 @@ export function StatusMessage({ message }: StatusMessageProps) {
       clearInterval(timer);
       clearInterval(dotsTimer);
     };
-  }, [message.isProcessing, message.elapsedStartTime, startTime]);
+  }, [message.isProcessing, startTime]);
+  
+  // 실제 표시할 경과 시간 (메시지에 이미 elapsed가 있으면 그 값을 우선 사용)
+  const displayElapsedTime = message.elapsed || internalElapsedTime;
   
   return (
     <div
@@ -87,15 +93,13 @@ export function StatusMessage({ message }: StatusMessageProps) {
         <span>
           {message.content}
           {message.isProcessing && <span className="animate-dots">{dots}</span>}
-          {elapsedTime > 0 && (
+          {displayElapsedTime > 0 && (
             <span className="elapsed-time" style={{ display: 'block', fontSize: isMobile ? '12px' : '15px', color: '#777', marginTop: '4px' }}>
-              {formatElapsedTime(elapsedTime)}
+              {formatElapsedTime(displayElapsedTime)}
             </span>
           )}
         </span>
       </div>
-      
-      
     </div>
   );
 }

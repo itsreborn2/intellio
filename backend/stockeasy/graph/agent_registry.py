@@ -19,6 +19,7 @@ from stockeasy.agents.response_formatter_agent import ResponseFormatterAgent
 from stockeasy.agents.fallback_manager_agent import FallbackManagerAgent
 from stockeasy.agents.telegram_retriever_agent import TelegramRetrieverAgent
 from stockeasy.agents.report_analyzer_agent import ReportAnalyzerAgent
+from stockeasy.agents.web_search_agent import WebSearchAgent
 # 기존 에이전트들 임포트
 from stockeasy.agents.financial_analyzer_agent import FinancialAnalyzerAgent
 from stockeasy.agents.industry_analyzer_agent import IndustryAnalyzerAgent
@@ -52,7 +53,8 @@ class AgentRegistry:
             "summarizer": SummarizerAgent,
             "response_formatter": ResponseFormatterAgent,
             "fallback_manager": FallbackManagerAgent,
-            "context_response": ContextResponseAgent
+            "context_response": ContextResponseAgent,
+            "web_search": WebSearchAgent
         }
     
     def initialize_agents(self, db: AsyncSession = None) -> None:
@@ -99,6 +101,9 @@ class AgentRegistry:
         
         # 매출 및 수주 현황 분석 에이전트 초기화
         self.agents["revenue_breakdown"] = RevenueBreakdownAgent(db=db)
+        
+        # 웹 검색 에이전트 초기화
+        self.agents["web_search"] = WebSearchAgent(db=db)
 
         # 통합 및 요약 에이전트 초기화
         self.agents["knowledge_integrator"] = KnowledgeIntegratorAgent(db=db)

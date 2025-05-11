@@ -129,15 +129,21 @@ class StockChatMessage(Base):
         comment="메시지 콘텐츠 타입 (text, image, chart, file, card 등)"
     )
     
-    # 텍스트 콘텐츠 (모든 메시지 타입은 기본 텍스트 설명을 가짐)
-    content: Mapped[str] = mapped_column(
-        Text, nullable=False,
+    # 텍스트 콘텐츠 (assistant 메시지가 components를 사용하는 경우 nullable)
+    content: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
         comment="메시지 텍스트 내용"
     )
 
     content_expert: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True,
         comment="전문가 메시지 텍스트 내용"
+    )
+    
+    # 구조화된 메시지 컴포넌트 (새로 추가)
+    components: Mapped[Optional[List[dict]]] = mapped_column(
+        JSONB, nullable=True,
+        comment="구조화된 메시지 컴포넌트 배열 (제목, 단락, 차트, 테이블 등)"
     )
     
     # 구조화된 메시지 데이터
@@ -182,6 +188,7 @@ class StockChatMessage(Base):
             "content_type": self.content_type,
             "content": self.content,
             "content_expert": self.content_expert,
+            "components": self.components,
             "stock_code": self.stock_code,
             "stock_name": self.stock_name,
             "message_data": self.message_data,

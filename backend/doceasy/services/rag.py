@@ -660,7 +660,7 @@ class RAGService:
                 logger.warning(f"문서 #{idx}")
                 score_str = f"{doc.score:.4f}" if doc.score is not None else "0.0000"
                 logger.warning(f"- 유사도 점수: {score_str}")
-                logger.warning(f"- 메타데이터: {json.dumps(doc.metadata, ensure_ascii=False)}")
+                #logger.warning(f"- 메타데이터: {json.dumps(doc.metadata, ensure_ascii=False)}")
                 logger.warning(f"- 내용: {doc.page_content[:100]}...")
             logger.info(f"검색된 총 청크 수: {len(all_chunks.documents)}")
             

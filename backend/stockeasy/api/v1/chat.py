@@ -17,6 +17,7 @@ import json
 import asyncio
 import time
 
+from common.schemas.chat_components import StructuredChatResponse
 from common.utils.util import remove_null_chars
 from common.services.agent_llm import refresh_agent_llm_cache
 from stockeasy.services.financial.stock_info_service import StockInfoService
@@ -53,6 +54,10 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
         "question_analyzer": {
             "start": "질문 의도 파악 중...",
             "complete": "질문 분석 완료"
+        },
+        "web_search": {
+            "start": "웹 검색 중...",
+            "complete": "웹 검색 완료"
         },
         "telegram_retriever": {
             "start": "내부 데이터 정보 검색 중...",
@@ -169,6 +174,7 @@ class ChatMessageResponse(BaseResponse):
     stock_name: Optional[str] = None
     content: str
     content_expert: Optional[str] = None
+    components: Optional[List[Dict[str, Any]]] = None
     agent_results: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -528,7 +534,7 @@ async def get_chat_messages(
 ) -> ChatMessageListResponse:
     """특정 채팅 세션의 메시지 목록을 조회합니다."""
     try:
-        # DB이 실제 세션이 있는지 확인.
+        # DB에 실제 세션이 있는지 확인.
         session_data = await ChatService.get_chat_session(
             db=db,
             session_id=chat_session_id,
@@ -550,7 +556,10 @@ async def get_chat_messages(
             offset=offset
         )
         
-        logger.debug(f"{session_data['title']} :총  {len(messages)} 메세지")
+        logger.info(f"{session_data['title']} :총  {len(messages)} 메세지")
+        for m in messages:
+            if m['role'] == "assistant" and m.get('components'):
+                logger.info(f"어시스턴트 메시지 컴포넌트 : {m.get('components', [])}")
         
         return ChatMessageListResponse(
             messages=[ChatMessageResponse(**message) for message in messages],
@@ -916,7 +925,10 @@ async def stream_chat_message(
                             stock_code=request.stock_code,
                             stock_name=request.stock_name,
                             metadata=metadata,
+                            agent_results=agent_results,
+                            components=result.get("components", [])  # 구조화된 컴포넌트 저장
                         )
+                        
                         # 어시스턴트 메시지 ID 저장
                         assistant_message_id = str(assistant_message["id"])
                         logger.info(f"[STREAM_CHAT] 어시스턴트 응답 저장 완료: {assistant_message_id}")
@@ -952,18 +964,25 @@ async def stream_chat_message(
                         
                         # 완료 이벤트 전송
                         logger.info("[STREAM_CHAT] 완료 이벤트 전송")
+                        logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
+                        # 구조화된 채팅 응답 구성
+                        structured_response = StructuredChatResponse(
+                            message_id=assistant_message_id,
+                            components=result.get("components", []),  # 에이전트에서 반환된 구조화된 컴포넌트
+                            metadata=metadata,
+                            timestamp=time.time(),
+                            elapsed=total_time
+                        )
+                        
+                        # 직렬화를 위해 모델을 딕셔너리로 변환
+                        response_dict = structured_response.dict()
+                        
+                        # 완료 이벤트 JSON 생성
                         complete_data = json.dumps({
                             'event': 'complete',
-                            'data': {
-                                'message': '처리가 완료되었습니다.',
-                                'response': answer,
-                                'response_expert': summary,
-                                'message_id': assistant_message_id,
-                                'metadata': metadata,
-                                'timestamp': time.time(),
-                                'elapsed': total_time
-                            }
+                            'data': response_dict
                         }, cls=DateTimeEncoder)
+                        
                         yield f"{complete_data}\n\n"
                         
                 except Exception as e:

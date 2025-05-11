@@ -433,7 +433,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
                 project_type=ProjectType.DOCEASY,
                 existing_db_session=db  # 기존 세션 전달
             )
-
+            
             if not embeddings:
                 raise ValueError("임베딩 생성 실패")
                 

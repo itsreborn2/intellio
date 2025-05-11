@@ -22,7 +22,7 @@ from common.services.reranker import PineconeRerankerConfig, Reranker, RerankerC
 from common.models.token_usage import ProjectType
 from common.services.embedding_models import EmbeddingModelType
 from stockeasy.prompts.report_prompts import (
-    REPORT_ANALYSIS_PROMPT,
+    
     REPORT_ANALYSIS_SYSTEM_PROMPT,
     REPORT_ANALYSIS_USER_PROMPT,
     INVESTMENT_OPINION_PROMPT,
@@ -32,7 +32,7 @@ from common.core.config import settings
 from common.services.vector_store_manager import VectorStoreManager
 from common.services.retrievers.semantic import SemanticRetriever, SemanticRetrieverConfig
 from common.services.retrievers.models import RetrievalResult
-from common.utils.util import async_retry
+from common.utils.util import async_retry, measure_time_async
 from stockeasy.models.agent_io import RetrievedAllAgentData, CompanyReportData
 from langchain_core.messages import AIMessage
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
@@ -64,7 +64,7 @@ def format_report_contents(reports: List[CompanyReportData]) -> str:
     formatted = ""
     for i, report in enumerate(reports):
         formatted += f"\n--- 리포트 {i+1} ---\n"
-        formatted += f"제목: {report.get('title', '제목 없음')}\n"
+        #formatted += f"제목: {report.get('title', '제목 없음')}\n"
         formatted += f"출처: {report.get('source', '미상')}\n"
         formatted += f"날짜: {report.get('publish_date', '날짜 정보 없음')}\n"
         formatted += f"내용:\n{report.get('content', '내용 없음')}\n"  # 내용 일부만 포함
@@ -84,256 +84,141 @@ class ReportAnalyzerAgent(BaseAgent):
             db: 데이터베이스 세션 객체 (선택적)
         """
         super().__init__(name, db)
-        # 설정 파일에서 LLM 생성 및 모델 정보 가져오기
         self.retrieved_str = "report_data"
         self.llm, self.model_name, self.provider = get_llm_for_agent("report_analyzer_agent")
-        self.agent_llm = get_agent_llm("report_analyzer_agent")
-        self.parser = JsonOutputParser()
-        self.prompt_template = REPORT_ANALYSIS_SYSTEM_PROMPT
         logger.info(f"ReportAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
+        self.vs_manager = VectorStoreManager(
+            embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+            project_name="stockeasy",
+            namespace=settings.PINECONE_NAMESPACE_STOCKEASY
+        )
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        기업 리포트 검색 및 분석을 수행합니다.
-        
-        Args:
-            state: 현재 상태 정보를 포함하는 딕셔너리
-            
-        Returns:
-            업데이트된 상태 딕셔너리
-        """
+        process_start_time = datetime.now() # process 전체 시작 시간
         try:
-            # 성능 측정 시작
-            start_time = datetime.now()
             logger.info(f"ReportAnalyzerAgent starting processing with {self.provider} {self.model_name}")
             
-            # 현재 사용자 쿼리 및 세션 정보 추출
             query = state.get("query", "")
-            
-            # 질문 분석 결과 추출 (새로운 구조)
             question_analysis = state.get("question_analysis", {})
             entities = question_analysis.get("entities", {})
             classification = question_analysis.get("classification", {})
-            data_requirements = question_analysis.get("data_requirements", {})
-            keywords = question_analysis.get("keywords", [])
-            detail_level = question_analysis.get("detail_level", "보통")
-            
-            # 엔티티에서 종목 정보 추출
+            final_report_toc: Optional[dict] = state.get("final_report_toc") 
+
             stock_code = entities.get("stock_code", state.get("stock_code"))
             stock_name = entities.get("stock_name", state.get("stock_name"))
             
             if not query:
                 logger.warning("Empty query provided to ReportAnalyzerAgent")
                 self._add_error(state, "검색 쿼리가 제공되지 않았습니다.")
+                state["agent_results"] = state.get("agent_results", {})
+                state["agent_results"]["report_analyzer"] = {
+                    "agent_name": "report_analyzer", "status": "failed", "data": {"reports_with_toc": {}}, 
+                    "error": "검색 쿼리가 제공되지 않았습니다.", "execution_time": 0,
+                    "metadata": {"model_name": self.model_name, "provider": self.provider}
+                }
                 return state
             
             logger.info(f"ReportAnalyzerAgent processing query: {query}")
-            #logger.info(f"Classification data: {classification}")
-            #logger.info(f"State keys: {state.keys()}")
             logger.info(f"Entities: {entities}")
-            #logger.info(f"Data requirements: {data_requirements}")
-            #logger.info(f"stock_code: {state.get('stock_code')}")
-            #logger.info(f"type(state): {type(state)}")
-            
             
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
 
-            # 벡터DB 검색 쿼리 생성 - question_classification 활용
             search_query = self._make_search_query(query, stock_code, stock_name, classification, state)
             
-            # 검색 매개변수 설정 - 세부 의도와 복잡성에 따라 조정
             k = self._get_report_count(classification)
             threshold = self._calculate_dynamic_threshold(classification)
             metadata_filter = self._create_metadata_filter(stock_code, stock_name, classification, state)
             
-            # 기업리포트 검색
-            reports:List[CompanyReportData] = await self._search_reports(
-                search_query, 
-                k, 
-                threshold, 
-                metadata_filter,
-                user_id=user_id
-            )
-            
-            # 검색 결과가 없는 경우
-            if not reports:
-                logger.warning("기업 리포트 검색 결과가 없습니다.")
-                
-                # 실행 시간 계산
-                end_time = datetime.now()
-                duration = (end_time - start_time).total_seconds()
-                
-                # 새로운 구조로 상태 업데이트 (결과 없음)
+            search_start_time = datetime.now()
+            structured_search_results: Dict[str, Union[List[CompanyReportData], Dict[str, List[CompanyReportData]]]] = \
+                await self._search_reports(
+                    search_query, 
+                    k, 
+                    threshold, 
+                    metadata_filter,
+                    user_id=user_id,
+                    final_report_toc=final_report_toc
+                )
+            search_duration = (datetime.now() - search_start_time).total_seconds()
+            logger.info(f"기업리포트 검색 시간 (_search_reports): {search_duration:.2f} 초")
+
+            main_query_reports = structured_search_results.get("main_query_results", [])
+            toc_reports = structured_search_results.get("toc_results", {})
+            processed_reports: List[CompanyReportData] = main_query_reports if isinstance(main_query_reports, list) else []
+
+            analysis = None
+
+            if not processed_reports and not structured_search_results.get("toc_results"):
+                logger.warning("기업 리포트 검색 결과가 없습니다 (메인 쿼리 및 TOC 모두).")
+                total_duration = (datetime.now() - process_start_time).total_seconds()
                 state["agent_results"] = state.get("agent_results", {})
                 state["agent_results"]["report_analyzer"] = {
-                    "agent_name": "report_analyzer",
-                    "status": "partial_success",
-                    "data": [],
-                    "error": None,
-                    "execution_time": duration,
+                    "agent_name": "report_analyzer", "status": "partial_success_no_data",
+                    "data": {"analysis": None, "searched_reports": [], "reports_with_toc": structured_search_results},
+                    "error": "검색된 기업 리포트가 없습니다.", "execution_time": total_duration,
                     "metadata": {
-                        "report_count": 0,
-                        "threshold": threshold,
-                        "model_name": self.model_name,
-                        "provider": self.provider
+                        "report_count": 0, "threshold": threshold, 
+                        "model_name": self.model_name, "provider": self.provider
                     }
                 }
+                state["retrieved_data"] = {}
+                state["retrieved_data"]["structured_report_data"] = structured_search_results
                 
-                # 타입 주석을 사용한 데이터 할당
-                if "retrieved_data" not in state:
-                    state["retrieved_data"] = {}
-                retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-                reports: List[CompanyReportData] = []
-                retrieved_data[self.retrieved_str] = reports
-                
-                state["processing_status"] = state.get("processing_status", {})
-                state["processing_status"]["report_analyzer"] = "completed_no_data"
-                
-                # 메트릭 기록
-                state["metrics"] = state.get("metrics", {})
-                state["metrics"]["report_analyzer"] = {
-                    "start_time": start_time,
-                    "end_time": end_time,
-                    "duration": duration,
-                    "status": "completed_no_data",
-                    "error": None,
-                    "model_name": self.model_name,
-                    "provider": self.provider
-                }
-                
-                logger.info(f"ReportAnalyzerAgent completed in {duration:.2f} seconds, found 0 reports")
+                logger.info(f"ReportAnalyzerAgent completed in {total_duration:.2f} seconds, found 0 reports overall.")
                 return state
-            
-            # 검색 결과 가공
-            processed_reports:List[CompanyReportData] = self._process_reports(reports)
-            
-            # 상세한 분석이 필요한 경우 (primary_intent와 complexity 기반 판단)
-            primary_intent = classification.get("primary_intent", "")
-            complexity = classification.get("complexity", "")
-            
-            # primary_intent: Literal["종목기본정보", "성과전망", "재무분석", "산업동향", "기타"] # 주요 질문 의도
-            # complexity: Literal["단순", "중간", "복합", "전문가급"]                      # 질문 복잡도
-            # expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형"]  # 기대하는 답변 유형
 
-            # 성과전망, 복합, 전문가급 질문이 아니면. 그냥 벡터 DB 검색결과를 리턴함.
-            # need_detailed_analysis = (
-            #     primary_intent in ["성과전망", "재무분석", "산업동향"] or 
-            #     complexity in ["복합", "전문가급"]
-            # )
-            # logger.info(f"need_detailed_analysis: {need_detailed_analysis}")
-            need_detailed_analysis = True
-
-            # 리포트 내용에서 핵심 정보 추출 및 분석
-            try:
-                # 커스텀 프롬프트 템플릿 확인
-                # 1. 상태에서 커스텀 프롬프트 템플릿 확인
-                custom_prompt_from_state = state.get("custom_prompt_template")
-                # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
-                custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
-                # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
-                system_prompt = None
-                if custom_prompt_from_state:
-                    system_prompt = custom_prompt_from_state
-                    logger.info(f"ReportAnalyzerAgent using custom prompt from state : {custom_prompt_from_state}")
-                elif custom_prompt_from_attr:
-                    system_prompt = custom_prompt_from_attr
-                    logger.info(f"ReportAnalyzerAgent using custom prompt from attribute")
-                    
-                analysis = await self._generate_report_analysis(
-                    processed_reports, 
-                    query, 
-                    stock_code, 
-                    stock_name,
-                    state,
-                    system_prompt=system_prompt
-                )
-                
-            except Exception as e:
-                logger.error(f"기업 리포트 분석 중 오류 발생: {str(e)}")
+            total_duration = (datetime.now() - process_start_time).total_seconds()
             
-            # 실행 시간 계산
-            end_time = datetime.now()
-            duration = (end_time - start_time).total_seconds()
-            
-
             state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["report_analyzer"] = {
                 "agent_name": "report_analyzer",
                 "status": "success",
                 "data": {
-                        "analysis": analysis if need_detailed_analysis else None,
-                        "searched_reports": processed_reports,
-                    },
+                    "analysis": None,
+                    "searched_reports": processed_reports,
+                    "main_query_reports": main_query_reports,
+                    "toc_reports": toc_reports,
+                },
                 "error": None,
-                "execution_time": duration,
+                "execution_time": total_duration,
                 "metadata": {
-                    "report_count": len(processed_reports),
+                    "report_count_main": len(processed_reports),
                     "threshold": threshold,
-                    "detailed_analysis": need_detailed_analysis,
+                    "detailed_analysis_skipped": True,
                     "model_name": self.model_name,
                     "provider": self.provider
                 }
             }
             
-            # 타입 주석을 사용한 데이터 할당
-            # state["retrieved_data"]["reports"] = processed_reports
-            if "retrieved_data" not in state:
-                state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-            reports: List[CompanyReportData] = processed_reports
-            retrieved_data[self.retrieved_str] = reports
+            state["retrieved_data"] = {}
+            state["retrieved_data"]["structured_report_data"] = structured_search_results
 
-            
             state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["report_analyzer"] = "completed"
-            logger.info(f"ReportAnalyzerAgent processing_status: {state['processing_status']}")
+            state["processing_status"]["report_analyzer"] = "completed_search_only"
             
-            # 메트릭 기록
-            state["metrics"] = state.get("metrics", {})
-            state["metrics"]["report_analyzer"] = {
-                "start_time": start_time,
-                "end_time": end_time,
-                "duration": duration,
-                "status": "completed",
-                "error": None,
-                "model_name": self.model_name,
-                "provider": self.provider
-            }
-            
-            logger.info(f"ReportAnalyzerAgent completed in {duration:.2f} seconds, found {len(processed_reports)} reports")
+            logger.info(f"ReportAnalyzerAgent (search_only) completed in {total_duration:.2f} seconds. Main reports: {len(processed_reports)}.")
             return state
             
         except Exception as e:
             logger.exception(f"Error in ReportAnalyzerAgent: {str(e)}")
             self._add_error(state, f"기업 리포트 검색 에이전트 오류: {str(e)}")
             
-            # 오류 상태 업데이트
+            total_duration = (datetime.now() - process_start_time).total_seconds()
             state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["report_analyzer"] = {
-                "agent_name": "report_analyzer",
-                "status": "failed",
-                "data": [],
-                "error": str(e),
-                "execution_time": 0,
-                "metadata": {
-                    "model_name": self.model_name,
-                    "provider": self.provider
-                }
+                "agent_name": "report_analyzer", "status": "failed",
+                "data": {"analysis": None, "searched_reports": [], "reports_with_toc": {}},
+                "error": str(e), "execution_time": total_duration if total_duration > 0 else 0,
+                "metadata": {"model_name": self.model_name, "provider": self.provider}
             }
-            
-            # 타입 주석을 사용한 데이터 할당
-            if "retrieved_data" not in state:
-                state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-            reports: List[CompanyReportData] = []
-            retrieved_data[self.retrieved_str] = reports
-            
+            if "retrieved_data" not in state: state["retrieved_data"] = {}
+            state["retrieved_data"]["structured_report_data"] = {}
+
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["report_analyzer"] = "error"
-            
             return state
-            
+
     def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
         """
         상태 객체에 오류 정보를 추가합니다.
@@ -406,6 +291,7 @@ class ReportAnalyzerAgent(BaseAgent):
         Returns:
             검색할 리포트 수
         """
+        return 20 # 무조건 20개 고정
         complexity = classification.get("complexity", "중간")
         
         if complexity == "단순":
@@ -432,13 +318,13 @@ class ReportAnalyzerAgent(BaseAgent):
         # 단순한 질문일수록 높은 임계값 (정확한 결과)
         # 복잡한 질문일수록 낮은 임계값 (더 많은 결과)
         if complexity == "단순":
-            return 0.5
+            return 0.3
         elif complexity == "중간":
-            return 0.35
-        elif complexity == "복합":
             return 0.25
-        else:  # "전문가급"
+        elif complexity == "복합":
             return 0.21
+        else:  # "전문가급"
+            return 0.20
     
     def _create_metadata_filter(self, stock_code: Optional[str], stock_name: Optional[str],
                               classification: Dict[str, Any], state: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -491,10 +377,10 @@ class ReportAnalyzerAgent(BaseAgent):
         if time_keywords and len(time_keywords) > 0:
             time_range = time_keywords[0]  # 첫 번째 시간 관련 키워드 사용
         
-        if time_range:
-            date_filter = self._parse_time_range(time_range)
-            if date_filter:
-                metadata_filter["document_date"] = date_filter
+        # if time_range:
+        #     date_filter = self._parse_time_range(time_range)
+        #     if date_filter:
+        #         metadata_filter["document_date"] = date_filter
         
         return metadata_filter
     
@@ -563,116 +449,152 @@ class ReportAnalyzerAgent(BaseAgent):
             logger.error(f"시간 범위 파싱 중 오류: {e}")
             return None
     
-    @async_retry(retries=3, delay=1.0, exceptions=(Exception,))
-    async def _search_reports(self, query: str, k: int = 5, threshold: float = 0.3,
-                             metadata_filter: Optional[Dict[str, Any]] = None,
-                             user_id: Optional[Union[str, UUID]] = None) -> List[CompanyReportData]:
+    @async_retry(retries=1, delay=1.0, exceptions=(Exception,))
+    async def _search_reports(self, 
+                             query: str, 
+                             k: int,
+                             threshold: float,
+                             metadata_filter: Optional[Dict[str, Any]],
+                             user_id: Optional[Union[str, UUID]],
+                             final_report_toc: Optional[dict]
+                             ) -> Dict[str, Union[List[CompanyReportData], Dict[str, List[CompanyReportData]]]]:
         """
-        파인콘 DB에서 기업리포트 검색
+        파인콘 DB에서 사용자 쿼리 및 목차별로 기업리포트를 검색하고,
+        리랭킹 없이 구조화된 딕셔너리 형태로 반환합니다.
+        목차 간 중복 문서는 허용되며, 각 검색 결과 리스트 내에서의 중복만 간단히 처리합니다.
+        """
         
-        Args:
-            query: 검색 쿼리
-            k: 검색할 최대 결과 수
-            threshold: 유사도 임계값
-            metadata_filter: 메타데이터 필터
+        report_data_for_summary_agent: Dict[str, Union[List[CompanyReportData], Dict[str, List[CompanyReportData]]]] = {
+            "main_query_results": [],
+            "toc_results": {} 
+        }
+
+        # 기본 필터 설정 (6개월 이내 문서)
+        six_months_ago = datetime.now() - timedelta(days=150)
+        six_months_ago_str = six_months_ago.strftime('%Y%m%d')
+        six_months_ago_int = int(six_months_ago_str)
+        
+        current_metadata_filter = metadata_filter.copy() if metadata_filter else {}
+        current_metadata_filter["document_date"] = {"$gte": six_months_ago_int}
             
-        Returns:
-            검색된 리포트 목록
-        """
+        logger.info(f"[_search_reports] 사용자쿼리k: {k}, threshold: {threshold}, 필터: {current_metadata_filter}")
+        
+        parsed_user_id = None
+        if user_id != "test_user":
+            parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
+
+        semantic_retriever = SemanticRetriever(
+            config=SemanticRetrieverConfig(min_score=threshold, user_id=parsed_user_id, project_type=ProjectType.STOCKEASY),
+            vs_manager=self.vs_manager
+        )
+        
         try:
-            # 벡터 스토어 연결
-            vs_manager = VectorStoreManager(
-                embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
-                project_name="stockeasy",
-                namespace=settings.PINECONE_NAMESPACE_STOCKEASY
-            )
-
-            # UUID 변환 로직: 문자열이면 UUID로 변환, UUID 객체면 그대로 사용, None이면 None
-            if user_id != "test_user":
-                parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
-            else:
-                parsed_user_id = None
-
-            # 시맨틱 검색 설정
-            semantic_retriever = SemanticRetriever(
-                config=SemanticRetrieverConfig(min_score=threshold,
-                                               user_id=parsed_user_id,
-                                               project_type=ProjectType.STOCKEASY),
-                vs_manager=vs_manager
-            )
-            
-            # 검색 수행
-            retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
+            # 1. 기본 사용자 쿼리로 검색
+            logger.info(f"  기본쿼리 검색 시작: '{query}' (k={k})")
+            main_retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
                 query=query, 
-                top_k=k * 4,  # 중복 제거, 리랭킹을 고려하여 4배로 검색
-                filters=metadata_filter
+                top_k=k, 
+                filters=current_metadata_filter
             )
+            main_query_reports_raw = [self._convert_doc_to_company_report_data(doc) for doc in main_retrieval_result.documents]
+            report_data_for_summary_agent["main_query_results"] = self._deduplicate_company_reports_in_list(main_query_reports_raw)
+            logger.info(f"  기본쿼리 검색 완료: 원본 {len(main_retrieval_result.documents)}개 -> 중복제거 후 {len(report_data_for_summary_agent['main_query_results'])}개")
 
-            # 2. 리랭킹 수행
-            reranker = Reranker(
-                RerankerConfig(
-                    reranker_type=RerankerType.PINECONE,
-                    pinecone_config=PineconeRerankerConfig(
-                        api_key=settings.PINECONE_API_KEY_STOCKEASY,
-                        min_score=0.1  # 낮은 임계값으로 더 많은 결과 포함
-                    )
-                )
-            )
-            
-            reranked_results = await reranker.rerank(
-                query=query,
-                documents=retrieval_result.documents,
-                top_k=int(k * 1.5)
-            )
-            logger.info(f"리랭킹 완료 - 결과: {len(retrieval_result.documents)} -> {len(reranked_results.documents)} 문서")
-            # 검색 결과 처리
-            results = []
-            seen_contents = set()  # 중복 제거를 위한 집합
-            
-            #for i, doc in enumerate(retrieval_result.documents):
-            for i, doc in enumerate(reranked_results.documents):
-                content = doc.page_content
-                metadata = doc.metadata
-                score = doc.score or 0.0
-                # if i < 2:
-                #     short_content = (content[:50] if len(content) > 50 else content).strip().replace("\n\n", "\n")
-                #     logger.debug(f"문서 {i} 점수: {score:.3f}, 내용({len(content)}): {short_content}")
-                #     short_metadata = {k: v for k, v in metadata.items() if k in ["stock_code", "stock_name", "sector_code", "sector_name", "document_date", "report_provider", "file_name", "page", "category"]}
-                #     logger.debug(f"문서 {i} 메타데이터: {short_metadata}")
-                #     logger.debug(f"---------------------------------------------------------------")
-                
-                # 내용 기반 중복 제거 (문서 일부가 중복되는 경우가 많음)
-                content_hash = hash(content[:100])  # 앞부분을 기준으로
-                if content_hash in seen_contents:
-                    continue
-                seen_contents.add(content_hash)
-                
-                # 결과 정보 구성
-                report_info:CompanyReportData = {
-                    "content": content,
-                    "score": score,
-                    "source": metadata.get("provider_code", "미상"),
-                    "publish_date": self._format_date(metadata.get("document_date", "")),
-                    "file_name": metadata.get("file_name", ""),
-                    "page": metadata.get("page", 0),
-                    "stock_code": metadata.get("stock_code", ""),
-                    "stock_name": metadata.get("stock_name", ""),
-                    "sector_name": metadata.get("sector_name", ""),
+            # 2. final_report_toc가 있는 경우 목차 항목별 검색 추가
+            toc_search_queries: Dict[str, str] = {} 
+            if final_report_toc and isinstance(final_report_toc, dict) and final_report_toc.get("sections"):
+                toc_search_queries = self._extract_toc_queries_for_search(final_report_toc) 
 
-                }             
+            if toc_search_queries:
+                k_toc = 10 # 각 TOC 항목별 검색할 문서 수 (조정 가능)
+                logger.info(f"  TOC 기반 검색 시작. 총 TOC 쿼리 수: {len(toc_search_queries)}, 각 항목당 k_toc: {k_toc}")
                 
-                results.append(report_info)
-            
-            # 스코어 기준 정렬
-            results.sort(key=lambda x: x["score"], reverse=True)
-            
-            # 최대 k개만 반환
-            return results[:k]
-            
+                processed_toc_results: Dict[str, List[CompanyReportData]] = {}
+                for toc_key, toc_item_query_text in toc_search_queries.items():
+                    if not toc_item_query_text: 
+                        logger.debug(f"    TOC 검색 건너<0xEB><0x9A><0x8D> (쿼리 비어있음): [{toc_key}]")
+                        continue
+                    try:
+                        logger.debug(f"    TOC 검색 중 - [{toc_key}]: '{toc_item_query_text}'")
+                        toc_retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
+                            query=toc_item_query_text, top_k=k_toc, filters=current_metadata_filter 
+                        )
+                        toc_item_reports_raw = [self._convert_doc_to_company_report_data(doc) for doc in toc_retrieval_result.documents]
+                        processed_toc_results[toc_key] = self._deduplicate_company_reports_in_list(toc_item_reports_raw)
+                        logger.debug(f"      TOC 검색 결과 [{toc_key}]: 원본 {len(toc_retrieval_result.documents)}개 -> 중복제거 후 {len(processed_toc_results[toc_key])}개")
+                    except Exception as e:
+                        logger.warning(f"    TOC 검색 오류 [{toc_key}]: {str(e)}")
+                        processed_toc_results[toc_key] = [] 
+                report_data_for_summary_agent["toc_results"] = processed_toc_results
+                logger.info(f"  TOC 기반 검색 완료.")
+            else:
+                logger.info("  TOC 정보가 없거나 검색할 유효한 TOC 항목이 없어 TOC 기반 검색을 수행하지 않았습니다.")
+
         except Exception as e:
-            logger.error(f"기업리포트 검색 중 오류 발생: {str(e)}", exc_info=True)
-            raise
-    
+            logger.error(f"[_search_reports] 심각한 오류 발생: {str(e)}", exc_info=True)
+        finally:
+            if 'semantic_retriever' in locals() and semantic_retriever:
+                await semantic_retriever.aclose()
+                
+        return report_data_for_summary_agent
+
+    def _convert_doc_to_company_report_data(self, doc: Any) -> CompanyReportData:
+        content = doc.page_content
+        metadata = doc.metadata
+        score = getattr(doc, 'score', metadata.get('_score', 0.0))
+        if score is None: score = 0.0
+        title = metadata.get("title")
+        if not title and content:
+            title = content.split('\n')[0][:100] 
+        elif not title:
+            title = "제목 없음"
+        return {
+            "content": content, "score": score,
+            "source": metadata.get("provider_code", metadata.get("source", "미상")),
+            "publish_date": self._format_date(metadata.get("document_date", "")),
+            "file_name": metadata.get("file_name", ""), "page": metadata.get("page", 0),
+            "stock_code": metadata.get("stock_code", ""), "stock_name": metadata.get("stock_name", ""),
+            "sector_name": metadata.get("sector_name", ""), "title": title 
+        }
+
+    def _extract_toc_queries_for_search(self, toc_data: dict) -> Dict[str, str]:
+        queries: Dict[str, str] = {}
+        if not (isinstance(toc_data, dict) and "sections" in toc_data and isinstance(toc_data["sections"], list)):
+            logger.warning("TOC 데이터 구조가 유효하지 않아 검색 쿼리를 추출할 수 없습니다.")
+            return queries
+        for section_index, section in enumerate(toc_data["sections"]):
+            if section_index == 0: continue
+            if not isinstance(section, dict): continue
+            section_id = section.get("section_id", f"s{section_index + 1}")
+            section_title = section.get("title", "").strip()
+            subsections = section.get("subsections")
+            if isinstance(subsections, list) and subsections:
+                for sub_idx, subsection_item in enumerate(subsections):
+                    if isinstance(subsection_item, dict):
+                        subsection_id = subsection_item.get("subsection_id", f"{section_id}_{sub_idx + 1}")
+                        subsection_title = subsection_item.get("title", "").strip()
+                        if subsection_title:
+                            unique_key = subsection_id
+                            queries[unique_key] = subsection_title 
+            elif section_title:
+                unique_key = section_id # 제목 부분 제외
+                queries[unique_key] = section_title
+        logger.info(f"TOC에서 추출된 검색 쿼리 수: {len(queries)}")
+        if len(queries) > 0 : logger.debug(f"  추출된 TOC 쿼리 (일부): {list(queries.items())[:3]}")
+        return queries
+
+    def _deduplicate_company_reports_in_list(self, reports: List[CompanyReportData]) -> List[CompanyReportData]:
+        if not reports: return []
+        deduped_reports: List[CompanyReportData] = []
+        seen_identifiers = set()
+        for report in reports:
+            content_prefix = report.get('content', '')[:200] if report.get('content') else ''
+            identifier = f"{report.get('file_name', '')}_{content_prefix}"
+            if identifier not in seen_identifiers:
+                seen_identifiers.add(identifier)
+                deduped_reports.append(report)
+        return deduped_reports
+        
     def _format_date(self, date_str: str) -> str:
         """
         날짜 문자열 형식화
@@ -764,157 +686,4 @@ class ReportAnalyzerAgent(BaseAgent):
             return lines[0]
         
         # 첫 60자를 제목으로 사용
-        return content[:60] + "..." if len(content) > 60 else content
-    
-    async def _generate_report_analysis(self, reports: List[CompanyReportData], query: str, 
-                                       stock_code: Optional[str] = None, 
-                                       stock_name: Optional[str] = None,
-                                       state: Dict[str, Any] = {},
-                                       system_prompt: Optional[str] = None) -> List[CompanyReportData]:
-        """
-        검색된 리포트의 투자 의견 및 목표가 정보 추출
-        
-        Args:
-            reports: 검색된 리포트 목록
-            query: 사용자 쿼리
-            stock_code: 종목 코드
-            stock_name: 종목명
-            
-        Returns:
-            각 리포트에 대한 분석 결과
-        """
-        if not reports:
-            return []
-        
-        # 리포트 내용 형식화
-        formatted_reports = format_report_contents(reports)
-        
-        # 1) 기본 분석 프롬프트 생성
-        query_with_date = f"오늘 {datetime.now().strftime('%Y-%m-%d')} 기준, {query}"
-        qa = state.get("question_analysis", {})
-        keywords = qa.get("keywords", [])
-        if keywords:
-            important_keywords = ", ".join(keywords[:3])  # 상위 3개 키워드 사용
-        
-        # 시스템 메시지와 사용자 메시지 분리 구성
-        if system_prompt:
-            system_message = SystemMessagePromptTemplate.from_template(system_prompt)
-        else:
-            system_message = SystemMessagePromptTemplate.from_template(REPORT_ANALYSIS_SYSTEM_PROMPT)
-        user_message = HumanMessagePromptTemplate.from_template(REPORT_ANALYSIS_USER_PROMPT)
-        
-        # ChatPromptTemplate 구성
-        analysis_prompt = ChatPromptTemplate.from_messages([
-            system_message,
-            user_message
-        ]).partial(
-            query=query_with_date,
-            stock_code=stock_code or "정보 없음",
-            stock_name=stock_name or "정보 없음",
-            report_contents=formatted_reports,
-            keywords=important_keywords if important_keywords else ""
-        )
-        
-        # 2) 투자 의견 및 목표가 추출 프롬프트
-        opinion_prompt = ChatPromptTemplate.from_template(INVESTMENT_OPINION_PROMPT).partial(
-            stock_code=stock_code or "정보 없음",
-            stock_name=stock_name or "정보 없음",
-            report_contents=formatted_reports
-        )
-        
-        # 폴백을 지원하는 AgentLLM 객체 사용
-        
-        # 병렬로 분석 실행 (폴백 메커니즘 사용)
-        try:
-            user_context = state.get("user_context", {})
-            user_id = user_context.get("user_id", None)
-            
-            # 프롬프트 형식화
-            formatted_analysis_prompt = analysis_prompt.format_prompt()
-            formatted_opinion_prompt = opinion_prompt.format_prompt()
-            
-            # 병렬 실행
-            results = await asyncio.gather(
-                self.agent_llm.ainvoke_with_fallback(formatted_analysis_prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db),
-                self.agent_llm.ainvoke_with_fallback(formatted_opinion_prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db),
-                return_exceptions=True
-            )
-            
-            # 결과 처리
-            analysis_result:AIMessage = results[0] if not isinstance(results[0], Exception) else ""
-            opinion_result:AIMessage = results[1] if not isinstance(results[1], Exception) else ""
-            
-            # 예외 로깅
-            if isinstance(results[0], Exception):
-                logger.error(f"리포트 분석 중 오류 발생: {str(results[0])}")
-            if isinstance(results[1], Exception):
-                logger.error(f"투자 의견 추출 중 오류 발생: {str(results[1])}")
-            
-            # 투자 의견 및 목표가 추출
-            investment_opinions = []
-            target_prices = []
-            
-            if opinion_result:
-                try:
-                    # 투자 의견 정보 파싱 시도
-                    opinion_data = {}
-                    opinion_content = opinion_result.content
-                    # "투자의견:" 또는 "투자 의견:" 패턴 찾기
-                    opinion_pattern = r'(투자\s*의견|투자의견)\s*:\s*([^\n,]+)'
-                    opinion_matches = re.findall(opinion_pattern, opinion_content)
-                    
-                    # "목표가:" 또는 "목표 가격:" 패턴 찾기
-                    price_pattern = r'(목표\s*가격|목표가|목표\s*주가)\s*:\s*([\d,]+)'
-                    price_matches = re.findall(price_pattern, opinion_content)
-                    
-                    for report in reports:
-                        source = report["source"] # provider_code, 증권사
-                        date = report["publish_date"]
-                        
-                        # 해당 리포트에 대한 투자 의견 찾기
-                        report_opinion = None
-                        for _, opinion in opinion_matches:
-                            if source in opinion_content and date in opinion_content:
-                                report_opinion = opinion.strip()
-                                break
-                        
-                        # 해당 리포트에 대한 목표가 찾기
-                        report_price = None
-                        for _, price in price_matches:
-                            if source in opinion_content and date in opinion_content:
-                                try:
-                                    # 쉼표 제거 후 숫자로 변환
-                                    report_price = int(price.replace(",", ""))
-                                except ValueError:
-                                    pass
-                                break
-                        
-                        investment_opinions.append({
-                            "source": source,
-                            "date": date,
-                            "opinion": report_opinion,
-                            "target_price": report_price
-                        })
-                except Exception as e:
-                    logger.error(f"투자 의견 추출 중 오류: {e}", exc_info=True)
-            
-            # 분석 결과 구조화
-            #report_analyses = []
-            #for report in reports:
-            analysis_content = analysis_result.content if not isinstance(analysis_result, Exception) else "분석 중 오류가 발생했습니다."
-            opinion_content = opinion_result.content if not isinstance(opinion_result, Exception) else "의견 추출 중 오류가 발생했습니다."
-                
-            #report_analyses.append()
-            
-            return {
-                #"analysis": {
-                    "llm_response": analysis_content,
-                    "investment_opinions": investment_opinions,
-                    "opinion_summary": opinion_content
-                #}
-                #"searched_documents": reports
-            }
-            
-        except Exception as e:
-            logger.exception(f"리포트 분석 프로세스 전체 오류: {str(e)}")
-            return [] 
+        return content[:60] + "..." if len(content) > 60 else content 

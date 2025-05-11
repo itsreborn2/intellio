@@ -11,6 +11,7 @@ export { default as LatestUpdates } from './LatestUpdates';
 export { default as StatusMessage } from './StatusMessage';
 export { default as CopyButton } from './CopyButton';
 export { default as ExpertModeToggle } from './ExpertModeToggle';
+export { MessageComponentRenderer } from './MessageComponentRenderer';
 
 // 지연 로딩 컴포넌트 내보내기
 export { default as LazyExpertModeToggle } from './LazyExpertModeToggle';

@@ -48,6 +48,7 @@ export function convertApiMessageToComponentMessage(message: IChatMessageDetail)
     role: message.role as 'user' | 'assistant' | 'status',
     content: message.content,
     content_expert: message.content_expert,
+    components: message.components,
     timestamp: message.created_at ? new Date(message.created_at).getTime() : Date.now(),
     responseId: message.metadata?.responseId,
     stockInfo: message.stock_code && message.stock_name ? {

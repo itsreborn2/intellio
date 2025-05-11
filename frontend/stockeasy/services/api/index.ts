@@ -10,6 +10,17 @@ export const API_ENDPOINT_COMMON = `${API_BASE_URL}/v1`;
 export const API_ENDPOINT_STOCKEASY = `${API_BASE_URL}/v1/stockeasy`;
 export const API_ENDPOINT_TOKEN_USAGE = `${API_BASE_URL}/v1/token-usage`;
 
+/**
+ * 널 문자를 제거하는 유틸리티 함수
+ * @param str 처리할 문자열
+ * @returns 널 문자가 제거된 문자열
+ */
+export const removeNullCharacters = (str: string): string => {
+  if (!str) return str;
+  // 널 문자(\u0000)를 모두 제거
+  return str.replace(/\0/g, '');
+};
+
 // API 요청을 위한 기본 옵션
 export const defaultFetchOptions: RequestInit = {
   credentials: 'include',
@@ -27,6 +38,11 @@ export const defaultFetchOptions: RequestInit = {
  */
 export const apiFetch = async (url: string, options: RequestInit = {}) => {
   try {
+    // body가 문자열이고 널 문자가 포함된 경우 처리
+    if (options.body && typeof options.body === 'string') {
+      options.body = removeNullCharacters(options.body);
+    }
+
     const response = await fetch(url, {
       ...defaultFetchOptions,
       ...options,

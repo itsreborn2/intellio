@@ -7,17 +7,24 @@
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from loguru import logger
-
+import asyncio
+import json
+import hashlib
 
 from langchain_core.output_parsers import StrOutputParser
 
+from stockeasy.models.agent_io import CompanyReportData, RetrievedTelegramMessage
+from stockeasy.services.financial.stock_info_service import StockInfoService
+from stockeasy.prompts.summarizer_section_prompt import create_all_section_content, format_other_agent_data, PROMPT_GENERATE_SECTION_CONTENT, PROMPT_GENERATE_EXECUTIVE_SUMMARY
 from common.models.token_usage import ProjectType
-from stockeasy.prompts.summarizer_prompt import DEEP_RESEARCH_PROMPT, DEEP_RESEARCH_SYSTEM_PROMPT, create_prompt
+from stockeasy.prompts.summarizer_prompt import DEEP_RESEARCH_SYSTEM_PROMPT, create_prompt
 from stockeasy.agents.base import BaseAgent
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.core.config import settings
 from common.services.agent_llm import get_agent_llm
-from langchain_core.messages import  HumanMessage
+from langchain_core.messages import  HumanMessage, SystemMessage
+from stockeasy.prompts.telegram_prompts import format_telegram_messages
+
 
 class SummarizerAgent(BaseAgent):
     """검색된 정보를 요약하는 에이전트"""
@@ -25,13 +32,13 @@ class SummarizerAgent(BaseAgent):
     def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """에이전트 초기화"""
         super().__init__(name, db)
-        #self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1,api_key=settings.OPENAI_API_KEY )
-        #self.llm, self.model_name, self.provider = get_llm_for_agent("summarizer_agent")
         self.agent_llm = get_agent_llm("summarizer_agent")
         logger.info(f"SummarizerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
-        self.parser = StrOutputParser()
-        self.prompt_template = DEEP_RESEARCH_SYSTEM_PROMPT
+        # self.parser = StrOutputParser() # 직접 사용 안 함
+        # self.prompt_template = DEEP_RESEARCH_SYSTEM_PROMPT # 직접 사용 안 함
+
     
+
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         검색된 정보를 요약합니다.
@@ -44,21 +51,28 @@ class SummarizerAgent(BaseAgent):
         """
         try:
             query = state.get("query", "")
-            stock_code = state.get("stock_code")
-            stock_name = state.get("stock_name")
-            classification = state.get("question_classification", {}).get("classification", {})
-            agent_results = state.get("agent_results", {})
-
-            telegram_data = agent_results.get("telegram_retriever", {}).get("data", [])
-            report_data = agent_results.get("report_analyzer", {}).get("data", [])
-            financial_data = agent_results.get("financial_analyzer", {}).get("data", {})
-            industry_data = agent_results.get("industry_analyzer", {}).get("data", [])
-            confidential_data = agent_results.get("confidential_analyzer", {}).get("data", {})
-            revenue_breakdown_data = agent_results.get("revenue_breakdown", {}).get("data", {})
-            # 통합된 지식이 있으면 사용
-            integrated_knowledge = agent_results.get("knowledge_integrator", {}).get("data", {})
-            #integrated_knowledge = state.get("integrated_knowledge")
+            stock_code = state.get("stock_code") 
+            stock_name = state.get("stock_name") 
             
+            agent_results = state.get("agent_results", {})
+            report_analyzer_data = agent_results.get("report_analyzer", {}).get("data", {})
+            
+            main_query_reports: List[CompanyReportData] = report_analyzer_data.get("main_query_reports", [])
+            toc_data_report_agent: Dict[str, List[CompanyReportData]] = report_analyzer_data.get("toc_reports", {})
+
+            #텔레그램은 toc_results, main_query_results. 기업리포트와는 키 이름이 다르다(toc_reports)
+            telegram_data = agent_results.get("telegram_retriever", {}).get("data", {})
+            toc_data_telegram_agent: Dict[str, List[RetrievedTelegramMessage]] = telegram_data.get("toc_results", {}) #텔레그램은 toc_results, main_query_results
+
+            # 다른 에이전트 결과 데이터 포맷팅 (stock_code, stock_name 전달)
+            other_agents_context_str = format_other_agent_data(
+                agent_results, 
+                stock_code=stock_code, 
+                stock_name=stock_name
+            )
+            
+            final_report_toc = state.get("final_report_toc") 
+
             if not query:
                 state["errors"] = state.get("errors", []) + [{
                     "agent": self.get_name(),
@@ -70,77 +84,346 @@ class SummarizerAgent(BaseAgent):
                 state["processing_status"]["summarizer"] = "error"
                 return state
             
-            if ( (not telegram_data or len(telegram_data) == 0) and 
-                (not report_data or len(report_data)) == 0 and 
-                not financial_data and not industry_data and 
-                not integrated_knowledge):
+            if not final_report_toc:
                 state["errors"] = state.get("errors", []) + [{
                     "agent": self.get_name(),
-                    "error": "요약할 정보가 없습니다.",
-                    "type": "InsufficientDataError",
+                    "error": "동적 목차 정보(final_report_toc)가 없습니다.",
+                    "type": "MissingDataError",
                     "timestamp": datetime.now()
                 }]
                 state["processing_status"] = state.get("processing_status", {})
                 state["processing_status"]["summarizer"] = "error"
                 return state
-        except Exception as e:
-            logger.exception(f"정보 요약 중 오류 발생: {e}")
+            
+            if not main_query_reports and not toc_data_report_agent:
+                logger.warning("[SummarizerAgent] 요약할 기업 리포트 정보가 없습니다 (메인 쿼리 및 TOC 결과 모두 부족). 다른 컨텍스트만으로 진행될 수 있습니다.")
+                # 오류로 처리하지 않고 다른 컨텍스트만으로 진행할 수 있도록 허용 (사용자 피드백에 따라 변경 가능)
+                # state["errors"] = state.get("errors", []) + [{
+                #     "agent": self.get_name(),
+                #     "error": "요약할 분석 정보가 없습니다 (ReportAnalyzer 결과 부족).",
+                #     "type": "InsufficientDataError",
+                #     "timestamp": datetime.now()
+                # }]
+                # state["processing_status"] = state.get("processing_status", {})
+                # state["processing_status"]["summarizer"] = "error"
+                # return state
+
+        except Exception as e: # 데이터 준비 과정에서의 예외
+            logger.exception(f"SummarizerAgent 정보 준비 중 오류 발생: {e}")
             state["errors"] = state.get("errors", []) + [{
                 "agent": self.get_name(),
-                "error": str(e),
+                "error": f"정보 준비 오류: {str(e)}",
                 "type": type(e).__name__,
                 "timestamp": datetime.now()
             }]
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["summarizer"] = "error"
+            return state
 
         try:
-            # 1. 상태에서 커스텀 프롬프트 템플릿 확인
-            custom_prompt_from_state = state.get("custom_prompt_template")
-            # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
-            custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
-            # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
-            system_prompt = None
-            if custom_prompt_from_state:
-                system_prompt = custom_prompt_from_state
-                logger.info(f"SummarizerAgent using custom prompt from state : {custom_prompt_from_state}")
-            elif custom_prompt_from_attr:
-                system_prompt = custom_prompt_from_attr
-                logger.info(f"SummarizerAgent using custom prompt from attribute")
-            # 요약 프롬프트 생성
-            prompt = create_prompt(
-                query=query, stock_code=stock_code, stock_name=stock_name, classification=classification,
-                telegram_data=telegram_data, report_data=report_data, confidential_data=confidential_data,
-                financial_data=financial_data, industry_data=industry_data,
-                integrated_knowledge=integrated_knowledge, revenue_breakdown_data=revenue_breakdown_data,
-                system_prompt=system_prompt
-            )
-            
-            # LLM으로 요약 생성
-            # chain = prompt | self.llm | self.parser
-            # summary = await chain.ainvoke({})
-
-            # LLM 호출
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
-            summary = await self.agent_llm.ainvoke_with_fallback(
-                input=prompt.format_prompt(),
-                user_id=user_id,
-                project_type=ProjectType.STOCKEASY,
-                db=self.db
+            
+            summary, summary_by_section = await self.generate_sectioned_summary_v2(
+                query=query, 
+                user_id=user_id, 
+                final_report_toc=final_report_toc,
+                toc_data_company_report=toc_data_report_agent,
+                toc_data_telegram_agent=toc_data_telegram_agent,
+                other_agents_context_str=other_agents_context_str,
+                stock_name=stock_name,
+                stock_code=stock_code
             )
             
-            # 상태 업데이트
-            state["summary"] = summary.content
+            state["summary"] = summary
+            state["summary_by_section"] = summary_by_section
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["summarizer"] = "completed"
             
             return state
         except Exception as e:
-            logger.exception(f"요약 프롬프트 생성 중 오류 발생: {e}")
+            logger.exception(f"SummarizerAgent 요약 생성 중 오류 발생: {e}")
             state["errors"] = state.get("errors", []) + [{
                 "agent": self.get_name(),
-                "error": str(e),
+                "error": f"요약 생성 오류: {str(e)}",
                 "type": type(e).__name__,
                 "timestamp": datetime.now()
             }]
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["summarizer"] = "error"
+            return state
+        
+    async def generate_sectioned_summary_v2(self,
+                                         query: str,
+                                         user_id: str,
+                                         final_report_toc: Dict[str, Any],
+                                         toc_data_company_report: Dict[str, List[CompanyReportData]],
+                                         toc_data_telegram_agent: Dict[str, List[RetrievedTelegramMessage]],
+                                         other_agents_context_str: str,
+                                         stock_name: Optional[str] = None,
+                                         stock_code: Optional[str] = None
+                                         ):
+        """
+        동적 목차에 따라 섹션별로 요약을 생성하고 통합하는 함수 (v2: 핵심요약 후생성).
+        1. "핵심 요약"을 제외한 나머지 섹션들을 병렬로 생성.
+        2. 생성된 다른 섹션들의 내용을 바탕으로 "핵심 요약" 섹션을 생성.
+        3. 모든 섹션 내용을 통합하여 최종 보고서와 섹션별 내용 맵을 반환.
+        """
+        logger.info("[SummarizerAgent] 동적 목차 기반 섹션별 요약 생성 시작 (v2: 핵심요약 후생성)")
+        
+        toc_reports_summary_for_log = {k: len(v) for k, v in toc_data_company_report.items()}
+        logger.info(f"[SummarizerAgent] 전달받은 toc_data_company_report (키: 리포트 수): {toc_reports_summary_for_log}")
+        if not toc_data_company_report:
+            logger.warning("[SummarizerAgent] toc_data_company_report가 비어있습니다. 일부 섹션 내용이 부실할 수 있습니다.")
+            
+        toc_telegram_summary_for_log = {k: len(v) for k, v in toc_data_telegram_agent.items()}
+        logger.info(f"[SummarizerAgent] 전달받은 toc_data_telegram_agent (키: 텔레그램 메시지 수): {toc_telegram_summary_for_log}")
+        if not toc_data_telegram_agent:
+            logger.warning("[SummarizerAgent] toc_data_telegram_agent가 비어있습니다. 일부 섹션 내용이 부실할 수 있습니다.")
+
+        toc_title = final_report_toc.get("title", "알 수 없는 제목의 보고서")
+        toc_sections_from_generator = final_report_toc.get("sections", [])
+
+        if not toc_sections_from_generator:
+            logger.warning("[SummarizerAgent] 목차에 섹션 정보가 없습니다. 빈 보고서를 반환합니다.")
+            return f"# {toc_title}\n\n목차에 정의된 섹션이 없어 보고서 내용을 생성할 수 없습니다.", {}
+
+        # 1. "핵심 요약" 섹션 정보 분리 (첫 번째 섹션으로 가정)
+        first_section_data_for_summary = toc_sections_from_generator[0]
+
+        # 2. "핵심 요약"을 제외한 나머지 섹션들 생성 준비
+        other_section_tasks = []
+        other_section_details_for_llm_call = [] 
+
+        for i, section_data in enumerate(toc_sections_from_generator):
+            if i == 0: # "핵심 요약" 섹션은 나중에 처리
+                continue
+
+            current_section_title = section_data.get("title", f"섹션 {i+1}")
+            current_section_description = section_data.get("description", "")
+            current_section_id = section_data.get("section_id")
+            
+            if not current_section_id:
+                logger.warning(f"[SummarizerAgent] '{current_section_title}' (인덱스 {i})에 section_id가 없습니다. 이 섹션을 건너뜁니다.")
+                continue
+
+            current_section_company_report: List[CompanyReportData] = []
+            reports_for_current_section_id = toc_data_company_report.get(current_section_id, [])
+            current_section_company_report.extend(reports_for_current_section_id)
+            
+            current_section_telegram_msgs: List[RetrievedTelegramMessage] = []
+            telegram_msgs_for_current_section_id = toc_data_telegram_agent.get(current_section_id, [])
+            current_section_telegram_msgs.extend(telegram_msgs_for_current_section_id)
+            
+            subsections = section_data.get("subsections", [])
+            subsections_text_current = ""
+            if isinstance(subsections, list) and subsections:
+                subsections_text_current = "\n".join([f" - {s.get('title', '')} ({s.get('description','')})" for s in subsections])
+                for sub_section_item in subsections:
+                    if isinstance(sub_section_item, dict):
+                        subsection_id = sub_section_item.get("subsection_id")
+                        if subsection_id:
+                            current_section_company_report.extend(toc_data_company_report.get(subsection_id, []))
+                            current_section_telegram_msgs.extend(toc_data_telegram_agent.get(subsection_id, []))
+            
+            seen_contents = set()
+            deduplicated_list_reports = []
+            for report in current_section_company_report:
+                content_key = hashlib.sha256(report.get("content", "")[:100].encode('utf-8')).hexdigest()
+                if content_key not in seen_contents:
+                    seen_contents.add(content_key)
+                    deduplicated_list_reports.append(report)
+            current_section_company_report = deduplicated_list_reports
+            
+            seen_telegram_msgs = set()
+            deduplicated_list_tele_msgs = []
+            for msg in current_section_telegram_msgs:
+                msg_key = hashlib.sha256(msg.get("content", "")[:100].encode('utf-8')).hexdigest()
+                if msg_key not in seen_telegram_msgs:
+                    seen_telegram_msgs.add(msg_key)
+                    deduplicated_list_tele_msgs.append(msg)
+            current_section_telegram_msgs = deduplicated_list_tele_msgs
+            
+            logger.info(f"[SummarizerAgent] 섹션 '{current_section_title}' (ID: {current_section_id}, 목차인덱스 {i}) 최종 집계 - 고유 리포트: {len(current_section_company_report)}개, 고유 텔레그램: {len(current_section_telegram_msgs)}개")
+
+            formatted_report_docs = self._format_documents_for_section(current_section_company_report)
+            formatted_telegram_msgs = self._format_telegram_messages_for_section(current_section_telegram_msgs)
+            
+            combined_context_for_current_section = f"{formatted_report_docs}\n\n{formatted_telegram_msgs}\n\n{other_agents_context_str}"
+            
+            prompt_str_current = PROMPT_GENERATE_SECTION_CONTENT.format(
+                query=query,
+                section_title=current_section_title,
+                section_description=current_section_description,
+                subsections_info=subsections_text_current,
+                all_analyses=combined_context_for_current_section
+            )
+            messages_current = [HumanMessage(content=prompt_str_current)]
+            task_current = asyncio.create_task(self.agent_llm.ainvoke_with_fallback(
+                messages_current, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db
+            ))
+            other_section_tasks.append(task_current)
+            other_section_details_for_llm_call.append({
+                "title": current_section_title, 
+                "original_toc_index": i,
+            })
+
+        # 3. 나머지 섹션들 내용 병렬 생성
+        other_sections_results_raw = await asyncio.gather(*other_section_tasks, return_exceptions=True)
+
+        # 4. 생성된 나머지 섹션 내용 정리 및 "핵심 요약" 생성용 컨텍스트 준비
+        generated_texts_for_summary_input = []
+        processed_other_sections_data = [] 
+
+        for idx, raw_result in enumerate(other_sections_results_raw):
+            section_detail = other_section_details_for_llm_call[idx]
+            original_section_title = section_detail["title"]
+
+            if isinstance(raw_result, Exception):
+                logger.error(f"[SummarizerAgent] '{original_section_title}' (목차인덱스 {section_detail['original_toc_index']}) 생성 실패: {str(raw_result)}")
+                processed_other_sections_data.append({
+                    "details": section_detail,
+                    "text": f"*오류: '{original_section_title}' 섹션 내용을 생성하는 중 문제가 발생했습니다: {str(raw_result)}*"
+                })
+                continue
+            
+            section_text_content = raw_result.content if hasattr(raw_result, 'content') else str(raw_result)
+            logger.info(f"[SummarizerAgent] '{original_section_title}' (목차인덱스 {section_detail['original_toc_index']}) 생성 완료 (길이: {len(section_text_content)})")
+            
+            #generated_texts_for_summary_input.append(f"## {original_section_title}\n{section_text_content}")
+            generated_texts_for_summary_input.append(section_text_content)
+            processed_other_sections_data.append({"details": section_detail, "text": section_text_content})
+
+        # 5. "핵심 요약" 섹션 내용 생성
+        summary_section_content_str = "*핵심 요약 생성 중 오류가 발생했거나, 요약할 다른 섹션 내용이 없습니다.*"
+        summary_section_title = first_section_data_for_summary.get("title", "핵심 요약")
+
+        if generated_texts_for_summary_input:
+            context_for_summary_llm = "\n\n".join(generated_texts_for_summary_input)
+            
+            # if other_agents_context_str and other_agents_context_str.strip():
+            #      context_for_summary_llm += f"\n\n<기타_참고_자료>\n{other_agents_context_str}\n</기타_참고_자료>"
+
+            summary_section_description = first_section_data_for_summary.get("description", "보고서 전체의 주요 내용을 요약합니다.")
+            summary_subsections_info = "" 
+            summary_section_subsections = first_section_data_for_summary.get("subsections", [])
+            if isinstance(summary_section_subsections, list) and summary_section_subsections:
+                 summary_subsections_info = "\n이 핵심 요약 섹션이 다룰 수 있는 하위 주제 목록:\n" + "\n".join([f" - {s.get('title', '')} ({s.get('description','')})" for s in summary_section_subsections])
+
+            # 핵심 요약 프롬프트 사용
+            prompt_str_summary = PROMPT_GENERATE_EXECUTIVE_SUMMARY.format(
+                original_query=query, # 원본 사용자 질문
+                report_title=toc_title, # 보고서 전체 제목
+                section_title=summary_section_title, # 현재 섹션 제목 ("핵심 요약")
+                # section_description은 EXECUTIVE_SUMMARY 프롬프트에 없음
+                # subsections_info도 EXECUTIVE_SUMMARY 프롬프트에 없음
+                sections_summary=context_for_summary_llm, # 다른 섹션들의 생성된 내용 + 기타 참고자료
+            )
+            messages_summary = [HumanMessage(content=prompt_str_summary)]
+            
+            logger.info(f"[SummarizerAgent] '{summary_section_title}' 생성 작업 시작 (PROMPT_GENERATE_EXECUTIVE_SUMMARY 사용). 컨텍스트 길이(근사치): {len(context_for_summary_llm)}")
+            try:
+                result_summary_section_raw = await self.agent_llm.ainvoke_with_fallback(
+                    messages_summary, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db
+                )
+                if isinstance(result_summary_section_raw, Exception):
+                    logger.error(f"[SummarizerAgent] '{summary_section_title}' 생성 실패 (LLM 호출 결과가 예외 객체): {str(result_summary_section_raw)}")
+                    summary_section_content_str = "*핵심 요약 생성 중 오류가 발생했습니다.*"
+                elif hasattr(result_summary_section_raw, 'content'):
+                    summary_section_content_str = result_summary_section_raw.content
+                    logger.info(f"[SummarizerAgent] '{summary_section_title}' 생성 완료 (길이: {len(summary_section_content_str)})")
+                else:
+                    summary_section_content_str = str(result_summary_section_raw)
+                    logger.warning(f"[SummarizerAgent] '{summary_section_title}' 생성 결과가 예상과 다릅니다: {summary_section_content_str[:200]}...")
+            except Exception as e_summary:
+                logger.exception(f"[SummarizerAgent] '{summary_section_title}' 생성 중 LLM 호출 예외 발생: {e_summary}")
+                summary_section_content_str = "*핵심 요약 생성 중 오류가 발생했습니다.*"
+        else:
+            logger.warning(f"[SummarizerAgent] '{summary_section_title}' 생성 스킵: 요약할 다른 섹션 내용이 없습니다.")
+
+        # 6. 최종 보고서 통합
+        section_contents_map = {}
+        final_report_parts = []
+
+        # "핵심 요약" 섹션 추가 (목차상 1번)
+        numbered_summary_title_for_report = f"{first_section_data_for_summary.get('original_toc_index', 0) + 1}. {summary_section_title}"
+        
+        section_contents_map[summary_section_title] = summary_section_content_str
+        #final_report_parts.append(f"## {numbered_summary_title_for_report}\n{summary_section_content_str}")
+        final_report_parts.append(summary_section_content_str)
+
+        # 나머지 섹션들 추가 (목차 순서대로)
+        for item in processed_other_sections_data:
+            details = item["details"]
+            text_content = item["text"]
+            section_title_from_details = details["title"]
+            
+            numbered_section_title_for_report = f"{details['original_toc_index'] + 1}. {section_title_from_details}"
+            
+            section_contents_map[section_title_from_details] = text_content
+            #final_report_parts.append(f"## {numbered_section_title_for_report}\n{text_content}")
+            final_report_parts.append(text_content)
+            
+        final_summary_md = f"# {toc_title}\n\n"
+        final_summary_md += "\n\n".join(final_report_parts)
+        
+        logger.info("[SummarizerAgent] 동적 목차 기반 섹션별 요약 통합 완료 (v2)")
+        return final_summary_md, section_contents_map
+    
+    def _format_documents_for_section(self, reports: List[CompanyReportData]) -> str:
+        """
+        CompanyReportData 리스트를 LLM 프롬프트에 적합한 문자열로 변환합니다.
+        (기존 common.agents.report_analyzer_agent.format_report_contents 와 유사하지만,
+         SummarizerAgent에 맞게 커스터마이징 가능)
+        """
+        if not reports:
+            return "해당 섹션에 대한 기업리포트 참고 자료가 없습니다."
+
+        formatted_texts = []
+        text = "<기업리포트>\n"
+        for i, report in enumerate(reports):
+            text += f" <자료 {i+1}>\n"
+            text += f"출처: {report.get('source', '미상')}\n"
+            text += f"날짜: {report.get('publish_date', '날짜 정보 없음')}\n"
+            # if report.get('title') and report.get('title') != '제목 없음': # title이 유효하면 추가
+            #     text += f"제목: {report.get('title')}\n"
+            sContent = report.get('content', '내용 없음')
+            sContent = sContent.replace("\n\n", "\n")
+            text += f"내용:\n{sContent}\n"
+            formatted_texts.append(text)
+            text += f" </자료 {i+1}>\n"
+        text += "</기업리포트>"
+        return text
+    
+    def _format_telegram_messages_for_section(self, messages: List[RetrievedTelegramMessage]) -> str:
+        """
+        RetrievedTelegramMessage 리스트를 LLM 프롬프트에 적합한 문자열로 변환합니다.
+        """
+        if not messages:
+            return "해당 섹션에 대한 내부DB 참고 자료가 없습니다."
+        
+        formatted_texts = []
+        text = "<내부DB>"
+        for i, message in enumerate(messages):
+            text += f"\n<자료 {i+1}>\n"
+            
+            # ISO 형식의 날짜를 년-월-일 형식으로 변환
+            created_at = message.get('message_created_at', '')
+            formatted_date = '날짜 정보 없음'
+            
+            if created_at:
+                try:
+                    dt_obj = datetime.fromisoformat(created_at)
+                    formatted_date = dt_obj.strftime('%Y-%m-%d')
+                except (ValueError, TypeError):
+                    # 날짜 변환 실패 시 원본 값 사용
+                    formatted_date = created_at
+            
+            text += f"날짜: {formatted_date}\n"
+            #text += f"채널: {message.get('channel_name', '채널 정보 없음')}\n"
+            text += f"내용: {message.get('content', '내용 없음')}\n"
+            text += f"</자료 {i+1}>\n"
+        text += "</내부DB>"
+        return text
         
     

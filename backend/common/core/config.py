@@ -62,6 +62,7 @@ class CommonSettings(BaseSettings):
     GEMINI_API_KEY: str
     UPSTAGE_API_KEY: str
     CLAUDE_API_KEY: str 
+    TAVILY_API_KEY: str
 
     # Redis 설정
     REDIS_HOST: str 

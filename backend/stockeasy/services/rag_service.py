@@ -12,12 +12,27 @@ from uuid import UUID
 from loguru import logger
 import time
 from sqlalchemy.ext.asyncio import AsyncSession
+import re
+from datetime import datetime
 
 from stockeasy.models.agent_io import QuestionClassification
 from common.utils.util import async_retry
 from common.core.config import settings
 from common.core.database import get_db_session
 from langchain.callbacks.tracers import LangChainTracer
+from common.schemas.chat_components import (
+    HeadingComponent, 
+    ParagraphComponent,
+    ListComponent, 
+    ListItemComponent,
+    CodeBlockComponent,
+    BarChartComponent,
+    LineChartComponent,
+    TableComponent,
+    TableHeader,
+    TableData,
+    MessageComponent
+)
 
 class StockRAGService:
     """Langgraph 기반 주식 분석 RAG 서비스"""
@@ -125,6 +140,168 @@ class StockRAGService:
         
         logger.info(f"사용자 컨텍스트 설정: 세션 ID {session_id}, 사용자 ID {user_id or '익명'}")
     
+    def _convert_text_to_components(self, text: str) -> List[MessageComponent]:
+        """텍스트 응답을 구조화된 컴포넌트로 변환합니다.
+        
+        Args:
+            text: 에이전트로부터 받은 텍스트 응답
+            
+        Returns:
+            List[MessageComponent]: 구조화된 메시지 컴포넌트 목록
+        """
+        components: List[MessageComponent] = []
+        
+        # 텍스트가 없는 경우 빈 리스트 반환
+        if not text or text.strip() == "":
+            return components
+            
+        # 텍스트 전처리 (필요시)
+        text = text.strip()
+        
+        # 마크다운 헤더 패턴 (# Header)
+        header_pattern = r'^(#{1,6})\s+(.+)$'
+        
+        # 코드 블록 패턴 (```언어 ... ```)
+        code_block_pattern = r'```([a-zA-Z]*)\n([\s\S]*?)```'
+        
+        # 리스트 항목 패턴
+        list_item_pattern = r'^[*-]\s+(.+)$'
+        ordered_list_item_pattern = r'^\d+\.\s+(.+)$'
+        
+        # 텍스트를 줄 단위로 분리
+        lines = text.split('\n')
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # 빈 줄은 건너뛰기
+            if not line:
+                i += 1
+                continue
+                
+            # 헤더 확인
+            header_match = re.match(header_pattern, line)
+            if header_match:
+                level = len(header_match.group(1))  # '#' 개수 = 레벨
+                content = header_match.group(2).strip()
+                components.append(HeadingComponent(level=level, content=content))
+                i += 1
+                continue
+                
+            # 코드 블록 확인 (여러 줄에 걸친 패턴)
+            if line.startswith("```"):
+                # 코드 블록의 끝을 찾음
+                code_content = []
+                language = line[3:].strip()  # ```python 에서 python 추출
+                i += 1  # 코드 블록 첫 줄로 이동
+                
+                while i < len(lines) and not lines[i].strip() == "```":
+                    code_content.append(lines[i])
+                    i += 1
+                
+                if i < len(lines):  # 코드 블록 종료 확인
+                    i += 1  # ``` 다음 줄로 이동
+                
+                code_text = "\n".join(code_content)
+                components.append(CodeBlockComponent(language=language if language else None, content=code_text))
+                continue
+                
+            # 리스트 항목 확인
+            list_items = []
+            is_ordered = False
+            
+            # 순서 없는 리스트 항목 확인
+            if re.match(list_item_pattern, line):
+                while i < len(lines) and re.match(list_item_pattern, lines[i]):
+                    item_match = re.match(list_item_pattern, lines[i])
+                    list_items.append(ListItemComponent(content=item_match.group(1).strip()))
+                    i += 1
+            
+            # 순서 있는 리스트 항목 확인
+            elif re.match(ordered_list_item_pattern, line):
+                is_ordered = True
+                while i < len(lines) and re.match(ordered_list_item_pattern, lines[i]):
+                    item_match = re.match(ordered_list_item_pattern, lines[i])
+                    list_items.append(ListItemComponent(content=item_match.group(1).strip()))
+                    i += 1
+            
+            # 리스트 항목을 찾았으면 리스트 컴포넌트 추가
+            if list_items:
+                components.append(ListComponent(ordered=is_ordered, items=list_items))
+                continue
+                
+            # 위의 어느 패턴에도 해당하지 않으면 단락으로 처리
+            paragraph_text = line
+            i += 1
+            
+            # 연속된 일반 텍스트는 하나의 단락으로 병합
+            while i < len(lines) and lines[i].strip() and not (
+                re.match(header_pattern, lines[i]) or 
+                re.match(list_item_pattern, lines[i]) or 
+                re.match(ordered_list_item_pattern, lines[i]) or 
+                lines[i].startswith("```")
+            ):
+                paragraph_text += "\n" + lines[i].strip()
+                i += 1
+                
+            components.append(ParagraphComponent(content=paragraph_text))
+        
+        return components
+
+    def _convert_chart_data_to_components(self, result: Dict[str, Any]) -> List[MessageComponent]:
+        """차트 데이터를 포함한 결과를 구조화된 컴포넌트로 변환합니다.
+        
+        Args:
+            result: 에이전트 처리 결과 데이터
+            
+        Returns:
+            List[MessageComponent]: 차트 컴포넌트를 포함한 메시지 컴포넌트 목록
+        """
+        components = []
+        
+        # 기본 텍스트 응답을 컴포넌트로 변환
+        if "answer" in result:
+            text_components = self._convert_text_to_components(result["answer"])
+            components.extend(text_components)
+        
+        # 차트 데이터 확인 및 변환
+        charts_data = result.get("charts", [])
+        for chart in charts_data:
+            chart_type = chart.get("type", "")
+            chart_data = chart.get("data", {})
+            chart_title = chart.get("title", "")
+            
+            if chart_type == "bar" and chart_data:
+                bar_chart = BarChartComponent(
+                    title=chart_title,
+                    data=chart_data
+                )
+                components.append(bar_chart)
+            elif chart_type == "line" and chart_data:
+                line_chart = LineChartComponent(
+                    title=chart_title,
+                    data=chart_data
+                )
+                components.append(line_chart)
+        
+        # 테이블 데이터 확인 및 변환
+        tables_data = result.get("tables", [])
+        for table in tables_data:
+            headers = table.get("headers", [])
+            rows = table.get("rows", [])
+            title = table.get("title", "")
+            
+            if headers and rows:
+                table_headers = [TableHeader(key=h["key"], label=h["label"]) for h in headers]
+                table_component = TableComponent(
+                    title=title,
+                    data=TableData(headers=table_headers, rows=rows)
+                )
+                components.append(table_component)
+        
+        return components
+
     @async_retry(retries=2, delay=2.0, exceptions=(Exception,))
     async def analyze_stock(
         self,
@@ -140,7 +317,7 @@ class StockRAGService:
         agent_results: Optional[Dict[str, Any]] = {}
     ) -> Dict[str, Any]:
         """
-        주식 정보 분석
+        주식 정보 분석 및 결과를 구조화된 컴포넌트로 변환
 
         Args:
             query: 사용자 질문
@@ -155,7 +332,7 @@ class StockRAGService:
             agent_results : 후속질문에 사용할 이전 에이전트 결과물
 
         Returns:
-            분석 결과
+            Dict[str, Any]: 구조화된 메시지 컴포넌트를 포함한 분석 결과
         """
         try:
             # 에이전트 그래프 초기화 (필요시)
@@ -195,16 +372,32 @@ class StockRAGService:
             
             logger.info(f"[StockRAGService] 주식 분석 완료: 종목코드={stock_code}, 결과 크기={len(str(result))}자")
             
+            # # 결과 텍스트를 구조화된 컴포넌트로 변환
+            # components = self._convert_chart_data_to_components(result)
+            
+            # # 구조화된 컴포넌트가 없는 경우 기본 텍스트 변환 사용
+            # if not components and "answer" in result:
+            #     components = self._convert_text_to_components(result["answer"])
+            
+            # # 원본 결과를 유지하면서 components 항목 추가
+            # result["components"] = [comp.dict() for comp in components]
+            
             return result
             
         except Exception as e:
             logger.exception(f"[StockRAGService] 주식 분석 중 오류 발생: {str(e)}")
             # 오류 발생 시 기본 응답 반환
+            error_components = [
+                HeadingComponent(level=2, content="처리 중 오류 발생"),
+                ParagraphComponent(content=f"죄송합니다. 질문 처리 중 오류가 발생했습니다: {str(e)}")
+            ]
+            
             return {
                 "query": query,
                 "stock_code": stock_code,
                 "stock_name": stock_name,
                 "answer": f"죄송합니다. 질문 처리 중 오류가 발생했습니다: {str(e)}",
+                "components": [comp.dict() for comp in error_components],
                 "error": str(e)
             }
 

@@ -102,7 +102,6 @@ class StockInfoService:
         # 자동 업데이트 태스크 시작
         self._update_task = asyncio.create_task(self._start_auto_update())
         logger.info("주식 정보 서비스 초기화 완료")
-        print("주식 정보 서비스 초기화 완료1")
         try:
             stocks = await self.search_stocks("삼성전", limit=5)
             logger.info(f"샘플 종목 검색 결과: {len(stocks)}개")
@@ -114,14 +113,12 @@ class StockInfoService:
             logger.info("섹터 조회 시작")
             sector = await self.get_sector_by_code("278470")
             logger.info(f"섹터 조회 결과 278470 : {sector}")
-            logger.info("섹터 조회 완료")
         except Exception as e:
             logger.error(f"샘플 종목 및 섹터 조회 중 오류 발생: {str(e)}")
         
         # 초기화 완료 이벤트 설정
         self._initialized.set()
         logger.info("주식 정보 서비스 초기화 이벤트 설정 완료")
-        print("주식 정보 서비스 초기화 완료2")
     
     async def wait_for_initialization(self) -> None:
         """

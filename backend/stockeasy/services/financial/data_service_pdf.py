@@ -96,7 +96,7 @@ class FinancialDataServicePDF:
         
         self.pdf_extractor = FinancialPDFExtractor()
         self.llm_service = FinancialLLMService()
-        self.cache_util = FinancialCacheUtil()
+        #self.cache_util = FinancialCacheUtil()
         
         logger.info("FinancialDataServicePDF 초기화 완료")
         
@@ -158,7 +158,7 @@ class FinancialDataServicePDF:
                 #print(f"filedate type : {type(file_date)}, {type(start_date)}, {type(end_date)}")
                 # 날짜 또는 연도 기반으로 필터링
                 if file_date and start_date <= file_date <= end_date:
-                    print(f"append file_date: {file_date}")
+                    #print(f"append file_date: {file_date}")
                     filtered_files.append(file)
                 # elif file.get("year", 0) >= start_date.year and file.get("year", 0) <= end_date.year:
                 #     print(f"append file_date2: {file_date}")
@@ -260,7 +260,7 @@ class FinancialDataServicePDF:
                 #print(f"filedate type : {type(file_date)}, {type(start_date)}, {type(end_date)}")
                 # 날짜 또는 연도 기반으로 필터링
                 if file_date and start_date <= file_date <= end_date:
-                    print(f"append file_date: {file_date}")
+                    #print(f"append file_date: {file_date}")
                     filtered_files.append(file)
                 # elif file.get("year", 0) >= start_date.year and file.get("year", 0) <= end_date.year:
                 #     print(f"append file_date2: {file_date}")
@@ -332,7 +332,8 @@ class FinancialDataServicePDF:
         print(f"Retrieving file list from GCS for stock {stock_code}")
         
         prefix = f"{self.base_gcs_path}/{stock_code}/"
-        blobs = list(self.storage_service.bucket.list_blobs(prefix=prefix))
+        #blobs = list(self.storage_service.bucket.list_blobs(prefix=prefix))
+        blobs = await asyncio.to_thread(self.storage_service.bucket.list_blobs, prefix=prefix)
         
         file_list = []
         for blob in blobs:
