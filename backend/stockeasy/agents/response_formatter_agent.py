@@ -324,8 +324,8 @@ class ResponseFormatterAgent(BaseAgent):
                          formatted_response = "보고서 내용을 생성하지 못했습니다."
 
             # 결과 저장
-            state["formatted_response"] = formatted_response
-            state["answer"] = formatted_response 
+            state["formatted_response"] = summary
+            state["answer"] = summary 
             state["components"] = all_components
             
             # 처리 상태 업데이트
