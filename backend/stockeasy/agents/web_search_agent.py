@@ -67,8 +67,8 @@ class WebSearchAgent(BaseAgent):
         self.tavily_service = TavilyService()
         
         # 최대 쿼리 개수 및 최대 결과 개수 설정
-        self.max_queries = 8
-        self.max_results_per_query = 10
+        self.max_queries = 7
+        self.max_results_per_query = 15
         
         logger.info(f"WebSearchAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
     
@@ -348,8 +348,8 @@ class WebSearchAgent(BaseAgent):
             # 단일 비동기 세션에서 모든 쿼리 병렬 처리
             all_results = await self.tavily_service.batch_search_async(
                 queries=search_queries,
-                #search_depth="advanced",
-                search_depth="basic",
+                search_depth="advanced",
+                #search_depth="basic",
                 max_results=self.max_results_per_query,
                 topic="general",
                 time_range="year"
