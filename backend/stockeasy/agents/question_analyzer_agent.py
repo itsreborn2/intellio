@@ -401,8 +401,8 @@ class QuestionAnalyzerAgent(BaseAgent):
                 else:
                     logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시 없음, 최근 이슈 요약 생성: {cache_key}")
                     recent_issues_summary = await self.summarize_recent_issues(stock_name, stock_code, user_id)
-                    # 2. 생성된 요약을 캐시에 저장 (만료 시간: 1일 = 86400초)
-                    await redis_client.set_key(cache_key, recent_issues_summary, expire=86400)
+                    # 2. 생성된 요약을 캐시에 저장 (만료 시간: 1일 = 86400초) -> 2일로 변경(크레딧 문제때문에..)
+                    await redis_client.set_key(cache_key, recent_issues_summary, expire=172800)
                     logger.info(f"종목 [{stock_name}/{stock_code}]에 최근 이슈 요약 캐시 저장 (만료: 1일): {cache_key}")
 
                 final_report_toc = await self.generate_dynamic_toc(query, recent_issues_summary, user_id)
