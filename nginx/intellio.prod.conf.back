@@ -1,16 +1,10 @@
 # 유지보수 모드 설정
-# 허용된 IP 주소들 (예시 IP이므로 실제 허용할 IP로 변경해주세요)
-geo $allowed_ip {
-    default 0;
-    127.0.0.1 1;        # 로컬호스트
-    # 여기에 허용할 IP 추가 (개발자/관리자 IP)
-    218.38.24.30 1; # 내 아이피
-}
-
-# 유지보수 모드 상태
-map $allowed_ip $maintenance {
-    0 1;  # maintenance on
-    1 0;  # maintenance off
+geo $remote_addr $maintenance_ip { 
+    default 1;          # 기본적으로 유지보수 모드 활성화(1, 점검중), 비활성(0, 페이지접속가능) 
+    127.0.0.1 0;        # 로컬호스트는 유지보수 모드 비활성화
+    218.38.24.30 0;     # 영호
+    14.4.216.143 0;     # 상균
+    49.169.245.211 0;  # 훈
 }
 
 # HTTP를 HTTPS로 리다이렉트
@@ -24,48 +18,11 @@ server {
     }
 }
 
-# 유지보수 전용 서버 설정
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    server_name intellio.kr www.intellio.kr doceasy.intellio.kr stockeasy.intellio.kr;
-    
-    # maintenance mode check - 유지보수 모드가 꺼져 있는 경우(허용 IP) 이 블록 건너뜀
-    if ($maintenance = 0) {
-        return 444;  # 해당 서버 블록 무시
-    }
-    
-    # SSL 인증서 설정
-    ssl_certificate /etc/letsencrypt/live/intellio.kr/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/intellio.kr/privkey.pem;
-    
-    # SSL 설정
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    
-    # 보안 헤더 설정
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    
-    location / {
-        root /etc/nginx;
-        try_files /maintenance.html =503;
-        add_header Content-Type "text/html; charset=utf-8";
-    }
-}
-
 # Main 서비스 - HTTPS 서버 설정
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
     server_name intellio.kr www.intellio.kr;
-
-    # maintenance mode check - 유지보수 모드가 켜져 있는 경우(비허용 IP) 이 블록 건너뜀
-    if ($maintenance = 1) {
-        return 444;  # 해당 서버 블록 무시
-    }
 
     # SSL 인증서 설정
     ssl_certificate /etc/letsencrypt/live/intellio.kr/fullchain.pem;
@@ -84,8 +41,30 @@ server {
     # 파일 업로드 크기 제한 설정
     client_max_body_size 500M;
 
+    # 네이버 사이트 소유 확인 파일
+    location = /naver05e1a36b2c19c00e7770c3727a983d6d.html {
+        root /home/intellio_korea/intellio_prod/frontend/main/public;
+        access_log off; # 불필요한 로그 생성을 방지합니다.
+    }
+
+    location = /naver4a501a73ba782a5091dd8118f800540f.html {
+        root /home/intellio_korea/intellio_prod/frontend/main/public;
+        access_log off;
+    }
+
+    # 유지보수 페이지 설정
+    location = /maintenance.html {
+        root /etc/nginx;
+        internal;
+    }
+
     # n8n 설정.
     location /n8n/ {
+        # 유지보수 모드 체크
+        if ($maintenance_ip) {
+            return 503;
+        }
+
         proxy_pass http://localhost:5678/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -96,6 +75,11 @@ server {
 
     # pgAdmin 설정
     location /pgadmin {
+        # 유지보수 모드 체크
+        if ($maintenance_ip) {
+            return 503;
+        }
+
         proxy_pass http://localhost:5055;
         proxy_set_header X-Script-Name /pgadmin;
         proxy_set_header X-Scheme $scheme;
@@ -118,6 +102,11 @@ server {
 
     # Main 연결 (port 3000)
     location / {
+        # 유지보수 모드 체크
+        if ($maintenance_ip) {
+            return 503;
+        }
+
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -138,6 +127,11 @@ server {
 
     # FastAPI 백엔드 API
     location /api/ {
+        # 유지보수 모드 체크
+        if ($maintenance_ip) {
+            return 503;
+        }
+
         proxy_pass http://localhost:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -149,6 +143,9 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Port $server_port;
+        proxy_read_timeout 600s;
+        proxy_connect_timeout 600s;
+        proxy_send_timeout 600s;
 
         # 디버깅을 위한 로깅 추가
         access_log /var/log/nginx/api_access.log;
@@ -159,6 +156,9 @@ server {
         proxy_hide_header 'Access-Control-Allow-Methods';
         proxy_hide_header 'Access-Control-Allow-Headers';
     }
+
+    # 유지보수 페이지 설정
+    error_page 503 /maintenance.html;
 }
 
 # DocEasy 서비스 - HTTPS 서버 설정
@@ -166,11 +166,6 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     server_name doceasy.intellio.kr;
-
-    # maintenance mode check - 유지보수 모드가 켜져 있는 경우(비허용 IP) 이 블록 건너뜀
-    if ($maintenance = 1) {
-        return 444;  # 해당 서버 블록 무시
-    }
 
     # SSL 인증서 설정
     ssl_certificate /etc/letsencrypt/live/intellio.kr/fullchain.pem;
@@ -186,6 +181,17 @@ server {
 
     # 파일 업로드 크기 제한 설정
     client_max_body_size 500M;
+
+    location = /naverfeeb3e00021b13204252db129c13f445.html {
+        root /home/intellio_korea/intellio_prod/frontend/doceasy/public;
+        access_log off;
+    }
+
+    # 유지보수 페이지 설정
+    location = /maintenance.html {
+        root /etc/nginx;
+        internal;
+    }
 
     # Next.js 정적 파일
     location /_next/static/ {
@@ -203,6 +209,11 @@ server {
     }
 
     location / {
+        # 유지보수 모드 체크
+        if ($maintenance_ip) {
+            return 503;
+        }
+
         proxy_pass http://localhost:3010;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -216,6 +227,11 @@ server {
 
     # FastAPI 백엔드 API
     location /api/ {
+        # 유지보수 모드 체크
+        if ($maintenance_ip) {
+            return 503;
+        }
+
         proxy_pass http://localhost:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -247,6 +263,9 @@ server {
         expires 30d;
         add_header Cache-Control "public, no-transform";
     }
+
+    # 유지보수 페이지 설정
+    error_page 503 /maintenance.html;
 }
 
 # Stockeasy 서비스 - HTTPS 서버 설정
@@ -254,11 +273,6 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     server_name stockeasy.intellio.kr;
-
-    # maintenance mode check - 유지보수 모드가 켜져 있는 경우(비허용 IP) 이 블록 건너뜀
-    if ($maintenance = 1) {
-        return 444;  # 해당 서버 블록 무시
-    }
 
     # SSL 인증서 설정
     ssl_certificate /etc/letsencrypt/live/intellio.kr/fullchain.pem;
@@ -277,8 +291,24 @@ server {
     # 파일 업로드 크기 제한 설정
     client_max_body_size 500M;
 
+    location = /navera911d5c653da42817aaa194970d2064b.html {
+        root /home/intellio_korea/intellio_prod/frontend/stockeasy/public;
+        access_log off;
+    }
+
+    # 유지보수 페이지 설정
+    location = /maintenance.html {
+        root /etc/nginx;
+        internal;
+    }
+
     # Stockeasy 연결 (port 3020)
     location / {
+        # 유지보수 모드 체크
+        if ($maintenance_ip) {
+            return 503;
+        }
+
         proxy_pass http://localhost:3020;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -315,6 +345,11 @@ server {
 
     # FastAPI 백엔드 API
     location /api/ {
+        # 유지보수 모드 체크
+        if ($maintenance_ip) {
+            return 503;
+        }
+
         proxy_pass http://localhost:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -354,10 +389,14 @@ server {
         expires 30d;
         add_header Cache-Control "public, no-transform";
     }
-
     
     # requestfile 디렉토리를 위한 새로운 설정
     location /requestfile/ {
+        # 유지보수 모드 체크
+        if ($maintenance_ip) {
+            return 503;
+        }
+    
         alias /mnt/volume_sgp1_02/intellio_prod/frontend/stockeasy/public/requestfile/;
         
         # 심볼릭 링크 허용 옵션
@@ -390,4 +429,31 @@ server {
         access_log /var/log/nginx/rs_etf_csv_access.log;
         error_log /var/log/nginx/rs_etf_csv_error.log debug;
     }
+
+    # 파일 다운로드 경로 설정
+    location /download_chat_session/ {
+        proxy_pass http://localhost:8000/download_chat_session/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # 파일 다운로드를 위한 버퍼 설정
+        proxy_buffer_size 128k;
+        proxy_buffers 4 256k;
+        proxy_busy_buffers_size 256k;
+        
+        # 타임아웃 설정 (큰 파일 다운로드 고려)
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        
+        # 접근 로그 기록
+        access_log /var/log/nginx/download_access.log;
+        error_log /var/log/nginx/download_error.log;
+    }
+
+    # 유지보수 페이지 설정 
+    error_page 503 /maintenance.html;
 }
