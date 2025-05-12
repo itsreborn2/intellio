@@ -67,8 +67,8 @@ class WebSearchAgent(BaseAgent):
         self.tavily_service = TavilyService()
         
         # 최대 쿼리 개수 및 최대 결과 개수 설정
-        self.max_queries = 9
-        self.max_results_per_query = 10
+        self.max_queries = 7
+        self.max_results_per_query = 15
         
         logger.info(f"WebSearchAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
     
