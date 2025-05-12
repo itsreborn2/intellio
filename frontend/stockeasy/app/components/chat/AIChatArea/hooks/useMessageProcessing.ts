@@ -11,6 +11,7 @@ import { useTimers } from './useTimers';
 import { saveRecentStocksToStorage } from '../utils/stockDataUtils';
 import { API_ENDPOINT_STOCKEASY } from '@/services/api/index';
 import { v4 as uuidv4 } from 'uuid'; // UUID 라이브러리 가져오기
+import { useAuth } from '@/hooks/useAuth';
 
 interface MessageProcessingOptions {
   onQuestionLimitExceeded?: () => void;
@@ -62,6 +63,15 @@ function useMessageProcessing(
     onProcessingComplete = () => {},
     maxQuestions = 10
   } = options;
+
+  // 현재 사용자 정보
+  const { user } = useAuth();
+  
+  // 관리자 이메일 리스트
+  const adminIds = process.env.NEXT_PUBLIC_ADMIN_IDS ? JSON.parse(process.env.NEXT_PUBLIC_ADMIN_IDS) : [];
+
+  // 사용자가 관리자인지 확인
+  const isAdmin = user?.email && adminIds.includes(user.email);
 
   // PDF 로딩 상태
   const [isPdfLoading, setIsPdfLoading] = useState<boolean>(false);
@@ -141,8 +151,11 @@ function useMessageProcessing(
       return;
     }
 
-    // 질문 횟수 제한 체크
-    if (questionCount >= maxQuestions) {
+    // 질문 횟수 제한 체크 (관리자는 제외)
+    console.log(`email : ${user?.email}`)
+    console.log(`isAdmin : ${isAdmin}`)
+    console.log(`adminIds : ${process.env.NEXT_PUBLIC_ADMIN_IDS}`)
+    if (!isAdmin && questionCount >= maxQuestions) {
       onQuestionLimitExceeded();
       return;
     }
@@ -532,7 +545,8 @@ function useMessageProcessing(
     questionCount,
     startTimer,
     stopTimer,
-    getMessages
+    getMessages,
+    isAdmin
   ]);
 
 
