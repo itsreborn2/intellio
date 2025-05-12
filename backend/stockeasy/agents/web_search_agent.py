@@ -9,11 +9,13 @@ import re
 import json
 import asyncio
 import hashlib
+import csv
+import os
 from datetime import datetime, timezone, timedelta
 #from langchain_tavily import TavilySearch
 from common.services.tavily import TavilyService
 from loguru import logger
-from typing import Dict, List, Any, Optional, Set, cast, Union
+from typing import Dict, List, Any, Optional, Set, cast, Union, Callable
 
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
@@ -127,12 +129,29 @@ class WebSearchAgent(BaseAgent):
             
             logger.info(f"총 {len(search_queries)}개의 쿼리 생성됨: {search_queries}")
             
+            # 멀티 쿼리 CSV 저장
+            await self._save_queries_to_csv(
+                query=query,
+                stock_code=stock_code,
+                stock_name=stock_name,
+                search_queries=search_queries
+            )
+            
             # 웹 검색 수행
             search_results = await self._perform_web_searches(search_queries)
             logger.info(f"웹 검색결과: {len(search_results)}개")
             if not search_results:
                 logger.warning("No web search results found")
                 return self._handle_no_results_response(state, start_time)
+            
+            # 웹 검색 결과 JSON 저장
+            await self._save_search_results_to_json(
+                query=query,
+                stock_code=stock_code,
+                stock_name=stock_name,
+                search_queries=search_queries,
+                search_results=search_results
+            )
             
             # 검색 결과 요약(요약하지 않고, 검색 결과 병합)
             summary = await self._summarize_search_results(
@@ -367,13 +386,6 @@ class WebSearchAgent(BaseAgent):
             검색 결과 목록
         """
         try:
-            # search_results = await self.tavily_search.ainvoke({"query": query, 
-            #                                     "search_depth": "advanced",
-            #                                     #"search_depth": "basic",
-            #                                     "max_results": max_results, 
-            #                                     "topic": "general",
-            #                                     "time_range" : "year",
-            #                                     })
             search_results = await self.tavily_service.search_async(query=query, 
                                                 search_depth="advanced",
                                                 #"search_depth": "basic",
@@ -680,3 +692,128 @@ class WebSearchAgent(BaseAgent):
         
         logger.info(f"WebSearchAgent completed in {duration:.2f} seconds, found 0 results")
         return state 
+
+    async def _save_queries_to_csv(self, query: str, stock_code: Optional[str], 
+                                  stock_name: Optional[str], search_queries: List[str]) -> None:
+        """
+        생성된 검색 쿼리를 CSV 파일로 저장합니다. 비동기 방식으로 동작합니다.
+        
+        Args:
+            query: 원본 사용자 쿼리
+            stock_code: 종목 코드
+            stock_name: 종목 이름
+            search_queries: 생성된 검색 쿼리 목록
+            
+        Returns:
+            None
+        """
+        try:
+            # 파일 I/O 작업을 별도 스레드에서 실행하기 위한 함수 정의
+            def write_to_csv() -> None:
+                # CSV 파일 경로 설정
+                log_dir = os.path.join('stockeasy', 'local_cache', 'web_search')
+                os.makedirs(log_dir, exist_ok=True)
+                
+                date_str = datetime.now().strftime('%Y%m%d')
+                csv_path = os.path.join(log_dir, f'search_queries_{date_str}.csv')
+                
+                # 파일 존재 여부 확인 (헤더 추가 여부 결정)
+                file_exists = os.path.isfile(csv_path)
+                
+                # 현재 날짜와 시간
+                current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                # CSV 파일에 데이터 추가
+                with open(csv_path, 'a', newline='', encoding='utf-8-sig') as csvfile:
+                    fieldnames = ['일자', '종목코드', '종목명', '사용자질문', '생성된쿼리']
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    
+                    # 파일이 새로 생성된 경우 헤더 작성
+                    if not file_exists:
+                        writer.writeheader()
+                    
+                    # 각 쿼리에 대한 행 추가
+                    for q in search_queries:
+                        writer.writerow({
+                            '일자': current_datetime,
+                            '종목코드': stock_code if stock_code else '',
+                            '종목명': stock_name if stock_name else '',
+                            '사용자질문': query,
+                            '생성된쿼리': q
+                        })
+                
+                return csv_path
+            
+            # 파일 I/O 작업을 별도 스레드에서 비동기적으로 실행
+            csv_path = await asyncio.to_thread(write_to_csv)
+            
+            logger.info(f"검색 쿼리가 CSV 파일에 저장되었습니다: {csv_path}")
+            
+        except Exception as e:
+            logger.error(f"CSV 파일 저장 중 오류 발생: {str(e)}", exc_info=True)
+
+    async def _save_search_results_to_json(self, query: str, stock_code: Optional[str], 
+                                         stock_name: Optional[str], search_queries: List[str],
+                                         search_results: List[Dict[str, Any]]) -> None:
+        """
+        웹 검색 결과를 일자별 JSON 파일로 저장합니다. 비동기 방식으로 동작합니다.
+        
+        Args:
+            query: 원본 사용자 쿼리
+            stock_code: 종목 코드
+            stock_name: 종목 이름
+            search_queries: 생성된 검색 쿼리 목록
+            search_results: 웹 검색 결과 목록
+            
+        Returns:
+            None
+        """
+        try:
+            # 파일 I/O 작업을 별도 스레드에서 실행하기 위한 함수 정의
+            def write_to_json() -> str:
+                # JSON 파일 경로 설정
+                json_dir = os.path.join('stockeasy', 'local_cache', 'web_search')
+                os.makedirs(json_dir, exist_ok=True)
+                
+                date_str = datetime.now().strftime('%Y%m%d')
+                json_path = os.path.join(json_dir, f'web_search_results_{date_str}.json')
+                
+                # 현재 날짜와 시간
+                current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                # 저장할 데이터 구성
+                entry = {
+                    "timestamp": current_datetime,
+                    "stock_code": stock_code if stock_code else "",
+                    "stock_name": stock_name if stock_name else "",
+                    "query": query,
+                    "search_queries": search_queries,
+                    "search_results": search_results
+                }
+                
+                # 파일 존재 여부 확인
+                data = []
+                if os.path.exists(json_path) and os.path.getsize(json_path) > 0:
+                    try:
+                        with open(json_path, 'r', encoding='utf-8-sig') as json_file:
+                            data = json.load(json_file)
+                    except json.JSONDecodeError:
+                        # 파일이 손상된 경우 새로 시작
+                        data = []
+                
+                # 데이터 추가
+                data.append(entry)
+                
+                # 파일에 저장
+                with open(json_path, 'w', encoding='utf-8-sig') as json_file:
+                    json.dump(data, json_file, ensure_ascii=False, indent=2)
+                
+                return json_path
+            
+            # 파일 I/O 작업을 별도 스레드에서 비동기적으로 실행
+            json_path = await asyncio.to_thread(write_to_json)
+            
+            logger.info(f"웹 검색 결과가 JSON 파일에 저장되었습니다: {json_path}")
+            
+        except Exception as e:
+            logger.error(f"JSON 파일 저장 중 오류 발생: {str(e)}", exc_info=True) 
