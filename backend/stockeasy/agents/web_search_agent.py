@@ -67,7 +67,7 @@ class WebSearchAgent(BaseAgent):
         self.tavily_service = TavilyService()
         
         # 최대 쿼리 개수 및 최대 결과 개수 설정
-        self.max_queries = 9
+        self.max_queries = 8
         self.max_results_per_query = 10
         
         logger.info(f"WebSearchAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
@@ -345,83 +345,20 @@ class WebSearchAgent(BaseAgent):
             검색 결과 목록
         """
         try:
-            all_results = []
-            
-            # 각 쿼리에 대해 비동기로 검색 수행
-            tasks = [self._search_web(query, self.max_results_per_query) for query in search_queries]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # 결과 처리
-            for query, result in zip(search_queries, results):
-                if isinstance(result, Exception):
-                    logger.error(f"Error searching for query '{query}': {str(result)}")
-                    continue
-                
-                # # 검색 쿼리 정보 추가. 이미 검색값 리턴할때 들어있음.
-                # for item in result:
-                #     item["search_query"] = query
-                    
-                all_results.extend(result)
-            
-            # 중복 제거 및 정렬
-            #deduplicated_results = self._remove_duplicates(all_results)
-            
-            # 관련성 평가 및 정렬
-            #scored_results = self._score_results(deduplicated_results)
+            # 단일 비동기 세션에서 모든 쿼리 병렬 처리
+            all_results = await self.tavily_service.batch_search_async(
+                queries=search_queries,
+                #search_depth="advanced",
+                search_depth="basic",
+                max_results=self.max_results_per_query,
+                topic="general",
+                time_range="year"
+            )
             
             return all_results
             
         except Exception as e:
-            logger.error(f"Error performing web searches: {str(e)}", exc_info=True)
-            return []
-    
-    async def _search_web(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
-        """
-        단일 쿼리에 대한 웹 검색을 수행합니다.
-        
-        Args:
-            query: 검색 쿼리
-            
-        Returns:
-            검색 결과 목록
-        """
-        try:
-            search_results = await self.tavily_service.search_async(query=query, 
-                                                search_depth="advanced",
-                                                #"search_depth": "basic",
-                                                max_results=max_results, 
-                                                topic="general",
-                                                time_range="year",
-                                                )
-            
-            # print(f"검색결과 : {search_results}")
-            # print(f"검색결과 시간 : {search_results.get('response_time', '0')}")
-            # print(f"검색결과 응답 : {search_results.get('answer', 'None')}")
-            # formatted_results = "검색 결과:\n\n"
-            # for i, result_item in enumerate(search_results.get('results', []), 1):
-            #     # result_item이 딕셔너리인지 확인 후 처리합니다.
-            #     if isinstance(result_item, dict):
-            #         formatted_results += f"{i}. 제목: {result_item.get('title', '제목 없음')}\n"
-            #         formatted_results += f"   URL: {result_item.get('url', '링크 없음')}\n"
-            #         formatted_results += f"   내용: {result_item.get('content', '내용 없음')}\n\n"
-            
-            # 결과 처리
-            processed_results = []
-            for i, result_item in enumerate(search_results.get('results', []), 1):
-                # result_item이 딕셔너리인지 확인 후 처리합니다.
-                if isinstance(result_item, dict):
-                    processed_result = {
-                        "title": result_item.get("title", "제목 없음"),
-                        "content": result_item.get("content", "내용 없음"),
-                        "url": result_item.get("url", "링크 없음"),
-                        "search_query": query,
-                    }
-                    processed_results.append(processed_result)
-            
-            return processed_results
-            
-        except Exception as e:
-            logger.error(f"Error in web search for query '{query}': {str(e)}", exc_info=True)
+            logger.error(f"웹 검색 수행 중 오류 발생: {str(e)}", exc_info=True)
             return []
     
     def _remove_duplicates(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
