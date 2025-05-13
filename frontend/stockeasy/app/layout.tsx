@@ -9,7 +9,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "StockEasy - AI 기반 주식정보 솔루션",
-  description: "AI 기반 주식정보 솔루션",
+  description: "스탁이지(StockEasy) AI 기반 주식정보 솔루션. 인텔리오(Intellio), 닥이지(DocEasy)",
   icons: {
     icon: "/favicon.ico",
     apple: {
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "StockEasy - AI 기반 주식정보 솔루션",
-    description: "AI 기반 주식정보 솔루션",
+    description: "스탁이지(StockEasy) AI 기반 주식정보 솔루션. 인텔리오(Intellio), 닥이지(DocEasy)",
     images: [
       {
         url: "https://stockeasy.intellio.kr/og_stockeasy.jpg",

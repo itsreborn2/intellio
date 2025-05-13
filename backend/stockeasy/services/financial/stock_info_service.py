@@ -125,10 +125,16 @@ class StockInfoService:
         초기화가 완료될 때까지 기다립니다.
         """
         await self._initialized.wait()
-    
+    async def force_update(self):
+        """강제 업데이트 태스크를 시작합니다."""
+        logger.info("주식 정보 강제 업데이트 태스크 시작")
+        print("주식 정보 업데이트 시작")
+        stock_info = await self._fetch_stock_info_from_krx()
+        
     async def _start_auto_update(self):
         """자동 업데이트 태스크를 시작합니다."""
         logger.info("주식 정보 자동 업데이트 태스크 시작")
+        print("주식 정보 자동 업데이트 태스크 시작")
         while True:
             try:
                 now = datetime.now()
@@ -141,10 +147,16 @@ class StockInfoService:
                 # 다음 업데이트까지 대기
                 wait_seconds = (target_time - now).total_seconds()
                 logger.info(f"다음 주식 정보 업데이트 예정 시각: {target_time}")
+                print(f"다음 주식 정보 업데이트 예정 시각: {target_time}")
                 await asyncio.sleep(wait_seconds)
                 
                 # 7:30이 되면 데이터 갱신
                 logger.info("예정된 시각에 주식 정보 업데이트 시작")
+
+                logger.info("KRX 종목 정보 업데이트 시작")
+                await self.update_all_stock_from_krx()
+                logger.info("KRX 종목 정보 업데이트 완료")
+                
                 stock_info = await self._fetch_stock_info_from_krx()
                 
                 # 이전 _stock_info_cache에서 sector 정보 보존
@@ -314,7 +326,9 @@ class StockInfoService:
         """
         try:
             # KRX에서 종목 정보 조회
+            print("KRX에서 종목 정보 조회 시작")
             krx_data = await self.read_krx_code()
+            print("KRX에서 종목 정보 조회 완료")
             
             # 데이터 변환
             by_code = {}
@@ -474,3 +488,139 @@ class StockInfoService:
             
         # by_code 키에서 모든 종목코드(키) 추출 후 오름차순 정렬
         return sorted(list(stock_info.get("by_code", {}).keys()))
+    
+    async def update_all_stock_from_krx(self):
+        """KRX 종목코드와 종목명을 구글 시트에 업데이트"""
+        try:
+            print("구글 시트 서비스 초기화 중...")
+            # 구글 시트 서비스 초기화
+            
+            sheet_service = GoogleSheetService(credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS)
+            
+            # 스프레드시트 URL로 열기
+            sheet_url = "https://docs.google.com/spreadsheets/d/1AgbEpblhoqSBTmryDjSSraqc5lRdgWKNwBUA4VYk2P4/edit"
+            print(f"스프레드시트 열기: {sheet_url}")
+            
+            # 시트 이름을 지정하거나 기본 시트 사용
+            worksheet_name = "섹터" # 원하는 시트 이름으로 변경하세요
+            try:
+                worksheet = sheet_service.open_sheet_by_url(sheet_url, worksheet_name=worksheet_name)
+                print(f"'{worksheet_name}' 워크시트 열기 성공")
+            except Exception as e:
+                logger.warning(f"'{worksheet_name}' 워크시트를 찾을 수 없어 첫 번째 시트를 사용합니다: {str(e)}")
+                worksheet = sheet_service.open_sheet_by_url(sheet_url)
+            
+            # KRX 종목 데이터 가져오기
+            print("KRX 종목 정보 가져오는 중...")
+            krx_data = await self.read_krx_code()
+            print(f"총 {len(krx_data)} 개의 종목 정보를 가져왔습니다.")
+            
+            # KRX 데이터를 딕셔너리로 변환 (종목코드를 키로)
+            krx_dict = {}
+            for _, row in krx_data.iterrows():
+                krx_dict[row["code"]] = {
+                    "name": row["name"]
+                }
+            
+            # 시트 데이터 가져오기
+            print("구글 시트 데이터 가져오는 중...")
+            all_values = worksheet.get_all_values()
+            print(f"구글 시트에서 {len(all_values)} 행의 데이터를 가져왔습니다.")
+            
+            # 헤더 행이 없으면 추가
+            if not all_values:
+                print("시트가 비어있어 헤더 행을 추가합니다.")
+                worksheet.append_row(["종목코드", "종목명", "섹터"])
+                all_values = [["종목코드", "종목명", "섹터"]]
+            
+            # 시트 데이터를 종목코드를 키로 하는 딕셔너리로 변환
+            sheet_dict = {}
+            header_row = all_values[0]
+            print(f"시트 헤더: {header_row}")
+            
+            # 종목코드, 종목명, 섹터 컬럼 인덱스 찾기
+            code_idx = header_row.index("종목코드") if "종목코드" in header_row else 0
+            name_idx = header_row.index("종목명") if "종목명" in header_row else 1
+            sector_idx = header_row.index("섹터") if "섹터" in header_row else 2
+            print(f"컬럼 인덱스 - 종목코드: {code_idx}, 종목명: {name_idx}, 섹터: {sector_idx}")
+            
+            # 헤더 제외한 데이터 행만 처리
+            for i, row in enumerate(all_values[1:], 2):  # i는 스프레드시트의 행 번호(2부터 시작, 1은 헤더)
+                if row and len(row) > code_idx and row[code_idx]:  # 비어있지 않은 행만 처리
+                    stock_code = row[code_idx]
+                    sheet_dict[stock_code] = {
+                        "name": row[name_idx] if len(row) > name_idx else "",
+                        "sector": row[sector_idx] if len(row) > sector_idx else "",
+                        "row": i  # 시트에서의 행 번호 저장 (1부터 시작)
+                    }
+            
+            print(f"구글 시트에서 {len(sheet_dict)} 개의 종목 정보를 가져왔습니다.")
+            
+            # 1. 종목명 변경 업데이트
+            name_changes = []
+            for code, data in sheet_dict.items():
+                if code in krx_dict and krx_dict[code]["name"] != data["name"]:
+                    name_changes.append({
+                        "code": code,
+                        "old_name": data["name"],
+                        "new_name": krx_dict[code]["name"],
+                        "row": data["row"]
+                    })
+            
+            # 종목명 변경 처리
+            if name_changes:
+                print(f"{len(name_changes)}개 종목의 이름이 변경되었습니다. 업데이트 중...")
+                for change in name_changes:
+                    worksheet.update_cell(change["row"], name_idx + 1, change["new_name"])  # 0-인덱스를 1-인덱스로 변환(gspread는 1부터 시작)
+                    print(f"종목명 변경: {change['code']} - {change['old_name']} → {change['new_name']}")
+            else:
+                print("변경된 종목명이 없습니다.")
+            
+            # 2. 상장 폐지된 종목 찾기 - 시트에는 있지만 KRX에는 없는 종목
+            delisted = []
+            for code, data in sheet_dict.items():
+                if code not in krx_dict:
+                    delisted.append({
+                        "code": code,
+                        "name": data["name"],
+                        "row": data["row"]
+                    })
+            
+            # 상장 폐지 종목 처리 - 행 번호 역순으로 정렬하여 삭제 (높은 행 번호부터 삭제해야 인덱스 변화가 없음)
+            if delisted:
+                delisted.sort(key=lambda x: x["row"], reverse=True)
+                print(f"{len(delisted)}개 종목이 상장 폐지되었습니다. 시트에서 삭제 중...")
+                for item in delisted:
+                    worksheet.delete_rows(item["row"])
+                    print(f"상장 폐지 종목 삭제: {item['code']} - {item['name']}")
+            else:
+                print("상장 폐지된 종목이 없습니다.")
+            
+            # 3. 신규 상장 종목 찾기 - KRX에는 있지만 시트에는 없는 종목
+            new_listings = []
+            for code, data in krx_dict.items():
+                # KOSPI, KOSDAQ은 추가하지 않음
+                if code not in sheet_dict and code not in ["KOSPI", "KOSDAQ"]:
+                    new_listings.append({
+                        "code": code,
+                        "name": data["name"]
+                    })
+            
+            # 신규 상장 종목 처리 - 맨 아래에 추가
+            if new_listings:
+                print(f"{len(new_listings)}개의 신규 상장 종목을 추가합니다.")
+                for item in new_listings:
+                    # 종목코드, 종목명, 섹터(빈 값)
+                    worksheet.append_row([item["code"], item["name"], ""])
+                    print(f"신규 상장 종목 추가: {item['code']} - {item['name']}")
+            else:
+                print("신규 상장 종목이 없습니다.")
+            
+            print("KRX 종목코드와 종목명 업데이트 완료")
+            print(f"시트 URL: {sheet_url}")
+            print(f"총 처리결과: 종목명 변경 {len(name_changes)}개, 상장 폐지 {len(delisted)}개, 신규 상장 {len(new_listings)}개")
+        except Exception as e:
+            logger.error(f"구글 시트 업데이트 중 오류 발생: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise
