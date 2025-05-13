@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: "AI 기반 문서관리, 주식정보 솔루션",
   icons: [
     { rel: "icon", url: "/favicon.ico", sizes: "any" },
-    { rel: "apple-touch-icon", url: "/apple-icon.png" }
+    { rel: "apple-touch-icon", url: "/apple-touch-icon.png" }
   ],
   openGraph: {
     title: "Intellio - AI",
