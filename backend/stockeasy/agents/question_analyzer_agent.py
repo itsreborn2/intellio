@@ -9,6 +9,8 @@ import json
 from loguru import logger
 from typing import Dict, List, Any, Optional, Literal, cast, Union
 from datetime import datetime
+import os
+import asyncio
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -397,7 +399,7 @@ class QuestionAnalyzerAgent(BaseAgent):
 
                 if cached_summary:
                     logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시된 최근 이슈 요약 사용: {cache_key}")
-                    recent_issues_summary = cached_summary
+                    recent_issues_summary = cached_summary 
                 else:
                     logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시 없음, 최근 이슈 요약 생성: {cache_key}")
                     recent_issues_summary = await self.summarize_recent_issues(stock_name, stock_code, user_id)
@@ -778,15 +780,82 @@ class QuestionAnalyzerAgent(BaseAgent):
     async def search_recent_issues(self, stock_name: str, stock_code: str) -> str:
         """Tavily API를 사용하여 특정 종목의 최근 6개월간 주요 뉴스 및 이슈를 검색합니다."""
         print(f"\n🔍 {stock_name}의 최근 주요 이슈 검색 중...")
-        query = f"{stock_name} 최근  주요 뉴스 및 핵심 이슈"
+        query = f"{stock_name} 최근 주요 뉴스 및 핵심 이슈"
         try:
             # search_with_tavily 함수를 재사용하거나 직접 Tavily 호출 로직 구현
             search_results = await self.search_with_tavily(query) 
             print(f"  📊 {stock_name} 최근 이슈 검색 완료.\n[{search_results[:200]}]")
+            
+            # 검색 결과를 JSON 파일로 저장
+            await self._save_recent_issues_to_json(stock_name, stock_code, query, search_results)
+            
             return search_results
         except Exception as e:
             print(f"  ⚠️ {stock_name} 최근 이슈 검색 중 오류: {str(e)}")
             return f"{stock_name} 최근 이슈 검색 중 오류 발생: {str(e)}"
+            
+    async def _save_recent_issues_to_json(self, stock_name: str, stock_code: str, 
+                                         query: str, search_results: Any) -> None:
+        """
+        최근 이슈 검색 결과를 일자별 JSON 파일로 저장합니다. 비동기 방식으로 동작합니다.
+        
+        Args:
+            stock_name: 종목 이름
+            stock_code: 종목 코드
+            query: 검색 쿼리
+            search_results: Tavily API 검색 결과
+            
+        Returns:
+            None
+        """
+        try:
+            # 파일 I/O 작업을 별도 스레드에서 실행하기 위한 함수 정의
+            def write_to_json() -> str:
+                # JSON 파일 경로 설정
+                json_dir = os.path.join('stockeasy', 'local_cache', 'web_search')
+                os.makedirs(json_dir, exist_ok=True)
+                
+                date_str = datetime.now().strftime('%Y%m%d')
+                json_path = os.path.join(json_dir, f'recent_issues_{date_str}.json')
+                
+                # 현재 날짜와 시간
+                current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                # 저장할 데이터 구성
+                entry = {
+                    "timestamp": current_datetime,
+                    "stock_code": stock_code,
+                    "stock_name": stock_name,
+                    "query": query,
+                    "search_results": search_results
+                }
+                
+                # 파일 존재 여부 확인
+                data = []
+                if os.path.exists(json_path) and os.path.getsize(json_path) > 0:
+                    try:
+                        with open(json_path, 'r', encoding='utf-8-sig') as json_file:
+                            data = json.load(json_file)
+                    except json.JSONDecodeError:
+                        # 파일이 손상된 경우 새로 시작
+                        data = []
+                
+                # 데이터 추가
+                data.append(entry)
+                
+                # 파일에 저장
+                with open(json_path, 'w', encoding='utf-8-sig') as json_file:
+                    json.dump(data, json_file, ensure_ascii=False, indent=2)
+                
+                return json_path
+            
+            # 파일 I/O 작업을 별도 스레드에서 비동기적으로 실행
+            json_path = await asyncio.to_thread(write_to_json)
+            
+            print(f"  💾 {stock_name} 최근 이슈 검색결과가 JSON 파일에 저장되었습니다: {json_path}")
+            
+        except Exception as e:
+            print(f"  ⚠️ JSON 파일 저장 중 오류 발생: {str(e)}")
 
     async def search_with_tavily(self, query: str) -> str:
         """Tavily API를 사용하여 웹 검색을 수행합니다."""
