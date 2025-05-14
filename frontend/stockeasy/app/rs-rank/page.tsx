@@ -13,6 +13,8 @@ import TableCopyButton from '../components/TableCopyButton';
 import { CandleMini } from 'intellio-common/components/ui/CandleMini';
 // RS 컬럼 툴팁용 GuideTooltip 컴포넌트 import
 import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip';
+import { CheckIcon } from '@heroicons/react/24/solid'; // CheckIcon import 추가
+import { CheckCircleIcon } from '@heroicons/react/24/solid'; // CheckCircleIcon 추가
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -51,11 +53,6 @@ type SortDirection = 'asc' | 'desc' | null;
 
 // CSV 데이터를 파싱한 결과를 위한 인터페이스
 interface CSVData {
-
-// --- RS 테이블 캡처 상태 변수 추가 ---
-// 이미지 복사(캡처) 중일 때 true, 아닐 때 false
-// 캡처 중에는 종목명/종목코드 검색 입력 박스를 숨긴다.
-
   headers: string[];
   rows: any[];
   errors: any[]; // 파싱 오류 정보 추가
@@ -349,9 +346,54 @@ export default function RSRankPage() {
       }
     };
     
+    const loadMarketIndexData = async () => {
+      try {
+        // KOSPI 주간 데이터 로드
+        const kospiResponse = await fetch('/requestfile/market-index/kospiwk.csv', { cache: 'no-store' });
+        if (!kospiResponse.ok) {
+          throw new Error(`KOSPI 데이터 로드 실패: ${kospiResponse.status}`);
+        }
+        const kospiCsvText = await kospiResponse.text();
+        const kospiParsedData = parseCSV(kospiCsvText);
+        // 데이터 형식 변환 (CandleData)
+        const kospiFormattedData = kospiParsedData.rows.map(row => ({
+          time: format(new Date(row['날짜']), 'yyyy-MM-dd'), // 날짜 형식 통일
+          open: parseFloat(row['시가']),
+          high: parseFloat(row['고가']),
+          low: parseFloat(row['저가']),
+          close: parseFloat(row['종가']),
+          volume: parseFloat(row['거래량'])
+        })).sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()); // 시간순 정렬
+        setKospiIndexData(kospiFormattedData);
+
+        // KOSDAQ 주간 데이터 로드
+        const kosdaqResponse = await fetch('/requestfile/market-index/kosdaqwk.csv', { cache: 'no-store' });
+        if (!kosdaqResponse.ok) {
+          throw new Error(`KOSDAQ 데이터 로드 실패: ${kosdaqResponse.status}`);
+        }
+        const kosdaqCsvText = await kosdaqResponse.text();
+        const kosdaqParsedData = parseCSV(kosdaqCsvText);
+        // 데이터 형식 변환 (CandleData)
+        const kosdaqFormattedData = kosdaqParsedData.rows.map(row => ({
+          time: format(new Date(row['날짜']), 'yyyy-MM-dd'), // 날짜 형식 통일
+          open: parseFloat(row['시가']),
+          high: parseFloat(row['고가']),
+          low: parseFloat(row['저가']),
+          close: parseFloat(row['종가']),
+          volume: parseFloat(row['거래량'])
+        })).sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()); // 시간순 정렬
+        setKosdaqIndexData(kosdaqFormattedData);
+
+      } catch (err) {
+        console.error('시장 지수 데이터 로드 오류:', err);
+        // 필요에 따라 사용자에게 오류 메시지를 표시할 수 있습니다.
+      }
+    };
+
     loadData();
     loadHighData();
     loadUpdateDate();
+    loadMarketIndexData(); // 시장 지수 데이터 로드 함수 호출
     // loadStockPriceData();
   }, []);
 
@@ -368,20 +410,22 @@ export default function RSRankPage() {
       
       // 차트 데이터 배열 초기화
       const newChartDataArray: CandleData[][] = Array.from({length: 21}, () => []);
-      const newStockNames: string[] = Array.from({length: 21}, () => '');
-      const newMarketTypes: string[] = Array.from({length: 21}, () => ''); // 빈 문자열로 초기화
+      let newStockNames: string[] = Array.from({length: 21}, () => ''); // const에서 let으로 변경
+      let newMarketTypes: string[] = Array.from({length: 21}, () => ''); // const에서 let으로 변경
       const newChartLoadingArray: boolean[] = Array.from({length: 21}, () => true);
       const newChartErrorArray: string[] = Array.from({length: 21}, () => '');
       const newRsValues: string[] = Array.from({length: 21}, () => '');
       
-      // RS 값 설정 (종목 데이터에서 가져옴)
-      topStocks.forEach((stock, index) => {
-        if (index < 21) {
-          newRsValues[index] = stock.RS ? String(stock.RS) : '';
-          newStockNames[index] = stock.종목명 || '';
-        }
-      });
-      
+      // RS 값 설정 (종목 데이터에서 가져옴) -> 각 차트 파일에서 가져오도록 변경하므로 이 부분은 주석 처리 또는 삭제
+      // topStocks.forEach((stock, index) => {
+      //   if (index < 21) {
+      //     newRsValues[index] = stock.RS ? String(stock.RS) : ''; 
+      //     newStockNames[index] = stock.종목명 || '';
+      //   }
+      // });
+      newStockNames = topStocks.map(stock => stock.종목명 || ''); // 종목명은 계속 rsData에서 가져옴
+      newMarketTypes = topStocks.map(stock => stock.시장구분 || ''); // 시장구분도 rsData에서 가져옴
+
       // 차트 데이터 파일 경로 배열 (순서대로 매핑)
       const chartFilePaths = [
         '/requestfile/chart-data/1.csv',
@@ -408,8 +452,8 @@ export default function RSRankPage() {
       ];
       
       // 시장 지수 데이터 파일 경로
-      const kospiIndexPath = '/requestfile/market-index/1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c.csv';
-      const kosdaqIndexPath = '/requestfile/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
+      const kospiIndexPath = '/requestfile/market-index/kospiwk.csv'; // KOSPI 주간 데이터 파일로 변경
+      const kosdaqIndexPath = '/requestfile/market-index/kosdaqwk.csv'; // KOSDAQ 주간 데이터 파일로 변경
       
       // 시장 지수 데이터 로드
       let kospiIndexData: CandleData[] = [];
@@ -453,11 +497,11 @@ export default function RSRankPage() {
               
               return {
                 time: formattedTime,
-                open: parseFloat(row['시가'] || 0),
-                high: parseFloat(row['고가'] || 0),
-                low: parseFloat(row['저가'] || 0),
-                close: parseFloat(row['종가'] || 0),
-                volume: parseFloat(row['거래량'] || 0),
+                open: parseFloat(row['시가']),
+                high: parseFloat(row['고가']),
+                low: parseFloat(row['저가']),
+                close: parseFloat(row['종가']),
+                volume: parseFloat(row['거래량'])
               };
             });
         }
@@ -499,11 +543,11 @@ export default function RSRankPage() {
               
               return {
                 time: formattedTime,
-                open: parseFloat(row['시가'] || 0),
-                high: parseFloat(row['고가'] || 0),
-                low: parseFloat(row['저가'] || 0),
-                close: parseFloat(row['종가'] || 0),
-                volume: parseFloat(row['거래량'] || 0),
+                open: parseFloat(row['시가']),
+                high: parseFloat(row['고가']),
+                low: parseFloat(row['저가']),
+                close: parseFloat(row['종가']),
+                volume: parseFloat(row['거래량'])
               };
             });
         }
@@ -545,6 +589,18 @@ export default function RSRankPage() {
               skipEmptyLines: true,
               dynamicTyping: true,
             });
+            
+            // RS 값 추출: parsedData의 마지막 행에서 RS 값을 가져옴
+            if (parsedData.data && parsedData.data.length > 0) {
+              const lastRow: any = parsedData.data[parsedData.data.length - 1];
+              if (lastRow && typeof lastRow.RS !== 'undefined') {
+                newRsValues[index] = String(lastRow.RS);
+              } else {
+                newRsValues[index] = ''; // RS 값이 없는 경우 빈 문자열
+              }
+            } else {
+              newRsValues[index] = ''; // 데이터가 없는 경우 빈 문자열
+            }
             
             // 차트 데이터 형식으로 변환
             const chartData: CandleData[] = parsedData.data
@@ -745,7 +801,7 @@ export default function RSRankPage() {
     }
     
     // 시가총액 컬럼은 우측 정렬
-    if (header === '시가총액' || header === '시가총액(억)') {
+    if (header === '시가총액') {
       return 'text-right';
     }
     
@@ -758,25 +814,25 @@ export default function RSRankPage() {
     return 'text-left';
   };
 
-  // 시가총액을 억 단위로 포맷팅하는 함수
-  const formatMarketCap = (value: any): string => {
-    if (!value) return '0';
-    
-    // 숫자가 아니면 그대로 반환
-    if (isNaN(Number(value))) return String(value);
-    
-    // 숫자로 변환
-    const valueStr = typeof value === 'number' ? String(value) : value;
-    let marketCapValue = Number(valueStr.replace(/[^0-9.]/g, ''));
-    
-    // 10억 이상인 경우 억 단위로 변환 (1,000,000,000 이상)
-    if (marketCapValue >= 100000000) {
-      marketCapValue = marketCapValue / 100000000; // 억 단위로 변환
-    }
-    
-    // 소수점 제거하고 천 단위 구분 쉼표(,) 추가
-    return Math.floor(marketCapValue).toLocaleString('ko-KR');
-  };
+  // 시가총액을 억 단위로 포맷팅하는 함수 제거
+  // const formatMarketCap = (value: any): string => {
+  //   if (!value) return '0';
+  //   
+  //   // 숫자가 아니면 그대로 반환
+  //   if (isNaN(Number(value))) return String(value);
+  //   
+  //   // 숫자로 변환
+  //   const valueStr = typeof value === 'number' ? String(value) : value;
+  //   let marketCapValue = Number(valueStr.replace(/[^0-9.]/g, ''));
+  //   
+  //   // 10억 이상인 경우 억 단위로 변환 (1,000,000,000 이상)
+  //   if (marketCapValue >= 100000000) {
+  //     marketCapValue = marketCapValue / 100000000; // 억 단위로 변환
+  //   }
+  //   
+  //   // 소수점 제거하고 천 단위 구분 쉼표(,) 추가
+  //   return Math.floor(marketCapValue).toLocaleString('ko-KR');
+  // };
 
   // 등락률 계산 함수 제거
   // const calculatePriceChange = (openPrice: number, closePrice: number): number => {
@@ -797,7 +853,7 @@ export default function RSRankPage() {
   //   return 'text-gray-900'; // 그 외는 검정색
   // };
 
-  // [검색 및 필터] selectedStock, searchFilter, 시가총액 2천억 이상 필터 적용
+  // [검색 및 필터] selectedStock, searchFilter, 시가총액 2천억 이상 필터 제거
   const filteredData = useMemo(() => {
     if (!csvData || !csvData.rows) return [];
     // 1. 선택된 종목이 있으면 해당 종목만 반환
@@ -816,8 +872,8 @@ export default function RSRankPage() {
         (row['종목코드'] && String(row['종목코드']).toLowerCase().includes(keyword))
       );
     }
-    // 3. 시가총액 2천억 이상 필터
-    result = result.filter(row => Number(row['시가총액'] || 0) >= 200000000000);
+    // 3. 시가총액 2천억 미만인 종목 필터링
+    // result = result.filter(row => Number(row['시가총액'] || 0) >= 200000000000);
     return result;
   }, [csvData, selectedStock, searchFilter]);
 
@@ -867,7 +923,8 @@ export default function RSRankPage() {
     });
   }, [highData.rows, highSortKey, highSortDirection]);
 
-  
+  // 표시할 테이블 컬럼 정의
+  const DESIRED_COLUMNS = ['종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
 
   // 페이지 변경 핸들러
   const handlePageChange = useCallback((page: number) => {
@@ -876,10 +933,10 @@ export default function RSRankPage() {
 
   // 헤더 이름을 변환하는 함수
   const formatHeaderName = (header: string) => {
-    // 시가총액 헤더를 시가총액(억)으로 변경
-    if (header === '시가총액') {
-      return '시가총액(억)';
-    }
+    // 시가총액 헤더를 시가총액(억)으로 변경하지 않음 (원본 헤더명 사용)
+    // if (header === '시가총액') {
+    //   return '시가총액(억)';
+    // }
     return header;
   };
 
@@ -894,22 +951,10 @@ export default function RSRankPage() {
       return value.padStart(6, '0');
     }
     
-    // 시가총액 컬럼인 경우 억 단위로 포맷팅
-    if (header === '시가총액' || header === '시가총액(억)') {
-      // 숫자가 아니면 그대로 반환
-      if (isNaN(Number(value))) return value;
-      
-      // 숫자로 변환 후 억 단위로 나누고 소수점 없이 표시
-      const valueStr = typeof value === 'number' ? String(value) : value;
-      let marketCapValue = Number(valueStr.replace(/[^0-9.]/g, ''));
-      
-      // 10억 이상인 경우 억 단위로 변환 (1,000,000,000 이상)
-      if (marketCapValue >= 100000000) {
-        marketCapValue = marketCapValue / 100000000; // 억 단위로 변환
-      }
-      
-      // 소수점 제거하고 천 단위 구분 쉼표(,) 추가
-      return Math.floor(marketCapValue).toLocaleString('ko-KR');
+    // 시가총액 컬럼은 천 단위 구분 기호(콤마) 추가
+    if (header === '시가총액') {
+      if (!value || isNaN(Number(value.replace(/,/g, '')))) return value || ''; // 숫자 아니거나 빈 값이면 그대로 반환
+      return Number(value.replace(/,/g, '')).toLocaleString('ko-KR');
     }
     
     // 거래대금 컬럼인 경우 억 단위로 포맷팅
@@ -919,7 +964,7 @@ export default function RSRankPage() {
       
       // 숫자로 변환 후 억 단위로 나누고 소수점 없이 표시
       const valueStr = typeof value === 'number' ? String(value) : value;
-      const tradeAmountInBillions = Number(valueStr.replace(/[^0-9.]/g, ''));
+      let tradeAmountInBillions = Number(valueStr.replace(/[^0-9.]/g, ''));
       
       // 천 단위 구분 쉼표(,) 추가
       return Math.floor(tradeAmountInBillions).toLocaleString('ko-KR');
@@ -1115,121 +1160,6 @@ export default function RSRankPage() {
     };
   }, []);
 
-  // 시장 지수 데이터 로드 함수
-  const loadMarketIndexData = async () => {
-    try {
-      // 시장 지수 데이터 로드 (코스피, 코스닥)
-      const kospiIndexPath = '/requestfile/market-index/1Dzf65fZ6elQ6b5zNvhUAFtN10HqJBE_c.csv';
-      const kosdaqIndexPath = '/requestfile/market-index/1ks9qkdzmsxv-qenv6udzzidfwgykc1qg.csv';
-      
-      // 시장 지수 데이터 로드
-      let kospiIndexData: CandleData[] = [];
-      let kosdaqIndexData: CandleData[] = [];
-      
-      try {
-        // KOSPI 지수 데이터 로드
-        let kospiResponse = await fetch(kospiIndexPath, { cache: 'no-store' });
-        
-        // 파일이 없으면 오류 메시지 표시
-        if (!kospiResponse.ok) {
-          throw new Error(`코스피 지수 데이터 파일을 찾을 수 없습니다.`);
-        }
-        
-        if (kospiResponse.ok) {
-          const kospiCsvText = await kospiResponse.text();
-          const kospiParsedData = Papa.parse(kospiCsvText, {
-            header: true,
-            skipEmptyLines: true,
-            dynamicTyping: true,
-          });
-          
-          kospiIndexData = kospiParsedData.data
-            .filter((row: any) => {
-              const isValid = row && row['날짜'] && row['시가'] && row['고가'] && row['저가'] && row['종가'];
-              return isValid;
-            })
-            .map((row: any) => {
-              // 날짜 형식 변환 (YYYYMMDD -> YYYY-MM-DD)
-              let timeStr = String(row['날짜'] || '');
-              let formattedTime = '';
-              
-              if (timeStr.length === 8) {
-                const year = timeStr.substring(0, 4);
-                const month = timeStr.substring(4, 6);
-                const day = timeStr.substring(6, 8);
-                formattedTime = `${year}-${month}-${day}`;
-              } else {
-                formattedTime = timeStr;
-              }
-              
-              return {
-                time: formattedTime,
-                open: parseFloat(row['시가'] || 0),
-                high: parseFloat(row['고가'] || 0),
-                low: parseFloat(row['저가'] || 0),
-                close: parseFloat(row['종가'] || 0),
-                volume: parseFloat(row['거래량'] || 0),
-              };
-            });
-        }
-        
-        // KOSDAQ 지수 데이터 로드
-        let kosdaqResponse = await fetch(kosdaqIndexPath, { cache: 'no-store' });
-        
-        // 파일이 없으면 오류 메시지 표시
-        if (!kosdaqResponse.ok) {
-          throw new Error(`코스닥 지수 데이터 파일을 찾을 수 없습니다.`);
-        }
-        
-        if (kosdaqResponse.ok) {
-          const kosdaqCsvText = await kosdaqResponse.text();
-          const kosdaqParsedData = Papa.parse(kosdaqCsvText, {
-            header: true,
-            skipEmptyLines: true,
-            dynamicTyping: true,
-          });
-          
-          kosdaqIndexData = kosdaqParsedData.data
-            .filter((row: any) => {
-              const isValid = row && row['날짜'] && row['시가'] && row['고가'] && row['저가'] && row['종가'];
-              return isValid;
-            })
-            .map((row: any) => {
-              // 날짜 형식 변환 (YYYYMMDD -> YYYY-MM-DD)
-              let timeStr = String(row['날짜'] || '');
-              let formattedTime = '';
-              
-              if (timeStr.length === 8) {
-                const year = timeStr.substring(0, 4);
-                const month = timeStr.substring(4, 6);
-                const day = timeStr.substring(6, 8);
-                formattedTime = `${year}-${month}-${day}`;
-              } else {
-                formattedTime = timeStr;
-              }
-              
-              return {
-                time: formattedTime,
-                open: parseFloat(row['시가'] || 0),
-                high: parseFloat(row['고가'] || 0),
-                low: parseFloat(row['저가'] || 0),
-                close: parseFloat(row['종가'] || 0),
-                volume: parseFloat(row['거래량'] || 0),
-              };
-            });
-        }
-      } catch (error) {
-        console.error('시장 지수 데이터 로드 오류:', error);
-      }
-      
-      // 상태 업데이트
-      setKospiIndexData(kospiIndexData);
-      setKosdaqIndexData(kosdaqIndexData);
-    } catch (error) {
-      console.error('시장 지수 데이터 로드 오류:', error);
-    }
-  };
-
   return (
     <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
       {/* 메인 콘텐츠 영역 - 모바일 최적화 */}
@@ -1336,9 +1266,7 @@ export default function RSRankPage() {
                                 // 표시할 헤더 순서 정의
                                 const desiredOrder = ['종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
                                 // '테마명' 제외하고 원하는 순서대로 정렬
-                                const orderedHeaders = csvData.headers
-                                  .filter(header => header !== '테마명')
-                                  .sort((a, b) => desiredOrder.indexOf(a) - desiredOrder.indexOf(b));
+                                const orderedHeaders = DESIRED_COLUMNS;
 
                                 return orderedHeaders.map((header, index) => (
                                   <th 
@@ -1464,16 +1392,14 @@ export default function RSRankPage() {
                                 {(() => {
                                   // 헤더와 동일한 순서로 셀 렌더링
                                   const desiredOrder = ['종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
-                                  const orderedHeaders = csvData.headers
-                                    .filter(header => header !== '테마명')
-                                    .sort((a, b) => desiredOrder.indexOf(a) - desiredOrder.indexOf(b));
+                                  const orderedHeaders = DESIRED_COLUMNS;
 
                                   return orderedHeaders.map((header, colIndex) => (
                                     <td 
                                       key={header}
                                       className={`py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis text-xs
                                         ${
-                                        // 모바일 화면에서 숨길 컬럼들
+                                        // 모바일 화면에서 숨길 컬럼들 (종목명, RS, RS_1M, MTT는 항상 표시)
                                         (header === '업종' || header === 'RS_3M' || header === 'RS_6M' || header === '시가총액' || header === '종목코드') ? 'hidden md:table-cell' : 
                                         ''
                                       }`}
@@ -1482,7 +1408,11 @@ export default function RSRankPage() {
                                       }}
                                       title={header === '업종' ? row[header] : ''} // 업종 셀에 툴팁 추가
                                     >
-                                      {formatCellValue(header, row[header])}
+                                      {header === 'MTT' ? (
+                                        String(row[header]).toLowerCase() === 'y' ? (
+                                          <CheckCircleIcon className="h-5 w-5 text-green-500 mx-auto" />
+                                        ) : null
+                                      ) : formatCellValue(header, row[header])}
                                     </td>
                                   ))
                                 })()}
@@ -1725,7 +1655,7 @@ export default function RSRankPage() {
                                     className={`py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis text-xs ${
                                       // 등락률 값에 따라 색상 클래스 적용
                                       (Number(row['등락률']) >= 5)
-                                        ? 'text-red-500' // 5% 이상 빨강
+                                        ? 'text-red-500' // 5% 이상 상승은 빨강
                                         : (Number(row['등락률']) <= -2)
                                           ? 'text-blue-500' // -2% 이하 파랑
                                           : '' // 2% 미만(절대값) 검정(기본)
@@ -1764,7 +1694,7 @@ export default function RSRankPage() {
                                     style={{ height: '35px' }}
                                   >
                                     {/* CSV에서 직접 가져온 시가총액 값을 formatMarketCap 함수로 포맷팅하여 표시 */} 
-                                    {formatMarketCap(row['시가총액'])}
+                                    {formatCellValue('시가총액', row['시가총액'])}
                                   </td>
                                   <td 
                                     className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis text-xs"

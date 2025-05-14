@@ -41,6 +41,19 @@ export const copyTableAsImage = async (
   options?: CopyTableOptions,
   updateDateText?: string // 인자 추가
 ) => {
+  // 고유 ID 생성 및 기존 컨테이너 식별 패턴 정의
+  const uniqueId = `image-capture-container-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+  const existingContainerIdPattern = 'image-capture-container-';
+
+  // 이전에 생성된 유사한 컨테이너 제거 (새로운 캡처 시작 전 정리)
+  document.querySelectorAll(`[id^="${existingContainerIdPattern}"]`).forEach(el => {
+    try {
+      el.remove();
+    } catch (e) {
+      console.warn('Failed to remove existing container:', e);
+    }
+  });
+
   // 로딩 메시지 즉시 표시 (가장 먼저 실행)
   const loadingToast = document.createElement('div');
   loadingToast.className = 'fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded shadow-lg z-50 animate-pulse';
@@ -52,7 +65,11 @@ export const copyTableAsImage = async (
   await new Promise(resolve => setTimeout(resolve, 0));
   
   if (!tableRef.current || !headerRef.current) {
-    document.body.removeChild(loadingToast);
+    try {
+      document.body.removeChild(loadingToast);
+    } catch (e) {
+      console.warn('Failed to remove loading toast on early return:', e);
+    }
     return;
   }
   
@@ -83,6 +100,7 @@ export const copyTableAsImage = async (
   try {
     // 임시 컨테이너 생성
     const container = document.createElement('div');
+    container.id = uniqueId; // 고유 ID 설정
     // 디버깅을 위해 화면에 보이도록 설정 (나중에 다시 숨김 처리)
     container.style.position = 'fixed';
     container.style.top = '10px';
@@ -589,7 +607,7 @@ export const copyTableAsImage = async (
     }
 
     // 임시 컨테이너 생성 (스타일 적용 및 중앙 정렬을 위해)
-    container.appendChild(tableClone);
+    tableContainer.appendChild(tableClone);
     
     // 워터마크 추가 (중앙에 반투명하게 표시)
     if (mergedOptions.watermark && mergedOptions.watermark.text) {

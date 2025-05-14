@@ -7,8 +7,8 @@ import MouseMoveEffect from "@/components/ui/mouse-move-effect"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Intellio",
-  description: "Amane Soft delivers innovative, high-performance software solutions for businesses of the future.",
+  title: "인텔리오",
+  description: "가장 빠르고 진보된 AI Power로 업무 자동화와 주식 정보를 전달합니다.",
 }
 
 export default function RootLayout({
