@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 #from langchain_tavily import TavilySearch
 from common.services.tavily import TavilyService
 
+
 class Entities(BaseModel):
     """추출된 엔티티 정보"""
     stock_name: PydanticOptional[str] = Field(None, description="종목명 또는 null")
@@ -818,9 +819,9 @@ class QuestionAnalyzerAgent(BaseAgent):
                                                 time_range="year",
                                                 )
             
-            print(f"검색결과 : {search_results}")
-            print(f"검색결과 시간 : {search_results.get('response_time', '0')}")
-            print(f"검색결과 응답 : {search_results.get('answer', 'None')}")
+            # print(f"검색결과 : {search_results}")
+            # print(f"검색결과 시간 : {search_results.get('response_time', '0')}")
+            # print(f"검색결과 응답 : {search_results.get('answer', 'None')}")
             formatted_results = "검색 결과:\n\n"
             for i, result_item in enumerate(search_results.get('results', []), 1):
                 # result_item이 딕셔너리인지 확인 후 처리합니다.

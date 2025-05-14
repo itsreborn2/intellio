@@ -1,7 +1,8 @@
 services:
   postgres:
-    image: postgres:15
-    command: postgres -c timezone=Asia/Seoul
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
     env_file:
       - .env
     environment:
