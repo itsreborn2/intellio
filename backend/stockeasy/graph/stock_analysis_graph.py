@@ -90,6 +90,19 @@ def should_use_industry(state: AgentState) -> bool:
     # 기존 로직 (fallback)
     return question_type in [1, 3, 4]
 
+def should_use_web_search(state: AgentState) -> bool:
+    """웹 검색 에이전트를 사용해야 하는지 결정합니다."""
+    # 새로운 question_analyzer의 분류 확인
+    data_requirements = state.get("data_requirements", {})
+    web_search_needed = data_requirements.get("web_search_needed", False)
+    
+    # question_analyzer 결과가 있으면 우선 적용
+    if "data_requirements" in state:
+        return web_search_needed
+    
+    # 기본값 반환 (검색 사용 우선)
+    return True
+
 def should_fallback_early(state: AgentState) -> str:
     """
     조기에 폴백 관리자로 라우팅해야 하는지 확인합니다.
@@ -298,6 +311,7 @@ class StockAnalysisGraph:
             "financial_analyzer": self.agents.get("financial_analyzer"),
             "industry_analyzer": self.agents.get("industry_analyzer"),
             "confidential_analyzer": self.agents.get("confidential_analyzer"),
+            "web_search": self.agents.get("web_search"),
         }, graph=self)  # 현재 그래프 인스턴스 전달
         
         # 그래프 초기화

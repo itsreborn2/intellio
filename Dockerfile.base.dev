@@ -18,10 +18,13 @@ RUN apt-get update && apt-get install -y \
 RUN python -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 
+# uv 설치
+RUN pip install uv
+
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir wheel setuptools && \
-    pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --upgrade pip && \
+    uv pip install wheel setuptools && \
+    uv pip install -r requirements.txt
 
 # 최종 스테이지
 FROM python:3.11.9-slim

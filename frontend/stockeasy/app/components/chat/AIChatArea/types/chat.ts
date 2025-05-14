@@ -2,6 +2,7 @@
 import { IChatSession } from '@/types/api/chat';
 import { StockOption } from './stock';
 
+
 /**
  * 채팅 메시지 타입 정의
  */
@@ -15,6 +16,7 @@ export interface ChatMessage {
     stockName: string;
     stockCode: string;
   };
+  components?: MessageComponent[]; // 구조화된 메시지 컴포넌트 배열 추가
   responseId?: string; // 분석 결과의 고유 ID
   isProcessing?: boolean; // 처리 중 상태
   agent?: string; // 에이전트 정보
@@ -54,6 +56,106 @@ export interface ChatContextState {
   copyStates: Record<string, boolean>;
   expertMode: Record<string, boolean>;
   elapsedTime: number;
+}
+
+
+// 모든 메시지 컴포넌트의 기본 인터페이스
+export interface IMessageComponentBase {
+  type: string;
+}
+
+// --- 복합 컴포넌트 인터페이스 ---
+export interface IBarChartData {
+  labels: string[];
+  datasets: Array<{ label: string; data: number[]; [key: string]: any }>;
+}
+
+export interface IBarChartComponent extends IMessageComponentBase {
+  type: 'bar_chart';
+  title?: string;
+  data: IBarChartData;
+}
+
+export interface ILineChartData {
+    labels: string[];
+    datasets: Array<{ label: string; data: number[]; [key: string]: any }>;
+}
+
+export interface ILineChartComponent extends IMessageComponentBase {
+    type: 'line_chart';
+    title?: string;
+    data: ILineChartData;
+}
+
+export interface IImageComponent extends IMessageComponentBase {
+  type: 'image';
+  url: string;
+  alt?: string;
+  caption?: string;
+}
+
+export interface ITableHeader {
+    key: string;
+    label: string;
+}
+
+export interface ITableData {
+    headers: ITableHeader[];
+    rows: Array<Record<string, any>>;
+}
+
+export interface ITableComponent extends IMessageComponentBase {
+    type: 'table';
+    title?: string;
+    data: ITableData;
+}
+
+// --- 세분화된 텍스트 컴포넌트 인터페이스 ---
+export interface IHeadingComponent extends IMessageComponentBase {
+  type: 'heading';
+  level: 1 | 2 | 3 | 4 | 5 | 6;
+  content: string;
+}
+
+export interface IParagraphComponent extends IMessageComponentBase {
+  type: 'paragraph';
+  content: string;
+}
+
+export interface IListItem {
+  content: string;
+}
+
+export interface IListComponent extends IMessageComponentBase {
+  type: 'list';
+  ordered: boolean;
+  items: IListItem[];
+}
+
+export interface ICodeBlockComponent extends IMessageComponentBase {
+  type: 'code_block';
+  language?: string;
+  content: string;
+}
+
+// --- 메시지 컴포넌트 Union 타입 ---
+export type MessageComponent =
+  | IHeadingComponent
+  | IParagraphComponent
+  | IListComponent
+  | ICodeBlockComponent
+  | IBarChartComponent
+  | ILineChartComponent
+  | IImageComponent
+  | ITableComponent;
+
+// --- 'complete' SSE 이벤트 데이터 인터페이스 ---
+export interface IStructuredChatResponseData {
+  message_id: string;
+  components: MessageComponent[];
+  metadata?: Record<string, any>;
+  timestamp: number;
+  elapsed: number;
 }
 
 /**

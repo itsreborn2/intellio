@@ -38,7 +38,7 @@ class ParallelSearchAgent(BaseAgent):
             "financial_analyzer", 
             "industry_analyzer",
             "confidential_analyzer",
-            
+            "web_search",
         ]
     
     async def process(self, state: AgentState) -> AgentState:
@@ -129,6 +129,9 @@ class ParallelSearchAgent(BaseAgent):
                     should_execute = True
                 elif agent_name == "revenue_breakdown" and data_requirements.get("revenue_data_needed", False):
                     logger.info(f"매출 및 수주 현황 데이터 필요: {agent_name}, {data_requirements}")
+                    should_execute = True
+                elif agent_name == "web_search" and data_requirements.get("web_search_needed", False):
+                    logger.info(f"웹 검색 데이터 필요: {agent_name}, {data_requirements}")
                     should_execute = True
             #logger.info(f"데이터 요구사항: {should_execute} {agent_name}, {data_requirements}")
             # 에이전트가 존재하고 실행이 필요한 경우 목록에 추가
@@ -228,7 +231,7 @@ class ParallelSearchAgent(BaseAgent):
         # 검색 결과가 비어있는지 확인
         has_data = False
         for key, value in state["retrieved_data"].items():
-            if key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data"] and value:
+            if key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "web_search_results"] and value:
                 has_data = True
                 #logger.info(f"검색 결과 있음: {key}에 {len(value)}개 항목")
                 break

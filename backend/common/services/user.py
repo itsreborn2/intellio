@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, List, Dict, Any
 from uuid import UUID, uuid4
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from fastapi import APIRouter
@@ -257,3 +257,23 @@ class UserService:
         
         await self.db.commit()
         return len(expired_sessions)
+
+    async def update_user_last_activity(self, user_id: UUID) -> bool:
+        """사용자의 마지막 활동 시간 업데이트 (updated_at 필드)"""
+        try:
+            user = await self.get(user_id)
+            if not user:
+                return False
+                
+            # SQL 쿼리를 통해 updated_at 필드만 업데이트
+            # 트리거를 통해 자동으로 현재 시간으로 설정됨
+            result = await self.db.execute(
+                text("UPDATE public.users SET updated_at = NOW() WHERE id = :user_id"),
+                {"user_id": str(user_id)}
+            )
+            await self.db.commit()
+            
+            return True
+        except Exception as e:
+            logger.error(f"사용자 활동 시간 업데이트 중 오류 발생: {str(e)}")
+            return False

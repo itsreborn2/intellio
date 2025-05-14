@@ -17,6 +17,7 @@ import json
 import asyncio
 import time
 
+from common.schemas.chat_components import StructuredChatResponse
 from common.utils.util import remove_null_chars
 from common.services.agent_llm import refresh_agent_llm_cache
 from stockeasy.services.financial.stock_info_service import StockInfoService
@@ -26,6 +27,7 @@ from common.core.deps import get_current_session
 from stockeasy.services.chat_service import ChatService
 from stockeasy.services.rag_service import StockRAGService
 from common.core.memory import chat_memory_manager
+from common.services.user import UserService
 
 
 # 챗 라우터 정의 위에 도우미 함수 추가
@@ -52,6 +54,10 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
         "question_analyzer": {
             "start": "질문 의도 파악 중...",
             "complete": "질문 분석 완료"
+        },
+        "web_search": {
+            "start": "웹 검색 중...",
+            "complete": "웹 검색 완료"
         },
         "telegram_retriever": {
             "start": "내부 데이터 정보 검색 중...",
@@ -168,6 +174,7 @@ class ChatMessageResponse(BaseResponse):
     stock_name: Optional[str] = None
     content: str
     content_expert: Optional[str] = None
+    components: Optional[List[Dict[str, Any]]] = None
     agent_results: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -223,6 +230,10 @@ async def create_chat_session(
             stock_name=request.stock_name,
             stock_info=request.stock_info
         )
+        
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(current_session.user_id)
         
         return ChatSessionResponse(**session_data)
         
@@ -282,6 +293,10 @@ async def get_chat_session(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="채팅 세션을 찾을 수 없습니다."
             )
+        
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(current_session.user_id)
         
         return ChatSessionResponse(**session_data)
         
@@ -352,6 +367,10 @@ async def delete_chat_session(
                 detail="채팅 세션을 찾을 수 없습니다."
             )
         
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(current_session.user_id)
+        
         return BaseResponse(
             ok=True,
             status_message="채팅 세션이 성공적으로 삭제되었습니다."
@@ -366,145 +385,6 @@ async def delete_chat_session(
             detail=f"채팅 세션 삭제 중 오류 발생: {str(e)}"
         )
 
-# # 현재는 안쓰는 함수
-# @chat_router.post("/sessions/{chat_session_id}/messages", response_model=ChatMessageResponse)
-# async def create_chat_message(
-#     chat_session_id: UUID = Path(..., description="채팅 세션 ID"),
-#     request: ChatMessageCreateRequest = Body(...),
-#     db: AsyncSession = Depends(get_db_async),
-#     current_session: Session = Depends(get_current_session),
-#     stock_rag_service: StockRAGService = Depends(get_stock_rag_service)
-# ) -> ChatMessageResponse:
-#     """새 채팅 메시지를 생성하고 응답을 생성합니다."""
-#     try:
-#         # 현재는 안쓰는 함수
-#         logger.info(f"create_chat_message 호출: {request}")
-#         # 세션 존재 여부 확인
-#         session_data = await ChatService.get_chat_session(
-#             db=db,
-#             session_id=chat_session_id,
-#             user_id=current_session.user_id
-#         )
-        
-#         if not session_data:
-#             raise HTTPException(
-#                 status_code=status.HTTP_404_NOT_FOUND,
-#                 detail="채팅 세션을 찾을 수 없습니다."
-#             )
-        
-#         logger.info(f"session_data: {session_data}")
-        
-#         # 메모리 관리자 인스턴스 가져오기
-#         from common.core.memory import chat_memory_manager
-        
-#         # 사용자 메시지 저장
-#         user_message = await ChatService.create_chat_message(
-#             db=db,
-#             chat_session_id=chat_session_id,
-#             role="user",
-#             content=request.message,
-#             stock_code=request.stock_code,
-#             stock_name=request.stock_name
-#         )
-#         logger.info(f"user_message: {user_message}")
-        
-#         # 메모리에 사용자 메시지 추가
-#         await chat_memory_manager.add_user_message(str(chat_session_id), request.message)
-        
-#         # 대화 히스토리 가져오기
-#         conversation_history = await chat_memory_manager.get_messages(str(chat_session_id))
-#         logger.info(f"대화 히스토리 로드 완료: {len(conversation_history)}개 메시지")
-        
-#         # LLM으로 응답 생성
-#         # StockRAGService를 사용하여 응답 생성 (대화 히스토리 포함)
-#         rag_result = await stock_rag_service.analyze_stock(
-#             query=request.message,
-#             stock_code=request.stock_code,
-#             stock_name=request.stock_name,
-#             session_id=str(current_session.id),
-#             user_id=str(current_session.user_id),
-#             conversation_history=conversation_history
-#         )
-
-#         # 응답 정보 추출
-#         answer = rag_result.get('answer', '')
-#         answer_expert = rag_result.get('answer_expert', '')
-
-#         # # 메타데이터 설정
-#         # metadata = {
-#         #     "rag_result": {
-#         #         "trace_id": rag_result.get("trace_id"),
-#         #         # 필요한 경우 추가 메타데이터 설정
-#         #     }
-#         # }
-#         # 랜덤 숫자.
-#         #answer = f"어시스턴트 응답 저장 : {random.randint(1, 1000000)}"
-#         metadata = ""
-#         #logger.info(f"어시스턴트 응답 저장 : {answer}")
-        
-#         # 메모리에 AI 응답 추가
-#         await chat_memory_manager.add_ai_message(str(chat_session_id), answer)
-        
-#         # 어시스턴트 응답 저장
-#         logger.debug("[STREAM_CHAT] 어시스턴트 응답 저장 중...")
-#         assistant_message = await ChatService.create_chat_message(
-#             db=db,
-#             message_id=user_message["id"],
-#             chat_session_id=chat_session_id,
-#             role="assistant",
-#             content=answer,
-#             content_expert=answer_expert,
-#             stock_code=request.stock_code,
-#             stock_name=request.stock_name,
-#             metadata=metadata,
-#             agent_results=rag_result.get("agent_results", {})
-#         )
-#         # 어시스턴트 메시지 ID 저장
-#         assistant_message_id = str(assistant_message["id"])
-#         logger.info(f"[STREAM_CHAT] 어시스턴트 응답 저장 완료: {assistant_message_id}")
-        
-#         # 세션에도 agent_results 저장
-#         logger.debug("[STREAM_CHAT] 세션에 에이전트 결과 저장 중...")
-        
-#         # 업데이트할 데이터 준비
-#         update_data = {}
-        
-#         # agent_results 데이터를 해당 세션에 추가
-#         update_data["agent_results"] = rag_result.get("agent_results", {})
-        
-#         # 기존 세션 데이터 확인
-#         if not session_data.get("stock_code") and request.stock_code:
-#             update_data["stock_code"] = request.stock_code
-            
-#         if not session_data.get("stock_name") and request.stock_name:
-#             update_data["stock_name"] = request.stock_name
-        
-#         logger.debug(f"[STREAM_CHAT] 업데이트할 세션 데이터: {list(update_data.keys())}")
-        
-#         # 세션 업데이트
-#         await ChatService.update_chat_session(
-#             db=db,
-#             session_id=chat_session_id,
-#             user_id=current_session.user_id,
-#             update_data=update_data
-#         )
-#         logger.info("[STREAM_CHAT] 세션에 에이전트 결과 저장 완료")
-        
-#         assistant_message["ok"] = True
-#         assistant_message["status_message"] = "정상 응답 완료"
-#         logger.info(f"어시스턴트 응답 완료")
-#         return ChatMessageResponse(**assistant_message)
-        
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         logger.error("채팅 메시지 생성 중 오류 발생: {}", str(e), exc_info=True)
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"채팅 메시지 생성 중 오류 발생: {str(e)}"
-#         )
-
-
 @chat_router.get("/sessions/{chat_session_id}/messages", response_model=ChatMessageListResponse)
 async def get_chat_messages(
     chat_session_id: UUID = Path(..., description="채팅 세션 ID"),
@@ -515,7 +395,7 @@ async def get_chat_messages(
 ) -> ChatMessageListResponse:
     """특정 채팅 세션의 메시지 목록을 조회합니다."""
     try:
-        # DB이 실제 세션이 있는지 확인.
+        # DB에 실제 세션이 있는지 확인.
         session_data = await ChatService.get_chat_session(
             db=db,
             session_id=chat_session_id,
@@ -537,7 +417,10 @@ async def get_chat_messages(
             offset=offset
         )
         
-        logger.debug(f"{session_data['title']} :총  {len(messages)} 메세지")
+        logger.info(f"{session_data['title']} :총  {len(messages)} 메세지")
+        for m in messages:
+            if m['role'] == "assistant" and m.get('components'):
+                logger.info(f"어시스턴트 메시지 컴포넌트 : {m.get('components', [])}")
         
         return ChatMessageListResponse(
             messages=[ChatMessageResponse(**message) for message in messages],
@@ -575,6 +458,10 @@ async def stream_chat_message(
         
         refresh_agent_llm_cache()
         async with AsyncSessionLocal() as db:
+            # 사용자 활동 시간 업데이트
+            user_service = UserService(db)
+            await user_service.update_user_last_activity(current_session.user_id)
+            
             # test code
             # stock_info_service = StockInfoService()
             # stock_info = await stock_info_service.get_stock_by_code(request.stock_code)
@@ -647,7 +534,7 @@ async def stream_chat_message(
         async def streaming_callback(chunk: str):
             nonlocal full_response
             # 로깅 추가
-            print(f"[{chunk}]", end="", flush=True)
+            #print(f"[{chunk}]", end="", flush=True)
             logger.info(f"[STREAM_CHAT] streaming_callback 호출됨: 청크 길이={len(chunk)}")
             # 청크 내용을 큐에 추가
             await streaming_queue.put(json.dumps({
@@ -824,7 +711,7 @@ async def stream_chat_message(
                             # 0.1초 대기 후 큐에서 토큰 가져오기 시도
                             try:
                                 event_data = await asyncio.wait_for(streaming_queue.get(), timeout=0.1)
-                                print(f"{event_data}", end="", flush=True)
+                                #print(f"{event_data}", end="", flush=True)
                                 # SSE 형식으로 데이터 전송 (data: 접두사 추가)
                                 yield f"{event_data}\n\n"
                                 streaming_queue.task_done()
@@ -899,7 +786,10 @@ async def stream_chat_message(
                             stock_code=request.stock_code,
                             stock_name=request.stock_name,
                             metadata=metadata,
+                            agent_results=agent_results,
+                            components=result.get("components", [])  # 구조화된 컴포넌트 저장
                         )
+                        
                         # 어시스턴트 메시지 ID 저장
                         assistant_message_id = str(assistant_message["id"])
                         logger.info(f"[STREAM_CHAT] 어시스턴트 응답 저장 완료: {assistant_message_id}")
@@ -935,18 +825,25 @@ async def stream_chat_message(
                         
                         # 완료 이벤트 전송
                         logger.info("[STREAM_CHAT] 완료 이벤트 전송")
+                        logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
+                        # 구조화된 채팅 응답 구성
+                        structured_response = StructuredChatResponse(
+                            message_id=assistant_message_id,
+                            components=result.get("components", []),  # 에이전트에서 반환된 구조화된 컴포넌트
+                            metadata=metadata,
+                            timestamp=time.time(),
+                            elapsed=total_time
+                        )
+                        
+                        # 직렬화를 위해 모델을 딕셔너리로 변환
+                        response_dict = structured_response.dict()
+                        
+                        # 완료 이벤트 JSON 생성
                         complete_data = json.dumps({
                             'event': 'complete',
-                            'data': {
-                                'message': '처리가 완료되었습니다.',
-                                'response': answer,
-                                'response_expert': summary,
-                                'message_id': assistant_message_id,
-                                'metadata': metadata,
-                                'timestamp': time.time(),
-                                'elapsed': total_time
-                            }
+                            'data': response_dict
                         }, cls=DateTimeEncoder)
+                        
                         yield f"{complete_data}\n\n"
                         
                 except Exception as e:
@@ -1131,6 +1028,10 @@ async def save_chat_to_pdf(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="채팅 세션을 찾을 수 없습니다."
             )
+        
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(current_session.user_id)
         
         # 메시지 목록 조회 (모든 메시지)
         messages = await ChatService.get_chat_messages(

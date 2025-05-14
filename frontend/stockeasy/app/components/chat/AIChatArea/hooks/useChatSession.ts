@@ -90,6 +90,14 @@ export function useChatSession(): ChatSessionHook {
     try {
       const apiMessages = await getChatMessages(sessionId);
       const convertedMessages = apiMessages.messages.map(convertApiMessageToComponentMessage);
+      
+      // 어시스턴트 메시지의 컴포넌트만 로그 출력
+      apiMessages.messages.forEach(message => {
+        if (message.role === "assistant" && message.components) {
+          console.log('어시스턴트 메시지 컴포넌트 : ', message.components);
+        }
+      });
+      
       setMessages(convertedMessages);
       return convertedMessages;
     } catch (err: any) {

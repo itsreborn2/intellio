@@ -18,7 +18,7 @@ from langchain_core.messages import AIMessage
 
 from stockeasy.prompts.revenue_breakdown_prompt import REVENUE_BREAKDOWN_SYSTEM_PROMPT, REVENUE_BREAKDOWN_USER_PROMPT, REVENUE_BREAKDOWN_SYSTEM_PROMPT2
 from common.core.config import settings
-from stockeasy.services.financial.data_service import FinancialDataService
+from stockeasy.services.financial.data_service_pdf import FinancialDataServicePDF
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from stockeasy.models.agent_io import RetrievedAllAgentData, FinancialData
 from common.services.agent_llm import get_llm_for_agent, get_agent_llm
@@ -40,7 +40,7 @@ class RevenueBreakdownAgent(BaseAgent):
         super().__init__(name, db)
         self.agent_llm = get_agent_llm("revenue_breakdown_agent")
         logger.info(f"RevenueBreakdownAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
-        self.financial_service = FinancialDataService()
+        self.financial_service = FinancialDataServicePDF()
         self.stock_service = StockInfoService()
         self.prompt_template = REVENUE_BREAKDOWN_SYSTEM_PROMPT2
         logger.info(f"RevenueBreakdownAgent 구현 완료 - 매출 및 수주 현황 정보 추출 준비 완료")

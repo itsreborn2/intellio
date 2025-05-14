@@ -56,6 +56,12 @@ class IndustryAnalyzerAgent(BaseAgent):
         # 서비스 초기화
         #self.industry_service = IndustryDataService()
         #self.stock_service = StockInfoService()
+        # VectorStoreManager 초기화
+        self.vs_manager = VectorStoreManager(
+            embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+            project_name="stockeasy",
+            namespace=settings.PINECONE_NAMESPACE_STOCKEASY_INDUSTRY
+        )
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -492,32 +498,29 @@ class IndustryAnalyzerAgent(BaseAgent):
             검색된 리포트 목록
         """
         try:
-            # 벡터 스토어 연결
-            vs_manager = VectorStoreManager(
-                embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
-                project_name="stockeasy",
-                namespace=settings.PINECONE_NAMESPACE_STOCKEASY_INDUSTRY
-            )
-
             if user_id != "test_user":
                 parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
             else:
                 parsed_user_id = None
             
-            # 시맨틱 검색 설정
-            semantic_retriever = SemanticRetriever(
-                config=SemanticRetrieverConfig(min_score=threshold, 
-                                               user_id=parsed_user_id, 
-                                               project_type=ProjectType.STOCKEASY),
-                vs_manager=vs_manager
-            )
-            
-            # 검색 수행
-            retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
-                query=query, 
-                top_k=k * 2,  # 중복 제거를 고려하여 2배로 검색
-                filters=metadata_filter
-            )
+            try:
+                # 시맨틱 검색 설정
+                semantic_retriever = SemanticRetriever(
+                    config=SemanticRetrieverConfig(min_score=threshold, 
+                                                user_id=parsed_user_id, 
+                                                project_type=ProjectType.STOCKEASY),
+                    vs_manager=self.vs_manager
+                )
+                
+                # 검색 수행
+                retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
+                    query=query, 
+                    top_k=k * 2,  # 중복 제거를 고려하여 2배로 검색
+                    filters=metadata_filter
+                )
+            except Exception as e:
+                logger.warning(f"[산업리포트 검색] retriever 실행 중 오류 발생: {str(e)}")
+                raise
             
             # 검색 결과 처리
             results = []

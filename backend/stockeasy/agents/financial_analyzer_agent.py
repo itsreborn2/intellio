@@ -16,11 +16,12 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import PromptTemplate
 from langchain_core.messages import AIMessage
 
+from stockeasy.services.financial.data_service_db import FinancialDataServiceDB
 from common.core.config import settings
-from stockeasy.services.financial.data_service import FinancialDataService
+from stockeasy.services.financial.data_service_pdf import FinancialDataServicePDF
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from stockeasy.prompts.financial_prompts import (
-    FINANCIAL_ANALYSIS_SYSTEM_PROMPT,
+    FINANCIAL_ANALYSIS_SYSTEM_PROMPT,   
     FINANCIAL_ANALYSIS_USER_PROMPT,
     format_financial_data
 )
@@ -43,8 +44,11 @@ class FinancialAnalyzerAgent(BaseAgent):
         """
         super().__init__(name, db)
         self.agent_llm = get_agent_llm("financial_analyzer_agent")
+        self.agent_llm_lite = get_agent_llm("gemini-lite")
         logger.info(f"FinancialAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
-        self.financial_service = FinancialDataService()
+        self.financial_service_pdf = FinancialDataServicePDF()
+        self.financial_service_db = FinancialDataServiceDB(db_session=db)
+
         self.stock_service = StockInfoService()
         self.prompt_template = FINANCIAL_ANALYSIS_SYSTEM_PROMPT
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -101,7 +105,8 @@ class FinancialAnalyzerAgent(BaseAgent):
             logger.info(f"date_range: {date_range}")
             
             # 재무 데이터 조회 (GCS에서 PDF 파일을 가져와서 처리)
-            financial_data = await self.financial_service.get_financial_data(stock_code, date_range)
+            financial_data = await self.financial_service_pdf.get_financial_data(stock_code, date_range)
+            db_search_data = await self.financial_service_db.get_financial_data_with_qoq(stock_code, date_range)
             
             # content를 제외한 메타데이터만 로깅
             log_data = {
@@ -114,7 +119,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     for key, value in financial_data.get("reports", {}).items()
                 }
             }
-            logger.info(f"financial_data metadata: {log_data}")
+            #logger.info(f"financial_data metadata: {log_data}")
 
             
             if not financial_data or not financial_data.get("reports"):
@@ -170,7 +175,8 @@ class FinancialAnalyzerAgent(BaseAgent):
 
             # 추출된 재무 데이터를 LLM에 전달할 형식으로 변환
             formatted_data = await self._prepare_financial_data_for_llm(
-                financial_data, 
+                financial_data,
+                db_search_data,
                 query, 
                 required_metrics,
                 data_requirements
@@ -180,6 +186,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             # 재무 데이터 분석 수행
             analysis_results = await self._analyze_financial_data(
                 formatted_data,
+                db_search_data,
                 query,
                 stock_code,
                 stock_name or "",
@@ -190,18 +197,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
-            # 새로운 구조로 상태 업데이트
-            # analysis_results
-            # {
-            #     "llm_response": analysis_content,
-            #     "extracted_data": {
-            #         "stock_code": stock_code,
-            #         "stock_name": stock_name,
-            #         "report_count": len(formatted_data),
-            #         "years_covered": self._extract_years_covered(formatted_data)
-            #     },
-            #     "raw_financial_data": formatted_data[:3] if formatted_data else []  # 최대 2개 보고서만 포함
-            # }
+            
             state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["financial_analyzer"] = {
                 "agent_name": "financial_analyzer",
@@ -224,6 +220,21 @@ class FinancialAnalyzerAgent(BaseAgent):
             financial_data_result: List[FinancialData] = [analysis_results]
             retrieved_data["financials"] = financial_data_result
             
+            # 목차 항목에 경쟁사가 있다면, 경쟁사의 이름을 llm에게 조회를 한다.
+            final_report_toc = state.get("final_report_toc") 
+            competitor_infos = await self._get_competitor_info(final_report_toc=final_report_toc, 
+                                                              stock_name=stock_name, 
+                                                              stock_code=stock_code, date_range=date_range)
+            if competitor_infos:
+                state["agent_results"]["financial_analyzer"]["competitor_infos"] = competitor_infos
+                
+                # 검색된 데이터가 있으면 retrieved_data에 추가
+                if "retrieved_data" in state and "financials" in retrieved_data:
+                    for financial in retrieved_data["financials"]:
+                        if isinstance(financial, dict):
+                            financial["competitor_infos"] = competitor_infos
+
+
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["financial_analyzer"] = "completed"
             
@@ -492,6 +503,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             
     async def _prepare_financial_data_for_llm(self, 
                                      financial_data: Dict[str, Any],
+                                     db_search_data: Dict[str, Any],
                                      query: str,
                                      required_metrics: List[str],
                                      data_requirements: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -507,6 +519,30 @@ class FinancialAnalyzerAgent(BaseAgent):
         Returns:
             LLM에 전달할 형식의 재무 데이터 리스트
         """
+# """
+# db_search_data 형식
+# {  'stock_code': '000660',
+# 	'period': {'end_date': '2025-04-25', 'start_date': '2023-12-01'},
+#    'quarters': {  202312: {  'net_income': {  'cumulative_value': -9137547.0,
+#                                               'display_unit': '백만원',
+#                                               'period_value': -1379450.0},
+#                              'operating_income': {  'cumulative_value': -7730313.0,
+#                                                     'display_unit': '백만원',
+#                                                     'period_value': 346034.0},
+#                              'revenue': {  'cumulative_value': 32765719.0,
+#                                            'display_unit': '백만원',
+#                                            'period_value': 11305505.0}},
+#                   202403: {  'net_income': {  'cumulative_value': 1917039.0,
+#                                               'display_unit': '백만원',
+#                                               'period_value': 1917039.0},
+#                              'operating_income': {  'cumulative_value': 2886029.0,
+#                                                     'display_unit': '백만원',
+#                                                     'period_value': 2886029.0},
+#                              'revenue': {  'cumulative_value': 12429598.0,
+#                                            'display_unit': '백만원',
+#                                            'period_value': 12429598.0}},
+
+# """        
         reports = financial_data.get("reports", {})
         stock_code = financial_data.get("stock_code", "")
         formatted_data = []
@@ -611,6 +647,7 @@ class FinancialAnalyzerAgent(BaseAgent):
     
     async def _analyze_financial_data(self, 
                                      formatted_data: List[Dict[str, Any]],
+                                     db_search_data: Dict[str, Any],
                                      query: str,
                                      stock_code: str,
                                      stock_name: str,
@@ -655,6 +692,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     today=datetime.now().strftime("%Y-%m-%d"),
                     query=query,
                     financial_data=financial_data_str,
+                    db_search_data=json.dumps(db_search_data, ensure_ascii=False, indent=2),
                     stock_code=stock_code,
                     stock_name=stock_name,
                     classification=classification.get("primary_intent", "")
@@ -750,3 +788,198 @@ class FinancialAnalyzerAgent(BaseAgent):
             "end_date": "",
             "included_years": []
         } 
+
+    async def _get_competitor_info(self, final_report_toc: Dict[str, Any], stock_name:str, stock_code: str, date_range: Dict[str, datetime]) -> List[Dict[str, Any]]:
+        """
+        경쟁사 정보를 조회하고 반환합니다.
+        
+        Args:
+            final_report_toc: 목차
+            stock_name: 종목명
+            stock_code: 종목 코드
+            date_range: 분석할 날짜 범위
+            
+        Returns:
+            경쟁사 정보 리스트 (없으면 빈 리스트)
+        """
+        try:
+            # final_report_toc가 없거나 sections가 없으면 빈 리스트 반환
+            if not final_report_toc or "sections" not in final_report_toc:
+                logger.info("목차 정보가 없습니다.")
+                return []
+                
+            # 경쟁사 관련 키워드 정의
+            competitor_keywords = ["경쟁사", "경쟁업체", "경쟁기업", "라이벌", "경쟁자", "업계 경쟁", "경쟁 업체"]
+            competitor_sections = []
+            
+            # 모든 섹션과 하위 섹션에서 경쟁사 관련 키워드 검색
+            sections = final_report_toc.get("sections", [])
+            for section in sections:
+                section_title = section.get("title", "")
+                section_desc = section.get("description", "")
+                
+                # 섹션 제목이나 설명에 경쟁사 키워드가 있는지 확인
+                if any(keyword in section_title or keyword in section_desc for keyword in competitor_keywords):
+                    competitor_sections.append({
+                        "title": section_title,
+                        "description": section_desc
+                    })
+                
+                # 하위 섹션 검사
+                subsections = section.get("subsections", [])
+                for subsection in subsections:
+                    subsection_title = subsection.get("title", "")
+                    subsection_desc = subsection.get("description", "")
+                    
+                    # 하위 섹션 제목이나 설명에 경쟁사 키워드가 있는지 확인
+                    if any(keyword in subsection_title or keyword in subsection_desc for keyword in competitor_keywords):
+                        competitor_sections.append({
+                            "title": subsection_title,
+                            "description": subsection_desc
+                        })
+            
+            # 경쟁사 관련 섹션이 없으면 빈 리스트 반환
+            if not competitor_sections:
+                logger.info("경쟁사 관련 섹션이 목차에 없습니다.")
+                return []
+                
+            # 경쟁사 섹션 정보를 텍스트로 변환하여 LLM에 전달
+            competitor_text = "\n\n".join([
+                f"섹션: {section['title']}\n설명: {section['description']}"
+                for section in competitor_sections
+            ])
+            
+            # LLM을 사용하여 경쟁사 이름 추출
+            competitors = await self._extract_competitors_from_toc(stock_name, stock_code, competitor_text)
+            logger.info(f"목차에 경쟁사 키워드. LLM 경쟁사 정보 수신 : {competitors}")
+            
+            if not competitors:
+                logger.info("목차에서 경쟁사를 추출할 수 없습니다.")
+                return []
+                
+            # 모든 경쟁사 정보를 담을 리스트
+            competitors_info_list = []
+            
+            # 각 경쟁사에 대한 정보 조회
+            for competitor in competitors:
+                competitor_name = competitor
+                # 경쟁사 종목 코드 찾기
+                competitor_info = await self.stock_service.get_stock_by_name(competitor_name)
+                
+                if not competitor_info or not competitor_info.get("code"):
+                    logger.warning(f"경쟁사 종목 코드를 찾을 수 없습니다: {competitor_name}")
+                    continue
+                    
+                competitor_code = competitor_info.get("code")
+                logger.info(f"경쟁사 종목 코드: {competitor_code}")
+                
+                # 경쟁사의 재무 데이터 조회
+                competitor_db_search_data = await self.financial_service_db.get_financial_data_with_qoq(competitor_code, date_range)
+                
+                if not competitor_db_search_data:
+                    logger.warning(f"경쟁사 재무 데이터를 찾을 수 없습니다: {competitor_name} ({competitor_code})")
+                    continue
+                
+                # 결과 추가
+                competitors_info_list.append({
+                    "stock_code": competitor_code,
+                    "stock_name": competitor_name,
+                    "db_search_data": competitor_db_search_data
+                })
+                
+                # 최대 3개까지만 조회
+                if len(competitors_info_list) >= 3:
+                    break
+            
+            logger.info(f"조회된 경쟁사 수: {len(competitors_info_list)}")
+            return competitors_info_list
+            
+        except Exception as e:
+            logger.exception(f"경쟁사 정보 조회 중 오류 발생: {str(e)}")
+            return []
+            
+    async def _extract_competitors_from_toc(self, stock_name: str, stock_code: str, competitor_text: str) -> List[str]:
+        """
+        목차 정보에서 경쟁사 이름을 추출합니다.
+        
+        Args:
+            stock_name: 종목명
+            stock_code: 종목 코드
+            competitor_text: 경쟁사 관련 섹션 텍스트
+            
+        Returns:
+            경쟁사 이름 리스트
+        """
+        try:
+            # 프롬프트 구성
+            prompt_template = """
+            한국 주식 시장에서 {stock_name}({stock_code})의 주요 경쟁사를 알려주세요.
+            
+            반드시 JSON 형식으로 리스트 형태로 결과를 반환해주세요. 정확한 회사명만 추출하세요.
+            만약 경쟁사 회사명이 명확하게 파악되지 않는다면, 해당 산업의 주요 경쟁사를 3개만 추론하여 반환해주세요.
+            
+            예시 형식:
+            ["삼성전자", "SK하이닉스"]
+            """
+            
+            # 메시지 구성
+            from langchain_core.messages import SystemMessage, HumanMessage
+            
+            messages = [
+                SystemMessage(content="당신은 한국 주식 시장의 기업 정보와 산업 구조에 대해 잘 알고 있는 AI 도우미입니다. JSON 형식으로 정확하게 응답해주세요."),
+                HumanMessage(content=prompt_template.format(
+                    stock_name=stock_name,
+                    stock_code=stock_code
+                ))
+            ]
+            
+            # LLM 호출
+            response = await self.agent_llm_lite.ainvoke_with_fallback(
+                messages,
+                project_type=ProjectType.STOCKEASY,
+                db=self.db
+            )
+            
+            # 결과 추출
+            response_text = response.content if response else ""
+            
+            # JSON 형식 찾기
+            json_pattern = r'\[.*?\]'
+            json_match = re.search(json_pattern, response_text, re.DOTALL)
+            
+            if json_match:
+                json_str = json_match.group(0)
+                try:
+                    competitors = json.loads(json_str)
+                    if isinstance(competitors, list) and competitors:
+                        return competitors
+                except json.JSONDecodeError:
+                    logger.error(f"경쟁사 목록 JSON 파싱 실패: {json_str}")
+            
+            # JSON 파싱 실패 시 텍스트 기반 추출 시도
+            lines = response_text.split('\n')
+            for line in lines:
+                if '["' in line and '"]' in line:
+                    try:
+                        competitors = json.loads(line.strip())
+                        if isinstance(competitors, list) and competitors:
+                            return competitors
+                    except json.JSONDecodeError:
+                        continue
+            
+            # 텍스트에서 회사명 패턴 추출 시도
+            company_pattern = r'([가-힣a-zA-Z0-9]+(?:[가-힣a-zA-Z0-9\s]+)?(?:주식회사|전자|반도체|그룹|회사|컴퍼니|주식|Corp|Inc|Co\.|Ltd\.)?)'
+            companies = []
+            
+            # 응답에서 회사명 추출
+            matches = re.findall(company_pattern, response_text)
+            for match in matches:
+                if len(match) > 1 and match not in ["경쟁사", "경쟁업체", "경쟁기업", "라이벌"]:
+                    companies.append(match.strip())
+            
+            # 중복 제거 및 반환
+            return list(set(companies))
+            
+        except Exception as e:
+            logger.exception(f"경쟁사 추출 중 오류 발생: {str(e)}")
+            return [] 

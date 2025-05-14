@@ -3,16 +3,19 @@
 이 모듈은 FastAPI 라우터들을 초기화하고 등록합니다.
 """
 
+import logging
 from fastapi import APIRouter
 from stockeasy.api.v1.telegram import telegram_router
 from stockeasy.api.v1.chat import chat_router
 from stockeasy.api.v1._internal_test import router as internal_test_router
+from stockeasy.api.v1.financial_data import router as financial_data_router
 from loguru import logger
 
 # API v1 라우터
 #root_router = APIRouter(prefix="/stockeasy", tags=["stockeasy"])
 api_router_stockeasy = APIRouter(prefix="/stockeasy", tags=["stockeasy"])
 
+logger = logging.getLogger(__name__)
 
 # 텔레그램 라우터 등록
 logger.info("텔레그램 라우터 등록 시작")
@@ -28,3 +31,8 @@ logger.info("채팅 라우터 등록 완료")
 logger.info("내부 테스트 라우터 등록 시작")
 api_router_stockeasy.include_router(internal_test_router)
 logger.info("내부 테스트 라우터 등록 완료")
+
+# 재무 데이터 라우터 등록
+logger.info("재무 데이터 라우터 등록 시작")
+api_router_stockeasy.include_router(financial_data_router)
+logger.info("재무 데이터 라우터 등록 완료")

@@ -60,7 +60,7 @@ class DataRequirement(TypedDict, total=False):
     financial_statements_needed: bool # 재무제표 필요 여부
     industry_data_needed: bool      # 산업 데이터 필요 여부
     revenue_data_needed: bool      # 매출 및 수주 현황 필요 여부
-
+    web_search_needed: bool        # 웹 검색 필요 여부
 
 class QuestionAnalysisResult(TypedDict, total=False):
     """질문 분석 결과 (질문분류기 출력)"""
@@ -200,15 +200,23 @@ class IndustryData(TypedDict, total=False):
     market_share: Dict[str, float]  # 시장 점유율
 
 
+class RetrievedWebSearchResult(TypedDict):
+    """웹 검색 결과"""
+    title: str                      # 검색 결과 제목
+    content: str                    # 검색 결과 내용
+    url: str                        # 검색 결과 URL
+    search_query: str               # 검색에 사용된 쿼리
+    search_date: datetime           # 검색 시간
 
 
 class RetrievedAllAgentData(TypedDict, total=False):
     """검색 및 분석된 모든 데이터"""
-    telegram_messages: List[RetrievedTelegramMessage] # 텔레그램 메시지
-    company_report: List[CompanyReportData]       # 기업 리포트
-    financials: List[FinancialData] # 재무 데이터
-    industry_report: List[IndustryData]    # 산업 정보
-    confidential: List[ConfidentialData]   # 비공개 자료
+    telegram_messages: Dict[str, Any] # 텔레그램 메시지
+    report_data: List[CompanyReportData]       # 기업 리포트
+    financial_data: List[FinancialData] # 재무 데이터
+    industry_data: List[IndustryData]    # 산업 정보
+    confidential_data: List[ConfidentialData]   # 비공개 자료
+    web_search_results: Dict[str, Any]   # 웹 검색 결과
 
 
 class IntegratedKnowledge(TypedDict, total=False):
@@ -218,6 +226,7 @@ class IntegratedKnowledge(TypedDict, total=False):
     opinions: List[Dict[str, Any]]  # 다양한 의견
     analysis: Dict[str, Any]        # 종합 분석
     sources: Dict[str, List[str]]   # 출처 정보
+
 
 
 class AgentMetric(TypedDict):
@@ -256,10 +265,12 @@ class AgentState(TypedDict, total=False):
     
     # 사용자 컨텍스트
     user_context: Dict[str, Any]    # 사용자 컨텍스트 정보
-
+    competitor_info: Optional[Dict[str, Any]]  # 경쟁사 정보
     
     # 질문 분석 결과 (질문분류기에서 설정)
     question_analysis: QuestionAnalysisResult  # 질문 분석 결과
+    recent_issues_summary: Optional[str]  # 최근 이슈 요약
+    final_report_toc: Optional[Dict[str, Any]]  # 최종 보고서 목차
     
     # 실행 계획 (오케스트레이터에서 설정)
     execution_plan: ExecutionPlan   # 실행 계획
@@ -273,9 +284,11 @@ class AgentState(TypedDict, total=False):
     # 통합 및 요약
     integrated_knowledge: Optional[IntegratedKnowledge]  # 통합된 지식 베이스
     summary: Optional[str]          # 생성된 요약
+    summary_by_section: Optional[Dict[str, str]]  # 섹션별 요약
     formatted_response: Optional[str]  # 최종 응답
     answer: Optional[str]           # 최종 답변
     answer_expert: Optional[str]    # 전문가형 답변
+    components: Optional[List[Dict[str, Any]]]  # 구조화된 응답 컴포넌트
     
     # 에러 및 메트릭
     errors: List[AgentError]        # 발생한 오류 목록

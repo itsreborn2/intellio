@@ -84,6 +84,24 @@ export interface IChatSession  extends IBaseResponse {
   updated_at?: string;
 }
 
+// export interface ChatMessage {
+//   id: string;
+//   role: 'user' | 'assistant' | 'status';
+//   content: string;
+//   content_expert?: string;
+//   timestamp: number;
+//   stockInfo?: {
+//     stockName: string;
+//     stockCode: string;
+//   };
+//   components?: MessageComponent[]; // 구조화된 메시지 컴포넌트 배열 추가
+//   responseId?: string; // 분석 결과의 고유 ID
+//   isProcessing?: boolean; // 처리 중 상태
+//   agent?: string; // 에이전트 정보
+//   elapsed?: number; // 경과 시간 (초 단위)
+//   elapsedStartTime?: number; // 경과 시간 시작 타임스탬프
+//   _forceUpdate?: number; // UI 리렌더링을 강제하기 위한 임의의 값
+// }
 /**
  * 상세 채팅 메시지 인터페이스
  */
@@ -95,6 +113,7 @@ export interface IChatMessageDetail  extends IBaseResponse {
   content_expert?: string;
   stock_code: string;
   stock_name: string;
+  components?: any[]; // 구조화된 메시지 컴포넌트 배열
   metadata?: any;
   created_at?: string;
   updated_at?: string;

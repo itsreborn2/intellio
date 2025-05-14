@@ -1,5 +1,5 @@
-from llama_index.core.node_parser import SentenceWindowNodeParser, SemanticSplitterNodeParser
-from llama_index.embeddings.openai import OpenAIEmbedding
+# from llama_index.core.node_parser import SentenceWindowNodeParser, SemanticSplitterNodeParser
+# from llama_index.embeddings.openai import OpenAIEmbedding
 from langchain.text_splitter import (
     RecursiveCharacterTextSplitter,
     CharacterTextSplitter,
@@ -211,23 +211,23 @@ class TextSplitter:
                 chunk_overlap=self.chunk_overlap,
                 disallowed_special=()
             )
-        elif self.splitter_type == "semantic_llama":
-            # 임베딩 모델 초기화
-            embed_model = OpenAIEmbedding(model="text-embedding-ada-002")
+        # elif self.splitter_type == "semantic_llama":
+        #     # 임베딩 모델 초기화
+        #     embed_model = OpenAIEmbedding(model="text-embedding-ada-002")
 
-            # SemanticSplitter 초기화
-            self.splitter = SemanticSplitterNodeParser(
-                buffer_size=1,  # 문장 그룹화 크기
-                breakpoint_percentile_threshold=95,  # 분할 임계값
-                embed_model=embed_model
-            )
-        elif self.splitter_type == "sentencewindow":
-            self.splitter = SentenceWindowNodeParser.from_defaults(
-                window_size=3, #각 문장을 중심으로 포함할 이전 및 이후 문장의 개수, 기본값3
-                window_metadata_key="window",
-                original_text_metadata_key="original_text",
-                #sentence_splitter=split_by_sentence_tokenizer #문서를 문장 단위로 분리하는 함수 또는 객체를 지정
-            )
+        #     # SemanticSplitter 초기화
+        #     self.splitter = SemanticSplitterNodeParser(
+        #         buffer_size=1,  # 문장 그룹화 크기
+        #         breakpoint_percentile_threshold=95,  # 분할 임계값
+        #         embed_model=embed_model
+        #     )
+        # elif self.splitter_type == "sentencewindow":
+        #     self.splitter = SentenceWindowNodeParser.from_defaults(
+        #         window_size=3, #각 문장을 중심으로 포함할 이전 및 이후 문장의 개수, 기본값3
+        #         window_metadata_key="window",
+        #         original_text_metadata_key="original_text",
+        #         #sentence_splitter=split_by_sentence_tokenizer #문서를 문장 단위로 분리하는 함수 또는 객체를 지정
+        #     )
             
         else:
             raise ValueError(f"Unsupported text splitter type: {self.splitter_type}")

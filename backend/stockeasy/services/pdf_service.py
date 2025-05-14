@@ -49,8 +49,8 @@ def convert_markdown_to_html(text: str) -> str:
     html = md.render(text)
     
     # 변환된 HTML을 로그로 출력(디버깅용)
-    print("==== 변환된 HTML ====")
-    print(html)
+    #print("==== 변환된 HTML ====")
+    #print(html)
     
     # <strong> 태그가 ReportLab에서 잘 작동하도록 <b> 태그로 변환
     html = html.replace("<strong>", "<b>").replace("</strong>", "</b>")

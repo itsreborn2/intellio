@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from datetime import datetime, timedelta
 from uuid import UUID
+from common.services.user import UserService
 from common.api.v1.auth import get_current_user
 from common.core.deps import get_current_session, get_db
 from common.models.user import Session, User
@@ -147,6 +148,10 @@ async def read_user_question_count(
         if not session or not session.user:
             raise HTTPException(status_code=401, detail="인증되지 않은 사용자입니다.")
         
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(session.user_id)
+
         # 현재 날짜
         now = datetime.now()
         logger.info(f"question-count summary")

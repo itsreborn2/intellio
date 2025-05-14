@@ -13,6 +13,7 @@ from sqlalchemy import select
 import traceback
 from datetime import datetime
 
+from common.services.user import UserService
 from common.core.database import get_db_async
 from common.models.user import Session
 from common.core.deps import get_current_session
@@ -166,6 +167,9 @@ async def table_search_stream(
     """테이블 모드 검색 및 질의응답 (스트리밍 방식)"""
     try:
         logger.info(f"테이블 검색 스트리밍 요청 - 쿼리: {request.query}, 문서 ID: {request.document_ids}, Mode: {request.mode}")
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(session.user_id)
         
         # 프로젝트의 updated_at 갱신
         if request.project_id:
@@ -305,6 +309,10 @@ async def chat_search(
             project.updated_at = datetime.now()
             logger.debug(f"프로젝트 {project_id} 마지막 수정 시간 갱신: {project.updated_at}")
 
+        # 사용자 활동 시간 업데이트
+        user_service = UserService(db)
+        await user_service.update_user_last_activity(session.user_id)
+
         # 사용자 메시지 저장
         user_message = ChatHistory(
             id=str(uuid4()),
@@ -315,6 +323,8 @@ async def chat_search(
         db.add(user_message)
         await db.commit()
         logger.info(f"사용자 메시지 저장 완료 - ID: {user_message.id}, 내용: {request.message}")
+
+        
 
         async def generate_stream():
             # AI 응답을 위한 ID 미리 생성

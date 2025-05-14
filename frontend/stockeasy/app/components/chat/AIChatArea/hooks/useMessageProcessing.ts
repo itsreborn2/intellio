@@ -2,16 +2,16 @@
  * useMessageProcessing.ts
  * 메시지 처리 로직을 위한 커스텀 훅
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { ChatMessage, StockOption } from '../types';
+import { ChatMessage, StockOption, IStructuredChatResponseData, MessageComponent } from '../types';
 import { createChatSession, streamChatMessage } from '@/services/api/chat';
-import { IChatSession } from '@/types/api/chat';
+import { IChatSession, IChatMessageDetail } from '@/types/api/chat';
 import { useTimers } from './useTimers';
 import { saveRecentStocksToStorage } from '../utils/stockDataUtils';
 import { API_ENDPOINT_STOCKEASY } from '@/services/api/index';
-import { useChatStore } from '@/stores/chatStore';
 import { v4 as uuidv4 } from 'uuid'; // UUID 라이브러리 가져오기
+import { useAuth } from '@/hooks/useAuth';
 
 interface MessageProcessingOptions {
   onQuestionLimitExceeded?: () => void;
@@ -20,14 +20,14 @@ interface MessageProcessingOptions {
   maxQuestions?: number;
 }
 
-// 메시지 처리에 필요한 콜백 함수들 정의
-interface MessageHandlers {
-  addMessage: (message: ChatMessage) => void;
-  updateMessage: (id: string, message: Partial<ChatMessage>) => void;
+// ChatStore 필요한 인터페이스만 정의
+interface ChatStoreActions {
+  addMessage: (message: IChatMessageDetail) => void;
+  updateMessage: (id: string, message: Partial<IChatMessageDetail>) => void;
   removeMessage: (id: string) => void;
   setCurrentSession: (session: IChatSession | null) => void;
   setProcessing: (isProcessing: boolean) => void;
-  getMessages?: () => ChatMessage[];
+  getMessages: () => any[]; // 실제 타입은 useChatStore의 getUiMessages 반환 타입
 }
 
 interface MessageProcessingHook {
@@ -52,7 +52,7 @@ interface MessageProcessingHook {
  */
 function useMessageProcessing(
   questionCount: number = 0,
-  messageHandlers: MessageHandlers,
+  messageHandlers: ChatStoreActions,
   currentSession: IChatSession | null = null,
   options: MessageProcessingOptions = {}
 ): MessageProcessingHook {
@@ -61,8 +61,17 @@ function useMessageProcessing(
     onQuestionLimitExceeded = () => toast.error('오늘의 질문 할당량을 모두 소진하였습니다. 내일 다시 이용해주세요.'),
     onProcessingStart = () => {},
     onProcessingComplete = () => {},
-    maxQuestions = 100
+    maxQuestions = 10
   } = options;
+
+  // 현재 사용자 정보
+  const { user } = useAuth();
+  
+  // 관리자 이메일 리스트
+  const adminIds = process.env.NEXT_PUBLIC_ADMIN_IDS ? JSON.parse(process.env.NEXT_PUBLIC_ADMIN_IDS) : [];
+
+  // 사용자가 관리자인지 확인
+  const isAdmin = user?.email && adminIds.includes(user.email);
 
   // PDF 로딩 상태
   const [isPdfLoading, setIsPdfLoading] = useState<boolean>(false);
@@ -142,8 +151,11 @@ function useMessageProcessing(
       return;
     }
 
-    // 질문 횟수 제한 체크
-    if (questionCount >= maxQuestions) {
+    // 질문 횟수 제한 체크 (관리자는 제외)
+    console.log(`email : ${user?.email}`)
+    console.log(`isAdmin : ${isAdmin}`)
+    console.log(`adminIds : ${process.env.NEXT_PUBLIC_ADMIN_IDS}`)
+    if (!isAdmin && questionCount >= maxQuestions) {
       onQuestionLimitExceeded();
       return;
     }
@@ -172,14 +184,23 @@ function useMessageProcessing(
       // 사용자 메시지 추가는 외부에서 이미 수행됨
       // AIChatArea 컴포넌트에서 직접 추가하여 동기화 문제 해결
 
-      // 상태 표시 메시지 추가
-      const statusMessageObj: ChatMessage = {
-        id: `status-${uuidv4()}`,
+      // 상태 표시 메시지 추가 (직접 IChatMessageDetail 타입으로 생성)
+      const statusId = `status-${uuidv4()}`;
+      const statusMessageObj: IChatMessageDetail = {
+        id: statusId,
         role: 'status',
         content: '요청을 처리 중입니다...',
-        timestamp: Date.now(),
-        isProcessing: true,
-        stockInfo
+        chat_session_id: sessionId || '',
+        stock_name: stockInfo.stockName,
+        stock_code: stockInfo.stockCode,
+        created_at: new Date().toISOString(),
+        ok: true,
+        status_message: '',
+        metadata: {
+          isProcessing: true,
+          stockInfo,
+          elapsed: 0
+        }
       };
 
       // 메시지 목록에 상태 메시지 추가
@@ -187,24 +208,6 @@ function useMessageProcessing(
       addMessage(statusMessageObj);
       console.log('[MessageProcessing] 상태 메시지 추가 후:', statusMessageObj.id);
       
-      // useChatStore에도 상태 메시지 추가 (Zustand 스토어 동기화)
-      const chatStore = useChatStore.getState();
-      chatStore.addMessage({
-        id: statusMessageObj.id,
-        role: 'status', // IChatMessageDetail의 role 타입에 맞춤 (system -> status)
-        content: statusMessageObj.content,
-        created_at: new Date().toISOString(),
-        stock_name: stockInfo.stockName,
-        stock_code: stockInfo.stockCode,
-        chat_session_id: sessionId || '',
-        ok: true,
-        status_message: '',
-        metadata: {
-          stockInfo,
-          isProcessing: true
-        }
-      });
-
       // 채팅 세션이 없으면 새로 생성
       if (!sessionId) {
         try {
@@ -240,9 +243,6 @@ function useMessageProcessing(
           sessionId = newSession.id;
           setCurrentSession(newSession);
           
-          // Zustand 스토어에도 세션 저장
-          chatStore.setCurrentSession(newSession);
-          
           console.log('새 채팅 세션 생성:', newSession);
         } catch (error: any) {
           console.error('채팅 세션 생성 실패:', error);
@@ -262,9 +262,11 @@ function useMessageProcessing(
             // 상태 메시지 업데이트
             updateMessage(statusMessageObj.id, { 
               content: '처리를 시작합니다...', 
-              elapsed: elapsedTime,
-              elapsedStartTime: Date.now(), // 전체 진행 시간 시작점 설정
-              isProcessing: true
+              metadata: {
+                ...statusMessageObj.metadata,
+                elapsed: elapsedTime,
+                isProcessing: true
+              }
             });
           },
           onAgentStart: (data) => {
@@ -273,9 +275,11 @@ function useMessageProcessing(
             // 상태 메시지 업데이트 (에이전트 정보만 변경, 시간은 초기 시작 시간 유지)
             updateMessage(statusMessageObj.id, { 
               content: data.message, 
-              agent: data.agent,
-              isProcessing: true
-              // elapsed와 elapsedStartTime은 변경하지 않음 (전체 시간 유지)
+              metadata: {
+                ...statusMessageObj.metadata,
+                agent: data.agent,
+                isProcessing: true
+              }
             });
           },
           onAgentComplete: (data) => {
@@ -284,9 +288,11 @@ function useMessageProcessing(
             // 상태 메시지 업데이트 (에이전트 정보만 변경, 시간은 초기 시작 시간 유지)
             updateMessage(statusMessageObj.id, { 
               content: data.message, 
-              agent: data.agent,
-              isProcessing: true
-              // elapsed와 elapsedStartTime은 변경하지 않음 (전체 시간 유지)
+              metadata: {
+                ...statusMessageObj.metadata,
+                agent: data.agent,
+                isProcessing: true
+              }
             });
           },
           onToken: (data) => {
@@ -304,39 +310,24 @@ function useMessageProcessing(
               stopTimer();
               removeMessage(statusMessageObj.id);
               
-              // useChatStore에서도 상태 메시지 제거
-              const messagesWithoutStatus = chatStore.messages.filter(
-                (msg: any) => msg.id !== statusMessageObj.id
-              );
-              chatStore.setMessages(messagesWithoutStatus);
-              console.log('[MessageProcessing] Zustand 스토어에서 상태 메시지 제거 (첫 번째 토큰 시):', statusMessageObj.id);
-              
-              // 어시스턴트 메시지 초기 생성
-              const assistantMessageObj: ChatMessage = {
+              // 어시스턴트 메시지 초기 생성 (직접 IChatMessageDetail로 생성)
+              const assistantMessageObj: IChatMessageDetail = {
                 id: assistantMessageId.current,
                 role: 'assistant',
                 content: '',  // 빈 내용으로 시작
-                timestamp: Date.now(),
-                stockInfo
-              };
-              
-              addMessage(assistantMessageObj);
-              
-              // Zustand 스토어에도 어시스턴트 메시지 추가
-              chatStore.addMessage({
-                id: assistantMessageObj.id,
-                role: 'assistant',
-                content: '',
-                created_at: new Date().toISOString(),
+                chat_session_id: sessionId || '',
                 stock_name: stockInfo.stockName,
                 stock_code: stockInfo.stockCode,
-                chat_session_id: sessionId,
+                created_at: new Date().toISOString(),
                 ok: true,
                 status_message: '',
                 metadata: {
-                  stockInfo
+                  stockInfo,
+                  isProcessing: true
                 }
-              });
+              };
+              
+              addMessage(assistantMessageObj);
             }
             
             // 콘텐츠 누적하고 메시지 업데이트
@@ -350,28 +341,20 @@ function useMessageProcessing(
             // 기존 메시지를 새 콘텐츠로 업데이트
             updateMessage(assistantMessageId.current, {
               content: updatedContent,
-              timestamp: Date.now(),
+              created_at: new Date().toISOString()
             });
           },
           onComplete: (data) => {
             console.log('[MessageProcessing] 처리 완료:', data);
             
+            console.log('[MessageProcessing] 어시스턴트 메시지 ID:', assistantMessageId.current);
             // 타이머 중지
             stopTimer();
             
-            // 현재 메시지 목록 로깅
-            // console.log('[MessageProcessing] 상태 메시지 제거 전 ChatContext 메시지 목록:', 
-            //   JSON.stringify(
-            //     Array.isArray(getMessages?.()) 
-            //       ? getMessages?.().map(m => ({ id: m.id, role: m.role })) 
-            //       : '메시지 목록 접근 불가'
-            //   )
-            // );
-            
             // 상태 메시지가 아직 존재하는 경우에만 제거 (토큰이 없을 경우)
             try {
-              //console.log('[MessageProcessing] 상태 메시지 제거 전 ChatContext 메시지 수:', getMessages?.()?.length || 0);
-              //console.log('[MessageProcessing] 상태 메시지 제거 시도:', statusMessageObj.id);
+              console.log('[MessageProcessing] 상태 메시지 제거 전 ChatContext 메시지 수:', getMessages?.()?.length || 0);
+              console.log('[MessageProcessing] 상태 메시지 제거 시도:', statusMessageObj.id);
               
               // 제거 전 ID 문자열이 'status-'로 시작하는지 확인 (안전 검증)
               if (!statusMessageObj.id.startsWith('status-')) {
@@ -383,142 +366,128 @@ function useMessageProcessing(
               const currentMessages = getMessages?.() || [];
               // 사용자 메시지 수 확인
               const userMessageCount = currentMessages.filter(msg => msg.role === 'user').length;
-              //console.log('[MessageProcessing] 상태 메시지 제거 전 사용자 메시지 수:', userMessageCount);
               
               // 메시지 목록에서 상태 메시지 삭제
               removeMessage(statusMessageObj.id);
-              //console.log('[MessageProcessing] 상태 메시지 제거 완료:', statusMessageObj.id);
               
-              // useChatStore에서도 상태 메시지 제거
-              const messagesWithoutStatus = chatStore.messages.filter(
-                (msg: any) => msg.id !== statusMessageObj.id
-              );
-              chatStore.setMessages(messagesWithoutStatus);
+              // 구조화된 응답 데이터 처리
+              const responseData = data as IStructuredChatResponseData;
+              const { message_id, components, metadata, timestamp, elapsed } = responseData;
               
-              // 상태 메시지 제거 후 메시지 목록 확인
-              const messagesAfterRemoval = getMessages?.() || [];
-              const userMessageCountAfter = messagesAfterRemoval.filter(msg => msg.role === 'user').length;
-              //console.log('[MessageProcessing] 상태 메시지 제거 후 ChatContext 메시지 수:', messagesAfterRemoval.length);
-              //console.log('[MessageProcessing] 상태 메시지 제거 후 사용자 메시지 수:', userMessageCountAfter);
-              
-              // 사용자 메시지가 줄어들었는지 확인 (문제 발견)
-              if (userMessageCountAfter < userMessageCount) {
-                console.error('[MessageProcessing] 경고: 상태 메시지 제거 후 사용자 메시지 수가 감소함!');
-                console.error('[MessageProcessing] 사용자 메시지 수 변화:', userMessageCount, '->', userMessageCountAfter);
+              // 스트리밍으로 이미 메시지가 생성되었다면 기존 메시지 업데이트
+              if (assistantMessageId.current) {
+                console.log('[MessageProcessing] 어시스턴트 메시지 업데이트 시작:', assistantMessageId.current);
+                
+                // 구조화된 컴포넌트 포함한 업데이트
+                updateMessage(assistantMessageId.current, {
+                  content: accumulatedContent.current, // 기존 누적된 텍스트 유지
+                  metadata: {
+                    components: components, // 구조화된 컴포넌트 추가
+                    responseId: metadata?.responseId,
+                    elapsed: elapsed || 0
+                  }
+                });
+                
+                console.log('[MessageProcessing] 어시스턴트 메시지 업데이트 완료:', assistantMessageId.current);
+                
+                // Zustand 스토어의 메시지도 업데이트
+                const currentMessages = getMessages?.() || [];
+                const messageToUpdate = currentMessages.find(msg => msg.id === assistantMessageId.current);
+                
+                if (messageToUpdate) {
+                  console.log('[MessageProcessing] 메시지 업데이트 완료 (메시지 수:', getMessages?.()?.length || 0, ')');
+                }
+              } else {
+                // 텍스트 콘텐츠 확인
+                let textContent = '';
+                console.log('[MessageProcessing] 구조화된 컴포넌트:', components);
+                if (components && components.length > 0) {
+                  // 첫 번째 텍스트 컴포넌트 내용을 기본 텍스트로 사용
+                  const textComponent = components.find(c => c.type === 'paragraph' || c.type === 'heading');
+                  if (textComponent) {
+                    if (textComponent.type === 'paragraph') {
+                      textContent = textComponent.content;
+                    } else if (textComponent.type === 'heading') {
+                      textContent = textComponent.content;
+                    }
+                  }
+                }
+                
+                console.log('[MessageProcessing] 어시스턴트 메시지:', textContent);
+
+                // 어시스턴트 메시지 직접 IChatMessageDetail 타입으로 생성
+                const assistantMessageObj: IChatMessageDetail = {
+                  id: message_id || `assistant-${uuidv4()}`,
+                  role: 'assistant',
+                  content: textContent,
+                  content_expert: data.response_expert,
+                  chat_session_id: sessionId || '',
+                  stock_name: stockInfo.stockName,
+                  stock_code: stockInfo.stockCode,
+                  created_at: new Date(timestamp || Date.now()).toISOString(),
+                  ok: true,
+                  status_message: '',
+                  metadata: {
+                    stockInfo,
+                    responseId: metadata?.responseId,
+                    elapsed: elapsed || 0,
+                    components: components // 메타데이터에 컴포넌트 추가
+                  }
+                };
+                
+                console.log('[MessageProcessing] 어시스턴트 메시지 객체 생성:', assistantMessageObj);
+
+                // 현재 메시지 목록 저장
+                const currentChatMessages = getMessages?.() || [];
+                console.log('[MessageProcessing] 어시스턴트 메시지 추가 전 메시지 수:', currentChatMessages.length);
+                
+                // 어시스턴트 메시지 추가
+                addMessage(assistantMessageObj);
+                
+                // 메시지 추가 후 상태 확인
+                const updatedChatMessages = getMessages?.() || [];
+                console.log('[MessageProcessing] 어시스턴트 메시지 추가 후 메시지 수:', updatedChatMessages.length);
+
+                console.log('[MessageProcessing] 스토어에 스트리밍 없는 메시지 추가:', assistantMessageObj.id);
               }
-              
-              console.log('[MessageProcessing] Zustand 스토어에서 상태 메시지 제거 (완료 시):', statusMessageObj.id);
+            
             } catch (error) {
               console.log('[MessageProcessing] 상태 메시지가 이미 제거됨');
             }
             
-            // 스트리밍으로 이미 메시지가 생성되었다면 기존 메시지 업데이트
-            if (assistantMessageId.current) {
-              const finalContent = data.response;
-              const finalContentExpert = data.response_expert;
-              
-              console.log('[MessageProcessing] 어시스턴트 메시지 업데이트 시작:', assistantMessageId.current);
-              updateMessage(assistantMessageId.current, {
-                content: finalContent,
-                content_expert: finalContentExpert,
-                responseId: data.metadata?.responseId,
-                elapsed: data.elapsed || 0,
-                _forceUpdate: Math.random() // 리렌더링 강제
-              });
-              console.log('[MessageProcessing] 어시스턴트 메시지 업데이트 완료:', assistantMessageId.current);
-              
-              // 현재 전체 메시지 목록 로그
-              console.log('[MessageProcessing] 현재 메시지 목록 상태를 확인하려면 ChatContext 상태를 검사하세요');
-              
-              // Zustand 스토어의 메시지도 업데이트
-              const currentMessages = chatStore.messages;
-              const messageToUpdate = currentMessages.find(msg => msg.id === assistantMessageId.current);
-              
-              if (messageToUpdate) {
-                // 새 메시지 객체 생성 (참조 변경을 위해)
-                const updatedMessage = {
-                  ...messageToUpdate,
-                  content: finalContent,
-                  content_expert: finalContentExpert,
-                  metadata: {
-                    ...messageToUpdate.metadata,
-                    responseId: data.metadata?.responseId,
-                    elapsed: data.elapsed || 0
-                  }
-                };
-                
-                // 메시지 배열 업데이트 (새 배열 생성)
-                // 이 때 기존 모든 메시지를 유지
-                const newMessages = currentMessages.map(msg => 
-                  msg.id === assistantMessageId.current ? updatedMessage : msg
-                );
-                
-                // Zustand 스토어 상태 업데이트
-                chatStore.setMessages(newMessages);
-                console.log('[MessageProcessing] Zustand 스토어 메시지 업데이트 (메시지 수:', newMessages.length, ')');
-                
-                // ChatContext 메시지 상태와 Zustand 스토어 상태 동기화 확인
-                const chatContextMessages = getMessages?.() || [];
-                console.log('[MessageProcessing] 메시지 동기화 상태 - ChatContext:', chatContextMessages.length, 'Zustand:', newMessages.length);
-                
-                // ChatContext 메시지와 Zustand 스토어 메시지가 불일치하는 경우 동기화 
-                if (chatContextMessages.length !== newMessages.length) {
-                  console.log('[MessageProcessing] 경고: 메시지 동기화 불일치 감지! 강제 동기화 시도');
-                }
-              }
-              
-              // 참조 초기화
-              assistantMessageId.current = null;
-            } else {
-              // 스트리밍 없이 완료된 경우 (혹시 모를 상황 대비)
-              const assistantMessageObj: ChatMessage = {
-                id: data.message_id || `assistant-${uuidv4()}`,
-                role: 'assistant',
-                content: data.response,
-                content_expert: data.response_expert,
-                timestamp: Date.now(),
-                responseId: data.metadata?.responseId,
-                elapsed: data.elapsed || 0,
-                stockInfo
-              };
-              
-              // 현재 메시지 목록 저장
-              const currentChatMessages = getMessages?.() || [];
-              console.log('[MessageProcessing] 어시스턴트 메시지 추가 전 메시지 수:', currentChatMessages.length);
-              
-              // 어시스턴트 메시지 추가
-              addMessage(assistantMessageObj);
-              
-              // Zustand 스토어에도 어시스턴트 메시지 추가 (스트리밍 없는 경우)
-              chatStore.addMessage({
-                id: assistantMessageObj.id,
-                role: 'assistant',
-                content: data.response,
-                content_expert: data.response_expert,
-                created_at: new Date().toISOString(),
-                stock_name: stockInfo.stockName,
-                stock_code: stockInfo.stockCode,
-                chat_session_id: sessionId,
-                ok: true,
-                status_message: '',
-                metadata: {
-                  stockInfo,
-                  responseId: data.metadata?.responseId,
-                  elapsed: data.elapsed || 0
-                }
-              });
-              
-              console.log('[MessageProcessing] Zustand 스토어에 스트리밍 없는 메시지 추가:', assistantMessageObj.id);
-              
-              // 메시지 추가 후 상태 확인
-              const updatedChatMessages = getMessages?.() || [];
-              console.log('[MessageProcessing] 어시스턴트 메시지 추가 후 메시지 수:', updatedChatMessages.length);
-            }
-            
-            setProcessing(false);
-            
             // 처리 완료 콜백 호출
             onProcessingComplete();
+
+            // 디버깅 로그 정리 (components 변수 참조 오류 수정)
+            console.log('[MessageProcessing] 처리 완료 및 응답 ID:', assistantMessageId.current);
+            
+            try {
+              // 상태 메시지가 제거되었는지 확인 (구조화된 메시지 사용 시)
+              const allMessages = getMessages?.() || [];
+              const assistantMsg = allMessages.find(msg => msg.id === assistantMessageId.current);
+              
+              if (assistantMsg) {
+                console.log('[MessageProcessing] 최종 메시지 메타데이터:', {
+                  id: assistantMessageId.current,
+                  componentsCount: assistantMsg.metadata?.components?.length || 0
+                });
+              }
+            } catch (error) {
+              console.log('[MessageProcessing] 메시지 검증 중 오류 발생');
+            }
+
+            // 스트리밍 완료 후 ChatContext 검증
+            const finalContextMessages = getMessages?.() || [];
+            console.log('[MessageProcessing] 처리 완료 후 상태 확인:', {
+              chatContextCount: finalContextMessages.length,
+              chatStoreCount: getMessages?.()?.length || 0
+            });
+            
+            // ChatContext가 비어있고 ChatStore에 메시지가 있으면 복원
+            if (finalContextMessages.length === 0 && getMessages?.()?.length > 0) {
+              console.log('[MessageProcessing] ChatContext 메시지 복원 필요');
+              // 복원 로직 또는 이벤트 발생
+            }
           },
           onError: (error) => {
             console.error('[MessageProcessing] 스트리밍 오류:', error);
@@ -529,27 +498,11 @@ function useMessageProcessing(
             // 상태 메시지를 오류 메시지로 변경
             updateMessage(statusMessageObj.id, {
               content: `오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`,
-              isProcessing: false,
-              elapsedStartTime: undefined
-            });
-            
-            // useChatStore에서도 상태 메시지 업데이트
-            const storeMessages = chatStore.messages;
-            const updatedStoreMessages = storeMessages.map((msg: any) => {
-              if (msg.id === statusMessageObj.id) {
-                return {
-                  ...msg,
-                  content: `오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`,
-                  metadata: {
-                    ...msg.metadata,
-                    isProcessing: false,
-                  }
-                };
+              metadata: {
+                ...statusMessageObj.metadata,
+                isProcessing: false
               }
-              return msg;
             });
-            chatStore.setMessages(updatedStoreMessages);
-            console.log('[MessageProcessing] Zustand 스토어에서 상태 메시지 오류 업데이트:', statusMessageObj.id);
             
             setProcessing(false);
             toast.error(`메시지 처리 중 오류: ${error.message || '알 수 없는 오류'}`);
@@ -592,8 +545,10 @@ function useMessageProcessing(
     questionCount,
     startTimer,
     stopTimer,
-    getMessages
+    getMessages,
+    isAdmin
   ]);
+
 
   return {
     elapsedTime,

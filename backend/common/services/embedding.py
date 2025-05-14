@@ -6,19 +6,10 @@ from typing import List, Dict, Any, Tuple
 import logging
 import re
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from common.utils.util import measure_time_async
+#from common.utils.util import measure_time_async
 import openai
 from openai import OpenAIError, Timeout
-# 순환 참조 방지를 위해 직접 임포트하지 않고 typing에서 TYPE_CHECKING을 사용
-from typing import TYPE_CHECKING
-
-# TYPE_CHECKING은 런타임에는 False로 평가됨
-if TYPE_CHECKING:
-    from common.services.embedding_models import EmbeddingModelManager, EmbeddingProvider, EmbeddingProviderFactory, EmbeddingModelConfig, EmbeddingModelType
-else:
-    # enum은 순환 참조 없이 직접 가져올 수 있음
-    from common.services.embedding_models import EmbeddingModelType
-
+from .embedding_models import EmbeddingModelManager, EmbeddingProvider, EmbeddingProviderFactory, EmbeddingModelConfig, EmbeddingModelType
 from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
@@ -37,24 +28,42 @@ class EmbeddingService:
             self.current_model_config.provider_name,
             self.current_model_config.name
         )
-
         
-        # VectorStoreManager는 필요시 외부에서 생성하여 사용
-        # (관련 코드 삭제)
-        
+        #self.create_pinecone_index(self.current_model)
+    async def aclose(self):
+        """비동기 임베딩 제공자의 리소스를 정리합니다."""
+        try:
+            if hasattr(self.provider, 'aclose') and callable(self.provider.aclose):
+                await self.provider.aclose()
+                logger.info(f"임베딩 제공자 {self.current_model_config.provider_name} 리소스 정리 완료")
+            else:
+                logger.warning(f"임베딩 제공자 {self.current_model_config.provider_name}에 aclose 메서드가 없습니다.")
+        except Exception as e:
+            logger.error(f"임베딩 제공자 리소스 정리 중 오류 발생: {str(e)}")
+    
+    def close(self):
+        """동기 임베딩 제공자의 리소스를 정리합니다."""
+        if hasattr(self.provider, 'close') and callable(self.provider.close):
+            try:
+                self.provider.close()
+                #logger.info(f"임베딩 제공자 {self.current_model_config.provider_name} 동기 리소스 정리 완료")
+            except Exception as e:
+                logger.error(f"임베딩 제공자 동기 리소스 정리 중 오류 발생: {str(e)}")
+    
+    def __del__(self):
+        """소멸자. 객체가 소멸할 때 동기 리소스를 정리합니다."""
+        self.close()
+        #if hasattr(self.provider, 'aclose') and callable(self.provider.aclose):
+            #logger.warning(f"임베딩 제공자 {self.current_model_config.provider_name}의 비동기 리소스는 명시적으로 aclose()를 호출해야 합니다.")
+            
     def change_model(self, model_type: EmbeddingModelType):
-        # 지연 임포트: 필요할 때만 임포트
-        from common.services.embedding_models import EmbeddingProviderFactory
-        
         self.current_model_config = self.model_manager.get_model_config(model_type)
         self.provider = EmbeddingProviderFactory.create_provider(
             self.current_model_config.provider_name,
             self.current_model_config.name
         )
         logger.info(f"모델 변경: {model_type}")
-    def get_model_name(self) -> str:
-        return self.current_model_config.name
-    
+        
     def get_model_type(self) -> EmbeddingModelType:
         return EmbeddingModelType(self.current_model_config.name)
         
@@ -95,7 +104,7 @@ class EmbeddingService:
     @retry(
         stop=stop_after_attempt(3),  # 최대 3번 시도
         wait=wait_exponential(multiplier=1, min=4, max=10),  # 지수 백오프
-        retry=retry_if_exception_type(Timeout)  # 타임아웃 예외 시 재시도
+        retry=retry_if_exception_type((Timeout, openai.APITimeoutError, openai.APIError, openai.RateLimitError))  # 타임아웃 예외 시 재시도
     )
     def create_embeddings_batch_sync(self, texts: List[str], user_id: str = None, project_type: str = None, existing_db_session = None) -> List[List[float]]:
         """텍스트 배치의 임베딩을 생성 (동기 버전)"""
@@ -128,11 +137,18 @@ class EmbeddingService:
                 if not emb or len(emb) != self.current_model_config.dimension:
                     logger.error(f"잘못된 임베딩 차원 (인덱스 {i}): {len(emb) if emb else 0}")
                     continue
-                    
-
             
             return embeddings
-            
+
+        except (openai.APITimeoutError, Timeout) as e:
+            logger.error(f"OpenAI 타임아웃 발생: {str(e)}")
+            raise
+        except openai.RateLimitError as e:
+            logger.error(f"OpenAI 레이트 리밋 발생: {str(e)}")
+            raise
+        except openai.APIError as e:
+            logger.error(f"OpenAI API 오류: {str(e)}")
+            raise        
         except Exception as e:
             logger.error(f"임베딩 생성 중 오류 발생: {str(e)}")
             raise

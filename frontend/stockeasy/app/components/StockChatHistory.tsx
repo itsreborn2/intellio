@@ -183,10 +183,37 @@ export default function StockChatHistory({
     //console.log('[히스토리 패널] 채팅 세션 선택:', session.id);
     try {
       // 세션에 속한 메시지 가져오기
+      // 백엔드 ChatMessageListResponse 타입 참고
+      // class ChatMessageListResponse(BaseResponse):
+      // """채팅 메시지 목록 응답 모델"""
+      // messages: List[ChatMessageResponse]
+      // total: int
+
       const response = await axios.get(`${API_ENDPOINT_STOCKEASY}/chat/sessions/${session.id}/messages`, { withCredentials: true });
       
       if (response.data.ok && Array.isArray(response.data.messages)) {
-        //console.log('[히스토리 패널] 채팅 메시지 로드 성공', response.data.messages.length);
+        console.log('[히스토리 패널] 채팅 메시지 로드 성공', response.data.messages.length);
+        
+        // 어시스턴트 메시지의 컴포넌트만 로그 출력
+        response.data.messages.forEach((message: any) => {
+          if (message.role === "assistant") {
+            // 컴포넌트 직접 속성 확인
+            if (message.components) {
+              console.log('[히스토리 패널] 어시스턴트 메시지 컴포넌트(직접):', message.id, message.components.length + '개');
+              console.log('[히스토리 패널] 첫 번째 컴포넌트 샘플:', message.components[0]);
+            } 
+            // 메타데이터에 컴포넌트가 있는지 확인
+            else if (message.metadata && message.metadata.components) {
+              console.log('[히스토리 패널] 어시스턴트 메시지 컴포넌트(메타데이터):', message.id, message.metadata.components.length + '개');
+              console.log('[히스토리 패널] 첫 번째 컴포넌트 샘플:', message.metadata.components[0]);
+              
+              // 메타데이터에서 직접 컴포넌트로 데이터 이동
+              message.components = message.metadata.components;
+            } else {
+              console.log('[히스토리 패널] 어시스턴트 메시지 컴포넌트 없음:', message.id);
+            }
+          }
+        });
         
         // Zustand 스토어를 사용하여 메시지 저장 및 UI 업데이트
         loadChatSession(session.id, session.title, response.data.messages);
