@@ -333,7 +333,7 @@ class WebSearchAgent(BaseAgent):
             default_query = f"{stock_name if stock_name else ''} {query}".strip()
             return [default_query]
     
-    @async_retry(retries=1, delay=1.0, exceptions=(Exception,))
+    @async_retry(retries=0, delay=1.0, exceptions=(Exception,))
     async def _perform_web_searches(self, search_queries: List[str]) -> List[Dict[str, Any]]:
         """
         생성된 쿼리를 사용하여 웹 검색을 수행합니다.

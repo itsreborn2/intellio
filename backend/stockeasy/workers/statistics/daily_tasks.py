@@ -80,7 +80,7 @@ def generate_daily_stats(self):
         # 비율 계산 (0으로 나누기 방지)
         sessions_per_user_total = (total_sessions / total_users) if total_users > 0 else 0
         sessions_per_user_today = (new_sessions_today / active_users_today) if active_users_today > 0 else 0
-        users_per_session_today = (active_users_today / total_users) if new_sessions_today > 0 else 0
+        users_per_session_today = round((active_users_today / total_users), 3) if new_sessions_today > 0 else 0
         # Google Sheet에 기록할 데이터 행 준비
         # 컬럼 순서: 일자, 전체사용자, 신규사용자, 오늘사용자, 전체 채팅세션, 오늘 신규 채팅세션, 전체세션/전체사용자, 오늘세션/오늘사용자, 오늘사용자/전체사용자
         data_row = [

@@ -178,7 +178,7 @@ async def check_1page_정정신고(report_file_path: str) -> str:
         print(f"파일명: {file_name}, 일자: {target_year}-{target_month:02d}-{target_day:02d}, GCS 수정")
         print(f"{file_name} -> {file_name_new}\n")
 
-async def process_reports(db: AsyncSession, company_code: str, reports_dir: str, test_file: str = None, skip_annual_first: bool = True):
+async def process_reports(db: AsyncSession, company_code: str, reports_dir: str, test_file: str = None, skip_annual_first: bool = True) -> bool:
     """
     특정 회사의 보고서 파일을 읽어 요약재무정보 추출
 
@@ -201,7 +201,8 @@ async def process_reports(db: AsyncSession, company_code: str, reports_dir: str,
         except Exception as e:
             logger.error(f"초기 다운로드 중 오류 발생 ({company_code}): {e}")
             # 오류 발생 시 디렉토리가 비어있을 수 있으므로 함수 종료 또는 다른 처리 필요
-            return
+            return False
+
 
     # GCS 서비스 초기화
     storage_service = GoogleCloudStorageService(
@@ -224,7 +225,8 @@ async def process_reports(db: AsyncSession, company_code: str, reports_dir: str,
     local_report_files = [f for f in os.listdir(company_dir) if f.endswith(".pdf")]
     logger.info(f"로컬 파일 개수 ({company_code}): {len(local_report_files)}")
 
-    # GCS 파일 개수가 로컬 파일 개수보다 많으면 다운로드 시도
+    # test_file이 없을때만, GCS 파일 개수가 로컬 파일 개수보다 많으면 다운로드 시도
+    # 특정 파일을 지정한게 아니라, 종목을 지정한 케이스
     if len(gcs_files) > len(local_report_files):
         logger.info(f"GCS 파일({len(gcs_files)})이 로컬 파일({len(local_report_files)})보다 많아 다운로드를 시작합니다 ({company_code}).")
         try:
@@ -254,7 +256,7 @@ async def process_reports(db: AsyncSession, company_code: str, reports_dir: str,
 
     if not report_files:
         logger.warning(f"처리할 보고서 파일이 없습니다: {company_dir}")
-        return
+        return False
 
     # await temp_gcs(report_files, company_dir)
     # return
@@ -281,7 +283,7 @@ async def process_reports(db: AsyncSession, company_code: str, reports_dir: str,
 
         # 파일명 파싱: 일자_종목명_종목코드_섹터_보고서유형_DART.pdf
         # 예: 20200330_SK하이닉스_000660_전기·전자_annual_DART.pdf
-        #print(f"test_mode: {test_mode}, test_file: {test_file}, file_name: {file_name}")
+        print(f"test_mode: {test_mode}, test_file: {test_file}, file_name: {file_name}")
         if test_mode and not test_file in file_name:
             continue
         parts = file_name.split("_")
@@ -376,6 +378,11 @@ async def process_reports(db: AsyncSession, company_code: str, reports_dir: str,
                 
                 if result["success"]:
                     logger.info(f"처리 완료: {file_name}, 항목 수: {result['details'].get('items_count', 0)}")
+                    # 로컬에서 파일 처리 후 삭제.
+                    if test_file:
+                        tmp_file_path = f'stockeasy/local_cache/tmp/{file_name}'
+                        os.remove(tmp_file_path)
+                        print(f"완료 후 파일 삭제 : {tmp_file_path}")
                 else:
                     logger.error(f"처리 실패: {file_name}, 오류: {result['message']}")
             except Exception as process_err:
@@ -386,6 +393,7 @@ async def process_reports(db: AsyncSession, company_code: str, reports_dir: str,
         except Exception as e:
             logger.error(f"파일 처리 중 오류 발생: {file_name}, 오류: {str(e)}")
             continue
+    return True
 
 async def process_one_company(company_code: str, reports_dir: str, test_file: str = None, skip_annual_first: bool = True):
     """
@@ -401,11 +409,16 @@ async def process_one_company(company_code: str, reports_dir: str, test_file: st
     try:
         if test_file:
             company_code = test_file.split("_")[2]
+            print(f"테스트 파일 있음. 파일만 처리: {test_file}")
         db = await get_db_session()
         logger.info(f"회사 코드 처리 시작: {company_code}")
-        await process_reports(db=db, company_code=company_code, reports_dir=reports_dir, 
+        result = await process_reports(db=db, company_code=company_code, reports_dir=reports_dir, 
                               test_file=test_file, skip_annual_first=skip_annual_first)
-        logger.info(f"회사 코드 처리 완료: {company_code}")
+        if result:
+            logger.info(f"회사 코드 처리 완료: {company_code}")
+        else:
+            logger.error(f"회사 코드 처리 실패: {company_code}")
+        return result
     except Exception as e:
         logger.error(f"회사 코드 처리 중 오류 발생: {company_code}, 오류: {str(e)}")
     finally:
@@ -537,13 +550,144 @@ async def make_code_list():
     for f in os.listdir('stockeasy/local_cache/tmp'):
         if f.endswith(".pdf"):
             code = f.split("_")[2]
+            date = f.split("_")[0]
+            year = int(date[:4])
+            if year < 2025:  # 2025년 이후 보고서만
+                continue
             #code_list.append(code)
             file_list.append(  os.path.basename(f) )
     return file_list
+async def move_file_to_classified(file_list: list = None):
+    """
+    원본 위치(Stockeasy/collected_auto/정기보고서/)에서 사업보고서 파일을 읽어서
+    파일명의 날짜 부분을 확인하여 일자가 00인 경우 01로 수정하고
+    새로운 위치(Stockeasy/classified/정기보고서/{종목코드}/)로 이동합니다.
+    
+    Args:
+        file_list: 처리할 파일 목록 (없으면 모든 파일 처리)
+    """
+    storage_service = GoogleCloudStorageService(
+        project_id=settings.GOOGLE_CLOUD_PROJECT,
+        bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET_STOCKEASY,
+        credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS
+    )
+    gcs_path = 'Stockeasy/collected_auto/정기보고서/'
+    target_gcs_base = 'Stockeasy/classified/정기보고서/'
+    
+    # 원본 디렉토리의 모든 파일 목록 가져오기
+    gcs_files = await storage_service.list_files_in_folder(gcs_path)
+    processed_files = []
+    
+    logger.info(f"원본 위치에서 {len(gcs_files)}개 파일 발견")
+    
+    for blob_path in gcs_files:
+        try:
+            base_file_name = os.path.basename(blob_path)
+            
+            # 파일 이름 형식 검증
+            parts = base_file_name.split('_')
+            if len(parts) < 6:
+                logger.warning(f"파일명 형식이 맞지 않습니다: {base_file_name}")
+                continue
+            
+            # 특정 파일 목록이 제공된 경우 해당 파일만 처리
+            if file_list and base_file_name not in file_list:
+                continue
+            
+            # 종목코드 및 날짜 추출
+            date_str = parts[0]
+            company_code = parts[2]
+            
+            # 새 파일명 계산 (일자가 00인 경우 01로 수정)
+            new_file_name = base_file_name
+            if len(date_str) == 8 and date_str[6:8] == '00':
+                new_date_str = date_str[:6] + '01'
+                new_file_name = base_file_name.replace(date_str, new_date_str, 1)
+                logger.info(f"파일명 날짜 수정: {base_file_name} -> {new_file_name}")
+            
+            # 이동할 타겟 경로 생성
+            target_gcs_path = f"{target_gcs_base}{company_code}/{new_file_name}"
+            
+            # 파일 이동
+            await storage_service.move_file(blob_path, target_gcs_path)
+            logger.info(f"파일 이동 완료: {base_file_name} -> {target_gcs_path}")
+            
+            processed_files.append(new_file_name)
+            
+        except Exception as e:
+            logger.error(f"파일 처리 중 오류 발생: {blob_path}, 오류: {str(e)}")
+    
+    logger.info(f"총 {len(processed_files)}개 파일이 새 위치로 이동되었습니다.")
+    return processed_files
+async def make_new_file_list_from_gcs_정기보고서():
+    """
+    GCS intellio-stockeasy-storage/Stockeasy/collected_auto/정기보고서 에 남아있는 파일 리스트를 가져온다.
+    """
+    storage_service = GoogleCloudStorageService(
+        project_id=settings.GOOGLE_CLOUD_PROJECT,
+        bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET_STOCKEASY,
+        credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS
+)
+    gcs_path = 'Stockeasy/collected_auto/정기보고서/'
+    target_gcs_base = 'Stockeasy/classified/정기보고서/'
+    gcs_files = await storage_service.list_files_in_folder(gcs_path)
+    file_list = []
+
+    for blob in gcs_files:
+        base_file_name = os.path.basename(blob)
+        tmp_path = 'stockeasy/local_cache/tmp'
+        os.makedirs(tmp_path, exist_ok=True)
+        if not os.path.exists(os.path.join(tmp_path, base_file_name)):
+            content = await storage_service.download_file(blob)
+            saved_file_path = os.path.join(tmp_path, base_file_name)
+            with open(saved_file_path, 'wb') as f:
+                f.write(content)
+            file_list.append(saved_file_path)
+
+            
+
+
+    return file_list
+async def change_file_name_wrong_date():
+    """
+    파일 이름의 날짜 부분에서 일자가 00으로 되어 있는 파일을 찾아 01로 변경합니다.
+    예: 20231200_회사명_코드_... -> 20231201_회사명_코드_...
+    """
+    tmp_path = 'stockeasy/local_cache/tmp'
+    os.makedirs(tmp_path, exist_ok=True)
+    
+    # 디렉토리의 모든 PDF 파일 가져오기
+    files = [f for f in os.listdir(tmp_path) if f.endswith('.pdf')]
+    renamed_count = 0
+    
+    for file_name in files:
+        parts = file_name.split('_')
+        if len(parts) < 6:  # 파일명 형식 확인
+            logger.warning(f"파일명 형식이 맞지 않습니다: {file_name}")
+            continue
+        
+        # 날짜 부분 확인 (첫 번째 부분)
+        date_str = parts[0]
+        if len(date_str) == 8 and date_str[6:8] == '00':
+            # 일자가 00인 경우 01로 변경
+            new_date_str = date_str[:6] + '01'
+            new_file_name = file_name.replace(date_str, new_date_str, 1)
+            
+            # 파일 이름 변경
+            old_path = os.path.join(tmp_path, file_name)
+            new_path = os.path.join(tmp_path, new_file_name)
+            
+            try:
+                os.rename(old_path, new_path)
+                renamed_count += 1
+                logger.info(f"파일명 변경: {file_name} -> {new_file_name}")
+            except Exception as e:
+                logger.error(f"파일명 변경 중 오류 발생: {file_name}, 오류: {str(e)}")
+    
+    logger.info(f"총 {renamed_count}개 파일의 이름이 변경되었습니다.")
+    return renamed_count
 async def main():
     """메인 함수"""
-    # await extract_error_files()
-    # return
     
     parser = argparse.ArgumentParser(description="요약재무정보 추출")
     parser.add_argument("--company", required=True, help="회사 코드 (예: 005930)")
@@ -552,55 +696,14 @@ async def main():
     parser.add_argument("--batch-size", type=int, default=3, help="한 번에 병렬로 처리할 회사 수 (기본값: 3)")
     args = parser.parse_args()
 
-    # storage_service = GoogleCloudStorageService(
-    #     project_id=settings.GOOGLE_CLOUD_PROJECT,
-    #     bucket_name=settings.GOOGLE_CLOUD_STORAGE_BUCKET_STOCKEASY,
-    #     credentials_path=settings.GOOGLE_APPLICATION_CREDENTIALS
-    # )
-    # new_files = await get_gcs_new_files(storage_service)
-    # print(f"새로운 파일 수: {len(new_files)}")
-    # for f in new_files:
-    #     # backend\stockeasy\local_cache\financial_reports\정기보고서\000020
-    #     base_file_name = os.path.basename(f)
-    #     tmp_path = 'stockeasy/local_cache/tmp'
-    #     if not os.path.exists(tmp_path):
-    #         os.makedirs(tmp_path)
-    #     if not os.path.exists(os.path.join(tmp_path, base_file_name)):
-    #         content = await storage_service.download_file(f)
-            
-    #         # 로컬에 저장
-    #         with open(os.path.join(tmp_path, base_file_name), 'wb') as f:
-    #             f.write(content)
-
-    #     code = base_file_name.split("_")[2]
-    #     source_path = f'{tmp_path}/{base_file_name}'
-    #     destination_path = f'stockeasy/local_cache/financial_reports/정기보고서/{code}/{base_file_name}'
-    #     shutil.copy(source_path, destination_path)
-    # return
     # 로깅 설정
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-    # "002810", "214370", "218410", "281740", "105630"
-    
-    #code_list = [
-    #     "218410", "281740", "105630",
-    #     "086790", "042700", "000050", "007330", "025540",
-    #     "036800", "065510", "027580", "066570", "053030",
-    #     "148150", "159580", "199820", "263020", "267270",
-    #     "376300", "388790", "460860", "460930", "274090",
-    #     "333430", "338220", "348370", "353200", "360070",
-    #     "328130", "298000", "261780", "251970", "241590",
-    #     '000660', '005930', '006360', '010140', '011200', '011780', '012450', '035720', '058970', '103590', '161890', '196170', '204320', '214450', '278470'
-    # ]
-    # 274090 328130
-    #code_list = ['000660', '005930', '006360', '010140', '011200', '011780', '012450', '035720', '058970', '103590', '161890', '196170', '204320', '214450', '278470']
-
-    # 은행, 
-    #code_list = ["024110", "105560", "000810"]#, ,"316140", "055550", "086790", "138930", "175330", "323410", "006280", "001450", "078930", "002790", "071050", "000370", "005280", "003690", "001460", "001465"]
-    #code_list = ['333430', '025540' ,'338220', '066570', '065510']
     # 20230321_한국콜마_161890_화학_annual_DART
     tmp_file_list = await make_code_list()
-    #tmp_file_list = tmp_file_list[:10]
+    #tmp_file_list = await make_new_file_list_from_gcs_정기보고서()
+    print(f"tmp_file_list: {len(tmp_file_list)}")
+    #tmp_file_list = tmp_file_list[:1]
     test_file = ""
     if test_file:
         tmp_code = test_file.split("_")[2]
@@ -609,26 +712,35 @@ async def main():
     stock_info_service = StockInfoService()
     await asyncio.sleep(0.5)  # 1초만 대기 후 진행
     all_code_list = await stock_info_service.get_all_stock_codes()
-    # index = all_code_list.index('060230')
-    # print(f"index : {index}")
-    # return
     #all_code_list = ["900100","900140","900070","008700","950130","950210","950220","241560","950140","950160","950190"]
     end_index = len(all_code_list)
     end_index = len(tmp_file_list)
-    start_index = 10#1037
+    start_index = 0#1037
     window_size = 100
+
         
     try:
         print(f"args.company: {args.company}")
         if args.company and args.company == "all":
         # 여기 for문 작성
+            tmp_list = []
             for current_index in range(start_index, end_index, window_size):
                 end = min(current_index + window_size, end_index)
                 tmp_list = tmp_file_list[current_index:end]
+                #code_list = all_code_list[current_index:end]
                 
+                #print(f"현재 처리 범위: {current_index} ~ {end-1}, 종목 수: {len(code_list)}")
                 print(f"현재 처리 범위: {current_index} ~ {end-1}, 종목 수: {len(tmp_list)}")
                 
                 # 병렬 처리 실행
+                # await process_companies(
+                #     code_list=code_list,
+                #     reports_dir=args.dir,
+                #     test_file=test_file,
+                #     skip_annual_first=not args.process_all,
+                #     batch_size=args.batch_size
+                # )
+                
                 await process_companies_each_files(
                     file_list=tmp_list,
                     reports_dir=args.dir,
@@ -636,24 +748,7 @@ async def main():
                 )
 
             print(f"처리된 종목코드 : {tmp_list}")
-            # for current_index in range(start_index, end_index, window_size):
-            #     end = min(current_index + window_size, end_index)
-            #     code_list = all_code_list[current_index:end]
-            #     #code_list = ["001270","038530","024110","000540","021820","003550","016600","005290","007330","016360","036830","023760","032830","006220","316140","011390","034230","078930","360070","460860","003690"]
-            #     print(f"현재 처리 범위: {current_index} ~ {end-1}, 종목 수: {len(code_list)}")
-                    
-            #     print(f"처리할 회사 코드: {code_list}")
-                
-            #     # 병렬 처리 실행
-            #     await process_companies(
-            #         code_list=code_list,
-            #         reports_dir=args.dir,
-            #         test_file=test_file,
-            #         skip_annual_first=not args.process_all,
-            #         batch_size=args.batch_size
-            #     )
 
-            # print(f"처리된 종목코드 : {code_list}")
         else:
             #단일 종목, 개별테스트
             print(f"테스트 처리할 회사 코드: {args.company}")

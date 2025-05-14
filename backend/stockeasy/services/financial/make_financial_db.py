@@ -231,6 +231,7 @@ class MakeFinancialDataDB:
         Returns:
             처리 결과
         """
+        print(f"연결 포괄손익계산서 처리 시작: 기업={company_code}, 연도={report_year}, 분기={report_quarter or '연간'}, 파일={os.path.basename(report_file_path)}")
         start_time = datetime.now()
         logger.info(f"연결 포괄손익계산서 처리 시작: 기업={company_code}, 연도={report_year}, 분기={report_quarter or '연간'}, 파일={os.path.basename(report_file_path)}")
         

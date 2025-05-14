@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "닥이지",
-  description: "AI 기반 문서관리 솔루션",
+  description: "닥이지(DocEasy) AI 기반 문서관리 솔루션. 인텔리오(Intellio), 스탁이지(StockEasy)",
   icons: {
     icon: "/favicon.ico",
     apple: {
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "닥이지",
-    description: "AI 기반 문서관리 솔루션",
+    description: "닥이지(DocEasy) AI 기반 문서관리 솔루션. 인텔리오(Intellio), 스탁이지(StockEasy)",
     images: [
       {
         url: "https://doceasy.intellio.kr/og_doceasy.jpg",

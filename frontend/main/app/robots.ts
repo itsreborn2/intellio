@@ -7,13 +7,14 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        disallow: process.env.NODE_ENV === "production" ? [] : ["/"],
-      },
-      {
-        userAgent: "Yeti",
         allow: "/",
         disallow: ["/admin", "/auth"],
       },
+      // {
+      //   userAgent: "Yeti",
+      //   allow: "/",
+      //   disallow: ["/admin", "/auth"],
+      // },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,
   }
