@@ -866,7 +866,7 @@ class MakeFinancialDataDB:
                         continue
                     print(f"end keyword 체크(정확 매칭) : [{i}/{tot_lines}] '{stripped_line}', 시작페이지:{start_page}, 현재페이지 {page}")
                     diff = tot_lines - i
-                    if diff <= 6: # end keyword가 뒤에서 5번째줄 안쪽에 나타난거면, 자본변동표 분석 스킵
+                    if tot_lines > 30 and diff <= 7: # end keyword가 뒤에서 5번째줄 안쪽에 나타난거면, 자본변동표 분석 스킵
                         print("자본변동표 분석 스킵")
                         skip_자본변동표 = True
                     if start_page <= page: # start보다 뒤쪽에서 만나야제.
@@ -1981,6 +1981,7 @@ class MakeFinancialDataDB:
         # LLM 호출에 성공했거나, 일부 실패했지만 데이터가 있는 경우 계속 진행
         financial_items = structured_data.get("financial_summary", [])
         logger.info(f"LLM 데이터 구조화 완료: 총 {len(financial_items)}개 항목 식별 (일부 오류 발생 가능), 소요시간={llm_duration:.1f}초")
+        pprint(financial_items, indent=2)
         
         if not financial_items and not has_llm_error: # 오류 없이 결과가 없는 경우
             logger.warning(f"LLM 구조화 결과 항목이 없습니다: {company_code}, 파일: {report_file_path}")

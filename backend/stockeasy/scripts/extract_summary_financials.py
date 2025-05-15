@@ -286,6 +286,8 @@ async def process_reports(db: AsyncSession, company_code: str, reports_dir: str,
         print(f"test_mode: {test_mode}, test_file: {test_file}, file_name: {file_name}")
         if test_mode and not test_file in file_name:
             continue
+        if test_file:
+            print(f"진행 : {test_file}")
         parts = file_name.split("_")
         if len(parts) < 6:  # 최소 6개 부분이 있어야 함
             logger.warning(f"파일명 형식이 맞지 않습니다: {file_name}")
@@ -543,7 +545,7 @@ async def get_gcs_new_files(storage_service):
     gcs_files = await storage_service.list_files_in_folder(gcs_path)
     #new_files = [os.path.basename(f) for f in gcs_files if f.endswith(".pdf")]
     return gcs_files
-async def make_code_list():
+async def make_code_list(year: int = 2025):
     code_list = []
     file_list = []
     # backend\stockeasy\local_cache\tmp\20210300_iM금융지주_139130_기타금융_Q1_DART.pdf
@@ -551,8 +553,8 @@ async def make_code_list():
         if f.endswith(".pdf"):
             code = f.split("_")[2]
             date = f.split("_")[0]
-            year = int(date[:4])
-            if year < 2025:  # 2025년 이후 보고서만
+            _year = int(date[:4])
+            if _year < year:  # 2025년 이후 보고서만
                 continue
             #code_list.append(code)
             file_list.append(  os.path.basename(f) )
@@ -639,6 +641,8 @@ async def make_new_file_list_from_gcs_정기보고서():
         os.makedirs(tmp_path, exist_ok=True)
         if not os.path.exists(os.path.join(tmp_path, base_file_name)):
             content = await storage_service.download_file(blob)
+
+            #stockeasy/local_cache/tmp 에 저장
             saved_file_path = os.path.join(tmp_path, base_file_name)
             with open(saved_file_path, 'wb') as f:
                 f.write(content)
@@ -693,15 +697,19 @@ async def main():
     parser.add_argument("--company", required=True, help="회사 코드 (예: 005930)")
     parser.add_argument("--dir", default="stockeasy/local_cache/financial_reports", help="보고서 파일 디렉토리")
     parser.add_argument("--process-all", action="store_true", help="모든 보고서 처리 (첫 annual 건너뛰기 없음)")
-    parser.add_argument("--batch-size", type=int, default=3, help="한 번에 병렬로 처리할 회사 수 (기본값: 3)")
+    parser.add_argument("--batch-size", type=int, default=10, help="한 번에 병렬로 처리할 회사 수 (기본값: 3)")
     args = parser.parse_args()
 
     # 로깅 설정
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     # 20230321_한국콜마_161890_화학_annual_DART
-    tmp_file_list = await make_code_list()
-    #tmp_file_list = await make_new_file_list_from_gcs_정기보고서()
+    
+    # 정기보고서는 아래 2개의 함수를 세트로 같이 처리해야됨.
+    #await make_new_file_list_from_gcs_정기보고서() # tmp 폴더로 다운로드
+    #await move_file_to_classified()
+    tmp_file_list = await make_code_list(2025) # tmp 폴더에 있는 파일을 리스팅
+    
     print(f"tmp_file_list: {len(tmp_file_list)}")
     #tmp_file_list = tmp_file_list[:1]
     test_file = ""
@@ -713,7 +721,7 @@ async def main():
     await asyncio.sleep(0.5)  # 1초만 대기 후 진행
     all_code_list = await stock_info_service.get_all_stock_codes()
     #all_code_list = ["900100","900140","900070","008700","950130","950210","950220","241560","950140","950160","950190"]
-    end_index = len(all_code_list)
+    #end_index = len(all_code_list)
     end_index = len(tmp_file_list)
     start_index = 0#1037
     window_size = 100
