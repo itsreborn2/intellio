@@ -129,9 +129,9 @@ export default function High52Section() {
 
   // 렌더링
   return (
-    <div className="bg-white rounded-lg p-4 border border-gray-200" ref={highHeaderRef}>
+    <div className="bg-white rounded border border-gray-100 px-2 md:px-4 py-1 md:py-2" ref={highHeaderRef}>
       <div className="flex justify-between items-center mb-4">
-        <div className="text-gray-700 font-semibold" style={{ fontSize: 'clamp(0.9rem, 1.1vw, 1.1rem)' }}>52주 신고가 주요 종목</div>
+        <h2 className="text-lg font-semibold text-gray-700 my-2">52주 신고가 주요 종목</h2>
         <div className="flex items-center space-x-2">
           {updateDate && (
             <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>

@@ -151,43 +151,80 @@ export default function IndustryCharts() {
   // updated 날짜 (예시: 오늘 날짜)
   const [updateDate, setUpdateDate] = useState<string | null>(null); // 타입을 string | null로 변경
   
-  // 업데이트 날짜를 로드하는 함수 추가 (IndisrtongrsChart.tsx와 동일 로직)
+  // 업데이트 날짜를 로드하는 함수 추가
   const loadUpdateDate = async () => {
     try {
-      const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+      // 파일 경로 정의 - ETFCurrentTable과 동일한 파일 참조
+      const cacheFilePath = '/requestfile/etf_sector/etf_table.csv?t=' + Date.now();
+      
+      // 파일 정보와 내용 가져오기
       const response = await fetch(cacheFilePath, { cache: 'no-store' });
       if (!response.ok) {
-        throw new Error(`날짜 데이터 파일 로드 실패: ${response.status}`);
+        throw new Error(`파일 로드 실패: ${response.status}`);
       }
+      
+      // 헤더에서 last-modified 날짜 가져오기
+      const lastModified = response.headers.get('last-modified');
+      const modifiedDate = lastModified ? new Date(lastModified) : null;
+      
+      // CSV 텍스트 파싱
       const csvText = await response.text();
       const parsedResult = Papa.parse(csvText, {
         header: true,
         skipEmptyLines: true,
       });
 
-      if (parsedResult.data && parsedResult.data.length > 0) {
+      // 날짜 및 시간 포맷팅
+      if (modifiedDate && !isNaN(modifiedDate.getTime())) {
+        // 마지막 수정 날짜/시간이 유효하면 사용
+        const month = String(modifiedDate.getMonth() + 1);
+        const day = String(modifiedDate.getDate()).padStart(2, '0');
+        const hours = String(modifiedDate.getHours()).padStart(2, '0');
+        const minutes = String(modifiedDate.getMinutes()).padStart(2, '0');
+        
+        // M/DD HH:MM 형식으로 설정
+        setUpdateDate(`${month}/${day} ${hours}:${minutes}`);
+      } else if (parsedResult.data && parsedResult.data.length > 0) {
+        // 마지막 수정 날짜를 가져올 수 없으면 CSV의 첫 번째 행의 날짜 사용
         const firstRow = parsedResult.data[0] as Record<string, string>; 
         const dateString = firstRow['날짜']; 
         if (dateString) {
-          const formatted = formatDateMMDD(dateString);
-          if (formatted) {
-            setUpdateDate(formatted);
+          const date = new Date(dateString);
+          if (!isNaN(date.getTime())) {
+            const month = String(date.getMonth() + 1);
+            const day = String(date.getDate()).padStart(2, '0');
+            // 현재 시간 사용 (파일 날짜만 있고 시간이 없는 경우)
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            
+            setUpdateDate(`${month}/${day} ${hours}:${minutes}`);
           } else {
-            console.error('IndustryCharts: 날짜 포맷 실패.');
-            setUpdateDate(null); // 포맷 실패 시 null로 설정
+            console.error('IndustryCharts: 날짜 파싱 실패:', dateString);
+            setFallbackDate();
           }
         } else {
           console.error('IndustryCharts: CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.');
-          setUpdateDate(null);
+          setFallbackDate();
         }
       } else {
         console.error('IndustryCharts: 날짜 CSV 파싱에 실패했거나 데이터가 없습니다.');
-        setUpdateDate(null);
+        setFallbackDate();
       }
     } catch (err) {
       console.error('IndustryCharts: 업데이트 날짜 로드 중 오류 발생:', err);
-      setUpdateDate(null);
+      setFallbackDate();
     }
+  };
+  
+  // 폴백 날짜 설정 함수 (오류 발생 시 현재 날짜/시간 사용)
+  const setFallbackDate = () => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1);
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    setUpdateDate(`${month}/${day} ${hours}:${minutes}`);
   };
 
   useEffect(() => {
@@ -291,12 +328,12 @@ export default function IndustryCharts() {
         <div className="flex flex-row items-center ml-auto">
           {/* updated: 평소에는 버튼 왼쪽, 캡처 중에는 오른쪽 끝 */}
           {!isCapturing && updateDate && (
-            <span
-              className="text-gray-600 text-xs mr-2"
-              style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+            <div
+              className="text-gray-600 text-xs mr-2 js-remove-for-capture"
+              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}
             >
-              updated 17:00 {updateDate}
-            </span>
+              updated {updateDate}
+            </div>
           )}
           {/* 모바일에서 숨기기 위한 div 추가 */}
           <div className="hidden"> {/* md:block 클래스 제거, hidden만 남김 */}
@@ -309,12 +346,12 @@ export default function IndustryCharts() {
             />
           </div>
           {isCapturing && updateDate && (
-            <span
-              className="text-gray-600 text-xs ml-2"
-              style={{ fontSize: 'clamp(0.65rem, 0.75vw, 0.75rem)' }}
+            <div
+              className="text-gray-600 text-xs ml-2 js-remove-for-capture"
+              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}
             >
-              updated 17:00 {updateDate}
-            </span>
+              updated {updateDate}
+            </div>
           )}
         </div>
       </div>

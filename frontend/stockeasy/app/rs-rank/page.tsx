@@ -307,42 +307,53 @@ export default function RSRankPage() {
     
     const loadUpdateDate = async () => {
       try {
-        // 로컬 캐시 파일에서 직접 로드
-        const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+        // 주식 데이터 CSV 파일에서 마지막 수정 날짜 가져오기
+        const cacheFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
         
-        // 로컬 캐시 파일 로드
+        // 헤더만 가져와서 Last-Modified 확인
         const response = await fetch(cacheFilePath, { cache: 'no-store' });
         
         if (!response.ok) {
-          throw new Error(`캐시 파일 로드 실패: ${response.status}`);
+          throw new Error(`주식 데이터 파일 로드 실패: ${response.status}`);
         }
         
-        const csvText = await response.text();
+        // 응답 헤더에서 Last-Modified 값 추출
+        const lastModified = response.headers.get('Last-Modified');
         
-        // CSV 파싱 및 데이터 처리
-        const parsedData = parseCSV(csvText);
-        
-        if (parsedData && parsedData.rows.length > 0) {
-          const dateString = parsedData.rows[0]['날짜']; // 첫 번째 행의 '날짜' 컬럼 값 사용
-          if (dateString) {
-            const formatted = formatDateMMDD(dateString);
-            if (formatted) {
-              setUpdateDate(formatted);
-            } else {
-              console.error('Failed to format update date from CSV.');
-               // setError('Failed to format update date from CSV.'); // 필요시 에러 상태 업데이트
-            }
-          } else {
-            console.error('Date column "날짜" not found or empty in date CSV.');
-            // setError('Date column "날짜" not found or empty in date CSV.');
-          }
+        if (lastModified) {
+          // Last-Modified 헤더에서 날짜와 시간 추출하여 포맷팅
+          const modifiedDate = new Date(lastModified);
+          const month = modifiedDate.getMonth() + 1; // getMonth()는 0부터 시작하므로 1 더함
+          const day = modifiedDate.getDate();
+          const hours = modifiedDate.getHours();
+          const minutes = modifiedDate.getMinutes();
+          
+          // M/DD HH:MM 형식으로 포맷팅
+          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          setUpdateDate(formattedDate);
         } else {
-          console.error('Failed to parse or empty date CSV.');
-          // setError('Failed to parse or empty date CSV.');
+          // Last-Modified 헤더가 없는 경우 현재 날짜/시간 사용
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const day = now.getDate();
+          const hours = now.getHours();
+          const minutes = now.getMinutes();
+          
+          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          setUpdateDate(formattedDate);
+          console.warn('주식 데이터 파일의 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
         }
       } catch (err) {
-        console.error('Failed to load update date:', err);
-        // setError(err instanceof Error ? err.message : String(err)); // 필요시 에러 상태 업데이트
+        console.error('업데이트 날짜 로드 실패:', err);
+        // 오류 발생 시 현재 날짜/시간을 사용
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const day = now.getDate();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        
+        const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        setUpdateDate(formattedDate);
       }
     };
     
@@ -1241,7 +1252,7 @@ export default function RSRankPage() {
   {/* 업데이트 날짜 표시 */}
   {updateDate && (
     <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-      updated 17:00 {updateDate}
+      updated {updateDate}
     </span>
   )}
   <div className="hidden md:block">
@@ -1249,7 +1260,7 @@ export default function RSRankPage() {
       tableRef={rsTableRef} 
       headerRef={rsHeaderRef} 
       tableName="RS 순위 TOP 200" 
-      updateDateText={updateDate ? `updated 17:00 ${updateDate}` : undefined}
+      updateDateText={updateDate ? `updated ${updateDate}` : undefined}
       // --- 복사(캡처) 시작/종료 시 입력 박스 숨김/표시를 위한 핸들러 연결 ---
       onStartCapture={() => setIsRsTableCapturing(true)}
       onEndCapture={() => setIsRsTableCapturing(false)}
@@ -1526,7 +1537,7 @@ export default function RSRankPage() {
                         {/* 업데이트 날짜 표시 */}
                         {updateDate && (
                           <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-                            updated 17:00 {updateDate}
+                            updated {updateDate}
                           </span>
                         )}
                         <div className="hidden md:block">
@@ -1534,7 +1545,7 @@ export default function RSRankPage() {
                             tableRef={highTableRef} 
                             headerRef={highHeaderRef} 
                             tableName="52주 신고가 주요 종목"
-                            updateDateText={updateDate ? `updated 17:00 ${updateDate}` : undefined}
+                            updateDateText={updateDate ? `updated ${updateDate}` : undefined}
                           />
                         </div>
                       </div>
@@ -1729,7 +1740,7 @@ export default function RSRankPage() {
             <div>
               <div className="p-2 md:p-4">
                 <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
-                  <div className="mb-3">
+                  <div className="mb-3 flex justify-between items-center">
                     <GuideTooltip
   title="RS상위 시장 비교차트"
   description={`RS 상위 21개 종목의 차트를 해당 종목이 속한 시장 지수(KOSPI, KOSDAQ)와 함께, 주봉 기준으로 52주간의 가격 변화를 비교합니다.`}
@@ -1738,11 +1749,17 @@ export default function RSRankPage() {
   collisionPadding={{ left: 260 }}
 >
   <span className="inline-flex items-center">
-    <h2 className="text-sm md:text-base font-semibold cursor-help">
+    <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help" data-state="closed">
       RS상위 시장 비교차트
     </h2>
   </span>
 </GuideTooltip>
+                    {/* 업데이트 날짜 표시 */}
+                    {updateDate && (
+                      <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+                        updated {updateDate}
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Array.from({length: 21}).map((_, index) => (

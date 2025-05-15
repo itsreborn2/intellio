@@ -154,9 +154,9 @@ export default function SectorLeaderSection() {
   }
 
   return (
-    <section className="bg-white rounded-lg p-4 border border-gray-200">
+    <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-1 md:py-2">
       <div ref={headerContainerRef} className="flex justify-between items-center mb-4">
-        <h2 className="font-semibold text-gray-700" style={{ fontSize: 'clamp(0.9rem, 1.1vw, 1.1rem)' }}>주도섹터 / 주도주</h2>
+        <h2 className="text-lg font-semibold text-gray-700 my-2">주도섹터 / 주도주</h2>
         <div className="flex items-center space-x-2">
           {updateDate && (
             <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>

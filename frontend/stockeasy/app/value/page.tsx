@@ -440,55 +440,54 @@ const ValuationPage = () => {
       setLoadingDate(true);
       setErrorDate(null);
       try {
-        // fetch 경로를 stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv로 변경
-        const response = await fetch('/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv'); 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const csvText = await response.text();
+        // per.csv 파일에서 마지막 수정 날짜 가져오기
+        const cacheFilePath = '/requestfile/value/per.csv';
         
-        // PapaParse를 사용하여 CSV 파싱 (stock-data 기준)
-        Papa.parse(csvText, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            if (results.errors.length > 0) {
-              console.error('CSV 파싱 오류:', results.errors);
-              setErrorDate('날짜 데이터 파싱 중 오류가 발생했습니다.');
-              return;
-            }
-            
-            const parsedData = results.data as Record<string, string>[];
-            
-            if (parsedData && parsedData.length > 0) {
-              const dateString = parsedData[0]['날짜']; // 첫 번째 행의 '날짜' 컬럼 값
-              if (dateString) {
-                const formattedDate = formatDateMMDD(dateString); // MM/DD 형식으로 변환
-                if (formattedDate) {
-                  setUpdateDate(formattedDate); // 상태 업데이트
-                } else {
-                  setErrorDate('날짜 형식이 올바르지 않습니다.');
-                }
-              } else {
-                setErrorDate('CSV에서 날짜 정보를 찾을 수 없습니다.');
-              }
-            } else {
-              setErrorDate('날짜 데이터가 비어있습니다.');
-            }
-          },
-          error: (error: any) => {
-            console.error('CSV 파싱 중 심각한 오류:', error);
-            setErrorDate('날짜 데이터 파싱 중 심각한 오류가 발생했습니다.');
-          }
-        });
-      } catch (err: unknown) {
-        console.error('날짜 데이터 로딩 오류:', err);
-        setErrorDate('날짜 데이터를 불러오는 데 실패했습니다.');
-        if (err instanceof Error) {
-          setErrorDate(`날짜 데이터를 불러오는 데 실패했습니다: ${err.message}`);
-        } else {
-          setErrorDate('알 수 없는 오류로 날짜 데이터를 불러오는 데 실패했습니다.');
+        // 헤더만 가져와서 Last-Modified 확인
+        const response = await fetch(cacheFilePath, { cache: 'no-store' });
+        
+        if (!response.ok) {
+          throw new Error(`per.csv 파일 로드 실패: ${response.status}`);
         }
+        
+        // 응답 헤더에서 Last-Modified 값 추출
+        const lastModified = response.headers.get('Last-Modified');
+        
+        if (lastModified) {
+          // Last-Modified 헤더에서 날짜와 시간 추출하여 포맷팅
+          const modifiedDate = new Date(lastModified);
+          const month = modifiedDate.getMonth() + 1; // getMonth()는 0부터 시작하므로 1 더함
+          const day = modifiedDate.getDate();
+          const hours = modifiedDate.getHours();
+          const minutes = modifiedDate.getMinutes();
+          
+          // M/DD HH:MM 형식으로 포맷팅
+          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          setUpdateDate(formattedDate);
+        } else {
+          // Last-Modified 헤더가 없는 경우 현재 날짜/시간 사용
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const day = now.getDate();
+          const hours = now.getHours();
+          const minutes = now.getMinutes();
+          
+          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          setUpdateDate(formattedDate);
+          console.warn('per.csv 파일의 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
+        }
+      } catch (err: unknown) {
+        console.error('업데이트 날짜 로드 실패:', err);
+        setErrorDate('날짜 데이터를 불러오는 데 실패했습니다.');
+        // 오류 발생 시 현재 날짜/시간을 사용
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const day = now.getDate();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        
+        const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        setUpdateDate(formattedDate);
       } finally {
         setLoadingDate(false);
       }
@@ -1059,7 +1058,7 @@ const ValuationPage = () => {
                   ) : errorDate ? (
                     <span className="text-red-500">{errorDate}</span>
                   ) : updateDate ? (
-                    <span>updated 17:00 {updateDate}</span>
+                    <span>updated {updateDate}</span>
                   ) : (
                     <span>날짜 정보 없음</span> // 로딩 완료 후에도 날짜가 없을 경우
                   )}
