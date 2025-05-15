@@ -8,7 +8,7 @@
 ### 1. 백엔드 구현
 
 #### 1.1 데이터베이스 모델 생성
-- [ ] `backend/stockeasy/models/chat.py`에 `ShareStockChatSession` 테이블 추가
+- [x] `backend/stockeasy/models/chat.py`에 `ShareStockChatSession` 테이블 추가
   ```python
   class ShareStockChatSession(Base):
       """공유된 주식 채팅 세션 테이블
@@ -82,7 +82,7 @@
           }
   ```
 
-- [ ] `ShareStockChatMessage` 테이블 추가
+- [x] `ShareStockChatMessage` 테이블 추가
   ```python
   class ShareStockChatMessage(Base):
       """공유된 주식 채팅 메시지 테이블
@@ -187,10 +187,10 @@
           }
   ```
 
-- [ ] `models/__init__.py` 파일에 새 모델 등록
+- [x] `models/__init__.py` 파일에 새 모델 등록
 
 #### 1.2 스키마(Pydantic 모델) 정의
-- [ ] `backend/stockeasy/schemas/chat.py`에 `ShareChatResponse` 추가
+- [x] `backend/stockeasy/schemas/chat.py`에 `ShareChatResponse` 추가
   ```python
   # 공유 링크 생성 응답 스키마
   class ShareLinkResponse(BaseModel):
@@ -210,7 +210,7 @@
   ```
 
 #### 1.3 서비스 로직 구현
-- [ ] `backend/stockeasy/services/chat.py`에 공유 링크 생성 서비스 추가
+- [x] `backend/stockeasy/services/chat_service.py`에 공유 링크 생성 서비스 추가
   ```python
   async def create_share_link(
       session_id: UUID,
@@ -272,7 +272,7 @@
       )
   ```
 
-- [ ] 공유된 채팅 조회 서비스 추가
+- [x] 공유된 채팅 조회 서비스 추가
   ```python
   async def get_shared_chat_session(
       share_uuid: str,
@@ -300,7 +300,7 @@
   ```
 
 #### 1.4 API 엔드포인트 구현
-- [ ] `backend/stockeasy/api/chat.py`에 공유 링크 생성 엔드포인트 추가
+- [x] `backend/stockeasy/api/v1/chat.py`에 공유 링크 생성 엔드포인트 추가
   ```python
   @router.get("/share/make_link/{session_id}", response_model=ShareLinkResponse)
   async def create_share_link(
@@ -330,7 +330,7 @@
       return await chat_service.create_share_link(session_id, db)
   ```
 
-- [ ] 공유된 채팅 조회 엔드포인트 추가
+- [x] 공유된 채팅 조회 엔드포인트 추가
   ```python
   @router.get("/share/{share_uuid}", response_model=dict)
   async def get_shared_chat(
@@ -358,7 +358,7 @@
 ### 2. 프론트엔드 구현
 
 #### 2.1 공유하기 버튼 추가
-- [ ] `frontend/stockeasy/app/components/Header.tsx` 수정
+- [x] `frontend/stockeasy/app/components/Header.tsx` 수정
   ```typescript
   // 추가 import
   import { Link, Share } from 'lucide-react';
@@ -432,7 +432,7 @@
   ```
 
 #### 2.2 API 서비스 구현
-- [ ] 공유 링크 API 서비스 추가 (`frontend/stockeasy/services/api/useChatShare.ts`)
+- [x] 공유 링크 API 서비스 추가 (`frontend/stockeasy/services/api/useChatShare.ts`)
   ```typescript
   import { useState } from 'react';
   import { API_BASE_URL } from '@/config';
@@ -502,7 +502,7 @@
   ```
 
 #### 2.3 공유 페이지 구현
-- [ ] 공유 페이지용 라우트 생성 (`frontend/stockeasy/app/share_chat/[shareUuid]/page.tsx`)
+- [x] 공유 페이지용 라우트 생성 (`frontend/stockeasy/app/share_chat/[shareUuid]/page.tsx`)
   ```typescript
   'use client';
   
@@ -596,7 +596,7 @@
   }
   ```
 
-- [ ] 공유 페이지 레이아웃 생성 (`frontend/stockeasy/app/share_chat/[shareUuid]/layout.tsx`)
+- [x] 공유 페이지 레이아웃 생성 (`frontend/stockeasy/app/share_chat/[shareUuid]/layout.tsx`)
   ```typescript
   import { Metadata } from 'next';
   
@@ -628,7 +628,7 @@
   ```
 
 #### 2.4 인증 예외 처리
-- [ ] 인증 미들웨어에 공유 페이지 경로 예외 추가 (`frontend/stockeasy/middleware.ts`)
+- [x] 인증 미들웨어에 공유 페이지 경로 예외 추가 (`frontend/stockeasy/middleware.ts`)
   ```typescript
   // middleware.ts 파일 수정 - 공유 페이지 경로 추가
   export const config = {
@@ -640,7 +640,7 @@
   ```
 
 #### 2.5 타입 정의 추가
-- [ ] `frontend/types/index.ts`에 공유 관련 타입 추가
+- [x] `frontend/types/index.ts`에 공유 관련 타입 추가
   ```typescript
   export interface IShareLinkResponse {
     share_uuid: string;
@@ -663,17 +663,17 @@
 
 #### 3.1 백엔드 테스트
 - [ ] 데이터베이스 마이그레이션 정상 동작 확인
-- [ ] 공유 링크 생성 API 동작 확인
-- [ ] 공유된 채팅 조회 API 동작 확인
+- [x] 공유 링크 생성 API 동작 확인
+- [x] 공유된 채팅 조회 API 동작 확인
 
 #### 3.2 프론트엔드 테스트
-- [ ] 공유하기 버튼 렌더링 확인
-- [ ] 공유 링크 생성 기능 동작 확인
-- [ ] 클립보드 복사 및 토스트 알림 확인
-- [ ] 생성된 공유 링크로 접속 테스트
-- [ ] 로그인 없이 공유 페이지 접근 가능 확인
-- [ ] 채팅 메시지 렌더링 확인
-- [ ] 다양한 메시지 타입 표시 확인
+- [x] 공유하기 버튼 렌더링 확인
+- [x] 공유 링크 생성 기능 동작 확인
+- [x] 클립보드 복사 및 토스트 알림 확인
+- [x] 생성된 공유 링크로 접속 테스트
+- [x] 로그인 없이 공유 페이지 접근 가능 확인
+- [x] 채팅 메시지 렌더링 확인
+- [x] 다양한 메시지 타입 표시 확인
 
 #### 3.3 크로스 브라우저 테스트
 - [ ] Chrome, Firefox, Safari, Edge 등 주요 브라우저 테스트

@@ -6,13 +6,14 @@ import { parseCookies } from 'nookies';
 import { isLoggedIn } from '../utils/auth';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore, useIsClient } from '@/stores/userModeStore';
-import { MessageSquare, Download, Loader2 } from 'lucide-react';
+import { MessageSquare, Download, Loader2, Share } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useChatStore } from '@/stores/chatStore';
 import { toast } from 'sonner';
 import { usePdfExport } from '@/services/api/usePdfExport';
+import { useChatShare } from '@/services/api/useChatShare';
 /**
  * StockEasy 애플리케이션의 고정 헤더 컴포넌트.
  * 화면 상단에 고정되며, 데스크톱에서는 사이드바 영역을 제외한 너비를 가집니다.
@@ -40,6 +41,9 @@ const Header: React.FC = () => {
   
   // PDF 내보내기 훅 사용
   const { isPdfLoading, exportToPdf } = usePdfExport();
+  
+  // 공유 링크 생성 훅 사용
+  const { isShareLoading, createShareLink } = useChatShare();
   
   // 메시지가 있는지 확인하여 토글 버튼을 표시할지 결정
   const hasChatMessages = storeMessages.length > 0;
@@ -197,6 +201,25 @@ const Header: React.FC = () => {
     exportToPdf(currentSession.id, userMode === 'expert');
   };
 
+  // 공유 링크 생성 처리 핸들러
+  const handleShareChat = async () => {
+    if (!currentSession) {
+      toast.error('채팅 세션이 없습니다.');
+      return;
+    }
+    
+    try {
+      const result = await createShareLink(currentSession.id);
+      
+      // 클립보드에 링크 복사
+      await navigator.clipboard.writeText(result.share_url);
+      
+      toast.success('공유 링크가 클립보드에 복사되었습니다.');
+    } catch (error) {
+      toast.error('공유 링크 생성에 실패했습니다.');
+    }
+  };
+
   // console.log('[Header] 렌더링:', 
   //   '로그인:', isUserLoggedIn, 
   //   '메시지:', storeMessages.length, 
@@ -285,6 +308,21 @@ const Header: React.FC = () => {
               </div>
             </div>
           </div> */}
+          {/* 공유하기 버튼 - 채팅 메시지가 있고 세션이 있을 때만 표시 */}
+          {isUserLoggedIn && hasChatMessages && currentSession && (
+            <button
+              onClick={handleShareChat}
+              disabled={isShareLoading}
+              className="flex items-center gap-1 text-sm px-2.5 py-1 rounded-md bg-[#F5F5F5] hover:bg-[#E5E5E5] transition-colors border border-[#DDD]"
+            >
+              {isShareLoading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Share size={16} />
+              )}
+              <span className="hidden sm:inline">공유</span>
+            </button>
+          )}
           {/* PDF 내보내기 버튼 - 채팅 메시지가 있고 세션이 있을 때만 표시 */}
           {isUserLoggedIn && hasChatMessages && currentSession && (
             <button

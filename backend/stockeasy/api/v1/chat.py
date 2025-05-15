@@ -22,13 +22,16 @@ from common.utils.util import remove_null_chars
 from common.services.agent_llm import refresh_agent_llm_cache
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from common.core.database import AsyncSessionLocal, get_db_async, get_db_session
-from common.models.user import Session
+from common.models.user import Session, User
 from common.core.deps import get_current_session
 from stockeasy.services.chat_service import ChatService
 from stockeasy.services.rag_service import StockRAGService
 from common.core.memory import chat_memory_manager
 from common.services.user import UserService
 import gc
+from stockeasy.schemas.chat import ShareLinkResponse, SharedChatResponse, SharedChatSessionResponse, SharedChatMessageResponse
+from sqlalchemy import select
+from stockeasy.models.chat import StockChatSession
 
 # 챗 라우터 정의 위에 도우미 함수 추가
 def get_user_friendly_agent_message(agent: str, status: str) -> str:
@@ -1076,3 +1079,45 @@ async def save_chat_to_pdf(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"PDF 생성 중 오류 발생: {str(e)}"
         ) 
+
+@chat_router.get("/share/make_link/{chat_session_id}", response_model=ShareLinkResponse)
+async def create_share_link(
+    chat_session_id: UUID = Path(..., description="채팅 세션 ID"),
+    db: AsyncSession = Depends(get_db_async),
+    current_session: Session = Depends(get_current_session)
+):
+    """채팅 세션 공유 링크 생성 API
+    
+    인증된 사용자만 자신의 채팅 세션에 대한 공유 링크 생성 가능
+    """
+    # 세션 소유권 확인
+    query = select(StockChatSession).where(
+        StockChatSession.id == chat_session_id,
+        StockChatSession.user_id == current_session.user_id
+    )
+    result = await db.execute(query)
+    session = result.scalar_one_or_none()
+    
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="채팅 세션을 찾을 수 없거나 접근 권한이 없습니다."
+        )
+    
+    # 공유 링크 생성 서비스 호출
+    chat_service = ChatService()
+    return await chat_service.create_share_link(db, chat_session_id)
+
+
+@chat_router.get("/share/{share_uuid}")
+async def get_shared_chat(
+    share_uuid: str = Path(..., description="공유 UUID"),
+    db: AsyncSession = Depends(get_db_async)
+):
+    """공유된 채팅 세션 조회 API
+    
+    공유 UUID로 공유된 채팅 세션과 메시지 조회
+    인증 없이 접근 가능
+    """
+    chat_service = ChatService()
+    return await chat_service.get_shared_chat_session(db, share_uuid) 

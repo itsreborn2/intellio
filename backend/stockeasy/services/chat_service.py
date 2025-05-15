@@ -11,10 +11,13 @@ from datetime import datetime
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
+from fastapi import HTTPException
 
 from common.utils.db_utils import get_one_or_none
-from stockeasy.models.chat import StockChatSession, StockChatMessage
+from stockeasy.models.chat import StockChatSession, StockChatMessage, ShareStockChatSession, ShareStockChatMessage
+from stockeasy.schemas.chat import ShareLinkResponse, SharedChatResponse, SharedChatSessionResponse, SharedChatMessageResponse
 from common.utils.util import remove_null_chars
+from common.core.config import settings
 
 
 # JSON 직렬화를 위한 커스텀 인코더 (datetime 객체 처리)
@@ -558,3 +561,139 @@ class ChatService:
         except Exception as e:
             logger.error(f"채팅 세션 agent_results 조회 중 오류 발생: {str(e)}")
             return {}
+
+    @staticmethod
+    async def create_share_link(
+        db: AsyncSession, 
+        session_id: UUID
+    ) -> ShareLinkResponse:
+        """채팅 세션 공유 링크 생성
+        
+        원본 채팅 세션을 복제하여 공유용 세션 생성
+        
+        Args:
+            db: 데이터베이스 세션
+            session_id: 채팅 세션 ID
+            
+        Returns:
+            ShareLinkResponse: 공유 링크 정보
+            
+        Raises:
+            HTTPException: 세션을 찾을 수 없는 경우
+        """
+        try:
+            # 채팅 세션 조회
+            query = select(StockChatSession).where(StockChatSession.id == session_id)
+            result = await db.execute(query)
+            original_session = result.scalar_one_or_none()
+            
+            if not original_session:
+                raise HTTPException(status_code=404, detail="채팅 세션을 찾을 수 없습니다.")
+                
+            # 공유 UUID 생성
+            share_uuid = str(uuid4())
+            
+            # 공유 세션 생성
+            share_session = ShareStockChatSession(
+                original_session_id=original_session.id,
+                share_uuid=share_uuid,
+                title=original_session.title,
+                stock_code=original_session.stock_code,
+                stock_name=original_session.stock_name,
+                stock_info=original_session.stock_info,
+                agent_results=original_session.agent_results
+            )
+            db.add(share_session)
+            await db.flush()
+            
+            # 원본 메시지 복사
+            for msg in original_session.messages:
+                share_message = ShareStockChatMessage(
+                    chat_session_id=share_session.id,
+                    original_message_id=msg.id,
+                    role=msg.role,
+                    stock_code=msg.stock_code,
+                    stock_name=msg.stock_name,
+                    content_type=msg.content_type,
+                    content=msg.content,
+                    content_expert=msg.content_expert,
+                    components=msg.components,
+                    message_data=msg.message_data,
+                    data_url=msg.data_url,
+                    message_metadata=msg.message_metadata,
+                    agent_results=msg.agent_results
+                )
+                db.add(share_message)
+            
+            await db.commit()
+            
+            # 공유 URL 생성
+            base_url = settings.STOCKEASY_URL
+            share_url = f"{base_url}/share_chat/{share_uuid}"
+            
+            return ShareLinkResponse(
+                share_uuid=share_uuid,
+                share_url=share_url
+            )
+        
+        except HTTPException:
+            await db.rollback()
+            raise
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"공유 링크 생성 중 오류 발생: {str(e)}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"공유 링크 생성 중 오류가 발생했습니다: {str(e)}"
+            )
+            
+    @staticmethod
+    async def get_shared_chat_session(
+        db: AsyncSession, 
+        share_uuid: str
+    ) -> Dict[str, Any]:
+        """공유된 채팅 세션 조회
+        
+        공유 UUID로 세션과 메시지 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            share_uuid: 공유 링크용 UUID
+            
+        Returns:
+            Dict[str, Any]: 공유된 채팅 세션 정보와 메시지 목록
+            
+        Raises:
+            HTTPException: 공유된 채팅을 찾을 수 없는 경우
+        """
+        try:
+            # 공유 세션 조회
+            query = select(ShareStockChatSession).where(
+                ShareStockChatSession.share_uuid == share_uuid
+            )
+            result = await db.execute(query)
+            session = result.scalar_one_or_none()
+            
+            if not session:
+                raise HTTPException(status_code=404, detail="공유된 채팅을 찾을 수 없습니다.")
+            
+            # 메시지 정렬 (생성 시간순)
+            session_messages = sorted(
+                session.messages, 
+                key=lambda msg: msg.created_at if msg.created_at else datetime.min
+            )
+            
+            # 구조화된 응답 생성
+            return {
+                "session": session.to_dict,
+                "messages": [msg.to_dict for msg in session_messages]
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"공유된 채팅 조회 중 오류 발생: {str(e)}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"공유된 채팅 조회 중 오류가 발생했습니다: {str(e)}"
+            )

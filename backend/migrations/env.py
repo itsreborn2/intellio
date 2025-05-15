@@ -35,7 +35,7 @@ from doceasy.models.category import Category
 from common.models.token_usage import TokenUsage
 
 from stockeasy.models.telegram_message import TelegramMessage
-from stockeasy.models.chat import StockChatSession, StockChatMessage
+from stockeasy.models.chat import StockChatSession, StockChatMessage, ShareStockChatSession, ShareStockChatMessage
 
 # 재무 데이터 모델 임포트
 from stockeasy.models.companies import Company

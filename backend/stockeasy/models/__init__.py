@@ -5,3 +5,6 @@
 
 # 모든 모델과 관계를 common/models/__init__.py에서 임포트합니다.
 from common.models import * 
+
+# stockeasy 모델 임포트
+from .chat import StockChatSession, StockChatMessage, ShareStockChatSession, ShareStockChatMessage 
