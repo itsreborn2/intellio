@@ -23,6 +23,18 @@ export interface ChatMessage {
   elapsed?: number; // 경과 시간 (초 단위)
   elapsedStartTime?: number; // 경과 시간 시작 타임스탬프
   _forceUpdate?: number; // UI 리렌더링을 강제하기 위한 임의의 값
+  metadata?: { // 메타데이터 추가
+    components?: MessageComponent[]; // 구조화된 컴포넌트
+    responseId?: string; // 응답 ID
+    isProcessing?: boolean; // 처리 중 상태
+    agent?: string; // 에이전트 정보
+    elapsed?: number; // 경과 시간
+    stockInfo?: { // 종목 정보
+      stockName: string;
+      stockCode: string;
+    };
+    content?: string; // 구조화된 응답 전체 내용
+  };
 }
 
 /**
@@ -152,6 +164,7 @@ export type MessageComponent =
 // --- 'complete' SSE 이벤트 데이터 인터페이스 ---
 export interface IStructuredChatResponseData {
   message_id: string;
+  content: string;
   components: MessageComponent[];
   metadata?: Record<string, any>;
   timestamp: number;

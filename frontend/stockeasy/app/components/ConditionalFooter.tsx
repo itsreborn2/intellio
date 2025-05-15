@@ -13,9 +13,10 @@ export default function ConditionalFooter() {
   // AIChatArea가 주로 사용되는 페이지 경로 (루트 페이지 '/'로 가정)
   // 만약 다른 경로라면 이 부분을 수정해야 합니다.
   const chatPagePath = '/'; 
+  //console.log(`pathname: ${pathname}`);
 
   // 현재 경로가 채팅 페이지 경로가 아니면 푸터를 렌더링합니다.
-  if (pathname !== chatPagePath) {
+  if (pathname !== chatPagePath && !pathname.startsWith("/chat")) {
     return <ClientFooter />;
   }
 

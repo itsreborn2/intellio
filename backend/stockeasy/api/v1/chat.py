@@ -121,8 +121,6 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
 # API 라우터 정의
 chat_router = APIRouter(prefix="/chat", tags=["채팅"])
 
-
-
 class BaseResponse(BaseModel):
     """기본 응답 모델"""
     ok: bool
@@ -829,6 +827,7 @@ async def stream_chat_message(
                         # 구조화된 채팅 응답 구성
                         structured_response = StructuredChatResponse(
                             message_id=assistant_message_id,
+                            content=answer,
                             components=result.get("components", []),  # 에이전트에서 반환된 구조화된 컴포넌트
                             metadata=metadata,
                             timestamp=time.time(),

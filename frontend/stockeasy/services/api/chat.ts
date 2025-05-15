@@ -211,7 +211,8 @@ export const streamChatMessage = async (
     onAgentComplete?: (data: any) => void,
     onToken?: (data: { token: string, timestamp: number, message_id: string }) => void,
     onComplete?: (data: any) => void,
-    onError?: (error: any) => void
+    onError?: (error: any) => void,
+    onNavigate?: (url: string) => void
   },
   isFollowUp: boolean = false
 ) => {
@@ -226,7 +227,13 @@ export const streamChatMessage = async (
       is_follow_up: isFollowUp
     }
     
+    // 세션 ID가 있으면 브라우저 URL을 /chat/${sessionId}로 변경
+    if (sessionId && callbacks.onNavigate) {
+      callbacks.onNavigate(`/chat/${sessionId}`);
+    }
+    
     // SSE 스트리밍 응답 처리
+    // URL 형식 유지하면서 브라우저 URL은 /chat/${sessionId}로 표시
     const response = await apiFetch(`${API_ENDPOINT_STOCKEASY}/chat/sessions/${sessionId}/messages/stream`, {
       method: 'POST',
       headers: {

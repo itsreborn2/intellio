@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 import { StockSelectorProvider, useStockSelector } from './context/StockSelectorContext';
 import { ChatLayout, MobileChatLayout } from './layouts';
 import { 
@@ -27,6 +28,7 @@ import { IChatMessageDetail } from '@/types/api/chat';
  */
 function AIChatAreaContent() {
   const isMobile = useIsMobile();
+  const router = useRouter();
   // ChatStore에서 필요한 상태 및 액션 직접 가져오기
   const { 
     currentSession, 
@@ -198,6 +200,18 @@ function AIChatAreaContent() {
         
         // 토큰 사용량 업데이트 (Zustand 스토어)
         fetchSummary && fetchSummary();
+      },
+      onNavigate: (url) => {
+        // 브라우저 URL을 변경합니다.
+        // Grok 방식: history.pushState()로 히스토리 항목 추가 (뒤로가기 지원)
+        window.history.pushState(
+          { 
+            page: "chat", 
+            sessionId: url.split('/').pop() // URL에서 세션 ID 추출 
+          }, 
+          "", 
+          url
+        );
       }
     }
   );

@@ -249,6 +249,9 @@ class ResponseFormatterAgent(BaseAgent):
                 formatted_response_parts.append(f"# {report_title}\n\n")
                 
                 toc_sections = final_report_toc.get("sections", [])
+                toc_sections.extend([
+                    {"title": "면책조항", "content": ""}
+                ])
                 
                 tasks = []
                 for section_data_item in toc_sections: # 변수명 변경 (section_data -> section_data_item)

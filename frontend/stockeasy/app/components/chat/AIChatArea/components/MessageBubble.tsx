@@ -467,7 +467,13 @@ export function MessageBubble({
               {/* CopyButton 컴포넌트 사용 */}
               <CopyButton 
                 onClick={() => {
-                  const contentToCopy = getContentToCopy();
+                  // 구조화된 응답 내용이 있으면 우선적으로 사용
+                  let contentToCopy = '';
+                  if (message.role === 'assistant' && message.metadata?.content) {
+                    contentToCopy = message.metadata.content;
+                  } else {
+                    contentToCopy = getContentToCopy();
+                  }
                   navigator.clipboard.writeText(contentToCopy);
                   setIsCopied(true);
                   if (onCopy) {

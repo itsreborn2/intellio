@@ -114,6 +114,7 @@ MessageComponent = Union[
 class StructuredChatResponse(BaseModel):
     """구조화된 채팅 응답 모델"""
     message_id: str = Field(..., description="해당 메시지의 DB ID")
+    content: str = Field(..., description="AI 답변 텍스트")
     components: List[MessageComponent] = Field(..., description="AI 답변을 구성하는 컴포넌트 리스트")
     metadata: Optional[Dict[str, Any]] = Field(None, description="메타데이터 (처리 시간 등)")
     timestamp: float = Field(..., description="타임스탬프 (Unix 시간, 초)")
