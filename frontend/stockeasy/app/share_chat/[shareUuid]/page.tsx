@@ -266,39 +266,34 @@ export default function SharedChatPage() {
   );
   
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-     
-      <div className="flex-1 overflow-auto py-6 px-4">
-        <div className="max-w-4xl mx-auto">
-          {processedMessages.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">메시지가 없습니다.</p>
-          ) : (
-            <div className="space-y-4">
-              {processedMessages.map((message) => {
-                // 렌더링 직전 각 메시지 검증
-                if (message.role === 'user') {
-                  console.log(`[메시지 렌더링] ID: ${message.id}, stockInfo:`, message.stockInfo);
-                }
-                
-                return (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    windowWidth={windowWidth}
-                    isExpertMode={expertMode[message.id]}
-                    onCopy={() => handleCopy(message.id)}
-                    onToggleExpertMode={() => handleToggleExpertMode(message.id)}
-                    timerState={{}}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-      
-      <div className="text-center py-3 bg-white border-t text-sm text-gray-500">
-        Powered by StockEasy
+    <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
+      <div className="w-full max-w-[1280px] mx-auto px-0 sm:px-2">
+        {processedMessages.length === 0 ? (
+          <div className="flex h-full items-center justify-center py-8">
+            <p className="text-center text-gray-500">메시지가 없습니다.</p>
+          </div>
+        ) : (
+          <div className="space-y-4 my-4">
+            {processedMessages.map((message) => {
+              // 렌더링 직전 각 메시지 검증
+              if (message.role === 'user') {
+                console.log(`[메시지 렌더링] ID: ${message.id}, stockInfo:`, message.stockInfo);
+              }
+              
+              return (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  windowWidth={windowWidth}
+                  isExpertMode={expertMode[message.id]}
+                  onCopy={() => handleCopy(message.id)}
+                  onToggleExpertMode={() => handleToggleExpertMode(message.id)}
+                  timerState={{}}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
