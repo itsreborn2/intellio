@@ -8,7 +8,7 @@ import pinecone
 import time
 
 from common.utils.util import measure_time_async  # 성능 측정을 위해 추가
-
+from common.core.config import settings
 from .embedding_models import EmbeddingModelType
 import logging
 from threading import Lock
@@ -116,9 +116,9 @@ class VectorStoreManager:
             self.embedding_obj, self.embedding_obj_async = self.embedding_model_provider.get_embeddings_obj()
             self.embedding_model_config = self.embedding_service.current_model_config
 
-            _api_key = os.getenv("PINECONE_API_KEY_DOCEASY")
+            _api_key = settings.PINECONE_API_KEY_DOCEASY#os.getenv("PINECONE_API_KEY_DOCEASY")
             if self.project_name == "stockeasy":
-                _api_key = os.getenv("PINECONE_API_KEY_STOCKEASY")
+                _api_key = settings.PINECONE_API_KEY_STOCKEASY#os.getenv("PINECONE_API_KEY_STOCKEASY")
             
             # Pinecone 6.0 스타일 초기화
             self.pinecone_client = PineconeClient(api_key=_api_key)
@@ -1380,3 +1380,75 @@ class VectorStoreManager:
                 logger.error(f"[{self.namespace}] 비동기 인덱스 생성 실패: {str(e)}")
                 return None
         return self.async_index
+
+    def vector_exists(self, vector_id: str) -> bool:
+        """지정된 벡터 ID가 벡터 스토어에 존재하는지 확인합니다.
+        
+        Args:
+            vector_id (str): 확인할 벡터 ID
+            
+        Returns:
+            bool: 벡터가 존재하면 True, 없으면 False
+        """
+        try:
+            # 특정 ID의 벡터 조회
+            result = self.index.fetch(ids=[vector_id], namespace=self.namespace)
+            
+            # Pinecone 6.0에서는 FetchResponse 객체가 반환됨
+            # vectors 속성을 통해 결과에 해당 ID가 있는지 확인
+            if hasattr(result, 'vectors'):
+                return vector_id in result.vectors
+            else:
+                # 만약 이전 버전과의 호환성을 위한 폴백이 필요한 경우
+                logger.warning(f"[{self.namespace}] FetchResponse 객체의 구조가 예상과 다름, 딕셔너리로 시도")
+                if isinstance(result, dict):
+                    return vector_id in result.get('vectors', {})
+                return False
+            
+        except Exception as e:
+            logger.error(f"[{self.namespace}] 벡터 존재 여부 확인 중 오류 발생: {str(e)}")
+            return False
+    
+    async def vector_exists_async(self, vector_id: str) -> bool:
+        """지정된 벡터 ID가 벡터 스토어에 존재하는지 확인합니다. (비동기 버전)
+        
+        Args:
+            vector_id (str): 확인할 벡터 ID
+            
+        Returns:
+            bool: 벡터가 존재하면 True, 없으면 False
+        """
+        try:
+            # 비동기 초기화 확인
+            await self.ensure_initialized()
+            
+            if self.async_index is None:
+                logger.warning(f"[{self.namespace}] 비동기 인덱스가 초기화되지 않았습니다. 동기 메서드로 폴백합니다.")
+                return self.vector_exists(vector_id)
+            
+            # 비동기 API를 사용하여 특정 ID의 벡터 조회
+            result = await self.async_index.fetch(
+                ids=[vector_id], 
+                namespace=self.namespace
+            )
+            
+            # Pinecone 6.0에서는 FetchResponse 객체가 반환됨
+            # vectors 속성을 통해 결과에 해당 ID가 있는지 확인
+            if hasattr(result, 'vectors'):
+                return vector_id in result.vectors
+            else:
+                # 만약 이전 버전과의 호환성을 위한 폴백이 필요한 경우
+                logger.warning(f"[{self.namespace}] FetchResponse 객체의 구조가 예상과 다름, 딕셔너리로 시도")
+                if isinstance(result, dict):
+                    return vector_id in result.get('vectors', {})
+                return False
+            
+        except Exception as e:
+            logger.error(f"[{self.namespace}] 비동기 벡터 존재 여부 확인 중 오류 발생: {str(e)}")
+            # 비동기 오류 시 동기 메서드로 폴백 시도
+            try:
+                return self.vector_exists(vector_id)
+            except Exception as inner_e:
+                logger.error(f"[{self.namespace}] 동기 폴백도 실패: {str(inner_e)}")
+                return False
+        

@@ -4,6 +4,9 @@ import os
 import aiohttp
 import asyncio
 import requests
+import csv
+import json
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
 from common.core.config import settings
 
@@ -176,11 +179,87 @@ class TavilyService:
             async with session.post(url, json=data, headers=headers) as response:
                 response.raise_for_status()  # 오류 발생 시 예외 발생
                 result = await response.json()
+                
+                # API 사용량 기록
+                await self._log_tavily_usage(
+                    query=query,
+                    result=result,
+                    include_domains=include_domains,
+                    exclude_domains=exclude_domains,
+                    search_depth=search_depth,
+                    include_images=include_images,
+                    time_range=time_range,
+                    topic=topic,
+                    max_results=max_results,
+                    include_answer=include_answer,
+                    include_raw_content=include_raw_content,
+                    include_image_descriptions=include_image_descriptions
+                )
+                
                 return result
         finally:
             # 세션을 이 메서드에서 생성한 경우에만 닫습니다
             if should_close_session:
                 await session.close()
+
+    async def _log_tavily_usage(
+        self,
+        query: str,
+        result: Dict[str, Any],
+        **kwargs
+    ) -> None:
+        """Tavily API 사용량을 CSV 파일로 기록합니다.
+        
+        Args:
+            query: 검색 쿼리
+            result: API 응답 결과
+            **kwargs: 요청에 사용된 기타 파라미터들
+        """
+        try:
+            # 파일 I/O 작업을 별도 스레드에서 실행하기 위한 함수 정의
+            def write_to_csv() -> str:
+                # CSV 파일 경로 설정
+                csv_dir = os.path.join('stockeasy', 'local_cache', 'web_search')
+                os.makedirs(csv_dir, exist_ok=True)
+                
+                date_str = datetime.now().strftime('%Y%m%d')
+                csv_path = os.path.join(csv_dir, f'tavily_usage_{date_str}.csv')
+                
+                # 현재 날짜와 시간
+                current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                # 파라미터 정보를 문자열로 변환
+                params_str = json.dumps(kwargs, ensure_ascii=False)
+                response_str = json.dumps(result, ensure_ascii=False)
+                
+                # CSV 파일 존재 여부 확인 및 헤더 작성
+                file_exists = os.path.exists(csv_path) and os.path.getsize(csv_path) > 0
+                
+                with open(csv_path, 'a', encoding='utf-8-sig', newline='') as csv_file:
+                    fieldnames = ['datetime', 'query', 'parameters', 'response']
+                    writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+                    
+                    # 파일이 새로 생성되는 경우 헤더 작성
+                    if not file_exists:
+                        writer.writeheader()
+                    
+                    # 데이터 기록
+                    writer.writerow({
+                        'datetime': current_datetime,
+                        'query': query,
+                        'parameters': params_str,
+                        'response': response_str[:500]
+                    })
+                
+                return csv_path
+            
+            # 파일 I/O 작업을 별도 스레드에서 비동기적으로 실행
+            csv_path = await asyncio.to_thread(write_to_csv)
+            
+            print(f"  💾 Tavily API 사용량이 CSV 파일에 기록되었습니다: {csv_path}")
+            
+        except Exception as e:
+            print(f"  ⚠️ Tavily API 사용량 기록 중 오류 발생: {str(e)}")
 
     async def batch_search_async(
         self,

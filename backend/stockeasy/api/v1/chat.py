@@ -28,7 +28,7 @@ from stockeasy.services.chat_service import ChatService
 from stockeasy.services.rag_service import StockRAGService
 from common.core.memory import chat_memory_manager
 from common.services.user import UserService
-
+import gc
 
 # 챗 라우터 정의 위에 도우미 함수 추가
 def get_user_friendly_agent_message(agent: str, status: str) -> str:
@@ -891,6 +891,7 @@ async def stream_chat_message(
         
         # EventSourceResponse 반환
         logger.info("[STREAM_CHAT] EventSourceResponse 설정 및 반환")
+       
         return EventSourceResponse(
             event_generator(),
             media_type="text/event-stream",
@@ -907,6 +908,8 @@ async def stream_chat_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"채팅 메시지 스트리밍 중 오류 발생: {str(e)}"
         )
+    finally:
+        gc.collect()
 
 @chat_router.delete("/sessions/{chat_session_id}/memory", response_model=BaseResponse)
 async def clear_chat_memory(
