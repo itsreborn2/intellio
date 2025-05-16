@@ -267,33 +267,46 @@ export default function SharedChatPage() {
   
   return (
     <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
-      <div className="w-full max-w-[1280px] mx-auto px-0 sm:px-2">
-        {processedMessages.length === 0 ? (
-          <div className="flex h-full items-center justify-center py-8">
-            <p className="text-center text-gray-500">메시지가 없습니다.</p>
-          </div>
-        ) : (
-          <div className="space-y-4 my-4">
-            {processedMessages.map((message) => {
-              // 렌더링 직전 각 메시지 검증
-              if (message.role === 'user') {
-                console.log(`[메시지 렌더링] ID: ${message.id}, stockInfo:`, message.stockInfo);
-              }
-              
-              return (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  windowWidth={windowWidth}
-                  isExpertMode={expertMode[message.id]}
-                  onCopy={() => handleCopy(message.id)}
-                  onToggleExpertMode={() => handleToggleExpertMode(message.id)}
-                  timerState={{}}
-                />
-              );
-            })}
-          </div>
-        )}
+      <div className="w-full max-w-[800px] mx-auto px-0 sm:px-2">
+        <div className="messages-container" style={{
+          overflow: 'hidden auto',
+          padding: '20px 10px 60px',
+          margin: '0px auto',
+          border: 'none',
+          borderRadius: '0px',
+          backgroundColor: 'rgb(244, 244, 244)',
+          boxSizing: 'border-box',
+          width: '100%',
+          height: '100%',
+          minHeight: 'calc(100% - 60px)'
+        }}>
+          {processedMessages.length === 0 ? (
+            <div className="flex h-full items-center justify-center py-8">
+              <p className="text-center text-gray-500">메시지가 없습니다.</p>
+            </div>
+          ) : (
+            <div className="space-y-4 my-4">
+              {processedMessages.map((message) => {
+                // 렌더링 직전 각 메시지 검증
+                if (message.role === 'user') {
+                  console.log(`[메시지 렌더링] ID: ${message.id}, stockInfo:`, message.stockInfo);
+                }
+                
+                return (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    windowWidth={windowWidth}
+                    isExpertMode={expertMode[message.id]}
+                    onCopy={() => handleCopy(message.id)}
+                    onToggleExpertMode={() => handleToggleExpertMode(message.id)}
+                    timerState={{}}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
