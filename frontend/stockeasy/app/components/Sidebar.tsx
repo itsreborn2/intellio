@@ -508,7 +508,20 @@ function SidebarContent() {
     
     // 쿠키에서 사용자 정보를 가져오지 못한 경우
     if (!hasUserInfo) {
+      // 현재 URL이 /share_chat인지 검사
+      const isShareChatPage = window.location.pathname.includes('/share_chat');
+      
+      // 공유 채팅 페이지인 경우 로그인 건너뛰기
+      if (isShareChatPage) {
+        setUserId('anonymous');
+        setUserName('Anonymous User');
+        console.log('공유 채팅 페이지: 로그인 건너뛰기');
+        return;
+      }
+      
       // 개발 환경인지 확인
+      // 개발 환경인데 익명 접속을 왜 허용하지. 이딴 코드를 왜 넣은거여.
+      // dev/prod 동작이 달라져서 디버깅을 어렵게 만드는 코드.
       const isDevelopment = process.env.NODE_ENV === 'development';
       const allowAnonymous = process.env.NEXT_PUBLIC_ALLOW_ANONYMOUS === 'true';
       
