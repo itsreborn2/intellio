@@ -220,6 +220,8 @@ class ShareStockChatSession(Base):
         nullable=False, index=True,
         comment="원본 채팅 세션 ID"
     )
+
+    # 공유 링크만 만료시키거나 재생성하면서 원본 데이터는 유지 가능
     share_uuid: Mapped[str] = mapped_column(
         String(36), nullable=False, unique=True, index=True,
         comment="공유 링크용 UUID"

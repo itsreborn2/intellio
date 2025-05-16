@@ -212,7 +212,6 @@ export const streamChatMessage = async (
     onToken?: (data: { token: string, timestamp: number, message_id: string }) => void,
     onComplete?: (data: any) => void,
     onError?: (error: any) => void,
-    onNavigate?: (url: string) => void
   },
   isFollowUp: boolean = false
 ) => {
@@ -225,11 +224,6 @@ export const streamChatMessage = async (
       stock_code: stockCode,
       stock_name: stockName,
       is_follow_up: isFollowUp
-    }
-    
-    // 세션 ID가 있으면 브라우저 URL을 /chat/${sessionId}로 변경
-    if (sessionId && callbacks.onNavigate) {
-      callbacks.onNavigate(`/chat/${sessionId}`);
     }
     
     // SSE 스트리밍 응답 처리

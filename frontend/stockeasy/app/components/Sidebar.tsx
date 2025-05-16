@@ -55,6 +55,16 @@ function SidebarContent() {
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false); // 로그인 다이얼로그 상태 추가
   const [showLoginTooltip, setShowLoginTooltip] = useState(false); // 로그인 툴팁 상태 추가
   
+  // 로그인 페이지로 리다이렉트하는 함수
+  const redirectToLogin = () => {
+    
+    // 알림 표시
+    alert('로그인이 필요한 서비스입니다.');
+    
+    // 로그인 페이지로 리다이렉트
+    window.location.href = `${process.env.NEXT_PUBLIC_INTELLIO_URL}/login?redirectTo=stockeasy`;
+  };
+
   // 버튼 참조 객체
   const buttonRefs = {
     home: useRef<HTMLButtonElement>(null),
@@ -83,6 +93,15 @@ function SidebarContent() {
   const goToHomePage = () => {
     // 홈버튼 클릭 이벤트 발생 (채팅 영역 초기화용)
     console.log('홈버튼 클릭: 이벤트 발생시킴', new Date().toISOString());
+
+    // 현재 경로가 공유 페이지인지 확인
+    const isShareChatPage = window.location.pathname.includes('/share_chat');
+
+    // 공유 페이지이고, 로그인되어 있지 않다면 로그인 페이지로 리다이렉트
+    if (isShareChatPage && (!isLoggedIn || userId === 'anonymous')) {
+      redirectToLogin();
+      return; // 로그인 페이지로 리다이렉트 후 함수 종료
+    }
     
     try {
       // 현재 경로가 홈페이지(루트)인 경우에만 이벤트 발생
@@ -489,20 +508,6 @@ function SidebarContent() {
       }
     };
     
-    // 로그인 페이지로 리다이렉트하는 함수
-    const redirectToLogin = () => {
-      const loginUrl = process.env.NEXT_PUBLIC_LOGIN_URL || 'https://intellio.kr/login';
-      
-      // 현재 URL을 리다이렉트 후 원래 페이지로 돌아올 수 있도록 저장
-      const currentUrl = window.location.href;
-      
-      // 알림 표시
-      alert('로그인이 필요한 서비스입니다.');
-      
-      // 로그인 페이지로 리다이렉트
-      window.location.href = `${loginUrl}?redirect=${encodeURIComponent(currentUrl)}`;
-    };
-    
     // 쿠키에서 사용자 정보 가져오기 시도
     const hasUserInfo = getUserInfoFromCookie();
     
@@ -511,25 +516,11 @@ function SidebarContent() {
       // 현재 URL이 /share_chat인지 검사
       const isShareChatPage = window.location.pathname.includes('/share_chat');
       
-      // 공유 채팅 페이지인 경우 로그인 건너뛰기
-      if (isShareChatPage) {
+      if(isShareChatPage) {
+        // 공유 채팅 페이지인 경우 로그인 건너뛰기
         setUserId('anonymous');
         setUserName('Anonymous User');
         console.log('공유 채팅 페이지: 로그인 건너뛰기');
-        return;
-      }
-      
-      // 개발 환경인지 확인
-      // 개발 환경인데 익명 접속을 왜 허용하지. 이딴 코드를 왜 넣은거여.
-      // dev/prod 동작이 달라져서 디버깅을 어렵게 만드는 코드.
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      const allowAnonymous = process.env.NEXT_PUBLIC_ALLOW_ANONYMOUS === 'true';
-      
-      if (isDevelopment || allowAnonymous) {
-        // 개발 환경 또는 익명 접속 허용 시 기본 값 설정
-        setUserId('anonymous');
-        setUserName('Anonymous User');
-        console.log('개발 환경 또는 익명 접속 허용: 익명 사용자로 접속');
       } else {
         // 운영 환경에서는 로그인 페이지로 리다이렉트
         redirectToLogin();

@@ -469,11 +469,30 @@ export function MessageBubble({
                 onClick={() => {
                   // 구조화된 응답 내용이 있으면 우선적으로 사용
                   let contentToCopy = '';
-                  if (message.role === 'assistant' && message.metadata?.content) {
-                    contentToCopy = message.metadata.content;
+                  if (message.role === 'assistant') {
+                    // 메타데이터의 content가 있으면 우선 사용
+                    if (message.metadata?.content) {
+                      contentToCopy = message.metadata.content;
+                      console.log('[MessageBubble] 구조화된 응답 내용 복사:', contentToCopy.substring(0, 30) + '...');
+                    } 
+                    // 만약 메타데이터의 content가 없거나 짧다면, 일반 content 확인
+                    else {
+                      const regularContent = getContentToCopy();
+                      // 일반 content가 더 길거나 메타데이터의 content가 없으면 일반 content 사용
+                      contentToCopy = regularContent;
+                      console.log('[MessageBubble] 일반 응답 내용 복사:', contentToCopy.substring(0, 30) + '...');
+                    }
+                    
+                    // 내용이 없으면 기본 내용 제공
+                    if (!contentToCopy || contentToCopy.trim() === '') {
+                      contentToCopy = message.content || "내용이 없습니다.";
+                      console.log('[MessageBubble] 대체 내용 복사:', contentToCopy.substring(0, 30) + '...');
+                    }
                   } else {
+                    // 어시스턴트가 아닌 경우 일반 복사 로직 사용
                     contentToCopy = getContentToCopy();
                   }
+                  
                   navigator.clipboard.writeText(contentToCopy);
                   setIsCopied(true);
                   if (onCopy) {

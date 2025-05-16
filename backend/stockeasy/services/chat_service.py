@@ -565,7 +565,7 @@ class ChatService:
     @staticmethod
     async def create_share_link(
         db: AsyncSession, 
-        session_id: UUID
+        chat_session_id: UUID
     ) -> ShareLinkResponse:
         """채팅 세션 공유 링크 생성
         
@@ -583,49 +583,67 @@ class ChatService:
         """
         try:
             # 채팅 세션 조회
-            query = select(StockChatSession).where(StockChatSession.id == session_id)
+            query = select(StockChatSession).where(StockChatSession.id == chat_session_id)
             result = await db.execute(query)
             original_session = result.scalar_one_or_none()
             
             if not original_session:
                 raise HTTPException(status_code=404, detail="채팅 세션을 찾을 수 없습니다.")
                 
-            # 공유 UUID 생성
-            share_uuid = str(uuid4())
-            
-            # 공유 세션 생성
-            share_session = ShareStockChatSession(
-                original_session_id=original_session.id,
-                share_uuid=share_uuid,
-                title=original_session.title,
-                stock_code=original_session.stock_code,
-                stock_name=original_session.stock_name,
-                stock_info=original_session.stock_info,
-                agent_results=original_session.agent_results
+            # 먼저 기존 공유 세션 확인
+            existing_query = select(ShareStockChatSession).where(
+                ShareStockChatSession.original_session_id == original_session.id
             )
-            db.add(share_session)
-            await db.flush()
-            
-            # 원본 메시지 복사
-            for msg in original_session.messages:
-                share_message = ShareStockChatMessage(
-                    chat_session_id=share_session.id,
-                    original_message_id=msg.id,
-                    role=msg.role,
-                    stock_code=msg.stock_code,
-                    stock_name=msg.stock_name,
-                    content_type=msg.content_type,
-                    content=msg.content,
-                    content_expert=msg.content_expert,
-                    components=msg.components,
-                    message_data=msg.message_data,
-                    data_url=msg.data_url,
-                    message_metadata=msg.message_metadata,
-                    agent_results=msg.agent_results
+            existing_result = await db.execute(existing_query)
+            existing_share_session = existing_result.scalar_one_or_none()
+
+            # 기존 공유 세션이 있으면 해당 UUID만 가져와서 바로 반환
+            if existing_share_session:
+                share_uuid = existing_share_session.share_uuid
+                
+                # # 공유 URL 생성하여 바로 반환
+                # base_url = settings.STOCKEASY_URL
+                # share_url = f"{base_url}/share_chat/{share_uuid}"
+                
+                # return ShareLinkResponse(
+                #     share_uuid=share_uuid,
+                #     share_url=share_url
+                # )
+            else:
+                # 새 공유 세션 생성 로직 (기존 코드)
+                share_uuid = str(uuid4())
+                share_session = ShareStockChatSession(
+                    original_session_id=original_session.id,
+                    share_uuid=share_uuid,
+                    title=original_session.title,
+                    stock_code=original_session.stock_code,
+                    stock_name=original_session.stock_name,
+                    stock_info=original_session.stock_info,
+                    agent_results=original_session.agent_results
                 )
-                db.add(share_message)
-            
-            await db.commit()
+                db.add(share_session)
+                await db.flush()
+                
+                # 원본 메시지 복사
+                for msg in original_session.messages:
+                    share_message = ShareStockChatMessage(
+                        chat_session_id=share_session.id,
+                        original_message_id=msg.id,
+                        role=msg.role,
+                        stock_code=msg.stock_code,
+                        stock_name=msg.stock_name,
+                        content_type=msg.content_type,
+                        content=msg.content,
+                        content_expert=msg.content_expert,
+                        components=msg.components,
+                        message_data=msg.message_data,
+                        data_url=msg.data_url,
+                        message_metadata=msg.message_metadata,
+                        agent_results=msg.agent_results
+                    )
+                    db.add(share_message)
+                
+                await db.commit()
             
             # 공유 URL 생성
             base_url = settings.STOCKEASY_URL

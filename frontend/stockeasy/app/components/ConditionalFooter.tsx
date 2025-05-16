@@ -16,7 +16,7 @@ export default function ConditionalFooter() {
   //console.log(`pathname: ${pathname}`);
 
   // 현재 경로가 채팅 페이지 경로가 아니면 푸터를 렌더링합니다.
-  if (pathname !== chatPagePath && !pathname.startsWith("/chat")) {
+  if (pathname !== chatPagePath && !pathname.startsWith("/chat") && !pathname.startsWith("/share_chat")) {
     return <ClientFooter />;
   }
 

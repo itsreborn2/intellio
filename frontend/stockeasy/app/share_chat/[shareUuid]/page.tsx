@@ -56,12 +56,6 @@ export default function SharedChatPage() {
       if (uniqueIds.has(msg.id)) return;
       uniqueIds.add(msg.id);
       
-      // 디버깅: 원본 메시지 구조 확인
-      console.log(`[원본 메시지] ID: ${msg.id}, 역할: ${msg.role}`, {
-        stock_code: msg.stock_code,
-        stock_name: msg.stock_name,
-        content: msg.content?.substring(0, 20) + '...'
-      });
       
       // 기본 메시지 객체 생성
       const processedMsg: ChatMessage = {
@@ -79,14 +73,14 @@ export default function SharedChatPage() {
         const stockName = msg.stock_name || session?.stock_name || '';
         const stockCode = msg.stock_code || session?.stock_code || '';
         
-        console.log(`[종목 정보 추출] ID: ${msg.id}`, {
-          원본_종목명: msg.stock_name,
-          원본_종목코드: msg.stock_code,
-          세션_종목명: session?.stock_name,
-          세션_종목코드: session?.stock_code,
-          최종_종목명: stockName,
-          최종_종목코드: stockCode
-        });
+        // console.log(`[종목 정보 추출] ID: ${msg.id}`, {
+        //   원본_종목명: msg.stock_name,
+        //   원본_종목코드: msg.stock_code,
+        //   세션_종목명: session?.stock_name,
+        //   세션_종목코드: session?.stock_code,
+        //   최종_종목명: stockName,
+        //   최종_종목코드: stockCode
+        // });
         
         // 중요: stockName 또는 stockCode가 있는 경우에만 stockInfo 추가
         if (stockName || stockCode) {
@@ -96,8 +90,6 @@ export default function SharedChatPage() {
             stockCode
           };
           
-          // 디버깅: 생성된 stockInfo 객체 확인
-          console.log(`[stockInfo 생성됨] ID: ${msg.id}`, processedMsg.stockInfo);
         }
       }
       
@@ -255,19 +247,17 @@ export default function SharedChatPage() {
     );
   }
   
-  // 렌더링 직전 디버깅 로그
-  console.log('[렌더링 직전] 처리된 메시지:', 
-    processedMessages.map(msg => ({
-      id: msg.id, 
-      role: msg.role,
-      hasStockInfo: !!msg.stockInfo,
-      stockInfoDetails: msg.stockInfo
-    }))
-  );
-  
+
   return (
     <div className="flex-1 p-0 sm:p-2 md:p-4 w-full">
-      <div className="w-full max-w-[800px] mx-auto px-0 sm:px-2">
+      {/* Fixed banner for shared report notification */}
+
+
+      {/* Main content area with padding to offset the fixed banner */}
+      <div className="w-full max-w-[800px] mx-auto px-0 sm:px-2 pt-4">
+       <div className="mb-3 p-3 text-center text-green-700 bg-green-50 border border-green-600 rounded-md">
+         공유된 보고서입니다.
+       </div>
         {processedMessages.length === 0 ? (
           <div className="flex h-full items-center justify-center py-8">
             <p className="text-center text-gray-500">메시지가 없습니다.</p>
@@ -275,10 +265,6 @@ export default function SharedChatPage() {
         ) : (
           <div className="space-y-4 my-4">
             {processedMessages.map((message) => {
-              // 렌더링 직전 각 메시지 검증
-              if (message.role === 'user') {
-                console.log(`[메시지 렌더링] ID: ${message.id}, stockInfo:`, message.stockInfo);
-              }
               
               return (
                 <MessageBubble

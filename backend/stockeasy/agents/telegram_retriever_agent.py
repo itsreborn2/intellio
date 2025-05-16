@@ -404,11 +404,11 @@ class TelegramRetrieverAgent(BaseAgent):
                     # title_key를 section_id로 변환 (매핑에 없으면 title_key 그대로 사용)
                     section_id = title_to_section_id.get(title_key, title_key)
                     
-                    # 변환 로그 기록
-                    if section_id != title_key:
-                        logger.info(f"Title '{title_key}' -> section_id '{section_id}' 매핑됨")
-                    else:
-                        logger.info(f"Title '{title_key}' 매핑 없음, 원본 사용")
+                    # # 변환 로그 기록
+                    # if section_id != title_key:
+                    #     logger.info(f"Title '{title_key}' -> section_id '{section_id}' 매핑됨")
+                    # else:
+                    #     logger.info(f"Title '{title_key}' 매핑 없음, 원본 사용")
                     
                     if isinstance(content_items, list):
                         messages_for_this_section: List[RetrievedTelegramMessage] = []

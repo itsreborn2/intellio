@@ -17,7 +17,6 @@ interface MessageProcessingOptions {
   onQuestionLimitExceeded?: () => void;
   onProcessingStart?: () => void;
   onProcessingComplete?: () => void;
-  onNavigate?: (url: string) => void;
   maxQuestions?: number;
 }
 
@@ -62,7 +61,6 @@ function useMessageProcessing(
     onQuestionLimitExceeded = () => toast.error('오늘의 질문 할당량을 모두 소진하였습니다. 내일 다시 이용해주세요.'),
     onProcessingStart = () => {},
     onProcessingComplete = () => {},
-    onNavigate,
     maxQuestions = 10
   } = options;
 
@@ -382,7 +380,7 @@ function useMessageProcessing(
                 
                 // 구조화된 컴포넌트 포함한 업데이트
                 updateMessage(assistantMessageId.current, {
-                  content: accumulatedContent.current, // 기존 누적된 텍스트 유지
+                  content: content || accumulatedContent.current, // 구조화된 응답 내용을 content에도 저장
                   metadata: {
                     components: components, // 구조화된 컴포넌트 추가
                     responseId: metadata?.responseId,
@@ -422,7 +420,7 @@ function useMessageProcessing(
                 const assistantMessageObj: IChatMessageDetail = {
                   id: message_id || `assistant-${uuidv4()}`,
                   role: 'assistant',
-                  content: textContent,
+                  content: content || textContent, // 구조화된 응답 내용을 우선 사용
                   content_expert: data.response_expert,
                   chat_session_id: sessionId || '',
                   stock_name: stockInfo.stockName,
@@ -511,8 +509,7 @@ function useMessageProcessing(
             setProcessing(false);
             toast.error(`메시지 처리 중 오류: ${error.message || '알 수 없는 오류'}`);
           },
-          // URL 변경을 위한 콜백 전달
-          onNavigate: options.onNavigate
+
         },
         isFollowUp  // 후속질문 여부 전달
       );
