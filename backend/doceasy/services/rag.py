@@ -549,7 +549,7 @@ class RAGService:
 
                 if not is_summary_query: #요약이 아닌 경우.
                     # 2. 리랭킹 수행
-                    reranker = Reranker(
+                    async with Reranker(
                         RerankerConfig(
                             reranker_type=RerankerType.PINECONE,
                             pinecone_config=PineconeRerankerConfig(
@@ -557,58 +557,57 @@ class RAGService:
                                 min_score=0.1  # 낮은 임계값으로 더 많은 결과 포함
                             )
                         )
-                    )
-                    
-                    # Pinecone 리랭커는 한 번에 최대 100개 문서만 처리 가능
-                    max_batch_size = 100
-                    all_documents = all_chunks.documents
-                    total_docs = len(all_documents)
-                    
-                    if total_docs <= max_batch_size:
-                        # 문서가 100개 이하면 한 번에 처리
-                        reranked_results = await reranker.rerank(
-                            query=normalized_query,
-                            documents=all_documents,
-                            top_k=min(top_k_adjusted, total_docs),
-                        )
-                        logger.info(f"리랭킹 완료 - 결과: {len(all_documents)} -> {len(reranked_results.documents)} 문서")
-                        all_chunks = reranked_results  # 리랭킹 결과로 대체
-                    else:
-                        # 문서가 100개 이상이면 배치로 나누어 처리
-                        logger.warning(f"문서가 {total_docs}개로 많아 {max_batch_size}개씩 배치 처리합니다.")
-                        batches = [all_documents[i:i+max_batch_size] for i in range(0, total_docs, max_batch_size)]
+                    ) as reranker:
+                        # Pinecone 리랭커는 한 번에 최대 100개 문서만 처리 가능
+                        max_batch_size = 100
+                        all_documents = all_chunks.documents
+                        total_docs = len(all_documents)
                         
-                        all_reranked_docs = []
-                        for i, batch in enumerate(batches):
-                            try:
-                                batch_size = len(batch)
-                                logger.info(f"배치 {i+1}/{len(batches)} 리랭킹 시작 (문서 {batch_size}개)")
-                                
-                                batch_results = await reranker.rerank(
-                                    query=normalized_query,
-                                    documents=batch,
-                                    top_k=batch_size,  # 배치 내 모든 문서 유지
-                                )
-                                
-                                all_reranked_docs.extend(batch_results.documents)
-                                logger.info(f"배치 {i+1} 리랭킹 완료: {batch_size} -> {len(batch_results.documents)} 문서")
-                            except Exception as e:
-                                logger.error(f"배치 {i+1} 리랭킹 실패: {str(e)}")
-                                # 리랭킹 실패시 원본 문서 유지
-                                all_reranked_docs.extend(batch)
-                        
-                        # 전체 리랭킹된 문서 중에서 상위 K개 선택
-                        # 점수 기준으로 내림차순 정렬
-                        all_reranked_docs.sort(key=lambda x: x.score if x.score is not None else 0, reverse=True)
-                        top_docs = all_reranked_docs[:top_k_adjusted]
-                        
-                        # 새로운 RetrievalResult 생성
-                        from copy import deepcopy
-                        reranked_results = deepcopy(all_chunks)
-                        reranked_results.documents = top_docs
-                        
-                        logger.info(f"전체 리랭킹 완료 - 결과: {total_docs} -> {len(top_docs)} 문서")
-                        all_chunks = reranked_results  # 리랭킹 결과로 대체
+                        if total_docs <= max_batch_size:
+                            # 문서가 100개 이하면 한 번에 처리
+                            reranked_results = await reranker.rerank(
+                                query=normalized_query,
+                                documents=all_documents,
+                                top_k=min(top_k_adjusted, total_docs),
+                            )
+                            logger.info(f"리랭킹 완료 - 결과: {len(all_documents)} -> {len(reranked_results.documents)} 문서")
+                            all_chunks = reranked_results  # 리랭킹 결과로 대체
+                        else:
+                            # 문서가 100개 이상이면 배치로 나누어 처리
+                            logger.warning(f"문서가 {total_docs}개로 많아 {max_batch_size}개씩 배치 처리합니다.")
+                            batches = [all_documents[i:i+max_batch_size] for i in range(0, total_docs, max_batch_size)]
+                            
+                            all_reranked_docs = []
+                            for i, batch in enumerate(batches):
+                                try:
+                                    batch_size = len(batch)
+                                    logger.info(f"배치 {i+1}/{len(batches)} 리랭킹 시작 (문서 {batch_size}개)")
+                                    
+                                    batch_results = await reranker.rerank(
+                                        query=normalized_query,
+                                        documents=batch,
+                                        top_k=batch_size,  # 배치 내 모든 문서 유지
+                                    )
+                                    
+                                    all_reranked_docs.extend(batch_results.documents)
+                                    logger.info(f"배치 {i+1} 리랭킹 완료: {batch_size} -> {len(batch_results.documents)} 문서")
+                                except Exception as e:
+                                    logger.error(f"배치 {i+1} 리랭킹 실패: {str(e)}")
+                                    # 리랭킹 실패시 원본 문서 유지
+                                    all_reranked_docs.extend(batch)
+                            
+                            # 전체 리랭킹된 문서 중에서 상위 K개 선택
+                            # 점수 기준으로 내림차순 정렬
+                            all_reranked_docs.sort(key=lambda x: x.score if x.score is not None else 0, reverse=True)
+                            top_docs = all_reranked_docs[:top_k_adjusted]
+                            
+                            # 새로운 RetrievalResult 생성
+                            from copy import deepcopy
+                            reranked_results = deepcopy(all_chunks)
+                            reranked_results.documents = top_docs
+                            
+                            logger.info(f"전체 리랭킹 완료 - 결과: {total_docs} -> {len(top_docs)} 문서")
+                            all_chunks = reranked_results
                     
                 
                 # 요약 쿼리이고 결과가 부족한 경우

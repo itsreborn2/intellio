@@ -162,7 +162,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     "duration": duration,
                     "status": "completed_no_data",
                     "error": None,
-                    "model_name": self.model_name
+                    "model_name": self.agent_llm.get_model_name()
                 }
                 
                 logger.info(f"FinancialAnalyzerAgent completed in {duration:.2f} seconds, no data found")

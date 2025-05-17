@@ -6,6 +6,20 @@ import { useChatShare } from '@/services/api/useChatShare';
 import { MessageBubble } from '@/app/components/chat/AIChatArea/components/MessageBubble';
 import { ChatMessage } from '@/app/components/chat/AIChatArea/types';
 
+// 로컬 스토리지 캐시 데이터 인터페이스
+interface ICachedSharedChat {
+  session: any;
+  messages: any[];
+  expiresAt: number;
+}
+
+// 로컬 스토리지 키 생성 유틸리티
+const getLocalStorageKey = (uuid: string) => `sharedChat_${uuid}`;
+
+// 로컬 스토리지 만료 시간 (1일)
+const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 1일
+//const CACHE_EXPIRATION_MS = 1 * 60 * 1000; // 1분
+
 // 로딩 스피너 컴포넌트 내부 정의
 function LoadingSpinner({ size = "lg" }: { size?: "sm" | "md" | "lg" }) {
   const sizeClasses = {
@@ -116,13 +130,108 @@ export default function SharedChatPage() {
     if (isRequestInProgress.current || dataLoaded.current) {
       return;
     }
-    
-    const fetchSharedChat = async () => {
+
+    const loadChatData = async () => {
+      isRequestInProgress.current = true;
+      setIsLoading(true);
+      setError(null);
+
+      // --- 모든 만료된 및 오래된 sharedChat 캐시 정리 ---
       try {
-        isRequestInProgress.current = true;
-        setIsLoading(true);
-        setError(null);
+        console.log("[캐시 정리 시작] 만료/오래된 sharedChat_ 항목들을 확인합니다.");
+        const MAX_CACHED_ITEMS = 50; // 예: 최대 50개 항목 유지
+        let allSharedItems: { key: string, data: ICachedSharedChat }[] = [];
+
+        // 1. 로컬스토리지에서 모든 sharedChat_ 아이템 수집
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('sharedChat_')) {
+            const cachedDataString = localStorage.getItem(key);
+            if (cachedDataString) {
+              try {
+                const cachedData: ICachedSharedChat = JSON.parse(cachedDataString);
+                allSharedItems.push({ key, data: cachedData });
+              } catch (e) {
+                // 파싱 실패한 데이터는 유효하지 않거나 손상된 데이터로 간주하고 즉시 삭제
+                console.warn(`[캐시 정리 오류] ${key} 파싱 실패, 즉시 삭제:`, e);
+                localStorage.removeItem(key); // 손상된 아이템 즉시 제거
+              }
+            }
+          }
+        }
+
+        // 2. 만료된 항목 필터링 및 삭제
+        const unexpiredItems: { key: string, data: ICachedSharedChat }[] = [];
+        let itemsActuallyRemovedCount = 0;
+
+        allSharedItems.forEach(item => {
+          if (item.data.expiresAt <= Date.now()) {
+            localStorage.removeItem(item.key);
+            console.log(`[캐시 만료 삭제] ${item.key} (만료일: ${new Date(item.data.expiresAt).toISOString()})`);
+            itemsActuallyRemovedCount++;
+          } else {
+            unexpiredItems.push(item);
+          }
+        });
+
+        if (itemsActuallyRemovedCount > 0) {
+            console.log(`[캐시 정리] 총 ${itemsActuallyRemovedCount}개의 만료된 항목이 삭제되었습니다.`);
+        }
+
+        // 3. 만료되지 않은 항목이 최대 개수를 초과하면, 가장 오래된 항목(expiresAt이 가장 빠른) 삭제
+        if (unexpiredItems.length > MAX_CACHED_ITEMS) {
+          console.log(`[캐시 정리] 만료되지 않은 항목(${unexpiredItems.length}개)이 최대치(${MAX_CACHED_ITEMS}개)를 초과. 오래된 항목 삭제 시작.`);
+          // expiresAt 기준으로 오름차순 정렬 (가장 빨리 만료될 = 가장 오래된)
+          unexpiredItems.sort((a, b) => a.data.expiresAt - b.data.expiresAt);
+          
+          const itemsToPurgeCount = unexpiredItems.length - MAX_CACHED_ITEMS;
+          for (let i = 0; i < itemsToPurgeCount; i++) {
+            const itemToPurge = unexpiredItems[i];
+            localStorage.removeItem(itemToPurge.key);
+            console.log(`[캐시 정리 - 용량 초과] 오래된 항목 삭제: ${itemToPurge.key} (만료 예정: ${new Date(itemToPurge.data.expiresAt).toISOString()})`);
+            itemsActuallyRemovedCount++;
+          }
+          console.log(`[캐시 정리] 용량 관리를 위해 추가로 ${itemsToPurgeCount}개의 오래된 항목이 삭제되었습니다.`);
+        }
         
+        if (itemsActuallyRemovedCount > 0) {
+             console.log(`[캐시 정리 완료] 총 ${itemsActuallyRemovedCount}개의 항목이 삭제 처리되었습니다.`);
+        } else {
+            console.log("[캐시 정리 완료] 삭제할 만료/오래된 항목 없음.");
+        }
+
+      } catch (e) {
+        console.error("캐시 정리 중 오류 발생:", e);
+      }
+      // --- 정리 로직 끝 ---
+
+      const localStorageKey = getLocalStorageKey(shareUuid);
+
+      // 1. 로컬 스토리지에서 캐시된 데이터 확인
+      try {
+        const cachedDataString = localStorage.getItem(localStorageKey);
+        if (cachedDataString) {
+          const cachedData: ICachedSharedChat = JSON.parse(cachedDataString);
+          if (cachedData.expiresAt > Date.now()) {
+            console.log("[캐시 사용] 로컬 스토리지에서 데이터 로드:", cachedData);
+            setSession(cachedData.session);
+            setMessages(cachedData.messages || []);
+            dataLoaded.current = true;
+            setIsLoading(false);
+            isRequestInProgress.current = false;
+            return; // 캐시된 데이터 사용 시 여기서 종료
+          } else {
+            console.log("[캐시 만료] 로컬 스토리지 데이터 삭제:", localStorageKey);
+            localStorage.removeItem(localStorageKey);
+          }
+        }
+      } catch (e) {
+        console.error("로컬 스토리지 읽기 오류:", e);
+        // 오류 발생 시 캐시 사용하지 않고 계속 진행
+      }
+
+      // 2. 캐시 없거나 만료 시 백엔드에서 데이터 가져오기
+      try {
         const data = await getSharedChat(shareUuid);
         console.log("[API 응답] 공유된 채팅 데이터:", {
           세션_정보: data.session ? {
@@ -135,6 +244,19 @@ export default function SharedChatPage() {
         
         setSession(data.session);
         setMessages(data.messages || []);
+
+        // 3. 가져온 데이터를 로컬 스토리지에 저장
+        try {
+          const cacheToStore: ICachedSharedChat = {
+            session: data.session,
+            messages: data.messages || [],
+            expiresAt: Date.now() + CACHE_EXPIRATION_MS,
+          };
+          localStorage.setItem(localStorageKey, JSON.stringify(cacheToStore));
+          console.log("[캐시 저장] 로컬 스토리지에 데이터 저장:", localStorageKey, cacheToStore);
+        } catch (e) {
+          console.error("로컬 스토리지 쓰기 오류:", e);
+        }
         
         dataLoaded.current = true;
       } catch (err) {
@@ -147,11 +269,13 @@ export default function SharedChatPage() {
     };
     
     if (shareUuid) {
-      fetchSharedChat();
+      loadChatData();
     }
     
     return () => {
-      isRequestInProgress.current = false;
+      // 컴포넌트 언마운트 시 isRequestInProgress.current를 false로 설정할 필요는
+      // 이 로직에서는 크게 중요하지 않으나, 복잡한 상황을 대비해 유지할 수 있습니다.
+      // isRequestInProgress.current = false; 
     };
   }, [shareUuid, getSharedChat]);
   

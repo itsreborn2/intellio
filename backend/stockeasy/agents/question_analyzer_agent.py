@@ -11,6 +11,7 @@ from typing import Dict, List, Any, Optional, Literal, cast, Union
 from datetime import datetime
 import os
 import asyncio
+import re
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -349,44 +350,203 @@ class QuestionAnalyzerAgent(BaseAgent):
                 # 프롬프트 준비
                 prompt = format_question_analyzer_prompt(query=query, stock_name=stock_name, stock_code=stock_code, system_prompt=system_prompt)
                 
-                # LLM 호출로 분석 수행 - structured output 사용
-                response:QuestionAnalysis = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
-                    prompt, # input=prompt 하면 안됨. 그냥 prompt 전달
-                    user_id=user_id,
-                    project_type=ProjectType.STOCKEASY,
-                    db=self.db
-                )
-                response.entities.stock_name = stock_name
-                response.entities.stock_code = stock_code
+                try:
+                    # LLM 호출로 분석 수행
+                    raw_response = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
+                        prompt,
+                        user_id=user_id,
+                        project_type=ProjectType.STOCKEASY,
+                        db=self.db
+                    )
+                    
+                    response: QuestionAnalysis
+                    
+                    if isinstance(raw_response, AIMessage):
+                        logger.info("AIMessage 형태로 응답 받음, JSON 파싱 시도")
+                        content = raw_response.content
+                        
+                        # ```json ``` 제거
+                        if isinstance(content, str):
+                            # 정규 표현식을 사용하여 ```json ... ``` 또는 ``` ... ``` 패턴을 찾고 내부 JSON만 추출
+                            match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
+                            if match:
+                                json_str = match.group(1)
+                            else:
+                                # 단순 ``` 제거 시도 (패턴이 안맞을 경우 대비)
+                                json_str = content.strip()
+                                if json_str.startswith("```json"):
+                                    json_str = json_str[7:]
+                                if json_str.startswith("```"):
+                                    json_str = json_str[3:]
+                                if json_str.endswith("```"):
+                                    json_str = json_str[:-3]
+                                json_str = json_str.strip()
+                                
+                            try:
+                                parsed_data = json.loads(json_str)
+                                response = QuestionAnalysis(**parsed_data)
+                                logger.info(f"AIMessage JSON 파싱 성공: {response}")
+                            except json.JSONDecodeError as json_err:
+                                logger.error(f"AIMessage JSON 파싱 실패: {json_err}. Fallback 로직으로 진행합니다.")
+                                raise Exception("AIMessage JSON parsing failed") # Fallback 트리거
+                        else:
+                            logger.error("AIMessage content가 문자열이 아님. Fallback 로직으로 진행합니다.")
+                            raise Exception("AIMessage content is not a string") # Fallback 트리거
+                    elif isinstance(raw_response, QuestionAnalysis):
+                        response = raw_response
+                    else:
+                        logger.error(f"예상치 못한 응답 타입: {type(raw_response)}. Fallback 로직으로 진행합니다.")
+                        raise Exception(f"Unexpected response type: {type(raw_response)}")
 
-                # 모든 데이터 전부 on
-                response.data_requirements.reports_needed = True
-                response.data_requirements.telegram_needed = True
-                response.data_requirements.financial_statements_needed = True
-                response.data_requirements.industry_data_needed = True
-                response.data_requirements.confidential_data_needed = True
-                response.data_requirements.revenue_data_needed = True
-                # 분석 결과 로깅
-                logger.info(f"Analysis result: {response}")
+                    # response가 QuestionAnalysis 객체인 경우 처리
+                    response.entities.stock_name = stock_name
+                    response.entities.stock_code = stock_code
 
-                # 서브그룹 가져오기
-                stock_info_service = StockInfoService()
-                subgroup_list = await stock_info_service.get_sector_by_code(stock_code)
-                logger.info(f"subgroup_info: {subgroup_list}")
+                    # 모든 데이터 전부 on
+                    response.data_requirements.reports_needed = True
+                    response.data_requirements.telegram_needed = True
+                    response.data_requirements.financial_statements_needed = True
+                    response.data_requirements.industry_data_needed = True
+                    response.data_requirements.confidential_data_needed = True
+                    response.data_requirements.revenue_data_needed = True
+                    
+                    # 분석 결과 로깅
+                    logger.info(f"Analysis result: {response}")
 
-                if subgroup_list and len(subgroup_list) > 0:
-                    response.entities.subgroup = subgroup_list
-                
-                # QuestionAnalysisResult 객체 생성 - 유틸리티 함수 사용
-                question_analysis: QuestionAnalysisResult = {
-                    "entities": response.entities.dict(),
-                    "classification": response.classification.dict(),
-                    "data_requirements": response.data_requirements.dict(),
-                    "keywords": response.keywords,
-                    "detail_level": response.detail_level
-                }
+                    # 서브그룹 가져오기
+                    stock_info_service = StockInfoService()
+                    subgroup_list = await stock_info_service.get_sector_by_code(stock_code)
+                    logger.info(f"subgroup_info: {subgroup_list}")
+
+                    if subgroup_list and len(subgroup_list) > 0:
+                        response.entities.subgroup = subgroup_list
+                    
+                    # QuestionAnalysisResult 객체 생성 - 유틸리티 함수 사용
+                    question_analysis: QuestionAnalysisResult = {
+                        "entities": response.entities.dict(),
+                        "classification": response.classification.dict(),
+                        "data_requirements": response.data_requirements.dict(),
+                        "keywords": response.keywords,
+                        "detail_level": response.detail_level
+                    }
+                    
+                except Exception as e:
+                    # 구조화된 출력 파싱에 실패한 경우 fallback 처리
+                    logger.error(f"구조화된 출력 파싱 중 오류 발생: {str(e)}")
+                    
+                    # LLM 호출 다시 시도 (일반 응답으로)
+                    logger.info("일반 응답 형식으로 다시 시도합니다.")
+                    ai_response = await self.agent_llm.ainvoke_with_fallback(
+                        prompt,
+                        user_id=user_id,
+                        project_type=ProjectType.STOCKEASY,
+                        db=self.db
+                    )
+                    
+                    logger.info(f"일반 응답 받음: {type(ai_response)}")
+                    
+                    # AIMessage에서 JSON 파싱 시도
+                    try:
+                        import re
+                        import json
+                        
+                        # JSON 패턴 찾기 (중괄호로 감싸진 부분)
+                        json_pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}))*\}'
+                        content = ai_response.content if hasattr(ai_response, 'content') else str(ai_response)
+                        json_match = re.search(json_pattern, content, re.DOTALL)
+                        
+                        if json_match:
+                            json_str = json_match.group(0)
+                            # JSON 문자열 파싱
+                            parsed_data = json.loads(json_str)
+                            logger.info(f"JSON 파싱 성공: {parsed_data}")
+                            
+                            # 기본 데이터 구조 생성
+                            question_analysis = {
+                                "entities": {
+                                    "stock_name": stock_name,
+                                    "stock_code": stock_code,
+                                    "sector": parsed_data.get("entities", {}).get("sector"),
+                                    "subgroup": None,  # 아래에서 설정
+                                    "time_range": parsed_data.get("entities", {}).get("time_range"),
+                                    "financial_metric": parsed_data.get("entities", {}).get("financial_metric"),
+                                    "competitor": parsed_data.get("entities", {}).get("competitor"),
+                                    "product": parsed_data.get("entities", {}).get("product")
+                                },
+                                "classification": {
+                                    "primary_intent": parsed_data.get("classification", {}).get("primary_intent", "종목기본정보"),
+                                    "complexity": parsed_data.get("classification", {}).get("complexity", "중간"),
+                                    "expected_answer_type": parsed_data.get("classification", {}).get("expected_answer_type", "사실형")
+                                },
+                                "data_requirements": {
+                                    "telegram_needed": True,
+                                    "reports_needed": True,
+                                    "financial_statements_needed": True,
+                                    "industry_data_needed": True,
+                                    "confidential_data_needed": True,
+                                    "revenue_data_needed": True,
+                                    "web_search_needed": parsed_data.get("data_requirements", {}).get("web_search_needed", False)
+                                },
+                                "keywords": parsed_data.get("keywords", []),
+                                "detail_level": parsed_data.get("detail_level", "보통")
+                            }
+                            
+                            # 서브그룹 가져오기
+                            stock_info_service = StockInfoService()
+                            subgroup_list = await stock_info_service.get_sector_by_code(stock_code)
+                            logger.info(f"subgroup_info: {subgroup_list}")
+                            
+                            if subgroup_list and len(subgroup_list) > 0:
+                                question_analysis["entities"]["subgroup"] = subgroup_list
+                        else:
+                            logger.warning("JSON 패턴을 찾을 수 없음, 기본 응답 구조 사용")
+                            # 기본 응답 구조 생성
+                            question_analysis = create_default_question_analysis(stock_name, stock_code)
+                            
+                    except Exception as json_error:
+                        logger.error(f"JSON 파싱 중 오류 발생: {str(json_error)}")
+                        # 기본 응답 구조 생성
+                        question_analysis = create_default_question_analysis(stock_name, stock_code)
                 
                 return question_analysis
+            
+            # 기본 질문 분석 구조 생성 함수
+            def create_default_question_analysis(stock_name, stock_code):
+                # 서브그룹 가져오기
+                try:
+                    stock_info_service = StockInfoService()
+                    subgroup_list = asyncio.run(stock_info_service.get_sector_by_code(stock_code))
+                except Exception:
+                    subgroup_list = []
+                
+                return {
+                    "entities": {
+                        "stock_name": stock_name,
+                        "stock_code": stock_code,
+                        "sector": None,
+                        "subgroup": subgroup_list if subgroup_list and len(subgroup_list) > 0 else None,
+                        "time_range": None,
+                        "financial_metric": None,
+                        "competitor": None,
+                        "product": None
+                    },
+                    "classification": {
+                        "primary_intent": "종목기본정보",
+                        "complexity": "중간",
+                        "expected_answer_type": "사실형"
+                    },
+                    "data_requirements": {
+                        "telegram_needed": True,
+                        "reports_needed": True,
+                        "financial_statements_needed": True,
+                        "industry_data_needed": True,
+                        "confidential_data_needed": True,
+                        "revenue_data_needed": True,
+                        "web_search_needed": False
+                    },
+                    "keywords": [stock_name, "정보"],
+                    "detail_level": "보통"
+                }
             
             # 2. 최근 이슈 검색 및 목차 생성 비동기 함수
             async def search_issues_and_generate_toc():
@@ -468,10 +628,10 @@ class QuestionAnalyzerAgent(BaseAgent):
         Returns:
             대화 컨텍스트 분석 결과
         """
-        logger.info(f"Analyzing conversation context dependency for query: {query}")
+        #logger.info(f"Analyzing conversation context dependency for query: {query}")
         
         if not conversation_history or len(conversation_history) < 2:
-            logger.info("대화 기록이 충분하지 않음, 컨텍스트 분석 건너뜀")
+            #logger.info("대화 기록이 충분하지 않음, 컨텍스트 분석 건너뜀")
             return ConversationContextAnalysis(
                 requires_context=False,
                 is_followup_question=False,
