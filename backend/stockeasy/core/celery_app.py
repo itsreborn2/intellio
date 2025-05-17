@@ -17,7 +17,8 @@ celery = Celery(
     include=[
         "stockeasy.workers.telegram.collector_tasks",
         "stockeasy.workers.telegram.embedding_tasks",
-        "stockeasy.workers.statistics.daily_tasks"
+        "stockeasy.workers.statistics.daily_tasks",
+        "stockeasy.workers.maintenance.cleanup_tasks"  # 새로운 모듈 추가
     ]
 )
 
@@ -61,6 +62,10 @@ celery.conf.task_routes = {
         "routing_key": "embedding-processing"
     },
     "stockeasy.workers.statistics.daily_tasks.*": {
+        "queue": "general-periodic",
+        "routing_key": "general-periodic"
+    },
+    "stockeasy.workers.maintenance.cleanup_tasks.*": {  # 새 태스크 라우팅 추가
         "queue": "general-periodic",
         "routing_key": "general-periodic"
     }
@@ -120,5 +125,9 @@ celery.conf.beat_schedule = {
     'generate-daily-statistics': {
         'task': 'stockeasy.workers.statistics.daily_tasks.generate_daily_stats',
         'schedule': crontab(minute='*/10'),  # 10분마다 실행 
+    },
+    'cleanup-old-shared-sessions': {  # 새 스케줄 추가
+        'task': 'stockeasy.workers.maintenance.cleanup_tasks.cleanup_old_shared_sessions',
+        'schedule': crontab(hour=4, minute=0),  # 매일 04:00에 실행
     }
 }

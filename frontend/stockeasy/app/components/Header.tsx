@@ -204,7 +204,7 @@ const Header: React.FC = () => {
   // 공유 링크 생성 처리 핸들러
   const handleShareChat = async () => {
     if (!currentSession) {
-      toast.error('채팅 세션이 없습니다.');
+      toast.error('채팅 세션이 없습니다.', { position: 'top-center' });
       return;
     }
     
@@ -214,9 +214,9 @@ const Header: React.FC = () => {
       // 클립보드에 링크 복사
       await navigator.clipboard.writeText(result.share_url);
       
-      toast.success('공유 링크가 클립보드에 복사되었습니다.');
+      toast.success('공유 링크가 클립보드에 복사되었습니다.', { position: 'top-center' });
     } catch (error) {
-      toast.error('공유 링크 생성에 실패했습니다.');
+      toast.error('공유 링크 생성에 실패했습니다.', { position: 'top-center' });
     }
   };
 
