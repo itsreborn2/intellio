@@ -86,7 +86,6 @@ async def read_token_usage_summary(
             raise HTTPException(status_code=401, detail="인증되지 않은 사용자입니다.")
         # 현재 날짜
         now = datetime.now()
-        logger.info(f"summary")
         
         # 기간에 따른 시작 날짜 계산
         if period == "day":

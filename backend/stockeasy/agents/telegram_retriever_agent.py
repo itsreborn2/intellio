@@ -886,7 +886,7 @@ class TelegramRetrieverAgent(BaseAgent):
             # 중복 제거된 청크로. 리랭킹 수행
 
             # 2. 리랭킹 수행
-            reranker = Reranker(
+            async with Reranker(
                 RerankerConfig(
                     reranker_type=RerankerType.PINECONE,
                     pinecone_config=PineconeRerankerConfig(
@@ -894,13 +894,12 @@ class TelegramRetrieverAgent(BaseAgent):
                         min_score=0.2  # 낮은 임계값으로 더 많은 결과 포함
                     )
                 )
-            )
-            
-            reranked_results = await reranker.rerank(
-                query=search_query,
-                documents=remove_duplicated_result,
-                top_k=k
-            )
+            ) as reranker:
+                reranked_results = await reranker.rerank(
+                    query=search_query,
+                    documents=remove_duplicated_result,
+                    top_k=k
+                )
 
             logger.info(f"리랭킹 완료 - 결과: {len(result.documents)} -> {len(reranked_results.documents)} 문서")
 

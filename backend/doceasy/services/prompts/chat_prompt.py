@@ -3,8 +3,9 @@ from .base import BasePrompt
 import re
 from enum import Enum
 
-import logging
-logger = logging.getLogger(__name__)
+
+from loguru import logger # loguru 임포트 추가
+# logger = logging.getLogger(__name__) # 표준 로거 초기화 제거
 
 class AnalysisType(Enum):
     TIME_SERIES = "시계열"

@@ -4,7 +4,8 @@
 이 모듈은 매일 정해진 시간에 실행되어 하루 동안의 데이터를 수집하고 
 통계를 생성하는 Celery 태스크를 포함합니다.
 """
-import logging
+
+from loguru import logger # loguru import 추가
 from datetime import datetime, timedelta
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,7 @@ from stockeasy.core.celery_app import celery
 from stockeasy.models.chat import StockChatSession, StockChatMessage
 from stockeasy.services.google_sheet_service import GoogleSheetService
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 
 @celery.task(
@@ -196,15 +197,3 @@ def get_daily_chat_sessions_sync(db: Session, start_time, end_time):
     except Exception as e:
         logger.error(f"일일 채팅 세션 통계 조회 중 오류: {str(e)}")
         return {'total': 0, 'error': str(e)}
-
-
-# if __name__ == "__main__":
-#     import logging
-#     logging.basicConfig(level=logging.INFO) # 간단한 로깅 설정
-#     logger.info("daily_tasks.py를 직접 실행하여 generate_daily_stats() 테스트 시작...")
-#     try:
-#         result = generate_daily_stats()
-#         logger.info(f"generate_daily_stats() 실행 완료. 결과: {result}")
-#     except Exception as e:
-#         logger.error(f"generate_daily_stats() 실행 중 오류 발생: {e}", exc_info=True)
-#     logger.info("generate_daily_stats() 테스트 종료.")

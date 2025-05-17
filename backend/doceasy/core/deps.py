@@ -3,9 +3,9 @@ from fastapi import Depends
 from common.core.deps import get_db_async
 from doceasy.services.project import ProjectService
 from doceasy.services.document import DocumentService
-import logging
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 
 def get_project_service(

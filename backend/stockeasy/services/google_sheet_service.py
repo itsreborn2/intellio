@@ -1,13 +1,14 @@
 import os
 import json
-import logging
+
+from loguru import logger # loguru import 추가
 from google.oauth2 import service_account
 import gspread
 from typing import List, Dict, Any, Optional
 
 from common.core.config import settings
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 class GoogleSheetService:
     """구글 스프레드시트 접근 서비스"""

@@ -2,7 +2,8 @@ from sqlalchemy import select, and_, or_, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing import List, Dict, Any, Optional, Tuple, Union
-import logging
+
+from loguru import logger # loguru import 추가
 from decimal import Decimal
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
@@ -20,7 +21,7 @@ from stockeasy.models.balance_sheet_data import BalanceSheetData
 from stockeasy.models.cash_flow_data import CashFlowData
 from stockeasy.models.equity_change_data import EquityChangeData
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 
 class FinancialRepository:

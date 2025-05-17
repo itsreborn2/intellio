@@ -13,7 +13,6 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 from typing import List, Optional, Dict, Any
-import logging
 import asyncio
 import os
 import io

@@ -24,14 +24,12 @@ from common.schemas.user import (
 from common.schemas.auth import OAuthLoginResponse
 from common.core.config import settings
 import json
-import logging
 from loguru import logger
 from datetime import datetime, timedelta
-from jose import jwt
+
 from pydantic import ValidationError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-logger = logging.getLogger(__name__)
 
 # OAuth2 bearer token 설정
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

@@ -3,7 +3,7 @@ import numpy as np
 from datetime import datetime
 from dataclasses import dataclass, asdict
 
-import logging
+from loguru import logger
 import re
 from common.core.config import settings
 from common.utils.util import measure_time_async
@@ -12,8 +12,6 @@ from common.services.embedding import EmbeddingService as CommonEmbeddingService
 from common.services.vector_store_manager import VectorStoreManager
 
 from stockeasy.models.telegram_message import TelegramMessage
-
-logger = logging.getLogger(__name__)
 
 # 외국계 증권사 이름 매핑 (여러 표기를 표준화된 이름으로 매핑)
 securities_mapping = {

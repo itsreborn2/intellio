@@ -17,10 +17,9 @@ from common.core.deps import get_current_session, get_embedding_service
 from common.core.database import  get_db_async
 from common.core.config import settings
 from uuid import UUID
-#import logging
+
 from fastapi.responses import JSONResponse
 
-#logger = logging.getLogger(__name__)
 from loguru import logger
 
 router = APIRouter()
@@ -48,7 +47,7 @@ async def get_categories(
         
         # 사용자의 카테고리만 조회
         query = select(Category).where(Category.user_id == session.user_id)
-        logger.debug(f"실행할 쿼리: {query}")
+        #logger.debug(f"실행할 쿼리: {query}")
         
         result = await db.execute(query)
         categories = result.scalars().all()

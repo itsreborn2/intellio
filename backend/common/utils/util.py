@@ -1,13 +1,13 @@
 import json
 import re
 import time
-import logging
 from functools import wraps
 from typing import Callable, Any, TypeVar
 import asyncio
+from loguru import logger
 
 # 로거 설정
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 def remove_null_chars(obj):
     """
@@ -63,7 +63,7 @@ def measure_time_async(func: Callable) -> Callable:
             execution_time = end_time - start_time
             #memory_used = end_memory - start_memory
             
-            logger.warn(
+            logger.warning(
                 f"함수 실행시간 : {func.__name__} : {execution_time:.2f} sec\n"
                 #f"Memory usage: {memory_used:.2f} MB\n"
                 #f"Arguments: args={args}, kwargs={kwargs}"
@@ -81,7 +81,7 @@ def measure_time_async(func: Callable) -> Callable:
         result = func(*args, **kwargs)
         end_time = time.time()
         execution_time = end_time - start_time
-        logger.warn(f"함수 실행시간 : {func.__name__} : {execution_time:.2f} sec\n")
+        logger.warning(f"함수 실행시간 : {func.__name__} : {execution_time:.2f} sec\n")
         return result
 
     return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
@@ -119,17 +119,17 @@ def async_retry(
                     last_exception = e
                     if attempt == retries:
                         logger.error(
-                            f"함수 {func.__name__} 실행 실패 (최대 재시도 횟수 초과)\n"
-                            f"에러: {str(e)}\n"
-                            f"Args: {args}\n"
+                            f"함수 {func.__name__} 실행 실패 (최대 재시도 횟수 초과)\\n"
+                            f"에러: {str(e)}\\n"
+                            f"Args: {args}\\n"
                             f"Kwargs: {kwargs}",
                             exc_info=True
                         )
                         raise
                     
                     logger.warning(
-                        f"함수 {func.__name__} 실행 실패 (시도 {attempt + 1}/{retries + 1})\n"
-                        f"에러: {str(e)}\n"
+                        f"함수 {func.__name__} 실행 실패 (시도 {attempt + 1}/{retries + 1})\\n"
+                        f"에러: {str(e)}\\n"
                         f"대기 시간: {wait_time}초"
                     )
                     

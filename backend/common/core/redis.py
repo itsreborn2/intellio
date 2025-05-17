@@ -7,11 +7,11 @@ from redis.asyncio import Redis as AsyncRedis
 from common.core.config import settings
 from datetime import datetime
 from uuid import UUID
-import logging
+from loguru import logger
 from dateutil import tz
 
 # Create a logger instance
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 # 문서 상태 상수
 DOCUMENT_STATUS = {
@@ -33,7 +33,6 @@ class RedisClient:
     DOCUMENT_PROGRESS_PREFIX = "doc_progress:"
     
     def __init__(self):
-        logger.info(f"[RedisClient] Redis URL: {settings.REDIS_URL}")
         self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
         
     def _make_key(self, prefix: str, key: str) -> str:
@@ -179,7 +178,6 @@ class AsyncRedisClient:
     CHAT_MEMORY_PREFIX = "chat_memory:"
     
     def __init__(self):
-        logger.info(f"[AsyncRedisClient] Redis URL: {settings.REDIS_URL}")
         self.redis = AsyncRedis.from_url(settings.REDIS_URL, decode_responses=True)
         
     def _make_key(self, prefix: str, key: str) -> str:

@@ -7,18 +7,16 @@
 import os
 import json
 import asyncio
-import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 import pandas as pd
-
-from stockeasy.services.google_sheet_service import GoogleSheetService
+from loguru import logger
 from common.core.config import settings
 
+from stockeasy.services.google_sheet_service import GoogleSheetService
 
-logger = logging.getLogger(__name__)
 
 class StockInfoService:
     """종목 정보 서비스 클래스"""

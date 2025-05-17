@@ -5,7 +5,7 @@ from uuid import  UUID
 from typing import Optional, List
 from common.models.base import Base
 from common.core.config import settings
-import logging
+from loguru import logger
 
 # TokenUsage 모델에 대한 순환 참조 문제를 방지하기 위해 직접 임포트하지 않음
 # 대신 클래스 초기화 완료 후 SQLAlchemy가 관계를 해석할 수 있도록 문자열 참조 사용
@@ -38,9 +38,9 @@ class User(Base):
 try:
     # 모듈 로딩 시점에서 TokenUsage 로드 시도
     from common.models.token_usage import TokenUsage
-    logging.info("TokenUsage 모델 로드 성공")
+    logger.info("TokenUsage 모델 로드 성공")
 except ImportError:
-    logging.warning("TokenUsage 모델 로드 실패 - 순환 참조 가능성 있음")
+    logger.warning("TokenUsage 모델 로드 실패 - 순환 참조 가능성 있음")
     pass  # 무시하고 계속 진행
 
 class Session(Base):

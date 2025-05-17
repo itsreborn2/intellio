@@ -1,6 +1,6 @@
 import asyncio
+
 from celery import Task
-import logging
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 
@@ -11,7 +11,7 @@ from stockeasy.services.telegram.collector import CollectorService
 from stockeasy.services.telegram.embedding import TelegramEmbeddingService
 from stockeasy.models.telegram_message import TelegramMessage
 
-from loguru import logger
+from loguru import logger # loguru import 추가
 
 class CollectorTask(Task):
     """텔레그램 메시지 수집 태스크

@@ -8,8 +8,7 @@ GCS에서 PDF 파일을 관리하고 처리하는 로직을 포함합니다.
 import os
 import json
 import asyncio
-import logging
-from pprint import pprint
+from loguru import logger
 import warnings
 from datetime import datetime, timedelta
 from functools import partial
@@ -43,17 +42,9 @@ from stockeasy.models.equity_change_data import EquityChangeData
 warnings.filterwarnings('ignore', category=UserWarning, module='pdfminer')
 warnings.filterwarnings('ignore', category=UserWarning, module='pdfplumber')
 
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),  # 콘솔 출력용 핸들러
-    ]
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정
-logging.getLogger("pdfminer").setLevel(logging.ERROR)
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정
+# logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 class FinancialDataServicePDF:
     """재무 데이터 서비스 클래스"""
@@ -78,6 +69,9 @@ class FinancialDataServicePDF:
         
         # 캐시 디렉토리 생성
         os.makedirs(self.local_cache_dir, exist_ok=True)
+
+        # 캐시 파일 초기화
+        self._initialize_cache_file()
         
         # 파일 목록 캐시 만료 시간 (24시간)
         self.cache_expiry = 24 * 60 * 60  # 초 단위
@@ -99,7 +93,34 @@ class FinancialDataServicePDF:
         #self.cache_util = FinancialCacheUtil()
         
         logger.info("FinancialDataServicePDF 초기화 완료")
-        
+    def _initialize_cache_file(self):
+        """
+        캐시 파일이 없거나 비어있는 경우 기본 구조로 초기화합니다.
+        """
+        try:
+            if not os.path.exists(self.file_list_cache_path) or os.path.getsize(self.file_list_cache_path) == 0:
+                logger.info(f"캐시 파일이 없거나 비어있어 기본 구조로 초기화합니다: {self.file_list_cache_path}")
+                with open(self.file_list_cache_path, 'w', encoding='utf-8') as f:
+                    json.dump({"_timestamps": {}}, f, ensure_ascii=False, indent=2)
+                logger.info("캐시 파일 초기화 완료")
+            else:
+                # 파일이 존재하지만 JSON 형식이 올바른지 확인
+                try:
+                    with open(self.file_list_cache_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    # 기본 구조 확인
+                    if "_timestamps" not in data:
+                        data["_timestamps"] = {}
+                        with open(self.file_list_cache_path, 'w', encoding='utf-8') as f:
+                            json.dump(data, f, ensure_ascii=False, indent=2)
+                        logger.info("캐시 파일에 _timestamps 필드 추가")
+                except json.JSONDecodeError:
+                    logger.warning(f"캐시 파일이 손상되었습니다. 재초기화합니다: {self.file_list_cache_path}")
+                    with open(self.file_list_cache_path, 'w', encoding='utf-8') as f:
+                        json.dump({"_timestamps": {}}, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"캐시 파일 초기화 중 오류 발생: {str(e)}")
+            
     @property
     async def db(self) -> AsyncSession:
         """데이터베이스 세션 가져오기"""
@@ -126,6 +147,8 @@ class FinancialDataServicePDF:
         Returns:
             재무 데이터를 포함하는 딕셔너리
         """
+        method_start_time = datetime.now()
+        logger.info(f"get_financial_data 시작: stock_code={stock_code}, date_range={date_range}")
         try:
             # 날짜 범위가 제공되지 않은 경우 기본값 설정 (최근 2년)
             if date_range is None:
@@ -135,12 +158,18 @@ class FinancialDataServicePDF:
                 start_date = date_range.get("start_date")
                 end_date = date_range.get("end_date")
             
-            print(f"재무 데이터 조회: {stock_code}, 기간: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
+            logger.info(f"재무 데이터 조회 기간 설정: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
+            # print(f"재무 데이터 조회: {stock_code}, 기간: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
             
             # 1. 파일 목록 가져오기
+            logger.info("파일 목록 가져오기 시작...")
+            step_start_time = datetime.now()
             file_list = await self._get_file_list(stock_code)
+            logger.info(f"파일 목록 가져오기 완료. 소요 시간: {datetime.now() - step_start_time}. 찾은 파일 수: {len(file_list)}")
             
             # 2. 파일 목록 필터링 (날짜 기준)
+            logger.info("파일 목록 필터링 시작...")
+            step_start_time = datetime.now()
             filtered_files = []
             for file in file_list:
                 file_date_str = file.get("date", "")
@@ -164,23 +193,33 @@ class FinancialDataServicePDF:
                 #     print(f"append file_date2: {file_date}")
                 #     filtered_files.append(file)
             
+            logger.info(f"파일 목록 필터링 완료. 소요 시간: {datetime.now() - step_start_time}. 필터링된 파일 수: {len(filtered_files)}")
+
             if not filtered_files:
-                logger.warning(f"지정 기간 내 재무 보고서가 없습니다: {stock_code}, 기간: {start_date} ~ {end_date}")
+                logger.warning(f"지정 기간 내 재무 보고서가 없습니다: {stock_code}, 기간: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
+                logger.info(f"get_financial_data 완료. 총 소요 시간: {datetime.now() - method_start_time}")
                 return {}
                 
             # 로그는 한글로 작성
-            print(f"조회 기간 내 재무 보고서 {len(filtered_files)}개 찾았습니다: {stock_code}")
+            # print(f"조회 기간 내 재무 보고서 {len(filtered_files)}개 찾았습니다: {stock_code}")
+            logger.info(f"조회 기간 내 재무 보고서 {len(filtered_files)}개 찾음: {stock_code}")
             
             # 3. 각 파일에서 데이터 추출
+            logger.info("각 파일에서 데이터 추출 시작...")
+            step_start_time = datetime.now()
             financial_data = {}
             for file_info in filtered_files:
                 # PDF에서 재무제표 페이지 추출
                 file_path = file_info.get("file_path")
+                logger.debug(f"파일 처리 중: {file_path}")
                 local_path = await self._ensure_local_file(file_path)
                 
                 if local_path:
                     # 페이지 추출 및 데이터 추가
+                    logger.debug(f"재무제표 페이지 추출 시작: {local_path}")
+                    page_extraction_start_time = datetime.now()
                     financial_statement_pages = await self._extract_financial_statement_pages(local_path)
+                    logger.debug(f"재무제표 페이지 추출 완료. 소요 시간: {datetime.now() - page_extraction_start_time}")
                     if financial_statement_pages:
                         report_type = file_info.get("type", "unknown")
                         report_year = file_info.get("year", 0)
@@ -195,15 +234,19 @@ class FinancialDataServicePDF:
                                 "date": file_info.get("date", "")
                             }
                         }
+            logger.info(f"각 파일에서 데이터 추출 완료. 소요 시간: {datetime.now() - step_start_time}")
             
             # 4. 데이터를 시간 순으로 정렬하여 반환
+            logger.info("데이터 정렬 시작...")
+            step_start_time = datetime.now()
             sorted_data = dict(sorted(
                 financial_data.items(),
                 key=lambda x: (x[1]["metadata"]["year"], x[1]["metadata"]["type"]),
                 reverse=True  # 최신 데이터 우선
             ))
+            logger.info(f"데이터 정렬 완료. 소요 시간: {datetime.now() - step_start_time}")
             
-            return {
+            result = {
                 "stock_code": stock_code,
                 "count": len(sorted_data),
                 "reports": sorted_data,
@@ -212,9 +255,12 @@ class FinancialDataServicePDF:
                     "end_date": end_date.strftime("%Y-%m-%d")
                 }
             }
+            logger.info(f"get_financial_data 완료. 총 소요 시간: {datetime.now() - method_start_time}. 반환 데이터 수: {len(sorted_data)}")
+            return result
             
         except Exception as e:
             logger.exception(f"재무 데이터 조회 중 오류: {str(e)}")
+            logger.error(f"get_financial_data 오류 발생. 총 소요 시간: {datetime.now() - method_start_time}")
             return {}
     
     async def get_financial_revenue_breakdown(self, stock_code: str, date_range: Dict[str, datetime] = None) -> Dict[str, Any]:
@@ -228,6 +274,8 @@ class FinancialDataServicePDF:
         Returns:
             재무 데이터를 포함하는 딕셔너리
         """
+        method_start_time = datetime.now()
+        logger.info(f"get_financial_revenue_breakdown 시작: stock_code={stock_code}, date_range={date_range}")
         try:
             # 날짜 범위가 제공되지 않은 경우 기본값 설정 (최근 2년)
             if date_range is None:
@@ -236,13 +284,19 @@ class FinancialDataServicePDF:
             else:
                 start_date = date_range.get("start_date")
                 end_date = date_range.get("end_date")
-            
-            print(f"재무 데이터 조회: {stock_code}, 기간: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
+
+            logger.info(f"매출 분석 데이터 조회 기간 설정: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
+            # print(f"재무 데이터 조회: {stock_code}, 기간: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
             
             # 1. 파일 목록 가져오기
+            logger.info("파일 목록 가져오기 시작...")
+            step_start_time = datetime.now()
             file_list = await self._get_file_list(stock_code)
+            logger.info(f"파일 목록 가져오기 완료. 소요 시간: {datetime.now() - step_start_time}. 찾은 파일 수: {len(file_list)}")
             
             # 2. 파일 목록 필터링 (날짜 기준)
+            logger.info("파일 목록 필터링 시작...")
+            step_start_time = datetime.now()
             filtered_files = []
             for file in file_list:
                 file_date_str = file.get("date", "")
@@ -266,30 +320,43 @@ class FinancialDataServicePDF:
                 #     print(f"append file_date2: {file_date}")
                 #     filtered_files.append(file)
             
+            logger.info(f"파일 목록 필터링 완료. 소요 시간: {datetime.now() - step_start_time}. 필터링된 파일 수: {len(filtered_files)}")
+
             if not filtered_files:
-                logger.warning(f"지정 기간 내 재무 보고서가 없습니다: {stock_code}, 기간: {start_date} ~ {end_date}")
+                logger.warning(f"지정 기간 내 재무 보고서가 없습니다: {stock_code}, 기간: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
+                logger.info(f"get_financial_revenue_breakdown 완료. 총 소요 시간: {datetime.now() - method_start_time}")
                 return {}
                 
             # 로그는 한글로 작성
-            print(f"조회 기간 내 재무 보고서 {len(filtered_files)}개 찾았습니다: {stock_code}")
+            # print(f"조회 기간 내 재무 보고서 {len(filtered_files)}개 찾았습니다: {stock_code}")
+            logger.info(f"조회 기간 내 재무 보고서 {len(filtered_files)}개 찾음: {stock_code}")
             
             # 3. 각 파일에서 데이터 추출
+            logger.info("각 파일에서 매출 분석 데이터 추출 시작...")
+            step_start_time = datetime.now()
             revenue_breakdown_data = ""
             for file_info in filtered_files:
                 # PDF에서 재무제표 페이지 추출
                 file_path = file_info.get("file_path")
+                logger.debug(f"파일 처리 중: {file_path}")
                 local_path = await self._ensure_local_file(file_path)
                 
                 if local_path:
                     # 페이지 추출 및 데이터 추가
+                    logger.debug(f"매출 분석 데이터 추출 시작: {local_path}")
+                    extraction_start_time = datetime.now()
                     extracted_data = await self.extract_revenue_breakdown_data(local_path)
+                    logger.debug(f"매출 분석 데이터 추출 완료. 소요 시간: {datetime.now() - extraction_start_time}")
                     if extracted_data:  # None이나 빈 문자열이 아닌 경우에만 추가
                         revenue_breakdown_data += extracted_data
 
+            logger.info(f"각 파일에서 매출 분석 데이터 추출 완료. 소요 시간: {datetime.now() - step_start_time}")
+            logger.info(f"get_financial_revenue_breakdown 완료. 총 소요 시간: {datetime.now() - method_start_time}")
             return revenue_breakdown_data
             
         except Exception as e:
             logger.exception(f"재무 데이터 조회 중 오류: {str(e)}")
+            logger.error(f"get_financial_revenue_breakdown 오류 발생. 총 소요 시간: {datetime.now() - method_start_time}")
             return {}
             
     async def _get_file_list(self, stock_code: str) -> List[Dict[str, Any]]:
@@ -303,17 +370,23 @@ class FinancialDataServicePDF:
         Returns:
             파일 경로 목록
         """
+        method_start_time = datetime.now()
+        logger.debug(f"_get_file_list 시작: stock_code={stock_code}")
         now = datetime.now()
         
         # 1. 메모리 캐시 확인
         if stock_code in self._file_list_cache:
             cache_entry = self._file_list_cache[stock_code]
             if (now - cache_entry["timestamp"]).total_seconds() < self.cache_expiry:
-                print(f"Using memory cached file list for stock {stock_code}")
+                # print(f"Using memory cached file list for stock {stock_code}")
+                logger.info(f"메모리 캐시 사용: stock_code={stock_code}. 총 소요 시간: {datetime.now() - method_start_time}")
                 return cache_entry["data"]
         
         # 2. 파일 캐시 확인
+        logger.info(f"파일 캐시 확인 시작: stock_code={stock_code}")
+        file_cache_check_start_time = datetime.now()
         if await self._is_file_list_cache_valid(stock_code):
+            logger.info(f"파일 캐시 유효성 검사 완료. 소요 시간: {datetime.now() - file_cache_check_start_time}")
             try:
                 with open(self.file_list_cache_path, 'r', encoding='utf-8') as f:
                     cached_data = json.load(f)
@@ -323,13 +396,18 @@ class FinancialDataServicePDF:
                             "data": cached_data[stock_code],
                             "timestamp": now
                         }
-                        print(f"Using file cached list for stock {stock_code}")
+                        # print(f"Using file cached list for stock {stock_code}")
+                        logger.info(f"파일 캐시 사용: stock_code={stock_code}. 총 소요 시간: {datetime.now() - method_start_time}")
                         return cached_data[stock_code]
             except Exception as e:
-                logger.warning(f"Failed to load cached file list: {str(e)}")
-        
+                logger.warning(f"파일 캐시 목록 로드 실패: {str(e)}")
+        else:
+            logger.info(f"파일 캐시 유효성 검사 완료 (유효하지 않음). 소요 시간: {datetime.now() - file_cache_check_start_time}")
+
         # 3. GCS에서 파일 목록 가져오기
-        print(f"Retrieving file list from GCS for stock {stock_code}")
+        # print(f"Retrieving file list from GCS for stock {stock_code}")
+        logger.info(f"GCS에서 파일 목록 조회 시작: stock_code={stock_code}")
+        gcs_fetch_start_time = datetime.now()
         
         prefix = f"{self.base_gcs_path}/{stock_code}/"
         #blobs = list(self.storage_service.bucket.list_blobs(prefix=prefix))
@@ -353,6 +431,8 @@ class FinancialDataServicePDF:
         # 파일 캐시 업데이트 (다른 종목의 캐시도 보존)
         await self._update_file_list_cache(stock_code, file_list)
         
+        logger.info(f"GCS에서 파일 목록 조회 완료. 소요 시간: {datetime.now() - gcs_fetch_start_time}. 찾은 파일 수: {len(file_list)}")
+        logger.debug(f"_get_file_list 완료. 총 소요 시간: {datetime.now() - method_start_time}")
         return file_list
         
     async def _is_file_list_cache_valid(self, stock_code: str) -> bool:
@@ -366,10 +446,12 @@ class FinancialDataServicePDF:
         Returns:
             캐시가 유효하면 True, 그렇지 않으면 False
         """
-        print(f"캐시 파일 유효성 검사 시작: {self.file_list_cache_path} (종목: {stock_code})")
+        # print(f"캐시 파일 유효성 검사 시작: {self.file_list_cache_path} (종목: {stock_code})")
+        logger.debug(f"파일 캐시 유효성 검사 시작: file={self.file_list_cache_path}, stock_code={stock_code}")
         
         if not os.path.exists(self.file_list_cache_path):
-            print("캐시 파일이 존재하지 않습니다. 유효하지 않음.")
+            # print("캐시 파일이 존재하지 않습니다. 유효하지 않음.")
+            logger.info("캐시 파일이 존재하지 않아 유효하지 않음으로 처리.")
             return False
             
         now = datetime.now()
@@ -379,8 +461,10 @@ class FinancialDataServicePDF:
             cache_entry = self._file_list_cache[stock_code]
             time_diff = (now - cache_entry["timestamp"]).total_seconds()
             is_valid = time_diff < self.cache_expiry
-            print(f"메모리에 저장된 종목({stock_code})의 마지막 캐시 갱신 시간: {cache_entry['timestamp']}")
-            print(f"경과 시간: {time_diff:.1f}초, 만료 시간: {self.cache_expiry}초, 유효함: {is_valid}")
+            # print(f"메모리에 저장된 종목({stock_code})의 마지막 캐시 갱신 시간: {cache_entry['timestamp']}")
+            # print(f"경과 시간: {time_diff:.1f}초, 만료 시간: {self.cache_expiry}초, 유효함: {is_valid}")
+            logger.debug(f"메모리 캐시 확인: stock_code={stock_code}, last_updated={cache_entry['timestamp']}, "
+                         f"elapsed={time_diff:.1f}s, expiry={self.cache_expiry}s, is_valid={is_valid}")
             return is_valid
             
         # 파일 캐시 확인
@@ -395,15 +479,19 @@ class FinancialDataServicePDF:
                 timestamp = datetime.fromisoformat(timestamp_str)
                 time_diff = (now - timestamp).total_seconds()
                 is_valid = time_diff < self.cache_expiry
-                print(f"파일 캐시에 저장된 종목({stock_code})의 마지막 갱신 시간: {timestamp}")
-                print(f"경과 시간: {time_diff:.1f}초, 만료 시간: {self.cache_expiry}초, 유효함: {is_valid}")
+                # print(f"파일 캐시에 저장된 종목({stock_code})의 마지막 갱신 시간: {timestamp}")
+                # print(f"경과 시간: {time_diff:.1f}초, 만료 시간: {self.cache_expiry}초, 유효함: {is_valid}")
+                logger.debug(f"파일 캐시 확인: stock_code={stock_code}, last_updated={timestamp}, "
+                             f"elapsed={time_diff:.1f}s, expiry={self.cache_expiry}s, is_valid={is_valid}")
                 return is_valid
             else:
-                print(f"종목({stock_code})에 대한 타임스탬프 정보가 없습니다. 유효하지 않음.")
+                # print(f"종목({stock_code})에 대한 타임스탬프 정보가 없습니다. 유효하지 않음.")
+                logger.info(f"파일 캐시에 종목({stock_code}) 타임스탬프 정보 없음. 유효하지 않음으로 처리.")
                 return False
                 
         except Exception as e:
-            print(f"캐시 파일 읽기 오류: {str(e)}")
+            # print(f"캐시 파일 읽기 오류: {str(e)}")
+            logger.warning(f"캐시 파일 읽기 오류: {str(e)}. 유효하지 않음으로 처리.")
             return False
         
     async def _update_file_list_cache(self, stock_code: str, file_list: List[Dict[str, Any]]) -> None:
@@ -415,6 +503,8 @@ class FinancialDataServicePDF:
             stock_code: 종목 코드
             file_list: 업데이트할 파일 목록
         """
+        logger.debug(f"_update_file_list_cache 시작: stock_code={stock_code}, file_count={len(file_list)}")
+        method_start_time = datetime.now()
         try:
             # 기존 캐시 데이터 로드
             cached_data = {}
@@ -443,11 +533,13 @@ class FinancialDataServicePDF:
                 "timestamp": now
             }
             
-            print(f"종목({stock_code})의 파일 목록 캐시가 갱신되었습니다. 타임스탬프: {now.isoformat()}")
+            # print(f"종목({stock_code})의 파일 목록 캐시가 갱신되었습니다. 타임스탬프: {now.isoformat()}")
+            logger.info(f"파일 목록 캐시 갱신 완료: stock_code={stock_code}, timestamp={now.isoformat()}. 소요 시간: {datetime.now() - method_start_time}")
             
         except Exception as e:
             logger.warning(f"Failed to update file list cache: {str(e)}")
-            print(f"파일 목록 캐시 업데이트 실패: {str(e)}")
+            # print(f"파일 목록 캐시 업데이트 실패: {str(e)}")
+            logger.error(f"파일 목록 캐시 업데이트 실패: {str(e)}. 소요 시간: {datetime.now() - method_start_time}")
             
     def _parse_filename(self, file_path: str) -> Optional[Dict[str, Any]]:
         """
@@ -461,6 +553,8 @@ class FinancialDataServicePDF:
         Returns:
             추출된 정보를 포함하는 딕셔너리 또는 None
         """
+        logger.debug(f"_parse_filename 시작: file_path={file_path}")
+        method_start_time = datetime.now()
         try:
             # 파일명만 추출
             file_name = os.path.basename(file_path)
@@ -471,6 +565,7 @@ class FinancialDataServicePDF:
             
             if not match:
                 logger.warning(f"Could not parse filename: {file_name}")
+                logger.debug(f"_parse_filename 완료 (파싱 실패). 소요 시간: {datetime.now() - method_start_time}")
                 return None
                 
             date_str, company_name, stock_code, industry, report_type = match.groups()
@@ -488,7 +583,7 @@ class FinancialDataServicePDF:
                 year = int(date_str[:4]) if len(date_str) >= 4 else 0
                 formatted_date = date_str
             
-            return {
+            result = {
                 "date": formatted_date,
                 "year": year,
                 "company": company_name,
@@ -496,9 +591,12 @@ class FinancialDataServicePDF:
                 "industry": industry,
                 "type": report_type
             }
+            logger.debug(f"_parse_filename 완료 (파싱 성공). 소요 시간: {datetime.now() - method_start_time}")
+            return result
             
         except Exception as e:
             logger.warning(f"Error parsing filename {file_path}: {str(e)}")
+            logger.debug(f"_parse_filename 완료 (오류 발생). 소요 시간: {datetime.now() - method_start_time}")
             return None
             
     async def _ensure_local_file(self, gcs_path: str) -> Optional[str]:
@@ -511,6 +609,8 @@ class FinancialDataServicePDF:
         Returns:
             로컬 파일 경로 또는 None (실패 시)
         """
+        logger.debug(f"_ensure_local_file 시작: gcs_path={gcs_path}")
+        method_start_time = datetime.now()
         try:
             # GCS 경로에서 상대 경로 추출 (Stockeasy/classified/정기보고서/종목코드/파일명)
             relative_path = gcs_path.split('/', 2)[-1]  # '정기보고서/종목코드/파일명' 부분만 추출
@@ -524,21 +624,26 @@ class FinancialDataServicePDF:
             # 파일이 이미 존재하는지 확인
             if os.path.exists(local_path):
                 logger.info(f"Using cached file: {local_path}")
+                logger.debug(f"_ensure_local_file 완료 (캐시 사용). 소요 시간: {datetime.now() - method_start_time}")
                 return str(local_path)
                 
             # GCS에서 파일 다운로드
             logger.info(f"Downloading file from GCS: {gcs_path}")
+            download_start_time = datetime.now()
             content = await self.storage_service.download_file(gcs_path)
+            logger.info(f"GCS 파일 다운로드 완료. 소요 시간: {datetime.now() - download_start_time}")
             
             # 로컬에 저장
             with open(local_path, 'wb') as f:
                 f.write(content)
                 
             logger.info(f"Downloaded and cached file: {local_path}")
+            logger.debug(f"_ensure_local_file 완료 (다운로드 및 캐시). 소요 시간: {datetime.now() - method_start_time}")
             return str(local_path)
             
         except Exception as e:
             logger.exception(f"Error ensuring local file for {gcs_path}: {str(e)}")
+            logger.error(f"_ensure_local_file 오류 발생. 소요 시간: {datetime.now() - method_start_time}")
             return None
             
     async def _extract_financial_statement_pages(self, pdf_path: str) -> str:
@@ -551,6 +656,8 @@ class FinancialDataServicePDF:
         Returns:
             추출된 재무제표 페이지 텍스트
         """
+        logger.debug(f"_extract_financial_statement_pages 시작: pdf_path={pdf_path}")
+        method_start_time = datetime.now()
         try:
             loop = asyncio.get_event_loop()
             fs_pages = []
@@ -560,13 +667,16 @@ class FinancialDataServicePDF:
             #keywords = ["요약재무정보"]
             
             # 1. fitz로 목차 페이지 찾기
+            logger.debug("fitz로 목차 페이지 찾기 시작...")
+            fitz_start_time = datetime.now()
             doc = await loop.run_in_executor(None, partial(fitz.open, pdf_path))
             target_pages = set()
             
             try:
                 # 목차 정보 가져오기
                 toc = await loop.run_in_executor(None, doc.get_toc)
-                logger.info(f"Found TOC with {len(toc)} items")
+                # logger.info(f"Found TOC with {len(toc)} items")
+                logger.debug(f"목차 아이템 {len(toc)}개 발견")
                 
                 # 목차에서 재무제표 관련 페이지 찾기
                 for item in toc:
@@ -587,7 +697,8 @@ class FinancialDataServicePDF:
                 
                 # 목차에서 페이지를 찾지 못한 경우 키워드로 검색
                 if not target_pages:
-                    logger.info("No pages found in TOC, searching by keywords...")
+                    # logger.info("No pages found in TOC, searching by keywords...")
+                    logger.debug("목차에서 페이지 못찾음. 키워드로 검색 시작...")
                     for page_num in range(len(doc)):
                         page = doc[page_num]
                         text = await loop.run_in_executor(None, page.get_text)
@@ -604,10 +715,13 @@ class FinancialDataServicePDF:
             
             finally:
                 await loop.run_in_executor(None, doc.close)
+            logger.debug(f"fitz 목차/키워드 검색 완료. 찾은 대상 페이지 수: {len(target_pages)}. 소요 시간: {datetime.now() - fitz_start_time}")
             
             # 2. pdfplumber로 찾은 페이지의 내용 추출
             if target_pages:
                 # pdfplumber를 동기 방식으로 사용
+                logger.debug("pdfplumber로 페이지 내용 추출 시작...")
+                pdfplumber_start_time = datetime.now()
                 pdf = await loop.run_in_executor(None, pdfplumber.open, pdf_path)
                 try:
                     for page_num in sorted(target_pages):
@@ -617,19 +731,24 @@ class FinancialDataServicePDF:
                             fs_pages.append((page_num, text))
                 finally:
                     await loop.run_in_executor(None, pdf.close)
+                logger.debug(f"pdfplumber 페이지 내용 추출 완료. 소요 시간: {datetime.now() - pdfplumber_start_time}")
                             
                 # 페이지 번호 순으로 정렬
                 fs_pages.sort(key=lambda x: x[0])
                 
                 # 추출된 텍스트 반환
-                logger.info(f"Extracted {len(fs_pages)} pages from {pdf_path}")
-                return "\n\n------- 페이지 구분선 -------\n\n".join([text for _, text in fs_pages])
+                # logger.info(f"Extracted {len(fs_pages)} pages from {pdf_path}")
+                extracted_text_result = "\n\n------- 페이지 구분선 -------\n\n".join([text for _, text in fs_pages])
+                logger.info(f"{pdf_path}에서 {len(fs_pages)} 페이지 추출 완료. 총 소요 시간: {datetime.now() - method_start_time}")
+                return extracted_text_result
             
             logger.warning(f"No financial statement pages found in {pdf_path}")
+            logger.info(f"_extract_financial_statement_pages 완료 (페이지 없음). 총 소요 시간: {datetime.now() - method_start_time}")
             return ""
                 
         except Exception as e:
             logger.exception(f"Error extracting financial statement pages from {pdf_path}: {str(e)}")
+            logger.error(f"_extract_financial_statement_pages 오류 발생. 총 소요 시간: {datetime.now() - method_start_time}")
             return "" 
         
     async def extract_revenue_breakdown_data(self, target_report: str):
@@ -641,9 +760,13 @@ class FinancialDataServicePDF:
         return :
             매출 및 수주상황 섹션 텍스트 
         """
+        logger.debug(f"extract_revenue_breakdown_data 시작: target_report={target_report}")
+        method_start_time = datetime.now()
+        doc = None # finally 블록에서 사용하기 위해 초기화
         try:
             base_file_name = os.path.basename(target_report)
             #logger.info(f" 사업보고서: {base_file_name}")
+            logger.debug(f"사업보고서 파일명: {base_file_name}")
             #  20250320_메지온_140410_일반서비스_annual_DART.pdf
             year = base_file_name.split("_")[0]
             year = year[:4]
@@ -661,14 +784,21 @@ class FinancialDataServicePDF:
             quater = report_type_map[quater_file]
 
             # 3. fitz를 사용하여 목차 내용 추출
+            logger.debug("fitz로 목차 내용 추출 시작...")
+            fitz_start_time = datetime.now()
             doc = fitz.open(target_report)
             toc = doc.get_toc()  # 목차 가져오기
+            logger.debug(f"fitz 목차 추출 완료. 아이템 수: {len(toc)}. 소요 시간: {datetime.now() - fitz_start_time}")
             #print(f"toc: {len(toc)}")
             if not toc:
                 logger.error("목차를 찾을 수 없습니다.")
+                if doc: doc.close()
+                logger.debug(f"extract_revenue_breakdown_data 완료 (목차 없음). 총 소요 시간: {datetime.now() - method_start_time}")
                 return ""
             
             # 4. 목차에서 'II. 사업의 내용' 및 '매출 및 수주상황' 찾기
+            logger.debug("목차에서 섹션 검색 시작...")
+            section_search_start_time = datetime.now()
             business_content_start_page = None
             business_content_end_page = None
             sales_section_start_page = None
@@ -715,15 +845,22 @@ class FinancialDataServicePDF:
                 start_page = sales_section_start_page
                 end_page = sales_section_end_page
                 #logger.info(f"'매출 및 수주상황' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
+                logger.debug(f"'매출 및 수주상황' 섹션 발견: 페이지 {start_page+1}~{end_page+1}")
             elif business_content_start_page is not None and business_content_end_page is not None:
                 start_page = business_content_start_page
                 end_page = business_content_end_page
                 #logger.info(f"'II. 사업의 내용' 섹션을 찾았습니다: 페이지 {start_page+1}~{end_page+1}")
+                logger.debug(f"'II. 사업의 내용' 섹션 발견: 페이지 {start_page+1}~{end_page+1}")
             else:
                 logger.error("매출 및 수주상황, 사업의 내용 섹션을 찾을 수 없습니다.")
+                if doc: doc.close()
+                logger.debug(f"extract_revenue_breakdown_data 완료 (섹션 없음). 총 소요 시간: {datetime.now() - method_start_time}")
                 return ""
+            logger.debug(f"목차 섹션 검색 완료. 소요 시간: {datetime.now() - section_search_start_time}")
             
             # 6. pdfplumber를 사용하여 해당 페이지 내용 추출
+            logger.debug(f"pdfplumber로 페이지 내용 추출 시작: 페이지 {start_page+1}~{end_page+1}")
+            pdfplumber_start_time = datetime.now()
             extracted_text = f"-----------------------------\n\n"
             extracted_text += f"## {year}년 {quater} 데이터\n\n"
             #print(f"{extracted_text}")
@@ -743,13 +880,20 @@ class FinancialDataServicePDF:
                             #extracted_text += text
             
             extracted_text += f"\n\n--- 데이터 끝 ---\n\n"
-            if not extracted_text:
+            logger.debug(f"pdfplumber 페이지 내용 추출 완료. 소요 시간: {datetime.now() - pdfplumber_start_time}")
+            if not extracted_text.strip(): # 기본 추가된 내용 제외하고 실제 추출 내용이 있는지 확인
                 logger.error("추출된 텍스트가 없습니다.")
+                if doc: doc.close()
+                logger.debug(f"extract_revenue_breakdown_data 완료 (추출된 텍스트 없음). 총 소요 시간: {datetime.now() - method_start_time}")
                 return ""
+            
+            logger.info(f"매출 분석 데이터 추출 완료. 총 소요 시간: {datetime.now() - method_start_time}")
             return extracted_text
         except Exception as e:
             logger.exception(f"Error extracting revenue breakdown data: {str(e)}")
+            logger.error(f"extract_revenue_breakdown_data 오류 발생. 총 소요 시간: {datetime.now() - method_start_time}")
             return ""
         finally:
-            doc.close()
+            if doc:
+                doc.close()
     

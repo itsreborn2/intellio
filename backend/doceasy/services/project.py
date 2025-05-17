@@ -7,10 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from doceasy.models.project import Project
 from common.models.user import Session
 from doceasy.schemas.project import ProjectCreate, ProjectUpdate, ProjectInDB
-import logging
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+from loguru import logger
 
 class ProjectService:
     """프로젝트 서비스"""
@@ -89,74 +86,7 @@ class ProjectService:
             logger.error(f"프로젝트 목록 조회 중 오류 발생: {str(e)}")
             raise
 
-    async def get_recent(
-        self,
-        session: Optional[Session] = None,
-    ) -> Dict[str, List[Project]]:
-        """최근 프로젝트 목록 조회
-        
-        Returns:
-            Dict[str, List[Project]]: 다음 기간별 프로젝트 목록
-            - today: 오늘 생성/수정된 프로젝트
-            - last_7_days: 지난 7일간 생성/수정된 프로젝트
-            - last_30_days: 지난 30일간 생성/수정된 프로젝트
-        """
-        logger.info(f"get_recent - UserID: {session.user_id}")
-
-        # 서버 자체의 시간대아 asia라 변환할 필요없음.
-        now = datetime.now()
-        today_start = datetime(now.year, now.month, now.day, tzinfo=kst)
-        last_7_days_start = today_start - timedelta(days=7)
-        last_30_days_start = today_start - timedelta(days=30)
-
-        # UTC로 변환
-        # today_start_utc = today_start.astimezone(timezone.utc)
-        # last_7_days_start_utc = last_7_days_start.astimezone(timezone.utc)
-        # last_30_days_start_utc = last_30_days_start.astimezone(timezone.utc)
-
-        # 기본 쿼리 생성
-        base_query = select(Project)
-        if session and session.user_id:
-            base_query = base_query.where(
-                Project.user_id == session.user_id,
-                Project.category_id == None  # 카테고리에 속하지 않은 프로젝트만 조회
-            )
-        else:
-            return {
-                "today": [],
-                "last_7_days": [],
-                "last_30_days": []
-            }
-
-        # 오늘 생성/수정된 프로젝트
-        today_query = base_query.where(
-            Project.updated_at >= today_start_utc
-        ).order_by(Project.updated_at.desc())
-        
-        # 지난 7일간 생성/수정된 프로젝트 (오늘 제외)
-        last_7_days_query = base_query.where(
-            Project.updated_at >= last_7_days_start_utc,
-            Project.updated_at < today_start_utc
-        ).order_by(Project.updated_at.desc())
-        
-        # 지난 30일간 생성/수정된 프로젝트 (지난 7일 제외)
-        last_30_days_query = base_query.where(
-            Project.updated_at >= last_30_days_start_utc,
-            Project.updated_at < last_7_days_start_utc
-        ).order_by(Project.updated_at.desc())
-
-        # 각 쿼리 실행
-        today_result = await self.db.execute(today_query)
-        last_7_days_result = await self.db.execute(last_7_days_query)
-        last_30_days_result = await self.db.execute(last_30_days_query)
-
-        # 결과 반환
-        return {
-            "today": list(today_result.scalars().all()),
-            "last_7_days": list(last_7_days_result.scalars().all()),
-            "last_30_days": list(last_30_days_result.scalars().all())
-        }
-
+    
     async def get_recent_by_user_id(
         self,
         user_id: UUID,

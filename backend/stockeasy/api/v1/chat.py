@@ -1103,7 +1103,7 @@ async def create_share_link(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail="채팅 세션을 찾을 수 없거나 접근 권한이 없습니다."
         )
-    
+    logger.info(f"[CREATE_SHARE_LINK] 채팅 세션 ID: {chat_session_id}")
     # 공유 링크 생성 서비스 호출
     chat_service = ChatService()
     return await chat_service.create_share_link(db, chat_session_id)
@@ -1119,5 +1119,6 @@ async def get_shared_chat(
     공유 UUID로 공유된 채팅 세션과 메시지 조회
     인증 없이 접근 가능
     """
+    logger.info(f"[GET_SHARED_CHAT] 공유 UUID: {share_uuid}")
     chat_service = ChatService()
     return await chat_service.get_shared_chat_session(db, share_uuid) 

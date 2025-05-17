@@ -1,5 +1,6 @@
+
+from loguru import logger # loguru import 추가
 import json
-import logging
 from datetime import datetime, timedelta
 from typing import Optional
 import asyncio
@@ -9,7 +10,7 @@ from google.oauth2 import service_account
 
 from common.core.config import settings
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 class GoogleCloudStorageService:
     def __init__(self, project_id: str, bucket_name: str, credentials_path: str):

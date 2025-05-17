@@ -7,12 +7,12 @@ from common.core.database import get_db_async
 from doceasy.services.table_history import TableHistoryService
 from doceasy.schemas.table_response import TableResponse, TableColumn, TableHeader, TableCell
 from doceasy.schemas.table_history import TableHistoryList
-import logging
+from loguru import logger
 
 router = APIRouter(prefix="/table-history", tags=["table-history"])
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # 디버그 로깅 활성화
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.DEBUG)  # 디버그 로깅 활성화
 
 #table-histories/project/${projectId}`,GET
 @router.get("/project/{project_id}", response_model=TableResponse)

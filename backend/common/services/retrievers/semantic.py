@@ -1,5 +1,5 @@
+from loguru import logger # loguru import 추가
 from typing import List, Dict, Optional, Tuple
-import logging
 from uuid import UUID
 #from sqlalchemy import UUID
 from .base import BaseRetriever, RetrieverConfig
@@ -8,7 +8,7 @@ from .models import DocumentWithScore, RetrievalResult
 from common.services.vector_store_manager import VectorStoreManager
 from common.core.config import settings
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 class SemanticRetrieverConfig(RetrieverConfig):
     """시맨틱 검색 설정"""

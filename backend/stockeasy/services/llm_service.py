@@ -1,13 +1,13 @@
 import json
-import re
-import logging
+
+from loguru import logger # loguru import 추가
 from typing import Dict, Any, List, Optional
 from stockeasy.utils.parsing_util import _process_numeric_value, remove_comment_number, remove_number_prefix
 from common.services.agent_llm import get_agent_llm
 #from common.services.llm_service import LLMService as CommonLLMService
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정
+# logger = logging.getLogger(__name__) # 삭제
+# logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정 # 삭제
 
 class FinancialLLMService:
     """

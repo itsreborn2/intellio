@@ -1,11 +1,12 @@
-import logging
+
+from loguru import logger # loguru import 추가
 from common.core.config import settings
 from common.services.embedding_models import    EmbeddingModelType
 from common.services.embedding import EmbeddingService as CommonEmbeddingService
 from common.services.vector_store_manager import VectorStoreManager
 
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 class StockeasyEmbeddingService(CommonEmbeddingService):
     """텔레그램 메시지 전용 임베딩 서비스"""

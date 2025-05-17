@@ -10,13 +10,11 @@ from common.core.security import get_password_hash, verify_password
 from common.models.user import User, Session
 from common.schemas.user import UserCreate, UserUpdate, SessionBase, SessionUpdate
 from common.core.config import settings
-import logging
+from loguru import logger
 
 from stockeasy.agents.base import BaseAgent
 
 router = APIRouter(tags=["auth"])
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 class UserService:
     """사용자 서비스"""

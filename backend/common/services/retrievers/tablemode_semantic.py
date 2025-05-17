@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional, Tuple
-import logging
-from loguru import logger
+
+from loguru import logger # loguru import 추가
 from .models import DocumentWithScore, RetrievalResult
 
 from common.services.vector_store_manager import VectorStoreManager
@@ -9,7 +9,7 @@ from .semantic import SemanticRetriever, SemanticRetrieverConfig
 
 import pinecone
 
-#logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 class TableModeSemanticRetriever(SemanticRetriever):
     """테이블 모드 시맨틱 검색 구현체

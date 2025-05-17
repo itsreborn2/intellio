@@ -1,7 +1,7 @@
 import asyncio
 import json
+from loguru import logger # loguru import 추가
 import os
-import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -11,9 +11,8 @@ from stockeasy.models.companies import Company
 from stockeasy.models.financial_reports import FinancialReport
 from stockeasy.models.financial_data import FinancialItemMapping, FinancialItemRawMapping, SummaryFinancialData
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s") # 삭제
+# logger = logging.getLogger(__name__) # 삭제
 
 async def insert_companies():
     """

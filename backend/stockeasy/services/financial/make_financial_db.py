@@ -8,7 +8,6 @@ GCS에서 PDF 파일을 관리하고 처리하는 로직을 포함합니다.
 import os
 import json
 import asyncio
-import logging
 from pprint import pprint
 import warnings
 from datetime import datetime, timedelta
@@ -25,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import fitz  # PyMuPDF 라이브러리
 import pdfplumber  # pdfplumber 추가
+from loguru import logger
 
 from common.core.database import get_db
 from stockeasy.repositories.financial_repository import FinancialRepository
@@ -45,16 +45,16 @@ warnings.filterwarnings('ignore', category=UserWarning, module='pdfminer')
 warnings.filterwarnings('ignore', category=UserWarning, module='pdfplumber')
 
 # 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),  # 콘솔 출력용 핸들러
-    ]
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정
-logging.getLogger("pdfminer").setLevel(logging.ERROR)
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         logging.StreamHandler(),  # 콘솔 출력용 핸들러
+#     ]
+# )
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정
+# pdfminer 로그는 common/core/logger.py의 filter_log 함수에서 처리됨
 
 # 목차 찾기 전용 키워드 목록 (찾고자 하는 재무제표 유형)
 toc_income_statement_keywords = [
@@ -161,21 +161,21 @@ class MakeFinancialDataDB:
         self._last_cache_write = None
 
         # 파일 핸들러 생성
-        error_file_handler = logging.FileHandler(self.error_log_path, encoding='utf-8')
+        # error_file_handler = logging.FileHandler(self.error_log_path, encoding='utf-8')
 
         # *** 중요: 파일 핸들러의 레벨을 ERROR로 설정 ***
-        error_file_handler.setLevel(logging.ERROR)
+        # error_file_handler.setLevel(logging.ERROR)
 
        # 로그 포맷터 설정
-        log_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        error_file_handler.setFormatter(log_formatter)
+        # log_formatter = logging.Formatter(
+        #     '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        # )
+        # error_file_handler.setFormatter(log_formatter)
 
         # 로거에 에러 파일 핸들러 추가 (중복 추가 방지)
-        if not any(isinstance(h, logging.FileHandler) and h.baseFilename == str(self.error_log_path) for h in logger.handlers):
-             logger.addHandler(error_file_handler)
-             logger.info(f"에러 로그 파일 설정 완료: {self.error_log_path}") # 이 INFO 로그는 파일에 안 감
+        # if not any(isinstance(h, logging.FileHandler) and h.baseFilename == str(self.error_log_path) for h in logger.handlers):
+        #      logger.addHandler(error_file_handler)
+        #      logger.info(f"에러 로그 파일 설정 완료: {self.error_log_path}") # 이 INFO 로그는 파일에 안 감
         
 
         
@@ -231,7 +231,7 @@ class MakeFinancialDataDB:
         Returns:
             처리 결과
         """
-        print(f"연결 포괄손익계산서 처리 시작: 기업={company_code}, 연도={report_year}, 분기={report_quarter or '연간'}, 파일={os.path.basename(report_file_path)}")
+        # print(f"연결 포괄손익계산서 처리 시작: 기업={company_code}, 연도={report_year}, 분기={report_quarter or '연간'}, 파일={os.path.basename(report_file_path)}") # logger.info로 대체
         start_time = datetime.now()
         logger.info(f"연결 포괄손익계산서 처리 시작: 기업={company_code}, 연도={report_year}, 분기={report_quarter or '연간'}, 파일={os.path.basename(report_file_path)}")
         

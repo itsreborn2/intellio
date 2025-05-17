@@ -10,7 +10,6 @@ import time
 from common.utils.util import measure_time_async  # 성능 측정을 위해 추가
 from common.core.config import settings
 from .embedding_models import EmbeddingModelType
-import logging
 from threading import Lock
 import asyncio
 from functools import wraps
@@ -18,12 +17,11 @@ from .embedding import EmbeddingService
 from numpy.linalg import norm
 import numpy as np
 from datetime import datetime
-#from langchain_teddynote.community.pinecone import upsert_documents, upsert_documents_parallel
 import os
 import aiohttp  # 명시적으로 aiohttp 임포트 추가
 
-logger = logging.getLogger(__name__)
-#from loguru import logger
+from loguru import logger # loguru import 추가
+
 
 # aiohttp 세션을 정리하기 위한 유틸리티 함수
 async def cleanup_aiohttp_sessions():
@@ -320,131 +318,88 @@ class VectorStoreManager:
 
     @measure_time_async
     async def search_async(self, query: str, top_k: int, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
-        """벡터 스토어에서 검색 수행 (비동기)"""
-        # 비동기 초기화 확실히 기다리기
+        """쿼리에 의미적으로 가장 유사한 문서를 비동기적으로 검색합니다"""
         try:
             await self.ensure_initialized()
-            await self.get_async_index()
-        except RuntimeError as e:
-            # 런타임 에러가 발생하면 이벤트 루프가 없는 상황일 수 있음
-            if "no running event loop" in str(e):
-                logger.warning(f"[{self.namespace}] 이벤트 루프가 없어 동기 메서드로 폴백")
-                return self.search(query, top_k, filters)
-            logger.error(f"[{self.namespace}] 비동기 초기화 실패: {str(e)}")
-            raise
-        except Exception as e:
-            logger.error(f"[{self.namespace}] 비동기 초기화 실패: {str(e)}")
-        
-        print(f"[{self.namespace}] 벡터 스토어 비동기 검색 시작 : {query}")
-
-        # 사용자 쿼리 임베딩
-        try:
-            start_time = time.time()
-            embedding = await self.create_embeddings_single_query_async(query)
-            end_time = time.time()
-            print(f"[{self.namespace}] 임베딩 생성 시간: {(end_time - start_time):.3f}초, 쿼리: {query}")
-        except RuntimeError as e:
-            # 런타임 에러가 발생하면 동기 메서드로 폴백
-            if "no running event loop" in str(e):
-                logger.warning(f"[{self.namespace}] 임베딩 생성 중 이벤트 루프 없음, 동기 메서드로 폴백")
-                embedding = self.create_embeddings_single_query(query)
-            else:
-                raise
-        
-        #print(f"[{self.namespace}] 필터: {filters}")
-        
-        try:
-            # 비동기 인덱스가 초기화되었는지 확인 (다시 한 번 명시적으로 확인)
             
-            if hasattr(self, 'async_index') and self.async_index is not None:
-                # Pinecone 비동기 클라이언트 직접 사용
-                print(f"[{self.namespace}] Pinecone 비동기 클라이언트(async_index) 직접 사용")
+            if not self._initialized:
+                logger.warning(f"[{self.namespace}] VectorStoreManager가 초기화되지 않아 검색을 진행할 수 없습니다.")
+                return []
+
+            # 쿼리 임베딩 생성
+            query_embedding = await self.create_embeddings_single_query_async(query)
+            
+            # Pinecone 검색 준비
+            search_params = {}
+            
+            # 네임스페이스가 있으면 추가
+            if self.namespace:
+                search_params["namespace"] = self.namespace
+            
+            # 필터가 있으면 추가
+            if filters:
+                search_params["filter"] = filters
                 
-                start_time = time.time()
-                # Pinecone 6.0+ 비동기 API 사용
+            # top_k 설정 및 로깅
+            search_params["top_k"] = top_k
+            # logger.info(f"[{self.namespace}] 검색 매개변수: {search_params}")
+            
+            # 비동기 검색 수행
+            async_index = await self.get_async_index()
+            score_threshold = 0.0  # 최소 유사도 점수
+            
+            try:
+                search_response = await async_index.query(
+                    vector=query_embedding,
+                    include_metadata=True,
+                    **search_params
+                )
+            except Exception as e:
+                logger.error(f"[{self.namespace}] Pinecone 비동기 검색 중 오류: {str(e)}")
+                # 대체 방법으로 동기 메서드 사용 (비동기 검색이 실패한 경우)
+                logger.warning(f"[{self.namespace}] 동기 메서드로 폴백")
                 try:
-                    query_response = await self.async_index.query(
-                        vector=embedding,
-                        top_k=top_k,
+                    # 동기 메서드를 비동기적으로 실행
+                    search_response = await asyncio.to_thread(
+                        self.index.query,
+                        vector=query_embedding,
                         include_metadata=True,
-                        include_values=False,
-                        namespace=self.namespace,
-                        filter=filters
+                        **search_params
                     )
-                except RuntimeError as e:
-                    # 이벤트 루프 오류가 발생하면 동기 메서드로 폴백
-                    if "no running event loop" in str(e):
-                        logger.warning(f"[{self.namespace}] 쿼리 중 이벤트 루프 없음, 동기 메서드로 폴백")
-                        return self.search(query, top_k, filters)
-                    else:
-                        logger.warning(f"[{self.namespace}] 비동기 클라이언트 중 오류 발생: {str(e)}")
-                        raise
-                finally:
-                    end_time = time.time()
-                    print(f"[{self.namespace}] Pinecone 비동기 쿼리 시간: {end_time - start_time}초")
-                    logger.info(f"[{self.namespace}] Pinecone 비동기 쿼리 시간: {end_time - start_time}초")
-                    # 비동기 클라이언트는 vector_store_manager 에서 관리하면 안됨
-                    # retirver에서 search 함수를 여러번 호출할 수 있음.
-                    #await self.async_index.close()
-                    pass
+                except Exception as e2:
+                    logger.error(f"[{self.namespace}] 동기 메서드도 실패: {str(e2)}")
+                    return []
                 
-                #end_time = time.time()
-                #print(f"[{self.namespace}] Pinecone 비동기 쿼리 시간: {end_time - start_time}초")
-
-                # LangChain Document 형식으로 결과 변환
-                docs = []
-                for match in query_response.matches:
-                    metadata = match.metadata if hasattr(match, 'metadata') else {}
-                    
-                    # 텍스트 컨텐츠 추출
-                    text = ""
-                    if 'text' in metadata and metadata['text']:
-                        text = metadata['text']
-                    elif 'content' in metadata and metadata['content']:
-                        text = metadata['content']
-                    elif 'page_content' in metadata and metadata['page_content']:
-                        text = metadata['page_content']
-                    
-                    # 점수 추출
-                    score = match.score if hasattr(match, 'score') else 0.0
-                    
-                    # Document 객체 생성 (LangChain과 호환)
-                    doc = LangchainDocument(page_content=text, metadata=metadata)
-                    
-                    # 튜플로 추가 (Document, score)
-                    docs.append((doc, score))
+            # 결과가 없는 경우
+            if not search_response.matches:
+                logger.warning(f"[{self.namespace}] 검색 결과 없음")
+                return []
                 
-                return docs
-            
-            else:
-                # 폴백: 기존 동기 메서드를 비동기 스레드로 실행
-                logger.info(f"[{self.namespace}] 폴백: 동기 메서드를 비동기 스레드로 실행")
-                try:
-                    results = await asyncio.to_thread(
-                        self.vector_store.similarity_search_by_vector_with_score,
-                        namespace=self.namespace,
-                        embedding=embedding,
-                        k=top_k,
-                        filter=filters
-                    )
-                    return results
-                except RuntimeError as e:
-                    # 이벤트 루프 오류가 발생하면 동기 메서드로 폴백
-                    if "no running event loop" in str(e):
-                        logger.warning(f"[{self.namespace}] to_thread 중 이벤트 루프 없음, 동기 메서드로 폴백")
-                        return self.search(query, top_k, filters)
-                    raise
+            # 결과 처리
+            results = []
+            for match in search_response.matches:
+                if match.score < score_threshold:
+                    continue
+                    
+                # 메타데이터 확인 및 처리
+                if not match.metadata or "text" not in match.metadata:
+                    continue
+                    
+                # Document 객체 생성
+                metadata = dict(match.metadata)
+                text = metadata.pop("text", "")  # 'text' 필드 제거하고 텍스트로 사용
+                
+                doc = LangchainDocument(
+                    page_content=text,
+                    metadata=metadata
+                )
+                results.append((doc, match.score))
+                
+            #logger.info(f"[{self.namespace}] 검색 결과 수: {len(results)}")
+            return results
         except Exception as e:
             logger.error(f"[{self.namespace}] 비동기 검색 중 오류 발생: {str(e)}")
-            # 마지막 폴백: 표준 동기 메서드 사용
-            logger.info(f"[{self.namespace}] 오류 발생, 표준 동기 메서드로 폴백")
-            results = self.vector_store.similarity_search_by_vector_with_score(
-                namespace=self.namespace,
-                embedding=embedding,
-                k=top_k,
-                filter=filters
-            )
-            return results
+            return []
 
     def search_mmr(self, query: str, top_k: int, fetch_k:int, lambda_mult:float, filters: Optional[Dict] = None) -> List[Tuple[LangchainDocument, float]]:
         """벡터 스토어에서 MMR 검색 수행 (다양성 고려)"""

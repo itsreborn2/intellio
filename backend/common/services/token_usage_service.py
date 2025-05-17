@@ -4,17 +4,15 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, func, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session as SQLAlchemySession
-import logging
 from contextlib import asynccontextmanager, contextmanager
 import asyncio
+from loguru import logger
 
 from common.models.token_usage import TokenUsage, ProjectType, TokenType
 from stockeasy.models.chat import StockChatMessage, StockChatSession
 # 순환 참조를 방지하기 위해 get_db 임포트를 제거하고 지연 임포트를 사용
 # from common.core.deps import get_db
 from common.core.config import settings
-
-logger = logging.getLogger(__name__)
 
 # 세션 타입을 위한 타입 변수
 T = TypeVar('T')
@@ -173,7 +171,7 @@ def track_token_usage_bg(
                 _project_type = kwargs.get('project_type', project_type)
                 _token_type = kwargs.get('token_type', token_type) or "embedding"  # 기본값
                 _model_name = kwargs.get('model_name', 'default_model')  # NULL 대신 기본값 설정
-                logger.info(f"[track_token_usage_bg][async] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
+                #logger.info(f"[track_token_usage_bg][async] _user_id: {_user_id}, _project_type: {_project_type}, _token_type: {_token_type}, _model_name: {_model_name}")
                 # 모델 이름이 없으면 클래스 인스턴스에서 가져오기
                 if not _model_name and len(args) > 0 and hasattr(args[0], 'model_name'):
                     _model_name = args[0].model_name

@@ -2,7 +2,7 @@ from uuid import UUID
 from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, BackgroundTasks, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
-import logging
+from loguru import logger
 from common.services.user import UserService
 from common.models.user import Session
 from sse_starlette import EventSourceResponse
@@ -23,7 +23,7 @@ from doceasy.services.document import DocumentService
 from doceasy.services.project import ProjectService
 from doceasy.services.rag import RAGService
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 
 router = APIRouter()  # prefix 제거, 태그만 설정

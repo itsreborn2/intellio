@@ -14,7 +14,7 @@ from common.services.vector_store_manager import VectorStoreManager
 from common.models.user import Session
 from common.schemas.user import SessionBase
 from common.core.exceptions import AuthenticationRedirectException
-#import logging
+
 from loguru import logger
 from common.core.config import settings
 
@@ -39,14 +39,14 @@ async def get_current_session(
 ) -> Session:
     """현재 세션 가져오기"""
     try:
-        logger.info(f'세션 처리 시작 - 세션 ID: {session_id}')
+        #logger.info(f'세션 처리 시작 - 세션 ID: {session_id}')
         user_service = UserService(db)
 
         # 기존 세션이 있는 경우
         if session_id:
             session = await user_service.get_active_session(session_id)
             if session:
-                logger.info(f'유효한 세션 확인: {session.id}')
+                #logger.info(f'유효한 세션 확인: {session.id}')
                 return session
         logger.warning('세션이 없거나 만료됨')
         #status_code = status.HTTP_401_UNAUTHORIZED

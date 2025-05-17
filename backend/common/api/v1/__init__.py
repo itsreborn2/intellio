@@ -1,8 +1,9 @@
 from fastapi import APIRouter
-from common.api.v1 import  session, auth,  admin, token_usage
-import logging
 
-logger = logging.getLogger(__name__)
+from loguru import logger # loguru import 추가
+from common.api.v1 import  session, auth,  admin, token_usage
+
+# logger = logging.getLogger(__name__) # 삭제
 
 api_router_common = APIRouter()
 

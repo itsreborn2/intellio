@@ -15,7 +15,7 @@ from common.app import LoadEnvGlobal
 from common.services.llm_models import LLMModels
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
-import logging
+from loguru import logger
 
 from google.oauth2 import service_account
 
@@ -38,8 +38,8 @@ LoadEnvGlobal()
 
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)
 
     
 async def test_stockeasy_rag():

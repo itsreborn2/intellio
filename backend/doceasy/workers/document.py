@@ -549,7 +549,7 @@ def make_embedding_data_batch(self, document_id: str, chunks: List[str], batch_s
 def process_documents_batch(document_ids: List[str]):
     """문서 일괄 처리"""
     try:
-        logger.warn(f"일괄 처리 시작: {document_ids}")
+        logger.warning(f"일괄 처리 시작: {document_ids}")
         # 각 문서에 대해 별도의 작업 생성
         jobs = group(process_document_task.s(doc_id) for doc_id in document_ids)
         result = jobs.apply_async()

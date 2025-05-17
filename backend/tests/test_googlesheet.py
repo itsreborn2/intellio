@@ -17,7 +17,8 @@ LoadEnvGlobal()
 
 from common.services.llm_models import LLMModels
 
-import logging
+
+from loguru import logger # loguru 임포트 추가
 
 from google.oauth2 import service_account
 
@@ -194,8 +195,8 @@ class GoogleSheetService:
 
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO) # 표준 로거 초기화 제거
+# logger = logging.getLogger(__name__) # 표준 로거 초기화 제거
 
 
 def read_krx_code():

@@ -1,6 +1,5 @@
 import time
 from typing import Dict, Any, Optional, List, Callable
-import logging
 
 from openai import AsyncOpenAI
 
@@ -13,8 +12,6 @@ from common.services.llm_models import LLMModels
 from langchain_core.messages import ai
 from common.models.user import Session
 from common.models.token_usage import ProjectType
-
-logger = logging.getLogger(__name__)
 
 class BasePrompt:
     prompt_mode = None

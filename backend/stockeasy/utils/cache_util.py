@@ -1,12 +1,13 @@
 import json
-import logging
+
+from loguru import logger # loguru import 추가
 from typing import Dict, Any, List, Optional, Tuple, Union, TypeVar, Generic, Callable
 import asyncio
 from functools import wraps
 
 from common.core.redis import AsyncRedisClient
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 T = TypeVar('T')
 

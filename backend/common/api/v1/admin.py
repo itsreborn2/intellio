@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
-import logging
+
+from loguru import logger # loguru import 추가
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import inspect, text
@@ -15,7 +16,7 @@ from common.core.config import settings
 from common.services.vector_store_manager import VectorStoreManager
 import json
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

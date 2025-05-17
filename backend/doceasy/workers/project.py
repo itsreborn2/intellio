@@ -1,9 +1,7 @@
 from doceasy.core.celery_app import celery
 from common.core.database import SessionLocal
 from doceasy.services.project import ProjectService
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 @celery.task(name="doceasy.workers.project.cleanup_expired_projects")
 async def cleanup_expired_projects():

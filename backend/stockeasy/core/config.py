@@ -3,9 +3,7 @@ from pydantic import Extra
 from common.core.config import CommonSettings
 import os
 from functools import lru_cache
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 def detect_file_encoding(file_path):
     """파일의 인코딩을 자동으로 감지"""

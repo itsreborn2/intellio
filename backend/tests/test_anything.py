@@ -17,7 +17,7 @@ from common.services.embedding import EmbeddingService
 from common.services.llm_models import LLMModels
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
-import logging
+from loguru import logger
 
 from google.oauth2 import service_account
 
@@ -39,8 +39,8 @@ from rich.console import Console
 
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)
 
 async def test_google_storage_service():
     from common.services.storage import GoogleCloudStorageService

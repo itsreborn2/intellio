@@ -2,10 +2,8 @@ from celery import Celery
 from celery.schedules import crontab
 from kombu import Queue, Exchange
 from celery.signals import task_success, task_failure
-import logging
+from loguru import logger
 from common.core.config import settings
-
-logger = logging.getLogger(__name__)
 
 # Celery 앱 초기화
 celery = Celery(

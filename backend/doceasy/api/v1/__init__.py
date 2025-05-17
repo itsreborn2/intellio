@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 from . import document, project, rag,  category, table_history
-import logging
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 api_router_doceasy = APIRouter()
 

@@ -13,14 +13,13 @@ from langchain_google_vertexai import ChatVertexAI
 from pydantic import BaseModel
 from google.oauth2 import service_account
 import json
-#from loguru import logger
+from loguru import logger
 from common.core.config import settings
-import logging
+
 from uuid import UUID
 from common.services.token_usage_service import TokenUsageQueue, track_token_usage, track_token_usage_bg, track_token_usage_sync
 from common.services.embedding_models import TokenCounter
 
-logger = logging.getLogger(__name__)
 class StreamingCallbackHandler(BaseCallbackHandler):
     """스트리밍 응답을 처리하는 콜백 핸들러"""
     
@@ -88,8 +87,8 @@ class LLMModels:
                 callback_handler=callback_handler,
                 **kwargs
             )
-            logger.warn(f"LLMModels : {model_info['model']} Streaming")
-            logger.warn(f"LLMModels : {model_info['model']} API 초기화")
+            logger.warning(f"LLMModels : {model_info['model']} Streaming")
+            logger.warning(f"LLMModels : {model_info['model']} API 초기화")
     def set_streaming_callback(self, streaming_callback: Optional[Callable[[str], None]] = None):
         """스트리밍 콜백 설정"""
         self._streaming_callback = streaming_callback
@@ -102,7 +101,7 @@ class LLMModels:
             streaming=True, 
             callback_handler=callback_handler,
         )
-        logger.warn(f"LLMModels : {model_info['model']} Streaming")
+        logger.warning(f"LLMModels : {model_info['model']} Streaming")
 
 
     def get_llm(self, model_name: str, 

@@ -1,7 +1,7 @@
 import asyncio
 import argparse
 from datetime import datetime
-import logging
+
 import os
 import re
 import shutil
@@ -14,9 +14,10 @@ from common.core.database import get_db_async, get_db_session
 from stockeasy.services.financial.make_financial_db import MakeFinancialDataDB
 from common.services.storage import GoogleCloudStorageService
 import sys
+from loguru import logger # loguru import 추가
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정
+# logger = logging.getLogger(__name__) # 삭제
+# logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정 # 삭제
 
 async def check_1page_정정신고(report_file_path: str) -> str:
     """
@@ -697,7 +698,7 @@ async def main():
     args = parser.parse_args()
 
     # 로깅 설정
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    # logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s") # 삭제
 
     # 20230321_한국콜마_161890_화학_annual_DART
     tmp_file_list = await make_code_list()

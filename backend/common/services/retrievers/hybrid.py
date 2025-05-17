@@ -198,7 +198,7 @@ class HybridRetriever(BaseRetriever):
         logger.info(f"벡터 검색 결과: {len(vector_results.documents)} 문서")
         
         # 2. 리랭킹 수행
-        reranker = Reranker(
+        async with Reranker(
             RerankerConfig(
                 reranker_type=RerankerType.PINECONE,
                 pinecone_config=PineconeRerankerConfig(
@@ -206,13 +206,12 @@ class HybridRetriever(BaseRetriever):
                     min_score=0.1  # 낮은 임계값으로 더 많은 결과 포함
                 )
             )
-        )
-        
-        reranked_results = await reranker.rerank(
-            query=query,
-            documents=vector_results.documents,
-            top_k=_top_k
-        )
+        ) as reranker:
+            reranked_results = await reranker.rerank(
+                query=query,
+                documents=vector_results.documents,
+                top_k=_top_k
+            )
         
         logger.info(f"리랭킹 완료 - 결과: {len(reranked_results.documents)} 문서")
         

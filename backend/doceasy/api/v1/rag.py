@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
-import logging
+from loguru import logger
 from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -26,8 +26,8 @@ from doceasy.models.chat import ChatHistory
 from doceasy.services.project import ProjectService
 
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # 디버그 로깅 활성화
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.DEBUG)  # 디버그 로깅 활성화
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 

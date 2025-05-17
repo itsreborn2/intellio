@@ -3,10 +3,10 @@ from celery import Celery
 from celery.schedules import crontab
 from kombu import Queue, Exchange
 from celery.signals import task_success, task_failure
-import logging
+from loguru import logger
 import common.models  # 추가: 모든 모델 관계를 로드
 from common.core.config import settings
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 # Redis 연결 설정
 redis_host = os.getenv("REDIS_HOST", "redis")
@@ -19,7 +19,7 @@ logger.info(f"REDIS_HOST: {redis_host}")
 logger.info(f"REDIS_PORT: {redis_port}")
 logger.info(f"REDIS_URL: {redis_url}")
 logger.info(f"PGBOUNCER_HOST: {settings.PGBOUNCER_HOST}")
-logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
+#logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
 logger.info("================================")
 
 # Celery 앱 초기화

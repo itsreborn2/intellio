@@ -14,7 +14,7 @@ from common.core.config import settings
 import tiktoken
 from transformers import AutoTokenizer
 from tokenizers import Tokenizer
-import logging
+from loguru import logger
 import nltk
 import google.api_core.exceptions
 import tenacity
@@ -41,7 +41,6 @@ except ImportError:
             DeprecationWarning
         )
     except ImportError:
-        logger = logging.getLogger(__name__)
         logger.warning("LangChain 콜백 모듈을 임포트할 수 없습니다.")
         
         # 더미 컨텍스트 매니저 생성
@@ -59,8 +58,6 @@ except ImportError:
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from common.services.token_usage_service import TokenUsageTracker
-
-logger = logging.getLogger(__name__)
 
 # TokenUsageQueue와 track_token_usage_bg는 token_usage_service.py로 이동하였습니다.
 

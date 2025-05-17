@@ -22,15 +22,15 @@ from common.app import LoadEnvGlobal
 from common.services.llm_models import LLMModels
 from sklearn.metrics.pairwise import cosine_similarity
 
-import logging
+from loguru import logger
 
 # 환경 변수 로드
 LoadEnvGlobal()
 
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)
 import asyncio
 from common.services.embedding import EmbeddingService
 from common.services.embedding_models import EmbeddingModelType

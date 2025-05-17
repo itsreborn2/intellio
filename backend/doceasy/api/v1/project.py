@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Body
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-import logging
+from loguru import logger  # logging 대신 loguru를 사용
 from datetime import datetime, timedelta
 
 from common.services.user import UserService
@@ -26,9 +26,9 @@ from doceasy.models.table_history import TableHistory
 
 router = APIRouter() # 상위에서 등록 prefix="/projects", tags=["projects"]
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 #logger = logging.getLogger("app.api.v1.project")
-logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.DEBUG)
 
 @router.post("/", response_model=ProjectSimpleResponse)
 async def create_project(

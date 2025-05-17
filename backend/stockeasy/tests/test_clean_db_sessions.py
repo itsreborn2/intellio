@@ -5,7 +5,8 @@ PostgreSQL 유휴 세션 정리 스크립트
 import asyncio
 import os
 import sys
-import logging
+
+from loguru import logger # loguru 임포트 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # 환경 변수 설정 - production 환경으로 명시적 설정
@@ -20,12 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from datetime import timedelta
 
 # 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+# logging.basicConfig( # 표준 로거 초기화 제거
+#     level=logging.INFO,
+#     format='%(asctime)s | %(levelname)s | %(message)s',
+#     datefmt='%Y-%m-%d %H:%M:%S'
+# )
+# logger = logging.getLogger(__name__) # 표준 로거 초기화 제거
 
 # 환경 변수 로드
 load_dotenv()

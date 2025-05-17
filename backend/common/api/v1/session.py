@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
-import logging
+
+from loguru import logger # loguru import 추가
 from fastapi import APIRouter, Depends, Response, Cookie, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +10,7 @@ from common.models.user import Session
 from common.services.user import UserService
 from common.schemas.user import SessionResponse, SessionBase
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 삭제
 
 router = APIRouter(tags=["sessions"])
 

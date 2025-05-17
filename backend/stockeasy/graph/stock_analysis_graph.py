@@ -338,45 +338,45 @@ class StockAnalysisGraph:
         def question_analyzer_router(state: AgentState) -> str:
             """질문 분석기 이후 라우팅 결정"""
             # 컨텍스트 분석 결과 확인
-            is_follow_up = state.get("is_follow_up", False)
-            context_analysis = state.get("context_analysis", False)
-            is_conversation_closing = context_analysis.get("is_conversation_closing", False)
+            #is_follow_up = state.get("is_follow_up", False)
+            #context_analysis = state.get("context_analysis", False)
+            #is_conversation_closing = context_analysis.get("is_conversation_closing", False)
 
-            logger.info(f"[question_analyzer_router] 후속질문 여부: {is_follow_up}, 대화마무리 : {is_conversation_closing}")
+            #logger.info(f"[question_analyzer_router] 후속질문 여부: {is_follow_up}, 대화마무리 : {is_conversation_closing}")
             
-            is_followup_question = context_analysis.get("is_followup_question", False)
-            requires_context = context_analysis.get("requires_context", False)
+            # is_followup_question = context_analysis.get("is_followup_question", False)
+            # requires_context = context_analysis.get("requires_context", False)
             
 
-            if is_conversation_closing:
-                logger.info(f"대화 마무리로 에이전트를 종료합니다. END")
-                if "processing_status" not in state:
-                    state["processing_status"] = {}
-                state["processing_status"]["question_analyzer"] = "completed"
-                return END
+            # if is_conversation_closing:
+            #     logger.info(f"대화 마무리로 에이전트를 종료합니다. END")
+            #     if "processing_status" not in state:
+            #         state["processing_status"] = {}
+            #     state["processing_status"]["question_analyzer"] = "completed"
+            #     return END
             
-            is_different_stock = context_analysis.get("is_different_stock", False)
-            # stock_relation: Optional[Literal["동일종목", "종목비교", "다른종목", "알수없음"]]  # 이전 종목과의 관계
-            stock_relation = context_analysis.get("stock_relation", "알수없음")
-            logger.info(f"[question_analyzer_router] 다른종목 여부: {is_different_stock}, 종목관계 : {stock_relation}")
-            if is_different_stock and stock_relation == "다른종목":
-                logger.info(f"다른종목에 관란 질문이므로,  에이전트를 종료합니다. END")
+            # is_different_stock = context_analysis.get("is_different_stock", False)
+            # # stock_relation: Optional[Literal["동일종목", "종목비교", "다른종목", "알수없음"]]  # 이전 종목과의 관계
+            # stock_relation = context_analysis.get("stock_relation", "알수없음")
+            # logger.info(f"[question_analyzer_router] 다른종목 여부: {is_different_stock}, 종목관계 : {stock_relation}")
+            # if is_different_stock and stock_relation == "다른종목":
+            #     logger.info(f"다른종목에 관란 질문이므로,  에이전트를 종료합니다. END")
                 
-                state["processing_status"]["question_analyzer"] = "completed"
-                return END
-            # 대화 컨텍스트가 필요한 경우 context_response로 라우팅
+            #     state["processing_status"]["question_analyzer"] = "completed"
+            #     return END
+            # # 대화 컨텍스트가 필요한 경우 context_response로 라우팅
 
-            #if requires_context:
-            if is_follow_up:
-                logger.info(f"후속질문으로 context_response 에이전트로 라우팅합니다.")
-                # 처리 상태 업데이트
-                if "processing_status" not in state:
-                    state["processing_status"] = {}
-                state["processing_status"]["question_analyzer"] = "completed"
-                return "context_response"
+            # #if requires_context:
+            # if is_follow_up:
+            #     logger.info(f"후속질문으로 context_response 에이전트로 라우팅합니다.")
+            #     # 처리 상태 업데이트
+            #     if "processing_status" not in state:
+            #         state["processing_status"] = {}
+            #     state["processing_status"]["question_analyzer"] = "completed"
+            #     return "context_response"
             
             # 그 외의 경우는 일반 흐름대로 오케스트레이터로
-            logger.info(f"일반 질문으로 orchestrator 에이전트로 라우팅합니다.")
+            #logger.info(f"일반 질문으로 orchestrator 에이전트로 라우팅합니다.")
             return "orchestrator"
         
         # 질문 분석기 -> 컨텍스트 응답 또는 오케스트레이터 조건부 엣지 추가
@@ -384,7 +384,7 @@ class StockAnalysisGraph:
             "question_analyzer",
             question_analyzer_router,
             {
-                "context_response": "context_response",
+                #"context_response": "context_response",
                 #"response_formatter": "response_formatter",
                 "orchestrator": "orchestrator",
                 END: END

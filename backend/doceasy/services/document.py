@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 from typing import Dict, List, Optional, Any
 from fastapi import UploadFile, BackgroundTasks, HTTPException
-import logging
+from loguru import logger
 import json
 import re
 
@@ -27,8 +27,6 @@ DOCUMENT_STATUS_COMPLETED = 'COMPLETED'
 DOCUMENT_STATUS_PARTIAL = 'PARTIAL'
 DOCUMENT_STATUS_ERROR = 'ERROR'
 DOCUMENT_STATUS_DELETED = 'DELETED'
-
-logger = logging.getLogger(__name__)
 
 class DocumentService:
     def __init__(self, db=None):

@@ -1,14 +1,12 @@
 import os
 from typing import Optional
 import io
-import logging
+from loguru import logger
 from common.core.config import settings
 import tempfile
 from tika import parser
 import tika
 tika.initVM()  # Tika 서버를 미리 초기화
-
-logger = logging.getLogger(__name__)
 
 class DocumentExtractor:
     """문서에서 텍스트를 추출하는 클래스"""
@@ -129,10 +127,10 @@ class DocumentExtractor:
 
                 extracted_text = "\n".join(cleaned_text_list)
                 
-                # 텍스트가 비어있으면 OCR 처리 시도
-                if not extracted_text:
-                    logger.warning("PDF에서 텍스트를 추출했으나 내용이 비어있습니다. OCR 처리를 시도합니다.")
-                    return DocumentExtractor().extract_using_document_ai(file_content, "application/pdf")
+                # # 텍스트가 비어있으면 OCR 처리 시도
+                # if not extracted_text:
+                #     logger.warning("PDF에서 텍스트를 추출했으나 내용이 비어있습니다. OCR 처리를 시도합니다.")
+                #     return DocumentExtractor().extract_using_document_ai(file_content, "application/pdf")
                     
                 return extracted_text
             finally:
@@ -148,12 +146,7 @@ class DocumentExtractor:
             raise RuntimeError(f"PDF 처리를 위한 라이브러리 오류: {str(e)}")
         except Exception as e:
             logger.error(f"PDF 텍스트 추출 중 오류 발생: {str(e)}")
-            # 일반적인 텍스트 추출 실패 시 OCR 시도
-            try:
-                return DocumentExtractor().extract_using_document_ai(file_content, "application/pdf")
-            except Exception as ocr_error:
-                logger.error(f"OCR 처리 중 오류 발생: {str(ocr_error)}")
-                raise RuntimeError(f"PDF 텍스트 추출 및 OCR 처리 실패: {str(e)}")
+            
             
     @staticmethod
     def extract_from_docx(file_content: bytes) -> str:
@@ -247,27 +240,6 @@ class DocumentExtractor:
         except Exception as e:
             logger.error(f"Vision API 텍스트 추출 실패: {str(e)}")
             raise RuntimeError(f"Vision API 텍스트 추출 실패: {str(e)}")
-            
-    def extract_using_document_ai(self, file_content: bytes, mime_type: str) -> str:
-        """Google Cloud Document AI를 사용한 텍스트 추출"""
-        try:
-            self._init_document_ai()
-            raw_document = documentai.RawDocument(
-                content=file_content,
-                mime_type=mime_type
-            )
-            request = documentai.ProcessRequest(
-                name=self.processor_name,
-                raw_document=raw_document
-            )
-            
-            response = self.document_client.process_document(request=request)
-            document = response.document
-            
-            return document.text.strip()
-        except Exception as e:
-            logger.error(f"Document AI 텍스트 추출 실패: {str(e)}")
-            raise RuntimeError(f"Document AI 텍스트 추출 실패: {str(e)}")
             
     @staticmethod
     def extract_from_tika(content: bytes) -> str:

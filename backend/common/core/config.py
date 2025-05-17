@@ -229,7 +229,7 @@ class CommonSettings(BaseSettings):
 def get_settings() -> CommonSettings:
     logger.info(f"Loading settings for environment: {os.getenv('ENV', 'development')}")
     settings = CommonSettings()
-    logger.info(f"Generated DATABASE_URL: {settings.DATABASE_URL}")
+    #logger.info(f"Generated DATABASE_URL: {settings.DATABASE_URL}")
     return settings
 
 settings = get_settings()
@@ -259,7 +259,7 @@ logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
 logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
 logger.info(f"PGBOUNCER_HOST: {settings.PGBOUNCER_HOST}")
 logger.info(f"PGBOUNCER_PORT: {settings.PGBOUNCER_PORT}")
-logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
+#logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
 
 # 캐시 디렉토리 설정
 settings.LOCAL_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "cache")

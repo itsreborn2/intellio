@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Tuple
 #from openai import OpenAI, AsyncOpenAI
 #from pinecone import Pinecone, PodSpec, ServerlessSpec
 
-import logging
+from loguru import logger
 import re
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 #from common.utils.util import measure_time_async
@@ -12,7 +12,7 @@ from openai import OpenAIError, Timeout
 from .embedding_models import EmbeddingModelManager, EmbeddingProvider, EmbeddingProviderFactory, EmbeddingModelConfig, EmbeddingModelType
 from langchain_core.embeddings import Embeddings
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 class EmbeddingService:
     def __init__(self, model_type: EmbeddingModelType = EmbeddingModelType.OPENAI_3_LARGE):

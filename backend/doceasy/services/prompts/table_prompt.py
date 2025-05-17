@@ -1,12 +1,11 @@
 from typing import Dict, Any, List, Optional
 from .base import BasePrompt
 import asyncio
-import logging
 from loguru import logger
 import json
 from common.utils.util import measure_time_async
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 class TablePrompt(BasePrompt):
     prompt_mode = "table"

@@ -3,9 +3,10 @@ import pdfplumber
 import re
 import os
 from typing import List, Dict, Optional, Tuple, Any, Union
-import logging
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+
+# logger = logging.getLogger(__name__)
 
 
 class FinancialPDFExtractor:
@@ -61,8 +62,8 @@ class FinancialPDFExtractor:
                         if end_page is None:
                             end_page = min(start_page + 3, len(doc) - 1)
                             
-                        logger.info(f"요약재무정보 섹션 찾음: 페이지 {start_page+1}~{end_page+1}")
-                        return (start_page, end_page)
+                logger.info(f"요약재무정보 섹션 찾음: 페이지 {start_page+1}~{end_page+1}")
+                return (start_page, end_page)
             
             # 목차에서 찾지 못한 경우 본문 내용에서 찾기 시도
             for page_num in range(min(30, len(doc))):  # 처음 30페이지만 검색
@@ -73,8 +74,8 @@ class FinancialPDFExtractor:
                         # 발견된 페이지부터 3페이지를 범위로 설정
                         start_page = page_num
                         end_page = min(start_page + 3, len(doc) - 1)
-                        logger.info(f"본문에서 요약재무정보 섹션 찾음: 페이지 {start_page+1}~{end_page+1}")
-                        return (start_page, end_page)
+                logger.info(f"본문에서 요약재무정보 섹션 찾음: 페이지 {start_page+1}~{end_page+1}")
+                return (start_page, end_page)
             
             logger.warning(f"요약재무정보 페이지를 찾을 수 없습니다: {pdf_path}")
             return None

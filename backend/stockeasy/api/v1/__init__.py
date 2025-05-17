@@ -3,7 +3,7 @@
 이 모듈은 FastAPI 라우터들을 초기화하고 등록합니다.
 """
 
-import logging
+
 from fastapi import APIRouter
 from stockeasy.api.v1.telegram import telegram_router
 from stockeasy.api.v1.chat import chat_router
@@ -15,7 +15,7 @@ from loguru import logger
 #root_router = APIRouter(prefix="/stockeasy", tags=["stockeasy"])
 api_router_stockeasy = APIRouter(prefix="/stockeasy", tags=["stockeasy"])
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # 표준 로거 초기화 제거
 
 # 텔레그램 라우터 등록
 logger.info("텔레그램 라우터 등록 시작")
