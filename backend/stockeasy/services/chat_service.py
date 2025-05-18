@@ -709,11 +709,13 @@ class ChatService:
             session.view_count += 1
             await db.commit()
             
-            # 메시지 정렬 (생성 시간순)
-            session_messages = sorted(
-                session.messages, 
-                key=lambda msg: msg.created_at if msg.created_at else datetime.min
-            )
+            # 메시지를 별도 쿼리로 명시적으로 로드
+            messages_query = select(ShareStockChatMessage).where(
+                ShareStockChatMessage.chat_session_id == session.id
+            ).order_by(ShareStockChatMessage.created_at)
+            
+            messages_result = await db.execute(messages_query)
+            session_messages = messages_result.scalars().all()
             
             # 구조화된 응답 생성
             return {
