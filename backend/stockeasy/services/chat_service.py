@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from uuid import UUID, uuid4
 import json
 from datetime import datetime, timedelta, timezone
+import pytz
 
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -697,7 +698,8 @@ class ChatService:
                 raise HTTPException(status_code=404, detail="공유된 채팅을 찾을 수 없습니다.")
             
             # 만료 여부 확인 (15일 이상 경과)
-            expiry_date = datetime.now(timezone.utc) - timedelta(days=15)
+            seoul_tz = pytz.timezone('Asia/Seoul')
+            expiry_date = datetime.now(seoul_tz) - timedelta(days=15)
             
             # 항상 timezone-aware 상태로 비교 (created_at은 항상 timezone with time zone이므로)
             if session.created_at < expiry_date:
