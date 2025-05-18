@@ -1,7 +1,7 @@
 from typing import Optional, List
 from uuid import uuid4
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, ForeignKey, text, Boolean, Index
+from sqlalchemy import String, Text, ForeignKey, text, Boolean, Index, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from common.models.base import Base
 from uuid import UUID as PyUUID
@@ -230,6 +230,11 @@ class ShareStockChatSession(Base):
         String(255), nullable=False,
         comment="채팅 세션 제목"
     )
+    # 로딩 횟수 필드 추가
+    view_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"),
+        comment="세션 조회 횟수"
+    )
     # 종목 정보 필드
     stock_code: Mapped[Optional[str]] = mapped_column(
         String(20), nullable=True, index=True,
@@ -265,6 +270,7 @@ class ShareStockChatSession(Base):
             "original_session_id": str(self.original_session_id),
             "share_uuid": self.share_uuid,
             "title": self.title,
+            "view_count": self.view_count,
             "stock_code": self.stock_code,
             "stock_name": self.stock_name,
             "stock_info": self.stock_info,

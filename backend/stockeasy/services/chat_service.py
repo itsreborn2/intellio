@@ -6,7 +6,7 @@
 from typing import List, Dict, Any, Optional
 from uuid import UUID, uuid4
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -683,6 +683,7 @@ class ChatService:
             
         Raises:
             HTTPException: 공유된 채팅을 찾을 수 없는 경우
+            HTTPException: 공유 링크가 만료된 경우 (15일 이상 경과)
         """
         try:
             # 공유 세션 조회
@@ -694,6 +695,17 @@ class ChatService:
             
             if not session:
                 raise HTTPException(status_code=404, detail="공유된 채팅을 찾을 수 없습니다.")
+            
+            # 만료 여부 확인 (15일 이상 경과)
+            expiry_date = datetime.now(timezone.utc) - timedelta(days=15)
+            
+            # 항상 timezone-aware 상태로 비교 (created_at은 항상 timezone with time zone이므로)
+            if session.created_at < expiry_date:
+                raise HTTPException(status_code=410, detail="공유 링크가 만료되었습니다.")
+            
+            # 조회수 증가
+            session.view_count += 1
+            await db.commit()
             
             # 메시지 정렬 (생성 시간순)
             session_messages = sorted(
@@ -710,6 +722,7 @@ class ChatService:
         except HTTPException:
             raise
         except Exception as e:
+            await db.rollback()
             logger.error(f"공유된 채팅 조회 중 오류 발생: {str(e)}")
             raise HTTPException(
                 status_code=500, 

@@ -232,6 +232,7 @@ export default function SharedChatPage() {
 
       // 2. 캐시 없거나 만료 시 백엔드에서 데이터 가져오기
       try {
+        setIsExpired(false);
         const data = await getSharedChat(shareUuid);
         console.log("[API 응답] 공유된 채팅 데이터:", {
           세션_정보: data.session ? {
@@ -261,7 +262,21 @@ export default function SharedChatPage() {
         dataLoaded.current = true;
       } catch (err) {
         console.error('공유 채팅 로드 실패:', err);
-        setError('공유된 채팅을 불러오는데 실패했습니다.');
+        
+        // 오류 메시지 확인
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        
+        if (errorMsg.startsWith('EXPIRED:')) {
+          // 만료된 링크인 경우
+          setIsExpired(true);
+          setError(errorMsg.substring(8)); // "EXPIRED:" 접두사 제거
+        } else {
+          // 다른 오류인 경우
+          setError('공유된 채팅을 불러오는데 실패했습니다.');
+        }
+        
+        // 오류 발생 시에도 데이터 로드 완료로 설정하여 재시도하지 않도록 함
+        dataLoaded.current = true;
       } finally {
         setIsLoading(false);
         isRequestInProgress.current = false;
@@ -353,6 +368,8 @@ export default function SharedChatPage() {
     }));
   };
   
+  const [isExpired, setIsExpired] = useState<boolean>(false);
+  
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -361,13 +378,23 @@ export default function SharedChatPage() {
     );
   }
   
+  if (isExpired) {
+    return (
+      <div className="w-full max-w-[800px] mx-auto px-0 sm:px-2 pt-4">
+        <div className="mb-3 p-3 text-center text-red-700 bg-red-50 border border-red-600 rounded-md">
+          <p>이 공유 링크는 만료되었습니다.</p>
+        </div>
+     </div>
+    );
+  }
+  
   if (error) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="p-4 rounded-md bg-red-50 text-red-600">
+      <div className="w-full max-w-[800px] mx-auto px-0 sm:px-2 pt-4">
+        <div className="mb-3 p-3 text-center text-red-700 bg-red-50 border border-red-600 rounded-md">
           {error}
         </div>
-      </div>
+     </div>
     );
   }
   
@@ -375,8 +402,6 @@ export default function SharedChatPage() {
   return (
     <div className="flex-1 p-0 sm:p-2 md:p-4 w-full">
       {/* Fixed banner for shared report notification */}
-
-
       {/* Main content area with padding to offset the fixed banner */}
       <div className="w-full max-w-[800px] mx-auto px-0 sm:px-2 pt-4">
        <div className="mb-3 p-3 text-center text-green-700 bg-green-50 border border-green-600 rounded-md">

@@ -42,12 +42,15 @@ export function useChatShare() {
     try {
       const response = await fetch(`${API_ENDPOINT_STOCKEASY}/chat/share/${shareUuid}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
       
       if (!response.ok) {
+        // 응답 코드가 410인 경우 링크 만료 오류 생성
+        if (response.status === 410) {
+          const errorData = await response.json();
+          throw new Error(`EXPIRED:${errorData.detail || '공유 링크가 만료되었습니다.'}`);
+        }
         throw new Error('공유된 채팅 조회 실패');
       }
       

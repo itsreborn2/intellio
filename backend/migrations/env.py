@@ -85,6 +85,15 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        # 타입 비교 비활성화
+        compare_type=True,
+        # 서버 기본값 비교 비활성화
+        compare_server_default=False,
+        # 이미 존재하는 테이블 처리 방식 설정
+        include_schemas=True,
+        include_object=lambda obj, name, type_, reflected, compare_to: 
+            # 이미 존재하는 테이블에 대한 변경사항만 감지
+            not (type_ == "table" and reflected and compare_to is None)
     )
 
     with context.begin_transaction():
@@ -106,7 +115,17 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            # 타입 비교 비활성화 - 타입 차이로 인한 불필요한 마이그레이션 방지
+            compare_type=False,
+            # 서버 기본값 비교 비활성화
+            compare_server_default=False,
+            # 이미 존재하는 테이블 처리 방식 설정
+            include_schemas=True,
+            include_object=lambda obj, name, type_, reflected, compare_to: 
+                # 이미 존재하는 테이블에 대한 변경사항만 감지
+                not (type_ == "table" and reflected and compare_to is None)
         )
 
         with context.begin_transaction():
