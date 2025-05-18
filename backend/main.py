@@ -50,7 +50,7 @@ logger.add(
 # 디버그 로그를 파일에 저장 (선택 사항)
 logger.add(
     "logs/debug_{time}.log",
-    rotation="500 MB",
+    rotation="50 MB",
     retention="10 days",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
     level="DEBUG"

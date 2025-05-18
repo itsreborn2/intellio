@@ -18,7 +18,7 @@ from common.core.database import AsyncSessionLocal
 #     embedding vector(3072),
 #     CONSTRAINT web_search_cache_pkey PRIMARY KEY (id)
 # )
-# docker-compose exec postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "CREATE EXTENSION IF NOT EXISTS vector;"
+# docker compose exec postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 async def main():
     # 검색할 쿼리 입력
