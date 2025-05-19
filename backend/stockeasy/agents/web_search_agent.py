@@ -523,17 +523,20 @@ class WebSearchAgent(BaseAgent):
             
             # 포맷팅
             formatted_results = []
+            seen_urls = set() # 중복 URL 추적을 위한 set 추가
             for i, result in enumerate(top_results, 1):
                 title = result.get("title", "제목 없음")
                 content = result.get("content", "내용 없음")
                 url = result.get("url", "URL 없음")
                 #score = result.get("relevance_score", 0)
                 
-                #formatted_results.append(f"[결과 {i}]\n제목: {title}\n내용: {content}\nURL: {url}\n점수: {score}\n")
-                formatted_results.append(f"[결과 {i}]\n제목: {title}\n내용: {content}\nURL: {url}\n\n")
+                #formatted_results.append(f"[결과 {i}]\\n제목: {title}\\n내용: {content}\\nURL: {url}\\n점수: {score}\\n")
+                if url and url not in seen_urls: # URL이 있고, 아직 처리되지 않은 경우
+                    formatted_results.append(f"[결과 {i}]\\n제목: {title}\\n내용: {content}\\nURL: {url}\\n\\n")
+                    seen_urls.add(url) # 처리된 URL로 추가
             
             # 검색 결과 텍스트
-            results_text = "\n".join(formatted_results)
+            results_text = "\\n".join(formatted_results)
             return results_text
 #             # 프롬프트 구성
 #             prompt = f"""
