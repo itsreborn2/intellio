@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 #from langchain_tavily import TavilySearch
 from common.services.tavily import TavilyService
 from loguru import logger
-from typing import Dict, List, Any, Optional, Set, cast, Union, Callable
+from typing import Dict, List, Any, Optional, Set, cast, Union, Callable, Tuple
 
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
@@ -28,10 +28,13 @@ from common.services.agent_llm import get_agent_llm, get_llm_for_agent
 from common.utils.util import async_retry, remove_json_block
 from common.core.config import settings
 from common.models.token_usage import ProjectType
+from common.services.embedding import EmbeddingService
+from common.services.embedding_models import EmbeddingModelType
 
 from stockeasy.models.agent_io import RetrievedAllAgentData, RetrievedWebSearchResult
 from stockeasy.agents.base import BaseAgent
 from sqlalchemy.ext.asyncio import AsyncSession
+from stockeasy.services.web_search_cache_service import WebSearchCacheService
 
 class MultiQueryOutput(BaseModel):
       """
@@ -69,6 +72,16 @@ class WebSearchAgent(BaseAgent):
         # 최대 쿼리 개수 및 최대 결과 개수 설정
         self.max_queries = 7
         self.max_results_per_query = 15
+        
+        # 캐싱 관련 설정 추가
+        self.use_cache = True  # 캐싱 기능 활성화 여부
+        self.web_search_cache_service = WebSearchCacheService(db) if db else None
+        self.similarity_threshold = 0.89  # 유사도 임계값
+        self.cache_expiry_days = 15  # 캐시 유효기한 (일)
+        
+        # 캐싱 지표
+        self.cache_hits = 0
+        self.cache_misses = 0
         
         logger.info(f"WebSearchAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
     
@@ -137,9 +150,14 @@ class WebSearchAgent(BaseAgent):
                 search_queries=search_queries
             )
             
-            # 웹 검색 수행
-            search_results = await self._perform_web_searches(search_queries)
+            # 웹 검색 수행 (캐싱 기능 사용)
+            search_results = await self._perform_web_searches(
+                search_queries=search_queries,
+                stock_code=stock_code,
+                stock_name=stock_name
+            )
             logger.info(f"웹 검색결과: {len(search_results)}개")
+            
             if not search_results:
                 logger.warning("No web search results found")
                 return self._handle_no_results_response(state, start_time)
@@ -222,7 +240,10 @@ class WebSearchAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.agent_llm.get_model_name()
+                "model_name": self.agent_llm.get_model_name(),
+                "cache_hits": self.cache_hits,
+                "cache_misses": self.cache_misses,
+                "cache_hit_ratio": round(self.cache_hits / (self.cache_hits + self.cache_misses), 2) if (self.cache_hits + self.cache_misses) > 0 else 0
             }
             
             logger.info(f"WebSearchAgent completed in {duration:.2f} seconds, found {len(processed_results)} results")
@@ -334,29 +355,75 @@ class WebSearchAgent(BaseAgent):
             return [default_query]
     
     @async_retry(retries=0, delay=1.0, exceptions=(Exception,))
-    async def _perform_web_searches(self, search_queries: List[str]) -> List[Dict[str, Any]]:
+    async def _perform_web_searches(self, search_queries: List[str], stock_code: Optional[str] = None, stock_name: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        생성된 쿼리를 사용하여 웹 검색을 수행합니다.
+        생성된 쿼리를 사용하여 웹 검색을 수행합니다. 캐시를 먼저 확인하고 없는 경우 API를 호출합니다.
         
         Args:
             search_queries: 검색할 쿼리 목록
+            stock_code: 종목 코드
+            stock_name: 종목 이름
             
         Returns:
             검색 결과 목록
         """
         try:
-            # 단일 비동기 세션에서 모든 쿼리 병렬 처리
-            all_results = await self.tavily_service.batch_search_async(
-                queries=search_queries,
-                search_depth="advanced",
-                #search_depth="basic",
-                max_results=self.max_results_per_query,
-                topic="general",
-                time_range="year"
-            )
+            all_results = []
+            
+            if self.use_cache and self.web_search_cache_service and self.db:
+                # 캐시 검색
+                logger.info(f"캐시에서 {len(search_queries)}개 쿼리 검색 시도")
+                cache_results, cache_miss_queries = await self.web_search_cache_service.check_cache(
+                    queries=search_queries, 
+                    stock_code=stock_code, 
+                    stock_name=stock_name
+                )
+                
+                # 캐시 히트 결과 추가
+                if cache_results:
+                    all_results.extend(cache_results)
+                    self.cache_hits += len(search_queries) - len(cache_miss_queries)
+                    logger.info(f"캐시 히트: {len(search_queries) - len(cache_miss_queries)}개 쿼리")
+                
+                # 캐시 미스 쿼리만 API 호출
+                if cache_miss_queries:
+                    self.cache_misses += len(cache_miss_queries)
+                    logger.info(f"캐시 미스: {len(cache_miss_queries)}개 쿼리, API 호출")
+                    api_results = await self.tavily_service.batch_search_async(
+                        queries=cache_miss_queries,
+                        search_depth="advanced",
+                        max_results=self.max_results_per_query,
+                        topic="general",
+                        time_range="year"
+                    )
+                    
+                    # 결과 추가
+                    all_results.extend(api_results)
+                    
+                    # 결과 캐싱
+                    for query in cache_miss_queries:
+                        query_results = [r for r in api_results if r.get("search_query") == query]
+                        if query_results:
+                            # 캐시에 저장
+                            await self.web_search_cache_service.save_to_cache(
+                                query=query, 
+                                results=query_results,
+                                stock_code=stock_code, 
+                                stock_name=stock_name
+                            )
+            else:
+                # 캐시 사용하지 않고 모든 쿼리 API 호출
+                logger.info(f"캐싱 비활성화 또는 DB 연결 없음: 직접 API 호출 ({len(search_queries)}개 쿼리)")
+                all_results = await self.tavily_service.batch_search_async(
+                    queries=search_queries,
+                    search_depth="advanced",
+                    max_results=self.max_results_per_query,
+                    topic="general",
+                    time_range="year"
+                )
             
             return all_results
-            
+                
         except Exception as e:
             logger.error(f"웹 검색 수행 중 오류 발생: {str(e)}", exc_info=True)
             return []

@@ -8,7 +8,7 @@ GCS에서 PDF 파일을 관리하고 처리하는 로직을 포함합니다.
 import os
 import json
 import asyncio
-import logging
+from loguru import logger
 from pprint import pprint
 import warnings
 from datetime import datetime, timedelta
@@ -39,21 +39,21 @@ from stockeasy.models.financial_data import SummaryFinancialData, FinancialItemM
 from stockeasy.models.income_statement_data import IncomeStatementData
 
 
-# PDF 관련 모든 경고 메시지 숨기기
-warnings.filterwarnings('ignore', category=UserWarning, module='pdfminer')
-warnings.filterwarnings('ignore', category=UserWarning, module='pdfplumber')
+# # PDF 관련 모든 경고 메시지 숨기기
+# warnings.filterwarnings('ignore', category=UserWarning, module='pdfminer')
+# warnings.filterwarnings('ignore', category=UserWarning, module='pdfplumber')
 
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),  # 콘솔 출력용 핸들러
-    ]
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정
-logging.getLogger("pdfminer").setLevel(logging.ERROR)
+# # 로깅 설정
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         logging.StreamHandler(),  # 콘솔 출력용 핸들러
+#     ]
+# )
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.INFO)  # 명시적으로 INFO 레벨 설정
+# logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 class FinancialDataServiceDB:
     """재무 데이터 서비스 클래스"""

@@ -640,7 +640,7 @@ class ChatService:
                         message_data=msg.message_data,
                         data_url=msg.data_url,
                         message_metadata=msg.message_metadata,
-                        agent_results=msg.agent_results
+                        # agent_results 필드 제외
                     )
                     db.add(share_message)
                 

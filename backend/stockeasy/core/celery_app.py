@@ -126,8 +126,8 @@ celery.conf.beat_schedule = {
         'task': 'stockeasy.workers.statistics.daily_tasks.generate_daily_stats',
         'schedule': crontab(minute='*/10'),  # 10분마다 실행 
     },
-    'cleanup-old-shared-sessions': {  # 새 스케줄 추가
-        'task': 'stockeasy.workers.maintenance.cleanup_tasks.cleanup_old_shared_sessions',
+    'cleanup-old-data': {  # 새 스케줄 추가
+        'task': 'stockeasy.workers.maintenance.cleanup_tasks.cleanup_old_data',
         'schedule': crontab(hour=4, minute=0),  # 매일 04:00에 실행
     }
 }

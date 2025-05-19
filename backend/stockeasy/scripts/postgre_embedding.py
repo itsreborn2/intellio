@@ -19,6 +19,16 @@ from common.core.database import AsyncSessionLocal
 #     CONSTRAINT web_search_cache_pkey PRIMARY KEY (id)
 # )
 # docker compose exec postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "CREATE EXTENSION IF NOT EXISTS vector;"
+async def test_query():
+    from stockeasy.services.web_search_cache_service import WebSearchCacheService
+    async with AsyncSessionLocal() as session:
+        web_search_cache_service = WebSearchCacheService(session)
+        cache_results, cache_miss_queries = await web_search_cache_service.check_cache(
+            queries=["케어젠 마이오키 FDA 승인"], 
+            stock_code="214370", 
+            stock_name="케어젠"
+        )
+    return cache_results, cache_miss_queries
 
 async def main():
     # 검색할 쿼리 입력
@@ -161,4 +171,4 @@ def convert_sqlalchemy_url_to_params(url):
     }
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(test_query())
