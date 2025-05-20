@@ -48,12 +48,15 @@ export default function Chart2() {
     };
   }, []);
 
-  // 차트 데이터가 변경되면 500ms 후에 차트 로딩 상태 해제
+  // 차트 데이터가 변경되면 차트 렌더링을 위한 충분한 시간(2초) 후에 로딩 상태 해제
   useEffect(() => {
     if (chartData.date.length > 0) {
+      console.log('데이터 로딩 완료, 차트 렌더링 대기 시작...');
       const timer = setTimeout(() => {
+        console.log('차트 렌더링 완료 처리');
         setChartReady(true);
-      }, 500); // 500ms 지연 후 차트 로딩 상태 해제
+        setLoading(false); // 로딩이 완전히 끝났음을 표시
+      }, 2000); // 2초 지연 - 차트 렌더링에 충분한 시간
       
       return () => clearTimeout(timer);
     }
@@ -110,8 +113,8 @@ export default function Chart2() {
               downRatio200: downRatio200Values,
               downRatio20: downRatio20Values
             });
-            // 데이터만 로딩 완료, 차트는 렌더링 후 로딩 상태 해제
-            setLoading(false);
+            // 데이터 로딩은 완료됐지만, 차트 렌더링이 완료될 때까지 로딩 상태 유지
+            // 차트가 렌더링될 때 onRender 이벤트에서 loading=false 설정
           },
           error: (error: any) => {
             console.error('CSV 파싱 오류:', error);
@@ -137,14 +140,11 @@ export default function Chart2() {
     );
   }
 
-  // 데이터 로딩 중이거나 데이터는 있지만 차트가 준비되지 않은 경우 로딩 스피너 표시
-  if (loading) {
-    return <LoadingSpinner size="md" message="데이터를 불러오는 중..." />;
-  }
-  
-  // 데이터가 존재하지만 차트가 아직 렌더링되지 않은 경우
-  if (chartData.date.length > 0 && !chartReady) {
-    return <LoadingSpinner size="md" message="차트를 준비하는 중..." />;
+  // 데이터 로딩 중이거나 차트가 준비되지 않은 경우 로딩 스피너 표시
+  if (loading || !chartReady) {
+    // 로딩 상태에 따라 다른 메시지 표시
+    const message = chartData.date.length > 0 ? "차트를 준비하는 중..." : "데이터를 불러오는 중...";
+    return <LoadingSpinner size="md" message={message} />;
   }
 
   // 차트 데이터와 레이아웃 설정
@@ -246,7 +246,7 @@ export default function Chart2() {
         layout={{ ...layout, width: containerWidth }}
         config={config}
         style={{ width: '100%', height: '100%' }}
-        onInitialized={() => setChartReady(true)} // 차트가 초기화 완료되면 표시
+        onInitialized={() => console.log('차트 초기화 완료')} 
       />
     </div>
   );

@@ -329,8 +329,8 @@ export default function IndustryCharts() {
           {/* updated: 평소에는 버튼 왼쪽, 캡처 중에는 오른쪽 끝 */}
           {!isCapturing && updateDate && (
             <div
-              className="text-gray-600 text-xs mr-2 js-remove-for-capture"
-              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}
+              className="text-xs mr-2 js-remove-for-capture"
+              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}
             >
               updated {updateDate}
             </div>
@@ -347,8 +347,8 @@ export default function IndustryCharts() {
           </div>
           {isCapturing && updateDate && (
             <div
-              className="text-gray-600 text-xs ml-2 js-remove-for-capture"
-              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}
+              className="text-xs ml-2 js-remove-for-capture"
+              style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}
             >
               updated {updateDate}
             </div>

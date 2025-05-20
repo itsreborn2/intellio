@@ -9,12 +9,11 @@ import ChartComponent from '../components/ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
 import html2canvas from 'html2canvas';
 import TableCopyButton from '../components/TableCopyButton';
-// 미니 캔들 SVG 컴포넌트 import
-import { CandleMini } from 'intellio-common/components/ui/CandleMini';
 // RS 컬럼 툴팁용 GuideTooltip 컴포넌트 import
 import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip';
 import { CheckIcon } from '@heroicons/react/24/solid'; // CheckIcon import 추가
 import { CheckCircleIcon } from '@heroicons/react/24/solid'; // CheckCircleIcon 추가
+import MTTtopchart from './MTTtopchart'; // MTT 상위 차트 컴포넌트 추가
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -108,6 +107,7 @@ export default function RSRankPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [sortKey, setSortKey] = useState<string>('RS');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [chartTab, setChartTab] = useState<'rs' | 'mtt'>('rs');
   const rsTableRef = useRef<HTMLDivElement>(null);
   const rsHeaderRef = useRef<HTMLDivElement>(null);
   const highTableRef = useRef<HTMLDivElement>(null);
@@ -1176,7 +1176,7 @@ export default function RSRankPage() {
       {/* 메인 콘텐츠 영역 - 모바일 최적화 */}
       <div className="w-full max-w-[1280px] mx-auto">
         {/* 테이블 섹션 컨테이너 */}
-        <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
+        <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden mb-6">
           {/* RS 순위 테이블 & 52주 신고/신저가 */}
           <div className="bg-white rounded-md shadow">
             <div className="p-2 md:p-4"> 
@@ -1194,7 +1194,7 @@ export default function RSRankPage() {
   width={360}
   collisionPadding={{ left: 260 }}
 >
-  <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help">
+  <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
     RS 순위
   </h2>
 </GuideTooltip>
@@ -1203,7 +1203,7 @@ export default function RSRankPage() {
    {/* 이미지 복사(캡처) 중에는 입력 박스를 숨긴다 */}
    {!isRsTableCapturing && (
     <div className="flex items-center">
-      <label htmlFor="rsSearchFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+      <label htmlFor="rsSearchFilter" className="text-[10px] sm:text-xs font-medium mr-1 sm:mr-2 whitespace-nowrap" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
         종목명/종목코드
       </label>
       {selectedStock ? (
@@ -1251,7 +1251,7 @@ export default function RSRankPage() {
    )}
   {/* 업데이트 날짜 표시 */}
   {updateDate && (
-    <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+    <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
       updated {updateDate}
     </span>
   )}
@@ -1314,7 +1314,7 @@ export default function RSRankPage() {
   >
     <span
       className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
-      style={{ minWidth: 36 }}
+      style={{ color: 'oklch(0.372 0.044 257.287)', minWidth: 36 }}
     >
       {formatHeaderName(header)}
     </span>
@@ -1330,7 +1330,7 @@ export default function RSRankPage() {
   >
     <span
       className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
-      style={{ minWidth: 36 }}
+      style={{ color: 'oklch(0.372 0.044 257.287)', minWidth: 36 }}
     >
       {formatHeaderName(header)}
     </span>
@@ -1346,7 +1346,7 @@ export default function RSRankPage() {
   >
     <span
       className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
-      style={{ minWidth: 36 }}
+      style={{ color: 'oklch(0.372 0.044 257.287)', minWidth: 36 }}
     >
       {formatHeaderName(header)}
     </span>
@@ -1362,7 +1362,7 @@ export default function RSRankPage() {
   >
     <span
       className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
-      style={{ minWidth: 36 }}
+      style={{ color: 'oklch(0.372 0.044 257.287)', minWidth: 36 }}
     >
       {formatHeaderName(header)}
     </span>
@@ -1378,13 +1378,13 @@ export default function RSRankPage() {
   >
     <span
       className="flex items-center justify-center w-full h-full px-2 py-1 rounded hover:bg-neutral-200/60 transition cursor-help text-center"
-      style={{ minWidth: 36 }}
+      style={{ color: 'oklch(0.372 0.044 257.287)', minWidth: 36 }}
     >
       {formatHeaderName(header)}
     </span>
   </GuideTooltip>
 ) : (
-  <span>{formatHeaderName(header)}</span>
+  <span style={{ color: 'oklch(0.372 0.044 257.287)' }}>{formatHeaderName(header)}</span>
 )}
                                       {sortKey === header && (
                                         <span className="ml-1">
@@ -1518,214 +1518,7 @@ export default function RSRankPage() {
                       </div>
                     </div>
                   </div>
-                  
-                  {/* 52주 신고/신저가 테이블 섹션 */}
-                  <div className="flex-1">
-                    <div ref={highHeaderRef} className="flex justify-between items-center mb-2">
-                      <GuideTooltip
-  title="52주 신고가 주요 종목"
-  description={`52주 신고가를 기록한 종목들 중, 종가가 고가 대비 특정 비율을 유지한 종목만을 선별합니다.\n시가총액 2천억 미만은 제외합니다.`}
-  side="top"
-  width={360}
-  collisionPadding={{ left: 260 }}
->
-  <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help">
-    52주 신고가 주요 종목
-  </h2>
-</GuideTooltip>
-                      <div className="flex items-center space-x-2">
-                        {/* 업데이트 날짜 표시 */}
-                        {updateDate && (
-                          <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-                            updated {updateDate}
-                          </span>
-                        )}
-                        <div className="hidden md:block">
-                          <TableCopyButton 
-                            tableRef={highTableRef} 
-                            headerRef={highHeaderRef} 
-                            tableName="52주 신고가 주요 종목"
-                            updateDateText={updateDate ? `updated ${updateDate}` : undefined}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="relative">
-                      <div className="flex-1 overflow-x-auto" ref={highTableRef}>
-                        {/* 데이터 유무 확인 */}
-                        {highData && highData.rows.length > 0 ? (
-                          <table className="w-full bg-white border border-gray-200 table-fixed">
-                            <thead>
-                              <tr className="bg-gray-100">
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center text-xs"
-                                  style={{ width: '90px', height: '35px' }}
-                                  onClick={() => handleHighSort('종목명')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>종목명</span>
-                                    {highSortKey === '종목명' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center text-xs"
-                                  style={{ width: '45px', height: '35px' }}
-                                  onClick={() => handleHighSort('RS')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>RS</span>
-                                    {highSortKey === 'RS' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center text-xs"
-                                  style={{ width: '55px', height: '35px' }} // 너비 늘림 (예: 55px -> 60px)
-                                  onClick={() => handleHighSort('등락률')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>등락률</span>
-                                    {highSortKey === '등락률' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                                {/* 당일 캔들 컬럼 헤더 - 등락률 우측에 위치 */}
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 text-center text-xs"
-                                  style={{ width: '90px', height: '35px' }}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>당일 캔들</span>
-                                  </div>
-                                </th>
-                                <th 
-                                  className="hidden sm:table-cell px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 text-center text-xs"
-                                  style={{ width: '70px', height: '35px' }}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>종가(원)</span>
-                                  </div>
-                                </th>
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center text-xs"
-                                  style={{ width: '60px', height: '35px' }}
-                                  onClick={() => handleHighSort('시가총액')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>시가총액(억)</span>
-                                    {highSortKey === '시가총액' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                                <th 
-                                  className="px-0.5 sm:px-1 md:px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-center text-xs"
-                                  style={{ width: '60px', height: '35px' }}
-                                  onClick={() => handleHighSort('거래대금')}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    <span>거래대금(억)</span>
-                                    {highSortKey === '거래대금' && (
-                                      <span className="ml-1">
-                                        {highSortDirection === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {/* .slice(0, 20) 제거 */}
-                              {sortedHighData.map((row: any, rowIndex: number) => (
-                                <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                  <td 
-                                    className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-left whitespace-nowrap overflow-hidden text-ellipsis text-xs" 
-                                    style={{ height: '35px' }}
-                                  >
-                                    {row['종목명']}
-                                  </td>
-                                  <td 
-                                    className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis text-xs"
-                                    style={{ height: '35px' }}
-                                  >
-                                    {row['RS']}
-                                  </td>
-                                  <td 
-                                    className={`py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis text-xs ${
-                                      // 등락률 값에 따라 색상 클래스 적용
-                                      (Number(row['등락률']) >= 5)
-                                        ? 'text-red-500' // 5% 이상 상승은 빨강
-                                        : (Number(row['등락률']) <= -2)
-                                          ? 'text-blue-500' // -2% 이하 파랑
-                                          : '' // 2% 미만(절대값) 검정(기본)
-                                    }`}
-                                    style={{ height: '35px' }}
-                                  >
-                                    {/* RS 값을 숫자로 변환하고 toFixed 적용, 변환 실패 시 0으로 처리 */}
-                                    {(Number(row['등락률']) > 0 ? '+' : '') + (Number(row['등락률']) || 0).toFixed(2)}%
-                                  </td>
-                                  {/* 당일 캔들(시가/고가/저가/종가) 셀 - 등락률 우측에 위치 */}
-                                  <td 
-                                    className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-center whitespace-nowrap overflow-hidden text-ellipsis text-xs"
-                                    style={{ height: '35px' }}
-                                  >
-                                    {/* CandleMini: 미니 캔들 SVG를 flex로 셀 중앙에 정렬 */}
-                                    <div className="flex items-center justify-center w-full h-full">
-                                      <CandleMini 
-                                        open={Number(row['시가'])}
-                                        high={Number(row['고가'])}
-                                        low={Number(row['저가'])}
-                                        close={Number(row['종가'])}
-                                        width={28}
-                                        height={44}
-                                      />
-                                    </div>
-                                  </td>
-                                  <td 
-                                    className="hidden sm:table-cell py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis text-xs"
-                                    style={{ height: '35px' }}
-                                  >
-                                    {/* (모바일 숨김) 종가 값이 숫자일 경우 천 단위 콤마로 포맷 */}
-                                    {row['종가'] && !isNaN(Number(row['종가'])) ? Number(row['종가']).toLocaleString('ko-KR') : (row['종가'] || '')}
-                                  </td>
-                                  <td 
-                                    className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis text-xs"
-                                    style={{ height: '35px' }}
-                                  >
-                                    {/* CSV에서 직접 가져온 시가총액 값을 formatMarketCap 함수로 포맷팅하여 표시 */} 
-                                    {formatCellValue('시가총액', row['시가총액'])}
-                                  </td>
-                                  <td 
-                                    className="py-1 sm:py-1.5 px-0.5 sm:px-1 md:px-2 border-b border-r text-right whitespace-nowrap overflow-hidden text-ellipsis text-xs"
-                                    style={{ height: '35px' }}
-                                  >
-                                    {/* 거래대금 값을 숫자로 변환하여 천 단위 콤마로만 표시, '억' 단위 텍스트 제거 */}
-                                    {(Number(row['거래대금']) || 0).toLocaleString()}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        ) : (
-                          <p className="text-gray-700 text-center py-4" style={{ fontSize: 'clamp(0.7rem, 0.8vw, 0.8rem)' }}>
-                            52주 신고/신저가를 갱신한 주요 종목이 없습니다.<br />시장 환경이 좋지 않은 상태를 의미합니다.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+
                   
                 </div>
               </Suspense>
@@ -1733,46 +1526,102 @@ export default function RSRankPage() {
           </div>
         </div>
 
-        {/* 차트 섹션 컨테이너 - 별도의 영역으로 분리 */}
-        <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
-          <div className="bg-white rounded-md shadow flex-1 flex flex-col overflow-hidden">
-            {/* 하단 섹션: RS상위 시장 비교차트 */}
-            <div>
-              <div className="p-2 md:p-4">
-                <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
-                  <div className="mb-3 flex justify-between items-center">
-                    <GuideTooltip
-  title="RS상위 시장 비교차트"
-  description={`RS 상위 21개 종목의 차트를 해당 종목이 속한 시장 지수(KOSPI, KOSDAQ)와 함께, 주봉 기준으로 52주간의 가격 변화를 비교합니다.`}
-  side="top"
-  width={360}
-  collisionPadding={{ left: 260 }}
->
-  <span className="inline-flex items-center">
-    <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help" data-state="closed">
-      RS상위 시장 비교차트
-    </h2>
-  </span>
-</GuideTooltip>
-                    {/* 업데이트 날짜 표시 */}
-                    {updateDate && (
-                      <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-                        updated {updateDate}
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Array.from({length: 21}).map((_, index) => (
-                      <div key={index} className="rounded-md">
-                        {renderChartComponent(index)}
-                      </div>
-                    ))}
-                  </div>
-                </Suspense>
-              </div>
-            </div>
+        {/* 차트 섹션 탭 메뉴 - 컨테이너 외부로 배치 */}
+        <div className="border-b border-gray-200">
+          <div className="flex w-max space-x-0">
+            <button
+              className={`px-4 py-2 text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${chartTab === 'rs' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+              onClick={() => setChartTab('rs')}
+              style={{ 
+                color: chartTab === 'rs' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
+                fontWeight: chartTab === 'rs' ? 700 : 400
+              }}
+            >
+              RS상위 차트
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${chartTab === 'mtt' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+              onClick={() => setChartTab('mtt')}
+              style={{ 
+                color: chartTab === 'mtt' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
+                fontWeight: chartTab === 'mtt' ? 700 : 400
+              }}
+            >
+              MTT 상위 차트
+            </button>
           </div>
         </div>
+        
+        {/* RS상위 차트 탭 컨텐츠 */}
+        {chartTab === 'rs' && (
+          <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
+            <div className="p-2 md:p-4">
+              <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
+                <div className="mb-3 flex justify-between items-center">
+                  <GuideTooltip
+                    title="RS상위 시장 비교차트"
+                    description={`RS 상위 21개 종목의 차트를 해당 종목이 속한 시장 지수(KOSPI, KOSDAQ)와 함께, 주봉 기준으로 52주간의 가격 변화를 비교합니다.`}
+                    side="top"
+                    width={360}
+                    collisionPadding={{ left: 260 }}
+                  >
+                    <span className="inline-flex items-center">
+                      <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'oklch(0.5 0.03 257.287)' }} data-state="closed">
+                        RS상위 시장 비교차트
+                      </h2>
+                    </span>
+                  </GuideTooltip>
+                  {/* 업데이트 날짜 표시 */}
+                  {updateDate && (
+                    <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+                      updated {updateDate}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Array.from({length: 21}).map((_, index) => (
+                    <div key={index} className="rounded-md">
+                      {renderChartComponent(index)}
+                    </div>
+                  ))}
+                </div>
+              </Suspense>
+            </div>
+          </div>
+        )}
+        
+        {/* MTT 상위 차트 탭 컨텐츠 */}
+        {chartTab === 'mtt' && (
+          <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
+            <div className="p-2 md:p-4">
+              <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
+                <div className="mb-3 flex justify-between items-center">
+                  <GuideTooltip
+                    title="MTT상위 시장 비교차트"
+                    description={`MTT 상위 종목의 차트를 해당 종목이 속한 시장 지수(KOSPI, KOSDAQ)와 함께, 주봉 기준으로 52주간의 가격 변화를 비교합니다.`}
+                    side="top"
+                    width={360}
+                    collisionPadding={{ left: 260 }}
+                  >
+                    <span className="inline-flex items-center">
+                      <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'oklch(0.5 0.03 257.287)' }} data-state="closed">
+                        MTT상위 시장 비교차트
+                      </h2>
+                    </span>
+                  </GuideTooltip>
+                  {/* 업데이트 날짜 표시 */}
+                  {updateDate && (
+                    <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+                      updated {updateDate}
+                    </span>
+                  )}
+                </div>
+                {/* MTT 상위 차트 컴포넌트 렌더링 */}
+                <MTTtopchart />
+              </Suspense>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

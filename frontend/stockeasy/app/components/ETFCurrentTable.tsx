@@ -666,7 +666,7 @@ const orderedIndustries = Object.keys(sortedData);
           collisionPadding={{ left: 260 }} // 왼쪽 여백 추가
         >
           <span className="inline-flex items-center"> {/* Tooltip 트리거 영역 확장을 위한 span */}
-            <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help"> {/* 도움말 커서 추가 */}
+            <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}> {/* 도움말 커서 추가 */}
               ETF 주요섹터
             </h2>
           </span>
@@ -680,7 +680,7 @@ const orderedIndustries = Object.keys(sortedData);
           */}
           {/* 업데이트 날짜/시간 표시 */} 
           {updateDate && (
-            <div className="text-gray-600 text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+            <div className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
               updated {updateDate}
             </div>
           )}
@@ -703,8 +703,9 @@ const orderedIndustries = Object.keys(sortedData);
               <th
                 key="산업"
                 scope="col"
-                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '60px',
                   height: '35px'
                 }}
@@ -722,8 +723,9 @@ const orderedIndustries = Object.keys(sortedData);
               <th
                 key="섹터"
                 scope="col"
-                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '60px',
                   height: '35px'
                 }}
@@ -741,8 +743,9 @@ const orderedIndustries = Object.keys(sortedData);
               <th
                 key="종목명"
                 scope="col"
-                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '140px',
                   height: '35px'
                 }}
@@ -761,8 +764,9 @@ const orderedIndustries = Object.keys(sortedData);
                 <th
                   key={header}
                   scope="col"
-                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                  className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
+                    color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                     width: '65px', 
                     height: '35px'
                   }}
@@ -782,8 +786,9 @@ const orderedIndustries = Object.keys(sortedData);
                 key="포지션"
                 scope="col"
                 // className 수정: cursor-help 추가
-                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-help border border-gray-200" // cursor-help 추가
+                className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider cursor-help border border-gray-200" // cursor-help 추가, text-gray-500 제거
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '78px',
                   height: '35px'
                 }}
@@ -813,8 +818,9 @@ const orderedIndustries = Object.keys(sortedData);
                   key={header}
                   scope="col"
                   // className 수정: font-medium, text-gray-500, uppercase, tracking-wider 추가
-                  className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 ${header === '20일 이격' || header === '돌파/이탈' || header === '대표종목(RS)' ? 'cursor-help' : ''} hidden md:table-cell`} // 스타일 클래스 추가 및 cursor-help 유지
+                  className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider border border-gray-200 ${header === '20일 이격' || header === '돌파/이탈' || header === '대표종목(RS)' ? 'cursor-help' : ''} hidden md:table-cell`} // 스타일 클래스 추가 및 cursor-help 유지, text-gray-500 제거
                   style={{
+                    color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                     width: header === '20일 이격' ? '65px' : header === '돌파/이탈' ? '70px' : header === '대표종목(RS)' ? '380px' : '80px',
                     height: '35px'
                   }}
@@ -998,7 +1004,7 @@ const orderedIndustries = Object.keys(sortedData);
                             const stockName = row['종목명'] as string;
                             const maData = maListMap[stockName.trim()];
                             let displayDate = '-';
-                            let textColor = 'text-black'; // 항상 검정색으로 표시
+                            // let textColor = 'text-black'; // 더 이상 사용되지 않음
                             
                             if (maData && maData['돌파/이탈']) {
                               const rawDate = maData['돌파/이탈'];
@@ -1010,7 +1016,7 @@ const orderedIndustries = Object.keys(sortedData);
                                 displayDate = rawDate;
                               }
                             }
-                            return <div className={`text-center tabular-nums ${textColor}`}>{displayDate}</div>;
+                            return <div className="text-center tabular-nums" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>{displayDate}</div>;
                           } else if (header === '대표종목(RS)') {
                             // 대표종목(RS) 데이터 표시 (20malist.csv 기반)
                             const stockName = row['종목명'] as string;
@@ -1044,7 +1050,15 @@ const orderedIndustries = Object.keys(sortedData);
                                     const rsValue = parseInt(rsValueStr, 10);
                                     return (
                                       <span key={index} className="text-xs mr-1">
-                                        {name}(<span className={rsValue >= 90 ? 'font-bold' : ''}>{rsValueStr}</span>)
+                                        {rsValue >= 90 ? (
+                                          <>
+                                            <span className="font-bold">{name}</span>(<span className="font-bold">{rsValueStr}</span>)
+                                          </>
+                                        ) : (
+                                          <>
+                                            {name}({rsValueStr})
+                                          </>
+                                        )}
                                       </span>
                                     );
                                   }

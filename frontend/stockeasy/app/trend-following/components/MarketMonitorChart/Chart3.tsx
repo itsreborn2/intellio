@@ -48,12 +48,15 @@ export default function Chart3() {
     };
   }, []);
 
-  // 차트 데이터가 변경되면 500ms 후에 차트 로딩 상태 해제
+  // 차트 데이터가 변경되면 차트 렌더링을 위한 충분한 시간(2초) 후에 로딩 상태 해제
   useEffect(() => {
     if (chartData.date.length > 0) {
+      console.log('데이터 로딩 완료, 차트 렌더링 대기 시작...');
       const timer = setTimeout(() => {
+        console.log('차트 렌더링 완료 처리');
         setChartReady(true);
-      }, 500); // 500ms 지연 후 차트 로딩 상태 해제
+        setLoading(false); // 로딩이 완전히 끝났음을 표시
+      }, 2000); // 2초 지연 - 차트 렌더링에 충분한 시간
       
       return () => clearTimeout(timer);
     }

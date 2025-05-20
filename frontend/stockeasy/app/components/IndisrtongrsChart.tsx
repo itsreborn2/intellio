@@ -1144,7 +1144,7 @@ export default function IndustryCharts() {
         </GuideTooltip>
         <div className="flex items-center space-x-2">
           {updateDate && (
-            <div className="text-gray-600 text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+            <div className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
               updated {updateDate}
             </div>
           )}

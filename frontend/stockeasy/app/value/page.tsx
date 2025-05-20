@@ -264,7 +264,7 @@ const ValuationPage = () => {
   
   const columns = useMemo(() => [
     columnHelper.accessor('stockCode', {
-      header: () => csvHeaders[4] || '종목코드', // CSV 헤더 사용 (Index 4)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[4] || '종목코드'}</div>, // CSV 헤더 사용 (Index 4)
       cell: info => {
         // 종목코드가 항상 6자리로 표시되도록 수정
         const code = info.getValue();
@@ -275,7 +275,7 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.stockCode,
     }),
     columnHelper.accessor('stockName', {
-      header: () => csvHeaders[5] || '종목명', // CSV 헤더 사용 (Index 5)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[5] || '종목명'}</div>, // CSV 헤더 사용 (Index 5)
       cell: info => {
         const stockName = info.getValue();
         const stockCode = info.row.original.stockCode;
@@ -296,7 +296,7 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.stockName,
     }),
     columnHelper.accessor('industry', {
-      header: () => csvHeaders[2] || '대분류', // CSV 헤더 사용 (Index 2)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[2] || '대분류'}</div>, // CSV 헤더 사용 (Index 2)
       cell: info => {
         const industry = info.getValue();
         
@@ -321,14 +321,14 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.industry,
     }),
     columnHelper.accessor('middleCategory', {
-      header: () => csvHeaders[3] || '중분류', // CSV 헤더 사용 (Index 3)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[3] || '중분류'}</div>, // CSV 헤더 사용 (Index 3)
       cell: info => <div className="truncate">{info.getValue()}</div>, // truncate 클래스 추가
       size: fixedColumnWidths.middleCategory,
       minSize: fixedColumnWidths.middleCategory,
       maxSize: fixedColumnWidths.middleCategory,
     }),
     columnHelper.accessor('marketCap', {
-      header: () => <div style={{ textAlign: 'center' }}>시가총액(억)</div>, // 헤더명 고정
+      header: () => <div style={{ textAlign: 'center', color: 'oklch(0.5 0.03 257.287)' }}>시가총액(억)</div>, // 헤더명 고정
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -343,7 +343,7 @@ const ValuationPage = () => {
     }),
     // --- PER 컬럼 수정 시작 ---
     columnHelper.accessor('per1', { // 필드명 변경
-      header: () => csvHeaders[10] || 'PER1', // CSV 헤더 사용 (Index 10)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[10] || 'PER1'}</div>, // CSV 헤더 사용 (Index 10)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -357,7 +357,7 @@ const ValuationPage = () => {
       enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('per2', { // 필드명 변경
-      header: () => csvHeaders[11] || 'PER2', // CSV 헤더 사용 (Index 11)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[11] || 'PER2'}</div>, // CSV 헤더 사용 (Index 11)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -371,7 +371,7 @@ const ValuationPage = () => {
       enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('per3', { // 필드명 변경
-      header: () => csvHeaders[12] || 'PER3', // CSV 헤더 사용 (Index 12)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[12] || 'PER3'}</div>, // CSV 헤더 사용 (Index 12)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -385,7 +385,7 @@ const ValuationPage = () => {
       enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('per4', { // 필드명 변경
-      header: () => csvHeaders[13] || 'PER4', // CSV 헤더 사용 (Index 13)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[13] || 'PER4'}</div>, // CSV 헤더 사용 (Index 13)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -399,7 +399,7 @@ const ValuationPage = () => {
       enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('per5', { // 필드명 변경
-      header: () => csvHeaders[14] || 'PER5', // CSV 헤더 사용 (Index 14)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[14] || 'PER5'}</div>, // CSV 헤더 사용 (Index 14)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -417,7 +417,7 @@ const ValuationPage = () => {
     // 추이 컬럼 추가
     columnHelper.display({
       id: 'trend',
-      header: () => '추이',
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>추이</div>,
       cell: ({ row }) => {
         const trendValues = ['per1', 'per3', 'per4', 'per5'].map(
           (colId) => typeof row.original[colId as keyof ValuationData] === 'number' ? row.original[colId as keyof ValuationData] : 0
@@ -825,7 +825,7 @@ const ValuationPage = () => {
                     collisionPadding={{ left: 260 }} // 사이드바 침범 방지
                   >
                     {/* 안쪽 h2는 그대로 유지 */}
-                    <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help">
+                    <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
                       밸류에이션
                     </h2>
                   </GuideTooltip>
@@ -836,7 +836,7 @@ const ValuationPage = () => {
               <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-2 md:mb-4">
                 {/* 종목명/종목코드 검색 필터 */}
                 <div className="flex items-center">
-                  <label htmlFor="searchFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+                  <label htmlFor="searchFilter" className="text-[10px] sm:text-xs font-medium mr-1 sm:mr-2 whitespace-nowrap" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
                     종목명/종목코드
                   </label>
                   {selectedStock ? (
@@ -884,7 +884,7 @@ const ValuationPage = () => {
                 
                 {/* 업종 선택 필터 */}
                 <div className="flex flex-row items-center ml-1 sm:ml-2">
-                  <label htmlFor="industryFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+                  <label htmlFor="industryFilter" className="text-[10px] sm:text-xs font-medium mr-1 sm:mr-2 whitespace-nowrap" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
                     대분류
                   </label>
                   {selectedIndustry ? (
@@ -938,7 +938,7 @@ const ValuationPage = () => {
                 
                 {/* [중분류] 선택 필터 */}
                 <div className="flex flex-row items-center ml-1 sm:ml-2">
-                  <label htmlFor="middleCategoryFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+                  <label htmlFor="middleCategoryFilter" className="text-[10px] sm:text-xs font-medium mr-1 sm:mr-2 whitespace-nowrap" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
                     중분류
                   </label>
                   {selectedMiddleCategory ? (
@@ -1052,7 +1052,7 @@ const ValuationPage = () => {
 )}
                 
                 {/* 업데이트 날짜 표시 영역 추가 - ml-auto 적용, self-end 추가 */}
-                <div className="text-gray-600 text-xs ml-auto self-end" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+                <div className="text-xs ml-auto self-end" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
                   {loadingDate ? (
                     <span>날짜 로딩 중...</span>
                   ) : errorDate ? (

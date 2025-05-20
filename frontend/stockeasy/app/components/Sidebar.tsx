@@ -645,7 +645,7 @@ function SidebarContent() {
       {/* 데스크탑 환경에서 사용할 툴팁 */}
       {!isMobile && (hoveredButton || showLoginTooltip) && (
         <div 
-          className="fixed left-[63px] bg-[#111827] text-[#ececf1] py-0.5 px-2 rounded-[6px] text-xs shadow-md z-[2000] border border-gray-700 pointer-events-none"
+          className="fixed left-[63px] bg-[#202123] text-[#ececf1] py-0.5 px-2 rounded-[6px] text-xs shadow-md z-[2000] border border-gray-700 pointer-events-none"
           style={{ 
             top: showLoginTooltip
               ? `${tooltipPosition['settings'] ? tooltipPosition['settings'] + 10 : 0}px`
@@ -720,8 +720,8 @@ function SidebarContent() {
                   </button>
                 </div>
                 
-                {/* 추세추종(Trend Following) 버튼 개발 중 - 임시 숨김 */}
-                {/* <div className="sidebar-button-container">
+                {/* 추세추종(Trend Following) 버튼 */}
+                <div className="sidebar-button-container">
                   <button
                     ref={buttonRefs.trendFollowing}
                     className="sidebar-button"
@@ -737,7 +737,7 @@ function SidebarContent() {
                     <LineChart className="icon" />
                     {isMobile && <span className="ml-2 text-sm text-[#3F424A]">추세추종</span>}
                   </button>
-                </div> */}
+                </div>
                 
                 {/* 차트 버튼 - RS순위 페이지로 이동 */}
                 <div className="sidebar-button-container">

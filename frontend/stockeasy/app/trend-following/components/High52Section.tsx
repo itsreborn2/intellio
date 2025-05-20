@@ -8,6 +8,7 @@ import { useEffect, useState, useRef } from 'react';
 import Papa from 'papaparse';
 import TableCopyButton from '../../components/TableCopyButton';
 import { CandleMini } from 'intellio-common/components/ui/CandleMini';
+import { CheckCircleIcon } from '@heroicons/react/24/solid';
 
 // CSV 파싱 결과 타입
 interface CSVData {
@@ -32,7 +33,7 @@ function formatMarketCap(value: any): string {
 export default function High52Section() {
   // 데이터 상태
   const [highData, setHighData] = useState<CSVData | null>(null);
-  const [highSortKey, setHighSortKey] = useState<string>('RS');
+  const [highSortKey, setHighSortKey] = useState<string>('등락률');
   const [highSortDirection, setHighSortDirection] = useState<'asc' | 'desc'>('desc');
   const [updateDate, setUpdateDate] = useState<string>('');
   const highTableRef = useRef<HTMLDivElement>(null);
@@ -73,33 +74,47 @@ export default function High52Section() {
     loadHighData();
   }, []);
 
-  // 업데이트 날짜 로드 (rs-rank와 동일)
+  // 업데이트 날짜 로드
   useEffect(() => {
     async function loadUpdateDate() {
       try {
-        const response = await fetch('/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv', { cache: 'no-store' });
-        if (!response.ok) return;
-        const csvText = await response.text();
-        const parsed = parseCSV(csvText);
-        if (parsed && parsed.rows.length > 0 && parsed.rows[0]['날짜']) {
-          // 날짜에서 yyyy를 제거하고 MM-DD 또는 MM/DD만 표시
-          // 예: 2024-04-23 -> 04-23, 20240423 -> 04-23
-          let raw = parsed.rows[0]['날짜'];
-          let mmdd = '';
-          if (/^\d{8}$/.test(raw)) { // 20240423
-            mmdd = raw.substring(4, 6) + '-' + raw.substring(6, 8);
-          } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) { // 2024-04-23
-            mmdd = raw.substring(5, 7) + '-' + raw.substring(8, 10);
-          } else if (/^\d{2}-\d{2}$/.test(raw)) { // 04-23
-            mmdd = raw;
-          } else if (/^\d{2}\/\d{2}$/.test(raw)) { // 04/23
-            mmdd = raw.replace('/', '-');
-          } else {
-            mmdd = raw;
-          }
-          setUpdateDate(mmdd);
+        // stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv 파일에서 마지막 수정 날짜 가져오기
+        const response = await fetch(cacheFilePath, { cache: 'no-store' });
+        
+        if (!response.ok) {
+          console.error(`데이터 파일 로드 실패: ${response.status}`);
+          return;
         }
-      } catch (e) {}
+        
+        // 응답 헤더에서 Last-Modified 값 추출
+        const lastModified = response.headers.get('Last-Modified');
+        
+        if (lastModified) {
+          // Last-Modified 헤더에서 날짜와 시간 추출하여 포맷팅
+          const modifiedDate = new Date(lastModified);
+          const month = modifiedDate.getMonth() + 1; // getMonth()는 0부터 시작하므로 1 더함
+          const day = modifiedDate.getDate();
+          const hours = modifiedDate.getHours();
+          const minutes = modifiedDate.getMinutes();
+          
+          // M/DD HH:MM 형식으로 포맷팅
+          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          setUpdateDate(formattedDate);
+        } else {
+          // Last-Modified 헤더가 없는 경우 현재 날짜/시간 사용
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const day = now.getDate();
+          const hours = now.getHours();
+          const minutes = now.getMinutes();
+          
+          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          setUpdateDate(formattedDate);
+          console.warn('파일의 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
+        }
+      } catch (e) {
+        console.error('업데이트 날짜 로드 실패:', e);
+      }
     }
     loadUpdateDate();
   }, []);
@@ -129,96 +144,54 @@ export default function High52Section() {
 
   // 렌더링
   return (
-    <div className="bg-white rounded border border-gray-100 px-2 md:px-4 py-1 md:py-2" ref={highHeaderRef}>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-gray-700 my-2">52주 신고가 주요 종목</h2>
-        <div className="flex items-center space-x-2">
-          {updateDate && (
-            <span className="text-gray-600 text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-              updated 16:40 {updateDate}
-            </span>
-          )}
-          <TableCopyButton 
-            tableRef={highTableRef} 
-            headerRef={highHeaderRef} 
-            tableName="52주 신고가 주요 종목"
-            updateDateText={updateDate ? `updated 16:40 ${updateDate}` : undefined}
-          />
+    <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
+        <div className="flex justify-between items-center mb-2">
+          {/* 제목 (52주 신고/신저가 주요종목) */}
+          <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>52주 신고/신저가 주요종목</div>
+          <div className="flex items-center space-x-2">
+            {updateDate && (
+              <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+                updated {updateDate}
+              </span>
+            )}
+            <TableCopyButton 
+              tableRef={highTableRef} 
+              headerRef={highHeaderRef} 
+              tableName="52주 신고가 주요 종목"
+              updateDateText={updateDate ? `updated ${updateDate}` : undefined}
+            />
+          </div>
         </div>
-      </div>
-      <div className="relative">
         <div className="overflow-x-auto rounded-[6px]" ref={highTableRef}>
           {highData && highData.rows.length > 0 ? (
             <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
-              <thead className="bg-gray-100 text-gray-700">
-                <tr className="bg-gray-50">
-                  <th className="px-3 py-2 border-b font-semibold text-left cursor-pointer" style={{ width: '90px' }} onClick={() => handleHighSort('종목명')}>
-                    <div className="flex items-center justify-center">
-                      <span>종목명</span>
-                      {highSortKey === '종목명' && (<span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>)}
-                    </div>
-                  </th>
-                  <th className="px-3 py-2 border-b font-semibold text-center cursor-pointer" style={{ width: '45px' }} onClick={() => handleHighSort('RS')}>
-                    <div className="flex items-center justify-center">
-                      <span>RS</span>
-                      {highSortKey === 'RS' && (<span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>)}
-                    </div>
-                  </th>
-                  <th className="px-3 py-2 border-b font-semibold text-right cursor-pointer" style={{ width: '55px' }} onClick={() => handleHighSort('등락률')}>
-                    <div className="flex items-center justify-center">
-                      <span>등락률</span>
-                      {highSortKey === '등락률' && (<span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>)}
-                    </div>
-                  </th>
-                  {/* 당일 캔들 컬럼 헤더 */}
-                  <th className="px-3 py-2 border-b font-semibold text-center" style={{ width: '90px' }}>
-                    <div className="flex items-center justify-center"><span>당일 캔들</span></div>
-                  </th>
-                  <th className="hidden sm:table-cell px-3 py-2 border-b font-semibold text-right" style={{ width: '70px' }}>
-                    <div className="flex items-center justify-center"><span>종가(원)</span></div>
-                  </th>
-                  <th className="px-3 py-2 border-b font-semibold text-right cursor-pointer" style={{ width: '60px' }} onClick={() => handleHighSort('시가총액')}>
-                    <div className="flex items-center justify-center">
-                      <span>시가총액(억)</span>
-                      {highSortKey === '시가총액' && (<span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>)}
-                    </div>
-                  </th>
-                  <th className="px-3 py-2 border-b font-semibold text-right cursor-pointer" style={{ width: '60px' }} onClick={() => handleHighSort('거래대금')}>
-                    <div className="flex items-center justify-center">
-                      <span>거래대금(억)</span>
-                      {highSortKey === '거래대금' && (<span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>)}
-                    </div>
-                  </th>
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+                  <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>업종명</th>
+                  <th className="px-3 py-2 border-b font-medium text-right cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('등락률')}>등락률{highSortKey === '등락률' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
+                  <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>당일 캔캔들</th>
+                  <th className="px-3 py-2 border-b font-medium text-right cursor-pointer" style={{ width: '120px', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('시가총액')}>시가총액(억){highSortKey === '시가총액' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
+                  <th className="px-3 py-2 border-b font-medium text-right cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('거래대금')}>거래대금(억){highSortKey === '거래대금' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
+                  <th className="px-3 py-2 border-b font-medium text-center cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('RS')}>RS{highSortKey === 'RS' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
+                  <th className="px-3 py-2 border-b font-medium text-center cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('MTT')}>MTT{highSortKey === 'MTT' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
                 </tr>
               </thead>
               <tbody>
                 {getSortedHighData(highData.rows).map((row: any, rowIndex: number) => (
                   <tr key={rowIndex} className={`${rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'} hover:bg-gray-50 transition-colors`}>
                     <td className="px-3 py-2 border-b text-left">{row['종목명']}</td>
-                    <td className="px-3 py-2 border-b text-center">{row['RS']}</td>
-                    <td className="px-3 py-2 border-b text-right">
-                      <span className={`${Number(row['등락률']) > 0 ? 'text-red-500' : Number(row['등락률']) < 0 ? 'text-blue-500' : ''}`}>
-                        {(Number(row['등락률']) > 0 ? '+' : '') + (Number(row['등락률']) || 0).toFixed(2)}%
-                      </span>
-                    </td>
-                    {/* 당일 캔들(시가/고가/저가/종가) */}
-                    <td className="px-3 py-2 border-b text-center">
-                      <div className="flex items-center justify-center w-full h-full">
-                        <CandleMini 
-                          open={Number(row['시가'])}
-                          high={Number(row['고가'])}
-                          low={Number(row['저가'])}
-                          close={Number(row['종가'])}
-                          width={28}
-                          height={44}
-                        />
-                      </div>
-                    </td>
-                    <td className="hidden sm:table-cell px-3 py-2 border-b text-right">
-                      {row['종가'] && !isNaN(Number(row['종가'])) ? Number(row['종가']).toLocaleString('ko-KR') : (row['종가'] || '')}
-                    </td>
-                    <td className="px-3 py-2 border-b text-right">{formatMarketCap(row['시가총액'])}</td>
+                    <td className="px-3 py-2 border-b text-left">{row['업종명']}</td>
+                    <td className="px-3 py-2 border-b text-right"><span className={`${Number(row['등락률']) > 5 ? 'text-red-500' : Number(row['등락률']) < 0 ? 'text-blue-500' : ''}`}>{(Number(row['등락률']) > 0 ? '+' : '') + (Number(row['등락률']) || 0).toFixed(2)}%</span></td>
+                    <td className="px-3 py-2 border-b text-center"><div className="flex items-center justify-center"><CandleMini open={Number(row['시가'])} high={Number(row['고가'])} low={Number(row['저가'])} close={Number(row['종가'])} width={28} height={44} /></div></td>
+                    <td className="px-3 py-2 border-b text-right" style={{ width: '120px' }}>{formatMarketCap(row['시가총액'])}</td>
                     <td className="px-3 py-2 border-b text-right">{formatMarketCap(row['거래대금'])}</td>
+                    <td className="px-3 py-2 border-b text-center">{row['RS']}</td>
+                    <td className="px-3 py-2 border-b text-center">
+                      {row['MTT'] === 'y' ? (
+                        <CheckCircleIcon className="h-5 w-5 text-green-500 mx-auto" />
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -229,7 +202,6 @@ export default function High52Section() {
             </p>
           )}
         </div>
-      </div>
-    </div>
+    </section>
   );
 }

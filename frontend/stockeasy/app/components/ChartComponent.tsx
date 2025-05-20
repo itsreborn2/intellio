@@ -111,9 +111,18 @@ const ChartComponent: React.FC<ChartProps> = ({
       const normalizedMarketType = marketType.toUpperCase();
       
       // 시장 지수 로컬 캐시 파일 경로 설정
-      const marketIndexPath = normalizedMarketType === 'KOSPI' 
-        ? '/requestfile/market-index/kospiwk.csv'
-        : '/requestfile/market-index/kosdaqwk.csv';
+      // breakout 관련 컴포넌트의 경우 일별 2개월 데이터 파일 사용
+      const useDaily2Month = parentComponent === 'BreakoutCandidatesChart' || 
+                           parentComponent === 'BreakoutFailChart' || 
+                           parentComponent === 'BreakoutSustainChart';
+      
+      const marketIndexPath = useDaily2Month
+        ? (normalizedMarketType === 'KOSPI' 
+          ? '/requestfile/market-index/kospidaily2month.csv'
+          : '/requestfile/market-index/kosdaqdaily2month.csv')
+        : (normalizedMarketType === 'KOSPI' 
+          ? '/requestfile/market-index/kospiwk.csv'
+          : '/requestfile/market-index/kosdaqwk.csv');
       
       // 로컬 캐시 파일에서 데이터 가져오기
       const response = await fetch(marketIndexPath, { cache: 'no-store' });
