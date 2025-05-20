@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation';
 import Papa from 'papaparse';
-import { format, subDays } from 'date-fns';
+import { format, subDays, parse, isValid } from 'date-fns'; // parse, isValid 추가
 import { formatDateMMDD } from '../utils/dateUtils';
 import ChartComponent from '../components/ChartComponent'
 import { fetchCSVData } from '../utils/fetchCSVData'
@@ -357,6 +357,62 @@ export default function RSRankPage() {
       }
     };
     
+    // Helper function to parse various date string formats
+    const parseDateString = (dateInput: unknown): Date | null => {
+      if (typeof dateInput !== 'string') {
+        // console.warn(`parseDateString received non-string input: ${String(dateInput)} (type: ${typeof dateInput})`);
+        return null;
+      }
+      const dateString = dateInput.trim();
+      if (!dateString) {
+        // console.warn('parseDateString received empty string after trim.');
+        return null;
+      }
+
+      const formats = [
+        'yyyyMMdd',   // Numeric string like 20230515
+        'yyyy-MM-dd', // ISO
+        'yyyy.MM.dd', // Dotted
+        'yyyy/MM/dd', // Slashed
+        'MM/dd/yyyy', // US
+        'M/d/yyyy',   // US short (e.g., 5/1/2024)
+        'dd/MM/yyyy', // EU
+        'd/M/yyyy',   // EU short
+      ];
+
+      for (const fmt of formats) {
+        const parsed = parse(dateString, fmt, new Date());
+        if (isValid(parsed)) {
+          return parsed;
+        }
+      }
+
+      if (/^\d{8}$/.test(dateString)) {
+        const year = parseInt(dateString.substring(0, 4), 10);
+        const month = parseInt(dateString.substring(4, 6), 10) - 1; // JS months are 0-indexed
+        const day = parseInt(dateString.substring(6, 8), 10);
+        if (year > 1900 && year < 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+            const manualDate = new Date(Date.UTC(year, month, day));
+            if (isValid(manualDate) && 
+                manualDate.getUTCFullYear() === year &&
+                manualDate.getUTCMonth() === month &&
+                manualDate.getUTCDate() === day) {
+              return manualDate;
+            }
+        }
+      }
+      
+      if (dateString.includes('-') || dateString.includes('/') || dateString.includes(':') || dateString.includes('.')) {
+        const directParsed = new Date(dateString);
+        if (isValid(directParsed) && dateString.length > 4) { // Avoid single numbers like "2024"
+             return directParsed;
+        }
+      }
+      
+      console.warn(`[parseDateString] Failed to parse date: '${dateString}' (Original input: '${String(dateInput)}')`);
+      return null;
+    };
+
     const loadMarketIndexData = async () => {
       try {
         // KOSPI 주간 데이터 로드
@@ -367,14 +423,27 @@ export default function RSRankPage() {
         const kospiCsvText = await kospiResponse.text();
         const kospiParsedData = parseCSV(kospiCsvText);
         // 데이터 형식 변환 (CandleData)
-        const kospiFormattedData = kospiParsedData.rows.map(row => ({
-          time: format(new Date(row['날짜']), 'yyyy-MM-dd'), // 날짜 형식 통일
-          open: parseFloat(row['시가']),
-          high: parseFloat(row['고가']),
-          low: parseFloat(row['저가']),
-          close: parseFloat(row['종가']),
-          volume: parseFloat(row['거래량'])
-        })).sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()); // 시간순 정렬
+        const kospiFormattedData = kospiParsedData.rows.reduce((acc, row) => {
+          const rawDateValue = row['날짜'] || row['일자'] || row['Date']; // 다양한 컬럼명 처리
+          const parsedDate = parseDateString(rawDateValue);
+
+          if (parsedDate) { // parseDateString returns valid Date or null
+            acc.push({
+              time: format(parsedDate, 'yyyy-MM-dd'), // 날짜 형식 통일
+              open: parseFloat(row['시가']),
+              high: parseFloat(row['고가']),
+              low: parseFloat(row['저가']),
+              close: parseFloat(row['종가']),
+              volume: parseFloat(row['거래량'])
+            });
+          } else {
+            if (rawDateValue !== undefined && rawDateValue !== null && String(rawDateValue).trim() !== '') {
+              // parseDateString will log the specific parsing failure
+              // console.warn(`KOSPI: Row skipped due to unparseable date. Input: '${String(rawDateValue)}'`);
+            }
+          }
+          return acc;
+        }, [] as CandleData[]).sort((a: CandleData, b: CandleData) => new Date(a.time).getTime() - new Date(b.time).getTime()); // 타입 명시
         setKospiIndexData(kospiFormattedData);
 
         // KOSDAQ 주간 데이터 로드
@@ -385,14 +454,27 @@ export default function RSRankPage() {
         const kosdaqCsvText = await kosdaqResponse.text();
         const kosdaqParsedData = parseCSV(kosdaqCsvText);
         // 데이터 형식 변환 (CandleData)
-        const kosdaqFormattedData = kosdaqParsedData.rows.map(row => ({
-          time: format(new Date(row['날짜']), 'yyyy-MM-dd'), // 날짜 형식 통일
-          open: parseFloat(row['시가']),
-          high: parseFloat(row['고가']),
-          low: parseFloat(row['저가']),
-          close: parseFloat(row['종가']),
-          volume: parseFloat(row['거래량'])
-        })).sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()); // 시간순 정렬
+        const kosdaqFormattedData = kosdaqParsedData.rows.reduce((acc, row) => {
+          const rawDateValue = row['날짜'] || row['일자'] || row['Date']; // 다양한 컬럼명 처리
+          const parsedDate = parseDateString(rawDateValue);
+          
+          if (parsedDate) { // parseDateString returns valid Date or null
+            acc.push({
+              time: format(parsedDate, 'yyyy-MM-dd'),
+              open: parseFloat(row['시가']),
+              high: parseFloat(row['고가']),
+              low: parseFloat(row['저가']),
+              close: parseFloat(row['종가']),
+              volume: parseFloat(row['거래량'])
+            });
+          } else {
+            if (rawDateValue !== undefined && rawDateValue !== null && String(rawDateValue).trim() !== '') {
+              // parseDateString will log the specific parsing failure
+              // console.warn(`KOSDAQ: Row skipped due to unparseable date. Input: '${String(rawDateValue)}'`);
+            }
+          }
+          return acc;
+        }, [] as CandleData[]).sort((a: CandleData, b: CandleData) => new Date(a.time).getTime() - new Date(b.time).getTime()); // 타입 명시
         setKosdaqIndexData(kosdaqFormattedData);
 
       } catch (err) {
@@ -1256,15 +1338,18 @@ export default function RSRankPage() {
     </span>
   )}
   <div className="hidden md:block">
-    <TableCopyButton 
-      tableRef={rsTableRef} 
-      headerRef={rsHeaderRef} 
-      tableName="RS 순위 TOP 200" 
-      updateDateText={updateDate ? `updated ${updateDate}` : undefined}
-      // --- 복사(캡처) 시작/종료 시 입력 박스 숨김/표시를 위한 핸들러 연결 ---
-      onStartCapture={() => setIsRsTableCapturing(true)}
-      onEndCapture={() => setIsRsTableCapturing(false)}
-    />
+    {/*
+      TableCopyButton(이미지 복사 버튼) 임시 숨김
+      <TableCopyButton 
+        tableRef={rsTableRef} 
+        headerRef={rsHeaderRef} 
+        tableName="RS 순위 TOP 200" 
+        updateDateText={updateDate ? `updated ${updateDate}` : undefined}
+        // --- 복사(캡처) 시작/종료 시 입력 박스 숨김/표시를 위한 핸들러 연결 ---
+        onStartCapture={() => setIsRsTableCapturing(true)}
+        onEndCapture={() => setIsRsTableCapturing(false)}
+      />
+    */}
   </div>
 </div>
                     </div>

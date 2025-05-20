@@ -568,7 +568,8 @@ const ChartComponent: React.FC<ChartProps> = ({
                   }
                 }
               } else {
-                console.warn('항목에 볼륨 필드가 없습니다:', originalItem);
+                // 볼륨 필드가 없는 경우 기본값 0 설정 (경고 제거)
+                volume = 0;
               }
             } else {
               if (candle.volume !== undefined) {
@@ -584,7 +585,8 @@ const ChartComponent: React.FC<ChartProps> = ({
                   // console.log(`캔들 데이터 자체의 볼륨 사용: ${volume}`);
                 }
               } else {
-                console.warn(`${candleTimeStr} 에 해당하는 볼륨 데이터를 찾을 수 없음`);
+                // 볼륨 데이터를 찾을 수 없는 경우 기본값 0 설정 (경고 제거)
+                volume = 0;
               }
             }
           } catch (matchingError) {

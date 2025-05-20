@@ -41,33 +41,50 @@ export default function MTTtopchart() {
     loadMarketIndexData()
   }, [])
 
-  // 파일 목록을 직접 설정
+  // 파일 목록을 JSON에서 동적으로 로드
   const loadFileList = async () => {
     try {
-      // 파일 목록을 직접 하드코딩 (find_by_name 도구로 확인한 CSV 파일 목록)
-      const fileList = [
-        '000500_가온전선_KOSDAQ_97_y.csv',
-        '006800_미래에셋증권_KOSDAQ_97_y.csv',
-        '018000_유니슨_KOSDAQ_98_y.csv',
-        '034020_두산에너빌리티_KOSDAQ_97_y.csv',
-        '071320_지역난방공사_KOSDAQ_97_y.csv',
-        '079550_LIG넥스원_KOSDAQ_97_y.csv',
-        '083650_비에이치아이_KOSDAQ_98_y.csv',
-        '086820_바이오솔루션_KOSDAQ_96_y.csv',
-        '108490_로보티즈_KOSDAQ_98_y.csv',
-        '119850_지엔씨에너지_KOSDAQ_97_y.csv',
-        '124500_아이티센글로벌_KOSDAQ_96_y.csv', 
-        '180640_한진칼_KOSDAQ_97_y.csv',
-        '256940_킵스파마_KOSDAQ_97_y.csv',
-        '278470_에이피알_KOSDAQ_97_y.csv',
-        '347700_스피어_KOSDAQ_96_y.csv',
-        '347850_디앤디파마텍_KOSDAQ_98_y.csv',
-        '376300_디어유_KOSDAQ_96_y.csv',
-        '389140_포바이포_KOSDAQ_99_y.csv',
-        '389470_인벤티지랩_KOSDAQ_98_y.csv',
-        '419530_SAMG엔터_KOSDAQ_98_y.csv',
-        '437730_삼현_KOSDAQ_96_y.csv'
-      ];
+      // file_list.json에서 파일 목록 로드
+      console.log('file_list.json 로드 시도 중...');
+      let fileList: string[] = [];
+      
+      try {
+        const fileListJson = await fetchCSVData('requestfile/mtt_top21/file_list.json');
+        console.log('file_list.json 로드 성공');
+        
+        try {
+          // JSON 파싱 시도
+          const parsedFileList = JSON.parse(fileListJson);
+          
+          // file_list.json이 1) 배열이거나 2) files 속성을 가진 객체인 경우 처리
+          if (Array.isArray(parsedFileList)) {
+            // 배열 형태일 경우
+            fileList = parsedFileList;
+            console.log(`파일 목록 성공적으로 로드됨 (배열): ${fileList.length}개 항목`);
+          } else if (parsedFileList && typeof parsedFileList === 'object') {
+            // 객체 형태인 경우
+            if (parsedFileList.files && Array.isArray(parsedFileList.files)) {
+              // {파일 이름 배열이 files 속성에 있는 경우
+              fileList = parsedFileList.files.filter((file: string) => file !== 'file_list.json'); // file_list.json 자신은 제외
+              console.log(`파일 목록의 'files' 속성에서 로드됨: ${fileList.length}개 항목`);
+            } else {
+              console.error('file_list.json이 올바른 구조가 아님 - files 속성이 없거나 배열이 아님:', parsedFileList);
+            }
+          }
+        } catch (parseError) {
+          console.error('file_list.json 파싱 오류:', parseError);
+        }
+      } catch (fileError) {
+        console.error('file_list.json 로드 실패:', fileError);
+      }
+      
+      // 파일 목록이 비어있으면 오류 처리
+      if (fileList.length === 0) {
+        console.error('file_list.json에서 파일 목록을 로드하지 못했습니다.');
+        setError('file_list.json에서 파일 목록을 로드하지 못했습니다. 서버를 확인해주세요.');
+        setLoading(false);
+        return; // 일찌 중단
+      }
       
       // 파일명에서 RS 값을 추출하여 정렬 (y.csv 앞의 숫자로 정렬)
       const sortedFiles = [...fileList].sort((a, b) => {
@@ -227,7 +244,9 @@ export default function MTTtopchart() {
 
       for (let i = 0; i < filesToProcess.length; i++) {
         const fileName = filesToProcess[i]
-        const filePath = `/requestfile/mtt_top21/${fileName}`
+        // 기존: const filePath = `/requestfile/mtt_top21/${fileName}`
+        // public 폴더 내의 경로이므로 /public을 제외한 경로로 접근
+        const filePath = `requestfile/mtt_top21/${fileName}`
         
         try {
           const csvText = await fetchCSVData(filePath)

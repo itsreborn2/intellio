@@ -17,7 +17,7 @@ interface CopyTableOptions {
  * 테이블 복사 버튼 컴포넌트 속성 타입
  */
 export interface TableCopyButtonProps {
-  tableRef: React.RefObject<HTMLTableElement>;
+  tableRef: React.RefObject<HTMLElement>; // HTMLTableElement에서 더 일반적인 HTMLElement로 변경
   headerRef: React.RefObject<HTMLDivElement>;
   tableName: string;
   options?: CopyTableOptions;
@@ -35,7 +35,7 @@ export interface TableCopyButtonProps {
  * @param updateDateText 테이블 컴포넌트에서 전달받은 업데이트 날짜/시간 텍스트
  */
 export const copyTableAsImage = async (
-  tableRef: React.RefObject<HTMLTableElement>,
+  tableRef: React.RefObject<HTMLElement>, // HTMLTableElement에서 HTMLElement로 변경하여 TableCopyButtonProps와 호환되도록 수정
   headerRef: React.RefObject<HTMLDivElement>,
   tableName: string,
   options?: CopyTableOptions,
