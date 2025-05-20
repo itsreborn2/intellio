@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Papa from 'papaparse';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
-import { TableCopyButton } from '@/app/components/TableCopyButton';
+// import { TableCopyButton } from '@/app/components/TableCopyButton';
 
 interface SectorData {
   산업: string;
@@ -194,6 +194,7 @@ export default function NewSectorEnter() {
               updated {updateDate}
             </span>
           )}
+          {/* 복사 버튼 숨김 처리
           {Object.keys(data).length > 0 && (
             <TableCopyButton 
               tableRef={tableContainerRef} 
@@ -206,6 +207,7 @@ export default function NewSectorEnter() {
               updateDateText={updateDate ? `updated ${updateDate}` : undefined}
             />
           )}
+          */}
         </div>
       </div>
       <div ref={tableContainerRef} className="overflow-x-auto rounded-[6px]">

@@ -1194,7 +1194,7 @@ export default function RSRankPage() {
   width={360}
   collisionPadding={{ left: 260 }}
 >
-  <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
+  <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
     RS 순위
   </h2>
 </GuideTooltip>
@@ -1421,7 +1421,9 @@ export default function RSRankPage() {
                                     >
                                       {header === 'MTT' ? (
                                         String(row[header]).toLowerCase() === 'y' ? (
-                                          <CheckCircleIcon className="h-5 w-5 text-green-500 mx-auto" />
+                                          <div className="flex items-center justify-center h-full w-full">
+                                            <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                                          </div>
                                         ) : null
                                       ) : formatCellValue(header, row[header])}
                                     </td>
@@ -1566,7 +1568,7 @@ export default function RSRankPage() {
                     collisionPadding={{ left: 260 }}
                   >
                     <span className="inline-flex items-center">
-                      <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'oklch(0.5 0.03 257.287)' }} data-state="closed">
+                      <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }} data-state="closed">
                         RS상위 시장 비교차트
                       </h2>
                     </span>
@@ -1604,7 +1606,7 @@ export default function RSRankPage() {
                     collisionPadding={{ left: 260 }}
                   >
                     <span className="inline-flex items-center">
-                      <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'oklch(0.5 0.03 257.287)' }} data-state="closed">
+                      <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }} data-state="closed">
                         MTT상위 시장 비교차트
                       </h2>
                     </span>

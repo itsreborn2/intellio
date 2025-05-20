@@ -173,7 +173,7 @@ export default function ETFCurrentTable() {
   const [maListMap, setMaListMap] = useState<Record<string, MaListData>>({}); // 종목명 -> 20malist 데이터
   
   // 테이블 복사 기능을 위한 ref 생성
-  const tableRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
   // 개별 ETF 차트 데이터 관련 티커 목록 및 매핑 테이블 제거됨
@@ -695,8 +695,8 @@ const orderedIndustries = Object.keys(sortedData);
         </div>
       </div>
 
-      <div ref={tableRef} className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-        <table className="min-w-full bg-white border border-gray-200 table-fixed">
+      <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+        <table ref={tableRef} className="min-w-full bg-white border border-gray-200 table-fixed">
           <thead>
             <tr className="bg-gray-100">
               {/* 기존 thead 내용 유지 */}

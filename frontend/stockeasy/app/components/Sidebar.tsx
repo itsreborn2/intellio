@@ -3,7 +3,7 @@
 import { Suspense, useState, useRef, useEffect } from 'react'
 import { Button } from "intellio-common/components/ui/button"
 import {
-  Home,
+  Bot,
   BarChart,
   ChartColumn,
   FileStack,
@@ -12,6 +12,7 @@ import {
   Users,
   Settings,
   PieChart,
+  Info,
   LayoutDashboard,
   Menu, // 햄버거 메뉴 아이콘 추가
   X, // X 아이콘 추가 (닫기 버튼용)
@@ -63,6 +64,7 @@ function SidebarContent() {
     etfSector: useRef<HTMLButtonElement>(null), // ETF/섹터 버튼 참조 추가
     value: useRef<HTMLButtonElement>(null), // 밸류에이션 버튼 참조 추가
     history: useRef<HTMLButtonElement>(null), // 검색 히스토리 버튼 참조 추가
+    about: useRef<HTMLButtonElement>(null), // About 버튼 참조 추가
     doc: useRef<HTMLButtonElement>(null),
     settings: useRef<HTMLDivElement>(null), // 설정 버튼(Avatar 컨테이너) 참조 추가
   };
@@ -654,12 +656,13 @@ function SidebarContent() {
             opacity: 1
           }}
         >
-          {hoveredButton === 'home' && '스탁이지'}
+          {hoveredButton === 'home' && '스탁 AI'}
           {hoveredButton === 'trendFollowing' && '추세추종'}
           {hoveredButton === 'chart' && 'RS순위'}
           {hoveredButton === 'etfSector' && 'ETF/섹터'}
           {hoveredButton === 'value' && '밸류에이션'}
           {hoveredButton === 'history' && '검색 히스토리'} 
+          {hoveredButton === 'about' && 'About'}
           {hoveredButton === 'doc' && '닥이지'}
           {hoveredButton === 'user' && '마이페이지'}
           {hoveredButton === 'settings' && (isLoggedIn && userId !== 'anonymous' ? '마이페이지' : '로그인')} 
@@ -702,8 +705,20 @@ function SidebarContent() {
           }}
         >
           <div className="flex-1 overflow-hidden">
-            <div className="pt-4">
-              <div className="w-full flex flex-col items-end text-[#3F424A]">
+            <div className="pt-2">  {/* pt-4에서 pt-2로 줄임 */}
+              {/* 파비콘 로고 추가 */}
+              <div className="w-full flex justify-center mb-2">  {/* mb-4에서 mb-2로 줄임 */}
+                <div className="sidebar-button-container flex justify-center">
+                  <img 
+                    src="/requestfile/favicon-32x32.png" 
+                    alt="StockEasy Logo" 
+                    width={32} 
+                    height={32} 
+                    className="icon" 
+                  />
+                </div>
+              </div>
+              <div className="w-full flex flex-col items-end gap-y-1 text-[#3F424A]">  {/* gap-y-1 추가로 버튼 간격 줄임 */}
                 
                 {/* 홈 버튼 - 스탁이지 메인 페이지로 이동 */}
                 <div className="sidebar-button-container">
@@ -714,9 +729,9 @@ function SidebarContent() {
                     onMouseEnter={() => handleMouseEnter('home')}
                     onMouseLeave={handleMouseLeave}
                   >
-                    <Home className="icon" />
+                    <Bot className="icon" />
                     {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                    {isMobile && <span className="ml-2 text-sm text-[#3F424A]">스탁이지</span>}
+                    {isMobile && <span className="ml-2 text-sm text-[#3F424A]">스탁 AI</span>}
                   </button>
                 </div>
                 
@@ -812,21 +827,8 @@ function SidebarContent() {
           
           {/* 하단 영역 - 설정 버튼만 남김 */}
           <div className="mt-auto pb-4">
-            <div className="w-full flex flex-col items-end gap-y-2"> 
-              {/* 문서 버튼 - DocEasy로 이동 */}
-              <div className="sidebar-button-container">
-                <button 
-                  ref={buttonRefs.doc}
-                  className="sidebar-button" 
-                  onClick={goToDocEasy} 
-                  onMouseEnter={() => handleMouseEnter('doc')}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <FileStack className="icon" />
-                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#3F424A]">닥이지</span>}
-                </button>
-              </div>
+            <div className="w-full flex flex-col items-end gap-y-1"> 
+              {/* 문서 버튼 삭제 - 하단으로 이동 */}
               
               {/* 설정 버튼 - 클릭 이벤트 추가 (여기서는 Avatar 사용) */}
               <div 
@@ -874,6 +876,40 @@ function SidebarContent() {
                     </Avatar>
                   </> 
                 )}
+              </div>
+              
+              {/* 문서 버튼 - DocEasy로 이동 */}
+              <div className="sidebar-button-container mt-1">
+                <button 
+                  ref={buttonRefs.doc}
+                  className="sidebar-button" 
+                  onClick={goToDocEasy} 
+                  onMouseEnter={() => handleMouseEnter('doc')}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <FileStack className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm text-[#3F424A]">닥이지</span>}
+                </button>
+              </div>
+              
+              {/* About 버튼 추가 */}
+              <div className="sidebar-button-container mt-1">
+                <button 
+                  ref={buttonRefs.about}
+                  className="sidebar-button" 
+                  onClick={() => {
+                    // About 페이지로 이동하는 로직 구현
+                    router.push('/about', { scroll: false });
+                    if (isMobile) setIsMenuOpen(false); // 모바일에서는 메뉴 닫기
+                  }} 
+                  onMouseEnter={() => handleMouseEnter('about')}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <Info className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm text-[#3F424A]">About</span>}
+                </button>
               </div>
             </div>
           </div>

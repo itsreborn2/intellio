@@ -180,12 +180,14 @@ export default function SectorLeaderSection() {
               updated {updateDate}
             </span>
           )}
+          {/* 복사 버튼 숨김 처리
           <TableCopyButton 
             tableRef={tableContainerRef} 
             headerRef={headerContainerRef} 
             tableName="주도섹터_주도주"
             updateDateText={updateDate ? `updated ${updateDate}` : undefined}
           />
+          */}
         </div>
       </div>
 

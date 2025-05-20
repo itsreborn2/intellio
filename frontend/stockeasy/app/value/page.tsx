@@ -825,7 +825,7 @@ const ValuationPage = () => {
                     collisionPadding={{ left: 260 }} // 사이드바 침범 방지
                   >
                     {/* 안쪽 h2는 그대로 유지 */}
-                    <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
+                    <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
                       밸류에이션
                     </h2>
                   </GuideTooltip>

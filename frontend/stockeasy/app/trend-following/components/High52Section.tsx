@@ -6,7 +6,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Papa from 'papaparse';
-import TableCopyButton from '../../components/TableCopyButton';
+// import TableCopyButton from '../../components/TableCopyButton';
 import { CandleMini } from 'intellio-common/components/ui/CandleMini';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 
@@ -154,12 +154,14 @@ export default function High52Section() {
                 updated {updateDate}
               </span>
             )}
+            {/* 복사 버튼 숨김 처리
             <TableCopyButton 
               tableRef={highTableRef} 
               headerRef={highHeaderRef} 
               tableName="52주 신고가 주요 종목"
               updateDateText={updateDate ? `updated ${updateDate}` : undefined}
             />
+            */}
           </div>
         </div>
         <div className="overflow-x-auto rounded-[6px]" ref={highTableRef}>
