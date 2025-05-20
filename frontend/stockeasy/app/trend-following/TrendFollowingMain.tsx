@@ -126,7 +126,7 @@ export default function TrendFollowingMain() {
                       fontWeight: sectorTab === 'industry' ? 700 : 400
                     }}
                   >
-                    산업동향
+                    차트
                   </button>
                 </div>
               </div>
