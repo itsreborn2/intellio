@@ -189,10 +189,8 @@ export default function High52Section() {
                     <td className="px-3 py-2 border-b text-right" style={{ width: '120px' }}>{formatMarketCap(row['시가총액'])}</td>
                     <td className="px-3 py-2 border-b text-right">{formatMarketCap(row['거래대금'])}</td>
                     <td className="px-3 py-2 border-b text-center">{row['RS']}</td>
-                    <td className="px-3 py-2 border-b flex justify-center items-center">
-                      {row['MTT'] === 'y' ? (
-                        <CheckCircleIcon className="h-5 w-5 text-green-500" />
-                      ) : null}
+                    <td className="px-3 py-2 border-b text-center">
+                      {row['MTT'] === 'y' && <CheckCircleIcon className="h-5 w-5 text-green-500 inline-block" />}
                     </td>
                   </tr>
                 ))}
