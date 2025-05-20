@@ -830,6 +830,40 @@ function SidebarContent() {
             <div className="w-full flex flex-col items-end gap-y-1"> 
               {/* 문서 버튼 삭제 - 하단으로 이동 */}
               
+              {/* About 버튼 추가 */}
+              <div className="sidebar-button-container mt-1">
+                <button 
+                  ref={buttonRefs.about}
+                  className="sidebar-button" 
+                  onClick={() => {
+                    // About 페이지로 이동하는 로직 구현
+                    router.push('/about', { scroll: false });
+                    if (isMobile) setIsMenuOpen(false); // 모바일에서는 메뉴 닫기
+                  }} 
+                  onMouseEnter={() => handleMouseEnter('about')}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <Info className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm text-[#3F424A]">About</span>}
+                </button>
+              </div>
+              
+              {/* 문서 버튼 - DocEasy로 이동 */}
+              <div className="sidebar-button-container mt-1">
+                <button 
+                  ref={buttonRefs.doc}
+                  className="sidebar-button" 
+                  onClick={goToDocEasy} 
+                  onMouseEnter={() => handleMouseEnter('doc')}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <FileStack className="icon" />
+                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
+                  {isMobile && <span className="ml-2 text-sm text-[#3F424A]">닥이지</span>}
+                </button>
+              </div>
+              
               {/* 설정 버튼 - 클릭 이벤트 추가 (여기서는 Avatar 사용) */}
               <div 
                 ref={buttonRefs.settings} // Ref 추가
@@ -876,40 +910,6 @@ function SidebarContent() {
                     </Avatar>
                   </> 
                 )}
-              </div>
-              
-              {/* 문서 버튼 - DocEasy로 이동 */}
-              <div className="sidebar-button-container mt-1">
-                <button 
-                  ref={buttonRefs.doc}
-                  className="sidebar-button" 
-                  onClick={goToDocEasy} 
-                  onMouseEnter={() => handleMouseEnter('doc')}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <FileStack className="icon" />
-                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#3F424A]">닥이지</span>}
-                </button>
-              </div>
-              
-              {/* About 버튼 추가 */}
-              <div className="sidebar-button-container mt-1">
-                <button 
-                  ref={buttonRefs.about}
-                  className="sidebar-button" 
-                  onClick={() => {
-                    // About 페이지로 이동하는 로직 구현
-                    router.push('/about', { scroll: false });
-                    if (isMobile) setIsMenuOpen(false); // 모바일에서는 메뉴 닫기
-                  }} 
-                  onMouseEnter={() => handleMouseEnter('about')}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <Info className="icon" />
-                  {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                  {isMobile && <span className="ml-2 text-sm text-[#3F424A]">About</span>}
-                </button>
               </div>
             </div>
           </div>
