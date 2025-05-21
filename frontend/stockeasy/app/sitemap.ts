@@ -17,7 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: route === '' ? 1 : 0.8,
   }))
 
-  // 동적으로 생성되는 페이지들은 여기에 추가
+  // 동적으로 생성되는 페이지들은 여기에 추가함함
   // 예: 종목 상세 페이지, 포트폴리오 상세 등
   // const stocks = await fetchStocks()
   // const stockRoutes = stocks.map((stock) => ({
