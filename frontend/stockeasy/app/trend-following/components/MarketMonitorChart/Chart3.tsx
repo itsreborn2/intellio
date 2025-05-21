@@ -10,6 +10,15 @@ import LoadingSpinner from '../../../components/LoadingSpinner';
 // Plotly를 클라이언트 사이드에서만 로드하기 위해 dynamic import 사용
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
+// 부모 컴포넌트에서 전달받을 데이터 타입
+interface MarketMonitorData {
+  [key: string]: any;
+}
+
+interface Chart3Props {
+  data: MarketMonitorData[];
+}
+
 interface ChartData {
   date: string[];
   kospi: number[];
@@ -17,7 +26,7 @@ interface ChartData {
   lowRatio: number[];   // 52W_Low_ratio (신저가)
 }
 
-export default function Chart3() {
+export default function Chart3({ data: marketDataFromProps }: Chart3Props) {
   const [chartData, setChartData] = useState<ChartData>({ 
     date: [], 
     kospi: [], 
@@ -62,75 +71,59 @@ export default function Chart3() {
     }
   }, [chartData]);
   
-  // CSV 데이터 로드
+  // Props로 받은 데이터 처리
   useEffect(() => {
-    async function fetchData() {
+    if (marketDataFromProps && marketDataFromProps.length > 0) {
+      setLoading(true); // 데이터 처리 시작
+      setError(null);
       try {
-        setLoading(true);
-        const response = await fetch('/requestfile/trend-following/marketmonitor.csv');
-        const csvText = await response.text();
+        const dates: string[] = [];
+        const kospiValues: number[] = [];
+        const highRatioValues: number[] = [];
+        const lowRatioValues: number[] = [];
 
-        Papa.parse(csvText, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            const data = results.data as Array<{[key: string]: string}>;
-            
-            // 데이터 추출 및 가공
-            const dates: string[] = [];
-            const kospiValues: number[] = [];
-            const highRatioValues: number[] = [];
-            const lowRatioValues: number[] = [];
+        // 모든 데이터 사용 - 시간순 정렬 (props로 받은 데이터는 이미 정렬되어있을 수 있으나, 안전하게 재정렬)
+        const sortedData = [...marketDataFromProps].sort((a, b) => {
+          const dateA = new Date(a['일자']).getTime();
+          const dateB = new Date(b['일자']).getTime();
+          return dateA - dateB;
+        });
 
-            // 모든 데이터 사용 - 시간순 정렬
-            const sortedData = [...data].sort((a, b) => {
-              const dateA = new Date(a['일자']).getTime();
-              const dateB = new Date(b['일자']).getTime();
-              return dateA - dateB;
-            });
-            
-            sortedData.forEach(row => {
-              // 데이터 유효성 검사: 값이 존재하고 숫자 변환이 NaN이 아니어야 함
-              const date = row['일자'];
-              const kospi = parseFloat(row['KOSPI']);
-              const highRatio = parseFloat(row['52W_High_ratio']);
-              const lowRatio = parseFloat(row['52W_Low_ratio']);
-              
-              if (date && !isNaN(kospi) && !isNaN(highRatio) && !isNaN(lowRatio)) {
-                dates.push(date);
-                kospiValues.push(kospi);
-                highRatioValues.push(highRatio);
-                lowRatioValues.push(lowRatio);
-              } else {
-                // 누락 row가 있으면 콘솔에 경고 로그 출력
-                console.warn('누락/잘못된 row:', row);
-              }
-            });
+        sortedData.forEach(row => {
+          const date = row['일자'];
+          const kospi = parseFloat(row['KOSPI']);
+          const highRatio = parseFloat(row['52W_High_ratio']);
+          const lowRatio = parseFloat(row['52W_Low_ratio']);
 
-            setChartData({
-              date: dates,
-              kospi: kospiValues,
-              highRatio: highRatioValues,
-              lowRatio: lowRatioValues
-            });
-            // 데이터만 로딩 완료, 차트는 렌더링 후 로딩 상태 해제
-            setLoading(false);
-          },
-          error: (error: any) => {
-            console.error('CSV 파싱 오류:', error);
-            setError('데이터를 불러오는 중 오류가 발생했습니다.');
-            setLoading(false);
+          if (date && !isNaN(kospi) && !isNaN(highRatio) && !isNaN(lowRatio)) {
+            dates.push(date);
+            kospiValues.push(kospi);
+            highRatioValues.push(highRatio);
+            lowRatioValues.push(lowRatio);
+          } else {
+            // console.warn('데이터 유효성 검사 실패 또는 누락된 값:', row);
           }
         });
-      } catch (error: any) {
-        console.error('데이터 불러오기 오류:', error);
-        setError('데이터를 불러오는 중 오류가 발생했습니다.');
-        setLoading(false);
-      }
-    }
 
-    fetchData();
-  }, []);
+        setChartData({
+          date: dates,
+          kospi: kospiValues,
+          highRatio: highRatioValues,
+          lowRatio: lowRatioValues
+        });
+        // setLoading(false)는 chartData 변경 후 chartReady를 설정하는 useEffect에서 관리
+      } catch (e: any) {
+        console.error('Props 데이터 처리 중 오류:', e);
+        setError('차트 데이터를 처리하는 중 오류가 발생했습니다.');
+        setLoading(false); // 오류 발생 시 로딩 중단
+      }
+    } else {
+      // Props 데이터가 없거나 비어있는 경우 초기화 또는 로딩 상태 유지
+      setChartData({ date: [], kospi: [], highRatio: [], lowRatio: [] });
+      // 부모에서 로딩을 관리하므로 여기서는 setLoading(true)를 하지 않을 수 있음.
+      // 현재는 부모의 로딩/에러 상태를 따르도록 이 부분은 비워둠.
+    }
+  }, [marketDataFromProps]);
 
   if (error) {
     return (
@@ -140,14 +133,24 @@ export default function Chart3() {
     );
   }
 
-  // 데이터 로딩 중이거나 데이터는 있지만 차트가 준비되지 않은 경우 로딩 스피너 표시
-  if (loading) {
-    return <LoadingSpinner size="md" message="데이터를 불러오는 중..." />;
+  // 부모 컴포넌트에서 loading, error를 이미 처리하고 있으므로, Chart3에서는 chartData 유무와 chartReady만으로 판단.
+  if (!marketDataFromProps || marketDataFromProps.length === 0) {
+    return null; // 부모의 로딩/에러 메시지에 의존
   }
-  
-  // 데이터가 존재하지만 차트가 아직 렌더링되지 않은 경우
-  if (chartData.date.length > 0 && !chartReady) {
-    return <LoadingSpinner size="md" message="차트를 준비하는 중..." />;
+
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
+
+  // 데이터가 있고, 아직 차트가 준비되지 않은 경우
+  if (!chartReady) {
+    // 로딩 상태에 따라 다른 메시지 표시
+    const message = chartData.date.length > 0 ? "차트를 준비하는 중..." : "데이터를 불러오는 중..."; 
+    return <LoadingSpinner size="md" message={message} />;
   }
 
   // 차트 데이터와 레이아웃 설정

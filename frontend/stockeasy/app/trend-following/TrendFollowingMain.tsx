@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import Papa from 'papaparse';
 import MarketSignalSection from './components/MarketSignalSection';
 import SectorLeaderSection from './components/SectorLeaderSection';
 // 52주 신고가 주요 종목 섹션 (rs-rank/page.tsx와 100% 동일)
@@ -18,6 +19,22 @@ import High52Chart from './components/High52Chart';
 // 돌파 차트 메인 컴포넌트
 import BreakoutChartMain from './components/breakout/BreakoutChartMain';
 
+// CSV 데이터 타입 정의 (하위 컴포넌트들과 동일하게)
+interface BreakoutData {
+  'Type'?: string;
+  'Code': string;
+  'Name': string;
+  'Breakthrough Price': string;
+  'Current Price'?: string;
+  'Daily Change %'?: string;
+  'Remaining %'?: string;
+  'Gap %'?: string;
+  'RS'?: string;
+  'MTT'?: string;
+  '저장시간'?: string;
+  [key: string]: string | undefined;
+}
+
 export default function TrendFollowingMain() {
   // 탭 선택 상태 관리 ("trend": 추세추종, "monitor": 시장지표)
   const [activeTab, setActiveTab] = useState<'trend' | 'monitor'>('trend');
@@ -28,45 +45,113 @@ export default function TrendFollowingMain() {
   // 돌파 섹션 탭 선택 상태 관리 ("list": 리스트 뷰, "chart": 차트 뷰)
   const [breakoutTab, setBreakoutTab] = useState<'list' | 'chart'>('list');
   // 돌파 리스트 업데이트 날짜/시간
-  const [updateDate, setUpdateDate] = useState<string>('');
+  const [breakoutUpdateDate, setBreakoutUpdateDate] = useState<string>('');
+  const [allBreakoutData, setAllBreakoutData] = useState<BreakoutData[]>([]); // 전체 데이터
+  const [breakoutCandidatesData, setBreakoutCandidatesData] = useState<BreakoutData[]>([]);
+  const [breakoutSustainData, setBreakoutSustainData] = useState<BreakoutData[]>([]);
+  const [breakoutFailData, setBreakoutFailData] = useState<BreakoutData[]>([]);
+  const [breakoutLoading, setBreakoutLoading] = useState<boolean>(true);
+  const [breakoutError, setBreakoutError] = useState<string | null>(null);
   
-  // 업데이트 날짜 로드
+  // breakout.csv 데이터 로드 (최초 마운트 시 한 번만 실행)
   useEffect(() => {
-    async function loadUpdateDate() {
+    async function loadBreakoutData() {
+      // 데이터가 이미 로드되었거나 로딩 중이면 다시 로드하지 않음
+      if (allBreakoutData.length > 0 || breakoutLoading === false && breakoutError === null) {
+        // console.log('Data already loaded or successfully loaded previously.');
+        // 기존 데이터로 필터링만 다시 수행할 수 있도록 breakoutLoading을 false로 유지
+        // 만약 탭 전환 시 필터링된 데이터가 초기화되지 않도록 하려면 여기서 상태 업데이트를 하지 않거나
+        // 필터링 로직을 useEffect 외부 또는 다른 useEffect로 분리해야 합니다.
+        // 현재는 최초 로드만 처리하므로, 이 조건은 데이터가 이미 있을 때 재로드를 방지합니다.
+        // 만약 activeTab, breakoutTab 변경 시 필터링만 다시 하고 싶다면, 
+        // 이 useEffect는 최초 로드만 담당하고, 다른 useEffect에서 allBreakoutData를 기반으로 필터링합니다.
+        // 여기서는 최초 로드에 집중합니다.
+        // setBreakoutLoading(false); // 데이터가 이미 있으므로 로딩 완료 상태로 유지
+        return; 
+      }
+      setBreakoutLoading(true);
+      setBreakoutError(null);
       try {
-        // breakout.csv 파일의 마지막 수정 날짜 가져오기
         const response = await fetch('/requestfile/trend-following/breakout.csv', { cache: 'no-store' });
-        
         if (!response.ok) {
-          console.error(`데이터 파일 로드 실패: ${response.status}`);
-          return;
+          throw new Error(`breakout.csv 로드 실패: ${response.status}`);
         }
-        
-        // 응답 헤더에서 Last-Modified 값 추출
-        const lastModified = response.headers.get('Last-Modified');
-        
-        if (lastModified) {
-          // Last-Modified 헤더에서 날짜와 시간 추출하여 포맷팅
-          const modifiedDate = new Date(lastModified);
-          const month = modifiedDate.getMonth() + 1; // getMonth()는 0부터 시작하므로 1 더함
-          const day = modifiedDate.getDate();
-          const hours = modifiedDate.getHours();
-          const minutes = modifiedDate.getMinutes();
-          
-          // M/DD HH:MM 형식으로 포맷팅
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-        }
-      } catch (e) {
-        console.error('업데이트 날짜 로드 실패:', e);
+        const csvText = await response.text();
+        Papa.parse<BreakoutData>(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            const parsedData = results.data;
+            setAllBreakoutData(parsedData); // 전체 데이터 저장
+
+            if (parsedData && parsedData.length > 0) {
+              // '저장시간' 컬럼에서 첫 번째 유효한 값으로 업데이트 날짜 설정
+              const firstValidDate = parsedData.find(row => row['저장시간'])?.['저장시간'];
+              if (firstValidDate) {
+                const dateObj = new Date(firstValidDate);
+                if (!isNaN(dateObj.getTime())) {
+                    const month = dateObj.getMonth() + 1;
+                    const day = dateObj.getDate();
+                    const hours = dateObj.getHours();
+                    const minutes = dateObj.getMinutes();
+                    setBreakoutUpdateDate(`${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`);
+                } else {
+                  setBreakoutUpdateDate(firstValidDate); // 원본 문자열 그대로 사용
+                }
+              } else {
+                setBreakoutUpdateDate('날짜 정보 없음');
+              }
+            } else if (parsedData && parsedData.length > 0) { // 저장시간이 없지만 데이터는 있는 경우
+              setBreakoutUpdateDate('날짜 정보 없음'); // 또는 기본 메시지
+            } else {
+              // CSV에 '저장시간'이 없는 경우 Last-Modified 헤더 사용
+              const lastModifiedHeader = response.headers.get('Last-Modified');
+            }
+            // 필터링된 데이터 설정은 별도의 useEffect에서 처리하거나 여기서 직접 수행
+            // allBreakoutData가 변경될 때마다 하위 컴포넌트에 전달할 데이터 필터링
+            if (parsedData && parsedData.length > 0) {
+              setBreakoutCandidatesData(parsedData.filter(item => item.Type === '돌파 후보'));
+              setBreakoutSustainData(parsedData.filter(item => item.Type === '돌파 유지'));
+              setBreakoutFailData(parsedData.filter(item => item.Type === '돌파 실패'));
+            }
+            setBreakoutLoading(false);
+          },
+          error: (error: any) => {
+            console.error('CSV 파싱 오류:', error);
+            setBreakoutError('데이터 파싱 중 오류 발생');
+            setBreakoutLoading(false);
+          }
+        });
+      } catch (e: any) {
+        console.error('breakout.csv 데이터 로드 실패:', e);
+        setBreakoutError(e.message || '데이터 로드 중 오류 발생');
+        setBreakoutLoading(false);
       }
     }
-    
-    // 돌파 리스트 탭이 활성화될 때 업데이트 날짜 로드
-    if (activeTab === 'trend' && breakoutTab === 'list') {
-      loadUpdateDate();
+    loadBreakoutData();
+  }, []); // 의존성 배열을 빈 배열로 변경하여 최초 마운트 시에만 실행
+
+  // allBreakoutData가 변경되면 각 섹션별 데이터 필터링
+  useEffect(() => {
+    if (allBreakoutData.length > 0) {
+      // TODO: 실제 'Type' 컬럼 값에 맞게 필터링 조건 수정 필요
+      // 예시: const candidates = breakoutDataAll.filter(item => item.Type === '돌파후보' || item.Type === 'Candidate');
+      // 현재는 임의의 값을 사용하거나, 사용자님께서 직접 CSV를 확인 후 수정하셔야 합니다.
+      // 아래는 'Type' 컬럼이 존재하고, '돌파 후보', '돌파 지속', '돌파 실패'라는 값을 가진다고 가정한 예시입니다.
+      // 실제 CSV 파일의 'Type' 컬럼명과 값으로 수정해주세요.
+      const candidates = allBreakoutData.filter((item: BreakoutData) => item.Type === '돌파 임박'); // 또는 다른 조건
+      const sustain = allBreakoutData.filter((item: BreakoutData) => item.Type === '돌파 지속'); // 또는 다른 조건
+      const fail = allBreakoutData.filter((item: BreakoutData) => item.Type === '돌파 실패'); // 또는 다른 조건
+
+      setBreakoutCandidatesData(candidates);
+      setBreakoutSustainData(sustain);
+      setBreakoutFailData(fail);
+    } else {
+      setBreakoutCandidatesData([]);
+      setBreakoutSustainData([]);
+      setBreakoutFailData([]);
     }
-  }, [activeTab, breakoutTab]);
+  }, [allBreakoutData]);
   return (
     <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
       <div className="w-full max-w-[1280px] mx-auto">
@@ -116,7 +201,7 @@ export default function TrendFollowingMain() {
                       fontWeight: sectorTab === 'sector' ? 700 : 400
                     }}
                   >
-                    주도섹터/주도주
+                    주도섹터
                   </button>
                   <button
                     className={`px-4 py-2 text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${sectorTab === 'industry' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
@@ -208,15 +293,15 @@ export default function TrendFollowingMain() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
                         {/* 돌파 후보군(좌측) */}
                         <div className="bg-white rounded-[6px] shadow p-2 md:p-4 border border-gray-200 h-full">
-                          <BreakoutCandidatesSection />
+                          <BreakoutCandidatesSection data={breakoutCandidatesData} updateDate={breakoutUpdateDate} loading={breakoutLoading} error={breakoutError} />
                         </div>
                         {/* 돌파 성공/실패(우측, 위아래로 분할) */}
                         <div className="flex flex-col gap-2 md:gap-4 h-full">
                           <div className="bg-white rounded-[6px] shadow p-2 md:p-4 border border-gray-200 flex-1">
-                            <BreakoutSustainSection />
+                            <BreakoutSustainSection data={breakoutSustainData} updateDate={breakoutUpdateDate} loading={breakoutLoading} error={breakoutError} />
                           </div>
                           <div className="bg-white rounded-[6px] shadow p-2 md:p-4 border border-gray-200 flex-1">
-                            <BreakoutFailSection />
+                            <BreakoutFailSection data={breakoutFailData} updateDate={breakoutUpdateDate} loading={breakoutLoading} error={breakoutError} />
                           </div>
                         </div>
                       </div>

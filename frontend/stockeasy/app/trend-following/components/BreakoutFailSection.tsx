@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 import { ArrowTrendingDownIcon, CheckCircleIcon } from '@heroicons/react/24/solid';
 
-// CSV 데이터 타입 정의
+// CSV 데이터 타입 정의 (부모로부터 전달받는 데이터 타입)
 interface BreakoutData {
   'Type'?: string;
   'Code': string;
@@ -16,63 +16,30 @@ interface BreakoutData {
   'Gap %'?: string;
   'RS'?: string;
   'MTT'?: string;
+  '저장시간'?: string; // 저장시간 컬럼 추가
   [key: string]: string | undefined;
 }
 
-// 돌파 실패 섹션
-export default function BreakoutFailSection() {
-  const [failData, setFailData] = useState<BreakoutData[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [updateDate, setUpdateDate] = useState<string>('');
+// 부모 컴포넌트로부터 받을 Props 정의
+interface BreakoutFailSectionProps {
+  data: BreakoutData[];
+  updateDate: string;
+  loading: boolean;
+  error: string | null;
+}
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        const response = await fetch('/requestfile/trend-following/breakout.csv', { cache: 'no-store' });
-        if (!response.ok) throw new Error(`CSV 파일 로드 실패: ${response.status}`);
-        
-        // 업데이트 날짜 처리
-        const lastModified = response.headers.get('Last-Modified');
-        if (lastModified) {
-          const date = new Date(lastModified);
-          const month = date.getMonth() + 1;
-          const day = date.getDate();
-          const hours = date.getHours();
-          const minutes = date.getMinutes();
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-        }
-        
-        const csvText = await response.text();
-        Papa.parse<BreakoutData>(csvText, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            const filtered = results.data.filter(row => row.Type === '돌파 실패');
-            setFailData(filtered);
-            setLoading(false);
-          },
-          error: (err: any) => {
-            console.error('CSV 파싱 오류:', err);
-            setError('CSV 데이터를 파싱하는 중 오류가 발생했습니다.');
-            setLoading(false);
-          },
-        });
-      } catch (err) {
-        console.error('데이터 로드 오류:', err);
-        setError('데이터를 불러오는 중 오류가 발생했습니다.');
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, []);
+export default function BreakoutFailSection({ data: failItems, updateDate, loading, error }: BreakoutFailSectionProps) {
+  // 내부 상태는 더 이상 필요 없음, props로 데이터를 받음
 
   const formatPrice = (price: string) => {
     if (!price) return '';
     return Number(price).toLocaleString('ko-KR');
   };
+
+  if (loading) return <div className="text-center py-10 text-sm">돌파 실패 종목 로딩 중...</div>;
+  if (error) return <div className="text-center py-10 text-red-500 text-sm">오류: {error}</div>;
+
+  const failItemsToDisplay = failItems.slice(0, 10);
 
   return (
     <section>
@@ -87,10 +54,8 @@ export default function BreakoutFailSection() {
           </span>
         )}
       </div>
-      {loading && <div className="text-sm" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>데이터를 불러오는 중입니다...</div>}
-      {error && <div className="text-red-500 text-sm">{error}</div>}
-      {!loading && !error && failData.length === 0 && <div className="text-sm" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>표시할 데이터가 없습니다.</div>}
-      {!loading && !error && failData.length > 0 && (
+      {!loading && !error && failItems.length === 0 && <div className="text-sm" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>표시할 데이터가 없습니다.</div>}
+      {!loading && !error && failItems.length > 0 && (
         <div className="overflow-x-auto rounded-[6px] overflow-hidden">
           <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
             <thead className="bg-gray-100">
@@ -105,7 +70,7 @@ export default function BreakoutFailSection() {
               </tr>
             </thead>
             <tbody>
-              {failData.map((item, idx) => {
+              {failItemsToDisplay.map((item: BreakoutData, idx: number) => {
                 const rsValue = item['RS'] || '-';
                 const mttValue = item['MTT'] || '-';
                 

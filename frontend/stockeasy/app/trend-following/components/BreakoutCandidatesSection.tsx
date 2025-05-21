@@ -1,11 +1,11 @@
 'use client'
-// 돌파 종목 후보군 섹션 (CSV 연동)
+// 돌파 종목 후보군 섹션 (CSV 연동함)
 import { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 
-// CSV 데이터 타입 정의
-interface WatchlistData {
+// CSV 데이터 타입 정의 (부모로부터 전달받는 데이터 타입)
+interface BreakoutData {
   'Type'?: string;
   'Code': string;
   'Name': string;
@@ -16,85 +16,23 @@ interface WatchlistData {
   'Gap %'?: string;
   'RS'?: string;
   'MTT'?: string;
+  '저장시간'?: string; // 저장시간 컬럼 추가
   [key: string]: string | undefined;
 }
 
-export default function BreakoutCandidatesSection() {
-  const [candidates, setCandidates] = useState<WatchlistData[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [updateDate, setUpdateDate] = useState<string>('');
+// 부모 컴포넌트로부터 받을 Props 정의
+interface BreakoutCandidatesSectionProps {
+  data: BreakoutData[];
+  updateDate: string;
+  loading: boolean;
+  error: string | null;
+}
 
-  useEffect(() => {
-    async function fetchCandidates() {
-      try {
-        setLoading(true);
-        const response = await fetch('/requestfile/trend-following/breakout.csv', { cache: 'no-store' });
-        if (!response.ok) throw new Error(`CSV 로드 실패: ${response.status}`);
-        
-        // 업데이트 날짜 처리
-        const lastModified = response.headers.get('Last-Modified');
-        if (lastModified) {
-          const date = new Date(lastModified);
-          const month = date.getMonth() + 1;
-          const day = date.getDate();
-          const hours = date.getHours();
-          const minutes = date.getMinutes();
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-        }
-        
-        const csvText = await response.text();
-        
-        // CSV 데이터 전처리 - 첫 줄을 제외한 나머지 줄에서 작은따옴표 문제 해결
-        const lines = csvText.split('\n');
-        const header = lines[0];
-        const processedLines = [header];
-        
-        for (let i = 1; i < lines.length; i++) {
-          if (lines[i].trim()) {
-            // 작은따옴표로 시작하는 종목코드 처리
-            const line = lines[i];
-            const fixedLine = line.replace(/^'([^,]+),/, '$1,');
-            processedLines.push(fixedLine);
-          }
-        }
-        
-        const processedCsvText = processedLines.join('\n');
-        console.log('전처리된 CSV 데이터 일부:', processedCsvText.substring(0, 200));
-        
-        Papa.parse<WatchlistData>(processedCsvText, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            // 디버깅을 위해 파싱된 데이터의 첫 번째 항목 출력
-            if (results.data.length > 0) {
-              console.log('파싱된 CSV 데이터 첫 번째 항목:', results.data[0]);
-              console.log('사용 가능한 컬럼명:', Object.keys(results.data[0]));
-            }
-            // 'Type' 컬럼이 '돌파 임박'인 데이터만 필터링
-            const filteredData = results.data.filter(item => item['Type']?.trim() === '돌파 임박');
-            console.log('필터링된 데이터 (Type: 돌파 임박) 개수:', filteredData.length);
-            if (filteredData.length > 0) {
-              console.log('필터링된 데이터 첫 번째 항목:', filteredData[0]);
-            }
-            setCandidates(filteredData);
-            setLoading(false);
-          },
-          error: (err: any) => {
-            console.error('CSV 파싱 오류:', err);
-            setError('CSV 파싱 중 오류 발생');
-            setLoading(false);
-          },
-        });
-      } catch (err) {
-        console.error('데이터 로드 오류:', err);
-        setError('데이터 로드 중 오류 발생');
-        setLoading(false);
-      }
-    }
-    fetchCandidates();
-  }, []);
+export default function BreakoutCandidatesSection({ data: candidatesData, updateDate, loading, error }: BreakoutCandidatesSectionProps) {
+  // 내부 상태는 더 이상 필요 없음, props로 데이터를 받음
+  const candidatesToDisplay = candidatesData.slice(0, 10);
+
+  if (loading) return <div className="text-center py-10 text-sm">돌파 후보군 로딩 중...</div>;
 
   return (
     <section>
@@ -106,7 +44,6 @@ export default function BreakoutCandidatesSection() {
           </span>
         )}
       </div>
-      {loading && <div style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>데이터를 불러오는 중입니다...</div>}
       {error && <div className="text-red-500">{error}</div>}
       {!loading && !error && (
         <div className="overflow-x-auto rounded-[6px] overflow-hidden">
@@ -123,7 +60,7 @@ export default function BreakoutCandidatesSection() {
               </tr>
             </thead>
             <tbody>
-              {candidates.map((item, idx) => {
+              {candidatesToDisplay.map((item: BreakoutData, idx: number) => {
                 const stockCode = item['Code'] || '-';
                 const stockName = item['Name'] || '-';
                 const breakoutPriceValue = item['Breakthrough Price'];
