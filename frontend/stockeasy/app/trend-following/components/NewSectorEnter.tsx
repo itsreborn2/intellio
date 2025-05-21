@@ -7,7 +7,6 @@ import { CheckCircleIcon } from '@heroicons/react/24/solid';
 // import { TableCopyButton } from '@/app/components/TableCopyButton';
 
 interface SectorData {
-  산업: string;
   섹터: string;
   '산업 등락률': string;
   종목명: string;
@@ -214,8 +213,7 @@ export default function NewSectorEnter() {
         <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
           <thead className="bg-gray-100">
             <tr>
-              <th className="px-3 py-2 border-b text-left font-medium w-[135px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>산업</th>
-              <th className="px-3 py-2 border-b text-left font-medium w-[115px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>섹터</th>
+              <th className="px-3 py-2 border-b text-left font-medium w-[135px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>섹터</th>
               <th className="px-3 py-2 border-b text-right font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
               <th className="px-3 py-2 border-b text-left font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
               <th className="px-3 py-2 border-b text-right font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
@@ -227,35 +225,16 @@ export default function NewSectorEnter() {
           </thead>
           <tbody className="bg-white">
             {Object.entries(data).map(([sector, sectorStocks]) => {
-              // 산업별 그룹화
-              const industryGroups: { [key: string]: SectorData[] } = {};
-              
-              sectorStocks.forEach(stock => {
-                if (!industryGroups[stock.산업]) {
-                  industryGroups[stock.산업] = [];
-                }
-                industryGroups[stock.산업].push(stock);
-              });
-              
               let isFirstRow = true;
               
               return (
                 <React.Fragment key={sector}>
-                  {Object.keys(industryGroups).map((industry, industryIndex) => {
-                    const stocks = industryGroups[industry];
-                    const industryRowSpan = stocks.length;
-                    
-                    return stocks.map((stock, stockIndex) => {
-                      const showSector = isFirstRow && stockIndex === 0;
-                      const showIndustry = stockIndex === 0;
-                      
-                      if (stockIndex === 0 && industryIndex === 0) {
-                        isFirstRow = false;
-                      }
+                  {sectorStocks.map((stock, stockIndex) => {
+                    const showSector = stockIndex === 0;
                       
                       return (
                         <tr 
-                          key={`${sector}-${industry}-${stockIndex}`}
+                          key={`${sector}-${stockIndex}`}
                           className="hover:bg-gray-50 transition-colors"
                         >
                           {showSector && (
@@ -264,14 +243,6 @@ export default function NewSectorEnter() {
                               rowSpan={sectorStocks.length}
                             >
                               {sector}
-                            </td>
-                          )}
-                          {showIndustry && (
-                            <td 
-                              className="px-3 py-2 border-b w-[115px]" 
-                              rowSpan={industryRowSpan}
-                            >
-                              {industry}
                             </td>
                           )}
                           <td className="px-3 py-2 border-b text-right w-24">
@@ -314,7 +285,6 @@ export default function NewSectorEnter() {
                           </td>
                         </tr>
                       );
-                    });
                   })}
                 </React.Fragment>
               );

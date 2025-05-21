@@ -1,7 +1,6 @@
 "use client";
 
-// 시장 신호등 섹션 (임시)
-// 시장 신호등 단일 신호 표시용 컴포넌트 (크기 18px, 텍스트와 높이 일치)
+// 시장 신호등 섹션
 import { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 
@@ -14,47 +13,43 @@ interface SignalColors {
 
 const signalColorValues: SignalColors = {
   red: '#ef4444', // Tailwind red-500
-  yellow: '#fde047', // Tailwind yellow-400 (기존 yellow-500은 #eab308로 너무 어두움)
+  yellow: '#fde047', // Tailwind yellow-400
   green: '#22c55e', // Tailwind green-500
   inactive: '#e5e7eb', // Tailwind gray-200
 };
 
+// 신호등 단일 표시용 컴포넌트
 function SignalLight({ label, colors }: { label: string; colors: [string, string, string] }) {
   return (
     <span className="flex flex-row items-center gap-1 mr-4">
-      {/* 신호등 박스 */}
       <span
         className="flex flex-row justify-center items-center bg-gray-900 border border-gray-700 rounded-xl shadow-md px-3 py-1"
         style={{ height: '28px', minWidth: '70px' }}
       >
-        {/* 빨간불 */}
         <span
           className="rounded-full border-2 shadow-[0_0_8px_1px_rgba(239,68,68,0.6)] mx-0.5"
           style={{ width: '18px', height: '18px', backgroundColor: colors[0], borderColor: colors[0] + '80' }}
         />
-        {/* 노란불 */}
         <span
           className="rounded-full border-2 shadow-[0_0_8px_1px_rgba(253,224,71,0.5)] mx-0.5"
           style={{ width: '18px', height: '18px', backgroundColor: colors[1], borderColor: colors[1] + '80' }}
         />
-        {/* 초록불 */}
         <span
           className="rounded-full border-2 shadow-[0_0_8px_1px_rgba(34,197,94,0.5)] mx-0.5"
           style={{ width: '18px', height: '18px', backgroundColor: colors[2], borderColor: colors[2] + '80' }}
         />
       </span>
-      {/* 신호등 라벨 (텍스트 18px, 옅은 회색 #ABABAB) */}
       <span className="text-[18px] font-medium ml-2 whitespace-nowrap" style={{ color: '#ABABAB' }}>{label}</span>
     </span>
   );
 }
 
-// 시장 신호등 섹션 (임시)
 export default function MarketSignalSection() {
   const [shortTermSignal, setShortTermSignal] = useState<string | null>(null);
   const [longTermSignal, setLongTermSignal] = useState<string | null>(null);
   const [kospiChange, setKospiChange] = useState<string | null>(null);
   const [kosdaqChange, setKosdaqChange] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchMarketSignalData() {
@@ -68,47 +63,52 @@ export default function MarketSignalSection() {
           complete: (results) => {
             const data = results.data as Array<{[key: string]: string}>;
             if (data && data.length > 0) {
-              const lastRow = data[data.length - 1];
-              setShortTermSignal(lastRow.short_term_signal?.toLowerCase() || null);
-              setLongTermSignal(lastRow.long_term_signal?.toLowerCase() || null);
+              const firstRow = data[0]; // CSV의 첫 번째 행에서 모든 데이터를 가져옵니다.
+              
+              setLastUpdated(firstRow.저장시간 || null);
+              setShortTermSignal(firstRow.short_term_signal?.toLowerCase() || null);
+              setLongTermSignal(firstRow.long_term_signal?.toLowerCase() || null);
 
-              // KOSPI 및 KOSDAQ 등락률 처리 (마지막에서 두 번째 데이터가 가장 최신일 수 있음)
-              // KOSPI_등락률과 KOSDAQ_등락률은 같은 행에 없을 수도 있으므로, 각 지표별 최신 값을 찾습니다.
-              let latestKospiData = null;
-              let latestKosdaqData = null;
-
-              for (let i = data.length - 1; i >= 0; i--) {
-                if (!latestKospiData && data[i].KOSPI_등락률 && data[i].종목명 === 'KOSPI') {
-                  latestKospiData = data[i].KOSPI_등락률;
-                }
-                if (!latestKosdaqData && data[i].KOSDAQ_등락률 && data[i].종목명 === 'KOSPI') { // CSV 데이터에서 KOSDAQ 등락률도 KOSPI 행에 있음
-                  latestKosdaqData = data[i].KOSDAQ_등락률;
-                }
-                if (latestKospiData && latestKosdaqData) break;
-              }
-
-              if (latestKospiData) {
-                const kospiChangeValue = parseFloat(latestKospiData);
-                // 디버깅을 위한 로그 추가
-                console.log('KOSPI 등락률 데이터:', latestKospiData, '파싱된 값:', kospiChangeValue);
+              if (firstRow.KOSPI_등락률) {
+                const kospiChangeValue = parseFloat(firstRow.KOSPI_등락률);
                 const formattedChange = `${kospiChangeValue >= 0 ? '+' : ''}${kospiChangeValue.toFixed(2)}%`;
                 setKospiChange(formattedChange);
+              } else {
+                setKospiChange(null);
               }
-              if (latestKosdaqData) {
-                const kosdaqChangeValue = parseFloat(latestKosdaqData);
-                // 디버깅을 위한 로그 추가
-                console.log('KOSDAQ 등락률 데이터:', latestKosdaqData, '파싱된 값:', kosdaqChangeValue);
+
+              if (firstRow.KOSDAQ_등락률) {
+                const kosdaqChangeValue = parseFloat(firstRow.KOSDAQ_등락률);
                 const formattedChange = `${kosdaqChangeValue >= 0 ? '+' : ''}${kosdaqChangeValue.toFixed(2)}%`;
                 setKosdaqChange(formattedChange);
+              } else {
+                setKosdaqChange(null);
               }
+            } else {
+              // 데이터가 없거나 형식이 잘못된 경우 모든 상태를 초기화/에러 상태로 설정
+              setLastUpdated(null);
+              setShortTermSignal('inactive');
+              setLongTermSignal('inactive');
+              setKospiChange(null);
+              setKosdaqChange(null);
             }
           },
+          error: (error: any) => {
+            console.error("Error parsing market signal CSV:", error);
+            setLastUpdated(null);
+            setShortTermSignal('inactive');
+            setLongTermSignal('inactive');
+            setKospiChange(null);
+            setKosdaqChange(null);
+          }
         });
       } catch (error) {
-        console.error("Error fetching or parsing market signal CSV:", error);
-        // 에러 발생 시 기본값 또는 에러 상태 처리
-        setShortTermSignal('inactive'); // 예시: 에러 시 'inactive'로 설정
+        console.error("Error fetching market signal CSV:", error);
+        setLastUpdated(null);
+        setShortTermSignal('inactive'); 
         setLongTermSignal('inactive');
+        setKospiChange(null);
+        setKosdaqChange(null);
       }
     }
 
@@ -123,7 +123,7 @@ export default function MarketSignalSection() {
         return [signalColorValues.inactive, signalColorValues.yellow, signalColorValues.inactive];
       case 'green':
         return [signalColorValues.inactive, signalColorValues.inactive, signalColorValues.green];
-      default: // null 또는 'inactive' 등 예상치 못한 값
+      default:
         return [signalColorValues.inactive, signalColorValues.inactive, signalColorValues.inactive];
     }
   };
@@ -135,6 +135,7 @@ export default function MarketSignalSection() {
     <div className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
       <section className="flex items-center w-full">
         <div className="flex flex-row items-center justify-between w-full">
+          {/* 좌측: 시장 신호 제목, 단기/장기 신호등 */}
           <div className="flex flex-row items-center gap-2">
             <div className="font-semibold flex items-center" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
               시장 신호
@@ -142,11 +143,17 @@ export default function MarketSignalSection() {
             <SignalLight label="단기" colors={shortTermColors} />
             <SignalLight label="장기" colors={longTermColors} />
           </div>
-          <div className="flex flex-row items-center gap-6">
+
+          {/* 우측: 업데이트 시간, KOSPI/KOSDAQ 등락률 */}
+          <div className="flex flex-row items-center gap-4"> 
+            {lastUpdated && (
+              <span className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+                Updated {lastUpdated}
+              </span>
+            )}
             {kospiChange && (
               <span className="text-base" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
                 KOSPI{' '}
-                {/* 양수일 때는 빨간색, 음수일 때는 파란색 */}
                 {kospiChange.startsWith('+') ? (
                   <span className="font-semibold text-red-500">
                     {kospiChange}
@@ -159,9 +166,8 @@ export default function MarketSignalSection() {
               </span>
             )}
             {kosdaqChange && (
-              <span className="text-base" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+              <span className="text-base ml-4" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}> {/* KOSPI와 간격 추가 */}
                 KOSDAQ{' '}
-                {/* 양수일 때는 빨간색, 음수일 때는 파란색 */}
                 {kosdaqChange.startsWith('+') ? (
                   <span className="font-semibold text-red-500">
                     {kosdaqChange}

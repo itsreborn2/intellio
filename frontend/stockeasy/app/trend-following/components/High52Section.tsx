@@ -147,7 +147,7 @@ export default function High52Section() {
     <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
         <div className="flex justify-between items-center mb-2">
           {/* 제목 (52주 신고/신저가 주요종목) */}
-          <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>52주 신고/신저가 주요종목</div>
+          <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>52주 신고가 주요종목</div>
           <div className="flex items-center space-x-2">
             {updateDate && (
               <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
@@ -198,7 +198,7 @@ export default function High52Section() {
             </table>
           ) : (
             <p className="text-gray-700 text-center py-4" style={{ fontSize: 'clamp(0.7rem, 0.8vw, 0.8rem)' }}>
-              52주 신고/신저가를 갱신한 주요 종목이 없습니다.<br />시장 환경이 좋지 않은 상태를 의미합니다.
+              52주 신고가를 갱신한 주요 종목이 없습니다.<br />시장 환경이 좋지 않은 상태를 의미합니다.
             </p>
           )}
         </div>

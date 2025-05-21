@@ -14,6 +14,8 @@ interface SectorData {
   종목코드: string;
   종목명: string;
   등락률: string;
+  시가총액: string;
+  거래대금: string;
   포지션: string;
   RS: string;
   RS_1M: string;
@@ -31,6 +33,20 @@ interface CSVParseResult {
   headers: string[];
   rows: any[];
   errors: any[];
+}
+
+// 숫자 포맷팅 함수
+function formatNumberWithCommas(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    return ''; // 빈 문자열이나 null/undefined는 그대로 반환하거나 'N/A' 등으로 처리
+  }
+  // 숫자 외 문자 제거 (콤마 등)
+  const numStr = String(value).replace(/[^0-9.-]+/g, '');
+  const num = Number(numStr);
+  if (isNaN(num)) {
+    return String(value); // 숫자로 변환할 수 없으면 원본 문자열 반환
+  }
+  return num.toLocaleString('ko-KR');
 }
 
 export default function SectorLeaderSection() {
@@ -173,7 +189,7 @@ export default function SectorLeaderSection() {
   return (
     <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
       <div ref={headerContainerRef} className="flex justify-between items-center mb-2">
-        <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>주도섹터 / 주도주</div>
+        <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>스탁이지 주도섹터</div>
         <div className="flex items-center space-x-2">
           {updateDate && (
             <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
@@ -184,7 +200,7 @@ export default function SectorLeaderSection() {
           <TableCopyButton 
             tableRef={tableContainerRef} 
             headerRef={headerContainerRef} 
-            tableName="주도섹터_주도주"
+            tableName="수탁이지_주도섹터"
             updateDateText={updateDate ? `updated ${updateDate}` : undefined}
           />
           */}
@@ -195,79 +211,54 @@ export default function SectorLeaderSection() {
         <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
           <thead className="bg-gray-100">
             <tr>
-              <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>섹터</th>
-              <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>ETF명</th>
-              <th className="px-3 py-2 border-b font-medium text-right w-24" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>ETF등락률</th>
-              <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
-              <th className="px-3 py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
-              <th className="px-3 py-2 border-b font-medium text-center w-28" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>포지션</th>
-              <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
-              <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS_1M</th>
-              <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
+              <th className="px-3 py-2 border-b font-medium text-left w-[80px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>섹터</th>
+              <th className="px-3 py-2 border-b font-medium text-left w-[100px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+              <th className="px-3 py-2 border-b font-medium text-right w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
+              <th className="px-3 py-2 border-b font-medium text-right w-[80px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>시가총액(억)</th>
+              <th className="px-3 py-2 border-b font-medium text-right w-[80px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>거래대금(억)</th>
+              <th className="px-3 py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>포지션</th>
+              <th className="px-3 py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
+              <th className="px-3 py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS_1M</th>
+              <th className="px-3 py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
             </tr>
           </thead>
           <tbody>
-            {Object.keys(data).map((sector) => {
+            {Object.keys(data).map(sector => {
               const sectorStocks = data[sector];
-              const etfGroups: { [etfName: string]: SectorData[] } = {};
-              
-              sectorStocks.forEach(stock => {
-                if (!etfGroups[stock.ETF명]) {
-                  etfGroups[stock.ETF명] = [];
-                }
-                etfGroups[stock.ETF명].push(stock);
-              });
-              
               let isFirstRow = true;
               
               return (
                 <React.Fragment key={sector}>
-                  {Object.keys(etfGroups).map((etfName, etfIndex) => {
-                    const stocks = etfGroups[etfName];
-                    const etfRowSpan = stocks.length;
+                  {sectorStocks.map((stock, stockIndex) => {
+                    const showSector = stockIndex === 0;
                     
-                    return stocks.map((stock, stockIndex) => {
-                      const showSector = isFirstRow && stockIndex === 0;
-                      const showEtf = stockIndex === 0;
-                      
-                      if (stockIndex === 0 && etfIndex === 0) {
-                        isFirstRow = false;
-                      }
-                      
-                      return (
-                        <tr 
-                          key={`${sector}-${etfName}-${stockIndex}`}
-                          className="hover:bg-gray-50 transition-colors"
-                        >
-                          {showSector && (
-                            <td 
-                              className="px-3 py-2 border-b" 
-                              rowSpan={sectorStocks.length}
-                            >
-                              {sector}
-                            </td>
-                          )}
-                          {showEtf && (
-                            <td 
-                              className="px-3 py-2 border-b" 
-                              rowSpan={etfRowSpan}
-                            >
-                              {etfName}
-                            </td>
-                          )}
-                          <td className="px-3 py-2 border-b text-right w-24">
-                            <span className={`${parseFloat(stock["ETF등락률"]) > 0 ? 'text-red-500' : parseFloat(stock["ETF등락률"]) < 0 ? 'text-blue-500' : ''}`}>
-                              {stock["ETF등락률"]}%
-                            </span>
+                    if (stockIndex === 0) {
+                      isFirstRow = false;
+                    }
+                    
+                    return (
+                      <tr 
+                        key={`${sector}-${stockIndex}`}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        {showSector && (
+                          <td 
+                            className="px-3 py-2 border-b w-[80px]" 
+                            rowSpan={sectorStocks.length}
+                          >
+                            {sector}
                           </td>
-                          <td className="px-3 py-2 border-b">{stock["종목명"]}</td>
-                          <td className="px-3 py-2 border-b text-right">
+                        )}
+                          <td className="px-3 py-2 border-b w-[100px]">{stock["종목명"]}</td>
+                          <td className="px-3 py-2 border-b text-right w-[60px]">
                             <span className={`${parseFloat(stock["등락률"]) > 0 ? 'text-red-500' : parseFloat(stock["등락률"]) < 0 ? 'text-blue-500' : ''}`}>
                               {stock["등락률"]}%
                             </span>
                           </td>
-                          <td className="px-3 py-2 border-b text-center w-28">
-                            <div className="mx-auto flex items-center justify-center w-20 h-6 bg-green-100 text-green-800 rounded-[4px]">
+                          <td className="px-3 py-2 border-b text-right w-[60px]">{formatNumberWithCommas(stock["시가총액"])}</td>
+                          <td className="px-3 py-2 border-b text-right w-[60px]">{formatNumberWithCommas(stock["거래대금"])}</td>
+                          <td className="px-3 py-2 border-b text-center w-[60px]">
+                            <div className="mx-auto flex items-center justify-center w-16 h-5 bg-green-100 text-green-800 rounded-[4px]">
                               <span className="text-xs font-medium">
                                 {stock["포지션"].includes('유지') 
                                   ? stock["포지션"] 
@@ -275,19 +266,18 @@ export default function SectorLeaderSection() {
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-2 border-b text-center">{stock["RS"]}</td>
-                          <td className="px-3 py-2 border-b text-center">{stock["RS_1M"]}</td>
-                          <td className="px-3 py-2 border-b text-center">
+                          <td className="px-3 py-2 border-b text-center w-[60px]">{stock["RS"]}</td>
+                          <td className="px-3 py-2 border-b text-center w-[60px]">{stock["RS_1M"]}</td>
+                          <td className="px-3 py-2 border-b text-center w-[60px]">
                             {stock["MTT"] === 'y' ? (
-                              <CheckCircleIcon className="h-5 w-5 text-green-500 mx-auto" />
+                              <CheckCircleIcon className="h-4 w-4 text-green-500 mx-auto" />
                             ) : (
                               null
                             )}
                           </td>
                         </tr>
                       );
-                    });
-                  })}
+                    })}
                 </React.Fragment>
               );
             })}

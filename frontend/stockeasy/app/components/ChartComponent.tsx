@@ -446,9 +446,7 @@ const ChartComponent: React.FC<ChartProps> = ({
             color: 'rgba(197, 203, 206, 0.5)',
           },
         },
-        crosshair: {
-          mode: CrosshairMode.Normal,
-        },
+
         rightPriceScale: {
           borderColor: 'rgba(197, 203, 206, 0.8)',
           entireTextOnly: true,
@@ -486,8 +484,31 @@ const ChartComponent: React.FC<ChartProps> = ({
           },
         },
         localization: {
+          locale: 'ko-KR',
           priceFormatter: (price: number) => {
-            return price.toLocaleString('ko-KR');
+            return Math.round(price).toLocaleString('ko-KR');
+          },
+          timeFormatter: (originalTime: number) => {
+            const date = new Date(originalTime * 1000); // lightweight-charts는 초 단위 timestamp를 사용
+            const year = date.getFullYear().toString().slice(-2); // 'yy'
+            const month = (date.getMonth() + 1).toString().padStart(2, '0'); // 'mm'
+            const day = date.getDate().toString().padStart(2, '0'); // 'dd'
+            return `${year}년 ${month}월 ${day}일`;
+          },
+        },
+        crosshair: {
+          mode: CrosshairMode.Normal,
+          vertLine: {
+            color: '#758696',
+            width: 1,
+            style: LineStyle.LargeDashed,
+            labelBackgroundColor: '#758696',
+          },
+          horzLine: {
+            color: '#758696',
+            width: 1,
+            style: LineStyle.LargeDashed,
+            labelBackgroundColor: '#758696',
           },
         },
       };

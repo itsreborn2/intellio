@@ -116,7 +116,7 @@ export default function TrendFollowingMain() {
                       fontWeight: sectorTab === 'sector' ? 700 : 400
                     }}
                   >
-                    주도섹터/주도주
+                    주도섹터
                   </button>
                   <button
                     className={`px-4 py-2 text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${sectorTab === 'industry' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}

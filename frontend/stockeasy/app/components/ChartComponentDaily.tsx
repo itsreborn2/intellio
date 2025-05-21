@@ -384,8 +384,16 @@ const ChartComponentDaily: React.FC<ChartProps> = ({
           },
         },
         localization: {
+          locale: 'ko-KR',
           priceFormatter: (price: number) => {
-            return price.toLocaleString('ko-KR');
+            return Math.round(price).toLocaleString('ko-KR');
+          },
+          timeFormatter: (originalTime: number) => {
+            const date = new Date(originalTime * 1000); // lightweight-charts는 초 단위 timestamp를 사용
+            const year = date.getFullYear().toString().slice(-2); // 'yy'
+            const month = (date.getMonth() + 1).toString().padStart(2, '0'); // 'mm'
+            const day = date.getDate().toString().padStart(2, '0'); // 'dd'
+            return `${year}년 ${month}월 ${day}일`;
           },
         },
       };
@@ -456,8 +464,8 @@ const ChartComponentDaily: React.FC<ChartProps> = ({
           lineStyle: LineStyle.Solid,
           priceScaleId: 'market-index',  // 별도의 스케일 ID 사용
           title: '', // 라벨 제거
-          lastValueVisible: true,
-          priceLineVisible: true,
+          lastValueVisible: false, // 마지막 값 라벨 숨김
+          priceLineVisible: false, // 가격 라인 숨김
         });
         lineSeriesRef.current = lineSeries;
         
