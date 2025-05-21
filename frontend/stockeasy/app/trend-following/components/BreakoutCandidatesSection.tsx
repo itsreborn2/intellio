@@ -1,5 +1,5 @@
 'use client'
-// 돌파 종목 후보군 섹션 (CSV 연동)
+// 돌파 종목 후보군 섹션 (CSV 연동함)
 import { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
