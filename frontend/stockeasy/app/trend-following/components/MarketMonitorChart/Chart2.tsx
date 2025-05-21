@@ -67,7 +67,7 @@ export default function Chart2() {
     async function fetchData() {
       try {
         setLoading(true);
-        const response = await fetch('/requestfile/trend-following/marketmonitor.csv');
+        const response = await fetch('/requestfile/trend-following/marketmonitor.csv', { cache: 'no-store' });
         const csvText = await response.text();
 
         Papa.parse(csvText, {

@@ -61,7 +61,7 @@ export default function NewSectorEnter() {
     async function fetchData() {
       setLoading(true);
       try {
-        const response = await fetch('/requestfile/trend-following/newsectorenter.csv');
+        const response = await fetch('/requestfile/trend-following/newsectorenter.csv', { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

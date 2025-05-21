@@ -59,7 +59,7 @@ export default function MarketSignalSection() {
   useEffect(() => {
     async function fetchMarketSignalData() {
       try {
-        const response = await fetch('/requestfile/trend-following/marketsignal.csv');
+        const response = await fetch('/requestfile/trend-following/marketsignal.csv', { cache: 'no-store' });
         const csvText = await response.text();
         
         Papa.parse(csvText, {

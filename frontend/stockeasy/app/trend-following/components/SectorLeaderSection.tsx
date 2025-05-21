@@ -63,7 +63,7 @@ export default function SectorLeaderSection() {
     async function fetchData() {
       setLoading(true);
       try {
-        const response = await fetch('/requestfile/trend-following/trend-following-sector.csv');
+        const response = await fetch('/requestfile/trend-following/trend-following-sector.csv', { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
