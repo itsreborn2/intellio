@@ -34,8 +34,7 @@ export default function NewSectorEnter() {
   const [data, setData] = useState<GroupedSectorData>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [updateDate, setUpdateDate] = useState<string>('');
-
+  const [updateDate, setUpdateDate] = useState<string>(''); // '저장시간'을 저장할 상태
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const headerContainerRef = useRef<HTMLDivElement>(null);
 
@@ -58,27 +57,17 @@ export default function NewSectorEnter() {
 
   useEffect(() => {
     async function fetchData() {
-      setLoading(true);
       try {
         const response = await fetch('/requestfile/trend-following/newsectorenter.csv', { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
         const csvText = await response.text();
         
-        Papa.parse<SectorData>(csvText, {
+        Papa.parse(csvText, {
           header: true,
           skipEmptyLines: true,
           complete: (results) => {
-            if (results.errors.length > 0) {
-              console.error('CSV 파싱 오류:', results.errors);
-              setError('CSV 파일을 파싱하는 중 오류가 발생했습니다.');
-              setLoading(false);
-              return;
-            }
-            const sortedData = results.data.sort((a, b) => {
-              return parseFloat(b["산업 등락률"]) - parseFloat(a["산업 등락률"]);
-            });
+            const parsedData = results.data as SectorData[];
+            // 데이터 정렬 로직 (예시: 섹터 이름으로 정렬)
+            const sortedData = parsedData.sort((a, b) => a.섹터.localeCompare(b.섹터));
             
             const grouped: GroupedSectorData = {};
             sortedData.forEach(row => {
@@ -89,71 +78,60 @@ export default function NewSectorEnter() {
               grouped[sector].push(row);
             });
             setData(grouped);
+
+            // 업데이트 시간 설정 로직
+            let updatedTimeSet = false;
+            if (results.data.length > 0 && (results.data[0] as SectorData).저장시간) {
+              const firstRowWithTime = results.data[0] as SectorData;
+              // '05/21 16:00' 형식에서 'MM/DD HH:mm' 부분만 추출
+              const match = firstRowWithTime.저장시간.match(/(\d{2}\/\d{2}\s\d{2}:\d{2})/);
+              if (match && match[1]) {
+                setUpdateDate(match[1]);
+                updatedTimeSet = true;
+              }
+            }
+
+            if (!updatedTimeSet) {
+              const lastModifiedHeader = response.headers.get('Last-Modified');
+              if (lastModifiedHeader) {
+                const date = new Date(lastModifiedHeader);
+                const month = date.getMonth() + 1;
+                const day = date.getDate();
+                const hours = date.getHours();
+                const minutes = date.getMinutes();
+                setUpdateDate(`${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`);
+                updatedTimeSet = true;
+              } else {
+                // CSV 저장시간도 없고, Last-Modified 헤더도 없는 경우 현재 시간 사용
+                const now = new Date();
+                const month = now.getMonth() + 1;
+                const day = now.getDate();
+                const hours = now.getHours();
+                const minutes = now.getMinutes();
+                const formattedDate = `${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                setUpdateDate(formattedDate);
+                console.warn('newsectorenter.csv 파일의 저장시간 및 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
+              }
+            }
             setLoading(false);
           },
           error: (err: Error) => {
-            console.error('Papa Parse 오류:', err);
-            setError('CSV 데이터를 불러오는 중 오류가 발생했습니다.');
+            console.error('CSV 파싱 중 에러 발생: ', err);
+            setError('CSV 파일을 파싱하는 중 오류가 발생했습니다.');
+            setUpdateDate(''); // 오류 발생 시 날짜 초기화
             setLoading(false);
           }
         });
-      } catch (err) {
-        console.error('데이터 가져오기 오류:', err);
+      } catch (e: any) {
+        console.error('데이터 패칭 중 에러 발생: ', e);
         setError('데이터를 가져오는 중 오류가 발생했습니다.');
+        setData({}); // 오류 발생 시 데이터 초기화
+        setUpdateDate(''); // 오류 발생 시 날짜 초기화
         setLoading(false);
       }
     }
 
     fetchData();
-  }, []);
-
-  // 업데이트 날짜 로드
-  useEffect(() => {
-    async function loadUpdateDate() {
-      try {
-        // newsectorenter.csv 파일에서 마지막 수정 날짜 가져오기
-        const cacheFilePath = '/requestfile/trend-following/newsectorenter.csv';
-        
-        // 헤더만 가져와서 Last-Modified 확인
-        const response = await fetch(cacheFilePath, { cache: 'no-store' });
-        
-        if (!response.ok) {
-          console.error(`newsectorenter.csv 파일 로드 실패: ${response.status}`);
-          return;
-        }
-        
-        // 응답 헤더에서 Last-Modified 값 추출
-        const lastModified = response.headers.get('Last-Modified');
-        
-        if (lastModified) {
-          // Last-Modified 헤더에서 날짜와 시간 추출하여 포맷팅
-          const modifiedDate = new Date(lastModified);
-          const month = modifiedDate.getMonth() + 1; // getMonth()는 0부터 시작하므로 1 더함
-          const day = modifiedDate.getDate();
-          const hours = modifiedDate.getHours();
-          const minutes = modifiedDate.getMinutes();
-          
-          // M/DD HH:MM 형식으로 포맷팅
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-        } else {
-          // Last-Modified 헤더가 없는 경우 현재 날짜/시간 사용
-          const now = new Date();
-          const month = now.getMonth() + 1;
-          const day = now.getDate();
-          const hours = now.getHours();
-          const minutes = now.getMinutes();
-          
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-          console.warn('newsectorenter.csv 파일의 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
-        }
-      } catch (error) {
-        console.error('데이터 업데이트 날짜 로드 실패:', error);
-      }
-    }
-    
-    loadUpdateDate();
   }, []);
 
   if (loading) {

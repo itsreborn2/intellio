@@ -148,7 +148,7 @@ export default function MarketSignalSection() {
           <div className="flex flex-row items-center gap-4"> 
             {lastUpdated && (
               <span className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
-                Updated {lastUpdated}
+                updated {lastUpdated}
               </span>
             )}
             {kospiChange && (

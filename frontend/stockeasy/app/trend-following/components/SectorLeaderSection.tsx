@@ -108,17 +108,55 @@ export default function SectorLeaderSection() {
               grouped[sector].push(row);
             });
             setData(grouped);
+
+            // 업데이트 시간 설정 로직
+            let updatedTimeSet = false;
+            if (results.data.length > 0 && results.data[0].저장시간) {
+              const firstRowWithTime = results.data[0] as SectorData;
+              const match = firstRowWithTime.저장시간.match(/(\d{2}\/\d{2}\s\d{2}:\d{2})/);
+              if (match && match[1]) {
+                setUpdateDate(match[1]);
+                updatedTimeSet = true;
+              }
+            }
+
+            if (!updatedTimeSet) {
+              const lastModifiedHeader = response.headers.get('Last-Modified');
+              if (lastModifiedHeader) {
+                const date = new Date(lastModifiedHeader);
+                const month = date.getMonth() + 1;
+                const day = date.getDate();
+                const hours = date.getHours();
+                const minutes = date.getMinutes();
+                setUpdateDate(`${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`);
+                updatedTimeSet = true;
+              } else {
+                // CSV 저장시간도 없고, Last-Modified 헤더도 없는 경우 현재 시간 사용
+                const now = new Date();
+                const month = now.getMonth() + 1;
+                const day = now.getDate();
+                const hours = now.getHours();
+                const minutes = now.getMinutes();
+                const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                setUpdateDate(formattedDate);
+                console.warn('trend-following-sector.csv 파일의 저장시간 및 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
+                updatedTimeSet = true;
+              }
+            }
             setLoading(false);
           },
           error: (err: Error) => {
-            console.error('Papa Parse 오류:', err);
-            setError('CSV 데이터를 불러오는 중 오류가 발생했습니다.');
+            console.error('CSV 파싱 중 에러 발생: ', err);
+            setError('CSV 파일을 파싱하는 중 오류가 발생했습니다.');
+            setUpdateDate('');
             setLoading(false);
           }
         });
-      } catch (err) {
-        console.error('데이터 가져오기 오류:', err);
+      } catch (e: any) {
+        console.error('데이터 패칭 중 에러 발생: ', e);
         setError('데이터를 가져오는 중 오류가 발생했습니다.');
+        setData({});
+        setUpdateDate('');
         setLoading(false);
       }
     }
@@ -126,54 +164,7 @@ export default function SectorLeaderSection() {
     fetchData();
   }, []);
 
-  // 업데이트 날짜 로드
-  useEffect(() => {
-    async function loadUpdateDate() {
-      try {
-        // trend-following-sector.csv 파일에서 마지막 수정 날짜 가져오기
-        const cacheFilePath = '/requestfile/trend-following/trend-following-sector.csv';
-        
-        // 헤더만 가져와서 Last-Modified 확인
-        const response = await fetch(cacheFilePath, { cache: 'no-store' });
-        
-        if (!response.ok) {
-          console.error(`trend-following-sector.csv 파일 로드 실패: ${response.status}`);
-          return;
-        }
-        
-        // 응답 헤더에서 Last-Modified 값 추출
-        const lastModified = response.headers.get('Last-Modified');
-        
-        if (lastModified) {
-          // Last-Modified 헤더에서 날짜와 시간 추출하여 포맷팅
-          const modifiedDate = new Date(lastModified);
-          const month = modifiedDate.getMonth() + 1; // getMonth()는 0부터 시작하므로 1 더함
-          const day = modifiedDate.getDate();
-          const hours = modifiedDate.getHours();
-          const minutes = modifiedDate.getMinutes();
-          
-          // M/DD HH:MM 형식으로 포맷팅
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-        } else {
-          // Last-Modified 헤더가 없는 경우 현재 날짜/시간 사용
-          const now = new Date();
-          const month = now.getMonth() + 1;
-          const day = now.getDate();
-          const hours = now.getHours();
-          const minutes = now.getMinutes();
-          
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-          console.warn('trend-following-sector.csv 파일의 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
-        }
-      } catch (e) {
-        console.error('업데이트 날짜 로드 실패:', e);
-      }
-    }
-    loadUpdateDate();
-  }, []);
-
+  // loading, error, data 상태에 따른 UI 렌더링은 여기부터 시작됩니다.
   if (loading) {
     return <div className="p-4 text-center">데이터를 불러오는 중입니다...</div>;
   }
@@ -188,22 +179,22 @@ export default function SectorLeaderSection() {
 
   return (
     <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
-      <div ref={headerContainerRef} className="flex justify-between items-center mb-2">
-        <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>스탁이지 주도섹터</div>
+      <div ref={headerContainerRef} className="flex justify-between items-center mb-3">
+        <h2 className="text-lg font-semibold" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+          주도 섹터 및 주도주 현황
+        </h2>
         <div className="flex items-center space-x-2">
           {updateDate && (
-            <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+            <span className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
               updated {updateDate}
             </span>
           )}
-          {/* 복사 버튼 숨김 처리
           <TableCopyButton 
             tableRef={tableContainerRef} 
             headerRef={headerContainerRef} 
             tableName="수탁이지_주도섹터"
             updateDateText={updateDate ? `updated ${updateDate}` : undefined}
           />
-          */}
         </div>
       </div>
 

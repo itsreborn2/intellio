@@ -59,64 +59,57 @@ export default function High52Section() {
     };
   }
 
-  // 데이터 로드
+  // 데이터 및 업데이트 날짜 로드
   useEffect(() => {
-    async function loadHighData() {
+    async function loadDataAndDate() {
       try {
         const response = await fetch(cacheFilePath, { cache: 'no-store' });
-        if (!response.ok) throw new Error('데이터 파일 로드 실패');
+        if (!response.ok) throw new Error(`데이터 파일 로드 실패: ${response.status}`);
         const csvText = await response.text();
-        setHighData(parseCSV(csvText));
-      } catch (e) {
-        setHighData({ headers: [], rows: [], errors: [] });
-      }
-    }
-    loadHighData();
-  }, []);
+        const parsedResult = parseCSV(csvText);
+        setHighData(parsedResult);
 
-  // 업데이트 날짜 로드
-  useEffect(() => {
-    async function loadUpdateDate() {
-      try {
-        // stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv 파일에서 마지막 수정 날짜 가져오기
-        const response = await fetch(cacheFilePath, { cache: 'no-store' });
-        
-        if (!response.ok) {
-          console.error(`데이터 파일 로드 실패: ${response.status}`);
-          return;
+        let updatedTimeSet = false;
+        if (parsedResult.rows.length > 0 && parsedResult.rows[0]['저장시간']) {
+          const firstRow = parsedResult.rows[0] as any; // 타입을 명시적으로 지정하는 것이 좋음
+          const saveTime = firstRow['저장시간'] as string;
+          const match = saveTime.match(/(\d{2}\/\d{2}\s\d{2}:\d{2})/);
+          if (match && match[1]) {
+            setUpdateDate(match[1]);
+            updatedTimeSet = true;
+          }
         }
-        
-        // 응답 헤더에서 Last-Modified 값 추출
-        const lastModified = response.headers.get('Last-Modified');
-        
-        if (lastModified) {
-          // Last-Modified 헤더에서 날짜와 시간 추출하여 포맷팅
-          const modifiedDate = new Date(lastModified);
-          const month = modifiedDate.getMonth() + 1; // getMonth()는 0부터 시작하므로 1 더함
-          const day = modifiedDate.getDate();
-          const hours = modifiedDate.getHours();
-          const minutes = modifiedDate.getMinutes();
-          
-          // M/DD HH:MM 형식으로 포맷팅
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-        } else {
-          // Last-Modified 헤더가 없는 경우 현재 날짜/시간 사용
-          const now = new Date();
-          const month = now.getMonth() + 1;
-          const day = now.getDate();
-          const hours = now.getHours();
-          const minutes = now.getMinutes();
-          
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-          console.warn('파일의 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
+
+        if (!updatedTimeSet) {
+          const lastModifiedHeader = response.headers.get('Last-Modified');
+          if (lastModifiedHeader) {
+            const modifiedDate = new Date(lastModifiedHeader);
+            const month = modifiedDate.getMonth() + 1;
+            const day = modifiedDate.getDate();
+            const hours = modifiedDate.getHours();
+            const minutes = modifiedDate.getMinutes();
+            const formattedDate = `${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            setUpdateDate(formattedDate);
+            updatedTimeSet = true;
+          } else {
+            const now = new Date();
+            const month = now.getMonth() + 1;
+            const day = now.getDate();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            const formattedDate = `${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            setUpdateDate(formattedDate);
+            console.warn(`${cacheFilePath} 파일의 저장시간 및 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.`);
+          }
         }
-      } catch (e) {
-        console.error('업데이트 날짜 로드 실패:', e);
+
+      } catch (e: any) {
+        console.error('데이터 및 업데이트 날짜 로드 중 오류:', e);
+        setHighData({ headers: [], rows: [], errors: [e.message] });
+        setUpdateDate(''); // 오류 발생 시 날짜 초기화
       }
     }
-    loadUpdateDate();
+    loadDataAndDate();
   }, []);
 
   // 정렬
@@ -150,7 +143,7 @@ export default function High52Section() {
           <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>52주 신고가 주요종목</div>
           <div className="flex items-center space-x-2">
             {updateDate && (
-              <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+              <span className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
                 updated {updateDate}
               </span>
             )}
