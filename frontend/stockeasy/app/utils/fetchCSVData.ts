@@ -18,8 +18,12 @@ export const fetchCSVData = async (filePath: string): Promise<string> => {
     // 파일 경로가 /로 시작하지 않으면 추가
     const normalizedPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
     
+    // URL 인코딩 적용 - 한글 및 특수문자 처리
+    const encodedPath = encodeURI(normalizedPath);
+    console.log(`파일 로드 시도: ${filePath}`);
+    
     // public 폴더에서 파일 로드
-    const response = await fetch(normalizedPath, { cache: 'no-store' });
+    const response = await fetch(encodedPath, { cache: 'no-store' });
     
     if (!response.ok) {
       throw new Error(`파일을 찾을 수 없습니다: ${filePath}`);

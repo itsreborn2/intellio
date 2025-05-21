@@ -89,11 +89,17 @@ export default function MarketSignalSection() {
 
               if (latestKospiData) {
                 const kospiChangeValue = parseFloat(latestKospiData);
-                setKospiChange(`${kospiChangeValue >= 0 ? '+' : ''}${kospiChangeValue.toFixed(2)}%`);
+                // 디버깅을 위한 로그 추가
+                console.log('KOSPI 등락률 데이터:', latestKospiData, '파싱된 값:', kospiChangeValue);
+                const formattedChange = `${kospiChangeValue >= 0 ? '+' : ''}${kospiChangeValue.toFixed(2)}%`;
+                setKospiChange(formattedChange);
               }
               if (latestKosdaqData) {
                 const kosdaqChangeValue = parseFloat(latestKosdaqData);
-                setKosdaqChange(`${kosdaqChangeValue >= 0 ? '+' : ''}${kosdaqChangeValue.toFixed(2)}%`);
+                // 디버깅을 위한 로그 추가
+                console.log('KOSDAQ 등락률 데이터:', latestKosdaqData, '파싱된 값:', kosdaqChangeValue);
+                const formattedChange = `${kosdaqChangeValue >= 0 ? '+' : ''}${kosdaqChangeValue.toFixed(2)}%`;
+                setKosdaqChange(formattedChange);
               }
             }
           },
@@ -126,31 +132,45 @@ export default function MarketSignalSection() {
   const longTermColors = getColorBySignal(longTermSignal);
 
   return (
-    <div className="bg-white rounded border border-gray-100 px-2 md:px-4 py-1 md:py-2">
+    <div className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
       <section className="flex items-center w-full">
         <div className="flex flex-row items-center justify-between w-full">
           <div className="flex flex-row items-center gap-2">
-            <h2 className="text-lg font-semibold text-gray-700 my-2">
+            <div className="font-semibold flex items-center" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
               시장 신호
-            </h2>
+            </div>
             <SignalLight label="단기" colors={shortTermColors} />
             <SignalLight label="장기" colors={longTermColors} />
           </div>
           <div className="flex flex-row items-center gap-6">
             {kospiChange && (
-              <span className="text-base text-gray-700">
+              <span className="text-base" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
                 KOSPI{' '}
-                <span className={`font-semibold ${parseFloat(kospiChange) >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
-                  {kospiChange}
-                </span>
+                {/* 양수일 때는 빨간색, 음수일 때는 파란색 */}
+                {kospiChange.startsWith('+') ? (
+                  <span className="font-semibold text-red-500">
+                    {kospiChange}
+                  </span>
+                ) : (
+                  <span className="font-semibold text-blue-500">
+                    {kospiChange}
+                  </span>
+                )}
               </span>
             )}
             {kosdaqChange && (
-              <span className="text-base text-gray-700">
+              <span className="text-base" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
                 KOSDAQ{' '}
-                <span className={`font-semibold ${parseFloat(kosdaqChange) >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
-                  {kosdaqChange}
-                </span>
+                {/* 양수일 때는 빨간색, 음수일 때는 파란색 */}
+                {kosdaqChange.startsWith('+') ? (
+                  <span className="font-semibold text-red-500">
+                    {kosdaqChange}
+                  </span>
+                ) : (
+                  <span className="font-semibold text-blue-500">
+                    {kosdaqChange}
+                  </span>
+                )}
               </span>
             )}
           </div>

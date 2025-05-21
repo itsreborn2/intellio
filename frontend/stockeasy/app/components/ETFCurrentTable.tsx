@@ -173,50 +173,75 @@ export default function ETFCurrentTable() {
   const [maListMap, setMaListMap] = useState<Record<string, MaListData>>({}); // 종목명 -> 20malist 데이터
   
   // 테이블 복사 기능을 위한 ref 생성
-  const tableRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
   // 개별 ETF 차트 데이터 관련 티커 목록 및 매핑 테이블 제거됨
   
   // 개별 ETF 차트 데이터 로딩 관련 함수들(loadPriceData, loadAllPriceData, normalizeTicker) 제거됨
   
-  // 업데이트 날짜를 로드하는 함수 추가
+  // 업데이트 날짜와 시간을 파일 수정 정보로부터 로드하는 함수
   const loadUpdateDate = async () => {
     try {
-      const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
-      const response = await fetch(cacheFilePath, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`날짜 데이터 파일 로드 실패: ${response.status}`);
-      }
-      const csvText = await response.text();
-      // Papa.parse 직접 사용 (기존 parseCSV 함수와는 별개로 처리)
-      const parsedResult = Papa.parse(csvText, {
-        header: true,
-        skipEmptyLines: true,
-      });
-
-      if (parsedResult.data && parsedResult.data.length > 0) {
-        const firstRow = parsedResult.data[0] as Record<string, string>; // 타입 단언
-        const dateString = firstRow['날짜']; 
-        if (dateString) {
-          const formatted = formatDateMMDD(dateString);
-          if (formatted) {
-            setUpdateDate(formatted);
-          } else {
-            console.error('ETFCurrentTable: 날짜 포맷 실패.');
-            // setError('날짜 포맷에 실패했습니다.'); // 필요시 에러 상태 업데이트
-          }
-        } else {
-          console.error('ETFCurrentTable: CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.');
-          // setError('CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.'); // 필요시 에러 상태 업데이트
+      // GET 요청으로 etf_table.csv 파일의 수정 날짜를 가져옴
+      // 캐시를 방지하기 위해 타임스탬프 추가
+      const etfFilePath = '/requestfile/etf_sector/etf_table.csv?t=' + Date.now();
+      
+      const response = await fetch(etfFilePath, { 
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
         }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`ETF 테이블 파일 접근 실패: ${response.status}`);
+      }
+      
+      // 응답 헤더에서 Last-Modified 정보 추출
+      const lastModified = response.headers.get('Last-Modified');
+      
+      if (lastModified) {
+        // Last-Modified 날짜를 Date 객체로 변환
+        const modifiedDate = new Date(lastModified);
+        
+        // 날짜 형식 변환 (M/DD 형식 - 예: 5/10)
+        const month = String(modifiedDate.getMonth() + 1); // 앞의 0 제거
+        const day = String(modifiedDate.getDate()).padStart(2, '0'); // 일은 두 자리 유지
+        
+        // 시간 형식 변환 (HH:MM 형식 - 예: 14:30)
+        const hours = String(modifiedDate.getHours()).padStart(2, '0');
+        const minutes = String(modifiedDate.getMinutes()).padStart(2, '0');
+        
+        // 날짜와 시간을 포함한 형식으로 변환 (M/DD HH:MM)
+        const formattedDate = `${month}/${day} ${hours}:${minutes}`;
+        
+        // 업데이트 날짜 설정
+        setUpdateDate(formattedDate);
       } else {
-        console.error('ETFCurrentTable: 날짜 CSV 파싱에 실패했거나 데이터가 없습니다.');
-        // setError('날짜 CSV 파싱에 실패했거나 데이터가 없습니다.'); // 필요시 에러 상태 업데이트
+        console.error('ETFCurrentTable: 파일의 수정 날짜 정보를 가져올 수 없습니다.');
+        
+        // 파일의 수정 날짜를 가져올 수 없는 경우 현재 날짜와 시간 사용
+        const now = new Date();
+        const month = String(now.getMonth() + 1); // 앞의 0 제거
+        const day = String(now.getDate()).padStart(2, '0'); // 일은 두 자리 유지
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const formattedDate = `${month}/${day} ${hours}:${minutes}`;
+        setUpdateDate(formattedDate);
       }
     } catch (err) {
       console.error('ETFCurrentTable: 업데이트 날짜 로드 중 오류 발생:', err);
-      // setError(err instanceof Error ? err.message : '업데이트 날짜 로드 중 알 수 없는 오류'); // 필요시 에러 상태 업데이트
+      // 오류 발생 시 현재 날짜와 시간 사용
+      const now = new Date();
+      const month = String(now.getMonth() + 1); // 앞의 0 제거
+      const day = String(now.getDate()).padStart(2, '0'); // 일은 두 자리 유지
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const formattedDate = `${month}/${day} ${hours}:${minutes}`;
+      setUpdateDate(formattedDate);
     }
   };
 
@@ -641,7 +666,7 @@ const orderedIndustries = Object.keys(sortedData);
           collisionPadding={{ left: 260 }} // 왼쪽 여백 추가
         >
           <span className="inline-flex items-center"> {/* Tooltip 트리거 영역 확장을 위한 span */}
-            <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help"> {/* 도움말 커서 추가 */}
+            <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}> {/* 도움말 커서 추가 */}
               ETF 주요섹터
             </h2>
           </span>
@@ -653,10 +678,10 @@ const orderedIndustries = Object.keys(sortedData);
             {updateTime}
           </div>
           */}
-          {/* 새로운 업데이트 시간/날짜 표시 */} 
+          {/* 업데이트 날짜/시간 표시 */} 
           {updateDate && (
-            <div className="text-gray-600 text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-              updated 17:00 {updateDate}
+            <div className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+              updated {updateDate}
             </div>
           )}
           <div className="hidden md:block">
@@ -664,22 +689,23 @@ const orderedIndustries = Object.keys(sortedData);
               tableRef={tableRef}
               headerRef={headerRef}
               tableName="ETF 현황"
-              updateDateText={updateDate ? `updated 17:00 ${updateDate}` : undefined}
+              updateDateText={updateDate ? `updated ${updateDate}` : undefined}
             />
           </div>
         </div>
       </div>
 
-      <div ref={tableRef} className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-        <table className="min-w-full bg-white border border-gray-200 table-fixed">
+      <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+        <table ref={tableRef} className="min-w-full bg-white border border-gray-200 table-fixed">
           <thead>
             <tr className="bg-gray-100">
               {/* 기존 thead 내용 유지 */}
               <th
                 key="산업"
                 scope="col"
-                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '60px',
                   height: '35px'
                 }}
@@ -697,8 +723,9 @@ const orderedIndustries = Object.keys(sortedData);
               <th
                 key="섹터"
                 scope="col"
-                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '60px',
                   height: '35px'
                 }}
@@ -716,8 +743,9 @@ const orderedIndustries = Object.keys(sortedData);
               <th
                 key="종목명"
                 scope="col"
-                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '140px',
                   height: '35px'
                 }}
@@ -736,8 +764,9 @@ const orderedIndustries = Object.keys(sortedData);
                 <th
                   key={header}
                   scope="col"
-                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                  className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
+                    color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                     width: '65px', 
                     height: '35px'
                   }}
@@ -757,8 +786,9 @@ const orderedIndustries = Object.keys(sortedData);
                 key="포지션"
                 scope="col"
                 // className 수정: cursor-help 추가
-                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-help border border-gray-200" // cursor-help 추가
+                className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider cursor-help border border-gray-200" // cursor-help 추가, text-gray-500 제거
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '78px',
                   height: '35px'
                 }}
@@ -788,8 +818,9 @@ const orderedIndustries = Object.keys(sortedData);
                   key={header}
                   scope="col"
                   // className 수정: font-medium, text-gray-500, uppercase, tracking-wider 추가
-                  className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 ${header === '20일 이격' || header === '돌파/이탈' || header === '대표종목(RS)' ? 'cursor-help' : ''} hidden md:table-cell`} // 스타일 클래스 추가 및 cursor-help 유지
+                  className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider border border-gray-200 ${header === '20일 이격' || header === '돌파/이탈' || header === '대표종목(RS)' ? 'cursor-help' : ''} hidden md:table-cell`} // 스타일 클래스 추가 및 cursor-help 유지, text-gray-500 제거
                   style={{
+                    color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                     width: header === '20일 이격' ? '65px' : header === '돌파/이탈' ? '70px' : header === '대표종목(RS)' ? '380px' : '80px',
                     height: '35px'
                   }}
@@ -973,7 +1004,7 @@ const orderedIndustries = Object.keys(sortedData);
                             const stockName = row['종목명'] as string;
                             const maData = maListMap[stockName.trim()];
                             let displayDate = '-';
-                            let textColor = 'text-black'; // 항상 검정색으로 표시
+                            // let textColor = 'text-black'; // 더 이상 사용되지 않음
                             
                             if (maData && maData['돌파/이탈']) {
                               const rawDate = maData['돌파/이탈'];
@@ -985,7 +1016,7 @@ const orderedIndustries = Object.keys(sortedData);
                                 displayDate = rawDate;
                               }
                             }
-                            return <div className={`text-center tabular-nums ${textColor}`}>{displayDate}</div>;
+                            return <div className="text-center tabular-nums" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>{displayDate}</div>;
                           } else if (header === '대표종목(RS)') {
                             // 대표종목(RS) 데이터 표시 (20malist.csv 기반)
                             const stockName = row['종목명'] as string;
@@ -1019,7 +1050,15 @@ const orderedIndustries = Object.keys(sortedData);
                                     const rsValue = parseInt(rsValueStr, 10);
                                     return (
                                       <span key={index} className="text-xs mr-1">
-                                        {name}(<span className={rsValue >= 90 ? 'font-bold' : ''}>{rsValueStr}</span>)
+                                        {rsValue >= 90 ? (
+                                          <>
+                                            <span className="font-bold">{name}</span>(<span className="font-bold">{rsValueStr}</span>)
+                                          </>
+                                        ) : (
+                                          <>
+                                            {name}({rsValueStr})
+                                          </>
+                                        )}
                                       </span>
                                     );
                                   }

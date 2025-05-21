@@ -111,9 +111,18 @@ const ChartComponent: React.FC<ChartProps> = ({
       const normalizedMarketType = marketType.toUpperCase();
       
       // 시장 지수 로컬 캐시 파일 경로 설정
-      const marketIndexPath = normalizedMarketType === 'KOSPI' 
-        ? '/requestfile/market-index/kospiwk.csv'
-        : '/requestfile/market-index/kosdaqwk.csv';
+      // breakout 관련 컴포넌트의 경우 일별 2개월 데이터 파일 사용
+      const useDaily2Month = parentComponent === 'BreakoutCandidatesChart' || 
+                           parentComponent === 'BreakoutFailChart' || 
+                           parentComponent === 'BreakoutSustainChart';
+      
+      const marketIndexPath = useDaily2Month
+        ? (normalizedMarketType === 'KOSPI' 
+          ? '/requestfile/market-index/kospidaily2month.csv'
+          : '/requestfile/market-index/kosdaqdaily2month.csv')
+        : (normalizedMarketType === 'KOSPI' 
+          ? '/requestfile/market-index/kospiwk.csv'
+          : '/requestfile/market-index/kosdaqwk.csv');
       
       // 로컬 캐시 파일에서 데이터 가져오기
       const response = await fetch(marketIndexPath, { cache: 'no-store' });
@@ -559,7 +568,8 @@ const ChartComponent: React.FC<ChartProps> = ({
                   }
                 }
               } else {
-                console.warn('항목에 볼륨 필드가 없습니다:', originalItem);
+                // 볼륨 필드가 없는 경우 기본값 0 설정 (경고 제거)
+                volume = 0;
               }
             } else {
               if (candle.volume !== undefined) {
@@ -575,7 +585,8 @@ const ChartComponent: React.FC<ChartProps> = ({
                   // console.log(`캔들 데이터 자체의 볼륨 사용: ${volume}`);
                 }
               } else {
-                console.warn(`${candleTimeStr} 에 해당하는 볼륨 데이터를 찾을 수 없음`);
+                // 볼륨 데이터를 찾을 수 없는 경우 기본값 0 설정 (경고 제거)
+                volume = 0;
               }
             }
           } catch (matchingError) {

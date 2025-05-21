@@ -264,7 +264,7 @@ const ValuationPage = () => {
   
   const columns = useMemo(() => [
     columnHelper.accessor('stockCode', {
-      header: () => csvHeaders[4] || '종목코드', // CSV 헤더 사용 (Index 4)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[4] || '종목코드'}</div>, // CSV 헤더 사용 (Index 4)
       cell: info => {
         // 종목코드가 항상 6자리로 표시되도록 수정
         const code = info.getValue();
@@ -275,7 +275,7 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.stockCode,
     }),
     columnHelper.accessor('stockName', {
-      header: () => csvHeaders[5] || '종목명', // CSV 헤더 사용 (Index 5)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[5] || '종목명'}</div>, // CSV 헤더 사용 (Index 5)
       cell: info => {
         const stockName = info.getValue();
         const stockCode = info.row.original.stockCode;
@@ -296,7 +296,7 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.stockName,
     }),
     columnHelper.accessor('industry', {
-      header: () => csvHeaders[2] || '대분류', // CSV 헤더 사용 (Index 2)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[2] || '대분류'}</div>, // CSV 헤더 사용 (Index 2)
       cell: info => {
         const industry = info.getValue();
         
@@ -321,14 +321,14 @@ const ValuationPage = () => {
       maxSize: fixedColumnWidths.industry,
     }),
     columnHelper.accessor('middleCategory', {
-      header: () => csvHeaders[3] || '중분류', // CSV 헤더 사용 (Index 3)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[3] || '중분류'}</div>, // CSV 헤더 사용 (Index 3)
       cell: info => <div className="truncate">{info.getValue()}</div>, // truncate 클래스 추가
       size: fixedColumnWidths.middleCategory,
       minSize: fixedColumnWidths.middleCategory,
       maxSize: fixedColumnWidths.middleCategory,
     }),
     columnHelper.accessor('marketCap', {
-      header: () => <div style={{ textAlign: 'center' }}>시가총액(억)</div>, // 헤더명 고정
+      header: () => <div style={{ textAlign: 'center', color: 'oklch(0.5 0.03 257.287)' }}>시가총액(억)</div>, // 헤더명 고정
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -343,7 +343,7 @@ const ValuationPage = () => {
     }),
     // --- PER 컬럼 수정 시작 ---
     columnHelper.accessor('per1', { // 필드명 변경
-      header: () => csvHeaders[10] || 'PER1', // CSV 헤더 사용 (Index 10)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[10] || 'PER1'}</div>, // CSV 헤더 사용 (Index 10)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -357,7 +357,7 @@ const ValuationPage = () => {
       enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('per2', { // 필드명 변경
-      header: () => csvHeaders[11] || 'PER2', // CSV 헤더 사용 (Index 11)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[11] || 'PER2'}</div>, // CSV 헤더 사용 (Index 11)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -371,7 +371,7 @@ const ValuationPage = () => {
       enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('per3', { // 필드명 변경
-      header: () => csvHeaders[12] || 'PER3', // CSV 헤더 사용 (Index 12)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[12] || 'PER3'}</div>, // CSV 헤더 사용 (Index 12)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -385,7 +385,7 @@ const ValuationPage = () => {
       enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('per4', { // 필드명 변경
-      header: () => csvHeaders[13] || 'PER4', // CSV 헤더 사용 (Index 13)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[13] || 'PER4'}</div>, // CSV 헤더 사용 (Index 13)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -399,7 +399,7 @@ const ValuationPage = () => {
       enableSorting: true, // 정렬 활성화
     }),
     columnHelper.accessor('per5', { // 필드명 변경
-      header: () => csvHeaders[14] || 'PER5', // CSV 헤더 사용 (Index 14)
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>{csvHeaders[14] || 'PER5'}</div>, // CSV 헤더 사용 (Index 14)
       cell: info => {
         const value = info.getValue();
         if (value === null) return <div style={{ textAlign: 'right' }}></div>;
@@ -417,7 +417,7 @@ const ValuationPage = () => {
     // 추이 컬럼 추가
     columnHelper.display({
       id: 'trend',
-      header: () => '추이',
+      header: () => <div style={{ color: 'oklch(0.5 0.03 257.287)' }}>추이</div>,
       cell: ({ row }) => {
         const trendValues = ['per1', 'per3', 'per4', 'per5'].map(
           (colId) => typeof row.original[colId as keyof ValuationData] === 'number' ? row.original[colId as keyof ValuationData] : 0
@@ -440,55 +440,54 @@ const ValuationPage = () => {
       setLoadingDate(true);
       setErrorDate(null);
       try {
-        // fetch 경로를 stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv로 변경
-        const response = await fetch('/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv'); 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const csvText = await response.text();
+        // per.csv 파일에서 마지막 수정 날짜 가져오기
+        const cacheFilePath = '/requestfile/value/per.csv';
         
-        // PapaParse를 사용하여 CSV 파싱 (stock-data 기준)
-        Papa.parse(csvText, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            if (results.errors.length > 0) {
-              console.error('CSV 파싱 오류:', results.errors);
-              setErrorDate('날짜 데이터 파싱 중 오류가 발생했습니다.');
-              return;
-            }
-            
-            const parsedData = results.data as Record<string, string>[];
-            
-            if (parsedData && parsedData.length > 0) {
-              const dateString = parsedData[0]['날짜']; // 첫 번째 행의 '날짜' 컬럼 값
-              if (dateString) {
-                const formattedDate = formatDateMMDD(dateString); // MM/DD 형식으로 변환
-                if (formattedDate) {
-                  setUpdateDate(formattedDate); // 상태 업데이트
-                } else {
-                  setErrorDate('날짜 형식이 올바르지 않습니다.');
-                }
-              } else {
-                setErrorDate('CSV에서 날짜 정보를 찾을 수 없습니다.');
-              }
-            } else {
-              setErrorDate('날짜 데이터가 비어있습니다.');
-            }
-          },
-          error: (error: any) => {
-            console.error('CSV 파싱 중 심각한 오류:', error);
-            setErrorDate('날짜 데이터 파싱 중 심각한 오류가 발생했습니다.');
-          }
-        });
-      } catch (err: unknown) {
-        console.error('날짜 데이터 로딩 오류:', err);
-        setErrorDate('날짜 데이터를 불러오는 데 실패했습니다.');
-        if (err instanceof Error) {
-          setErrorDate(`날짜 데이터를 불러오는 데 실패했습니다: ${err.message}`);
-        } else {
-          setErrorDate('알 수 없는 오류로 날짜 데이터를 불러오는 데 실패했습니다.');
+        // 헤더만 가져와서 Last-Modified 확인
+        const response = await fetch(cacheFilePath, { cache: 'no-store' });
+        
+        if (!response.ok) {
+          throw new Error(`per.csv 파일 로드 실패: ${response.status}`);
         }
+        
+        // 응답 헤더에서 Last-Modified 값 추출
+        const lastModified = response.headers.get('Last-Modified');
+        
+        if (lastModified) {
+          // Last-Modified 헤더에서 날짜와 시간 추출하여 포맷팅
+          const modifiedDate = new Date(lastModified);
+          const month = modifiedDate.getMonth() + 1; // getMonth()는 0부터 시작하므로 1 더함
+          const day = modifiedDate.getDate();
+          const hours = modifiedDate.getHours();
+          const minutes = modifiedDate.getMinutes();
+          
+          // M/DD HH:MM 형식으로 포맷팅
+          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          setUpdateDate(formattedDate);
+        } else {
+          // Last-Modified 헤더가 없는 경우 현재 날짜/시간 사용
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const day = now.getDate();
+          const hours = now.getHours();
+          const minutes = now.getMinutes();
+          
+          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          setUpdateDate(formattedDate);
+          console.warn('per.csv 파일의 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
+        }
+      } catch (err: unknown) {
+        console.error('업데이트 날짜 로드 실패:', err);
+        setErrorDate('날짜 데이터를 불러오는 데 실패했습니다.');
+        // 오류 발생 시 현재 날짜/시간을 사용
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const day = now.getDate();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        
+        const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        setUpdateDate(formattedDate);
       } finally {
         setLoadingDate(false);
       }
@@ -826,7 +825,7 @@ const ValuationPage = () => {
                     collisionPadding={{ left: 260 }} // 사이드바 침범 방지
                   >
                     {/* 안쪽 h2는 그대로 유지 */}
-                    <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help">
+                    <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
                       밸류에이션
                     </h2>
                   </GuideTooltip>
@@ -837,7 +836,7 @@ const ValuationPage = () => {
               <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-2 md:mb-4">
                 {/* 종목명/종목코드 검색 필터 */}
                 <div className="flex items-center">
-                  <label htmlFor="searchFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+                  <label htmlFor="searchFilter" className="text-[10px] sm:text-xs font-medium mr-1 sm:mr-2 whitespace-nowrap" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
                     종목명/종목코드
                   </label>
                   {selectedStock ? (
@@ -885,7 +884,7 @@ const ValuationPage = () => {
                 
                 {/* 업종 선택 필터 */}
                 <div className="flex flex-row items-center ml-1 sm:ml-2">
-                  <label htmlFor="industryFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+                  <label htmlFor="industryFilter" className="text-[10px] sm:text-xs font-medium mr-1 sm:mr-2 whitespace-nowrap" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
                     대분류
                   </label>
                   {selectedIndustry ? (
@@ -939,7 +938,7 @@ const ValuationPage = () => {
                 
                 {/* [중분류] 선택 필터 */}
                 <div className="flex flex-row items-center ml-1 sm:ml-2">
-                  <label htmlFor="middleCategoryFilter" className="text-[10px] sm:text-xs font-medium text-gray-700 mr-1 sm:mr-2 whitespace-nowrap">
+                  <label htmlFor="middleCategoryFilter" className="text-[10px] sm:text-xs font-medium mr-1 sm:mr-2 whitespace-nowrap" style={{ color: 'oklch(0.5 0.03 257.287)' }}>
                     중분류
                   </label>
                   {selectedMiddleCategory ? (
@@ -1053,13 +1052,13 @@ const ValuationPage = () => {
 )}
                 
                 {/* 업데이트 날짜 표시 영역 추가 - ml-auto 적용, self-end 추가 */}
-                <div className="text-gray-600 text-xs ml-auto self-end" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
+                <div className="text-xs ml-auto self-end" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
                   {loadingDate ? (
                     <span>날짜 로딩 중...</span>
                   ) : errorDate ? (
                     <span className="text-red-500">{errorDate}</span>
                   ) : updateDate ? (
-                    <span>updated 17:00 {updateDate}</span>
+                    <span>updated {updateDate}</span>
                   ) : (
                     <span>날짜 정보 없음</span> // 로딩 완료 후에도 날짜가 없을 경우
                   )}
