@@ -178,7 +178,7 @@ export default function RSRankPage() {
         // 로컬 캐시 파일에서 직접 로드
         try {
           // 로컬 캐시 파일 경로
-          const cacheFilePath = '/requestfile/stock-data/stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv';
+          const cacheFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv'; // stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv 파일만 사용하도록 경로 수정
           // const rsDataFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv'; // RS 데이터 파일 로드 로직 제거
           
           // 로컬 캐시 파일 로드
@@ -996,18 +996,18 @@ export default function RSRankPage() {
       
       // 등락률 컬럼의 경우 숫자로 변환하여 비교
       if (highSortKey === '등락률') {
-        aValue = parseFloat(aValue.replace('%', '')) || 0;
-        bValue = parseFloat(bValue.replace('%', '')) || 0;
+        aValue = typeof aValue === 'string' ? parseFloat(aValue.replace('%', '')) || 0 : 0;
+        bValue = typeof bValue === 'string' ? parseFloat(bValue.replace('%', '')) || 0 : 0;
       }
       // 시가총액 컬럼의 경우 숫자로 변환하여 비교
       else if (highSortKey === '시가총액') {
         aValue = parseFloat(aValue.replace(/,/g, '')) || 0;
-        bValue = parseFloat(bValue.replace(/,/g, '')) || 0;
+        bValue = typeof bValue === 'string' ? parseFloat(bValue.replace(/,/g, '')) || 0 : 0;
       }
       // 거래대금 컬럼의 경우 숫자로 변환하여 비교
       else if (highSortKey === '거래대금') {
-        aValue = parseFloat(aValue.replace(/,/g, '')) || 0;
-        bValue = parseFloat(bValue.replace(/,/g, '')) || 0;
+        aValue = typeof aValue === 'string' ? parseFloat(aValue.replace(/,/g, '')) || 0 : 0;
+        bValue = typeof bValue === 'string' ? parseFloat(bValue.replace(/,/g, '')) || 0 : 0;
       }
       
       if (aValue < bValue) return highSortDirection === 'asc' ? -1 : 1;
