@@ -714,7 +714,7 @@ function SidebarContent() {
               <div className="w-full flex justify-center mb-2">  {/* mb-4에서 mb-2로 줄임 */}
                 <div className="sidebar-button-container flex justify-center">
                   <img 
-                    src="/requestfile/favicon-32x32.png" 
+                    src="/favicon-32x32.png" 
                     alt="StockEasy Logo" 
                     width={32} 
                     height={32} 
