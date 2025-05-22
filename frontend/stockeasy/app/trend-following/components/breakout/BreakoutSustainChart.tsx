@@ -25,6 +25,7 @@ interface ChartInfo {
   data: CandleData[];  // ChartComponent에 맞게 data로 이름 변경
   isLoading: boolean;
   error: string;
+  breakthroughPrice?: number; // 돌파 가격 추가
 }
 
 export default function BreakoutSustainChart() {
@@ -57,6 +58,35 @@ export default function BreakoutSustainChart() {
         
         // 2. 시장 지수 데이터 로드
         await loadMarketIndexData();
+
+        // 2.1. 돌파 가격 데이터 로드 (breakout.csv)
+        let breakthroughPriceMap: { [key: string]: number } = {};
+        try {
+          const breakoutResponse = await fetch('/requestfile/trend-following/breakout.csv', { cache: 'no-store' });
+          if (!breakoutResponse.ok) {
+            console.warn(`[BreakoutSustainChart] breakout.csv 파일 로드 실패: ${breakoutResponse.status}`);
+          } else {
+            const breakoutCsvText = await breakoutResponse.text();
+            const breakoutCsvData = Papa.parse(breakoutCsvText, { header: true, skipEmptyLines: true });
+            if (breakoutCsvData.data) {
+              breakoutCsvData.data.forEach((row: any) => {
+                const stockCode = row['Code']?.toString().padStart(6, '0');
+                const priceString = row['Breakthrough Price'];
+                if (stockCode && priceString) {
+                  const price = parseFloat(priceString.replace(/,/g, ''));
+                  if (!isNaN(price)) {
+                    breakthroughPriceMap[stockCode] = price;
+                  } else {
+                    // console.warn(`[BreakoutSustainChart] Breakthrough Price 값 '${priceString}' (종목코드: ${stockCode})은 유효한 숫자가 아닙니다.`);
+                  }
+                }
+              });
+              console.log('[BreakoutSustainChart] 생성된 돌파 가격 맵:', breakthroughPriceMap); // 디버깅 로그 추가
+            }
+          }
+        } catch (err) {
+          console.warn('[BreakoutSustainChart] breakout.csv 처리 중 오류:', err);
+        }
         
         // 3. 차트 정보 배열 초기화
         const newChartInfos: ChartInfo[] = [];
@@ -72,6 +102,10 @@ export default function BreakoutSustainChart() {
             const market = parts[2];
             const changeRate = parts[3];
             const rsValue = parts[4];
+
+            // 해당 종목의 돌파 가격 가져오기
+            const breakthroughPrice = breakthroughPriceMap[code];
+            console.log(`[BreakoutSustainChart] 종목코드: ${code}, 파일명: ${fileName}, 가져온 돌파가격: ${breakthroughPrice}`); // 디버깅 로그 추가
             
             console.log(`로딩 차트 데이터: ${fileName}`);
             
@@ -126,7 +160,8 @@ export default function BreakoutSustainChart() {
               rsValue: latestRsValue, // CSV에서 추출한 RS 값 사용
               data: chartData,
               isLoading: false,
-              error: ''
+              error: '',
+              breakthroughPrice: breakthroughPrice // 돌파 가격 추가
             });
           } catch (err) {
             console.error(`${fileName} 차트 데이터 로드 오류:`, err);
@@ -138,7 +173,8 @@ export default function BreakoutSustainChart() {
               rsValue: '',
               data: [],
               isLoading: false,
-              error: `차트 데이터를 로드하는데 실패했습니다: ${err instanceof Error ? err.message : '알 수 없는 오류'}`
+              error: `차트 데이터를 로드하는데 실패했습니다: ${err instanceof Error ? err.message : '알 수 없는 오류'}`, 
+              breakthroughPrice: undefined // 오류 발생 시 돌파 가격 없음
             });
           }
         }
@@ -454,6 +490,7 @@ export default function BreakoutSustainChart() {
                       stockName={chartInfo.name}
                       showMA20={false}
                       parentComponent="BreakoutSustainChart"
+                      breakthroughPrice={chartInfo.breakthroughPrice}
                     />
                   )}
                 </div>

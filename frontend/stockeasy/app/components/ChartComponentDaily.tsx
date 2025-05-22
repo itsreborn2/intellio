@@ -55,6 +55,7 @@ interface ChartProps {
   stockName?: string; // 종목명 추가
   showMA20?: boolean; // 20일 이동평균선 표시 여부
   parentComponent?: string; // 부모 컴포넌트 식별자 추가
+  breakthroughPrice?: number; // 돌파 가격
 }
 
 /**
@@ -69,6 +70,7 @@ interface ChartProps {
  * @param stockName - 종목명 (기본값: undefined)
  * @param showMA20 - 20일 이동평균선 표시 여부 (기본값: true)
  * @param parentComponent - 부모 컴포넌트 식별자 (기본값: undefined)
+ * @param breakthroughPrice - 돌파 가격 (기본값: undefined)
  */
 const ChartComponentDaily: React.FC<ChartProps> = ({ 
   data, 
@@ -80,8 +82,10 @@ const ChartComponentDaily: React.FC<ChartProps> = ({
   marketType,
   stockName,
   showMA20 = true,
-  parentComponent
+  parentComponent,
+  breakthroughPrice,
 }) => {
+  console.log(`[ChartComponentDaily] 종목: ${stockName}, 수신된 breakthroughPrice: ${breakthroughPrice}, 타입: ${typeof breakthroughPrice}`);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candlestickSeriesRef = useRef<any>(null);
@@ -449,8 +453,9 @@ const ChartComponentDaily: React.FC<ChartProps> = ({
         volumeSeries.setData(volumeData);
       }
       
-      // 시장 지수 데이터가 있으면 라인 차트 추가
-      if (marketIndexData && marketIndexData.length > 0) {
+      // 시장 지수 데이터가 있고, marketType이 정의된 경우에만 라인 시리즈 추가
+      // BreakoutSustainChart에서는 시장 지수 라인을 표시하지 않음
+      if (marketType && marketIndexData && marketIndexData.length > 0 && parentComponent !== 'BreakoutSustainChart' && parentComponent !== 'BreakoutFailChart' && parentComponent !== 'BreakoutCandidatesChart') {
         console.log(`시장 지수 데이터 처리 시작 - 총 ${marketIndexData.length}개 항목`);
         
         // 시장 지수를 표시할 단위 파스텔 계열 색상 설정
@@ -540,12 +545,32 @@ const ChartComponentDaily: React.FC<ChartProps> = ({
             console.log('시리즈 데이터 샘플 (상위 3개):', JSON.stringify(seriesData.slice(0, 3)));
           }
         } else {
-          console.warn('처리 및 필터링된 시장 지수 데이터가 없어 차트에 표시할 수 없습니다.');
-          // 필요하다면, 여기서 priceScale 'market-index'를 숨기거나 할 수 있음
-          // chart.priceScale('market-index').applyOptions({ visible: false });
+          console.log('시장 지수 데이터가 없거나 marketType이 정의되지 않았거나 BreakoutSustainChart, BreakoutFailChart 또는 BreakoutCandidatesChart에서 호출되어 라인 시리즈를 추가하지 않습니다.');
+          // 시장 지수 데이터가 없을 경우 또는 BreakoutSustainChart일 경우 가격 스케일 숨김
+          chart.priceScale('market-index').applyOptions({ visible: false });
         }
       }
       
+      // 돌파 가격 라인 추가
+      if (breakthroughPrice !== undefined && candlestickSeriesRef.current) {
+        console.log(`[ChartComponentDaily] 종목: ${stockName}, 돌파 가격(${breakthroughPrice}) 라인 생성 시도.`);
+        candlestickSeriesRef.current.createPriceLine({
+          price: breakthroughPrice,
+          color: 'rgba(0, 150, 136, 0.7)', // KOSDAQ 지수 색상 (청록색/초록색 계열)
+          lineWidth: 2, // 선 굵기 2로 변경
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: '', // 라인 위의 '돌파' 텍스트 라벨 제거 (가격은 계속 표시됨)
+        });
+      } else {
+        if (breakthroughPrice === undefined) {
+          console.log(`[ChartComponentDaily] 종목: ${stockName}, breakthroughPrice가 undefined이므로 돌파 라인을 생성하지 않습니다.`);
+        }
+        if (!candlestickSeriesRef.current) {
+          console.log(`[ChartComponentDaily] 종목: ${stockName}, candlestickSeries가 없으므로 돌파 라인을 생성하지 않습니다.`);
+        }
+      }
+
       // 20일 이동평균선 추가 (shouldShowMA20이 true인 경우)
       if (shouldShowMA20 && validData.length > 0) {
         const ma20Data = calculateMA20(validData);
@@ -626,14 +651,15 @@ const ChartComponentDaily: React.FC<ChartProps> = ({
     }
     
     return cleanupFunction;
-  }, [data, height, showVolume, marketType, marketIndexData, shouldShowMA20]);
+  }, [data, height, showVolume, marketType, marketIndexData, shouldShowMA20, parentComponent]);
   
   // 시장 지수 데이터 로드 useEffect
   useEffect(() => {
-    if (marketType && !marketIndexLoaded && !isLoadingMarketIndex) {
+    // BreakoutSustainChart에서는 시장 지수 데이터를 로드하지 않음
+    if (marketType && !marketIndexLoaded && !isLoadingMarketIndex && parentComponent !== 'BreakoutSustainChart' && parentComponent !== 'BreakoutFailChart' && parentComponent !== 'BreakoutCandidatesChart') {
       fetchMarketIndexData();
     }
-  }, [marketType, marketIndexLoaded, isLoadingMarketIndex, fetchMarketIndexData]);
+  }, [marketType, marketIndexLoaded, isLoadingMarketIndex, fetchMarketIndexData, parentComponent]);
 
   // 숫자 필드 추출을 위한 헬퍼 함수
   const extractNumberField = (item: any, fieldNames: string[]): number => {
@@ -737,6 +763,22 @@ const ChartComponentDaily: React.FC<ChartProps> = ({
           }}
         >
           {subtitle}
+        </div>
+      )}
+      {breakthroughPrice !== undefined && !isNaN(breakthroughPrice) && (
+        <div
+          style={{
+            position: 'absolute',
+            top: title ? (subtitle ? '45px' : '25px') : (subtitle ? '25px' : '5px'), // title, subtitle 유무에 따라 위치 조정
+            left: '10px',
+            color: 'rgba(0, 150, 136, 1)', // 돌파 라인 색상 (투명도 없음)
+            fontSize: 'clamp(0.65rem, 0.8vw, 0.8rem)',
+            fontWeight: '700', // 텍스트를 더 진하게 (bold)
+            zIndex: 10,
+            pointerEvents: 'none',
+          }}
+        >
+          돌파
         </div>
       )}
     </div>
