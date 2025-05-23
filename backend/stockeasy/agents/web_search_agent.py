@@ -100,6 +100,14 @@ class WebSearchAgent(BaseAgent):
             start_time = datetime.now()
             logger.info("WebSearchAgent starting processing")
             
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "processing")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["web_search"] = "processing"
+            
             # 현재 쿼리 및 세션 정보 추출
             query = state.get("query", "")
             
@@ -122,6 +130,15 @@ class WebSearchAgent(BaseAgent):
             if not query:
                 logger.warning("Empty query provided to WebSearchAgent")
                 self._add_error(state, "검색 쿼리가 제공되지 않았습니다.")
+                
+                # 상태 업데이트 - 콜백 함수 사용
+                if "update_processing_status" in state and "agent_name" in state:
+                    state["update_processing_status"](state["agent_name"], "error")
+                else:
+                    # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["web_search"] = "error"
+                
                 return state
             
             logger.info(f"WebSearchAgent processing query: {query}")
@@ -203,8 +220,7 @@ class WebSearchAgent(BaseAgent):
                 processed_results.append(processed_result)
             
             # 새로운 구조로 상태 업데이트
-            state["agent_results"] = state.get("agent_results", {})
-            state["agent_results"]["web_search"] = {
+            agent_result = {
                 "agent_name": "web_search",
                 "status": "success",
                 "data": {
@@ -219,22 +235,39 @@ class WebSearchAgent(BaseAgent):
                 }
             }
             
-            # 타입 주석을 사용한 데이터 할당
-            if "retrieved_data" not in state:
-                state["retrieved_data"] = {}
-            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
+            # 콜백 함수를 통한 상태 업데이트
+            if "update_agent_results" in state:
+                state["update_agent_results"]("web_search", agent_result)
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["agent_results"] = state.get("agent_results", {})
+                state["agent_results"]["web_search"] = agent_result
             
-            retrieved_data[self.retrieved_str] = {
+            # 검색 데이터 업데이트
+            retrieved_data_result = {
                 "summary": summary,
                 "results": processed_results
             }
             
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["web_search"] = "completed"
+            if "update_retrieved_data" in state:
+                state["update_retrieved_data"](self.retrieved_str, retrieved_data_result)
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                if "retrieved_data" not in state:
+                    state["retrieved_data"] = {}
+                retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
+                retrieved_data[self.retrieved_str] = retrieved_data_result
             
-            # 메트릭 기록
-            state["metrics"] = state.get("metrics", {})
-            state["metrics"]["web_search"] = {
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["web_search"] = "completed"
+            
+            # 메트릭 업데이트
+            metrics_result = {
                 "start_time": start_time,
                 "end_time": end_time,
                 "duration": duration,
@@ -245,6 +278,13 @@ class WebSearchAgent(BaseAgent):
                 "cache_misses": self.cache_misses,
                 "cache_hit_ratio": round(self.cache_hits / (self.cache_hits + self.cache_misses), 2) if (self.cache_hits + self.cache_misses) > 0 else 0
             }
+            
+            if "update_metrics" in state:
+                state["update_metrics"]("web_search", metrics_result)
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["metrics"] = state.get("metrics", {})
+                state["metrics"]["web_search"] = metrics_result
             
             logger.info(f"WebSearchAgent completed in {duration:.2f} seconds, found {len(processed_results)} results")
             return state
@@ -599,26 +639,32 @@ class WebSearchAgent(BaseAgent):
     
     def _handle_error_response(self, state: Dict[str, Any], start_time: datetime, error_message: str) -> Dict[str, Any]:
         """
-        오류 발생 시 응답을 처리합니다.
+        오류 응답을 처리합니다.
         
         Args:
-            state: 상태 객체
+            state: 상태 딕셔너리
             start_time: 시작 시간
             error_message: 오류 메시지
             
         Returns:
-            업데이트된 상태 객체
+            업데이트된 상태 딕셔너리
         """
-        # 오류 추가
-        self._add_error(state, f"웹 검색 에이전트 오류: {error_message}")
-        
-        # 실행 시간 계산
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
         
+        # 상태 업데이트 - 콜백 함수 사용
+        if "update_processing_status" in state and "agent_name" in state:
+            state["update_processing_status"](state["agent_name"], "error")
+        else:
+            # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["web_search"] = "error"
+        
+        # 오류 추가
+        self._add_error(state, f"웹 검색 에이전트 오류: {error_message}")
+        
         # 오류 상태 업데이트
-        state["agent_results"] = state.get("agent_results", {})
-        state["agent_results"]["web_search"] = {
+        agent_result = {
             "agent_name": "web_search",
             "status": "failed",
             "data": [],
@@ -627,18 +673,27 @@ class WebSearchAgent(BaseAgent):
             "metadata": {}
         }
         
-        # 타입 주석을 사용한 데이터 할당
-        if "retrieved_data" not in state:
-            state["retrieved_data"] = {}
-        retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-        retrieved_data[self.retrieved_str] = {"summary": "", "results": []}
+        if "update_agent_results" in state:
+            state["update_agent_results"]("web_search", agent_result)
+        else:
+            # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+            state["agent_results"] = state.get("agent_results", {})
+            state["agent_results"]["web_search"] = agent_result
         
-        state["processing_status"] = state.get("processing_status", {})
-        state["processing_status"]["web_search"] = "error"
+        # 검색 데이터 업데이트
+        retrieved_data_result = {"summary": "", "results": []}
         
-        # 메트릭 기록
-        state["metrics"] = state.get("metrics", {})
-        state["metrics"]["web_search"] = {
+        if "update_retrieved_data" in state:
+            state["update_retrieved_data"](self.retrieved_str, retrieved_data_result)
+        else:
+            # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+            if "retrieved_data" not in state:
+                state["retrieved_data"] = {}
+            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
+            retrieved_data[self.retrieved_str] = retrieved_data_result
+        
+        # 메트릭 업데이트
+        metrics_result = {
             "start_time": start_time,
             "end_time": end_time,
             "duration": duration,
@@ -647,26 +702,39 @@ class WebSearchAgent(BaseAgent):
             "model_name": self.agent_llm.get_model_name()
         }
         
+        if "update_metrics" in state:
+            state["update_metrics"]("web_search", metrics_result)
+        else:
+            # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+            state["metrics"] = state.get("metrics", {})
+            state["metrics"]["web_search"] = metrics_result
+        
         return state
     
     def _handle_no_results_response(self, state: Dict[str, Any], start_time: datetime) -> Dict[str, Any]:
         """
-        검색 결과가 없을 때 응답을 처리합니다.
+        검색 결과가 없는 경우를 처리합니다.
         
         Args:
-            state: 상태 객체
+            state: 상태 딕셔너리
             start_time: 시작 시간
             
         Returns:
-            업데이트된 상태 객체
+            업데이트된 상태 딕셔너리
         """
-        # 실행 시간 계산
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
         
+        # 상태 업데이트 - 콜백 함수 사용
+        if "update_processing_status" in state and "agent_name" in state:
+            state["update_processing_status"](state["agent_name"], "completed_no_data")
+        else:
+            # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["web_search"] = "completed_no_data"
+        
         # 새로운 구조로 상태 업데이트 (결과 없음)
-        state["agent_results"] = state.get("agent_results", {})
-        state["agent_results"]["web_search"] = {
+        agent_result = {
             "agent_name": "web_search",
             "status": "partial_success",
             "data": [],
@@ -677,18 +745,27 @@ class WebSearchAgent(BaseAgent):
             }
         }
         
-        # 타입 주석을 사용한 데이터 할당
-        if "retrieved_data" not in state:
-            state["retrieved_data"] = {}
-        retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
-        retrieved_data[self.retrieved_str] = {"summary": "관련된 검색 결과를 찾을 수 없습니다.", "results": []}
+        if "update_agent_results" in state:
+            state["update_agent_results"]("web_search", agent_result)
+        else:
+            # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+            state["agent_results"] = state.get("agent_results", {})
+            state["agent_results"]["web_search"] = agent_result
         
-        state["processing_status"] = state.get("processing_status", {})
-        state["processing_status"]["web_search"] = "completed_no_data"
+        # 검색 데이터 업데이트
+        retrieved_data_result = {"summary": "관련된 검색 결과를 찾을 수 없습니다.", "results": []}
         
-        # 메트릭 기록
-        state["metrics"] = state.get("metrics", {})
-        state["metrics"]["web_search"] = {
+        if "update_retrieved_data" in state:
+            state["update_retrieved_data"](self.retrieved_str, retrieved_data_result)
+        else:
+            # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+            if "retrieved_data" not in state:
+                state["retrieved_data"] = {}
+            retrieved_data = cast(RetrievedAllAgentData, state["retrieved_data"])
+            retrieved_data[self.retrieved_str] = retrieved_data_result
+        
+        # 메트릭 업데이트
+        metrics_result = {
             "start_time": start_time,
             "end_time": end_time,
             "duration": duration,
@@ -696,6 +773,13 @@ class WebSearchAgent(BaseAgent):
             "error": None,
             "model_name": self.agent_llm.get_model_name()
         }
+        
+        if "update_metrics" in state:
+            state["update_metrics"]("web_search", metrics_result)
+        else:
+            # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+            state["metrics"] = state.get("metrics", {})
+            state["metrics"]["web_search"] = metrics_result
         
         logger.info(f"WebSearchAgent completed in {duration:.2f} seconds, found 0 results")
         return state 

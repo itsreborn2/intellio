@@ -7,11 +7,13 @@
 
 import asyncio
 import copy
-from typing import Dict, Any, List, Optional
+import csv
+import os
+from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 import time
 from loguru import logger
-
+import weakref
 from stockeasy.models.agent_io import AgentState
 from stockeasy.agents.base import BaseAgent
 
@@ -149,15 +151,56 @@ class ParallelSearchAgent(BaseAgent):
             state["retrieved_data"]["no_search_agents_executed"] = True
             return state
         
+        # 상태 업데이트를 위한 콜백 함수 정의 - 원본 state를 직접 업데이트
+        def update_processing_status(agent_name: str, status: str) -> None:
+            """원본 state의 processing_status를 업데이트하는 콜백 함수"""
+            state["processing_status"][agent_name] = status
+            logger.info(f"콜백 함수를 통해 {agent_name} 상태를 {status}로 업데이트")
+            
+        def update_agent_results(agent_name: str, result: Dict[str, Any]) -> None:
+            """원본 state의 agent_results를 업데이트하는 콜백 함수"""
+            if "agent_results" not in state:
+                state["agent_results"] = {}
+            state["agent_results"][agent_name] = result
+            logger.debug(f"콜백 함수를 통해 {agent_name} 결과 업데이트")
+            
+        def update_retrieved_data(agent_name: str, data: Any) -> None:
+            """원본 state의 retrieved_data를 업데이트하는 콜백 함수"""
+            if "retrieved_data" not in state:
+                state["retrieved_data"] = {}
+            state["retrieved_data"][agent_name] = data
+            logger.debug(f"콜백 함수를 통해 {agent_name} 검색 데이터 업데이트")
+            
+        def update_metrics(agent_name: str, metrics: Dict[str, Any]) -> None:
+            """원본 state의 metrics를 업데이트하는 콜백 함수"""
+            if "metrics" not in state:
+                state["metrics"] = {}
+            state["metrics"][agent_name] = metrics
+            logger.debug(f"콜백 함수를 통해 {agent_name} 메트릭 업데이트")
+            
         # 각 에이전트를 실행할 비동기 작업 생성
         tasks = []
         for name, agent in search_agents:
             # 처리 상태 초기화 - 우선 processing 상태로 설정
             state["processing_status"][name] = "processing"
-            # 복사본 생성
-            agent_state = copy.deepcopy(state)
-            # processing_status는 참조로 유지 (다시 원본으로 설정)
-            agent_state["processing_status"] = state["processing_status"]
+            
+            # shallow copy 사용 - 읽기 전용 데이터만 공유
+            agent_state = copy.copy(state)
+            
+            # 에이전트가 수정하는 데이터는 빈 상태로 초기화 (콜백을 통해서만 업데이트)
+            agent_state["retrieved_data"] = {}
+            agent_state["agent_results"] = {}
+            agent_state["metrics"] = {}
+            agent_state["errors"] = []
+            
+            # 콜백 함수들 추가 - 원본 state를 참조
+            agent_state["update_processing_status"] = update_processing_status
+            agent_state["update_agent_results"] = update_agent_results
+            agent_state["update_retrieved_data"] = update_retrieved_data
+            agent_state["update_metrics"] = update_metrics
+            # 에이전트 이름 전달
+            agent_state["agent_name"] = name
+            
             # 커스텀 프롬프트 템플릿 정보 추가
             if custom_prompt_templates:
                 agent_state["custom_prompt_templates"] = custom_prompt_templates
@@ -172,6 +215,7 @@ class ParallelSearchAgent(BaseAgent):
         failure_count = 0
         
         # 결과 처리
+        # result는 agent_state
         for (name, _), result in zip(search_agents, results):
             if isinstance(result, Exception):
                 # 오류 처리
@@ -296,7 +340,34 @@ class ParallelSearchAgent(BaseAgent):
         logger.info(f"ParallelSearchAgent 병렬 처리 완료. 실행 시간: {execution_time:.2f}초, 성공: {success_count}, 실패: {failure_count}")
         
         return state
-    
+    def write_to_csv_full_graph_time(self, event_type: str, agent_name: str, note: Optional[str] = None) -> None:
+        # CSV 파일 경로 설정
+        log_dir = os.path.join('stockeasy', 'local_cache')
+        os.makedirs(log_dir, exist_ok=True)
+        
+        date_str = datetime.now().strftime('%Y%m%d')
+        csv_path = os.path.join(log_dir, f'log_agent_time_{date_str}.csv')
+        
+        # 파일 존재 여부 확인 (헤더 추가 여부 결정)
+        file_exists = os.path.isfile(csv_path)
+        
+        # 현재 날짜와 시간
+        current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # CSV 파일에 데이터 추가
+        with open(csv_path, 'a', newline='', encoding='utf-8-sig') as csvfile:
+            fieldnames = ['일자', 'event_type', 'agent_name', 'note']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            # 파일이 새로 생성된 경우 헤더 작성
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow({
+                '일자': current_datetime,
+                'event_type': event_type,
+                'agent_name': agent_name,
+                'note': note
+            })
     async def _run_agent(self, name: str, agent: BaseAgent, state: AgentState) -> AgentState:
         """
         단일 에이전트를 비동기적으로 실행합니다.
@@ -327,10 +398,16 @@ class ParallelSearchAgent(BaseAgent):
                     except Exception as e:
                         logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
             
+            # 에이전트 상태 업데이트 (콜백 함수 사용)
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "started")
+            
             #logger.info(f"에이전트 {name} 실행 시작")
+            await asyncio.to_thread(self.write_to_csv_full_graph_time, "agent_start", name)
             result = await agent.process(state)
             #logger.info(f"에이전트 {name} 실행 완료")
-            
+            await asyncio.to_thread(self.write_to_csv_full_graph_time, "agent_end", name)
+
             # 결과에 에이전트 이름 추가
             result["last_agent"] = name
             
@@ -341,6 +418,10 @@ class ParallelSearchAgent(BaseAgent):
             # 완료 상태로 설정 (혹시 set되지 않은 경우)
             if name not in result["processing_status"]:
                 result["processing_status"][name] = "completed"
+                
+            # 에이전트 상태 업데이트 (콜백 함수 사용)
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed")
             
             if self.graph:
                 # 그래프에 처리 상태 업데이트 (에이전트 완료)
@@ -364,6 +445,10 @@ class ParallelSearchAgent(BaseAgent):
             logger.error(f"에이전트 {name} 실행 중 오류 발생: {str(e)}", exc_info=True)
             # 에러 상태 표시를 위한 처리 상태 업데이트
             state["processing_status"][name] = "failed"
+            
+            # 에이전트 상태 업데이트 (콜백 함수 사용)
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "failed")
             
             if self.graph:
                 # 그래프에 처리 상태 업데이트 (에이전트 실패)

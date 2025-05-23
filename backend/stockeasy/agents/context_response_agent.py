@@ -219,6 +219,10 @@ class ContextResponseAgent(BaseAgent):
             #state["answer"] = answer
             state["summary"] = answer
             
+            # 키 설정 확인 로그 추가
+            logger.info(f"[ContextResponseAgent] summary 키 설정 완료: {bool(state.get('summary'))}, 길이: {len(state.get('summary', ''))}")
+            logger.info(f"[ContextResponseAgent] answer 키 존재: {bool(state.get('answer'))}")
+            
             # 성능 지표 업데이트
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()

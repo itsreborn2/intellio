@@ -92,12 +92,25 @@ class TelegramRetrieverAgent(BaseAgent):
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        사용자 쿼리와 분류 정보를 기반으로 텔레그램 메시지를 검색하고, report_analyzer_agent와 유사한 구조로 결과를 저장합니다.
+        텔레그램 메시지 검색 및 처리를 수행합니다.
+        
+        Args:
+            state: 현재 상태 정보
+            
+        Returns:
+            업데이트된 상태 정보
         """
         try:
             start_time = datetime.now()
-            logger.info("TelegramRetrieverAgent starting processing")
             
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "processing")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["telegram_retriever"] = "processing"
+                
             query = state.get("query", "")
             
             question_analysis = state.get("question_analysis", {})
@@ -189,8 +202,13 @@ class TelegramRetrieverAgent(BaseAgent):
                     "toc_results": {} 
                 }
                 
-                state["processing_status"] = state.get("processing_status", {})
-                state["processing_status"]["telegram_retriever"] = "completed_no_data"
+                # 상태 업데이트 - 콜백 함수 사용
+                if "update_processing_status" in state and "agent_name" in state:
+                    state["update_processing_status"](state["agent_name"], "completed_no_data")
+                else:
+                    # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["telegram_retriever"] = "completed_no_data"
                 
                 logger.info(f"TelegramRetrieverAgent completed in {duration:.2f} seconds, found 0 messages or no summary data.")
                 return state
@@ -222,8 +240,14 @@ class TelegramRetrieverAgent(BaseAgent):
                 "toc_results": processed_toc_results
             }
             
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["telegram_retriever"] = "completed"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["telegram_retriever"] = "completed"
+                
             logger.info(f"TelegramRetrieverAgent completed in {duration:.2f} seconds, found {len(processed_main_results)} messages")
             return state
             
@@ -244,8 +268,13 @@ class TelegramRetrieverAgent(BaseAgent):
             if "retrieved_data" not in state: state["retrieved_data"] = {}
             state["retrieved_data"][self.retrieved_str] = {"summary_text": "", "main_query_results": [], "toc_results": {} }
             
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["telegram_retriever"] = "error"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "error")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["telegram_retriever"] = "error"
             
             return state
 

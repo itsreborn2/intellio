@@ -223,7 +223,7 @@ class SummarizerAgent(BaseAgent):
             subsections = section_data.get("subsections", [])
             subsections_text_current = ""
             if isinstance(subsections, list) and subsections:
-                subsections_text_current = "\n".join([f" - {s.get('title', '')} ({s.get('description','')})" for s in subsections])
+                subsections_text_current = "\n".join([f" - {s.get('title', '')}\n   섹션설명:({s.get('description','')})" for s in subsections])
                 for sub_section_item in subsections:
                     if isinstance(sub_section_item, dict):
                         subsection_id = sub_section_item.get("subsection_id")

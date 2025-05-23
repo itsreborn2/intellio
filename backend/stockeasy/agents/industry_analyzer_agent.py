@@ -78,6 +78,14 @@ class IndustryAnalyzerAgent(BaseAgent):
             start_time = datetime.now()
             logger.info("IndustryAnalyzerAgent starting processing")
             
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "processing")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["industry_analyzer"] = "processing"
+            
             # 현재 쿼리 및 세션 정보 추출
             query = state.get("query", "")
             
@@ -181,8 +189,13 @@ class IndustryAnalyzerAgent(BaseAgent):
                     industry_data_result: List[IndustryReportData] = []
                     retrieved_data[self.retrieved_str] = industry_data_result
                     
-                    state["processing_status"] = state.get("processing_status", {})
-                    state["processing_status"]["industry_analyzer"] = "completed_no_data"
+                    # 상태 업데이트 - 콜백 함수 사용
+                    if "update_processing_status" in state and "agent_name" in state:
+                        state["update_processing_status"](state["agent_name"], "completed_no_data")
+                    else:
+                        # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                        state["processing_status"] = state.get("processing_status", {})
+                        state["processing_status"]["industry_analyzer"] = "completed_no_data"
                     
                     # 메트릭 기록
                     state["metrics"] = state.get("metrics", {})
@@ -250,8 +263,13 @@ class IndustryAnalyzerAgent(BaseAgent):
                 }
                 retrieved_data[self.retrieved_str] = industry_data_result
                 
-                state["processing_status"] = state.get("processing_status", {})
-                state["processing_status"]["industry_analyzer"] = "completed"
+                # 상태 업데이트 - 콜백 함수 사용
+                if "update_processing_status" in state and "agent_name" in state:
+                    state["update_processing_status"](state["agent_name"], "completed")
+                else:
+                    # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["industry_analyzer"] = "completed"
                 logger.info(f"IndustryAnalyzerAgent processing_status: {state['processing_status']}")
                 # 메트릭 기록
                 state["metrics"] = state.get("metrics", {})
@@ -289,8 +307,13 @@ class IndustryAnalyzerAgent(BaseAgent):
                 industry_data_result: List[IndustryReportData] = []
                 retrieved_data["industry"] = industry_data_result
                 
-                state["processing_status"] = state.get("processing_status", {})
-                state["processing_status"]["industry_analyzer"] = "error"
+                # 상태 업데이트 - 콜백 함수 사용
+                if "update_processing_status" in state and "agent_name" in state:
+                    state["update_processing_status"](state["agent_name"], "error")
+                else:
+                    # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["industry_analyzer"] = "error"
                 
                 return state
                 
@@ -316,8 +339,13 @@ class IndustryAnalyzerAgent(BaseAgent):
             industry_data_result: List[IndustryReportData] = []
             retrieved_data[self.retrieved_str] = industry_data_result
             
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["industry_analyzer"] = "error"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "error")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["industry_analyzer"] = "error"
             
             return state
     

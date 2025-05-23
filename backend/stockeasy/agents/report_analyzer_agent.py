@@ -98,6 +98,14 @@ class ReportAnalyzerAgent(BaseAgent):
         try:
             logger.info(f"ReportAnalyzerAgent starting processing with {self.provider} {self.model_name}")
             
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "processing")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["report_analyzer"] = "processing"
+            
             query = state.get("query", "")
             question_analysis = state.get("question_analysis", {})
             entities = question_analysis.get("entities", {})
@@ -116,6 +124,15 @@ class ReportAnalyzerAgent(BaseAgent):
                     "error": "검색 쿼리가 제공되지 않았습니다.", "execution_time": 0,
                     "metadata": {"model_name": self.model_name, "provider": self.provider}
                 }
+                
+                # 상태 업데이트 - 콜백 함수 사용
+                if "update_processing_status" in state and "agent_name" in state:
+                    state["update_processing_status"](state["agent_name"], "error")
+                else:
+                    # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["report_analyzer"] = "error"
+                    
                 return state
             
             logger.info(f"ReportAnalyzerAgent processing query: {query}")
@@ -165,6 +182,14 @@ class ReportAnalyzerAgent(BaseAgent):
                 state["retrieved_data"] = {}
                 state["retrieved_data"]["structured_report_data"] = structured_search_results
                 
+                # 상태 업데이트 - 콜백 함수 사용
+                if "update_processing_status" in state and "agent_name" in state:
+                    state["update_processing_status"](state["agent_name"], "completed_no_data")
+                else:
+                    # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["report_analyzer"] = "completed_no_data"
+                
                 logger.info(f"ReportAnalyzerAgent completed in {total_duration:.2f} seconds, found 0 reports overall.")
                 return state
 
@@ -194,8 +219,13 @@ class ReportAnalyzerAgent(BaseAgent):
             state["retrieved_data"] = {}
             state["retrieved_data"]["structured_report_data"] = structured_search_results
 
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["report_analyzer"] = "completed_search_only"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed_search_only")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["report_analyzer"] = "completed_search_only"
             
             logger.info(f"ReportAnalyzerAgent (search_only) completed in {total_duration:.2f} seconds. Main reports: {len(processed_reports)}.")
             return state
@@ -215,8 +245,14 @@ class ReportAnalyzerAgent(BaseAgent):
             if "retrieved_data" not in state: state["retrieved_data"] = {}
             state["retrieved_data"]["structured_report_data"] = {}
 
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["report_analyzer"] = "error"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "error")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["report_analyzer"] = "error"
+                
             return state
 
     def _add_error(self, state: Dict[str, Any], error_message: str) -> None:

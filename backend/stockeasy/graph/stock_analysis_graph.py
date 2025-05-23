@@ -8,6 +8,11 @@ import os
 from typing import Dict, Any, List, Literal, Union, Optional, TypedDict, Tuple, Set, cast, Callable
 import asyncio
 import time
+import csv
+import psutil
+import gc
+import objgraph
+from pathlib import Path
 
 from langgraph.graph import END, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
@@ -230,19 +235,49 @@ class StockAnalysisGraph:
                 self.callbacks[event_type] = []
             logger.info(f"모든 이벤트의 콜백 함수가 제거됨")
     
+    def write_to_csv_full_graph_time(self, event_type: str, agent_name: str, note: Optional[str] = None) -> None:
+        # CSV 파일 경로 설정
+        log_dir = os.path.join('stockeasy', 'local_cache')
+        os.makedirs(log_dir, exist_ok=True)
+        
+        date_str = datetime.now().strftime('%Y%m%d')
+        csv_path = os.path.join(log_dir, f'log_agent_time_{date_str}.csv')
+        
+        # 파일 존재 여부 확인 (헤더 추가 여부 결정)
+        file_exists = os.path.isfile(csv_path)
+        
+        # 현재 날짜와 시간
+        current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # CSV 파일에 데이터 추가
+        with open(csv_path, 'a', newline='', encoding='utf-8-sig') as csvfile:
+            fieldnames = ['일자', 'event_type', 'agent_name', 'note']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            # 파일이 새로 생성된 경우 헤더 작성
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow({
+                '일자': current_datetime,
+                'event_type': event_type,
+                'agent_name': agent_name,
+                'note': note
+            })
+                
+    
     # 콜백 실행 메서드 추가
     async def _execute_callbacks(self, event_type: str, agent_name: str, state: Dict[str, Any]):
         """
         등록된 콜백 함수들을 실행합니다.
         
         Args:
-            event_type: 이벤트 유형
+            event_type: 이벤트 타입 ('agent_start', 'agent_complete', 'graph_end')
             agent_name: 에이전트 이름
             state: 현재 상태
         """
         if event_type not in self.callbacks:
             return
-        
+
         # 세션 ID가 'test_session'인 경우에만 콜백 실행
         session_id = state.get("session_id")
         if session_id != "test_session":
@@ -281,6 +316,7 @@ class StockAnalysisGraph:
                         self.current_state[session_id]['agent_results'] = {}
                     
                     self.current_state[session_id]['agent_results'][agent_name] = serializable_state['agent_results'][agent_name]
+        
     
     def _build_graph(self, db: AsyncSession = None):
         """
@@ -402,7 +438,7 @@ class StockAnalysisGraph:
                 previous_error = state.get("previous_error", "")
                 logger.info(f"오류 후 재시작 상태 감지됨. 이전 오류: {previous_error}")
                 
-                # LangSmith 타임스탬프 오류였던 경우, 병렬 검색으로 직접 라우팅
+                # LangSmith 타임스탬프 오류인 경우, 병렬 검색으로 직접 라우팅
                 if "invalid 'dotted_order'" in previous_error and "earlier than parent timestamp" in previous_error:
                     logger.info("LangSmith 타임스탬프 오류 복구를 위해 병렬 검색으로 즉시 라우팅합니다.")
                     
@@ -591,6 +627,277 @@ class StockAnalysisGraph:
         """
         
         async def wrapped_process(state: Dict[str, Any]) -> Dict[str, Any]:
+            # 객체 유형 분석 함수
+            async def analyze_objects(phase):
+                try:
+                    # 객체 카운트 스냅샷 디렉토리 생성
+                    csv_dir = Path("stockeasy/local_cache/memory_tracking")
+                    csv_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    session_id = state.get("session_id", "unknown")
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    
+                    # 가장 많은 객체 유형 15개 출력
+                    most_common = objgraph.most_common_types(limit=10)
+                    # logger.info(f"[객체분석-{phase}] {agent_name} - 상위 15개 객체 유형:")
+                    # for type_name, count in most_common:
+                    #     logger.info(f"  {type_name}: {count}개")
+                    
+                    # CSV에 기록 (비동기 파일 작업)
+                    csv_path = csv_dir / f"object_types_{session_id}.csv"
+                    file_exists = csv_path.exists()
+                    
+                    # 비동기 파일 작업을 위한 함수
+                    async def write_object_types_csv():
+                        # CSV 파일에 데이터 추가 (이벤트 루프 차단 방지)
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(None, lambda: _write_object_types_to_csv(
+                            csv_path, file_exists, timestamp, session_id, agent_name, phase, most_common
+                        ))
+                    
+                    # 실제 CSV 파일 작성 함수 (이벤트 루프 외부에서 실행)
+                    def _write_object_types_to_csv(path, exists, timestamp, session_id, agent_name, phase, data):
+                        with open(path, 'a', newline='') as csvfile:
+                            fieldnames = ['timestamp', 'session_id', 'agent', 'phase', 'object_type', 'count']
+                            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                            
+                            if not exists:
+                                writer.writeheader()
+                            
+                            for type_name, count in data:
+                                writer.writerow({
+                                    'timestamp': timestamp,
+                                    'session_id': session_id,
+                                    'agent': agent_name,
+                                    'phase': phase,
+                                    'object_type': type_name,
+                                    'count': count
+                                })
+                    
+                    # 비동기 CSV 작성 실행
+                    await write_object_types_csv()
+                    
+                    # parallel_search 에이전트 특별 처리 (가장 메모리를 많이 사용하는 에이전트)
+                    if agent_name == "parallel_search":
+                        # 상태 객체 내용 분석
+                        if "retrieved_data" in state:
+                            retrieved_data = state.get("retrieved_data", {})
+                            logger.info(f"[객체분석-상세] {agent_name} - retrieved_data 컨텐츠:")
+                            
+                            # retrieved_data 내용을 CSV에 저장 (비동기)
+                            retrieved_data_path = csv_dir / f"retrieved_data_{session_id}_{timestamp}.csv"
+                            
+                            # 비동기 파일 작업을 위한 함수
+                            async def write_retrieved_data_csv():
+                                # CSV 파일에 데이터 추가 (이벤트 루프 차단 방지)
+                                loop = asyncio.get_event_loop()
+                                await loop.run_in_executor(None, lambda: _write_retrieved_data_to_csv(
+                                    retrieved_data_path, retrieved_data
+                                ))
+                                
+                            # 실제 CSV 파일 작성 함수 (이벤트 루프 외부에서 실행)
+                            def _write_retrieved_data_to_csv(path, data):
+                                with open(path, 'w', newline='') as csvfile:
+                                    fieldnames = ['key', 'type', 'items_count', 'size_kb']
+                                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                                    writer.writeheader()
+                                    
+                                    for key, value in data.items():
+                                        size_kb = len(str(value)) // 1024
+                                        items_count = len(value) if isinstance(value, (list, dict)) else 1
+                                        writer.writerow({
+                                            'key': key,
+                                            'type': type(value).__name__,
+                                            'items_count': items_count,
+                                            'size_kb': size_kb
+                                        })
+                            
+                            # 비동기 CSV 작성 실행
+                            await write_retrieved_data_csv()
+                            
+                            # 로그 출력 (즉시 수행)
+                            for key, value in retrieved_data.items():
+                                size_kb = len(str(value)) // 1024
+                                if isinstance(value, list):
+                                    logger.info(f"  {key}: {len(value)}개 항목, 크기 약 {size_kb}KB")
+                                else:
+                                    logger.info(f"  {key}: 크기 약 {size_kb}KB")
+                        
+                        # 큰 객체 분석 (예: dict)
+                        if any(t[0] == "dict" and t[1] > 10000 for t in most_common):
+                            logger.info(f"[객체분석-상세] {agent_name} - dict 객체가 많음, 가장 큰 5개 dict 찾기:")
+                            # 모든 객체에서 dict 객체 찾기
+                            big_dicts = []
+                            for obj in gc.get_objects():
+                                if isinstance(obj, dict) and len(obj) > 100:  # 큰 딕셔너리만 체크
+                                    big_dicts.append((len(obj), obj))
+                            
+                            # 크기순으로 정렬하고 상위 5개 출력
+                            # 수정: key 함수를 사용하여 튜플의 첫 번째 요소(dict 길이)만으로 정렬
+                            big_dicts.sort(key=lambda x: x[0], reverse=True)
+                            big_dicts = big_dicts[:5]  # 상위 5개만 추출
+                            
+                            # 큰 딕셔너리 정보를 CSV에 저장 (비동기)
+                            big_dicts_path = csv_dir / f"big_dicts_{agent_name}_{session_id}_{timestamp}.csv"
+                            
+                            # 로그 출력 (즉시 수행)
+                            for i, (size, d) in enumerate(big_dicts):
+                                # 딕셔너리의 일부 키만 출력
+                                keys = list(d.keys())[:5] if len(d) > 5 else list(d.keys())
+                                logger.info(f"  큰 dict #{i+1}: {size}개 항목, 키 샘플: {keys}")
+                                
+                                # 딕셔너리의 내용 일부 출력
+                                if keys:
+                                    first_key = keys[0]
+                                    first_value = d[first_key]
+                                    first_value_type = type(first_value).__name__
+                                    logger.info(f"    첫 항목 타입: {first_value_type}")
+                                    
+                                    # 문자열 값이면 길이 출력
+                                    if isinstance(first_value, str):
+                                        first_value_length = len(first_value)
+                                        logger.info(f"    첫 항목 길이: {first_value_length} 문자")
+                            
+                            # 비동기 파일 작업을 위한 함수
+                            async def write_big_dicts_csv():
+                                # CSV 파일에 데이터 추가 (이벤트 루프 차단 방지)
+                                loop = asyncio.get_event_loop()
+                                await loop.run_in_executor(None, lambda: _write_big_dicts_to_csv(
+                                    big_dicts_path, big_dicts
+                                ))
+                                
+                            # 실제 CSV 파일 작성 함수 (이벤트 루프 외부에서 실행)
+                            def _write_big_dicts_to_csv(path, big_dicts_data):
+                                with open(path, 'w', newline='') as csvfile:
+                                    fieldnames = ['index', 'size', 'sample_keys', 'first_value_type', 'first_value_length']
+                                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                                    writer.writeheader()
+                                    
+                                    for i, (size, d) in enumerate(big_dicts_data):
+                                        keys = list(d.keys())[:5] if len(d) > 5 else list(d.keys())
+                                        
+                                        first_value_type = ""
+                                        first_value_length = 0
+                                        if keys:
+                                            first_key = keys[0]
+                                            first_value = d[first_key]
+                                            first_value_type = type(first_value).__name__
+                                            
+                                            if isinstance(first_value, str):
+                                                first_value_length = len(first_value)
+                                        
+                                        writer.writerow({
+                                            'index': i+1,
+                                            'size': size,
+                                            'sample_keys': str(keys),
+                                            'first_value_type': first_value_type,
+                                            'first_value_length': first_value_length
+                                        })
+                            
+                            # 비동기 CSV 작성 실행
+                            await write_big_dicts_csv()
+                    
+                    # 객체 참조 그래프 생성 (메모리 많이 사용하는 에이전트만)
+                    if agent_name in ["parallel_search", "knowledge_integrator", "summarizer" , "response_formatter"]:
+                        # 가장 큰 객체 유형에 대한 참조 그래프 생성
+                        biggest_type = most_common[0][0]
+                        try:
+                            # 그래프 파일 저장 (비동기)
+                            graph_path = csv_dir / f"{agent_name}_{phase}_{biggest_type}_{timestamp}.png"
+                            
+                            # 비동기 그래프 생성 함수
+                            async def create_graph():
+                                # 그래프 생성 (이벤트 루프 차단 방지)
+                                loop = asyncio.get_event_loop()
+                                await loop.run_in_executor(None, lambda: _create_object_graph(
+                                    biggest_type, str(graph_path)
+                                ))
+                                logger.info(f"[객체분석-그래프] {agent_name} - {biggest_type} 타입 참조 그래프 저장: {graph_path}")
+                            
+                            # 실제 그래프 생성 함수 (이벤트 루프 외부에서 실행)
+                            def _create_object_graph(obj_type, path):
+                                sample_objs = objgraph.by_type(obj_type)[:3]  # 타입의 처음 3개 객체
+                                if sample_objs:
+                                    objgraph.show_backrefs(
+                                        sample_objs, 
+                                        filename=path,
+                                        max_depth=5,
+                                        too_many=10,
+                                        filter=lambda x: not isinstance(x, type)
+                                    )
+                            
+                            # 비동기 그래프 생성 실행
+                            await create_graph()
+                            
+                        except Exception as e:
+                            logger.error(f"[객체분석-오류] 그래프 생성 중 오류: {str(e)}")
+                
+                except Exception as e:
+                    logger.error(f"[객체분석-오류] 객체 분석 중 오류 발생: {str(e)}", exc_info=True)
+            
+            # 메모리 사용량 체크 함수
+            def get_memory_usage():
+                process = psutil.Process(os.getpid())
+                memory_info = process.memory_info()
+                return {
+                    "rss": memory_info.rss / (1024 * 1024),  # RSS in MB
+                    "vms": memory_info.vms / (1024 * 1024),  # VMS in MB
+                    "gc_objects": len(gc.get_objects()),  # GC가 추적 중인 객체 수
+                    "state_size": len(str(state)),  # 상태 크기 (문자열 변환 후 길이로 대략 측정)
+                }
+            
+            # 메모리 사용량을 CSV 파일에 기록하는 함수
+            async def log_memory_to_csv(phase, memory_data):
+                csv_dir = Path("stockeasy/local_cache/memory_tracking")
+                csv_dir.mkdir(parents=True, exist_ok=True)
+                csv_path = csv_dir / "memory_usage.csv"
+                
+                # CSV 파일 존재 여부 확인
+                file_exists = csv_path.exists()
+                
+                session_id = state.get("session_id", "unknown")
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                
+                # 비동기 파일 작업을 위한 함수
+                async def write_memory_csv():
+                    # CSV 파일에 데이터 추가 (이벤트 루프 차단 방지)
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, lambda: _write_memory_to_csv(
+                        csv_path, file_exists, timestamp, session_id, agent_name, phase, memory_data
+                    ))
+                
+                # 실제 CSV 파일 작성 함수 (이벤트 루프 외부에서 실행)
+                def _write_memory_to_csv(path, exists, timestamp, session_id, agent_name, phase, memory_data):
+                    with open(path, 'a', newline='') as csvfile:
+                        fieldnames = ['timestamp', 'session_id', 'agent', 'phase', 'rss_mb', 'vms_mb', 'gc_objects', 'state_size']
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        
+                        # 파일이 없으면 헤더 추가
+                        if not exists:
+                            writer.writeheader()
+                        
+                        writer.writerow({
+                            'timestamp': timestamp,
+                            'session_id': session_id,
+                            'agent': agent_name,
+                            'phase': phase,
+                            'rss_mb': round(memory_data["rss"], 2),
+                            'vms_mb': round(memory_data["vms"], 2),
+                            'gc_objects': memory_data["gc_objects"],
+                            'state_size': memory_data["state_size"]
+                        })
+                
+                # 비동기 CSV 작성 실행
+                await write_memory_csv()
+            
+            # 프로세스 시작 전 메모리 사용량 체크
+            pre_memory = get_memory_usage()
+            logger.info(f"[메모리체크-시작] {agent_name} - RSS: {pre_memory['rss']:.2f}MB, VMS: {pre_memory['vms']:.2f}MB, GC 객체: {pre_memory['gc_objects']}, 상태크기: {pre_memory['state_size']}")
+            await log_memory_to_csv("before", pre_memory)
+            
+            # 프로세스 시작 전 객체 유형 분석 (비동기)
+            analyze_task = asyncio.create_task(analyze_objects("before"))
+            
             # 에이전트 시작 콜백 실행
             await self._execute_callbacks("agent_start", agent_name, state)
             
@@ -608,7 +915,7 @@ class StockAnalysisGraph:
             
             # 전역 스트리밍 콜백이 있는지 확인하고 상태에 추가
             if hasattr(self, '_streaming_callback') and self._streaming_callback and 'streaming_callback' not in state:
-                state['streaming_callback'] = self._streaming_callback
+                state['streaming_callback'] = self._streaming_callback  # 클래스 멤버로 저장
                 logger.info(f"[wrapped_process] {agent_name} 에이전트에 스트리밍 콜백 함수 추가: {self._streaming_callback.__name__ if hasattr(self._streaming_callback, '__name__') else '이름 없는 함수'}")
             elif 'streaming_callback' in state and state['streaming_callback'] is None and hasattr(self, '_streaming_callback') and self._streaming_callback:
                 # 상태에 streaming_callback이 None으로 있는 경우 전역 콜백으로 대체
@@ -618,8 +925,20 @@ class StockAnalysisGraph:
                 logger.info(f"[wrapped_process] {agent_name} 에이전트에 이미 콜백 함수가 있음: {state['streaming_callback'].__name__ if hasattr(state['streaming_callback'], '__name__') else '이름 없는 함수' if state['streaming_callback'] else 'None'}")
             
             try:
+                # analyze_task가 완료될 때까지 기다림 (에이전트 실행 전)
+                await analyze_task
+                
+                # GC 실행 전 객체 수
+                gc_count_before = len(gc.get_objects())
+                
                 # 원본 프로세스 호출
                 result = await original_process(state)
+                
+                # GC 실행 및 이후 객체 수
+                collected = gc.collect()
+                gc_count_after = len(gc.get_objects())
+                
+                logger.info(f"[GC정보] {agent_name} - 컬렉션 전: {gc_count_before}, 컬렉션 후: {gc_count_after}, 수집된 객체: {collected}")
                 
                 # result가 None인 경우 빈 딕셔너리로 처리
                 if result is None:
@@ -630,11 +949,42 @@ class StockAnalysisGraph:
                 if result and 'streaming_callback' in result:
                     del result['streaming_callback']
                 
+                # 프로세스 종료 후 메모리 사용량 체크
+                post_memory = get_memory_usage()
+                memory_diff = {
+                    "rss": post_memory["rss"] - pre_memory["rss"],
+                    "vms": post_memory["vms"] - pre_memory["vms"],
+                    "gc_objects": post_memory["gc_objects"] - pre_memory["gc_objects"],
+                    "state_size": post_memory["state_size"] - pre_memory["state_size"]
+                }
+                
+                logger.info(f"[메모리체크-종료] {agent_name} - RSS: {post_memory['rss']:.2f}MB, VMS: {post_memory['vms']:.2f}MB, GC 객체: {post_memory['gc_objects']}, 상태크기: {post_memory['state_size']}")
+                logger.info(f"[메모리변화] {agent_name} - RSS: {memory_diff['rss']:.2f}MB, VMS: {memory_diff['vms']:.2f}MB, GC 객체: {memory_diff['gc_objects']}, 상태크기: {memory_diff['state_size']}")
+                
+                # 비동기로 CSV 파일에 로깅
+                await log_memory_to_csv("after", post_memory)
+                
+                # 프로세스 종료 후 객체 유형 분석 (비동기로 실행)
+                analyze_after_task = asyncio.create_task(analyze_objects("after"))
+                
                 # 에이전트 완료 콜백 실행
                 await self._execute_callbacks("agent_end", agent_name, result)
                 
+                # analyze_after_task가 완료될 때까지 기다림 (에이전트 결과 반환 전)
+                await analyze_after_task
+                
                 return result
             except Exception as e:
+                # 오류 발생 시 메모리 상태 체크
+                error_memory = get_memory_usage()
+                logger.error(f"[메모리체크-오류] {agent_name} - RSS: {error_memory['rss']:.2f}MB, VMS: {error_memory['vms']:.2f}MB, GC 객체: {error_memory['gc_objects']}, 상태크기: {error_memory['state_size']}")
+                
+                # 비동기로 CSV 파일에 로깅
+                await log_memory_to_csv("error", error_memory)
+                
+                # 오류 발생 시 객체 유형 분석 (비동기로 실행)
+                asyncio.create_task(analyze_objects("error"))
+                
                 logger.error(f"에이전트 {agent_name} 처리 중 오류 발생: {str(e)}", exc_info=True)
                 state["processing_status"][agent_name] = "failed"
                 state["errors"] = state.get("errors", [])
@@ -752,13 +1102,13 @@ class StockAnalysisGraph:
             logger.info(f"[process_query] chat_session_id: {chat_session_id}")
 
             # 후속질문 여부 추출
-            is_follow_up = kwargs.get("is_follow_up", False)
-            logger.info(f"[process_query] 후속질문 여부: {is_follow_up}")
+            # is_follow_up = kwargs.get("is_follow_up", False)
+            # logger.info(f"[process_query] 후속질문 여부: {is_follow_up}")
 
             # 이전 에이전트 결과물 추출
             agent_results = {}
-            if is_follow_up:
-                agent_results = kwargs.get("agent_results", {})
+            # if is_follow_up:
+            #     agent_results = kwargs.get("agent_results", {})
 
             # 스트리밍 콜백 함수 추출 및 클래스 멤버로 저장
             streaming_callback = kwargs.get("streaming_callback")
@@ -775,7 +1125,7 @@ class StockAnalysisGraph:
                 "chat_session_id": chat_session_id,
                 "stock_code": stock_code,
                 "stock_name": stock_name,
-                "is_follow_up": is_follow_up,  # 후속질문 여부를 상태에 명시적으로 추가
+                #"is_follow_up": is_follow_up,  # 후속질문 여부를 상태에 명시적으로 추가
                 "errors": [],
                 "processing_status": {},
                 "retrieved_data": {},  # 검색 결과를 담을 딕셔너리
@@ -796,9 +1146,28 @@ class StockAnalysisGraph:
                 
                 # LangSmith 타임스탬프 오류인 경우 특별 처리
                 if kwargs.get("previous_error") and "invalid 'dotted_order'" in kwargs.get("previous_error") and "earlier than parent timestamp" in kwargs.get("previous_error"):
-                    logger.warning("LangSmith 타임스탬프 오류에서 재시작합니다. 그래프 실행을 조정합니다.")
-                    # 타임스탬프 오류 발생 시 트레이싱 비활성화 또는 다른 특별 처리를 여기에 추가할 수 있음
-            
+                    logger.warning("LangSmith 타임스탬프 오류 감지됨. 폴백 메커니즘을 트리거합니다.")
+                    # 오류 정보를 담은 상태로 폴백 매니저 에이전트를 직접 호출
+                    try:
+                        if "fallback_manager" in self.agents:
+                            fallback_state = {
+                                "query": query,
+                                "stock_code": stock_code,
+                                "stock_name": stock_name,
+                                "session_id": session_id or "error_session",
+                                "error": str(e),
+                                "errors": [{
+                                    "agent": "stock_analysis_graph",
+                                    "error": str(e),
+                                    "type": "LangSmithTimestampError",
+                                    "timestamp": datetime.now()
+                                }]
+                            }
+                            result = await self.agents["fallback_manager"].process(fallback_state)
+                            return result
+                    except Exception as fallback_error:
+                        logger.error(f"폴백 매니저 호출 중 추가 오류 발생: {str(fallback_error)}")
+                
           
             # 세션별 상태 초기화
             async with self.state_lock:

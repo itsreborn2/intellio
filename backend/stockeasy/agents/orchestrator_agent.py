@@ -124,6 +124,14 @@ class OrchestratorAgent(BaseAgent):
             start_time = datetime.now()
             logger.info(f"OrchestratorAgent starting processing")
             
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "processing")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["orchestrator"] = "processing"
+            
             # 질문 분석 결과 추출
             query = state.get("query", "")
             stock_code = state.get("stock_code", "")
@@ -206,8 +214,12 @@ class OrchestratorAgent(BaseAgent):
             state["execution_plan"] = final_plan
             
             # 처리 상태 업데이트
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["orchestrator"] = "completed_with_default_plan"
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed_with_default_plan")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["orchestrator"] = "completed_with_default_plan"
             
             # 성능 지표 업데이트
             end_time = datetime.now()
@@ -236,8 +248,12 @@ class OrchestratorAgent(BaseAgent):
             state["execution_plan"] = execution_plan
             
             # 처리 상태 업데이트
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["orchestrator"] = "completed_with_default_plan"
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed_with_default_plan")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["orchestrator"] = "completed_with_default_plan"
             
             return state
     

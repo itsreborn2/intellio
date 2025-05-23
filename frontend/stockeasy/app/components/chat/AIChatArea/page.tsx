@@ -14,13 +14,11 @@ import {
 } from './components';
 import { useMessageProcessing } from './hooks';
 import { useIsMobile } from './hooks';
-import { HomeIcon, RefreshCcw } from 'lucide-react';
 import { useChatStore } from '@/stores/chatStore';
 import { useTokenUsageStore } from '@/stores/tokenUsageStore';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore } from '@/stores/userModeStore';
 import { StockOption } from './types';
-import { IChatMessageDetail } from '@/types/api/chat';
 
 /**
  * AIChatArea 메인 컴포넌트

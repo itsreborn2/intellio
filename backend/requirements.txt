@@ -172,7 +172,6 @@ pgvector==0.4.1
 pickleshare==0.7.5
 pillow==11.1.0
 pinecone==6.0.2
-pinecone-client==2.2.4
 pinecone-plugin-interface==0.0.7
 pipdeptree==2.25.0
 pipreqs==0.5.0
@@ -273,3 +272,5 @@ xxhash==3.5.0
 yarg==0.1.9
 yarl==1.20.0
 zstandard==0.23.0
+psutil==7.0.0
+objgraph==3.6.2

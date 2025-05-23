@@ -6,6 +6,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.base.dev
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     image: intellio-base-dev:latest
     volumes:
       - ./backend:/backend
@@ -15,6 +17,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.fastapi.dev
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     volumes:
       - ./backend:/backend:rw,delegated
     env_file:

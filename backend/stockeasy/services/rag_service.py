@@ -7,6 +7,10 @@
 import asyncio
 import os
 import threading
+import gc
+import psutil
+import csv
+from pathlib import Path
 from typing import Dict, List, Any, Optional, ClassVar, Union, Callable
 from uuid import UUID
 from loguru import logger
@@ -67,13 +71,27 @@ class StockRAGService:
         
         self._user_contexts = {}  # 사용자별 컨텍스트 저장
         
+        # RAG 서비스 시작 시 메모리 상태 기록
+        self._log_rag_service_memory("start")
+        
         #logger.info("멀티에이전트 기반 주식 분석 RAG 서비스가 초기화되었습니다.")
     async def close(self):
         """
-        리소스 정리 - DB 세션 닫기
+        리소스 정리 - DB 세션 닫기 및 메모리 정리
         """
         if hasattr(self, 'db') and self.db:
             try:
+                # 메모리 정리 로직 실행
+                if hasattr(self, 'graph') and self.graph:
+                    logger.info("[RAG 서비스] 메모리 정리 시작")
+                    try:
+                        # 현재 세션의 모든 상태에 대해 메모리 정리 실행
+                        if hasattr(self.graph, 'current_state') and self.graph.current_state:
+                            for session_key, state in self.graph.current_state.items():
+                                await self._cleanup_memory(state)
+                        logger.info("[RAG 서비스] 메모리 정리 완료")
+                    except Exception as e:
+                        logger.error(f"[RAG 서비스] 메모리 정리 중 오류: {str(e)}")
                 
                 # DB 세션 닫기
                 logger.info("StockRAGService DB 세션 닫기")
@@ -425,6 +443,167 @@ class StockRAGService:
             logger.info(f"{len(old_sessions)}개의 오래된 사용자 컨텍스트가 정리되었습니다.")
         
         return len(old_sessions)
+
+    async def _cleanup_memory(self, state: Dict[str, Any]):
+        """
+        메모리 정리 로직 - graph_end에서 이동한 코드
+        """
+        # 메모리 사용량 측정 함수
+        def get_obj_memory_size(obj):
+            try:
+                return len(str(obj)) // 1024  # KB 단위로 반환
+            except:
+                return 0  # 측정 실패 시 0 반환
+        
+        # 메모리 정리 전 전체 크기 계산
+        total_size_before = sum([
+            get_obj_memory_size(state.get(k, {})) 
+            for k in ["retrieved_data", "agent_results", "integrated_knowledge", 
+                     "summary_by_section", "conversation_history",
+                     "answer_expert"]
+        ])
+        
+        logger.info(f"[메모리정리] 초기화 전 대용량 객체 총 크기: {total_size_before}KB")
+        
+        # 대용량 객체 초기화
+        large_objects = [
+            # 검색 및 에이전트 데이터 (가장 큰 객체들)
+            "retrieved_data",              # 검색 데이터
+            "agent_results",               # 에이전트 결과
+            "integrated_knowledge",        # 통합된 지식 베이스
+            
+            # 응답 관련 객체들 - 최종 응답은 보존
+            "summary_by_section",          # 섹션별 요약
+            "summary",                   # 요약 - 최종 응답이므로 보존
+            "formatted_response",        # 형식화된 응답 - 최종 응답이므로 보존
+            "answer",                    # 답변 - 최종 응답이므로 보존
+            "answer_expert",               # 전문가형 답변
+            "components",                # 구조화된 응답 컴포넌트 - 최종 응답이므로 보존
+            
+            # 히스토리 관련 객체
+            "conversation_history",        # 과거 대화 이력
+            
+            # 분석 데이터
+            "question_analysis",           # 질문 분석 결과
+            "execution_plan"               # 실행 계획
+        ]
+        
+        # 초기화된 객체 목록 (로깅용)
+        initialized_objects = []
+        
+        for obj_name in large_objects:
+            if obj_name in state:
+                obj_size = get_obj_memory_size(state.get(obj_name, {}))
+                logger.info(f"[메모리정리] {obj_name} 크기: {obj_size}KB - 초기화 중")
+                
+                # 각 객체 타입에 맞게 초기화
+                if obj_name in ["retrieved_data", "agent_results", "summary_by_section", 
+                               "processing_status", "metrics", "execution_plan", "question_analysis"]:
+                    state[obj_name] = {}  # 빈 딕셔너리로 설정
+                elif obj_name in ["integrated_knowledge", "answer_expert"]:
+                    state[obj_name] = None  # None으로 설정
+                elif obj_name in ["conversation_history", "errors"]:
+                    state[obj_name] = []  # 빈 리스트로 설정
+                
+                initialized_objects.append(obj_name)
+        
+        # retrieved_data의 내부 객체도 명시적으로 초기화 (중요: 가장 메모리를 많이 사용하는 객체)
+        if "retrieved_data" in state:
+            sub_fields = [
+                "telegram_messages", "report_data", "financial_data", 
+                "industry_data", "confidential_data", "web_search_results"
+            ]
+            
+            for field in sub_fields:
+                if field in state["retrieved_data"]:
+                    field_size = get_obj_memory_size(state["retrieved_data"].get(field, {}))
+                    logger.info(f"[메모리정리] retrieved_data.{field} 크기: {field_size}KB - 초기화 중")
+                    
+                    if field in ["telegram_messages", "web_search_results"]:
+                        state["retrieved_data"][field] = {}  # 딕셔너리 형태의 필드
+                    else:
+                        state["retrieved_data"][field] = []  # 리스트 형태의 필드
+        
+        # 메모리 비운 후 가비지 컬렉션 실행 (2회 실행으로 순환 참조도 처리)
+        gc_count_before = len(gc.get_objects())
+        collected1 = gc.collect(generation=0)  # 첫 번째 세대 (최신 객체)
+        collected2 = gc.collect(generation=1)  # 두 번째 세대
+        collected3 = gc.collect(generation=2)  # 세 번째 세대 (오래된 객체)
+        gc_count_after = len(gc.get_objects())
+        
+        # 메모리 해제 후 크기 계산
+        total_size_after = sum([
+            get_obj_memory_size(state.get(k, {})) 
+            for k in ["retrieved_data", "agent_results", "integrated_knowledge", 
+                     "summary_by_section", "conversation_history",
+                     "answer_expert"]
+        ])
+        
+        # 메모리 해제 결과 로깅
+        memory_freed = total_size_before - total_size_after
+        gc_objects_freed = gc_count_before - gc_count_after
+        
+        logger.info(f"[메모리정리] 초기화된 객체: {', '.join(initialized_objects)}")
+        logger.info(f"[메모리정리] GC 실행 결과 - 컬렉션된 객체: gen0={collected1}, gen1={collected2}, gen2={collected3}")
+        logger.info(f"[메모리정리] GC 실행 전후 객체 수: {gc_count_before} -> {gc_count_after} (차이: {gc_objects_freed}개)")
+        logger.info(f"[메모리정리] 총 해제된 메모리: {memory_freed}KB (이전: {total_size_before}KB, 이후: {total_size_after}KB)")
+        logger.info(f"[메모리정리] 모든 대용량 객체 메모리 정리 및 GC 실행 완료")
+        
+        # RAG 서비스 메모리 정리 완료 후 메모리 상태 기록
+        self._log_rag_service_memory("cleanup_end")
+
+    def _log_rag_service_memory(self, phase: str) -> None:
+        """
+        RAG 서비스의 메모리 상태를 CSV 파일에 기록합니다.
+        
+        Args:
+            phase: 기록 시점 ("start", "cleanup_end" 등)
+        """
+        try:
+            # 메모리 사용량 측정
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            memory_data = {
+                "rss": memory_info.rss / (1024 * 1024),  # RSS in MB
+                "vms": memory_info.vms / (1024 * 1024),  # VMS in MB
+                "gc_objects": len(gc.get_objects()),  # GC가 추적 중인 객체 수
+            }
+            
+            # CSV 파일 경로 설정
+            csv_dir = Path("stockeasy/local_cache/memory_tracking")
+            csv_dir.mkdir(parents=True, exist_ok=True)
+            csv_path = csv_dir / "memory_usage.csv"
+            
+            # CSV 파일 존재 여부 확인
+            file_exists = csv_path.exists()
+            
+            # 현재 시간
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+            
+            # CSV 파일에 데이터 추가
+            with open(csv_path, 'a', newline='') as csvfile:
+                fieldnames = ['timestamp', 'session_id', 'agent', 'phase', 'rss_mb', 'vms_mb', 'gc_objects', 'state_size']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                
+                # 파일이 없으면 헤더 추가
+                if not file_exists:
+                    writer.writeheader()
+                
+                writer.writerow({
+                    'timestamp': timestamp,
+                    'session_id': 'rag_service',
+                    'agent': 'rag_service',
+                    'phase': phase,
+                    'rss_mb': round(memory_data["rss"], 2),
+                    'vms_mb': round(memory_data["vms"], 2),
+                    'gc_objects': memory_data["gc_objects"],
+                    'state_size': 0  # RAG 서비스는 상태 크기 측정하지 않음
+                })
+            
+            logger.info(f"[RAG서비스-메모리] {phase} - RSS: {memory_data['rss']:.2f}MB, VMS: {memory_data['vms']:.2f}MB, GC 객체: {memory_data['gc_objects']}")
+            
+        except Exception as e:
+            logger.error(f"[RAG서비스-메모리] 메모리 기록 중 오류 발생: {str(e)}")
 
     
 

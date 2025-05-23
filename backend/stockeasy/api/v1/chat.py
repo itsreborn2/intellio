@@ -598,9 +598,16 @@ async def stream_chat_message(
                         agent_results=agent_results
                     )
                 )
-                def cleanup_callback(_):
-                    asyncio.create_task(stock_rag_service.close())
-                task.add_done_callback(cleanup_callback)
+                # async def cleanup_callback(_):
+                #     try:
+                #         logger.info("[STREAM_CHAT] RAG 서비스 리소스 정리 시작")
+                #         await stock_rag_service.close()
+                #         logger.info("[STREAM_CHAT] RAG 서비스 리소스 정리 완료")
+                #     except Exception as e:
+                #         logger.error(f"[STREAM_CHAT] RAG 서비스 리소스 정리 중 오류: {str(e)}")
+                
+                # # 비동기 함수를 create_task로 변환하여 실행
+                # task.add_done_callback(lambda _: asyncio.create_task(cleanup_callback(_)))
                 
                 # 상태 추적을 위한 이전 상태 저장 변수
                 prev_status = {}
@@ -683,18 +690,10 @@ async def stream_chat_message(
                                                 }
                                             }, cls=DateTimeEncoder))
                                             
-                                            # response_formatter가 시작되면 응답 스트리밍 단계 시작 알림
-                                            if agent == "response_formatter" and status == "processing" and not response_started:
-                                                response_started = True
-                                                #logger.info("[STREAM_CHAT] 응답 스트리밍 단계 시작")
-                                                await streaming_queue.put(json.dumps({
-                                                    "event": "response_start",
-                                                    "data": {
-                                                        "message": "응답 생성을 시작합니다.",
-                                                        "timestamp": time.time(),
-                                                        "elapsed": elapsed
-                                                    }
-                                                }, cls=DateTimeEncoder))
+                                            # response_formatter가 완료되면 메모리 정리 시작
+                                            if agent == "response_formatter" and status in ["completed", "completed_with_default_plan", "completed_no_data"]:
+                                                logger.info("[STREAM_CHAT] response_formatter 완료 - 메모리 정리 준비")
+                                                # 메모리 정리 로직 준비 (추후 cleanup_callback에서 실행)
                                 
                                 # 현재 상태를 이전 상태로 저장
                                 prev_status = processing_status.copy()
@@ -737,13 +736,48 @@ async def stream_chat_message(
                     result = await task
                     total_time = time.time() - start_time
                     
+                    # result 객체 분석을 위한 로그 추가
+                    logger.info(f"[STREAM_CHAT] result 객체 키값들: {list(result.keys()) if isinstance(result, dict) else 'result는 dict가 아님'}")
+                    logger.info(f"[STREAM_CHAT] result 타입: {type(result)}")
+                    
+                    # 각 주요 키의 존재 여부 확인
+                    if isinstance(result, dict):
+                        for key in ['answer', 'summary', 'formatted_response', 'agent_results', 'components']:
+                            value = result.get(key)
+                            logger.info(f"[STREAM_CHAT] result['{key}'] 존재: {value is not None}, 타입: {type(value)}, 길이: {len(str(value)) if value else 0}")
+                    
+                    # answer 값 상세 분석
+                    answer_value = result.get("answer") if isinstance(result, dict) else None
+                    logger.info(f"[STREAM_CHAT] result.get('answer') 값: {repr(answer_value)}")
+                    logger.info(f"[STREAM_CHAT] answer 값 타입: {type(answer_value)}")
+                    logger.info(f"[STREAM_CHAT] answer 값 길이: {len(answer_value) if answer_value else 'None'}")
+                    
+                    # summary 값도 확인
+                    summary_value = result.get("summary") if isinstance(result, dict) else None
+                    logger.info(f"[STREAM_CHAT] result.get('summary') 값: {repr(summary_value[:100] if summary_value else None)}")
+                    
+                    # formatted_response 값도 확인
+                    formatted_response_value = result.get("formatted_response") if isinstance(result, dict) else None
+                    logger.info(f"[STREAM_CHAT] result.get('formatted_response') 값: {repr(formatted_response_value[:100] if formatted_response_value else None)}")
+                    
                     # 결과에서 요약 추출
                     summary = result.get("summary", "")
                     # 전체 응답이 스트리밍을 통해 구성되었음
-                    answer = full_response or result.get("answer", "처리가 완료되었으나 응답을 찾을 수 없습니다.")
+                    #answer = full_response or result.get("answer") or "처리가 완료되었으나 응답을 찾을 수 없습니다."
+                    answer = result.get("answer") or "처리가 완료되었으나 응답을 찾을 수 없습니다."
+                    
+                    # answer가 None이거나 기본 메시지인 경우 대안 사용
+                    if not answer or answer == "처리가 완료되었으나 응답을 찾을 수 없습니다.":
+                        # summary나 formatted_response를 대안으로 사용
+                        answer = result.get("summary") or result.get("formatted_response") or "처리가 완료되었으나 응답을 찾을 수 없습니다."
+                        logger.info(f"[STREAM_CHAT] answer 키가 없어서 대안 사용: summary={bool(result.get('summary'))}, formatted_response={bool(result.get('formatted_response'))}")
+                    
+                    # answer가 None이 아닌지 확인
+                    if answer is None:
+                        answer = "처리가 완료되었으나 응답을 찾을 수 없습니다."
                     
                     logger.info("[STREAM_CHAT] 응답 생성 완료 (총 소요시간: {:.2f}초, 응답 길이: {}자)", 
-                               total_time, len(answer))
+                               total_time, len(answer) if answer else 0)
                     
                     # 메모리에 AI 응답 추가
                     await chat_memory_manager.add_ai_message(str(chat_session_id), answer)
@@ -803,8 +837,10 @@ async def stream_chat_message(
                             # 업데이트할 데이터 준비
                             update_data = {}
                             
+                            # 세션에는 agent_results 저장하지 않음.
+                            # 조회할때 시간 걸리는듯.
                             # agent_results 데이터를 해당 세션에 추가
-                            update_data["agent_results"] = remove_null_chars(agent_results)
+                            #update_data["agent_results"] = remove_null_chars(agent_results)
                             
                             # 기존 세션 데이터 확인
                             if not session_data.get("stock_code") and request.stock_code:

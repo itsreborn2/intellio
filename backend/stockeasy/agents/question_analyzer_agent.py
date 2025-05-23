@@ -33,7 +33,7 @@ from stockeasy.agents.base import BaseAgent
 from sqlalchemy.ext.asyncio import AsyncSession
 #from langchain_tavily import TavilySearch
 from common.services.tavily import TavilyService
-
+from common.utils.util import extract_json_from_text
 
 class Entities(BaseModel):
     """추출된 엔티티 정보"""
@@ -124,6 +124,40 @@ class ConversationContextAnalysis(BaseModel):
 
 
 # 새로운 모델 클래스 추가
+class SubsectionModel(BaseModel):
+    """
+    하위 섹션을 위한 구조화된 출력 포맷
+    """
+    subsection_id: str = Field(
+        description="하위 섹션 ID (예: section_2_1)"
+    )
+    title: str = Field(
+        description="하위 섹션 제목 (예: 2.1 하위 섹션 제목)"
+    )
+    description: Optional[str] = Field(
+        default=None,
+        description="하위 섹션에서 다룰 내용의 간략한 설명"
+    )
+
+class SectionModel(BaseModel):
+    """
+    섹션을 위한 구조화된 출력 포맷
+    """
+    section_id: str = Field(
+        description="섹션 ID (예: section_1)"
+    )
+    title: str = Field(
+        description="섹션 제목 (예: 1. 핵심 요약)"
+    )
+    description: Optional[str] = Field(
+        default=None,
+        description="섹션에서 다룰 내용의 간략한 설명"
+    )
+    subsections: List[SubsectionModel] = Field(
+        default_factory=list,
+        description="하위 섹션 목록"
+    )
+
 class DynamicTocOutput(BaseModel):
     """
     동적 목차 생성 결과를 위한 구조화된 출력 포맷
@@ -202,11 +236,12 @@ class QuestionAnalyzerAgent(BaseAgent):
             # 대화 컨텍스트 의존성 분석
             # 수정된 조건: 대화 기록이 2개 이상 있는지 확인
             # 상용 서비스에 맞게 type 속성이 있는 경우도 처리
-            has_valid_history = (
-                conversation_history and 
-                isinstance(conversation_history, list) and 
-                len(conversation_history) >= 1
-            )
+            # has_valid_history = (
+            #     conversation_history and 
+            #     isinstance(conversation_history, list) and 
+            #     len(conversation_history) >= 1
+            # )
+            has_valid_history = False #강제 비활성화
             
             if has_valid_history:
                 logger.info(f"대화 기록 있음: {len(conversation_history)}개 메시지")
@@ -436,7 +471,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                     
                     # LLM 호출 다시 시도 (일반 응답으로)
                     logger.info("일반 응답 형식으로 다시 시도합니다.")
-                    ai_response = await self.agent_llm.ainvoke_with_fallback(
+                    ai_response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
                         prompt,
                         user_id=user_id,
                         project_type=ProjectType.STOCKEASY,
@@ -451,15 +486,12 @@ class QuestionAnalyzerAgent(BaseAgent):
                         import json
                         
                         # JSON 패턴 찾기 (중괄호로 감싸진 부분)
-                        json_pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}))*\}'
-                        content = ai_response.content if hasattr(ai_response, 'content') else str(ai_response)
-                        json_match = re.search(json_pattern, content, re.DOTALL)
+                        json_str = extract_json_from_text(ai_response.content)
                         
-                        if json_match:
-                            json_str = json_match.group(0)
+                        if json_str:
                             # JSON 문자열 파싱
                             parsed_data = json.loads(json_str)
-                            logger.info(f"JSON 파싱 성공: {parsed_data}")
+                            logger.info(f"\n✅ JSON 파싱 성공: title={parsed_data.get('title')}, sections={len(parsed_data.get('sections', []))}개")
                             
                             # 기본 데이터 구조 생성
                             question_analysis = {
@@ -743,7 +775,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                 stock_relation="알수없음",
                 reasoning=f"분석 중 오류 발생: {str(e)}"
             )
-    
+        
     def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
         """
         상태 객체에 오류 정보를 추가합니다.
@@ -778,10 +810,8 @@ class QuestionAnalyzerAgent(BaseAgent):
         Returns:
             DynamicTocOutput: 생성된 목차 구조
         """
-        print("\n📋 동적 목차 생성 중...")
+        logger.info("\n📋 동적 목차 생성 중...")
         
-        #llm_lite = get_llm_for_agent("gemini-lite")
-
         prompt_template = ChatPromptTemplate.from_template(PROMPT_DYNAMIC_TOC).partial(
             query=query,
             recent_issues_summary=recent_issues_summary,
@@ -789,124 +819,143 @@ class QuestionAnalyzerAgent(BaseAgent):
         )
         formatted_prompt = prompt_template.format_prompt()
         
-        response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
+        # 1. 먼저 구조화된 출력을 시도
+        try:
+            logger.info("구조화된 출력(DynamicTocOutput)을 사용하여 목차 생성 시도")
+            structured_response = await self.agent_llm.with_structured_output(DynamicTocOutput).ainvoke(
                 formatted_prompt,
                 project_type=ProjectType.STOCKEASY,
                 user_id=user_id,
                 db=self.db
             )
-        
-        # # 구조화된 출력 대신 일반 텍스트 응답으로 받음
-        # chain = prompt_template | llm_lite | StrOutputParser()
-        
-        # # LLM에 요청 보내기
-        # response_text = await chain.ainvoke({
-        #     "query": query, 
-        #     "recent_issues_summary": recent_issues_summary
-        # })
-        
-
-        response_text = response.content
-        print("\n📄 LLM 원본 응답:")
-        print(response_text[:200]) # 응답 일부 출력 (디버깅용)
-        
-        # JSON 문자열을 파싱
-        try:
-            # JSON 부분 추출 (LLM이 JSON 외에 다른 텍스트를 포함할 수 있음)
-            import re
-            import json
             
-            # JSON 패턴 찾기 (중괄호로 감싸진 부분)
-            json_pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}))*\}'
-            json_match = re.search(json_pattern, response_text, re.DOTALL)
+            # 구조화된 출력이 성공적으로 파싱된 경우
+            logger.info(f"\n✅ 구조화된 출력 성공: title={structured_response.title}, sections={len(structured_response.sections)}개")
             
-            if json_match:
-                json_str = json_match.group(0)
-                # JSON 문자열 파싱
-                toc_data = json.loads(json_str)
-                print("\n✅ JSON 파싱 성공")
-            else:
-                # JSON 패턴을 찾지 못한 경우
-                print("\n⚠️ JSON 패턴을 찾을 수 없음, 기본 목차 구조 사용")
-                toc_data = {
-                    "title": f"투자 리서치 보고서: {query}",
-                    "sections": [
-                        {
-                            "section_id": "section_1",
-                            "title": "핵심 요약 (Executive Summary)",
-                            "description": "주요 발견과 결론을 요약",
-                            "subsections": []
-                        },
-                        {
-                            "section_id": "section_2", 
-                            "title": "기업 개요 및 사업 모델",
-                            "description": "기업의 기본 정보와 비즈니스 모델 분석",
-                            "subsections": []
-                        },
-                        {
-                            "section_id": "section_3",
-                            "title": "산업/시장 동향 분석",
-                            "description": "기업이 속한 산업의 현황과 전망",
-                            "subsections": []
-                        }
-                    ],
-                    "rationale": "기본 목차 구조 사용"
-                }
-        except Exception as e:
-            print(f"\n⚠️ JSON 파싱 오류: {str(e)}, 기본 목차 구조 사용")
-            # 오류 시 기본 목차 구조 사용
-            toc_data = {
-                "title": f"투자 리서치 보고서: {query}",
-                "sections": [
-                    {
-                        "section_id": "section_1",
-                        "title": "핵심 요약 (Executive Summary)",
-                        "description": "주요 발견과 결론을 요약",
-                        "subsections": []
-                    },
-                    {
-                        "section_id": "section_2", 
-                        "title": "기업 개요 및 사업 모델",
-                        "description": "기업의 기본 정보와 비즈니스 모델 분석",
-                        "subsections": []
-                    },
-                    {
-                        "section_id": "section_3",
-                        "title": "산업/시장 동향 분석",
-                        "description": "기업이 속한 산업의 현황과 전망",
-                        "subsections": []
-                    }
-                ],
-            }
-        
-        # 파싱된 데이터로 DynamicTocOutput 객체 생성
-        result = DynamicTocOutput(
-            title=toc_data.get("title", f"투자 리서치 보고서: {query}"),
-            sections=toc_data.get("sections", []),
-            rationale=toc_data.get("rationale", "")
-        )
-        
-        print(f"\n✅ 동적 목차 생성 완료. 총 {len(result.sections)}개 섹션 포함")
-        print(f"📚 보고서 제목: {result.title}")
-        
-        # 섹션 정보 상세 출력
-        print(f"📑 목차 구조:")
-        for i, section in enumerate(result.sections, 1):
-            # 섹션 제목과 설명 출력
-            section_title = section.get('title', '제목 없음')
-            section_desc = section.get('description', '')
-            print(f"  {section_title}")
-            if section_desc:
-                print(f"     - {section_desc}")
+            # 섹션이 비어있는 경우 확인
+            if len(structured_response.sections) == 0:
+                logger.warning("구조화된 출력에 섹션이 없습니다. 기본 응답 구조로 fallback합니다.")
+                raise ValueError("구조화된 출력에 섹션이 없습니다.")
                 
-            # 하위 섹션이 있으면 출력
-            if 'subsections' in section and section['subsections']:
-                for j, subsection in enumerate(section['subsections'], 1):
-                    subsection_title = subsection.get('title', '제목 없음')
-                    print(f"     {subsection_title}")
-        
-        return result
-    
+            return structured_response
+            
+        except Exception as e:
+            # 구조화된 출력 파싱 실패 시 fallback으로 일반 텍스트 응답 시도
+            logger.warning(f"\n⚠️ 구조화된 출력 실패: {str(e)}, 일반 텍스트 응답으로 fallback")
+            
+            # 2. 일반 텍스트 응답 시도
+            response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
+                formatted_prompt,
+                project_type=ProjectType.STOCKEASY,
+                user_id=user_id,
+                db=self.db
+            )
+            
+            response_text = response.content
+            logger.info(f"\n📄 LLM 원본 응답:")
+            logger.info(f"\n{response_text[:200]}") # 응답 일부 출력 (디버깅용)
+            
+            # 3. JSON 문자열 파싱 시도
+            try:
+                # JSON 부분 추출 (LLM이 JSON 외에 다른 텍스트를 포함할 수 있음)
+                json_str = extract_json_from_text(response_text)
+                if json_str:
+                    # JSON 문자열 파싱
+                    toc_data = json.loads(json_str)
+                    logger.info(f"\n✅ JSON 파싱 성공: title={toc_data.get('title')}, sections={len(toc_data.get('sections', []))}개")
+                    
+                    # 섹션이 비어있는 경우 확인
+                    if len(toc_data.get('sections', [])) == 0:
+                        logger.warning(f"JSON 파싱 성공했으나 섹션이 없습니다. 기본 목차 구조를 사용합니다.")
+                        raise ValueError("JSON 파싱 성공했으나 섹션이 없습니다.")
+                        
+                    # JSON 데이터를 DynamicTocOutput 모델 형식으로 변환
+                    converted_sections = []
+                    for section in toc_data.get('sections', []):
+                        # 서브섹션 변환
+                        converted_subsections = []
+                        for subsection in section.get('subsections', []):
+                            converted_subsections.append(
+                                SubsectionModel(
+                                    subsection_id=subsection.get('subsection_id', ''),
+                                    title=subsection.get('title', ''),
+                                    description=subsection.get('description')
+                                )
+                            )
+                        
+                        # 섹션 변환
+                        converted_sections.append(
+                            SectionModel(
+                                section_id=section.get('section_id', ''),
+                                title=section.get('title', ''),
+                                description=section.get('description'),
+                                subsections=converted_subsections
+                            )
+                        )
+                        
+                    # DynamicTocOutput 객체 생성
+                    result = DynamicTocOutput(
+                        title=toc_data.get('title', f"투자 리서치 보고서: {query}"),
+                        sections=converted_sections
+                    )
+                    
+                    return result
+                    
+                else:
+                    # JSON 패턴을 찾지 못한 경우
+                    logger.warning("JSON 문자열을 추출할 수 없음, 기본 응답 구조 사용")
+                    raise ValueError("JSON 문자열을 추출할 수 없습니다.")
+                    
+            except Exception as json_error:
+                # 4. JSON 파싱 실패 시 기본 목차 구조 사용
+                logger.warning(f"\n⚠️ JSON 파싱 오류: {str(json_error)}, 기본 목차 구조 사용")
+                logger.warning(f"LLM 원본 응답:\n{response_text}")
+                
+                # 기본 목차 구조 생성
+                default_sections = [
+                    SectionModel(
+                        section_id="section_1",
+                        title="핵심 요약 (Executive Summary)",
+                        description="주요 발견과 결론을 요약",
+                        subsections=[]
+                    ),
+                    SectionModel(
+                        section_id="section_2",
+                        title="기업 개요 및 사업 모델",
+                        description="기업의 기본 정보와 비즈니스 모델 분석",
+                        subsections=[]
+                    ),
+                    SectionModel(
+                        section_id="section_3",
+                        title="산업/시장 동향 분석",
+                        description="기업이 속한 산업의 현황과 전망",
+                        subsections=[]
+                    )
+                ]
+                
+                # 기본 DynamicTocOutput 객체 생성
+                result = DynamicTocOutput(
+                    title=f"투자 리서치 보고서: {query}",
+                    sections=default_sections
+                )
+                
+                print(f"\n✅ 동적 목차 생성 완료. 총 {len(result.sections)}개 섹션 포함")
+                print(f"📚 보고서 제목: {result.title}")
+                
+                # 섹션 정보 상세 출력
+                print(f"📑 목차 구조:")
+                for section in result.sections:
+                    print(f"  {section.title}")
+                    if section.description:
+                        print(f"     - {section.description}")
+                        
+                    # 하위 섹션이 있으면 출력
+                    if section.subsections:
+                        for subsection in section.subsections:
+                            print(f"     {subsection.title}")
+                
+                return result
+
     async def summarize_recent_issues(self, stock_name: str, stock_code: str, user_id: str) -> str:
         """LLM을 사용하여 검색된 최근 이슈 결과를 요약합니다."""
 
@@ -936,7 +985,6 @@ class QuestionAnalyzerAgent(BaseAgent):
         except Exception as e:
             print(f"  ⚠️ {stock_name} 최근 이슈 요약 중 오류: {str(e)}")
             return f"{stock_name} 최근 이슈 요약 중 오류 발생: {str(e)}"
-    # --- END: 최근 이슈 검색 및 요약 함수 ---
 
     async def search_recent_issues(self, stock_name: str, stock_code: str) -> str:
         """Tavily API를 사용하여 특정 종목의 최근 6개월간 주요 뉴스 및 이슈를 검색합니다."""
@@ -1065,6 +1113,5 @@ class QuestionAnalyzerAgent(BaseAgent):
             return formatted_results
         except Exception as e:
             print(f"검색 중 오류가 발생했습니다: {str(e)}")
-            print(search_results)
             return f"검색 중 오류가 발생했습니다: {str(e)}"
         
