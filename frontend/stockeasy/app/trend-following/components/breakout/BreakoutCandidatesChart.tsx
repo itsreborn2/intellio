@@ -25,6 +25,7 @@ interface ChartInfo {
   data: CandleData[];  // ChartComponent에 맞게 data로 이름 변경
   isLoading: boolean;
   error: string;
+  breakthroughPrice?: number; // 돌파 가격
 }
 
 export default function BreakoutCandidatesChart() {
@@ -57,8 +58,30 @@ export default function BreakoutCandidatesChart() {
         
         // 2. 시장 지수 데이터 로드
         await loadMarketIndexData();
+
+        // 3. breakout.csv에서 돌파 가격 정보 로드
+        const breakthroughPriceResponse = await fetch('/requestfile/trend-following/breakout.csv', { cache: 'no-store' });
+        if (!breakthroughPriceResponse.ok) {
+          throw new Error(`breakout.csv 로드 실패: ${breakthroughPriceResponse.status}`);
+        }
+        const breakthroughCsvText = await breakthroughPriceResponse.text();
+        const breakthroughCsvData = Papa.parse(breakthroughCsvText, { header: true, skipEmptyLines: true });
+        const breakthroughPriceMap: { [key: string]: number } = {};
+        if (breakthroughCsvData.data) {
+          breakthroughCsvData.data.forEach((row: any) => {
+            if (row.Code && row['Breakthrough Price']) {
+              const price = parseFloat(row['Breakthrough Price']);
+              if (!isNaN(price)) { // NaN이 아닐 경우에만 맵에 추가
+                breakthroughPriceMap[row.Code] = price;
+              } else {
+                console.warn(`[BreakoutCandidatesChart] 종목코드 ${row.Code}의 Breakthrough Price 값 '${row['Breakthrough Price']}'는 유효한 숫자가 아닙니다. 이 종목의 돌파 라인은 표시되지 않습니다.`);
+              }
+            }
+          });
+        }
+        console.log('돌파 가격 맵:', breakthroughPriceMap);
         
-        // 3. 차트 정보 배열 초기화
+        // 4. 차트 정보 배열 초기화
         const newChartInfos: ChartInfo[] = [];
         
         // 4. 각 파일별로 차트 데이터 로드
@@ -122,6 +145,7 @@ export default function BreakoutCandidatesChart() {
             
             // 차트 데이터 변환
             const chartData = await loadChartData(`/requestfile/breakoutchart/watchlist/${fileName}`);
+            const breakthroughPrice = breakthroughPriceMap[code]; // breakthroughPrice 변수 선언 위치 수정
             
             newChartInfos.push({
               code,
@@ -131,7 +155,8 @@ export default function BreakoutCandidatesChart() {
               rsValue: latestRsValue, // CSV에서 추출한 RS 값 사용
               data: chartData,
               isLoading: false,
-              error: ''
+              error: '',
+              breakthroughPrice: breakthroughPrice // 돌파 가격 추가
             });
           } catch (err) {
             console.error(`${fileName} 차트 데이터 로드 오류:`, err);
@@ -462,6 +487,7 @@ export default function BreakoutCandidatesChart() {
                       stockName={chartInfo.name}
                       showMA20={false}
                       parentComponent="BreakoutCandidatesChart"
+                      breakthroughPrice={chartInfo.breakthroughPrice}
                     />
                   )}
                 </div>
