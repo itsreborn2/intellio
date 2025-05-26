@@ -108,6 +108,7 @@ class ResponseFormatterAgent(BaseAgent):
   2. 왼쪽 Y축에는 막대 차트(매출액, 영업이익 등 금액), 오른쪽 Y축에는 선 그래프(YoY, QoQ 등 증감률)
   3. 서로 다른 단위(억원과 %)를 동시에 표현해야 할 때
   4. 특히 매출액/영업이익/순이익과 같은 주요 지표와 그에 대한 증감률을 동시에 표현할 때
+  5. **중요**: line_datasets의 각 라벨은 구체적이어야 합니다. "YoY (%)"가 아닌 "매출액 YoY (%)", "영업이익 YoY (%)" 형태로 작성하세요.
 
 표 데이터를 발견하면 단순히 테이블로 변환하지 말고, 다음 규칙을 따르세요:
 1. 시간 순서(연도별, 분기별)로 나열된 수치 데이터는 바차트나 라인차트로 변환하세요.
@@ -115,7 +116,8 @@ class ResponseFormatterAgent(BaseAgent):
 3. 하나의 표에 여러 지표가 있다면, 각 지표별로 별도의 바차트나 라인차트를 생성하세요.
 4. 표 형식이 너무 복잡하거나 다양한 종류의 데이터가 혼합되어 있을 때만 테이블 컴포넌트를 사용하세요.
 5. 중요: 동일한 매출처/회사/항목이 여러 분기/시간에 걸쳐 나타나는 경우, 반드시 하나의 차트에 통합해서 표현하세요. x축은 기간(분기/연도)으로 하고, 각 항목은 서로 다른 데이터셋으로 표현합니다.
-6. 같은 표에 수치(금액)와 증감률(%)이 함께 있는 경우, 혼합 차트(mixed_chart)를 사용하여 직관적으로 보여주세요.
+6. 같은 표에 수치(금액)와 증감률(%)이 함께 있는 경우, 혼합 차트(mixed_chart)를 사용하여 직관적으로 보여주세요. 이때 line_datasets의 라벨은 "항목명 + 증감률 타입"으로 구체적으로 명명하세요 (예: "매출액 YoY (%)", "영업이익 YoY (%)").
+7. 표의 행이 서로 다른 항목(매출액, 영업이익, 순이익 등)을 나타내고, 열이 시간(연도/분기)과 증감률을 나타내는 경우, 각 항목에 대해 별도의 막대 차트와 선 차트 데이터셋을 생성하세요.
 
 표, 차트, 목록 등은 내용에 적합한 경우에만 사용하세요.
 섹션 제목은 이미 추가되었으니 다시 추가하지 마세요.
@@ -1219,11 +1221,52 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
     """혼합 차트 컴포넌트를 생성합니다. 막대 차트와 선 차트가 결합된 차트입니다.
     title은 차트 제목,
     labels은 x축 라벨,
-    bar_datasets는 왼쪽 Y축에 표시될 막대 차트 데이터셋 목록 (예: [{"label": "매출액", "data": [100, 200]}]),
-    line_datasets는 오른쪽 Y축에 표시될 선 차트 데이터셋 목록 (예: [{"label": "증감률", "data": [5.2, 7.3]}]),
-    y_axis_left_title은 왼쪽 Y축 제목 (선택, 예: "매출액 (억원)"),
-    y_axis_right_title은 오른쪽 Y축 제목 (선택, 예: "증감률 (%)")
+    bar_datasets는 왼쪽 Y축에 표시될 막대 차트 데이터셋 목록 (예: [{"label": "매출액 (억원)", "data": [100, 200]}]),
+    line_datasets는 오른쪽 Y축에 표시될 선 차트 데이터셋 목록입니다. 
+    
+    중요: line_datasets의 각 항목은 구체적인 라벨을 가져야 합니다:
+    - 올바른 예: [{"label": "매출액 YoY (%)", "data": [5.2, 7.3]}, {"label": "영업이익 YoY (%)", "data": [8.1, 9.2]}]
+    - 잘못된 예: [{"label": "YoY (%)", "data": [5.2, 7.3]}, {"label": "YoY (%)", "data": [8.1, 9.2]}]
+    
+    bar_datasets와 line_datasets의 개수가 같은 경우, 각각은 동일한 항목에 대한 값과 증감률을 나타냅니다.
+    y_axis_left_title은 왼쪽 Y축 제목 (선택, 예: "억원"),
+    y_axis_right_title은 오른쪽 Y축 제목 (선택, 예: "%")
     """
+    # Line 데이터셋 라벨 개선 로직
+    # 같은 라벨이 여러 개 있는 경우, bar_datasets의 라벨을 참조하여 구체적인 라벨로 변경
+    if len(bar_datasets) == len(line_datasets):
+        unique_line_labels = set()
+        for i, line_dataset in enumerate(line_datasets):
+            line_label = line_dataset.get("label", "")
+            # 동일한 라벨이 반복되거나 너무 일반적인 경우
+            if (line_label in unique_line_labels or 
+                line_label in ["YoY (%)", "QoQ (%)", "증감률 (%)", "%", "증감률"]):
+                
+                # 대응하는 bar_dataset의 라벨에서 항목명 추출
+                if i < len(bar_datasets):
+                    bar_label = bar_datasets[i].get("label", "")
+                    # bar_label에서 항목명 추출 (예: "매출액 (억원)" -> "매출액")
+                    item_name = bar_label.split(" (")[0].split("(")[0].strip()
+                    
+                    # 원래 line_label에서 증감률 타입 추출
+                    if "yoy" in line_label.lower() or "전년" in line_label:
+                        rate_type = "YoY"
+                    elif "qoq" in line_label.lower() or "전분기" in line_label:
+                        rate_type = "QoQ"
+                    elif "mom" in line_label.lower() or "전월" in line_label:
+                        rate_type = "MoM"
+                    else:
+                        rate_type = "YoY"  # 기본값
+                    
+                    # 새로운 구체적인 라벨 생성
+                    new_label = f"{item_name} {rate_type} (%)"
+                    line_dataset["label"] = new_label
+                    unique_line_labels.add(new_label)
+                else:
+                    unique_line_labels.add(line_label)
+            else:
+                unique_line_labels.add(line_label)
+    
                     # 막대 차트 데이터셋에 색상 할당
     bar_color_palette = ["#4C9AFF", "#36B37E", "#FF5630", "#FFAB00", "#6554C0", "#00B8D9"]
     

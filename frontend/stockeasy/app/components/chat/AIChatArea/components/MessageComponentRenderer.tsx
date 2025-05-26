@@ -263,9 +263,11 @@ export function MessageComponentRenderer({
       const formattedData = data.labels.map((label: string, index: number) => {
         const dataPoint: Record<string, any> = { name: label };
         
-        // 각 데이터셋의 해당 인덱스 값을 추가
-        data.datasets.forEach((dataset: any) => {
-          dataPoint[dataset.label] = dataset.data[index];
+        // 각 데이터셋의 해당 인덱스 값을 추가 - 고유한 키 생성
+        data.datasets.forEach((dataset: any, datasetIndex: number) => {
+          // 동일한 라벨을 가진 데이터셋들을 구분하기 위해 인덱스 추가
+          const uniqueKey = `${dataset.label}_${datasetIndex}`;
+          dataPoint[uniqueKey] = dataset.data[index];
         });
         
         return dataPoint;
@@ -372,10 +374,14 @@ export function MessageComponentRenderer({
               
               {data.datasets.map((dataset: any, index: number) => {
                 const datasetColor = dataset.backgroundColor || CHART_COLORS[index % CHART_COLORS.length];
+                // 고유한 키 생성 (데이터 가공 시와 동일한 방식)
+                const uniqueKey = `${dataset.label}_${index}`;
+                
                 return (
                   <Bar 
                     key={index} 
-                    dataKey={dataset.label} 
+                    dataKey={uniqueKey}
+                    name={dataset.label} // 범례에 표시될 이름은 원래 라벨 사용
                     fill={datasetColor}
                     animationDuration={1500}
                     animationEasing="ease-in-out"
@@ -432,9 +438,11 @@ export function MessageComponentRenderer({
       const formattedData = data.labels.map((label: string, index: number) => {
         const dataPoint: Record<string, any> = { name: label };
         
-        // 각 데이터셋의 해당 인덱스 값을 추가
-        data.datasets.forEach((dataset: any) => {
-          dataPoint[dataset.label] = dataset.data[index];
+        // 각 데이터셋의 해당 인덱스 값을 추가 - 고유한 키 생성
+        data.datasets.forEach((dataset: any, datasetIndex: number) => {
+          // 동일한 라벨을 가진 데이터셋들을 구분하기 위해 인덱스 추가
+          const uniqueKey = `${dataset.label}_${datasetIndex}`;
+          dataPoint[uniqueKey] = dataset.data[index];
         });
         
         return dataPoint;
@@ -539,11 +547,15 @@ export function MessageComponentRenderer({
               
               {data.datasets.map((dataset: any, index: number) => {
                 const datasetColor = dataset.borderColor || CHART_COLORS[index % CHART_COLORS.length];
+                // 고유한 키 생성 (데이터 가공 시와 동일한 방식)
+                const uniqueKey = `${dataset.label}_${index}`;
+                
                 return (
                   <Line 
                     key={index} 
                     type="monotone" 
-                    dataKey={dataset.label} 
+                    dataKey={uniqueKey}
+                    name={dataset.label} // 범례에 표시될 이름은 원래 라벨 사용
                     stroke={datasetColor}
                     strokeWidth={3}
                     activeDot={{ 
@@ -609,9 +621,11 @@ export function MessageComponentRenderer({
           dataPoint[dataset.label] = dataset.data[index];
         });
         
-        // 선 차트 데이터셋 (오른쪽 Y축)
-        data.line_datasets.forEach((dataset: any) => {
-          dataPoint[dataset.label] = dataset.data[index];
+        // 선 차트 데이터셋 (오른쪽 Y축) - 고유한 키 생성
+        data.line_datasets.forEach((dataset: any, datasetIndex: number) => {
+          // 동일한 라벨을 가진 데이터셋들을 구분하기 위해 인덱스 추가
+          const uniqueKey = `${dataset.label}_${datasetIndex}`;
+          dataPoint[uniqueKey] = dataset.data[index];
         });
         
         return dataPoint;
@@ -807,12 +821,16 @@ export function MessageComponentRenderer({
                    dataset.label.includes('QoQ') ? '#7C4DFF' : 
                    CHART_COLORS[(index + 4) % CHART_COLORS.length]);
                 
+                // 고유한 키 생성 (데이터 가공 시와 동일한 방식)
+                const uniqueKey = `${dataset.label}_${index}`;
+                
                 return (
                   <Line 
                     key={`line-${index}`} 
                     yAxisId="right"
                     type="monotone" 
-                    dataKey={dataset.label} 
+                    dataKey={uniqueKey}
+                    name={dataset.label} // 범례에 표시될 이름은 원래 라벨 사용
                     stroke={datasetColor}
                     strokeWidth={3}
                     activeDot={{ 
