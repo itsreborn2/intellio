@@ -111,9 +111,18 @@ const ChartComponent: React.FC<ChartProps> = ({
       const normalizedMarketType = marketType.toUpperCase();
       
       // 시장 지수 로컬 캐시 파일 경로 설정
-      const marketIndexPath = normalizedMarketType === 'KOSPI' 
-        ? '/requestfile/market-index/kospiwk.csv'
-        : '/requestfile/market-index/kosdaqwk.csv';
+      // breakout 관련 컴포넌트의 경우 일별 2개월 데이터 파일 사용
+      const useDaily2Month = parentComponent === 'BreakoutCandidatesChart' || 
+                           parentComponent === 'BreakoutFailChart' || 
+                           parentComponent === 'BreakoutSustainChart';
+      
+      const marketIndexPath = useDaily2Month
+        ? (normalizedMarketType === 'KOSPI' 
+          ? '/requestfile/market-index/kospidaily2month.csv'
+          : '/requestfile/market-index/kosdaqdaily2month.csv')
+        : (normalizedMarketType === 'KOSPI' 
+          ? '/requestfile/market-index/kospiwk.csv'
+          : '/requestfile/market-index/kosdaqwk.csv');
       
       // 로컬 캐시 파일에서 데이터 가져오기
       const response = await fetch(marketIndexPath, { cache: 'no-store' });
@@ -437,9 +446,7 @@ const ChartComponent: React.FC<ChartProps> = ({
             color: 'rgba(197, 203, 206, 0.5)',
           },
         },
-        crosshair: {
-          mode: CrosshairMode.Normal,
-        },
+
         rightPriceScale: {
           borderColor: 'rgba(197, 203, 206, 0.8)',
           entireTextOnly: true,
@@ -477,8 +484,31 @@ const ChartComponent: React.FC<ChartProps> = ({
           },
         },
         localization: {
+          locale: 'ko-KR',
           priceFormatter: (price: number) => {
-            return price.toLocaleString('ko-KR');
+            return Math.round(price).toLocaleString('ko-KR');
+          },
+          timeFormatter: (originalTime: number) => {
+            const date = new Date(originalTime * 1000); // lightweight-charts는 초 단위 timestamp를 사용
+            const year = date.getFullYear().toString().slice(-2); // 'yy'
+            const month = (date.getMonth() + 1).toString().padStart(2, '0'); // 'mm'
+            const day = date.getDate().toString().padStart(2, '0'); // 'dd'
+            return `${year}년 ${month}월 ${day}일`;
+          },
+        },
+        crosshair: {
+          mode: CrosshairMode.Normal,
+          vertLine: {
+            color: '#758696',
+            width: 1,
+            style: LineStyle.LargeDashed,
+            labelBackgroundColor: '#758696',
+          },
+          horzLine: {
+            color: '#758696',
+            width: 1,
+            style: LineStyle.LargeDashed,
+            labelBackgroundColor: '#758696',
           },
         },
       };
@@ -559,7 +589,8 @@ const ChartComponent: React.FC<ChartProps> = ({
                   }
                 }
               } else {
-                console.warn('항목에 볼륨 필드가 없습니다:', originalItem);
+                // 볼륨 필드가 없는 경우 기본값 0 설정 (경고 제거)
+                volume = 0;
               }
             } else {
               if (candle.volume !== undefined) {
@@ -575,7 +606,8 @@ const ChartComponent: React.FC<ChartProps> = ({
                   // console.log(`캔들 데이터 자체의 볼륨 사용: ${volume}`);
                 }
               } else {
-                console.warn(`${candleTimeStr} 에 해당하는 볼륨 데이터를 찾을 수 없음`);
+                // 볼륨 데이터를 찾을 수 없는 경우 기본값 0 설정 (경고 제거)
+                volume = 0;
               }
             }
           } catch (matchingError) {

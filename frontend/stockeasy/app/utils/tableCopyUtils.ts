@@ -17,7 +17,7 @@ interface CopyTableOptions {
  * 테이블 복사 버튼 컴포넌트 속성 타입
  */
 export interface TableCopyButtonProps {
-  tableRef: React.RefObject<HTMLDivElement>;
+  tableRef: React.RefObject<HTMLElement>; // HTMLTableElement에서 더 일반적인 HTMLElement로 변경
   headerRef: React.RefObject<HTMLDivElement>;
   tableName: string;
   options?: CopyTableOptions;
@@ -35,12 +35,25 @@ export interface TableCopyButtonProps {
  * @param updateDateText 테이블 컴포넌트에서 전달받은 업데이트 날짜/시간 텍스트
  */
 export const copyTableAsImage = async (
-  tableRef: React.RefObject<HTMLDivElement>,
+  tableRef: React.RefObject<HTMLElement>, // HTMLTableElement에서 HTMLElement로 변경하여 TableCopyButtonProps와 호환되도록 수정
   headerRef: React.RefObject<HTMLDivElement>,
   tableName: string,
   options?: CopyTableOptions,
   updateDateText?: string // 인자 추가
 ) => {
+  // 고유 ID 생성 및 기존 컨테이너 식별 패턴 정의
+  const uniqueId = `image-capture-container-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+  const existingContainerIdPattern = 'image-capture-container-';
+
+  // 이전에 생성된 유사한 컨테이너 제거 (새로운 캡처 시작 전 정리)
+  document.querySelectorAll(`[id^="${existingContainerIdPattern}"]`).forEach(el => {
+    try {
+      el.remove();
+    } catch (e) {
+      console.warn('Failed to remove existing container:', e);
+    }
+  });
+
   // 로딩 메시지 즉시 표시 (가장 먼저 실행)
   const loadingToast = document.createElement('div');
   loadingToast.className = 'fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded shadow-lg z-50 animate-pulse';
@@ -52,7 +65,11 @@ export const copyTableAsImage = async (
   await new Promise(resolve => setTimeout(resolve, 0));
   
   if (!tableRef.current || !headerRef.current) {
-    document.body.removeChild(loadingToast);
+    try {
+      document.body.removeChild(loadingToast);
+    } catch (e) {
+      console.warn('Failed to remove loading toast on early return:', e);
+    }
     return;
   }
   
@@ -83,13 +100,14 @@ export const copyTableAsImage = async (
   try {
     // 임시 컨테이너 생성
     const container = document.createElement('div');
+    container.id = uniqueId; // 고유 ID 설정
     // 디버깅을 위해 화면에 보이도록 설정 (나중에 다시 숨김 처리)
     container.style.position = 'fixed';
     container.style.top = '10px';
     container.style.left = '10px';
     container.style.zIndex = '9999';
     container.style.width = 'fit-content'; // 내용에 맞게 자동 조정
-    container.style.maxWidth = '600px'; // 최대 너비를 늘려서 우측 잘림 방지
+    // container.style.maxWidth = '600px'; // 최대 너비를 늘려서 우측 잘림 방지 - 제거하여 테이블 전체 너비 반영
     container.style.height = 'fit-content'; // 내용에 맞게 자동 조정
     container.style.backgroundColor = mergedOptions.backgroundColor || '#ffffff';
     container.style.padding = '0px 20px 20px 0px'; // 좌측 패딩 제거, 우측과 하단 패딩 추가로 잘림 방지
@@ -180,14 +198,135 @@ export const copyTableAsImage = async (
         }
       });
       
-      // 테이블 스타일 직접 적용
-      tableClone.style.width = 'auto';
-      tableClone.style.minWidth = '100%'; // 테이블이 컨테이너 너비를 채우도록
+      // 테이블 스타일 직접 적용 - 더 강력한 제한 추가
+      tableClone.style.width = '500px'; // 고정 너비 설정 - 전체 테이블 너비 제한
+      tableClone.style.maxWidth = '500px'; // 업데이트
+      tableClone.style.tableLayout = 'fixed'; // fixed를 먼저 설정하여 각 셀 너비 제한이 제대로 적용되도록 함
       tableClone.style.borderCollapse = 'collapse'; // 테두리 겹침 제거
-      tableClone.style.fontSize = '10px';
+      tableClone.style.fontSize = '9px'; // 글자 크기 조금 추가 축소
+      
+      // 모든 colgroup, col 요소 제거 (셀 너비 설정에 영향을 줄 수 있음)
+      const colgroups = tableClone.querySelectorAll('colgroup');
+      colgroups.forEach(colgroup => colgroup.remove());
+
+      // MTT 컬럼의 체크 아이콘 처리
+      // SVG 아이콘을 찾아서 중앙 정렬을 위한 래퍼 요소로 감싸기
+      try {
+        const svgIcons = tableClone.querySelectorAll('svg');
+        svgIcons.forEach(svgIcon => {
+          // 아이콘 셀 찾기
+          const iconCell = svgIcon.closest('td');
+          if (iconCell) {
+            // 커스텀 스타일 적용
+            iconCell.style.cssText = `
+              text-align: center !important;
+              vertical-align: middle !important;
+              display: table-cell !important;
+              padding: 0 !important;
+              height: 35px !important;
+            `;
+            
+            // 아이콘 래퍼 요소 생성
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = `
+              display: flex !important;
+              justify-content: center !important;
+              align-items: center !important;
+              width: 100% !important;
+              height: 100% !important;
+              margin: 0 auto !important;
+              position: relative !important;
+            `;
+            
+            // 아이콘 복사 및 스타일 적용
+            const iconClone = svgIcon.cloneNode(true) as SVGElement;
+            iconClone.style.cssText = `
+              display: block !important;
+              margin: 0 auto !important;
+              position: absolute !important;
+              top: 50% !important;
+              left: 50% !important;
+              transform: translate(-50%, -50%) !important;
+            `;
+            
+            // 기존 아이콘 제거 및 래퍼로 감싸진 아이콘 추가
+            svgIcon.remove();
+            wrapper.appendChild(iconClone);
+            iconCell.innerHTML = '';
+            iconCell.appendChild(wrapper);
+          }
+        });
+      } catch (error) {
+        console.error('SVG 아이콘 처리 중 오류:', error);
+      }
+      
+      // 각 셀 너비 설정 - 컴팩트하게 고정 크기로 설정
+      // 먼저 헤더에 너비 설정 (이것이 컬럼 너비에 영향을 준다)
+      const headerCells = tableClone.querySelectorAll('th');
+      headerCells.forEach((cell) => {
+        const cellElement = cell as HTMLElement;
+        const cellText = cellElement.textContent?.trim() || '';
+
+        // 헤더 셀 기본 스타일
+        cellElement.style.cssText += `
+          width: 40px !important;
+          max-width: 40px !important;
+          min-width: 40px !important;
+          padding: 2px !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          font-size: 9px !important;
+        `;
+
+        // 특정 컴럼은 더 강한 너비 제한
+        if (cellText.includes('산업')) {
+          cellElement.style.cssText += `width: 30px !important; max-width: 30px !important;`;
+        } else if (cellText.includes('섹터')) {
+          cellElement.style.cssText += `width: 30px !important; max-width: 30px !important;`;
+        } else if (cellText.includes('등락률') || cellText.includes('등락율')) {
+          cellElement.style.cssText += `width: 20px !important; max-width: 20px !important;`;
+        } else if (cellText.includes('ETF 종목') || cellText.includes('종목명')) {
+          cellElement.style.cssText += `width: 85px !important; max-width: 85px !important;`;
+        } else if (cellText.includes('포지션')) {
+          cellElement.style.cssText += `width: 30px !important; max-width: 30px !important;`;
+        }
+      });
+
+      // 데이터 셀에도 동일한 스타일 적용
+      const dataCells = tableClone.querySelectorAll('td');
+      dataCells.forEach((cell) => {
+        const cellElement = cell as HTMLElement;
+        const cellText = cellElement.textContent?.trim() || '';
+        
+        // 모든 데이터 셀에 기본 스타일 적용
+        cellElement.style.cssText += `
+          max-width: 40px !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          padding: 1px 2px !important;
+          font-size: 9px !important;
+        `;
+
+        // 연산자 서로 이어붙여 사용하면 이전 스타일을 유지하면서 추가 스타일 적용 가능
+        // 이것은 cssText 가 +\\\\ \\ 를 사용하기 때문
+        
+        // ETF 종목은 약간 너게 설정
+        if (cellElement.parentElement?.firstElementChild === cellElement || cellElement.parentElement?.children[1] === cellElement) {
+          // 첫번째 컬럼(산업) 이나 두번째 컬럼(섹터) 셀은 더 좀게
+          cellElement.style.cssText += `max-width: 30px !important; width: 30px !important;`;
+        } else if (cellElement.parentElement?.children[2] === cellElement) {
+          // ETF 종목명 컴럼이면 약간 넓게
+          cellElement.style.cssText += `max-width: 85px !important; width: 85px !important;`;
+        }
+      });
     } catch (error) {
       console.error('테이블 요소 처리 중 오류:', error);
     }
+
+    tableContainer.appendChild(tableClone); // 테이블 복제본을 테이블 컨테이너에 추가
+    container.appendChild(tableContainer); // 테이블 컨테이너를 메인 컨테이너에 추가
     
     // 포지션 셀 처리 함수 - try-catch 블록 외부로 이동
     const processPositionCell = (cell: HTMLTableCellElement) => {
@@ -589,7 +728,7 @@ export const copyTableAsImage = async (
     }
 
     // 임시 컨테이너 생성 (스타일 적용 및 중앙 정렬을 위해)
-    container.appendChild(tableClone);
+    tableContainer.appendChild(tableClone);
     
     // 워터마크 추가 (중앙에 반투명하게 표시)
     if (mergedOptions.watermark && mergedOptions.watermark.text) {

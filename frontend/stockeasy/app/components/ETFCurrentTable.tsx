@@ -161,8 +161,9 @@ export default function ETFCurrentTable() {
   const [csvData, setCsvData] = useState<{ headers: string[]; rows: Record<string, any>[]; groupedData: GroupedData; errors: any[] }>({ headers: [], rows: [], groupedData: {}, errors: [] });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);  
-  const [sortKey, setSortKey] = useState<string>('산업');  // 정렬 상태 - 기본값으로 산업 컬럼 오름차순 설정
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sortKey, setSortKey] = useState<string | null>(null);  // 정렬 상태 - 기본값으로 산업 컬럼 오름차순 설정
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  console.log('[ETFCurrentTable] Initial sortKey:', sortKey, 'Initial sortDirection:', sortDirection);
   const [updateDate, setUpdateDate] = useState<string | null>(null); // 새로운 업데이트 날짜 상태
   // 개별 ETF 차트 데이터 관련 상태 제거됨
   const [tickerMappingInfo, setTickerMappingInfo] = useState<{
@@ -173,50 +174,75 @@ export default function ETFCurrentTable() {
   const [maListMap, setMaListMap] = useState<Record<string, MaListData>>({}); // 종목명 -> 20malist 데이터
   
   // 테이블 복사 기능을 위한 ref 생성
-  const tableRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
   // 개별 ETF 차트 데이터 관련 티커 목록 및 매핑 테이블 제거됨
   
   // 개별 ETF 차트 데이터 로딩 관련 함수들(loadPriceData, loadAllPriceData, normalizeTicker) 제거됨
   
-  // 업데이트 날짜를 로드하는 함수 추가
+  // 업데이트 날짜와 시간을 파일 수정 정보로부터 로드하는 함수
   const loadUpdateDate = async () => {
     try {
-      const cacheFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
-      const response = await fetch(cacheFilePath, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`날짜 데이터 파일 로드 실패: ${response.status}`);
-      }
-      const csvText = await response.text();
-      // Papa.parse 직접 사용 (기존 parseCSV 함수와는 별개로 처리)
-      const parsedResult = Papa.parse(csvText, {
-        header: true,
-        skipEmptyLines: true,
-      });
-
-      if (parsedResult.data && parsedResult.data.length > 0) {
-        const firstRow = parsedResult.data[0] as Record<string, string>; // 타입 단언
-        const dateString = firstRow['날짜']; 
-        if (dateString) {
-          const formatted = formatDateMMDD(dateString);
-          if (formatted) {
-            setUpdateDate(formatted);
-          } else {
-            console.error('ETFCurrentTable: 날짜 포맷 실패.');
-            // setError('날짜 포맷에 실패했습니다.'); // 필요시 에러 상태 업데이트
-          }
-        } else {
-          console.error('ETFCurrentTable: CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.');
-          // setError('CSV 파일에 "날짜" 컬럼이 없거나 비어있습니다.'); // 필요시 에러 상태 업데이트
+      // GET 요청으로 etf_table.csv 파일의 수정 날짜를 가져옴
+      // 캐시를 방지하기 위해 타임스탬프 추가
+      const etfFilePath = '/requestfile/etf_sector/etf_table.csv?t=' + Date.now();
+      
+      const response = await fetch(etfFilePath, { 
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
         }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`ETF 테이블 파일 접근 실패: ${response.status}`);
+      }
+      
+      // 응답 헤더에서 Last-Modified 정보 추출
+      const lastModified = response.headers.get('Last-Modified');
+      
+      if (lastModified) {
+        // Last-Modified 날짜를 Date 객체로 변환
+        const modifiedDate = new Date(lastModified);
+        
+        // 날짜 형식 변환 (M/DD 형식 - 예: 5/10)
+        const month = String(modifiedDate.getMonth() + 1); // 앞의 0 제거
+        const day = String(modifiedDate.getDate()).padStart(2, '0'); // 일은 두 자리 유지
+        
+        // 시간 형식 변환 (HH:MM 형식 - 예: 14:30)
+        const hours = String(modifiedDate.getHours()).padStart(2, '0');
+        const minutes = String(modifiedDate.getMinutes()).padStart(2, '0');
+        
+        // 날짜와 시간을 포함한 형식으로 변환 (M/DD HH:MM)
+        const formattedDate = `${month}/${day} ${hours}:${minutes}`;
+        
+        // 업데이트 날짜 설정
+        setUpdateDate(formattedDate);
       } else {
-        console.error('ETFCurrentTable: 날짜 CSV 파싱에 실패했거나 데이터가 없습니다.');
-        // setError('날짜 CSV 파싱에 실패했거나 데이터가 없습니다.'); // 필요시 에러 상태 업데이트
+        console.error('ETFCurrentTable: 파일의 수정 날짜 정보를 가져올 수 없습니다.');
+        
+        // 파일의 수정 날짜를 가져올 수 없는 경우 현재 날짜와 시간 사용
+        const now = new Date();
+        const month = String(now.getMonth() + 1); // 앞의 0 제거
+        const day = String(now.getDate()).padStart(2, '0'); // 일은 두 자리 유지
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const formattedDate = `${month}/${day} ${hours}:${minutes}`;
+        setUpdateDate(formattedDate);
       }
     } catch (err) {
       console.error('ETFCurrentTable: 업데이트 날짜 로드 중 오류 발생:', err);
-      // setError(err instanceof Error ? err.message : '업데이트 날짜 로드 중 알 수 없는 오류'); // 필요시 에러 상태 업데이트
+      // 오류 발생 시 현재 날짜와 시간 사용
+      const now = new Date();
+      const month = String(now.getMonth() + 1); // 앞의 0 제거
+      const day = String(now.getDate()).padStart(2, '0'); // 일은 두 자리 유지
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const formattedDate = `${month}/${day} ${hours}:${minutes}`;
+      setUpdateDate(formattedDate);
     }
   };
 
@@ -266,10 +292,15 @@ export default function ETFCurrentTable() {
             '대표종목(RS)': r['대표종목(RS)']
           });
         });
+        const processedRows = rows.map(r => ({
+          ...r,
+          '티커': r['종목코드'] ? String(r['종목코드']).padStart(6, '0') : undefined
+        }));
+
         setCsvData({
           headers: ['산업','섹터','종목명','등락율','포지션','20일 이격','돌파/이탈','대표종목(RS)'],
-          rows: rows as any[],
-          groupedData: grouped,
+          rows: processedRows as any[],
+          groupedData: grouped, // groupedData는 이미 티커 키를 사용하고 있음
           errors: result.errors,
         });
       } catch (err: any) {
@@ -304,151 +335,142 @@ export default function ETFCurrentTable() {
   
   // 정렬된 데이터 계산
   const sortedData = useMemo(() => {
-    if (!sortKey || !sortDirection || !csvData.groupedData) {
-      return csvData.groupedData;
+    console.log('[ETFCurrentTable useMemo] sortKey:', sortKey, 'sortDirection:', sortDirection);
+    if (csvData && csvData.rows && csvData.rows.length > 0) {
+      console.log('[ETFCurrentTable useMemo] csvData.rows[0]:', JSON.stringify(csvData.rows[0]));
     }
-    
-    // 마켓 행 반드시 복사하여 사용
-    const marketGroup = [...(csvData.groupedData['마켓'] || [])];
-    
-    // 1. 마켓을 포함한 모든 산업 그룹들의 데이터를 복사
-    const allIndustries: GroupedData = {};
-    for (const industry in csvData.groupedData) {
-      allIndustries[industry] = [...csvData.groupedData[industry]];
+    if (csvData && csvData.rows && csvData.rows.length > 1) {
+      console.log('[ETFCurrentTable useMemo] csvData.rows[1]:', JSON.stringify(csvData.rows[1]));
     }
-    
-    // 2. 단순한 행 정렬 함수 정의
+    // csvData.rows가 없거나 비어있으면 빈 배열 반환
+    if (!csvData || !csvData.rows || csvData.rows.length === 0) {
+      return [];
+    }
+
+    // 정렬 키나 방향이 없으면 원본 순서(CSV 기본 정렬) 반환
+    if (!sortKey || !sortDirection) {
+      console.log('[ETFCurrentTable useMemo] No sortKey or sortDirection, returning original csvData.rows');
+      return csvData.rows;
+    }
+
+    // 모든 행을 포함하는 새로운 배열을 복사하여 정렬 (원본 데이터 변경 방지)
+    const dataToSort = [...csvData.rows];
+
     const sortRow = (a: any, b: any) => {
       let aValue = a[sortKey];
       let bValue = b[sortKey];
-      
-      // 포지션 컴럼은 특별 처리
+
+      // 포지션 컬럼 특별 처리
       if (sortKey === '포지션') {
-        // 포지션 값은 데이터에 직접 존재하지 않음
-        // 티커를 사용하여 포지션 값을 가져와야 함
-        const aTicker = a['티커'];
-        const bTicker = b['티커'];
-        
-        // (불필요한 로그 완전 제거)
-// console.log('포지션 정렬을 위한 티커:', aTicker, bTicker);
-        
-        // 포지션 값 추출 - maListMap에서 포지션 정보 가져오기
         const extractPositionValue = (ticker: string): number => {
-          // 티커로 종목명 찾기
+          console.log(`[extractPositionValue] ticker: ${ticker}`);
           const stockName = tickerMappingInfo.stockNameMap[ticker] || '';
-          if (!stockName) return 0;
-          
-          // maListMap에서 포지션 정보 가져오기
+          if (!stockName) {
+            console.log(`[extractPositionValue] No stockName for ticker: ${ticker}`);
+            return 0;
+          }
+          console.log(`[extractPositionValue] stockName: ${stockName}`);
+
           const maData = maListMap[stockName.trim()];
-          if (!maData || !maData['포지션']) return 0;
-          
-          // 포지션 텍스트에 따라 값 할당
-          const positionText = maData['포지션'];
-          
-          if (positionText.includes('유지')) {
-            return 1; // 유지는 양수 값
-          } else if (positionText.includes('이탈')) {
-            return -1; // 이탈은 음수 값
+          console.log(`[extractPositionValue] maData for ${stockName.trim()}:`, maData);
+
+          // maData 존재 및 타입, '포지션' 속성 존재 및 타입 확인
+          if (!maData || typeof maData !== 'object' || !maData.hasOwnProperty('포지션')) {
+            console.log(`[extractPositionValue] maData or maData['포지션'] is missing or invalid for ${stockName}`);
+            return 0;
           }
           
-          return 0; // 기타 경우
+          const positionText = maData['포지션'];
+          if (typeof positionText !== 'string') {
+            console.log(`[extractPositionValue] positionText is not a string for ${stockName}:`, positionText);
+            return 0;
+          }
+          console.log(`[extractPositionValue] positionText: ${positionText}`);
+
+          const daysMatch = positionText.match(/(\d+)/); // 숫자 부분 추출
+          const days = daysMatch ? parseInt(daysMatch[1], 10) : 0;
+          console.log(`[extractPositionValue] daysMatch: ${daysMatch}, days: ${days}`);
+
+          if (isNaN(days)) {
+            console.log(`[extractPositionValue] days is NaN for ${positionText}`);
+            return 0; // 숫자로 변환할 수 없으면 0
+          }
+
+          let calculatedValue = 0;
+          if (positionText.includes('유지')) {
+            calculatedValue = days; // '유지 X일' -> X
+          } else if (positionText.includes('이탈')) {
+            calculatedValue = -days; // '이탈 Y일' -> -Y
+          }
+          console.log(`[extractPositionValue] calculatedValue for ${positionText}: ${calculatedValue}`);
+          return calculatedValue; // '신규' 또는 기타 텍스트는 0으로 처리
         };
-        
-        const aPositionValue = extractPositionValue(aTicker);
-        const bPositionValue = extractPositionValue(bTicker);
-        
-        // (불필요한 로그 완전 제거)
-// console.log(`비교: ${aPositionValue} vs ${bPositionValue}, 정렬방향: ${sortDirection}`);
-        
+        const aPositionValue = extractPositionValue(a['티커']);
+        const bPositionValue = extractPositionValue(b['티커']);
+        console.log(`[sortRow - 포지션] aValue: ${aPositionValue}, bValue: ${bPositionValue}, direction: ${sortDirection}`);
         if (aPositionValue < bPositionValue) return sortDirection === 'asc' ? -1 : 1;
         if (aPositionValue > bPositionValue) return sortDirection === 'asc' ? 1 : -1;
         return 0;
+      } 
+      // 등락률 컬럼 처리 (maListMap에서 데이터 가져와서 숫자로 변환)
+      else if (sortKey === '등락율') {
+        const extractChangeRateValue = (rowItem: Record<string, any>): number => {
+          const ticker = rowItem['티커'] as string;
+          const stockNameFromCsv = rowItem['종목명'] as string;
+          // 티커를 우선 사용하고, 없으면 CSV의 종목명을 사용
+          const stockNameKey = tickerMappingInfo.stockNameMap[ticker] || stockNameFromCsv || '';
+          if (!stockNameKey) return Number.NEGATIVE_INFINITY;
+
+          const maData = maListMap[stockNameKey.trim()];
+          if (!maData || typeof maData['등락률'] === 'undefined') {
+            // maListMap에 해당 종목이나 등락률 데이터가 없는 경우
+            // CSV의 '등락율' 컬럼 값을 직접 사용 시도 (fallback)
+            const csvChangeRate = rowItem['등락율'];
+            if (typeof csvChangeRate === 'string' && csvChangeRate !== '-' && csvChangeRate.trim() !== ''){
+              const parsedCsvValue = parseFloat(csvChangeRate.replace('%', ''));
+              return isNaN(parsedCsvValue) ? Number.NEGATIVE_INFINITY : parsedCsvValue;
+            }
+            return Number.NEGATIVE_INFINITY;
+          }
+
+          let changeRateStr = String(maData['등락률']);
+          if (changeRateStr === '-' || changeRateStr.trim() === '') return Number.NEGATIVE_INFINITY;
+
+          const parsedValue = parseFloat(changeRateStr.replace('%', ''));
+          return isNaN(parsedValue) ? Number.NEGATIVE_INFINITY : parsedValue;
+        };
+        aValue = extractChangeRateValue(a);
+        bValue = extractChangeRateValue(b);
       }
-      // 숫자 문자열을 숫자로 변환 (일반 컴럼)
-      else if (!isNaN(parseFloat(aValue)) && !isNaN(parseFloat(bValue))) {
-        aValue = parseFloat(aValue);
-        bValue = parseFloat(bValue);
+      // 그 외 숫자 형태의 문자열을 숫자로 변환 (시가총액, 거래량 등)
+      else if (['가격', '시가총액', '거래량'].includes(sortKey)) {
+        aValue = parseFloat(String(aValue).replace(/,/g, ''));
+        bValue = parseFloat(String(bValue).replace(/,/g, ''));
       }
-      
+      // 일반 문자열 비교 또는 이미 숫자인 경우
+      else if (typeof aValue === 'string' && typeof bValue === 'string') {
+        // 문자열 직접 비교
+      } else if (typeof aValue === 'number' && typeof bValue === 'number'){
+        // 숫자 직접 비교
+      } else {
+        // 혼합 타입이거나 예상치 못한 타입의 경우, 기본 비교 시도 또는 에러 처리
+        // 여기서는 문자열로 변환하여 비교
+        aValue = String(aValue);
+        bValue = String(bValue);
+      }
+
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     };
-    
-    // 3. 산업 그룹을 등락률 평균 기준으로 정렬 (직접 계산)
-    // 산업 컴럼 외 다른 컴럼을 정렬할 때는 산업그룹 순서는 유지하고 그룹 내부만 정렬
-    if (sortKey === '산업') {
-      // 산업 컴럼을 클릭했을 때는 산업 그룹을 정렬
 
-      const industryAverages: Record<string, number> = {};
-      
-      // 각 산업의 등락률 평균값 계산
-      for (const industry in allIndustries) {
-        // 마켓을 제외한 산업만 평균 계산 (마켓은 항상 최상단에 고정)
-        if (industry !== '마켓') {
-          // 해당 산업의 모든 항목에 대해 등락률 평균 계산
-          let sum = 0;
-          let count = 0;
-          
-          allIndustries[industry].forEach((item: any) => {
-            const changeRate = item['등락율']; // '등락율' 기준으로 평균 계산
-            if (changeRate) {
-              const numValue = parseFloat(changeRate.replace('%', ''));
-              if (!isNaN(numValue)) {
-                sum += numValue;
-                count++;
-              }
-            }
-          });
-          
-          // 산업 평균 등락률 계산
-          industryAverages[industry] = count > 0 ? sum / count : 0;
-        }
-      }
-      
-      // 마켓을 제외한 산업 그룹만 정렬
-      const sortedIndustries = Object.keys(allIndustries)
-        .filter(industry => industry !== '마켓')
-        .sort((a, b) => {
-          const aAvg = industryAverages[a];
-          const bAvg = industryAverages[b];
-          
-          // sortDirection에 따라 산업 그룹 정렬 방향 변경
-          if (aAvg < bAvg) return sortDirection === 'asc' ? 1 : -1; 
-          if (aAvg > bAvg) return sortDirection === 'asc' ? -1 : 1;
-          return 0;
-        });
-      
-      // 정렬된 산업 순서대로 새 데이터 객체 생성 (마켓은 최상단 고정)
-      const sortedGroupedData: GroupedData = { '마켓': marketGroup };
-      
-      // 정렬된 산업 순서대로 그룹 추가
-      sortedIndustries.forEach(industry => {
-        sortedGroupedData[industry] = allIndustries[industry];
-      });
-      
-      return sortedGroupedData;
-    } else {
-      // 다른 컴럼을 클릭했을 때는 그룹 순서는 유지하고 그룹 내부만 정렬
-      
-      // 1. 산업 그룹 내부 정렬
-      for (const industry in allIndustries) {
-        allIndustries[industry].sort(sortRow);
-      }
-      
-      // 2. 마켓 그룹은 최상단에 고정
-      const sortedGroupedData: GroupedData = { '마켓': allIndustries['마켓'] };
-      
-      // 3. 기존 산업 순서를 유지하면서 그룹 내부만 정렬된 데이터 추가
-      Object.keys(csvData.groupedData)
-        .filter(industry => industry !== '마켓')
-        .forEach(industry => {
-          sortedGroupedData[industry] = allIndustries[industry];
-        });
-      
-      return sortedGroupedData;
-    }
-  }, [csvData.groupedData, sortKey, sortDirection]);
+    return dataToSort.sort(sortRow);
+  }, [csvData.rows, sortKey, sortDirection, maListMap, tickerMappingInfo.stockNameMap]);
+
+  // 테이블 본문 렌더링 로직을 수정합니다.
+  // 이전에는 industryGroups를 순회했지만, 이제 평탄화된 sortedData (배열)를 직접 사용합니다.
+  // allRows를 생성하는 로직도 평탄화된 sortedData를 사용하도록 변경합니다.
+
 
   // 날짜 컬럼을 제외한 헤더 필터링
   const filteredHeaders = useMemo(() => {
@@ -512,6 +534,8 @@ export default function ETFCurrentTable() {
     // 일치하는 산업명을 찾지 못한 경우 '-'를 반환합니다.
     return '-';
   }, [maListMap]); // maListMap이 변경될 때만 함수를 재생성합니다.
+
+
 
   // 변동률에 따른 색상 클래스 반환 함수 (평균용 -> 산업 등락률용으로 재사용)
   const getAverageColorClass = (change: string) => {
@@ -641,7 +665,7 @@ const orderedIndustries = Object.keys(sortedData);
           collisionPadding={{ left: 260 }} // 왼쪽 여백 추가
         >
           <span className="inline-flex items-center"> {/* Tooltip 트리거 영역 확장을 위한 span */}
-            <h2 className="text-sm md:text-base font-semibold text-gray-700 cursor-help"> {/* 도움말 커서 추가 */}
+            <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}> {/* 도움말 커서 추가 */}
               ETF 주요섹터
             </h2>
           </span>
@@ -653,10 +677,10 @@ const orderedIndustries = Object.keys(sortedData);
             {updateTime}
           </div>
           */}
-          {/* 새로운 업데이트 시간/날짜 표시 */} 
+          {/* 업데이트 날짜/시간 표시 */} 
           {updateDate && (
-            <div className="text-gray-600 text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)' }}>
-              updated 17:00 {updateDate}
+            <div className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+              updated {updateDate}
             </div>
           )}
           <div className="hidden md:block">
@@ -664,41 +688,24 @@ const orderedIndustries = Object.keys(sortedData);
               tableRef={tableRef}
               headerRef={headerRef}
               tableName="ETF 현황"
-              updateDateText={updateDate ? `updated 17:00 ${updateDate}` : undefined}
+              updateDateText={updateDate ? `updated ${updateDate}` : undefined}
             />
           </div>
         </div>
       </div>
 
-      <div ref={tableRef} className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-        <table className="min-w-full bg-white border border-gray-200 table-fixed">
+      <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+        <table ref={tableRef} className="min-w-full bg-white border border-gray-200 table-fixed">
           <thead>
             <tr className="bg-gray-100">
               {/* 기존 thead 내용 유지 */}
-              <th
-                key="산업"
-                scope="col"
-                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
-                style={{
-                  width: '60px',
-                  height: '35px'
-                }}
-                onClick={() => handleSort('산업')}
-              >
-                <div className="flex justify-center items-center">
-                  산업
-                  {sortKey === '산업' && (
-                    <span className="ml-1">
-                      {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
-                    </span>
-                  )}
-                </div>
-              </th>
+
               <th
                 key="섹터"
                 scope="col"
-                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '60px',
                   height: '35px'
                 }}
@@ -716,8 +723,9 @@ const orderedIndustries = Object.keys(sortedData);
               <th
                 key="종목명"
                 scope="col"
-                className="px-4 py-3 text-center text-xs md:text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                className="px-4 py-3 text-center text-xs md:text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '140px',
                   height: '35px'
                 }}
@@ -736,8 +744,9 @@ const orderedIndustries = Object.keys(sortedData);
                 <th
                   key={header}
                   scope="col"
-                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200"
+                  className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider cursor-pointer border border-gray-200"
                   style={{
+                    color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                     width: '65px', 
                     height: '35px'
                   }}
@@ -757,8 +766,9 @@ const orderedIndustries = Object.keys(sortedData);
                 key="포지션"
                 scope="col"
                 // className 수정: cursor-help 추가
-                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-help border border-gray-200" // cursor-help 추가
+                className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider cursor-help border border-gray-200" // cursor-help 추가, text-gray-500 제거
                 style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                   width: '78px',
                   height: '35px'
                 }}
@@ -788,8 +798,9 @@ const orderedIndustries = Object.keys(sortedData);
                   key={header}
                   scope="col"
                   // className 수정: font-medium, text-gray-500, uppercase, tracking-wider 추가
-                  className={`px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-200 ${header === '20일 이격' || header === '돌파/이탈' || header === '대표종목(RS)' ? 'cursor-help' : ''} hidden md:table-cell`} // 스타일 클래스 추가 및 cursor-help 유지
+                  className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider border border-gray-200 ${header === '20일 이격' || header === '돌파/이탈' || header === '대표종목(RS)' ? 'cursor-help' : ''} hidden md:table-cell`} // 스타일 클래스 추가 및 cursor-help 유지, text-gray-500 제거
                   style={{
+                    color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                     width: header === '20일 이격' ? '65px' : header === '돌파/이탈' ? '70px' : header === '대표종목(RS)' ? '380px' : '80px',
                     height: '35px'
                   }}
@@ -839,76 +850,29 @@ const orderedIndustries = Object.keys(sortedData);
             </tr>
           </thead>
           <tbody className="bg-white">
-            {(() => {
-              // 산업별로 데이터를 그룹화하고 각 산업의 첫 번째 행 인덱스를 저장
-              const industryGroups: { [industry: string]: { rows: Record<string, any>[], firstRowIndex: number } } = {};
-              let allRows: { industry: string, row: Record<string, any> }[] = [];
+            {(sortedData as Record<string, any>[]).map((row: Record<string, any>, rowIndex: number) => {
+              // 각 행에 대한 고유 키 생성 시, row에 고유 ID가 있다면 그것을 사용하는 것이 좋습니다.
+              // 여기서는 rowIndex를 사용하지만, 데이터에 '티커'와 같이 고유 식별자가 있다면 활용하세요.
+              // 예: const rowKey = row['티커'] ? `${row['티커']}-${rowIndex}` : `row-${rowIndex}`;
+              const rowKey = `row-${rowIndex}`; // 임시로 rowIndex 사용, 실제 데이터 기반 키 권장
               
-              // sortedData의 키를 직접 사용하여 정렬된 순서대로 데이터 추가
-              // 마켓은 항상 먼저 표시하고, 나머지는 sortedData의 키 순서대로 추가
-              const industriesToRender = Object.keys(sortedData);
-              
-              // 마켓을 먼저 추가
-              if (industriesToRender.includes('마켓')) {
-                const industry = '마켓';
-                industryGroups[industry] = { 
-                  rows: sortedData[industry], 
-                  firstRowIndex: allRows.length 
-                };
-                
-                sortedData[industry].forEach(row => {
-                  allRows.push({ industry, row });
-                });
-              }
-              
-              // 나머지 산업 그룹들을 sortedData 순서대로 추가
-              industriesToRender.forEach(industry => {
-                if (industry !== '마켓' && sortedData[industry]) {
-                  industryGroups[industry] = { 
-                    rows: sortedData[industry], 
-                    firstRowIndex: allRows.length 
-                  };
-                  
-                  sortedData[industry].forEach(row => {
-                    allRows.push({ industry, row });
-                  });
-                }
-              });
-              
-              // 각 행 렌더링
-              return allRows.map((item, rowIndex) => {
-                const { industry, row } = item;
-                const isFirstRowOfIndustry = industryGroups[industry].firstRowIndex === rowIndex;
-                const rowCount = industryGroups[industry].rows.length;
-                
-                // 산업이 바뀔 때 더 두꺼운 상단 테두리 적용
-                const borderTopClass = isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : '';
-                
-                return (
-                  <tr key={`${industry}-${rowIndex}`} className={`hover:bg-gray-100 ${borderTopClass}`}>
-                    {isFirstRowOfIndustry && (
-                      <td
-                        rowSpan={rowCount}
-                        className="px-2 py-1 whitespace-nowrap text-xs border border-gray-200 align-middle"
-                        style={{ width: '60px' }}
-                      >
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ borderRadius: '4px' }}>
-                            {industry === '소비재/음식료' ? '소비재/음식료' : industry}
-                          </span>
-                          <span className={`mt-1 text-xs font-medium ${getAverageColorClass(getIndustryChangeRate(industry))}`} style={{ paddingLeft: '2px', width: '100%' }}>
-                            {getIndustryChangeRate(industry)}
-                          </span>
-                        </div>
-                      </td>
-                    )}
+              // 스타일링 위한 클래스 (이전 로직에서는 industry에 따라 borderTopClass를 다르게 설정 가능했으나, 이제 모든 행 동일)
+              const borderTopClass = ''; // 필요에 따라 조건부 스타일링 추가 가능
+
+              return (
+                <tr key={rowKey} className={`hover:bg-gray-100 ${borderTopClass}`}>
+
                     <td 
-                      className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} 
+                      className="px-2 py-1 whitespace-nowrap text-xs border border-gray-200" 
                       style={{ width: '60px', height: '16px' }}
                     >
-                      {row['섹터']}
+                      <div className="flex flex-col items-start">
+                        <span className="text-xs px-1 sm:px-2 py-0.5 sm:py-1 bg-white text-gray-700 border border-gray-200 shadow-sm inline-block" style={{ borderRadius: '4px' }}>
+                          {row['섹터']}
+                        </span>
+                      </div>
                     </td>
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '140px', height: '16px' }}>
+                    <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '140px', height: '16px' }}>
                       {row['종목명'] || tickerMappingInfo.stockNameMap[row['티커']] || ''}
                     </td>
                     {filteredHeaders.filter(header => header === '등락율').map((header) => {
@@ -928,14 +892,14 @@ const orderedIndustries = Object.keys(sortedData);
                       return (
                         <td
                           key={header}
-                          className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 text-right tabular-nums ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`}
+                          className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200 text-right tabular-nums"
                           style={{ width: '60px', height: '16px' }}
                         >
                           <span className={textColorClass}>{changeRateText || '-'}</span>
                         </td>
                       );
                     })}
-                    <td className={`px-4 py-1 whitespace-nowrap text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''}`} style={{ width: '78px', height: '16px' }}>
+                    <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '78px', height: '16px' }}>
                       {/* 포지션 상태 표시 */}
                       <div className="flex items-center justify-center">
                         {renderPositionBadge(row['종목명'])}
@@ -944,7 +908,7 @@ const orderedIndustries = Object.keys(sortedData);
                     {['20일 이격', '돌파/이탈', '대표종목(RS)'].map((header) => (
                       <td
                         key={header}
-                        className={`px-4 py-1 ${header === '대표종목(RS)' ? 'whitespace-normal break-words' : 'whitespace-nowrap'} text-xs border border-gray-200 ${isFirstRowOfIndustry ? 'border-t-2 border-t-gray-300' : ''} hidden md:table-cell`}
+                        className={`px-4 py-1 ${header === '대표종목(RS)' ? 'whitespace-normal break-words' : 'whitespace-nowrap'} text-xs border border-gray-200 hidden md:table-cell`}
                         style={{
                           width: header === '20일 이격' ? '60px' : header === '돌파/이탈' ? '80px' : header === '대표종목(RS)' ? '400px' : '80px',
                           height: '16px'
@@ -973,7 +937,7 @@ const orderedIndustries = Object.keys(sortedData);
                             const stockName = row['종목명'] as string;
                             const maData = maListMap[stockName.trim()];
                             let displayDate = '-';
-                            let textColor = 'text-black'; // 항상 검정색으로 표시
+                            // let textColor = 'text-black'; // 더 이상 사용되지 않음
                             
                             if (maData && maData['돌파/이탈']) {
                               const rawDate = maData['돌파/이탈'];
@@ -985,7 +949,7 @@ const orderedIndustries = Object.keys(sortedData);
                                 displayDate = rawDate;
                               }
                             }
-                            return <div className={`text-center tabular-nums ${textColor}`}>{displayDate}</div>;
+                            return <div className="text-center tabular-nums" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>{displayDate}</div>;
                           } else if (header === '대표종목(RS)') {
                             // 대표종목(RS) 데이터 표시 (20malist.csv 기반)
                             const stockName = row['종목명'] as string;
@@ -1019,7 +983,15 @@ const orderedIndustries = Object.keys(sortedData);
                                     const rsValue = parseInt(rsValueStr, 10);
                                     return (
                                       <span key={index} className="text-xs mr-1">
-                                        {name}(<span className={rsValue >= 90 ? 'font-bold' : ''}>{rsValueStr}</span>)
+                                        {rsValue >= 90 ? (
+                                          <>
+                                            <span className="font-bold">{name}</span>(<span className="font-bold">{rsValueStr}</span>)
+                                          </>
+                                        ) : (
+                                          <>
+                                            {name}({rsValueStr})
+                                          </>
+                                        )}
                                       </span>
                                     );
                                   }
@@ -1034,8 +1006,7 @@ const orderedIndustries = Object.keys(sortedData);
                     ))}
                   </tr>
                 );
-              });
-            })()}
+            })}
           </tbody>
         </table>
       </div>
