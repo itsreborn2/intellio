@@ -189,7 +189,6 @@ class QuestionAnalyzerAgent(BaseAgent):
             db: 데이터베이스 세션 객체 (선택적)
         """
         super().__init__(name, db)
-        self.llm, self.model_name, self.provider = get_llm_for_agent("question_analyzer_agent")
         self.agent_llm = get_agent_llm("question_analyzer_agent")
         self.agent_llm_lite = get_agent_llm("gemini-2.0-flash-lite")
         logger.info(f"QuestionAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
@@ -272,7 +271,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                         "duration": duration,
                         "status": "completed",
                         "error": None,
-                        "model_name": self.model_name
+                        "model_name": self.agent_llm.get_model_name()
                     }
                     
                     state["processing_status"] = state.get("processing_status", {})
@@ -300,7 +299,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                         "duration": duration,
                         "status": "completed",
                         "error": None,
-                        "model_name": self.model_name
+                        "model_name": self.agent_llm.get_model_name()
                     }
                     
                     state["processing_status"] = state.get("processing_status", {})
@@ -328,7 +327,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                         "duration": duration,
                         "status": "completed",
                         "error": None,
-                        "model_name": self.model_name
+                        "model_name": self.agent_llm.get_model_name()
                     }
                     
                     state["processing_status"] = state.get("processing_status", {})
@@ -533,21 +532,21 @@ class QuestionAnalyzerAgent(BaseAgent):
                         else:
                             logger.warning("JSON 패턴을 찾을 수 없음, 기본 응답 구조 사용")
                             # 기본 응답 구조 생성
-                            question_analysis = create_default_question_analysis(stock_name, stock_code)
+                            question_analysis = await create_default_question_analysis(stock_name, stock_code)
                             
                     except Exception as json_error:
                         logger.error(f"JSON 파싱 중 오류 발생: {str(json_error)}")
                         # 기본 응답 구조 생성
-                        question_analysis = create_default_question_analysis(stock_name, stock_code)
+                        question_analysis = await create_default_question_analysis(stock_name, stock_code)
                 
                 return question_analysis
             
             # 기본 질문 분석 구조 생성 함수
-            def create_default_question_analysis(stock_name, stock_code):
+            async def create_default_question_analysis(stock_name, stock_code):
                 # 서브그룹 가져오기
                 try:
                     stock_info_service = StockInfoService()
-                    subgroup_list = asyncio.run(stock_info_service.get_sector_by_code(stock_code))
+                    subgroup_list = await stock_info_service.get_sector_by_code(stock_code)
                 except Exception:
                     subgroup_list = []
                 
@@ -597,7 +596,10 @@ class QuestionAnalyzerAgent(BaseAgent):
                     logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시 없음, 최근 이슈 요약 생성: {cache_key}")
                     recent_issues_summary = await self.summarize_recent_issues(stock_name, stock_code, user_id)
                     # 2. 생성된 요약을 캐시에 저장 (만료 시간: 1일 = 86400초) -> 2일로 변경(크레딧 문제때문에..)
-                    await redis_client.set_key(cache_key, recent_issues_summary, expire=172800)
+                    expire_time = 172800
+                    if settings.ENV == "development":
+                        expire_time = 86400 * 7 # 개발버전은 7일단위.
+                    await redis_client.set_key(cache_key, recent_issues_summary, expire=expire_time)
                     logger.info(f"종목 [{stock_name}/{stock_code}]에 최근 이슈 요약 캐시 저장 (만료: 1일): {cache_key}")
 
                 final_report_toc = await self.generate_dynamic_toc(query, recent_issues_summary, user_id)
@@ -634,7 +636,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.model_name
+                "model_name": self.agent_llm.get_model_name()
             }
             
             # 처리 상태 업데이트

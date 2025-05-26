@@ -176,30 +176,57 @@ class FinancialDataServicePDF:
             # 로그는 한글로 작성
             print(f"조회 기간 내 재무 보고서 {len(filtered_files)}개 찾았습니다: {stock_code}")
             
-            # 3. 각 파일에서 데이터 추출
+            # 3. 각 파일에서 데이터 추출 (병렬 처리)
+            logger.info(f"[성능개선] {len(filtered_files)}개 파일에서 데이터 추출 병렬 처리 시작")
+            parallel_start_time = datetime.now()
+            
+            # 파일별 처리 함수 정의
+            async def process_file(file_info):
+                try:
+                    file_path = file_info.get("file_path")
+                    local_path = await self._ensure_local_file(file_path)
+                    
+                    if local_path:
+                        # 페이지 추출 및 데이터 추가
+                        financial_statement_pages = await self._extract_financial_statement_pages(local_path)
+                        if financial_statement_pages:
+                            report_type = file_info.get("type", "unknown")
+                            report_year = file_info.get("year", 0)
+                            
+                            # 데이터 구조화
+                            return (f"{report_year}_{report_type}", {
+                                "content": financial_statement_pages,
+                                "metadata": {
+                                    "year": report_year,
+                                    "type": report_type,
+                                    "file_name": os.path.basename(file_path),
+                                    "date": file_info.get("date", "")
+                                }
+                            })
+                    return None
+                except Exception as e:
+                    logger.error(f"파일 처리 중 오류: {file_info.get('file_path', '')}, 오류: {str(e)}")
+                    return None
+            
+            # 모든 파일을 병렬로 처리
+            results = await asyncio.gather(
+                *[process_file(file_info) for file_info in filtered_files],
+                return_exceptions=True
+            )
+            
+            # 결과 수집
             financial_data = {}
-            for file_info in filtered_files:
-                # PDF에서 재무제표 페이지 추출
-                file_path = file_info.get("file_path")
-                local_path = await self._ensure_local_file(file_path)
-                
-                if local_path:
-                    # 페이지 추출 및 데이터 추가
-                    financial_statement_pages = await self._extract_financial_statement_pages(local_path)
-                    if financial_statement_pages:
-                        report_type = file_info.get("type", "unknown")
-                        report_year = file_info.get("year", 0)
-                        
-                        # 데이터 구조화
-                        financial_data[f"{report_year}_{report_type}"] = {
-                            "content": financial_statement_pages,
-                            "metadata": {
-                                "year": report_year,
-                                "type": report_type,
-                                "file_name": os.path.basename(file_path),
-                                "date": file_info.get("date", "")
-                            }
-                        }
+            successful_count = 0
+            for result in results:
+                if isinstance(result, tuple) and result is not None:
+                    key, data = result
+                    financial_data[key] = data
+                    successful_count += 1
+                elif isinstance(result, Exception):
+                    logger.error(f"파일 처리 중 예외 발생: {str(result)}")
+            
+            parallel_duration = (datetime.now() - parallel_start_time).total_seconds()
+            logger.info(f"[성능개선] 파일 병렬 처리 완료 - {successful_count}/{len(filtered_files)}개 성공, 소요시간: {parallel_duration:.2f}초")
             
             # 4. 데이터를 시간 순으로 정렬하여 반환
             sorted_data = dict(sorted(
@@ -274,19 +301,45 @@ class FinancialDataServicePDF:
             # 로그는 한글로 작성
             print(f"조회 기간 내 재무 보고서 {len(filtered_files)}개 찾았습니다: {stock_code}")
             
-            # 3. 각 파일에서 데이터 추출
+            # 3. 각 파일에서 데이터 추출 (병렬 처리)
+            logger.info(f"[성능개선] {len(filtered_files)}개 파일에서 매출 분석 데이터 추출 병렬 처리 시작")
+            parallel_start_time = datetime.now()
+            
+            # 파일별 처리 함수 정의
+            async def process_revenue_file(file_info):
+                try:
+                    file_path = file_info.get("file_path")
+                    local_path = await self._ensure_local_file(file_path)
+                    
+                    if local_path:
+                        # 페이지 추출 및 데이터 추가
+                        business_report_info = await self.extract_business_report_info(local_path)
+                        extracted_data = await self.extract_revenue_breakdown_data(local_path, business_report_info)
+                        if extracted_data:  # None이나 빈 문자열이 아닌 경우에만 추가
+                            return extracted_data
+                    return ""
+                except Exception as e:
+                    logger.error(f"매출 데이터 파일 처리 중 오류: {file_info.get('file_path', '')}, 오류: {str(e)}")
+                    return ""
+            
+            # 모든 파일을 병렬로 처리
+            results = await asyncio.gather(
+                *[process_revenue_file(file_info) for file_info in filtered_files],
+                return_exceptions=True
+            )
+            
+            # 결과 수집
             revenue_breakdown_data = ""
-            for file_info in filtered_files:
-                # PDF에서 재무제표 페이지 추출
-                file_path = file_info.get("file_path")
-                local_path = await self._ensure_local_file(file_path)
-                
-                if local_path:
-                    # 페이지 추출 및 데이터 추가
-                    business_report_info = await self.extract_business_report_info(local_path)
-                    extracted_data = await self.extract_revenue_breakdown_data(local_path, business_report_info)
-                    if extracted_data:  # None이나 빈 문자열이 아닌 경우에만 추가
-                        revenue_breakdown_data += extracted_data
+            successful_count = 0
+            for result in results:
+                if isinstance(result, str) and result:
+                    revenue_breakdown_data += result
+                    successful_count += 1
+                elif isinstance(result, Exception):
+                    logger.error(f"매출 데이터 파일 처리 중 예외 발생: {str(result)}")
+            
+            parallel_duration = (datetime.now() - parallel_start_time).total_seconds()
+            logger.info(f"[성능개선] 매출 데이터 파일 병렬 처리 완료 - {successful_count}/{len(filtered_files)}개 성공, 소요시간: {parallel_duration:.2f}초")
 
             return revenue_breakdown_data
             
@@ -659,12 +712,12 @@ class FinancialDataServicePDF:
                 }
             
             quater = report_type_map.get(quater_file, "")
-            logger.info(f"보고서 기간: {year}.{quater}")
+            #logger.info(f"보고서 기간: {year}.{quater}")
 
             # 3. fitz를 사용하여 목차 내용 추출
             doc = await asyncio.to_thread(fitz.open, target_report)
             toc = await asyncio.to_thread(doc.get_toc)  # 목차 가져오기 비동기로 처리
-            logger.info(f"목차 항목 수: {len(toc)}")
+            #logger.info(f"목차 항목 수: {len(toc)}")
             
             if not toc:
                 logger.error("목차를 찾을 수 없습니다.")
@@ -690,7 +743,7 @@ class FinancialDataServicePDF:
                 # 'II. 사업의 내용' 목차 찾기
                 if "사업의 내용" in title and (title.startswith("II.") or title.startswith("Ⅱ.")):
                     business_content_start_page = page_num - 1  # 0-based 페이지 번호로 변환
-                    logger.info(f"'사업의 내용' 섹션 시작: 페이지 {business_content_start_page+1}")
+                    #logger.info(f"'사업의 내용' 섹션 시작: 페이지 {business_content_start_page+1}")
                     
                     # 다음 대분류 목차를 찾아 끝 페이지 결정
                     for next_item in toc[i+1:]:
@@ -698,31 +751,31 @@ class FinancialDataServicePDF:
                         if next_level <= level and (next_title.startswith("III.") or next_title.startswith("Ⅲ.") or 
                                                 next_title.startswith("IV.") or next_title.startswith("Ⅳ.")):
                             business_content_end_page = next_page - 2  # 다음 대분류 시작 전 페이지
-                            logger.info(f"'사업의 내용' 섹션 종료: 페이지 {business_content_end_page+1}")
+                            #logger.info(f"'사업의 내용' 섹션 종료: 페이지 {business_content_end_page+1}")
                             break
                     
                     # 다음 대분류가 없으면 문서 끝까지를 범위로 설정
                     if business_content_end_page is None:
                         business_content_end_page = len(doc) - 1
-                        logger.info(f"'사업의 내용' 섹션 종료(문서 끝): 페이지 {business_content_end_page+1}")
+                        #logger.info(f"'사업의 내용' 섹션 종료(문서 끝): 페이지 {business_content_end_page+1}")
                 
                 # '매출 및 수주상황' 목차 찾기 (II. 사업의 내용 아래에 있어야 함)
                 if business_content_start_page is not None and "매출" in title and "수주" in title:
                     sales_section_start_page = page_num - 1  # 0-based 페이지 번호로 변환
-                    logger.info(f"'매출 및 수주상황' 섹션 시작: 페이지 {sales_section_start_page+1}")
+                    #logger.info(f"'매출 및 수주상황' 섹션 시작: 페이지 {sales_section_start_page+1}")
                     
                     # 다음 동일 레벨 또는 상위 레벨 목차를 찾아 끝 페이지 결정
                     for next_item in toc[i+1:]:
                         next_level, next_title, next_page = next_item
                         if next_level <= level:
                             sales_section_end_page = next_page - 2  # 다음 섹션 시작 전 페이지
-                            logger.info(f"'매출 및 수주상황' 섹션 종료: 페이지 {sales_section_end_page+1}")
+                            #logger.info(f"'매출 및 수주상황' 섹션 종료: 페이지 {sales_section_end_page+1}")
                             break
                     
                     # 다음 섹션이 없으면 사업의 내용 끝까지를 범위로 설정
                     if sales_section_end_page is None and business_content_end_page is not None:
                         sales_section_end_page = business_content_end_page
-                        logger.info(f"'매출 및 수주상황' 섹션 종료(사업의 내용 끝): 페이지 {sales_section_end_page+1}")
+                        #logger.info(f"'매출 및 수주상황' 섹션 종료(사업의 내용 끝): 페이지 {sales_section_end_page+1}")
                     
                     break  # 매출 및 수주상황 섹션을 찾았으므로 검색 종료
             
@@ -766,13 +819,13 @@ class FinancialDataServicePDF:
             
             # pdfplumber 사용 (try/except 블록 적용)
             try:
-                logger.info(f"PDF 페이지 추출 시작: {start_page+1}~{end_page+1}")
+                #logger.info(f"PDF 페이지 추출 시작: {start_page+1}~{end_page+1}")
                 
                 with pdfplumber.open(target_report) as pdf:
                     # 페이지 범위가 너무 크면 최대 페이지로 제한
                     max_pages = 30
                     pdf_length = len(pdf.pages)
-                    logger.info(f"PDF 총 페이지 수: {pdf_length}")
+                    #logger.info(f"PDF 총 페이지 수: {pdf_length}")
                     
                     # 페이지 범위 유효성 검사 및 조정
                     if start_page >= pdf_length:
@@ -977,7 +1030,7 @@ class FinancialDataServicePDF:
         try:
             # 입력 문자열 정리
             date_str = date_str.strip()
-            logger.debug(f"날짜 정규화 시작: '{date_str}'")
+            #logger.debug(f"날짜 정규화 시작: '{date_str}'")
             
             # 특수문자 및 한글 제거
             date_str = re.sub(r'[년월일\s]', '.', date_str)

@@ -50,6 +50,7 @@ class SummarizerAgent(BaseAgent):
             업데이트된 상태 (summary 추가)
         """
         try:
+            start_time_process = datetime.now()
             query = state.get("query", "")
             stock_code = state.get("stock_code") 
             stock_name = state.get("stock_name") 
@@ -97,16 +98,6 @@ class SummarizerAgent(BaseAgent):
             
             if not main_query_reports and not toc_data_report_agent:
                 logger.warning("[SummarizerAgent] 요약할 기업 리포트 정보가 없습니다 (메인 쿼리 및 TOC 결과 모두 부족). 다른 컨텍스트만으로 진행될 수 있습니다.")
-                # 오류로 처리하지 않고 다른 컨텍스트만으로 진행할 수 있도록 허용 (사용자 피드백에 따라 변경 가능)
-                # state["errors"] = state.get("errors", []) + [{
-                #     "agent": self.get_name(),
-                #     "error": "요약할 분석 정보가 없습니다 (ReportAnalyzer 결과 부족).",
-                #     "type": "InsufficientDataError",
-                #     "timestamp": datetime.now()
-                # }]
-                # state["processing_status"] = state.get("processing_status", {})
-                # state["processing_status"]["summarizer"] = "error"
-                # return state
 
         except Exception as e: # 데이터 준비 과정에서의 예외
             logger.exception(f"SummarizerAgent 정보 준비 중 오류 발생: {e}")
@@ -142,7 +133,7 @@ class SummarizerAgent(BaseAgent):
             state["summary_by_section"] = summary_by_section
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["summarizer"] = "completed"
-            
+            logger.info(f"[SummarizerAgent] 요약 생성 완료: 소요시간 {datetime.now() - start_time_process}")
             return state
         except Exception as e:
             logger.exception(f"SummarizerAgent 요약 생성 중 오류 발생: {e}")
@@ -199,6 +190,8 @@ class SummarizerAgent(BaseAgent):
         # 2. "핵심 요약"을 제외한 나머지 섹션들 생성 준비
         other_section_tasks = []
         other_section_details_for_llm_call = [] 
+
+        start_time_other_sections = datetime.now()
 
         for i, section_data in enumerate(toc_sections_from_generator):
             if i == 0: # "핵심 요약" 섹션은 나중에 처리
@@ -281,6 +274,7 @@ class SummarizerAgent(BaseAgent):
 
         # 3. 나머지 섹션들 내용 병렬 생성
         other_sections_results_raw = await asyncio.gather(*other_section_tasks, return_exceptions=True)
+        logger.info(f"[SummarizerAgent] 나머지 섹션들 내용 병렬 생성 완료: 소요시간 {datetime.now() - start_time_other_sections}")
 
         # 4. 생성된 나머지 섹션 내용 정리 및 "핵심 요약" 생성용 컨텍스트 준비
         generated_texts_for_summary_input = []
@@ -309,6 +303,7 @@ class SummarizerAgent(BaseAgent):
         summary_section_content_str = "*핵심 요약 생성 중 오류가 발생했거나, 요약할 다른 섹션 내용이 없습니다.*"
         summary_section_title = first_section_data_for_summary.get("title", "핵심 요약")
 
+        start_time_summary_section = datetime.now()
         if generated_texts_for_summary_input:
             context_for_summary_llm = "\n\n".join(generated_texts_for_summary_input)
             
@@ -351,6 +346,7 @@ class SummarizerAgent(BaseAgent):
                 summary_section_content_str = "*핵심 요약 생성 중 오류가 발생했습니다.*"
         else:
             logger.warning(f"[SummarizerAgent] '{summary_section_title}' 생성 스킵: 요약할 다른 섹션 내용이 없습니다.")
+        logger.info(f"[SummarizerAgent] 핵심요약 생성 완료: 소요시간 {datetime.now() - start_time_summary_section}")
 
         # 6. 최종 보고서 통합
         section_contents_map = {}
@@ -374,14 +370,14 @@ class SummarizerAgent(BaseAgent):
             section_contents_map[section_title_from_details] = text_content
             #final_report_parts.append(f"## {numbered_section_title_for_report}\n{text_content}")
             final_report_parts.append(text_content)
-        section_contents_map['면책조항'] = "**면책조항**\n본 보고서는 투자 참고 자료로만 활용하시기 바라며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 보고서의 내용이 사실과 다른 내용이 일부 존재할 수 있으니 참고해 주시기 바랍니다. 투자 결정은 투자자 본인의 책임하에 이루어져야 하며, 본 보고서에 기반한 투자로 인한 손실에 대해 작성자와 당사는 어떠한 법적 책임도 지지 않습니다. 모든 투자에는 위험이 수반되므로 투자 전 투자자 본인의 판단과 책임하에 충분한 검토가 필요합니다."
+        section_contents_map['면책조항'] = "본 보고서는 투자 참고 자료로만 활용하시기 바라며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 보고서의 내용이 사실과 다른 내용이 일부 존재할 수 있으니 참고해 주시기 바랍니다. 투자 결정은 투자자 본인의 책임하에 이루어져야 하며, 본 보고서에 기반한 투자로 인한 손실에 대해 작성자와 당사는 어떠한 법적 책임도 지지 않습니다. 모든 투자에는 위험이 수반되므로 투자 전 투자자 본인의 판단과 책임하에 충분한 검토가 필요합니다."
         final_report_parts.append(section_contents_map['면책조항'])
 
         final_summary_md = f"# {toc_title}\n\n"
         final_summary_md += "\n\n".join(final_report_parts)
         #final_summary_md += "\n\n**면책조항**\n\n본 보고서는 투자 참고 자료로만 활용하시기 바라며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 보고서의 내용이 사실과 다른 내용이 일부 존재할 수 있으니 참고해 주시기 바랍니다. 투자 결정은 투자자 본인의 책임하에 이루어져야 하며, 본 보고서에 기반한 투자로 인한 손실에 대해 작성자와 당사는 어떠한 법적 책임도 지지 않습니다. 모든 투자에는 위험이 수반되므로 투자 전 투자자 본인의 판단과 책임하에 충분한 검토가 필요합니다."
 
-        logger.info("[SummarizerAgent] 동적 목차 기반 섹션별 요약 통합 완료 (v2)")
+        logger.info(f"[SummarizerAgent] 동적 목차 기반 섹션별 요약 통합 완료 (v2), 소요시간 {datetime.now() - start_time_other_sections}")
         return final_summary_md, section_contents_map
     
     def _format_documents_for_section(self, reports: List[CompanyReportData]) -> str:

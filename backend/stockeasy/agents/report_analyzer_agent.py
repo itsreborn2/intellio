@@ -87,11 +87,11 @@ class ReportAnalyzerAgent(BaseAgent):
         self.retrieved_str = "report_data"
         self.llm, self.model_name, self.provider = get_llm_for_agent("report_analyzer_agent")
         logger.info(f"ReportAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
-        self.vs_manager = VectorStoreManager(
-            embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
-            project_name="stockeasy",
-            namespace=settings.PINECONE_NAMESPACE_STOCKEASY
-        )
+        # VectorStoreManager 캐시된 인스턴스 사용 (지연 초기화)
+        self.vs_manager = None  # 실제 사용 시점에 AgentRegistry에서 가져옴
+        
+        # 동시 검색 수 제한 (API Rate Limiting 방지)
+        self._search_semaphore = asyncio.Semaphore(8)  # 최대 8개 동시 검색 (메인 + TOC 섹션들)
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         process_start_time = datetime.now() # process 전체 시작 시간
@@ -500,6 +500,20 @@ class ReportAnalyzerAgent(BaseAgent):
         목차 간 중복 문서는 허용되며, 각 검색 결과 리스트 내에서의 중복만 간단히 처리합니다.
         """
         
+        # VectorStoreManager 캐시된 인스턴스 사용 (지연 초기화)
+        if self.vs_manager is None:
+            logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 시작 (ReportAnalyzer)")
+            
+            # 글로벌 캐시 함수를 직접 사용
+            from stockeasy.graph.agent_registry import get_cached_vector_store_manager
+            
+            self.vs_manager = get_cached_vector_store_manager(
+                embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+                namespace=settings.PINECONE_NAMESPACE_STOCKEASY,
+                project_name="stockeasy"
+            )
+            logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 완료 (ReportAnalyzer)")
+        
         report_data_for_summary_agent: Dict[str, Union[List[CompanyReportData], Dict[str, List[CompanyReportData]]]] = {
             "main_query_results": [],
             "toc_results": {} 
@@ -525,60 +539,170 @@ class ReportAnalyzerAgent(BaseAgent):
         )
         
         try:
-            # 1. 기본 사용자 쿼리로 검색
-            logger.info(f"  기본쿼리 검색 시작: '{query}' (k={k})")
-            main_retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
-                query=query, 
-                top_k=k, 
-                filters=current_metadata_filter
-            )
-            main_query_reports_raw = [self._convert_doc_to_company_report_data(doc) for doc in main_retrieval_result.documents]
-            report_data_for_summary_agent["main_query_results"] = self._deduplicate_company_reports_in_list(main_query_reports_raw)
-            logger.info(f"  기본쿼리 검색 완료: 원본 {len(main_retrieval_result.documents)}개 -> 중복제거 후 {len(report_data_for_summary_agent['main_query_results'])}개")
-
-            # 2. final_report_toc가 있는 경우 목차 항목별 검색 추가
+            # TOC 쿼리 사전 준비
             toc_search_queries: Dict[str, str] = {} 
             if final_report_toc and isinstance(final_report_toc, dict) and final_report_toc.get("sections"):
                 toc_search_queries = self._extract_toc_queries_for_search(final_report_toc) 
 
+            # 병렬 검색 태스크 준비
+            search_tasks = []
+            task_names = []
+            
+            # 1. 기본 사용자 쿼리 검색 태스크
+            logger.info(f"  기본쿼리 검색 시작: '{query}' (k={k})")
+            main_task = semantic_retriever.retrieve(
+                query=query, 
+                top_k=k, 
+                filters=current_metadata_filter
+                        )
+            search_tasks.append(main_task)
+            task_names.append("main_query")
+
+            # 2. TOC 기반 검색 태스크들 추가 (핵심요약 제외한 모든 목차)
             if toc_search_queries:
-                k_toc = 10 # 각 TOC 항목별 검색할 문서 수 (조정 가능)
+                k_toc = 50  # 각 TOC 항목별 검색할 문서 수
                 logger.info(f"  TOC 기반 검색 시작. 총 TOC 쿼리 수: {len(toc_search_queries)}, 각 항목당 k_toc: {k_toc}")
                 
-                processed_toc_results: Dict[str, List[CompanyReportData]] = {}
                 for toc_key, toc_item_query_text in toc_search_queries.items():
-                    if not toc_item_query_text: 
-                        logger.debug(f"    TOC 검색 건너<0xEB><0x9A><0x8D> (쿼리 비어있음): [{toc_key}]")
-                        continue
+                     if not toc_item_query_text: 
+                         logger.debug(f"    TOC 검색 건너뜀 (쿼리 비어있음): [{toc_key}]")
+                         continue
+                     
+                     logger.debug(f"    TOC 검색 태스크 준비 - [{toc_key}]: '{toc_item_query_text}'")
+                     toc_task = semantic_retriever.retrieve(
+                         query=toc_item_query_text, 
+                         top_k=k_toc, 
+                         filters=current_metadata_filter
+                     )
+                     search_tasks.append(toc_task)
+                     task_names.append(toc_key)
+                    
+            # 병렬 검색 실행 (Semaphore로 동시 실행 수 제한)
+            logger.info(f"  병렬 검색 실행 시작 - 총 {len(search_tasks)}개 태스크 (메인쿼리 + 모든 TOC 섹션, 최대 동시 {self._search_semaphore._value}개)")
+            search_start_time = datetime.now()
+            
+            # Semaphore를 사용한 제한된 병렬 실행
+            async def _limited_search(task, task_name):
+                async with self._search_semaphore:
+                    logger.debug(f"    검색 시작: [{task_name}]")
                     try:
-                        logger.debug(f"    TOC 검색 중 - [{toc_key}]: '{toc_item_query_text}'")
-                        toc_retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
-                            query=toc_item_query_text, top_k=k_toc, filters=current_metadata_filter 
-                        )
-                        toc_item_reports_raw = [self._convert_doc_to_company_report_data(doc) for doc in toc_retrieval_result.documents]
-                        processed_toc_results[toc_key] = self._deduplicate_company_reports_in_list(toc_item_reports_raw)
-                        logger.debug(f"      TOC 검색 결과 [{toc_key}]: 원본 {len(toc_retrieval_result.documents)}개 -> 중복제거 후 {len(processed_toc_results[toc_key])}개")
+                        result = await task
+                        logger.debug(f"    검색 완료: [{task_name}]")
+                        return result
                     except Exception as e:
-                        logger.warning(f"    TOC 검색 오류 [{toc_key}]: {str(e)}")
-                        processed_toc_results[toc_key] = [] 
-                report_data_for_summary_agent["toc_results"] = processed_toc_results
-                logger.info(f"  TOC 기반 검색 완료.")
-            else:
-                logger.info("  TOC 정보가 없거나 검색할 유효한 TOC 항목이 없어 TOC 기반 검색을 수행하지 않았습니다.")
+                        logger.warning(f"    검색 실패: [{task_name}] - {str(e)}")
+                        return e
+            
+            # 제한된 병렬 실행
+            limited_tasks = [_limited_search(task, name) for task, name in zip(search_tasks, task_names)]
+            search_results = await asyncio.gather(*limited_tasks, return_exceptions=True)
+            
+            search_duration = (datetime.now() - search_start_time).total_seconds()
+            logger.info(f"  제한된 병렬 검색 실행 완료 - 총 소요시간: {search_duration:.2f}초")
+
+            # 검색 결과 처리
+            for i, (result, task_name) in enumerate(zip(search_results, task_names)):
+                if isinstance(result, Exception):
+                    logger.warning(f"    검색 오류 [{task_name}]: {str(result)}")
+                    if task_name == "main_query":
+                        report_data_for_summary_agent["main_query_results"] = []
+                    else:
+                        if "toc_results" not in report_data_for_summary_agent:
+                            report_data_for_summary_agent["toc_results"] = {}
+                        report_data_for_summary_agent["toc_results"][task_name] = []
+                    continue
+                
+                # 성공한 결과 처리
+                if task_name == "main_query":
+                    main_query_reports_raw = [self._convert_doc_to_company_report_data(doc) for doc in result.documents]
+                    report_data_for_summary_agent["main_query_results"] = self._deduplicate_company_reports_in_list(main_query_reports_raw)
+                    logger.info(f"    기본쿼리 검색 완료: 원본 {len(result.documents)}개 -> 중복제거 후 {len(report_data_for_summary_agent['main_query_results'])}개")
+                else:
+                    # TOC 검색 결과: 50개 추출 → 점수 정렬 → 상위 10개 선별 → 중복제거
+                    if "toc_results" not in report_data_for_summary_agent:
+                        report_data_for_summary_agent["toc_results"] = {}
+                    toc_item_reports_raw = [self._convert_doc_to_company_report_data(doc) for doc in result.documents]
+                    # 점수 기준으로 상위 10개 선별
+                    top_10_reports = self._select_top_reports_by_score(toc_item_reports_raw, top_k=10)
+                    # 선별된 10개에서 중복 제거
+                    report_data_for_summary_agent["toc_results"][task_name] = self._deduplicate_company_reports_in_list(top_10_reports)
+                    logger.debug(f"      TOC 검색 결과 [{task_name}]: 원본 {len(result.documents)}개 -> 상위 10개 선별 -> 중복제거 후 {len(report_data_for_summary_agent['toc_results'][task_name])}개")
 
         except Exception as e:
             logger.error(f"[_search_reports] 심각한 오류 발생: {str(e)}", exc_info=True)
         finally:
-            if 'semantic_retriever' in locals() and semantic_retriever:
-                await semantic_retriever.aclose()
+            # 캐시된 VectorStoreManager를 사용하므로 개별 에이전트에서 close하지 않음
+            # if 'semantic_retriever' in locals() and semantic_retriever:
+            #     await semantic_retriever.aclose()
+            pass
                 
         return report_data_for_summary_agent
+
+    def _calculate_date_weight(self, document_date: Union[str, int, float]) -> float:
+        """
+        문서 날짜에 따른 가중치 계산
+        
+        Args:
+            document_date: 문서 날짜 (YYYYMMDD 형식의 문자열, 정수, 또는 실수)
+            
+        Returns:
+            날짜 기반 가중치 (7일 이내: 0.15, 14일 이내: 0.1, 22일 이내: 0.07, 44일 이내: 0.03)
+        """
+        try:
+            # 현재 날짜
+            current_date = datetime.now()
+            
+            # document_date 파싱
+            if isinstance(document_date, (float, int)):
+                document_date = str(document_date).split('.')[0]  # 소수점 이하 제거
+            
+            if not document_date or len(str(document_date)) != 8:
+                return 0.0  # 날짜 정보가 없거나 형식이 맞지 않으면 가중치 없음
+            
+            date_str = str(document_date)
+            year = int(date_str[:4])
+            month = int(date_str[4:6])
+            day = int(date_str[6:8])
+            
+            doc_date = datetime(year, month, day)
+            days_diff = (current_date - doc_date).days
+            
+            # 날짜 차이에 따른 가중치 적용
+            if days_diff <= 7:
+                weight = 0.15
+                #logger.debug(f"날짜 가중치 적용: {document_date} ({days_diff}일 전) -> +{weight}")
+                return weight
+            elif days_diff <= 14:
+                weight = 0.1
+                #logger.debug(f"날짜 가중치 적용: {document_date} ({days_diff}일 전) -> +{weight}")
+                return weight
+            elif days_diff <= 22:
+                weight = 0.07
+                #logger.debug(f"날짜 가중치 적용: {document_date} ({days_diff}일 전) -> +{weight}")
+                return weight
+            elif days_diff <= 44:
+                weight = 0.03
+                #logger.debug(f"날짜 가중치 적용: {document_date} ({days_diff}일 전) -> +{weight}")
+                return weight
+            else:
+                #logger.debug(f"날짜 가중치 미적용: {document_date} ({days_diff}일 전) -> +0.0")
+                return 0.0  # 44일 초과는 가중치 없음
+                
+        except Exception as e:
+            logger.debug(f"날짜 가중치 계산 중 오류: {e}, document_date: {document_date}")
+            return 0.0
 
     def _convert_doc_to_company_report_data(self, doc: Any) -> CompanyReportData:
         content = doc.page_content
         metadata = doc.metadata
-        score = getattr(doc, 'score', metadata.get('_score', 0.0))
-        if score is None: score = 0.0
+        original_score = getattr(doc, 'score', metadata.get('_score', 0.0))
+        if original_score is None: original_score = 0.0
+        
+        # 날짜 기반 가중치 적용
+        document_date = metadata.get("document_date", "")
+        date_weight = self._calculate_date_weight(document_date)
+        score = original_score + date_weight
+        
         title = metadata.get("title")
         if not title and content:
             title = content.split('\n')[0][:100] 
@@ -587,7 +711,7 @@ class ReportAnalyzerAgent(BaseAgent):
         return {
             "content": content, "score": score,
             "source": metadata.get("provider_code", metadata.get("source", "미상")),
-            "publish_date": self._format_date(metadata.get("document_date", "")),
+            "publish_date": self._format_date(document_date),
             "file_name": metadata.get("file_name", ""), "page": metadata.get("page", 0),
             "stock_code": metadata.get("stock_code", ""), "stock_name": metadata.get("stock_name", ""),
             "sector_name": metadata.get("sector_name", ""), "title": title 
@@ -618,6 +742,29 @@ class ReportAnalyzerAgent(BaseAgent):
         logger.info(f"TOC에서 추출된 검색 쿼리 수: {len(queries)}")
         if len(queries) > 0 : logger.debug(f"  추출된 TOC 쿼리 (일부): {list(queries.items())[:3]}")
         return queries
+
+    def _select_top_reports_by_score(self, reports: List[CompanyReportData], top_k: int = 10) -> List[CompanyReportData]:
+        """
+        가중치가 적용된 점수 기준으로 상위 k개 리포트 선별
+        
+        Args:
+            reports: 리포트 목록
+            top_k: 선별할 상위 리포트 수
+            
+        Returns:
+            점수 기준 상위 k개 리포트 목록
+        """
+        if not reports:
+            return []
+        
+        # 점수 기준으로 내림차순 정렬
+        sorted_reports = sorted(reports, key=lambda x: x.get('score', 0.0), reverse=True)
+        
+        # 상위 k개만 반환
+        selected_reports = sorted_reports[:top_k]
+        logger.debug(f"점수 기준 상위 {top_k}개 선별: 원본 {len(reports)}개 -> 선별 {len(selected_reports)}개")
+        
+        return selected_reports
 
     def _deduplicate_company_reports_in_list(self, reports: List[CompanyReportData]) -> List[CompanyReportData]:
         if not reports: return []
@@ -723,3 +870,80 @@ class ReportAnalyzerAgent(BaseAgent):
         
         # 첫 60자를 제목으로 사용
         return content[:60] + "..." if len(content) > 60 else content 
+
+    async def _batch_create_embeddings_for_queries(self, queries: List[str]) -> Dict[str, List[float]]:
+        """
+        여러 검색 쿼리에 대한 임베딩을 배치로 생성하여 API 호출 최적화
+        
+        Args:
+            queries: 검색 쿼리 리스트
+            
+        Returns:
+            쿼리별 임베딩 딕셔너리
+        """
+        if not queries:
+            return {}
+            
+        try:
+            # 배치로 임베딩 생성
+            embeddings = await self.vs_manager.embedding_model_provider.create_embeddings_async(queries)
+            
+            # 쿼리-임베딩 매핑 생성
+            query_embeddings = {}
+            for i, query in enumerate(queries):
+                if i < len(embeddings):
+                    query_embeddings[query] = embeddings[i]
+                    
+            logger.info(f"배치 임베딩 생성 완료: {len(queries)}개 쿼리 -> {len(query_embeddings)}개 임베딩")
+            return query_embeddings
+            
+        except Exception as e:
+            logger.error(f"배치 임베딩 생성 실패: {str(e)}")
+            # 폴백: 개별 임베딩 생성
+            query_embeddings = {}
+            for query in queries:
+                try:
+                    embedding = await self.vs_manager.create_embeddings_single_query_async(query)
+                    query_embeddings[query] = embedding
+                except Exception as individual_error:
+                    logger.error(f"개별 임베딩 생성 실패 [{query}]: {str(individual_error)}")
+                    
+            return query_embeddings
+
+    async def _search_reports_with_batch_embeddings(self, 
+                                                   query: str, 
+                                                   k: int,
+                                                   threshold: float,
+                                                   metadata_filter: Optional[Dict[str, Any]],
+                                                   user_id: Optional[Union[str, UUID]],
+                                                   final_report_toc: Optional[dict]
+                                                   ) -> Dict[str, Union[List[CompanyReportData], Dict[str, List[CompanyReportData]]]]:
+        """
+        배치 임베딩 기반 최적화된 검색 메서드 (향후 사용 고려)
+        """
+        # VectorStoreManager 캐시된 인스턴스 사용
+        if self.vs_manager is None:
+            from stockeasy.graph.agent_registry import get_cached_vector_store_manager
+            self.vs_manager = get_cached_vector_store_manager(
+                embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+                namespace=settings.PINECONE_NAMESPACE_STOCKEASY,
+                project_name="stockeasy"
+            )
+
+        # 모든 검색 쿼리 수집
+        all_queries = [query]
+        toc_search_queries = {}
+        
+        if final_report_toc and isinstance(final_report_toc, dict) and final_report_toc.get("sections"):
+            toc_search_queries = self._extract_toc_queries_for_search(final_report_toc)
+            all_queries.extend([q for q in toc_search_queries.values() if q])
+
+        # 배치로 임베딩 생성
+        logger.info(f"배치 임베딩 생성 시작: {len(all_queries)}개 쿼리")
+        query_embeddings = await self._batch_create_embeddings_for_queries(all_queries)
+        
+        # TODO: 생성된 임베딩으로 직접 Pinecone 검색하는 로직 구현
+        # 현재는 기존 메서드 사용
+        return await self._search_reports(query, k, threshold, metadata_filter, user_id, final_report_toc) 
+
+ 

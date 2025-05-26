@@ -5,6 +5,7 @@
 형태로 포맷팅하는 응답 포맷터 에이전트 클래스를 구현합니다.
 """
 
+from datetime import datetime
 import json
 import re
 from loguru import logger
@@ -44,7 +45,6 @@ class ResponseFormatterAgent(BaseAgent):
             db: 데이터베이스 세션 객체 (선택적)
         """
         super().__init__(name, db)
-        #self.llm, self.model_name, self.provider = get_llm_for_agent("response_formatter_agent")
         self.agent_llm = get_agent_llm("response_formatter_agent")
         self.agent_llm_for_tools = get_agent_llm("gemini-lite")
         #self.agent_llm_for_tools = get_agent_llm("gemini-2.0-flash")
@@ -57,6 +57,7 @@ class ResponseFormatterAgent(BaseAgent):
         개별 섹션을 비동기적으로 처리하여 컴포넌트와 포맷된 텍스트를 생성합니다.
         반환값: (생성된 컴포넌트 리스트, 해당 섹션의 LLM 텍스트 응답, 섹션 제목)
         """
+        start_time_process_section = datetime.now()
         section_title = section_data.get("title")
         section_components = []
         # 이 섹션 내에서 LLM이 생성한 순수 텍스트 (툴 콜 없이 반환된 내용)
@@ -137,7 +138,7 @@ class ResponseFormatterAgent(BaseAgent):
                             tool_args['level'] = int(tool_args['level'])
                         
                         tool_func = next((t for t in tools if t.name == tool_name), None)
-                        logger.info(f"Tool name : {tool_name}, args : {tool_args}, tool_func: {tool_func}")
+                        #logger.info(f"Tool name : {tool_name}, args : {tool_args}, tool_func: {tool_func}")
                         if tool_func:
                             component_dict = tool_func.invoke(tool_args)
 
@@ -210,6 +211,7 @@ class ResponseFormatterAgent(BaseAgent):
                          section_components.append(create_paragraph({"content": cleaned_text}))
                 
                 # 성공적으로 처리되면 (툴콜이 있든 없든) 컴포넌트들과 LLM 텍스트, 제목 반환
+                logger.info(f"섹션 '{section_title}' 처리 완료: 소요시간 {datetime.now() - start_time_process_section}")
                 return section_components, llm_generated_text_for_section, section_title
 
             except Exception as e:
@@ -235,18 +237,10 @@ class ResponseFormatterAgent(BaseAgent):
         """
         try:
             # 현재 사용자 쿼리 및 종목 정보 추출
+            start_time_process_query = datetime.now()
             query = state.get("query", "")
             stock_code = state.get("stock_code")
             stock_name = state.get("stock_name")
-            
-            # 통합된 응답 및 인사이트 추출
-            integrated_knowledge = state.get("integrated_knowledge", {})
-            # integrated_response = integrated_knowledge.get("integrated_response", state.get("integrated_response", "")) # 사용되지 않음
-            # core_insights = integrated_knowledge.get("core_insights", []) # 사용되지 않음
-            
-            # analysis = integrated_knowledge.get("analysis", {}) # 사용되지 않음
-            # confidence_assessment = analysis.get("confidence_assessment", {}) # 사용되지 않음
-            # uncertain_areas = analysis.get("uncertain_areas", []) # 사용되지 않음
             
             logger.info(f"ResponseFormatterAgent formatting response for query: {query}")
             
@@ -314,9 +308,13 @@ class ResponseFormatterAgent(BaseAgent):
                 formatted_response_parts.append(f"# {report_title}\n\n")
                 
                 toc_sections = final_report_toc.get("sections", [])
-                toc_sections.extend([
-                    {"title": "면책조항", "content": ""}
-                ])
+                
+                # 면책조항 내용을 summary_by_section에서 가져오기 (LLM 요청 없이)
+                disclaimer_content = summary_by_section.get("면책조항", "")
+                # fallback으로 기본 면책조항 사용
+                if not disclaimer_content.strip():
+                    logger.info("ResponseFormatterAgent: summary_by_section에 면책조항이 없어 기본 면책조항을 사용합니다.")
+                    disclaimer_content = """본 보고서는 투자 참고 자료로만 활용하시기 바라며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 보고서의 내용이 사실과 다른 내용이 일부 존재할 수 있으니 참고해 주시기 바랍니다. 투자 결정은 투자자 본인의 책임하에 이루어져야 하며, 본 보고서에 기반한 투자로 인한 손실에 대해 작성자와 당사는 어떠한 법적 책임도 지지 않습니다. 모든 투자에는 위험이 수반되므로 투자 전 투자자 본인의 판단과 책임하에 충분한 검토가 필요합니다."""
                 
                 tasks = []
                 for section_data_item in toc_sections: # 변수명 변경 (section_data -> section_data_item)
@@ -371,7 +369,12 @@ class ResponseFormatterAgent(BaseAgent):
                                 formatted_response_parts.append(llm_text_for_section + "\n\n")
                             # 만약 llm_text_for_section이 비어있고 components_from_section에 내용이 있다면,
                             # (즉, 툴콜링으로만 컴포넌트가 만들어진 경우) 해당 텍스트는 이미 컴포넌트로 변환되었으므로 추가 텍스트 불필요.
-            
+                
+                # 면책조항 컴포넌트 추가 (고정된 내용)
+                all_components.append(create_heading({"level": 3, "content": "면책조항"}))
+                all_components.append(create_paragraph({"content": disclaimer_content}))
+                formatted_response_parts.append(f"**면책조항**\n\n{disclaimer_content}\n\n")
+           
             # 최종 formatted_response 조합
             formatted_response = "".join(formatted_response_parts).strip()
 
@@ -403,7 +406,7 @@ class ResponseFormatterAgent(BaseAgent):
             # 처리 상태 업데이트
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["response_formatter"] = "completed"
-            
+            logger.info(f"[ResponseFormatterAgent] process 완료: 소요시간 {datetime.now() - start_time_process_query}")
             return state
             
         except Exception as e:
@@ -1013,32 +1016,52 @@ def create_bar_chart(title: str, labels: List[str], datasets: List[Dict[str, Any
     datasets는 [{"label": "매출액", "data": [100, 200], "backgroundColor": "#4C9AFF"}] 형식의 데이터셋 목록입니다.
     backgroundColor는 흰색에 가까운 색상을 하지 않습니다.
     """
-    # 데이터셋에 색상이 없는 경우 기본 색상 할당
-    color_palette = ["#4C9AFF", "#36B37E", "#FF5630", "#FFAB00", "#6554C0", "#00B8D9"]
+    # 뚜렷하게 구분되는 색상 팔레트 (서로 다른 색상)
+    color_palette = [
+        "#FF5630",  # 빨간색
+        "#36B37E",  # 녹색
+        "#4C9AFF",  # 파란색
+        "#FFAB00",  # 주황색
+        "#6554C0",  # 보라색
+        "#00B8D9",  # 청록색
+        "#E91E63",  # 핑크색
+        "#8BC34A",  # 라이트 그린
+        "#795548",  # 갈색
+        "#FF9800",  # 다른 주황색
+        "#9C27B0",  # 보라색 계열
+        "#607D8B",  # 블루 그레이
+        "#F44336",  # 다른 빨간색
+        "#009688",  # 틸색
+        "#3F51B5",  # 인디고
+        "#FFC107"   # 노란색
+    ]
+    
+    # 이미 사용된 색상 추적
+    used_colors = set()
     
     # 데이터셋이 1개인 경우 랜덤하게 색상 선택
     import random
     random_start = random.randint(0, len(color_palette) - 1) if len(datasets) == 1 else 0
     
     for i, dataset in enumerate(datasets):
-        #if "backgroundColor" not in dataset:
-        # 특정 키워드에 따라 색상 할당
-        label_lower = dataset.get("label", "").lower()
-        if "매출" in label_lower or "revenue" in label_lower or "sales" in label_lower:
-            dataset["backgroundColor"] = "#4C9AFF"  # 매출은 파란색
-        elif "영업이익" in label_lower :
-            dataset["backgroundColor"] = "#FC847E"  # 영업이익 핑크빛빨간색
-        elif "순이익" in label_lower  :
-            dataset["backgroundColor"] = "#92E492"  # 영업이익 녹색계열
-
-        elif "yoy" in label_lower or "증감률" in label_lower:
-            dataset["backgroundColor"] = "#FF5630"  # 증감률은 빨간색
-        elif "qoq" in label_lower:
-            dataset["backgroundColor"] = "#FFAB00"  # QoQ는 주황색
-        else:
-            # 기본 색상 순환 (데이터셋이 1개인 경우 랜덤 시작점 사용)
-            color_idx = (random_start + i) % len(color_palette)
-            dataset["backgroundColor"] = color_palette[color_idx]
+        if "backgroundColor" not in dataset:
+            assigned_color = None
+            
+            # 사용되지 않은 색상 중에서 순차적으로 선택
+            for j in range(len(color_palette)):
+                color_idx = (random_start + i + j) % len(color_palette)
+                candidate_color = color_palette[color_idx]
+                if candidate_color not in used_colors:
+                    assigned_color = candidate_color
+                    used_colors.add(assigned_color)
+                    break
+            
+            # 모든 색상이 사용된 경우 순환하여 할당
+            if not assigned_color:
+                color_idx = (random_start + i) % len(color_palette)
+                assigned_color = color_palette[color_idx]
+            
+            dataset["backgroundColor"] = assigned_color
     
     return BarChartComponent(
         title=title,
@@ -1272,11 +1295,11 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
         if pattern1_match:
             item_name = pattern1_match.group(1).strip()
             rate_type = pattern1_match.group(2).lower()
-            logger.info(f"패턴1 매칭: '{label}' -> 항목: '{item_name}', 증감률: '{rate_type}'")
+            #logger.info(f"패턴1 매칭: '{label}' -> 항목: '{item_name}', 증감률: '{rate_type}'")
         elif pattern2_match:
             item_name = pattern2_match.group(1).strip()
             rate_type = pattern2_match.group(2).lower()
-            logger.info(f"패턴2 매칭: '{label}' -> 항목: '{item_name}', 증감률: '{rate_type}'")
+            #logger.info(f"패턴2 매칭: '{label}' -> 항목: '{item_name}', 증감률: '{rate_type}'")
         else:
             # 기타 패턴: 주요 항목이 포함되어 있는지 확인
             for item in major_items:
@@ -1321,7 +1344,7 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                     variant_index = (base_index + offset) % len(line_color_palette)
                     assigned_color = line_color_palette[variant_index]
                     
-                logger.info(f"라인 데이터셋 '{label}': 항목 '{item_name}', 증감률 '{rate_type}'에 색상 {assigned_color} 할당")
+                #logger.info(f"라인 데이터셋 '{label}': 항목 '{item_name}', 증감률 '{rate_type}'에 색상 {assigned_color} 할당")
         
         # 항목별 할당 실패 시 일반 로직으로 색상 할당
         if not assigned_color:
@@ -1332,7 +1355,7 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                         # 해당 증감률 유형에 맞는 색상 선택 (데이터셋이 1개인 경우 랜덤 시작점 사용)
                         color_index = (random_start + i + offset_value) % len(line_color_palette)
                         assigned_color = line_color_palette[color_index]
-                        logger.info(f"라인 데이터셋 '{label}': 증감률 '{rate_type}'에 색상 {assigned_color} 할당")
+                        #logger.info(f"라인 데이터셋 '{label}': 증감률 '{rate_type}'에 색상 {assigned_color} 할당")
                         break
                         
             # 여전히 할당 실패 시 사용 가능한 색상 중 하나 선택
@@ -1346,7 +1369,7 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                     color_idx = (random_start + i) % len(line_color_palette)
                     assigned_color = line_color_palette[color_idx]
                 
-                logger.info(f"라인 데이터셋 '{label}': 자동 색상 {assigned_color} 할당")
+                #logger.info(f"라인 데이터셋 '{label}': 자동 색상 {assigned_color} 할당")
         
         # 색상 할당 및 사용된 색상 추적
         dataset["borderColor"] = assigned_color

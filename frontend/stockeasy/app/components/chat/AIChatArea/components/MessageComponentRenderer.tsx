@@ -133,14 +133,19 @@ export function MessageComponentRenderer({
   switch (component.type as string) {
     case 'heading': {
       const { level, content } = component as any;
+      console.log(`lv ${level} - ${content}`);
       // 헤딩 레벨에 따라 적절한 스타일 적용
       const styles: React.CSSProperties = {
         fontWeight: 'bold',
-        lineHeight: 1,
-        margin: '0.4em 0 0.2em 0',
+        lineHeight: 1.3,
+        margin: level === 1 ? '0.4em 0 0.2em 0' :
+                level === 2 ? '0.8em 0 0.2em 0' :  // level 2는 위쪽 여백을 더 크게
+                level === 3 ? '0.5em 0 0.2em 0' :
+                level === 4 ? '0.4em 0 0.2em 0' :
+                level === 5 ? '0.4em 0 0.2em 0' : '0.4em 0 0.2em 0',
         fontSize: level === 1 ? '2em' :
                  level === 2 ? '1.75em' :
-                 level === 3 ? '1.45em' :
+                 level === 3 ? '1.4em' :
                  level === 4 ? '1.25em' :
                  level === 5 ? '1.1em' : '1em'
       };
@@ -635,8 +640,8 @@ export function MessageComponentRenderer({
             <ComposedChart 
               data={formattedData}
               margin={isChartPair 
-                ? { top: 20, right: 30, left: 10, bottom: 10 } // 2열 배치 시 마진
-                : { top: 25, right: 15, left: 10, bottom: 0 } // 1열 배치 시 마진 (왼쪽 여백 제거)
+                ? { top: 25, right: 10, left: 20, bottom: 10 } // 2열 배치 시 마진
+                : { top: 25, right: 15, left: 15, bottom: 0 } // 1열 배치 시 마진 (왼쪽 여백 제거)
               }
               barCategoryGap="20%" // 카테고리 그룹 간격 추가
               barGap={3} // 막대 간 간격

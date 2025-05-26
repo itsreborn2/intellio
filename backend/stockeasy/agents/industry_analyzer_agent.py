@@ -5,6 +5,7 @@
 """
 
 import re
+import time
 from typing import Dict, List, Any, Optional, cast
 from datetime import datetime
 from uuid import UUID
@@ -48,20 +49,19 @@ class IndustryAnalyzerAgent(BaseAgent):
         """
         super().__init__(name, db)
         self.retrieved_str = "industry_data"
-        self.llm, self.model_name, self.provider = get_llm_for_agent("industry_analyzer_agent")
+        start_time = time.time()
         self.agent_llm = get_agent_llm("industry_analyzer_agent")
+        end_time = time.time()
+        duration = end_time - start_time
+        logger.info(f"IndustryAnalyzerAgent initialization time only llm: {duration:.2f} seconds")
         self.parser = JsonOutputParser()
-        logger.info(f"IndustryAnalyzerAgent initialized with provider: {self.provider}, model: {self.model_name}")
+        logger.info(f"IndustryAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.prompt_template = INDUSTRY_ANALYSIS_SYSTEM_PROMPT
         # 서비스 초기화
         #self.industry_service = IndustryDataService()
         #self.stock_service = StockInfoService()
-        # VectorStoreManager 초기화
-        self.vs_manager = VectorStoreManager(
-            embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
-            project_name="stockeasy",
-            namespace=settings.PINECONE_NAMESPACE_STOCKEASY_INDUSTRY
-        )
+        # VectorStoreManager 캐시된 인스턴스 사용 (지연 초기화)
+        self.vs_manager = None  # 실제 사용 시점에 글로벌 캐시에서 가져옴
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -205,7 +205,7 @@ class IndustryAnalyzerAgent(BaseAgent):
                         "duration": duration,
                         "status": "completed_no_data",
                         "error": None,
-                        "model_name": self.model_name
+                        "model_name": self.agent_llm.get_model_name()
                     }
                     
                     logger.info(f"IndustryAnalyzerAgent completed in {duration:.2f} seconds, no data found")
@@ -279,7 +279,7 @@ class IndustryAnalyzerAgent(BaseAgent):
                     "duration": duration,
                     "status": "completed",
                     "error": None,
-                    "model_name": self.model_name
+                    "model_name": self.agent_llm.get_model_name()
                 }
                 
                 logger.info(f"IndustryAnalyzerAgent completed in {duration:.2f} seconds")
@@ -526,6 +526,20 @@ class IndustryAnalyzerAgent(BaseAgent):
             검색된 리포트 목록
         """
         try:
+            # VectorStoreManager 캐시된 인스턴스 사용 (지연 초기화)
+            if self.vs_manager is None:
+                logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 시작 (IndustryAnalyzer)")
+                
+                # 글로벌 캐시 함수를 직접 사용
+                from stockeasy.graph.agent_registry import get_cached_vector_store_manager
+                
+                self.vs_manager = get_cached_vector_store_manager(
+                    embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+                    namespace=settings.PINECONE_NAMESPACE_STOCKEASY_INDUSTRY,
+                    project_name="stockeasy"
+                )
+                logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 완료 (IndustryAnalyzer)")
+            
             if user_id != "test_user":
                 parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
             else:

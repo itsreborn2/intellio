@@ -61,7 +61,6 @@ class WebSearchAgent(BaseAgent):
         """
         super().__init__(name, db)
         self.retrieved_str = "web_search_results"
-        #self.llm, self.model_name, self.provider = get_llm_for_agent("web_search_agent")
         self.agent_llm = get_agent_llm("web_search_agent")
         self.agent_llm_lite = get_agent_llm("gemini-lite")
         self.parser = JsonOutputParser()

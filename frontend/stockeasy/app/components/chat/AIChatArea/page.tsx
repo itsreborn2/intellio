@@ -435,8 +435,15 @@ function AIChatAreaContent() {
         setIsUserSending(false);
         isSendingRef.current = false;
       }, 1000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[AIChatAreaContent] 메시지 전송 중 오류 발생:', error);
+      
+      // 에러 메시지 표시 - useMessageProcessing에서 이미 toast가 표시되므로 중복 방지
+      if (!error.message?.includes('채팅 세션 생성')) {
+        const errorMessage = error.message || '메시지 전송 중 오류가 발생했습니다.';
+        toast.error(errorMessage);
+      }
+      
       setIsUserSending(false);
       isSendingRef.current = false;
     }

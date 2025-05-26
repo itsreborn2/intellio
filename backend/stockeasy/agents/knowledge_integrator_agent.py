@@ -54,10 +54,9 @@ class KnowledgeIntegratorAgent(BaseAgent):
             db: 데이터베이스 세션
         """
         super().__init__(db=db)
-        self.llm, self.model_name, self.provider = get_llm_for_agent("knowledge_integrator_agent")
         self.agent_llm = get_agent_llm("knowledge_integrator_agent")
         self.parser = JsonOutputParser(pydantic_object=KnowledgeIntegratorOutput)
-        logger.info(f"KnowledgeIntegratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
+        logger.info(f"KnowledgeIntegratorAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -296,7 +295,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.model_name
+                "model_name": self.agent_llm.get_model_name()
             }
             
             # 상태 업데이트 - 콜백 함수 사용

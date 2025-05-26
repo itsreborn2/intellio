@@ -9,14 +9,19 @@ import asyncio
 import copy
 import csv
 import os
+import psutil
+import gc
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 import time
 from loguru import logger
 import weakref
+from pathlib import Path
 from stockeasy.models.agent_io import AgentState
 from stockeasy.agents.base import BaseAgent
 
+# 메모리 추적 On/Off 설정 변수
+ENABLE_MEMORY_TRACKING = os.getenv("ENABLE_MEMORY_TRACKING", "true").lower() == "true"
 
 class ParallelSearchAgent(BaseAgent):
     """
@@ -42,6 +47,85 @@ class ParallelSearchAgent(BaseAgent):
             "confidential_analyzer",
             "web_search",
         ]
+    
+    def get_memory_usage(self):
+        """메모리 사용량을 반환합니다. (가벼운 버전)"""
+        try:
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            return {
+                "rss": memory_info.rss / (1024 * 1024),  # RSS in MB
+                "vms": memory_info.vms / (1024 * 1024),  # VMS in MB
+                "gc_objects": 0,  # 무거운 작업 제거
+                "state_size": 0,  # parallel agent에서는 state_size를 별도로 계산하지 않음
+            }
+        except Exception as e:
+            logger.error(f"메모리 사용량 체크 중 오류: {str(e)}")
+            return {"rss": 0, "vms": 0, "gc_objects": 0, "state_size": 0}
+    
+    async def log_memory_to_csv(self, phase: str, memory_data: Dict[str, Any], agent_name: str = "parallel_search", session_id: str = "unknown"):
+        """메모리 사용량을 CSV 파일에 비동기로 기록합니다."""
+        if not ENABLE_MEMORY_TRACKING:
+            return
+            
+        try:
+            csv_dir = Path("stockeasy/local_cache/memory_tracking")
+            csv_dir.mkdir(parents=True, exist_ok=True)
+            csv_path = csv_dir / "memory_usage.csv"
+            
+            # CSV 파일 존재 여부 확인
+            file_exists = csv_path.exists()
+            
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+            
+            # 비동기 파일 작업을 위한 함수
+            async def write_memory_csv():
+                # CSV 파일에 데이터 추가 (이벤트 루프 차단 방지)
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, lambda: self._write_memory_to_csv(
+                    csv_path, file_exists, timestamp, session_id, agent_name, phase, memory_data
+                ))
+            
+            # 비동기 CSV 작성 실행
+            await write_memory_csv()
+            
+        except Exception as e:
+            logger.error(f"메모리 CSV 로깅 중 오류: {str(e)}")
+    
+    def _write_memory_to_csv(self, path, exists, timestamp, session_id, agent_name, phase, memory_data):
+        """실제 CSV 파일 작성 함수 (이벤트 루프 외부에서 실행)"""
+        try:
+            with open(path, 'a', newline='') as csvfile:
+                fieldnames = ['timestamp', 'pid', 'worker_id', 'thread_info', 'session_id', 'agent', 'phase', 'rss_mb', 'vms_mb', 'gc_objects', 'state_size']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                
+                # 파일이 없으면 헤더 추가
+                if not exists:
+                    writer.writeheader()
+                
+                # 워커 식별자 정보 추가
+                import multiprocessing
+                import threading
+                
+                process = multiprocessing.current_process()
+                worker_id = f"{process.name}-{process.pid}"
+                thread_info = f"{threading.current_thread().name}-{threading.get_ident()}"
+                
+                writer.writerow({
+                    'timestamp': timestamp,
+                    'pid': os.getpid(),
+                    'worker_id': worker_id,
+                    'thread_info': thread_info,
+                    'session_id': session_id,
+                    'agent': agent_name,
+                    'phase': phase,
+                    'rss_mb': round(memory_data["rss"], 2),
+                    'vms_mb': round(memory_data["vms"], 2),
+                    'gc_objects': memory_data["gc_objects"],
+                    'state_size': memory_data["state_size"]
+                })
+        except Exception as e:
+            logger.error(f"CSV 파일 작성 중 오류: {str(e)}")
     
     async def process(self, state: AgentState) -> AgentState:
         """
@@ -69,7 +153,7 @@ class ParallelSearchAgent(BaseAgent):
                     
                     # 병렬 검색 에이전트 자체의 상태 업데이트
                     self.graph.current_state[session_id]["processing_status"]["parallel_search"] = "processing"
-                    logger.debug(f"ParallelSearchAgent: 처리 시작 상태를 그래프에 업데이트")
+                    #logger.debug(f"ParallelSearchAgent: 처리 시작 상태를 그래프에 업데이트")
             except Exception as e:
                 logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
         
@@ -333,14 +417,14 @@ class ParallelSearchAgent(BaseAgent):
                     
                     # 병렬 검색 에이전트 자체의 상태 업데이트
                     self.graph.current_state[session_id]["processing_status"]["parallel_search"] = "completed"
-                    logger.debug(f"ParallelSearchAgent: 처리 완료 상태를 그래프에 업데이트")
+                    #logger.debug(f"ParallelSearchAgent: 처리 완료 상태를 그래프에 업데이트")
             except Exception as e:
                 logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
         
         logger.info(f"ParallelSearchAgent 병렬 처리 완료. 실행 시간: {execution_time:.2f}초, 성공: {success_count}, 실패: {failure_count}")
         
         return state
-    def write_to_csv_full_graph_time(self, event_type: str, agent_name: str, note: Optional[str] = None) -> None:
+    def write_to_csv_full_graph_time(self, event_type: str, agent_name: str, note: Optional[str] = None, session_id: Optional[str] = None) -> None:
         # CSV 파일 경로 설정
         log_dir = os.path.join('stockeasy', 'local_cache')
         os.makedirs(log_dir, exist_ok=True)
@@ -354,9 +438,12 @@ class ParallelSearchAgent(BaseAgent):
         # 현재 날짜와 시간
         current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
+        # PID 정보 가져오기
+        current_pid = os.getpid()
+        
         # CSV 파일에 데이터 추가
         with open(csv_path, 'a', newline='', encoding='utf-8-sig') as csvfile:
-            fieldnames = ['일자', 'event_type', 'agent_name', 'note']
+            fieldnames = ['일자', 'pid', 'session_id', 'event_type', 'agent_name', 'note']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             
             # 파일이 새로 생성된 경우 헤더 작성
@@ -364,6 +451,8 @@ class ParallelSearchAgent(BaseAgent):
                 writer.writeheader()
             writer.writerow({
                 '일자': current_datetime,
+                'pid': current_pid,
+                'session_id': session_id or 'unknown',
                 'event_type': event_type,
                 'agent_name': agent_name,
                 'note': note
@@ -380,10 +469,21 @@ class ParallelSearchAgent(BaseAgent):
         Returns:
             에이전트 실행 후 상태
         """
+        session_id = state.get("session_id", "unknown")
+        agent_start_time = time.time()  # 에이전트 시작 시간 기록
+        
+        # 메모리 추적이 활성화된 경우에만 메모리 체크 수행
+        pre_memory = None
+        if ENABLE_MEMORY_TRACKING:
+            # 에이전트 시작 전 메모리 사용량 체크 (동기로 빠르게)
+            pre_memory = self.get_memory_usage()  # 동기 호출로 변경 (빠름)
+            logger.info(f"[메모리체크-시작] {name} - RSS: {pre_memory['rss']:.2f}MB, VMS: {pre_memory['vms']:.2f}MB")
+            # 백그라운드로 CSV 로깅
+            asyncio.create_task(self.log_memory_to_csv("before", pre_memory, name, session_id))
+        
         try:
             if self.graph:
                 # 그래프에 처리 상태 업데이트 (에이전트 시작)
-                session_id = state.get("session_id")
                 if session_id and hasattr(self.graph, 'current_state'):
                     try:
                         async with self.graph.state_lock:
@@ -403,11 +503,15 @@ class ParallelSearchAgent(BaseAgent):
                 state["update_processing_status"](state["agent_name"], "started")
             
             #logger.info(f"에이전트 {name} 실행 시작")
-            await asyncio.to_thread(self.write_to_csv_full_graph_time, "agent_start", name)
+            await asyncio.to_thread(self.write_to_csv_full_graph_time, "agent_start", name, None, session_id)
             result = await agent.process(state)
             #logger.info(f"에이전트 {name} 실행 완료")
-            await asyncio.to_thread(self.write_to_csv_full_graph_time, "agent_end", name)
+            await asyncio.to_thread(self.write_to_csv_full_graph_time, "agent_end", name, None, session_id)
 
+            # 에이전트 실행 시간 계산
+            agent_end_time = time.time()
+            execution_time = agent_end_time - agent_start_time
+            
             # 결과에 에이전트 이름 추가
             result["last_agent"] = name
             
@@ -425,7 +529,6 @@ class ParallelSearchAgent(BaseAgent):
             
             if self.graph:
                 # 그래프에 처리 상태 업데이트 (에이전트 완료)
-                session_id = state.get("session_id")
                 if session_id and hasattr(self.graph, 'current_state'):
                     try:
                         async with self.graph.state_lock:
@@ -440,9 +543,57 @@ class ParallelSearchAgent(BaseAgent):
                     except Exception as e:
                         logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
             
+            # 메모리 추적이 활성화된 경우에만 메모리 체크 수행
+            # 단, 에이전트 실행 시간이 충분히 긴 경우에만 (0.5초 이상)
+            if ENABLE_MEMORY_TRACKING and pre_memory and execution_time >= 0.5:
+                # 백그라운드로 메모리 체크 및 로깅 수행
+                async def background_memory_work():
+                    try:
+                        # 에이전트 완료 후 메모리 사용량 체크 (동기로 빠르게)
+                        post_memory = self.get_memory_usage()
+                        memory_diff = {
+                            "rss": post_memory["rss"] - pre_memory["rss"],
+                            "vms": post_memory["vms"] - pre_memory["vms"],
+                            "gc_objects": 0,  # 무거운 작업 제거
+                            "state_size": 0
+                        }
+                        
+                        logger.info(f"[메모리체크-종료-백그라운드] {name} - 실행시간: {execution_time:.2f}s, RSS: {post_memory['rss']:.2f}MB, VMS: {post_memory['vms']:.2f}MB")
+                        logger.info(f"[메모리변화-백그라운드] {name} - RSS: {memory_diff['rss']:.2f}MB, VMS: {memory_diff['vms']:.2f}MB")
+                        
+                        # 비동기로 CSV 파일에 로깅
+                        await self.log_memory_to_csv("after", post_memory, name, session_id)
+                    except Exception as e:
+                        logger.warning(f"[메모리체크-백그라운드] {name} - 메모리 체크 중 오류: {e}")
+                
+                # 백그라운드 작업 시작 (결과 기다리지 않음)
+                asyncio.create_task(background_memory_work())
+            elif ENABLE_MEMORY_TRACKING and execution_time < 0.5:
+                logger.debug(f"[메모리체크-건너뛰기] {name} - 실행시간이 짧아서 메모리 체크 건너뜀 ({execution_time:.2f}s)")
+            
             return result
+            
         except Exception as e:
-            logger.error(f"에이전트 {name} 실행 중 오류 발생: {str(e)}", exc_info=True)
+            # 에이전트 실행 시간 계산 (오류 시)
+            agent_end_time = time.time()
+            execution_time = agent_end_time - agent_start_time
+            
+            logger.error(f"에이전트 {name} 실행 중 오류 발생 (실행시간: {execution_time:.2f}s): {str(e)}", exc_info=True)
+            
+            # 메모리 추적이 활성화된 경우 오류 시 메모리 체크 (실행시간이 충분한 경우만)
+            if ENABLE_MEMORY_TRACKING and execution_time >= 0.5:
+                # 오류 발생 시 메모리 상태 체크 (background)
+                async def background_error_memory():
+                    try:
+                        error_memory = self.get_memory_usage()
+                        logger.error(f"[메모리체크-오류-백그라운드] {name} - 실행시간: {execution_time:.2f}s, RSS: {error_memory['rss']:.2f}MB, VMS: {error_memory['vms']:.2f}MB")
+                        await self.log_memory_to_csv("error", error_memory, name, session_id)
+                    except Exception as mem_e:
+                        logger.warning(f"[메모리체크-오류-백그라운드] {name} - 오류 메모리 체크 중 오류: {mem_e}")
+                
+                # Background 작업 시작
+                asyncio.create_task(background_error_memory())
+            
             # 에러 상태 표시를 위한 처리 상태 업데이트
             state["processing_status"][name] = "failed"
             
@@ -452,7 +603,6 @@ class ParallelSearchAgent(BaseAgent):
             
             if self.graph:
                 # 그래프에 처리 상태 업데이트 (에이전트 실패)
-                session_id = state.get("session_id")
                 if session_id and hasattr(self.graph, 'current_state'):
                     try:
                         async with self.graph.state_lock:

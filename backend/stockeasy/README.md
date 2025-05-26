@@ -10,6 +10,29 @@ Stockeasy 멀티에이전트 시스템은 주식 관련 질문에 대한 종합�
 - 종합적인 정보 요약 및 응답 생성
 - 오류 처리 및 대체 응답 제공
 
+## 환경 설정
+
+### 메모리 추적 기능
+
+메모리 사용량과 누수를 모니터링하기 위한 메모리 추적 기능을 제공합니다.
+
+**메모리 추적 활성화 (기본값)**
+```bash
+export ENABLE_MEMORY_TRACKING=true
+```
+
+**메모리 추적 비활성화**
+```bash
+export ENABLE_MEMORY_TRACKING=false
+```
+
+메모리 추적이 활성화되면:
+- 각 에이전트 실행 전후의 메모리 사용량이 기록됩니다
+- `backend/stockeasy/local_cache/memory_tracking/memory_usage.csv`에 메모리 데이터가 저장됩니다
+- 객체 분석 정보가 수집됩니다 (주요 에이전트만)
+
+**참고**: 메모리 추적 기능은 비동기로 실행되어 시스템 성능에 최소한의 영향을 줍니다.
+
 ## 아키텍처
 
 ![멀티에이전트 시스템 아키텍처](../../docs/images/multiagent_architecture.png)

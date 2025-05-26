@@ -10,6 +10,7 @@ import json
 import asyncio
 import hashlib
 from datetime import datetime, timezone, timedelta
+import time
 from zoneinfo import ZoneInfo
 from loguru import logger
 from typing import Dict, List, Any, Optional, Set, cast, Union
@@ -51,17 +52,16 @@ class TelegramRetrieverAgent(BaseAgent):
         super().__init__(name, db)
         self.retrieved_str = "telegram_messages"
         self.embedding_service = TelegramEmbeddingService()
-        self.llm, self.model_name, self.provider = get_llm_for_agent("telegram_retriever_agent")
+        start_time = time.time()
         self.agent_llm = get_agent_llm("telegram_retriever_agent")
+        end_time = time.time()
+        duration = end_time - start_time
+        logger.info(f"TelegramRetrieverAgent initialization time only llm: {duration:.2f} seconds")
         self.parser = JsonOutputParser()
         self.prompt_template = TELEGRAM_SUMMARY_PROMPT
-        logger.info(f"TelegramRetrieverAgent initialized with provider: {self.provider}, model: {self.model_name}")
-        # VectorStoreManager 초기화
-        self.vs_manager = VectorStoreManager(
-            embedding_model_type=self.embedding_service.get_model_type(), # TelegramEmbeddingService 사용
-            project_name="stockeasy",
-            namespace=settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM
-        )
+        logger.info(f"TelegramRetrieverAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
+        # VectorStoreManager 캐시된 인스턴스 사용 (지연 초기화)
+        self.vs_manager = None  # 실제 사용 시점에 AgentRegistry에서 가져옴
     
     def _parse_source_date(self, source_str: str) -> Optional[datetime]:
         """
@@ -135,7 +135,7 @@ class TelegramRetrieverAgent(BaseAgent):
                     "agent_name": "telegram_retriever", "status": "failed", 
                     "data": {"summary_text": "검색 쿼리 없음", "main_query_results": [], "toc_results": {}},
                     "error": "검색 쿼리가 제공되지 않았습니다.", "execution_time": 0,
-                    "metadata": {"model_name": self.model_name, "provider": self.provider}
+                    "metadata": {"model_name": self.agent_llm.get_model_name(), "provider": self.agent_llm.get_provider()}
                 }
                 if "retrieved_data" not in state: state["retrieved_data"] = {}
                 state["retrieved_data"][self.retrieved_str] = {
@@ -193,7 +193,7 @@ class TelegramRetrieverAgent(BaseAgent):
                     "data": {"summary_text": overall_summary_text, "main_query_results": [], "toc_results": {}},
                     "error": "텔레그램 메시지 검색 결과가 없거나 요약 데이터가 없습니다.",
                     "execution_time": duration,
-                    "metadata": {"message_count": 0, "threshold": threshold, "model_name": self.model_name, "provider": self.provider}
+                    "metadata": {"message_count": 0, "threshold": threshold, "model_name": self.agent_llm.get_model_name(), "provider": self.agent_llm.get_provider()}
                 }
                 
                 if "retrieved_data" not in state: state["retrieved_data"] = {}
@@ -230,7 +230,7 @@ class TelegramRetrieverAgent(BaseAgent):
                 "metadata": {
                     "message_count": len(processed_main_results),
                     "threshold": threshold,
-                    "model_name": self.model_name, "provider": self.provider
+                    "model_name": self.agent_llm.get_model_name(), "provider": self.agent_llm.get_provider()
                 }
             }
             
@@ -810,6 +810,20 @@ class TelegramRetrieverAgent(BaseAgent):
         try:
             logger.info(f"Generated search query: {search_query}")
             
+            # VectorStoreManager 캐시된 인스턴스 사용 (지연 초기화)
+            if self.vs_manager is None:
+                logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 시작 (TelegramRetriever)")
+                
+                # 글로벌 캐시 함수를 직접 사용
+                from stockeasy.graph.agent_registry import get_cached_vector_store_manager
+                
+                self.vs_manager = get_cached_vector_store_manager(
+                    embedding_model_type=self.embedding_service.get_model_type(),
+                    namespace=settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM,
+                    project_name="stockeasy"
+                )
+                logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 완료 (TelegramRetriever)")
+            
             initial_k = min(k * 3, 40) # 최대 가져올 문서 수 약간 늘림
             
             parsed_user_id = None
@@ -825,28 +839,56 @@ class TelegramRetrieverAgent(BaseAgent):
                 vs_manager=self.vs_manager
             )
             
-            # 검색 수행
-            result: RetrievalResult = await semantic_retriever.retrieve(
-                query=search_query, 
-                top_k=initial_k,#k * 2,
-            )
-            
-            # 외국계 증권사 필터 넣고 한번 더?
+            # 외국계 증권사 필터 준비
             # dict_values는 직렬화할 수 없으므로 list로 변환해야 함
             securities_values = list(securities_mapping.values())
             # 중복 제거
             unique_securities = list(set(securities_values))
-            
             foreign_filters = {"keywords": {"$in": unique_securities}}
-        
-            # 외국계 증권사 필터로 검색 수행
-            result_foreign: RetrievalResult = await semantic_retriever.retrieve(
-                query=search_query, 
-                top_k=initial_k,#k * 2,
-                filters=foreign_filters
-            )
+            
+            # 병렬 검색 태스크 준비
+            search_tasks = [
+                # 일반 검색
+                semantic_retriever.retrieve(
+                    query=search_query, 
+                    top_k=initial_k
+                ),
+                # 외국계 증권사 필터 검색
+                semantic_retriever.retrieve(
+                    query=search_query, 
+                    top_k=initial_k,
+                    filters=foreign_filters
+                )
+            ]
+            
+            # subgroup이 존재하고 비어있지 않을 때만 subgroup 필터 검색 추가
+            subgroup_task_added = False
+            if subgroup and len(subgroup) > 0:
+                subgroup_filters = {"keywords": {"$in": subgroup}}
+                logger.info(f"[텔레검색] subgroup_filters: {subgroup_filters}")
+                
+                search_tasks.append(
+                    semantic_retriever.retrieve(
+                        query=search_query, 
+                        top_k=initial_k,
+                        filters=subgroup_filters
+                    )
+                )
+                subgroup_task_added = True
+            else:
+                logger.info("[텔레검색] subgroup이 없거나 비어있어 subgroup 검색 제외")
+            
+            # 병렬 검색 실행
+            search_results = await asyncio.gather(*search_tasks)
+            
+            # 결과 분리
+            result = search_results[0]  # 일반 검색
+            result_foreign = search_results[1]  # 외국계 증권사 검색
+            result_subgroup = search_results[2] if subgroup_task_added else None  # 서브그룹 검색
+            
+            logger.info(f"[병렬검색 완료] 일반: {len(result.documents)}개, 외국계: {len(result_foreign.documents)}개, 서브그룹: {len(result_subgroup.documents) if result_subgroup else 0}개")
 
-            # 두 검색 결과 통합
+            # 검색 결과 통합
             combined_documents = []
             doc_ids = set()  # 문서 ID 중복 방지를 위한 집합
             
@@ -864,26 +906,13 @@ class TelegramRetrieverAgent(BaseAgent):
                     combined_documents.append(doc)
                     doc_ids.add(doc_id)
             
-            # subgroup이 존재하고 비어있지 않을 때만 subgroup 필터 검색 수행
-            if subgroup and len(subgroup) > 0:
-                subgroup_filters = {"keywords": {"$in": subgroup}}
-                logger.info(f"[텔레검색] subgroup_filters: {subgroup_filters}")
-                
-                # 서브그룹 증권사 필터로 검색 수행
-                result_subgroup: RetrievalResult = await semantic_retriever.retrieve(
-                    query=search_query, 
-                    top_k=initial_k,
-                    filters=subgroup_filters
-                )
-                
-                # 서브그룹 필터 검색 추가
+            # 서브그룹 필터 검색 결과 추가 (중복 제외)
+            if result_subgroup:
                 for doc in result_subgroup.documents:
                     doc_id = f"{doc.metadata.get('channel_id')}_{doc.metadata.get('message_id')}"
                     if doc_id not in doc_ids:
                         combined_documents.append(doc)
                         doc_ids.add(doc_id)
-            else:
-                logger.info("[텔레검색] subgroup이 없거나 비어있어 subgroup 검색 제외")
             
             if len(combined_documents) == 0:
                 logger.warning(f"No telegram messages found for query: {search_query}")

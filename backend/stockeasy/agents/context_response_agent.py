@@ -35,9 +35,9 @@ class ContextResponseAgent(BaseAgent):
             db: 데이터베이스 세션 객체 (선택적)
         """
         super().__init__(name, db)
-        self.llm, self.model_name, self.provider = get_llm_for_agent("context_response_agent")
+        #self.llm, self.agent_llm.get_model_name(), self.agent_llm.get_provider() = get_llm_for_agent("context_response_agent")
         self.agent_llm = get_agent_llm("context_response_agent")
-        logger.info(f"ContextResponseAgent initialized with provider: {self.provider}, model: {self.model_name}")
+        logger.info(f"ContextResponseAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -235,7 +235,7 @@ class ContextResponseAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.model_name
+                "model_name": self.agent_llm.get_model_name()
             }
             
             # 처리 상태 업데이트

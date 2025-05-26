@@ -38,6 +38,9 @@ from common.schemas.chat_components import (
     MessageComponent
 )
 
+# 메모리 추적 On/Off 설정 변수 (다른 파일들과 동일)
+ENABLE_MEMORY_TRACKING = os.getenv("ENABLE_MEMORY_TRACKING", "true").lower() == "true"
+
 class StockRAGService:
     """Langgraph 기반 주식 분석 RAG 서비스"""
     
@@ -446,7 +449,7 @@ class StockRAGService:
 
     async def _cleanup_memory(self, state: Dict[str, Any]):
         """
-        메모리 정리 로직 - graph_end에서 이동한 코드
+        메모리 정리 로직 - graph_end에서 이동한 코드 (최적화된 버전)
         """
         # 메모리 사용량 측정 함수
         def get_obj_memory_size(obj):
@@ -524,12 +527,10 @@ class StockRAGService:
                     else:
                         state["retrieved_data"][field] = []  # 리스트 형태의 필드
         
-        # 메모리 비운 후 가비지 컬렉션 실행 (2회 실행으로 순환 참조도 처리)
-        gc_count_before = len(gc.get_objects())
+        # 메모리 비운 후 가비지 컬렉션 실행 (빠른 버전)
         collected1 = gc.collect(generation=0)  # 첫 번째 세대 (최신 객체)
         collected2 = gc.collect(generation=1)  # 두 번째 세대
         collected3 = gc.collect(generation=2)  # 세 번째 세대 (오래된 객체)
-        gc_count_after = len(gc.get_objects())
         
         # 메모리 해제 후 크기 계산
         total_size_after = sum([
@@ -539,13 +540,11 @@ class StockRAGService:
                      "answer_expert"]
         ])
         
-        # 메모리 해제 결과 로깅
+        # 메모리 해제 결과 로깅 (최적화된 버전 - 무거운 gc.get_objects() 제거)
         memory_freed = total_size_before - total_size_after
-        gc_objects_freed = gc_count_before - gc_count_after
         
         logger.info(f"[메모리정리] 초기화된 객체: {', '.join(initialized_objects)}")
         logger.info(f"[메모리정리] GC 실행 결과 - 컬렉션된 객체: gen0={collected1}, gen1={collected2}, gen2={collected3}")
-        logger.info(f"[메모리정리] GC 실행 전후 객체 수: {gc_count_before} -> {gc_count_after} (차이: {gc_objects_freed}개)")
         logger.info(f"[메모리정리] 총 해제된 메모리: {memory_freed}KB (이전: {total_size_before}KB, 이후: {total_size_after}KB)")
         logger.info(f"[메모리정리] 모든 대용량 객체 메모리 정리 및 GC 실행 완료")
         
@@ -554,21 +553,56 @@ class StockRAGService:
 
     def _log_rag_service_memory(self, phase: str) -> None:
         """
-        RAG 서비스의 메모리 상태를 CSV 파일에 기록합니다.
+        RAG 서비스의 메모리 상태를 CSV 파일에 기록합니다. (최적화된 버전)
         
         Args:
             phase: 기록 시점 ("start", "cleanup_end" 등)
         """
+        if not ENABLE_MEMORY_TRACKING:
+            return
+            
         try:
-            # 메모리 사용량 측정
+            # 메모리 사용량 측정 (가벼운 버전)
             process = psutil.Process(os.getpid())
             memory_info = process.memory_info()
             memory_data = {
                 "rss": memory_info.rss / (1024 * 1024),  # RSS in MB
                 "vms": memory_info.vms / (1024 * 1024),  # VMS in MB
-                "gc_objects": len(gc.get_objects()),  # GC가 추적 중인 객체 수
+                "gc_objects": 0,  # 무거운 작업 제거
             }
             
+            # 백그라운드에서 CSV 파일 작성
+            asyncio.create_task(self._write_memory_csv_async(phase, memory_data))
+            
+            logger.info(f"[RAG서비스-메모리] {phase} - RSS: {memory_data['rss']:.2f}MB, VMS: {memory_data['vms']:.2f}MB")
+            
+        except Exception as e:
+            logger.error(f"[RAG서비스-메모리] 메모리 기록 중 오류 발생: {str(e)}")
+    
+    async def _write_memory_csv_async(self, phase: str, memory_data: dict) -> None:
+        """
+        메모리 데이터를 CSV 파일에 비동기로 작성합니다.
+        
+        Args:
+            phase: 기록 시점
+            memory_data: 메모리 데이터
+        """
+        try:
+            # 파일 작업을 백그라운드 스레드에서 실행
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._write_memory_csv_sync, phase, memory_data)
+        except Exception as e:
+            logger.error(f"[RAG서비스-메모리] 비동기 CSV 작성 중 오류: {str(e)}")
+    
+    def _write_memory_csv_sync(self, phase: str, memory_data: dict) -> None:
+        """
+        메모리 데이터를 CSV 파일에 동기적으로 작성합니다.
+        
+        Args:
+            phase: 기록 시점
+            memory_data: 메모리 데이터
+        """
+        try:
             # CSV 파일 경로 설정
             csv_dir = Path("stockeasy/local_cache/memory_tracking")
             csv_dir.mkdir(parents=True, exist_ok=True)
@@ -582,7 +616,7 @@ class StockRAGService:
             
             # CSV 파일에 데이터 추가
             with open(csv_path, 'a', newline='') as csvfile:
-                fieldnames = ['timestamp', 'session_id', 'agent', 'phase', 'rss_mb', 'vms_mb', 'gc_objects', 'state_size']
+                fieldnames = ['timestamp', 'pid', 'session_id', 'agent', 'phase', 'rss_mb', 'vms_mb', 'gc_objects', 'state_size']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 
                 # 파일이 없으면 헤더 추가
@@ -591,6 +625,7 @@ class StockRAGService:
                 
                 writer.writerow({
                     'timestamp': timestamp,
+                    'pid': os.getpid(),
                     'session_id': 'rag_service',
                     'agent': 'rag_service',
                     'phase': phase,
@@ -599,11 +634,9 @@ class StockRAGService:
                     'gc_objects': memory_data["gc_objects"],
                     'state_size': 0  # RAG 서비스는 상태 크기 측정하지 않음
                 })
-            
-            logger.info(f"[RAG서비스-메모리] {phase} - RSS: {memory_data['rss']:.2f}MB, VMS: {memory_data['vms']:.2f}MB, GC 객체: {memory_data['gc_objects']}")
-            
+                
         except Exception as e:
-            logger.error(f"[RAG서비스-메모리] 메모리 기록 중 오류 발생: {str(e)}")
+            logger.error(f"[RAG서비스-메모리] CSV 파일 작성 중 오류: {str(e)}")
 
     
 

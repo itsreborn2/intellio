@@ -239,10 +239,24 @@ async def create_chat_session(
         return ChatSessionResponse(**session_data)
         
     except Exception as e:
-        logger.error(f"채팅 세션 생성 중 오류 발생: {str(e)}")
+        error_message = str(e)
+        logger.error(f"채팅 세션 생성 중 오류 발생: {error_message}")
+        
+        # 특정 오류 타입에 따른 사용자 친화적 메시지 제공
+        if "StringDataRightTruncationError" in error_message or "value too long" in error_message:
+            user_message = "채팅 제목이 너무 깁니다. 더 짧은 제목으로 다시 시도해주세요."
+        elif "duplicate key" in error_message.lower():
+            user_message = "이미 존재하는 채팅 세션입니다."
+        elif "foreign key" in error_message.lower():
+            user_message = "유효하지 않은 사용자 정보입니다."
+        elif "connection" in error_message.lower():
+            user_message = "데이터베이스 연결에 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
+        else:
+            user_message = "채팅 세션 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"채팅 세션 생성 중 오류 발생: {str(e)}"
+            detail=user_message
         )
 
 
@@ -735,30 +749,6 @@ async def stream_chat_message(
                     # 태스크 완료 대기
                     result = await task
                     total_time = time.time() - start_time
-                    
-                    # result 객체 분석을 위한 로그 추가
-                    logger.info(f"[STREAM_CHAT] result 객체 키값들: {list(result.keys()) if isinstance(result, dict) else 'result는 dict가 아님'}")
-                    logger.info(f"[STREAM_CHAT] result 타입: {type(result)}")
-                    
-                    # 각 주요 키의 존재 여부 확인
-                    if isinstance(result, dict):
-                        for key in ['answer', 'summary', 'formatted_response', 'agent_results', 'components']:
-                            value = result.get(key)
-                            logger.info(f"[STREAM_CHAT] result['{key}'] 존재: {value is not None}, 타입: {type(value)}, 길이: {len(str(value)) if value else 0}")
-                    
-                    # answer 값 상세 분석
-                    answer_value = result.get("answer") if isinstance(result, dict) else None
-                    logger.info(f"[STREAM_CHAT] result.get('answer') 값: {repr(answer_value)}")
-                    logger.info(f"[STREAM_CHAT] answer 값 타입: {type(answer_value)}")
-                    logger.info(f"[STREAM_CHAT] answer 값 길이: {len(answer_value) if answer_value else 'None'}")
-                    
-                    # summary 값도 확인
-                    summary_value = result.get("summary") if isinstance(result, dict) else None
-                    logger.info(f"[STREAM_CHAT] result.get('summary') 값: {repr(summary_value[:100] if summary_value else None)}")
-                    
-                    # formatted_response 값도 확인
-                    formatted_response_value = result.get("formatted_response") if isinstance(result, dict) else None
-                    logger.info(f"[STREAM_CHAT] result.get('formatted_response') 값: {repr(formatted_response_value[:100] if formatted_response_value else None)}")
                     
                     # 결과에서 요약 추출
                     summary = result.get("summary", "")

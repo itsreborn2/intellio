@@ -9,6 +9,7 @@ import json
 import re
 import asyncio
 from datetime import datetime, timedelta
+import time
 from uuid import UUID
 from loguru import logger
 from typing import Dict, List, Any, Optional, Union, cast, Tuple
@@ -80,17 +81,13 @@ class ConfidentialAnalyzerAgent(BaseAgent):
         super().__init__(name, db)
         # 설정 파일에서 LLM 생성 및 모델 정보 가져오기
         self.retrieved_str = "confidential_data"
-        self.llm, self.model_name, self.provider = get_llm_for_agent("confidential_analyzer_agent")
         self.agent_llm = get_agent_llm("confidential_analyzer_agent")
+
         self.parser = JsonOutputParser()
         self.prompt_template = CONFIDENTIAL_ANALYSIS_SYSTEM_PROMPT
         logger.info(f"ConfidentialAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
-        # VectorStoreManager 초기화
-        self.vs_manager = VectorStoreManager(
-            embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
-            project_name="stockeasy",
-            namespace=settings.PINECONE_NAMESPACE_STOCKEASY_CONFIDENTIAL_NOTE
-        )
+        # VectorStoreManager 캐시된 인스턴스 사용 (지연 초기화)
+        self.vs_manager = None  # 실제 사용 시점에 글로벌 캐시에서 가져옴
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -182,8 +179,8 @@ class ConfidentialAnalyzerAgent(BaseAgent):
                     "metadata": {
                         "report_count": 0,
                         "threshold": threshold,
-                        "model_name": self.model_name,
-                        "provider": self.provider
+                        "model_name": self.agent_llm.get_model_name(),
+                        "provider": self.agent_llm.get_provider()
                     }
                 }
                 
@@ -210,8 +207,8 @@ class ConfidentialAnalyzerAgent(BaseAgent):
                     "duration": duration,
                     "status": "completed_no_data",
                     "error": None,
-                    "model_name": self.model_name,
-                    "provider": self.provider
+                    "model_name": self.agent_llm.get_model_name(),
+                    "provider": self.agent_llm.get_provider()
                 }
                 
                 logger.info(f"ConfidentialAnalyzerAgent completed in {duration:.2f} seconds, found 0 reports")
@@ -275,8 +272,8 @@ class ConfidentialAnalyzerAgent(BaseAgent):
                     "report_count": len(processed_reports),
                     "threshold": threshold,
                     "detailed_analysis": need_detailed_analysis,
-                    "model_name": self.model_name,
-                    "provider": self.provider
+                    "model_name": self.agent_llm.get_model_name(),
+                    "provider": self.agent_llm.get_provider()
                 }
             }
             
@@ -306,8 +303,8 @@ class ConfidentialAnalyzerAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.model_name,
-                "provider": self.provider
+                "model_name": self.agent_llm.get_model_name(),
+                "provider": self.agent_llm.get_provider()
             }
             
             logger.info(f"ConfidentialAnalyzerAgent completed in {duration:.2f} seconds, found {len(processed_reports)} reports")
@@ -326,8 +323,8 @@ class ConfidentialAnalyzerAgent(BaseAgent):
                 "error": str(e),
                 "execution_time": 0,
                 "metadata": {
-                    "model_name": self.model_name,
-                    "provider": self.provider
+                    "model_name": self.agent_llm.get_model_name(),
+                    "provider": self.agent_llm.get_provider()
                 }
             }
             
@@ -589,6 +586,20 @@ class ConfidentialAnalyzerAgent(BaseAgent):
             검색된 리포트 목록
         """
         try:
+            # VectorStoreManager 캐시된 인스턴스 사용 (지연 초기화)
+            if self.vs_manager is None:
+                logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 시작 (ConfidentialAnalyzer)")
+                
+                # 글로벌 캐시 함수를 직접 사용
+                from stockeasy.graph.agent_registry import get_cached_vector_store_manager
+                
+                self.vs_manager = get_cached_vector_store_manager(
+                    embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+                    namespace=settings.PINECONE_NAMESPACE_STOCKEASY_CONFIDENTIAL_NOTE,
+                    project_name="stockeasy"
+                )
+                logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 완료 (ConfidentialAnalyzer)")
+            
             # 벡터 스토어 연결
             # vs_manager = VectorStoreManager(
             #     embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
@@ -621,7 +632,9 @@ class ConfidentialAnalyzerAgent(BaseAgent):
                 logger.warning(f"[비공개자료 검색] retriever 실행 중 오류 발생: {str(e)}")
                 raise
             finally:
-                await semantic_retriever.aclose()
+                # 캐시된 VectorStoreManager를 사용하므로 개별 에이전트에서 close하지 않음
+                # await semantic_retriever.aclose()
+                pass
             
             # 검색 결과 처리
             results = []

@@ -26,6 +26,8 @@ from stockeasy.agents.session_manager_agent import SessionManagerAgent
 from stockeasy.agents.parallel_search_agent import ParallelSearchAgent
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# 메모리 추적 On/Off 설정 변수
+ENABLE_MEMORY_TRACKING = os.getenv("ENABLE_MEMORY_TRACKING", "true").lower() == "true"
 
 def should_use_telegram(state: AgentState) -> bool:
     """텔레그램 검색 에이전트를 사용해야 하는지 결정합니다."""
@@ -235,7 +237,7 @@ class StockAnalysisGraph:
                 self.callbacks[event_type] = []
             logger.info(f"모든 이벤트의 콜백 함수가 제거됨")
     
-    def write_to_csv_full_graph_time(self, event_type: str, agent_name: str, note: Optional[str] = None) -> None:
+    def write_to_csv_full_graph_time(self, event_type: str, agent_name: str, note: Optional[str] = None, session_id: Optional[str] = None) -> None:
         # CSV 파일 경로 설정
         log_dir = os.path.join('stockeasy', 'local_cache')
         os.makedirs(log_dir, exist_ok=True)
@@ -249,9 +251,12 @@ class StockAnalysisGraph:
         # 현재 날짜와 시간
         current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
+        # PID 정보 가져오기
+        current_pid = os.getpid()
+        
         # CSV 파일에 데이터 추가
         with open(csv_path, 'a', newline='', encoding='utf-8-sig') as csvfile:
-            fieldnames = ['일자', 'event_type', 'agent_name', 'note']
+            fieldnames = ['일자', 'pid', 'session_id', 'event_type', 'agent_name', 'note']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             
             # 파일이 새로 생성된 경우 헤더 작성
@@ -259,6 +264,8 @@ class StockAnalysisGraph:
                 writer.writeheader()
             writer.writerow({
                 '일자': current_datetime,
+                'pid': current_pid,
+                'session_id': session_id or 'unknown',
                 'event_type': event_type,
                 'agent_name': agent_name,
                 'note': note
@@ -277,6 +284,9 @@ class StockAnalysisGraph:
         """
         if event_type not in self.callbacks:
             return
+        if event_type == "graph_start" or event_type == "agent_start" or event_type == "agent_end" or event_type == "graph_end":
+            session_id = state.get("session_id", "unknown")
+            await asyncio.to_thread(self.write_to_csv_full_graph_time, event_type, agent_name, None, session_id)
 
         # 세션 ID가 'test_session'인 경우에만 콜백 실행
         session_id = state.get("session_id")
@@ -627,8 +637,14 @@ class StockAnalysisGraph:
         """
         
         async def wrapped_process(state: Dict[str, Any]) -> Dict[str, Any]:
+            # 에이전트 시작 시간 기록
+            agent_start_time = time.time()
+            
             # 객체 유형 분석 함수
             async def analyze_objects(phase):
+                if not ENABLE_MEMORY_TRACKING:
+                    return
+                    
                 try:
                     # 객체 카운트 스냅샷 디렉토리 생성
                     csv_dir = Path("stockeasy/local_cache/memory_tracking")
@@ -675,7 +691,7 @@ class StockAnalysisGraph:
                                 })
                     
                     # 비동기 CSV 작성 실행
-                    await write_object_types_csv()
+                    # await write_object_types_csv()  # object_types 파일 생성 비활성화
                     
                     # parallel_search 에이전트 특별 처리 (가장 메모리를 많이 사용하는 에이전트)
                     if agent_name == "parallel_search":
@@ -713,7 +729,7 @@ class StockAnalysisGraph:
                                         })
                             
                             # 비동기 CSV 작성 실행
-                            await write_retrieved_data_csv()
+                            # await write_retrieved_data_csv()  # retrieved_data 파일 생성 비활성화
                             
                             # 로그 출력 (즉시 수행)
                             for key, value in retrieved_data.items():
@@ -802,101 +818,192 @@ class StockAnalysisGraph:
                         # 가장 큰 객체 유형에 대한 참조 그래프 생성
                         biggest_type = most_common[0][0]
                         try:
-                            # 그래프 파일 저장 (비동기)
-                            graph_path = csv_dir / f"{agent_name}_{phase}_{biggest_type}_{timestamp}.png"
+                            # objgraph 사용 가능성 확인
+                            try:
+                                import objgraph
+                                has_objgraph = True
+                            except ImportError:
+                                logger.warning(f"[객체분석-경고] objgraph 라이브러리가 설치되지 않아 그래프 생성을 건너뜁니다. 설치 명령: pip install objgraph")
+                                has_objgraph = False
                             
-                            # 비동기 그래프 생성 함수
-                            async def create_graph():
-                                # 그래프 생성 (이벤트 루프 차단 방지)
-                                loop = asyncio.get_event_loop()
-                                await loop.run_in_executor(None, lambda: _create_object_graph(
-                                    biggest_type, str(graph_path)
-                                ))
-                                logger.info(f"[객체분석-그래프] {agent_name} - {biggest_type} 타입 참조 그래프 저장: {graph_path}")
-                            
-                            # 실제 그래프 생성 함수 (이벤트 루프 외부에서 실행)
-                            def _create_object_graph(obj_type, path):
-                                sample_objs = objgraph.by_type(obj_type)[:3]  # 타입의 처음 3개 객체
-                                if sample_objs:
-                                    objgraph.show_backrefs(
-                                        sample_objs, 
-                                        filename=path,
-                                        max_depth=5,
-                                        too_many=10,
-                                        filter=lambda x: not isinstance(x, type)
-                                    )
-                            
-                            # 비동기 그래프 생성 실행
-                            await create_graph()
+                            if has_objgraph:
+                                # 그래프 파일 저장 (비동기)
+                                graph_path = csv_dir / f"{agent_name}_{phase}_{biggest_type}_{timestamp}.png"
+                                
+                                # 비동기 그래프 생성 함수
+                                async def create_graph():
+                                    try:
+                                        # 그래프 생성 (이벤트 루프 차단 방지)
+                                        loop = asyncio.get_event_loop()
+                                        await loop.run_in_executor(None, lambda: _create_object_graph(
+                                            biggest_type, str(graph_path)
+                                        ))
+                                        logger.info(f"[객체분석-그래프] {agent_name} - {biggest_type} 타입 참조 그래프 저장 성공: {graph_path}")
+                                    except Exception as graph_e:
+                                        logger.error(f"[객체분석-그래프] {agent_name} - 그래프 생성 실행 중 오류: {str(graph_e)}")
+                                
+                                # 실제 그래프 생성 함수 (이벤트 루프 외부에서 실행)
+                                def _create_object_graph(obj_type, path):
+                                    try:
+                                        sample_objs = objgraph.by_type(obj_type)[:3]  # 타입의 처음 3개 객체
+                                        if sample_objs:
+                                            logger.info(f"[객체분석-그래프] {agent_name} - {obj_type} 타입 객체 {len(sample_objs)}개로 그래프 생성 시작")
+                                            
+                                            # Graphviz 설치 여부 확인 후 적절한 방법 선택
+                                            try:
+                                                objgraph.show_backrefs(
+                                                    sample_objs, 
+                                                    filename=path,
+                                                    max_depth=5,
+                                                    too_many=10,
+                                                    filter=lambda x: not isinstance(x, type)
+                                                )
+                                                logger.info(f"[객체분석-그래프] {agent_name} - 그래프 파일 생성 완료: {path}")
+                                            except Exception as graphviz_e:
+                                                if "graphviz" in str(graphviz_e).lower() or "dot" in str(graphviz_e).lower() or "executable not found" in str(graphviz_e).lower():
+                                                    logger.warning(f"[객체분석-그래프] Graphviz가 설치되지 않아 PNG 그래프 대신 텍스트 참조 정보를 저장합니다.")
+                                                    
+                                                    # 텍스트 파일로 참조 정보 저장
+                                                    text_path = str(path).replace('.png', '.txt')
+                                                    with open(text_path, 'w', encoding='utf-8') as f:
+                                                        f.write(f"객체 타입: {obj_type}\n")
+                                                        f.write(f"분석 시점: {timestamp}\n")
+                                                        f.write(f"에이전트: {agent_name}\n")
+                                                        f.write(f"단계: {phase}\n\n")
+                                                        
+                                                        for i, obj in enumerate(sample_objs):
+                                                            f.write(f"=== 객체 #{i+1} ===\n")
+                                                            f.write(f"객체 ID: {id(obj)}\n")
+                                                            f.write(f"객체 타입: {type(obj).__name__}\n")
+                                                            f.write(f"객체 크기: {len(str(obj))} 문자\n")
+                                                            
+                                                            # 간단한 참조자 정보 수집
+                                                            referrers = objgraph.find_backref_chain(obj, objgraph.is_proper_module)
+                                                            if referrers:
+                                                                f.write(f"참조 체인 길이: {len(referrers)}\n")
+                                                                for j, ref in enumerate(referrers[:3]):  # 상위 3개만
+                                                                    f.write(f"  참조자 #{j+1}: {type(ref).__name__}\n")
+                                                            f.write("\n")
+                                                    
+                                                    logger.info(f"[객체분석-그래프] {agent_name} - 텍스트 참조 정보 저장 완료: {text_path}")
+                                                else:
+                                                    raise graphviz_e
+                                        else:
+                                            logger.warning(f"[객체분석-그래프] {agent_name} - {obj_type} 타입의 객체를 찾을 수 없어 그래프 생성을 건너뜁니다.")
+                                    except Exception as create_e:
+                                        logger.error(f"[객체분석-그래프] {agent_name} - 그래프 파일 생성 중 오류: {str(create_e)}")
+                                        # graphviz가 설치되지 않은 경우의 오류 메시지 확인
+                                        if "graphviz" in str(create_e).lower() or "dot" in str(create_e).lower():
+                                            logger.warning(f"[객체분석-그래프] Graphviz가 설치되지 않은 것 같습니다. 설치 가이드: https://graphviz.org/download/")
+                                        # 간단한 텍스트 요약이라도 저장
+                                        try:
+                                            text_path = str(path).replace('.png', '_error.txt')
+                                            with open(text_path, 'w', encoding='utf-8') as f:
+                                                f.write(f"그래프 생성 실패\n")
+                                                f.write(f"오류: {str(create_e)}\n")
+                                                f.write(f"객체 타입: {obj_type}\n")
+                                                f.write(f"시점: {timestamp}\n")
+                                            logger.info(f"[객체분석-그래프] 오류 정보 저장: {text_path}")
+                                        except Exception as text_e:
+                                            logger.error(f"[객체분석-그래프] 텍스트 파일 저장도 실패: {str(text_e)}")
+                                
+                                # 비동기 그래프 생성 실행
+                                await create_graph()
                             
                         except Exception as e:
-                            logger.error(f"[객체분석-오류] 그래프 생성 중 오류: {str(e)}")
+                            logger.error(f"[객체분석-오류] 그래프 생성 중 오류: {str(e)}", exc_info=True)
                 
                 except Exception as e:
                     logger.error(f"[객체분석-오류] 객체 분석 중 오류 발생: {str(e)}", exc_info=True)
             
             # 메모리 사용량 체크 함수
             def get_memory_usage():
-                process = psutil.Process(os.getpid())
-                memory_info = process.memory_info()
-                return {
-                    "rss": memory_info.rss / (1024 * 1024),  # RSS in MB
-                    "vms": memory_info.vms / (1024 * 1024),  # VMS in MB
-                    "gc_objects": len(gc.get_objects()),  # GC가 추적 중인 객체 수
-                    "state_size": len(str(state)),  # 상태 크기 (문자열 변환 후 길이로 대략 측정)
-                }
+                if not ENABLE_MEMORY_TRACKING:
+                    return {"rss": 0, "vms": 0, "gc_objects": 0, "state_size": 0}
+                    
+                try:
+                    process = psutil.Process(os.getpid())
+                    memory_info = process.memory_info()
+                    return {
+                        "rss": memory_info.rss / (1024 * 1024),  # RSS in MB
+                        "vms": memory_info.vms / (1024 * 1024),  # VMS in MB
+                        "gc_objects": 0,  # 무거운 작업 제거 (빠른 처리 위해)
+                        "state_size": len(str(state)) // 1024,  # 상태 크기 (KB 단위로 축소)
+                    }
+                except Exception as e:
+                    logger.error(f"메모리 사용량 체크 중 오류: {str(e)}")
+                    return {"rss": 0, "vms": 0, "gc_objects": 0, "state_size": 0}
             
             # 메모리 사용량을 CSV 파일에 기록하는 함수
             async def log_memory_to_csv(phase, memory_data):
-                csv_dir = Path("stockeasy/local_cache/memory_tracking")
-                csv_dir.mkdir(parents=True, exist_ok=True)
-                csv_path = csv_dir / "memory_usage.csv"
-                
-                # CSV 파일 존재 여부 확인
-                file_exists = csv_path.exists()
-                
-                session_id = state.get("session_id", "unknown")
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-                
-                # 비동기 파일 작업을 위한 함수
-                async def write_memory_csv():
-                    # CSV 파일에 데이터 추가 (이벤트 루프 차단 방지)
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, lambda: _write_memory_to_csv(
-                        csv_path, file_exists, timestamp, session_id, agent_name, phase, memory_data
-                    ))
-                
-                # 실제 CSV 파일 작성 함수 (이벤트 루프 외부에서 실행)
-                def _write_memory_to_csv(path, exists, timestamp, session_id, agent_name, phase, memory_data):
-                    with open(path, 'a', newline='') as csvfile:
-                        fieldnames = ['timestamp', 'session_id', 'agent', 'phase', 'rss_mb', 'vms_mb', 'gc_objects', 'state_size']
-                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                        
-                        # 파일이 없으면 헤더 추가
-                        if not exists:
-                            writer.writeheader()
-                        
-                        writer.writerow({
-                            'timestamp': timestamp,
-                            'session_id': session_id,
-                            'agent': agent_name,
-                            'phase': phase,
-                            'rss_mb': round(memory_data["rss"], 2),
-                            'vms_mb': round(memory_data["vms"], 2),
-                            'gc_objects': memory_data["gc_objects"],
-                            'state_size': memory_data["state_size"]
-                        })
-                
-                # 비동기 CSV 작성 실행
-                await write_memory_csv()
+                if not ENABLE_MEMORY_TRACKING:
+                    return
+                    
+                try:
+                    csv_dir = Path("stockeasy/local_cache/memory_tracking")
+                    csv_dir.mkdir(parents=True, exist_ok=True)
+                    csv_path = csv_dir / "memory_usage.csv"
+                    
+                    # CSV 파일 존재 여부 확인
+                    file_exists = csv_path.exists()
+                    
+                    session_id = state.get("session_id", "unknown")
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                    
+                    # 비동기 파일 작업을 위한 함수
+                    async def write_memory_csv():
+                        # CSV 파일에 데이터 추가 (이벤트 루프 차단 방지)
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(None, lambda: _write_memory_to_csv(
+                            csv_path, file_exists, timestamp, session_id, agent_name, phase, memory_data
+                        ))
+                    
+                    # 실제 CSV 파일 작성 함수 (이벤트 루프 외부에서 실행)
+                    def _write_memory_to_csv(path, exists, timestamp, session_id, agent_name, phase, memory_data):
+                        try:
+                            with open(path, 'a', newline='') as csvfile:
+                                fieldnames = ['timestamp', 'pid', 'worker_id', 'thread_info', 'session_id', 'agent', 'phase', 'rss_mb', 'vms_mb', 'gc_objects', 'state_size']
+                                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                                
+                                # 파일이 없으면 헤더 추가
+                                if not exists:
+                                    writer.writeheader()
+                                
+                                # 워커 식별자 정보 추가
+                                import multiprocessing
+                                import threading
+                                
+                                process = multiprocessing.current_process()
+                                worker_id = f"{process.name}-{process.pid}"
+                                thread_info = f"{threading.current_thread().name}-{threading.get_ident()}"
+                                
+                                writer.writerow({
+                                    'timestamp': timestamp,
+                                    'pid': os.getpid(),
+                                    'worker_id': worker_id,
+                                    'thread_info': thread_info,
+                                    'session_id': session_id,
+                                    'agent': agent_name,
+                                    'phase': phase,
+                                    'rss_mb': round(memory_data["rss"], 2),
+                                    'vms_mb': round(memory_data["vms"], 2),
+                                    'gc_objects': memory_data["gc_objects"],
+                                    'state_size': memory_data["state_size"]
+                                })
+                        except Exception as e:
+                            logger.error(f"CSV 파일 작성 중 오류: {str(e)}")
+                    
+                    # 비동기 CSV 작성 실행
+                    await write_memory_csv()
+                    
+                except Exception as e:
+                    logger.error(f"메모리 CSV 로깅 중 오류: {str(e)}")
             
-            # 프로세스 시작 전 메모리 사용량 체크
+            # 프로세스 시작 전 메모리 사용량 체크 (동기로 빠르게)
             pre_memory = get_memory_usage()
-            logger.info(f"[메모리체크-시작] {agent_name} - RSS: {pre_memory['rss']:.2f}MB, VMS: {pre_memory['vms']:.2f}MB, GC 객체: {pre_memory['gc_objects']}, 상태크기: {pre_memory['state_size']}")
-            await log_memory_to_csv("before", pre_memory)
-            
-            # 프로세스 시작 전 객체 유형 분석 (비동기)
-            analyze_task = asyncio.create_task(analyze_objects("before"))
+            if ENABLE_MEMORY_TRACKING:
+                logger.info(f"[메모리체크-시작] {agent_name} - RSS: {pre_memory['rss']:.2f}MB, VMS: {pre_memory['vms']:.2f}MB, 상태크기: {pre_memory['state_size']}KB")
+                await log_memory_to_csv("before", pre_memory)
             
             # 에이전트 시작 콜백 실행
             await self._execute_callbacks("agent_start", agent_name, state)
@@ -924,21 +1031,17 @@ class StockAnalysisGraph:
             elif 'streaming_callback' in state:
                 logger.info(f"[wrapped_process] {agent_name} 에이전트에 이미 콜백 함수가 있음: {state['streaming_callback'].__name__ if hasattr(state['streaming_callback'], '__name__') else '이름 없는 함수' if state['streaming_callback'] else 'None'}")
             
+            # 특정 에이전트에만 analyze_objects 시작 시 실행 (메모리 많이 사용하는 에이전트)
+            # if ENABLE_MEMORY_TRACKING and agent_name in ["parallel_search", "knowledge_integrator", "summarizer", "response_formatter"]:
+            #     asyncio.create_task(analyze_objects("before"))
+            
             try:
-                # analyze_task가 완료될 때까지 기다림 (에이전트 실행 전)
-                await analyze_task
-                
-                # GC 실행 전 객체 수
-                gc_count_before = len(gc.get_objects())
-                
-                # 원본 프로세스 호출
+                # 원본 프로세스 즉시 실행 (블로킹 없음)
                 result = await original_process(state)
                 
-                # GC 실행 및 이후 객체 수
-                collected = gc.collect()
-                gc_count_after = len(gc.get_objects())
-                
-                logger.info(f"[GC정보] {agent_name} - 컬렉션 전: {gc_count_before}, 컬렉션 후: {gc_count_after}, 수집된 객체: {collected}")
+                # 에이전트 실행 시간 계산
+                agent_end_time = time.time()
+                execution_time = agent_end_time - agent_start_time
                 
                 # result가 None인 경우 빈 딕셔너리로 처리
                 if result is None:
@@ -949,43 +1052,79 @@ class StockAnalysisGraph:
                 if result and 'streaming_callback' in result:
                     del result['streaming_callback']
                 
-                # 프로세스 종료 후 메모리 사용량 체크
-                post_memory = get_memory_usage()
-                memory_diff = {
-                    "rss": post_memory["rss"] - pre_memory["rss"],
-                    "vms": post_memory["vms"] - pre_memory["vms"],
-                    "gc_objects": post_memory["gc_objects"] - pre_memory["gc_objects"],
-                    "state_size": post_memory["state_size"] - pre_memory["state_size"]
-                }
+                # Background GC 작업 (메인 플로우와 병렬)
+                async def background_gc_work():
+                    try:
+                        collected = await asyncio.to_thread(gc.collect)
+                        logger.info(f"[GC정보-백그라운드] {agent_name} - 실행시간: {execution_time:.2f}s, 수집된 객체: {collected}")
+                    except Exception as e:
+                        logger.warning(f"[GC정보-백그라운드] {agent_name} - GC 작업 중 오류: {e}")
                 
-                logger.info(f"[메모리체크-종료] {agent_name} - RSS: {post_memory['rss']:.2f}MB, VMS: {post_memory['vms']:.2f}MB, GC 객체: {post_memory['gc_objects']}, 상태크기: {post_memory['state_size']}")
-                logger.info(f"[메모리변화] {agent_name} - RSS: {memory_diff['rss']:.2f}MB, VMS: {memory_diff['vms']:.2f}MB, GC 객체: {memory_diff['gc_objects']}, 상태크기: {memory_diff['state_size']}")
+                # Background 메모리 체크 작업
+                async def background_memory_work():
+                    if not ENABLE_MEMORY_TRACKING:
+                        return
+                        
+                    try:
+                        # 프로세스 종료 후 메모리 사용량 체크
+                        post_memory = get_memory_usage()
+                        memory_diff = {
+                            "rss": post_memory["rss"] - pre_memory["rss"],
+                            "vms": post_memory["vms"] - pre_memory["vms"],
+                            "gc_objects": 0,  # 무거운 작업 제거
+                            "state_size": post_memory["state_size"] - pre_memory["state_size"]
+                        }
+                        
+                        logger.info(f"[메모리체크-종료-백그라운드] {agent_name} - 실행시간: {execution_time:.2f}s, RSS: {post_memory['rss']:.2f}MB, VMS: {post_memory['vms']:.2f}MB, 상태크기: {post_memory['state_size']}KB")
+                        logger.info(f"[메모리변화-백그라운드] {agent_name} - RSS: {memory_diff['rss']:.2f}MB, VMS: {memory_diff['vms']:.2f}MB, 상태크기: {memory_diff['state_size']}KB")
+                        
+                        # 비동기로 CSV 파일에 로깅
+                        await log_memory_to_csv("after", post_memory)
+                    except Exception as e:
+                        logger.warning(f"[메모리체크-백그라운드] {agent_name} - 메모리 체크 중 오류: {e}")
                 
-                # 비동기로 CSV 파일에 로깅
-                await log_memory_to_csv("after", post_memory)
+                # Background 작업들 시작 (결과 기다리지 않음)
+                asyncio.create_task(background_gc_work())
                 
-                # 프로세스 종료 후 객체 유형 분석 (비동기로 실행)
-                analyze_after_task = asyncio.create_task(analyze_objects("after"))
+                # 메모리 체크는 실행 시간이 0.5초 이상인 경우에만 수행
+                if execution_time >= 0.5:
+                    asyncio.create_task(background_memory_work())
+                    if ENABLE_MEMORY_TRACKING:
+                        # asyncio.create_task(analyze_objects("after"))  # big_dicts 파일 생성 비활성화
+                        pass
+                elif ENABLE_MEMORY_TRACKING:
+                    logger.debug(f"[메모리체크-건너뛰기] {agent_name} - 실행시간이 짧아서 메모리 체크 건너뜀 ({execution_time:.2f}s)")
                 
                 # 에이전트 완료 콜백 실행
                 await self._execute_callbacks("agent_end", agent_name, result)
                 
-                # analyze_after_task가 완료될 때까지 기다림 (에이전트 결과 반환 전)
-                await analyze_after_task
-                
                 return result
+                
             except Exception as e:
-                # 오류 발생 시 메모리 상태 체크
-                error_memory = get_memory_usage()
-                logger.error(f"[메모리체크-오류] {agent_name} - RSS: {error_memory['rss']:.2f}MB, VMS: {error_memory['vms']:.2f}MB, GC 객체: {error_memory['gc_objects']}, 상태크기: {error_memory['state_size']}")
+                # 에이전트 실행 시간 계산 (오류 시)
+                agent_end_time = time.time()
+                execution_time = agent_end_time - agent_start_time
                 
-                # 비동기로 CSV 파일에 로깅
-                await log_memory_to_csv("error", error_memory)
+                # 오류 발생 시 메모리 상태 체크 (background)
+                async def background_error_memory():
+                    if not ENABLE_MEMORY_TRACKING:
+                        return
+                        
+                    try:
+                        error_memory = get_memory_usage()
+                        logger.error(f"[메모리체크-오류-백그라운드] {agent_name} - 실행시간: {execution_time:.2f}s, RSS: {error_memory['rss']:.2f}MB, VMS: {error_memory['vms']:.2f}MB, 상태크기: {error_memory['state_size']}KB")
+                        await log_memory_to_csv("error", error_memory)
+                    except Exception as mem_e:
+                        logger.warning(f"[메모리체크-오류-백그라운드] {agent_name} - 오류 메모리 체크 중 오류: {mem_e}")
                 
-                # 오류 발생 시 객체 유형 분석 (비동기로 실행)
-                asyncio.create_task(analyze_objects("error"))
+                # Background 작업들 (실행 시간이 충분한 경우에만)
+                if execution_time >= 0.5:
+                    asyncio.create_task(background_error_memory())
+                    if ENABLE_MEMORY_TRACKING:
+                        # asyncio.create_task(analyze_objects("error"))  # big_dicts 파일 생성 비활성화
+                        pass
                 
-                logger.error(f"에이전트 {agent_name} 처리 중 오류 발생: {str(e)}", exc_info=True)
+                logger.error(f"에이전트 {agent_name} 처리 중 오류 발생 (실행시간: {execution_time:.2f}s): {str(e)}", exc_info=True)
                 state["processing_status"][agent_name] = "failed"
                 state["errors"] = state.get("errors", [])
                 state["errors"].append({
@@ -1003,7 +1142,7 @@ class StockAnalysisGraph:
                 await self._execute_callbacks("agent_error", agent_name, state)
                 
                 raise
-                
+        
         return wrapped_process
 
     def _determine_next_agent(self, state: AgentState) -> str:
