@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import ExpertModeToggle from './ExpertModeToggle';
 import { useUserModeStore, useIsClient } from '@/stores/userModeStore';
 // @ts-ignore: Type 선언 오류 무시
-import MessageComponentRenderer from './MessageComponentRenderer';
+import ChartPairRenderer, { MessageComponentRenderer } from './MessageComponentRenderer';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -213,12 +213,7 @@ export function MessageBubble({
       
       return (
         <div className="structured-message">
-          {message.components.map((component, index) => (
-            <MessageComponentRenderer 
-              key={`${message.id}-comp-${index}`} 
-              component={component} 
-            />
-          ))}
+          <ChartPairRenderer components={message.components} />
         </div>
       );
     }
@@ -320,8 +315,9 @@ export function MessageBubble({
           width: 100%;
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 12px;
           border: none;
+
         }
 
         .chat-message {
@@ -370,12 +366,7 @@ export function MessageBubble({
              Array.isArray(message.components) && 
              message.components.length > 0 ? (
               <div className="structured-message">
-                {message.components.map((component, index) => (
-                  <MessageComponentRenderer 
-                    key={`${message.id}-comp-${index}`} 
-                    component={component} 
-                  />
-                ))}
+                <ChartPairRenderer components={message.components} />
               </div>
             ) : message.role === 'user' ? (
               <div style={{

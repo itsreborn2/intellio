@@ -99,6 +99,20 @@ export interface ILineChartComponent extends IMessageComponentBase {
     data: ILineChartData;
 }
 
+export interface IMixedChartData {
+    labels: string[];
+    bar_datasets: Array<{ label: string; data: number[]; [key: string]: any }>;
+    line_datasets: Array<{ label: string; data: number[]; [key: string]: any }>;
+    y_axis_left_title?: string;
+    y_axis_right_title?: string;
+}
+
+export interface IMixedChartComponent extends IMessageComponentBase {
+    type: 'mixed_chart';
+    title?: string;
+    data: IMixedChartData;
+}
+
 export interface IImageComponent extends IMessageComponentBase {
   type: 'image';
   url: string;
@@ -159,7 +173,8 @@ export type MessageComponent =
   | IBarChartComponent
   | ILineChartComponent
   | IImageComponent
-  | ITableComponent;
+  | ITableComponent
+  | IMixedChartComponent;
 
 // --- 'complete' SSE 이벤트 데이터 인터페이스 ---
 export interface IStructuredChatResponseData {

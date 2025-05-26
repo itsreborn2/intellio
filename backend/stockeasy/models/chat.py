@@ -27,7 +27,7 @@ class StockChatSession(Base):
         comment="사용자 ID"
     )
     title: Mapped[str] = mapped_column(
-        String(255), nullable=False, 
+        String(1000), nullable=False, 
         server_default="새 채팅",
         comment="채팅 세션 제목"
     )
@@ -227,7 +227,7 @@ class ShareStockChatSession(Base):
         comment="공유 링크용 UUID"
     )
     title: Mapped[str] = mapped_column(
-        String(255), nullable=False,
+        String(1000), nullable=False,
         comment="채팅 세션 제목"
     )
     # 로딩 횟수 필드 추가

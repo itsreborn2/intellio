@@ -273,3 +273,5 @@ xxhash==3.5.0
 yarg==0.1.9
 yarl==1.20.0
 zstandard==0.23.0
+psutil==7.0.0
+objgraph==3.6.2

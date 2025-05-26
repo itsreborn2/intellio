@@ -5,8 +5,9 @@ from fastapi.responses import RedirectResponse
 from starlette import status
 from common.core.config import settings
 from dotenv import load_dotenv
-import logging
-from logging.config import dictConfig
+#from loguru import logger
+#import logging
+#from logging.config import dictConfig
 from contextlib import asynccontextmanager
 import os
 from common.core.exceptions import AuthenticationRedirectException
@@ -30,7 +31,7 @@ LoadEnvGlobal()
 async def lifespan(app: FastAPI):
     """애플리케이션 라이프사이클 관리"""
     # 시작 시 실행
-    logger = logging.getLogger("app")
+    #logger = logging.getLogger("app")
     logger.info("애플리케이션 시작됨")
     
     # 토큰 사용량 추적 큐 초기화
@@ -45,6 +46,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"토큰 사용량 추적 큐 초기화 실패: {str(e)}")
     
+    # VectorStoreManager 워밍업 (백그라운드에서 실행)
+    try:
+        from stockeasy.graph.agent_registry import warm_up_vector_store_managers
+        import asyncio
+        
+        # 백그라운드에서 워밍업 실행 (애플리케이션 시작을 블로킹하지 않음)
+        asyncio.create_task(warm_up_vector_store_managers_async())
+        logger.info("VectorStoreManager 워밍업 백그라운드 작업이 시작되었습니다")
+    except Exception as e:
+        logger.error(f"VectorStoreManager 워밍업 시작 실패: {str(e)}")
+    
     yield
     
     # 종료 시 실행
@@ -58,6 +70,30 @@ async def lifespan(app: FastAPI):
         logger.error(f"토큰 사용량 추적 큐 종료 실패: {str(e)}")
         
     logger.info("애플리케이션 종료됨")
+
+async def warm_up_vector_store_managers_async():
+    """
+    VectorStoreManager 워밍업을 비동기로 실행하는 함수
+    """
+    try:
+        import asyncio
+        import time
+        from stockeasy.graph.agent_registry import warm_up_vector_store_managers
+        
+        # 약간의 지연 후 워밍업 시작 (다른 초기화 작업들이 완료된 후)
+        await asyncio.sleep(2)
+        
+        #logger = logging.getLogger("app")
+        logger.info("VectorStoreManager 워밍업을 백그라운드에서 시작합니다")
+        
+        start_time = time.time()
+        warm_up_vector_store_managers()
+        end_time = time.time()
+        
+        logger.info(f"VectorStoreManager 워밍업이 완료되었습니다 - 소요시간: {end_time - start_time:.2f}초")
+    except Exception as e:
+        #logger = logging.getLogger("app")
+        logger.error(f"VectorStoreManager 워밍업 중 오류 발생: {str(e)}")
 
 # FastAPI 애플리케이션 인스턴스 생성
 app = FastAPI(
@@ -94,14 +130,13 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request, call_next):
     """요청과 응답을 로깅하는 미들웨어"""
-    logger = logging.getLogger("app")
-    logger.debug(f"Request path: {request.url.path}")
-    logger.debug(f"Request method: {request.method}")
-    logger.debug(f"Request headers: {request.headers}")
+    logger.debug(f"요청 경로: {request.url.path}")
+    logger.debug(f"요청 메소드: {request.method}")
+    logger.debug(f"요청 헤더: {request.headers}")
     
     response = await call_next(request)
     
-    logger.debug(f"Response status: {response.status_code}")
+    logger.debug(f"응답 상태: {response.status_code}")
     return response
 
 
@@ -121,114 +156,114 @@ except Exception as e:
 
 
 
-# ANSI 이스케이프 코드를 사용한 색상 정의
-class ColorFormatter(logging.Formatter):
-    """컬러 로그 포맷터"""
+# # ANSI 이스케이프 코드를 사용한 색상 정의
+# class ColorFormatter(logging.Formatter):
+#     """컬러 로그 포맷터"""
     
-    # 로그 레벨별 색상 정의
-    COLORS = {
-        'DEBUG': '\033[36m',    # 청록색
-        'INFO': '\033[32m',     # 초록색
-        'WARNING': '\033[33m',   # 노란색
-        'ERROR': '\033[31m',    # 빨간색
-        'CRITICAL': '\033[41m',  # 빨간 배경
-    }
-    RESET = '\033[0m'  # 색상 초기화
+#     # 로그 레벨별 색상 정의
+#     COLORS = {
+#         'DEBUG': '\033[36m',    # 청록색
+#         'INFO': '\033[32m',     # 초록색
+#         'WARNING': '\033[33m',   # 노란색
+#         'ERROR': '\033[31m',    # 빨간색
+#         'CRITICAL': '\033[41m',  # 빨간 배경
+#     }
+#     RESET = '\033[0m'  # 색상 초기화
 
-    def format(self, record):
-        # Windows 터미널에서도 색상이 표시되도록 설정
-        if sys.platform == 'win32':
-            import ctypes
-            kernel32 = ctypes.windll.kernel32
-            kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+#     def format(self, record):
+#         # Windows 터미널에서도 색상이 표시되도록 설정
+#         if sys.platform == 'win32':
+#             import ctypes
+#             kernel32 = ctypes.windll.kernel32
+#             kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
 
-        # 원본 값 백업
-        original_asctime = record.asctime if hasattr(record, 'asctime') else None
-        original_name = record.name
+#         # 원본 값 백업
+#         original_asctime = record.asctime if hasattr(record, 'asctime') else None
+#         original_name = record.name
 
-        # asctime 설정 (없는 경우 생성)
-        if not hasattr(record, 'asctime'):
-            record.asctime = self.formatTime(record)
+#         # asctime 설정 (없는 경우 생성)
+#         if not hasattr(record, 'asctime'):
+#             record.asctime = self.formatTime(record)
 
-        # levelname에 따른 색상 선택
-        color = self.COLORS.get(record.levelname, '')
+#         # levelname에 따른 색상 선택
+#         color = self.COLORS.get(record.levelname, '')
         
-        # time과 name에 levelname 기반 색상 적용
-        record.asctime = f"{color}{record.asctime}{self.RESET}"
-        record.name = f"{color}{record.name}{self.RESET}"
+#         # time과 name에 levelname 기반 색상 적용
+#         record.asctime = f"{color}{record.asctime}{self.RESET}"
+#         record.name = f"{color}{record.name}{self.RESET}"
         
-        # 포맷팅
-        result = super().format(record)
+#         # 포맷팅
+#         result = super().format(record)
 
-        # 원본 값 복원
-        # if original_asctime:
-        #     record.asctime = original_asctime
-        record.name = original_name
+#         # 원본 값 복원
+#         # if original_asctime:
+#         #     record.asctime = original_asctime
+#         record.name = original_name
         
-        return result
+#         return result
 
-# 로깅 설정
-logging_config = {
-    "version": 1,
-    "disable_existing_loggers": True,
-    "formatters": {
-        "color": {
-            "()": ColorFormatter,
-            "format": "%(asctime)s/%(name)s - %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S"
-        },
-        "file": {
-            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S"
-        }
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "color",
-            "level": "INFO"
-        },
-        "file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "formatter": "file",
-            "filename": "logs/app.log",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 5,
-            "encoding": "utf-8",
-            "level": "INFO"
-        }
-    },
-    "loggers": {
-        "common": {
-            "handlers": ["console", "file"],
-            "level": "INFO",
-            "propagate": False
-        },
-        "doceasy": {
-            "handlers": ["console", "file"],
-            "level": "INFO",
-            "propagate": False
-        },
-        "stockeasy": {
-            "handlers": ["console", "file"],
-            "level": "INFO",
-            "propagate": False
-        },
+# # 로깅 설정
+# logging_config = {
+#     "version": 1,
+#     "disable_existing_loggers": True,
+#     "formatters": {
+#         "color": {
+#             "()": ColorFormatter,
+#             "format": "%(asctime)s/%(name)s - %(message)s",
+#             "datefmt": "%Y-%m-%d %H:%M:%S"
+#         },
+#         "file": {
+#             "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+#             "datefmt": "%Y-%m-%d %H:%M:%S"
+#         }
+#     },
+#     "handlers": {
+#         "console": {
+#             "class": "logging.StreamHandler",
+#             "formatter": "color",
+#             "level": "INFO"
+#         },
+#         "file": {
+#             "class": "logging.handlers.RotatingFileHandler",
+#             "formatter": "file",
+#             "filename": "logs/app.log",
+#             "maxBytes": 10485760,  # 10MB
+#             "backupCount": 5,
+#             "encoding": "utf-8",
+#             "level": "INFO"
+#         }
+#     },
+#     "loggers": {
+#         "common": {
+#             "handlers": ["console", "file"],
+#             "level": "INFO",
+#             "propagate": False
+#         },
+#         "doceasy": {
+#             "handlers": ["console", "file"],
+#             "level": "INFO",
+#             "propagate": False
+#         },
+#         "stockeasy": {
+#             "handlers": ["console", "file"],
+#             "level": "INFO",
+#             "propagate": False
+#         },
         
-        "uvicorn": {
-            "handlers": ["console", "file"],
-            "level": "INFO",
-            "propagate": False
-        }
-    },
-    "root": {
-        "handlers": ["console", "file"],
-        "level": "WARNING"
-    }
-}
+#         "uvicorn": {
+#             "handlers": ["console", "file"],
+#             "level": "INFO",
+#             "propagate": False
+#         }
+#     },
+#     "root": {
+#         "handlers": ["console", "file"],
+#         "level": "WARNING"
+#     }
+# }
 
 # 로깅 설정 적용
-dictConfig(logging_config)
+#dictConfig(logging_config)
 
 @app.exception_handler(AuthenticationRedirectException)
 async def authentication_redirect_handler(request: Request, exc: AuthenticationRedirectException):

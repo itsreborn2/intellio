@@ -6,6 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // 기본 페이지 URL들
   const routes = [
     '',
+    '/trend-following',
     '/rs-rank',
     '/etf-sector',
     '/value',

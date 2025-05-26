@@ -16,7 +16,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import PromptTemplate
 from langchain_core.messages import AIMessage
 
-from stockeasy.prompts.revenue_breakdown_prompt import REVENUE_BREAKDOWN_SYSTEM_PROMPT, REVENUE_BREAKDOWN_USER_PROMPT, REVENUE_BREAKDOWN_SYSTEM_PROMPT2
+from stockeasy.prompts.revenue_breakdown_prompt import REVENUE_BREAKDOWN_SYSTEM_PROMPT3, REVENUE_BREAKDOWN_USER_PROMPT, REVENUE_BREAKDOWN_SYSTEM_PROMPT2
 from common.core.config import settings
 from stockeasy.services.financial.data_service_pdf import FinancialDataServicePDF
 from stockeasy.services.financial.stock_info_service import StockInfoService
@@ -42,7 +42,7 @@ class RevenueBreakdownAgent(BaseAgent):
         logger.info(f"RevenueBreakdownAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.financial_service = FinancialDataServicePDF()
         self.stock_service = StockInfoService()
-        self.prompt_template = REVENUE_BREAKDOWN_SYSTEM_PROMPT2
+        self.prompt_template = REVENUE_BREAKDOWN_SYSTEM_PROMPT3
         logger.info(f"RevenueBreakdownAgent 구현 완료 - 매출 및 수주 현황 정보 추출 준비 완료")
 
     
@@ -61,6 +61,14 @@ class RevenueBreakdownAgent(BaseAgent):
             # 성능 측정 시작
             start_time = datetime.now()
             logger.info("RevenueBreakdownAgent 처리 시작")
+            
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "processing")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["revenue_breakdown"] = "processing"
             
             # 현재 쿼리 및 세션 정보 추출
             query = state.get("query", "")
@@ -99,19 +107,23 @@ class RevenueBreakdownAgent(BaseAgent):
             logger.info(f"분석 기간: {date_range}")
             
             # 재무 데이터 조회 (GCS에서 PDF 파일을 가져와서 처리)
+            start_time_get_financial_revenue_breakdown = datetime.now()
             revenue_breakdown_data = await self.financial_service.get_financial_revenue_breakdown(stock_code, date_range)
-            
+            logger.info(f"재무 데이터 조회 완료: 소요시간 {datetime.now() - start_time_get_financial_revenue_breakdown}")
+
             if not revenue_breakdown_data or len(revenue_breakdown_data) == 0:
                 logger.warning(f"종목 {stock_code}에 대한 재무(매출,수주)  데이터를 찾을 수 없습니다.")
                 return self._set_error_state(state, "재무(매출,수주) 데이터를 찾을 수 없음", start_time)
             
             # 매출 및 수주 데이터 추출 및 분석
+            start_time_analyze_revenue_breakdown = datetime.now()
             analysis_results = await self._analyze_revenue_breakdown(
                 revenue_breakdown_data,
                 query,
                 stock_code,
                 stock_name or ""
             )
+            logger.info(f"매출 및 수주 분석 완료: 소요시간 {datetime.now() - start_time_analyze_revenue_breakdown}")
             
             # 실행 시간 계산
             end_time = datetime.now()
@@ -144,8 +156,14 @@ class RevenueBreakdownAgent(BaseAgent):
             # 데이터 추가
             retrieved_data["revenue_breakdown"].append(analysis_results)
             
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["revenue_breakdown"] = "completed"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["revenue_breakdown"] = "completed"
+                
             logger.info(f"RevenueBreakdownAgent processing_status: {state['processing_status']}")
             
             # 메트릭 기록
@@ -196,9 +214,13 @@ class RevenueBreakdownAgent(BaseAgent):
         if "retrieved_data" not in state:
             state["retrieved_data"] = {}
         
-        # 처리 상태 업데이트
-        state["processing_status"] = state.get("processing_status", {})
-        state["processing_status"]["revenue_breakdown"] = "error"
+        # 처리 상태 업데이트 - 콜백 함수 사용
+        if "update_processing_status" in state and "agent_name" in state:
+            state["update_processing_status"](state["agent_name"], "error")
+        else:
+            # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+            state["processing_status"] = state.get("processing_status", {})
+            state["processing_status"]["revenue_breakdown"] = "error"
         
         return state
         
@@ -326,7 +348,7 @@ class RevenueBreakdownAgent(BaseAgent):
             from langchain_core.messages import SystemMessage, HumanMessage
             
             messages = [
-                SystemMessage(content=REVENUE_BREAKDOWN_SYSTEM_PROMPT2),
+                SystemMessage(content=REVENUE_BREAKDOWN_SYSTEM_PROMPT3),
                 HumanMessage(content=REVENUE_BREAKDOWN_USER_PROMPT.format(
                                             query=query, 
                                             stock_code=stock_code, 

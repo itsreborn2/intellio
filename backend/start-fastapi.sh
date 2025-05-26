@@ -44,7 +44,7 @@ echo "Celery 워커 총 수: $TOTAL_CELERY_WORKERS (DocEasy: $CELERY_DOCEASY_CON
 # CPU 워커 수 설정 - 기본값은 시스템 CPU 수 또는 개발환경에서는 1
 if [ "$RELOAD" = "true" ] || [ "$CURRENT_ENV" != "production" ]; then
     # 개발 환경에서는 워커 수를 1로 설정 (reload 모드와 여러 워커는 호환되지 않음)
-    WORKERS=${WORKERS:-"1"}
+    WORKERS=${WORKERS:-"3"}
     echo "개발 환경(reload=true 또는 개발환경)에서 실행 중: 워커 수 = $WORKERS"
 else
     # 프로덕션 환경에서는 CPU 코어 수와 Celery 워커 수를 고려하여 설정

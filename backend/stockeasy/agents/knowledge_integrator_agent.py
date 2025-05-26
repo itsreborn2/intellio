@@ -54,10 +54,9 @@ class KnowledgeIntegratorAgent(BaseAgent):
             db: 데이터베이스 세션
         """
         super().__init__(db=db)
-        self.llm, self.model_name, self.provider = get_llm_for_agent("knowledge_integrator_agent")
         self.agent_llm = get_agent_llm("knowledge_integrator_agent")
         self.parser = JsonOutputParser(pydantic_object=KnowledgeIntegratorOutput)
-        logger.info(f"KnowledgeIntegratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
+        logger.info(f"KnowledgeIntegratorAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -72,6 +71,14 @@ class KnowledgeIntegratorAgent(BaseAgent):
         try:
             # 성능 측정 시작
             start_time = datetime.now()
+            
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "processing")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["knowledge_integrator"] = "processing"
             
             # 현재 사용자 쿼리 및 종목 정보 추출
             query = state.get("query", "")
@@ -288,12 +295,18 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.model_name
+                "model_name": self.agent_llm.get_model_name()
             }
             
-            # 처리 상태 업데이트
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["knowledge_integrator"] = "completed"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["knowledge_integrator"] = "completed"
+            
+            state["knowledge_integrator_result"] = integrated_knowledge
             
             logger.info(f"KnowledgeIntegratorAgent completed in {duration:.2f} seconds")
             
@@ -327,9 +340,13 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 "metadata": {}
             }
             
-            # 처리 상태 업데이트
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["knowledge_integrator"] = "failed"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "error")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["knowledge_integrator"] = "error"
             
             # 응답에 오류 메시지 추가
             state["integrated_response"] = "죄송합니다. 정보를 통합하는 중 오류가 발생했습니다."

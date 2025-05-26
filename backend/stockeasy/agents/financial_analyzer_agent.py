@@ -7,7 +7,7 @@
 import re
 import json
 import asyncio
-from typing import Dict, List, Any, Optional, cast
+from typing import Dict, List, Any, Optional, cast, Callable
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -66,6 +66,14 @@ class FinancialAnalyzerAgent(BaseAgent):
             start_time = datetime.now()
             logger.info("FinancialAnalyzerAgent starting processing")
             
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "processing")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["financial_analyzer"] = "processing"
+            
             # 현재 쿼리 및 세션 정보 추출
             query = state.get("query", "")
             
@@ -103,11 +111,34 @@ class FinancialAnalyzerAgent(BaseAgent):
             # 분석 기간 파악
             date_range = self._determine_date_range(query, data_requirements)
             logger.info(f"date_range: {date_range}")
+
+            # 재무 데이터 조회 (순차 처리)
+            logger.info("[성능개선] PDF 데이터 조회 시작")
+            pdf_start_time = datetime.now()
             
-            # 재무 데이터 조회 (GCS에서 PDF 파일을 가져와서 처리)
-            financial_data = await self.financial_service_pdf.get_financial_data(stock_code, date_range)
-            db_search_data = await self.financial_service_db.get_financial_data_with_qoq(stock_code, date_range)
+            # PDF 데이터 조회 (시간이 오래 걸림)
+            try:
+                financial_data = await self.financial_service_pdf.get_financial_data(stock_code, date_range)
+            except Exception as e:
+                logger.error(f"PDF 데이터 조회 실패: {e}")
+                financial_data = {}
             
+            pdf_duration = (datetime.now() - pdf_start_time).total_seconds()
+            logger.info(f"[성능개선] PDF 데이터 조회 완료 - 소요시간: {pdf_duration:.2f}초")
+            
+            # DB 데이터 조회 (빠름)
+            logger.info("[성능개선] DB 데이터 조회 시작")
+            db_start_time = datetime.now()
+            
+            try:
+                db_search_data = await self.financial_service_db.get_financial_data_with_qoq(stock_code, date_range)
+            except Exception as e:
+                logger.error(f"DB 데이터 조회 실패: {e}")
+                db_search_data = {}
+            
+            db_duration = (datetime.now() - db_start_time).total_seconds()
+            logger.info(f"[성능개선] DB 데이터 조회 완료 - 소요시간: {db_duration:.2f}초")
+
             # content를 제외한 메타데이터만 로깅
             log_data = {
                 "stock_code": financial_data.get("stock_code"),
@@ -151,8 +182,13 @@ class FinancialAnalyzerAgent(BaseAgent):
                 financial_data_list: List[FinancialData] = []
                 retrieved_data["financials"] = financial_data_list
                 
-                state["processing_status"] = state.get("processing_status", {})
-                state["processing_status"]["financial_analyzer"] = "completed_no_data"
+                # 상태 업데이트 - 콜백 함수 사용
+                if "update_processing_status" in state and "agent_name" in state:
+                    state["update_processing_status"](state["agent_name"], "completed_no_data")
+                else:
+                    # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                    state["processing_status"] = state.get("processing_status", {})
+                    state["processing_status"]["financial_analyzer"] = "completed_no_data"
                 
                 # 메트릭 기록
                 state["metrics"] = state.get("metrics", {})
@@ -162,7 +198,12 @@ class FinancialAnalyzerAgent(BaseAgent):
                     "duration": duration,
                     "status": "completed_no_data",
                     "error": None,
-                    "model_name": self.agent_llm.get_model_name()
+                    "model_name": self.agent_llm.get_model_name(),
+                    "performance_metrics": {
+                        "pdf_data_fetch_duration": pdf_duration if 'pdf_duration' in locals() else 0.0,
+                        "db_data_fetch_duration": db_duration if 'db_duration' in locals() else 0.0,
+                        "total_data_fetch_time": (pdf_duration if 'pdf_duration' in locals() else 0.0) + (db_duration if 'db_duration' in locals() else 0.0)
+                    }
                 }
                 
                 logger.info(f"FinancialAnalyzerAgent completed in {duration:.2f} seconds, no data found")
@@ -171,7 +212,6 @@ class FinancialAnalyzerAgent(BaseAgent):
             # 필요한 재무 지표 식별
             required_metrics = self._identify_required_metrics(classification, query)
             logger.info(f"[FinancialAnalyzerAgent] required_metrics: {required_metrics}")
-
 
             # 추출된 재무 데이터를 LLM에 전달할 형식으로 변환
             formatted_data = await self._prepare_financial_data_for_llm(
@@ -192,11 +232,10 @@ class FinancialAnalyzerAgent(BaseAgent):
                 stock_name or "",
                 classification
             )
-            
+
             # 실행 시간 계산
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            
             
             state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["financial_analyzer"] = {
@@ -234,9 +273,13 @@ class FinancialAnalyzerAgent(BaseAgent):
                         if isinstance(financial, dict):
                             financial["competitor_infos"] = competitor_infos
 
-
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["financial_analyzer"] = "completed"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["financial_analyzer"] = "completed"
             
             # 메트릭 기록
             state["metrics"] = state.get("metrics", {})
@@ -246,9 +289,16 @@ class FinancialAnalyzerAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.agent_llm.get_model_name()
+                "model_name": self.agent_llm.get_model_name(),
+                "performance_metrics": {
+                    "pdf_data_fetch_duration": pdf_duration,
+                    "db_data_fetch_duration": db_duration,
+                    "total_data_fetch_time": pdf_duration + db_duration
+                }
             }
             
+            logger.info(f"[성능개선] FinancialAnalyzerAgent 완료 - 총 실행시간: {duration:.2f}초")
+            logger.info(f"[성능개선] 데이터 조회 시간 요약 - PDF: {pdf_duration:.2f}초, DB: {db_duration:.2f}초")
             logger.info(f"FinancialAnalyzerAgent completed in {duration:.2f} seconds")
             return state
             
@@ -281,8 +331,13 @@ class FinancialAnalyzerAgent(BaseAgent):
             financial_data_list: List[FinancialData] = []
             retrieved_data["financials"] = financial_data_list
             
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["financial_analyzer"] = "error"
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "error")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["financial_analyzer"] = "error"
             
             return state
             
@@ -859,7 +914,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 
             # 모든 경쟁사 정보를 담을 리스트
             competitors_info_list = []
-            
+
             # 각 경쟁사에 대한 정보 조회
             for competitor in competitors:
                 competitor_name = competitor
@@ -890,7 +945,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 # 최대 3개까지만 조회
                 if len(competitors_info_list) >= 3:
                     break
-            
+
             logger.info(f"조회된 경쟁사 수: {len(competitors_info_list)}")
             return competitors_info_list
             

@@ -35,6 +35,22 @@ class LineChartComponent(BaseModel):
     data: LineChartData = Field(..., description="차트 데이터")
 
 
+class MixedChartData(BaseModel):
+    """혼합 차트 데이터 모델"""
+    labels: List[str] = Field(..., description="X축 라벨 목록")
+    bar_datasets: List[Dict[str, Any]] = Field(..., description="막대 차트 데이터셋 목록 (왼쪽 Y축)")
+    line_datasets: List[Dict[str, Any]] = Field(..., description="선 차트 데이터셋 목록 (오른쪽 Y축)")
+    y_axis_left_title: Optional[str] = Field(None, description="왼쪽 Y축 제목")
+    y_axis_right_title: Optional[str] = Field(None, description="오른쪽 Y축 제목")
+
+
+class MixedChartComponent(BaseModel):
+    """혼합 차트 컴포넌트 모델 (막대 + 선 차트)"""
+    type: Literal['mixed_chart'] = 'mixed_chart'
+    title: Optional[str] = Field(None, description="차트 제목")
+    data: MixedChartData = Field(..., description="차트 데이터")
+
+
 class ImageComponent(BaseModel):
     """이미지 컴포넌트 모델"""
     type: Literal['image'] = 'image'
@@ -104,6 +120,7 @@ MessageComponent = Union[
     CodeBlockComponent,
     BarChartComponent,
     LineChartComponent,
+    MixedChartComponent,
     ImageComponent,
     TableComponent,
     # 필요시 추가 컴포넌트 정의
