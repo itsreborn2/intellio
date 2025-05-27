@@ -10,6 +10,8 @@ import { useIsMobile } from '../hooks';
 import StockBadge from './StockBadge';
 import StockSuggestions from './StockSuggestions';
 import SendButton from './SendButton';
+import { checkTimeRestriction, getRestrictionMessage } from '@/app/utils/timeRestriction';
+import { toast } from 'sonner';
 
 interface InputAreaProps {
   inputMessage: string;
@@ -284,6 +286,15 @@ export function InputArea({
     // 종목이 선택되어 있거나 현재 채팅 세션이 있는 경우 메시지 전송 가능
     if (e.key === 'Enter' && !e.shiftKey && inputMessage.trim() !== '' && (selectedStock || hasActiveSession)) {
       e.preventDefault();
+      
+      // 시간 제한 체크
+      const { isRestricted, nextAvailableTime } = checkTimeRestriction();
+      if (isRestricted) {
+        const restrictionMessage = getRestrictionMessage(nextAvailableTime);
+        toast.error(restrictionMessage);
+        return;
+      }
+
       setIsKeyPressed(true);
       onSendMessage();
       // scrollToBottom이 제공되었다면 호출
@@ -437,6 +448,14 @@ export function InputArea({
   
   // 전송 버튼 클릭 핸들러
   const handleSendButtonClick = useCallback(() => {
+    // 시간 제한 체크
+    const { isRestricted, nextAvailableTime } = checkTimeRestriction();
+    if (isRestricted) {
+      const restrictionMessage = getRestrictionMessage(nextAvailableTime);
+      toast.error(restrictionMessage);
+      return;
+    }
+
     // 종목이 선택되어 있거나 현재 채팅 세션이 있는 경우 메시지 전송 가능
     if ((selectedStock || hasActiveSession) && inputMessage.trim() !== '' && !isProcessing) {
       onSendMessage();
