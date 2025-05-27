@@ -97,58 +97,86 @@ export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo 
     return `${baseIntent}${urlWithoutProtocol}#${intentParams}`;
   };
 
+  // 다양한 브라우저 호출 방법들
+  const openInExternalBrowser = (url: string) => {
+    const userAgent = window.navigator.userAgent;
+    
+    // 1. Chrome 브라우저 우선 시도 (Android)
+    if (/Android/i.test(userAgent)) {
+      const chromeIntent = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+      try {
+        window.location.href = chromeIntent;
+        return true;
+      } catch (e) {
+        console.log('Chrome Intent 실패:', e);
+      }
+    }
+
+    // 2. 다양한 브라우저 스킴 시도 (네이버 제외)
+    const browserSchemes = [
+      `samsung://internet?url=${encodeURIComponent(url)}`,      // Samsung Internet 우선
+      `firefox://open-url?url=${encodeURIComponent(url)}`,
+      `googlechrome://navigate?url=${encodeURIComponent(url)}`,
+      `opera-http://${url.replace(/^https?:\/\//, '')}`
+    ];
+
+    for (const scheme of browserSchemes) {
+      try {
+        window.location.href = scheme;
+        // 각 시도 간격을 두어 성공 여부 확인
+        setTimeout(() => {
+          // 만약 여전히 현재 페이지에 있다면 다음 방법 시도
+          if (document.visibilityState === 'visible') {
+            return false;
+          }
+        }, 500);
+        return true;
+      } catch (e) {
+        console.log(`브라우저 스킴 실패 (${scheme}):`, e);
+      }
+    }
+
+    // 3. 최종 폴백: 일반 window.open
+    try {
+      const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
+      if (newWindow) {
+        return true;
+      }
+    } catch (e) {
+      console.log('window.open 실패:', e);
+    }
+
+    // 4. 마지막 수단: 현재 탭에서 이동
+    window.location.href = url;
+    return true;
+  };
+
   // 강력한 시스템 브라우저 호출 (네이버 앱 대응)
   const handleOAuth = useCallback(() => {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+    // 절대 URL 생성 (새 탭에서 접근할 때 필요)
+    let backendUrl: string;
+    
+    if (typeof window !== 'undefined') {
+      // 브라우저 환경에서는 현재 도메인 + /api 사용
+      const currentDomain = window.location.origin;
+      backendUrl = `${currentDomain}/api`;
+    } else {
+      // 서버 환경에서는 환경변수 또는 기본값 사용
+      backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+    }
+    
     const oauthUrl = `${backendUrl}/v1/auth/${provider}/login?redirectTo=${redirectTo}`;
     
-    // 네이버 앱에서의 특별 처리 (Chrome Custom Tabs 우선)
+    console.log('OAuth URL:', oauthUrl); // 디버깅용
+    
+    // 네이버 앱에서의 특별 처리 (외부 브라우저 호출)
     if (isNaverApp()) {
-      // Chrome Custom Tabs Intent URI 생성
-      const customTabsUrl = createCustomTabsIntent(oauthUrl, provider);
-      
-      try {
-        // 1순위: Chrome Custom Tabs Intent
-        window.location.href = customTabsUrl;
-        
-        // 1초 후 폴백 실행 (Custom Tabs 실패 시)
-        setTimeout(() => {
-          // 2순위: 간단한 Chrome 호출
-          const simpleChrome = `googlechrome://navigate?url=${encodeURIComponent(oauthUrl)}`;
-          window.location.href = simpleChrome;
-          
-          // 1초 후 최종 폴백
-          setTimeout(() => {
-            // 3순위: 일반 브라우저
-            window.location.href = oauthUrl;
-          }, 1000);
-        }, 500);
-        
-        return;
-      } catch (error) {
-        // 즉시 폴백: 일반 브라우저 호출
-        window.location.href = oauthUrl;
-        return;
-      }
+      openInExternalBrowser(oauthUrl);
+      return;
     }
     
-    // 일반적인 처리
-    if (isMobileDevice()) {
-      // 모바일: 새 탭으로 열기 + 추가 옵션
-      const newWindow = window.open(
-        oauthUrl, 
-        '_blank', 
-        'noopener,noreferrer,width=400,height=600,scrollbars=yes,resizable=yes'
-      );
-      
-      // 팝업 차단 시 현재 탭에서 이동
-      if (!newWindow || newWindow.closed) {
-        window.location.href = oauthUrl;
-      }
-    } else {
-      // 데스크톱: 현재 탭에서 이동
-      window.location.href = oauthUrl;
-    }
+    // 일반적인 처리 - 모든 환경에서 단순 이동 (네이버 앱 제외)
+    window.location.href = oauthUrl;
   }, [provider, redirectTo]);
 
   // 모바일 기기 감지
@@ -226,12 +254,17 @@ export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo 
       </Button>
       
       {/* Intent 방식 상태 표시 */}
-      {!isLoading && (
+      {/* {!isLoading && (
         <div className="text-xs text-center space-y-1">
           {isNaverApp() ? (
-            <div className="text-purple-600 flex items-center justify-center gap-1">
-              <span>🎨</span>
-              <span>Chrome Custom Tabs로 안전 로그인</span>
+            <div className="space-y-1">
+              <div className="text-purple-600 flex items-center justify-center gap-1">
+                <span>🎨</span>
+                <span>Chrome Custom Tabs로 안전 로그인</span>
+              </div>
+              <div className="text-gray-500 text-[10px]">
+                네이버 앱에서 외부 브라우저로 안전하게 로그인합니다
+              </div>
             </div>
           ) : isMobileDevice() ? (
             <div className="text-green-600 flex items-center justify-center gap-1">
@@ -245,7 +278,7 @@ export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo 
             </div>
           )}
         </div>
-      )}
+      )} */}
     </div>
   );
 }; 

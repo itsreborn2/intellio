@@ -38,15 +38,86 @@ interface LoginButtonProps {
 const LoginButton: React.FC<LoginButtonProps> = ({ provider, redirectTo = 'stockeasy' }) => {
   const [isLoading, setIsLoading] = useState(false)
 
+  // 네이버 앱 감지
+  const isNaverApp = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    return /NAVER|NaverApp/i.test(window.navigator.userAgent);
+  };
+
+  // 모바일 기기 감지
+  const isMobileDevice = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      window.navigator.userAgent
+    );
+  };
+
+  // 외부 브라우저 호출 (네이버 앱 전용)
+  const openInExternalBrowser = (url: string) => {
+    const userAgent = window.navigator.userAgent;
+    
+    // Chrome Custom Tabs (Android)
+    if (/Android/i.test(userAgent)) {
+      const chromeIntent = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+      try {
+        window.location.href = chromeIntent;
+        return true;
+      } catch (e) {
+        console.log('Chrome Intent 실패:', e);
+      }
+    }
+
+    // 다양한 브라우저 스킴 시도
+    const browserSchemes = [
+      `googlechrome://navigate?url=${encodeURIComponent(url)}`,
+      `firefox://open-url?url=${encodeURIComponent(url)}`,
+      `samsung://internet?url=${encodeURIComponent(url)}`
+    ];
+
+    for (const scheme of browserSchemes) {
+      try {
+        window.location.href = scheme;
+        return true;
+      } catch (e) {
+        console.log(`브라우저 스킴 실패 (${scheme}):`, e);
+      }
+    }
+
+    // 최종 폴백: 현재 탭에서 이동
+    window.location.href = url;
+    return true;
+  };
+
   // 로그인 처리 함수
   const handleLogin = async () => {
     if (isLoading) return // 중복 클릭 방지
     
     try {
       setIsLoading(true)
-      // 백엔드 URL을 직접 사용
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
-      window.location.href = `${backendUrl}/v1/auth/${provider}/login?redirectTo=${redirectTo}`
+      // 절대 URL 생성 (새 탭에서 접근할 때 필요)
+      let backendUrl: string;
+      
+      if (typeof window !== 'undefined') {
+        // 브라우저 환경에서는 현재 도메인 + /api 사용
+        const currentDomain = window.location.origin;
+        backendUrl = `${currentDomain}/api`;
+      } else {
+        // 서버 환경에서는 환경변수 또는 기본값 사용
+        backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+      }
+      
+      const oauthUrl = `${backendUrl}/v1/auth/${provider}/login?redirectTo=${redirectTo}`;
+      console.log('OAuth URL:', oauthUrl); // 디버깅용
+      
+      // 네이버 앱에서의 특별 처리
+      if (isNaverApp()) {
+        openInExternalBrowser(oauthUrl);
+        return;
+      }
+      
+      // 일반적인 처리 - 모든 환경에서 단순 이동 (네이버 앱 제외)
+      window.location.href = oauthUrl;
     } catch (error) {
       console.error('로그인 오류:', error)
       setIsLoading(false)
