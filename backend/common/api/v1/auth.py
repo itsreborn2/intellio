@@ -129,14 +129,25 @@ async def logout(
         message="로그아웃되었습니다."
     )
 
+
 @router.get("/{provider}/login")
 async def oauth_login(provider: str, request: Request, redirectTo: Optional[str] = None):
     """소셜 로그인 시작점"""
     # 요청 출처 확인
     referer = request.headers.get('referer')
     origin = request.headers.get('origin')
+    user_agent = request.headers.get('user-agent', '')
+    
     # 로그 출력
-    logger.info(f"Login request from referer: {referer}, origin: {origin}")
+    logger.info(f"Login request from referer: {referer}, origin: {origin}, user-agent: {user_agent}")
+    
+    # 네이버 앱에서 구글 OAuth 시도하는 경우 감지
+    if provider == "google" and "NAVER" in user_agent.upper():
+        logger.warning("네이버 앱에서 구글 OAuth 시도 - Chrome Custom Tabs 우선 권장")
+    
+    # Chrome Custom Tabs 요청 감지
+    if "Chrome" in user_agent and "Mobile" in user_agent:
+        logger.info("모바일 Chrome 요청 감지 - Custom Tabs 사용 가능성 높음")
     # Login request from referer: http://localhost:3000/
     # Login request from referer: http://localhost:3010/
     # INTELLIO_URL=https://www.intellio.kr
