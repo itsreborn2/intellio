@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { checkTimeRestriction, getRestrictionMessage } from '@/app/utils/timeRestriction';
 import { StockSelectorProvider, useStockSelector } from './context/StockSelectorContext';
 import { ChatLayout, MobileChatLayout } from './layouts';
 import { 
@@ -322,6 +323,14 @@ function AIChatAreaContent() {
 
   // 메시지 전송 핸들러
   const handleSendMessage = async () => {
+    // 시간 제한 체크
+    const { isRestricted, nextAvailableTime } = checkTimeRestriction();
+    if (isRestricted) {
+      const restrictionMessage = getRestrictionMessage(nextAvailableTime);
+      toast.error(restrictionMessage);
+      return;
+    }
+
     // ref를 사용하여 즉시 전송 상태 확인
     if (isSendingRef.current || isLoading) {
       console.log('[AIChatAreaContent] 이미 메시지 전송 중입니다.');

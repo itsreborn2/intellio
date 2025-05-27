@@ -5,6 +5,7 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { ChatMessage, StockOption, IStructuredChatResponseData, MessageComponent } from '../types';
+import { checkTimeRestriction, getRestrictionMessage } from '@/app/utils/timeRestriction';
 import { createChatSession, streamChatMessage } from '@/services/api/chat';
 import { IChatSession, IChatMessageDetail } from '@/types/api/chat';
 import { useTimers } from './useTimers';
@@ -142,6 +143,14 @@ function useMessageProcessing(
     recentStocks: StockOption[],
     isFollowUp: boolean = false
   ) => {
+    // 시간 제한 체크
+    const { isRestricted, nextAvailableTime } = checkTimeRestriction();
+    if (isRestricted) {
+      const restrictionMessage = getRestrictionMessage(nextAvailableTime);
+      toast.error(restrictionMessage);
+      return;
+    }
+
     // 입력값 검증 - 현재 세션이 있으면 종목이 없어도 가능
     if (!inputMessage.trim()) {
       toast.error('메시지를 입력해주세요.');
