@@ -239,10 +239,24 @@ async def create_chat_session(
         return ChatSessionResponse(**session_data)
         
     except Exception as e:
-        logger.error(f"채팅 세션 생성 중 오류 발생: {str(e)}")
+        error_message = str(e)
+        logger.error(f"채팅 세션 생성 중 오류 발생: {error_message}")
+        
+        # 특정 오류 타입에 따른 사용자 친화적 메시지 제공
+        if "StringDataRightTruncationError" in error_message or "value too long" in error_message:
+            user_message = "채팅 제목이 너무 깁니다. 더 짧은 제목으로 다시 시도해주세요."
+        elif "duplicate key" in error_message.lower():
+            user_message = "이미 존재하는 채팅 세션입니다."
+        elif "foreign key" in error_message.lower():
+            user_message = "유효하지 않은 사용자 정보입니다."
+        elif "connection" in error_message.lower():
+            user_message = "데이터베이스 연결에 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
+        else:
+            user_message = "채팅 세션 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"채팅 세션 생성 중 오류 발생: {str(e)}"
+            detail=user_message
         )
 
 
@@ -598,9 +612,16 @@ async def stream_chat_message(
                         agent_results=agent_results
                     )
                 )
-                def cleanup_callback(_):
-                    asyncio.create_task(stock_rag_service.close())
-                task.add_done_callback(cleanup_callback)
+                # async def cleanup_callback(_):
+                #     try:
+                #         logger.info("[STREAM_CHAT] RAG 서비스 리소스 정리 시작")
+                #         await stock_rag_service.close()
+                #         logger.info("[STREAM_CHAT] RAG 서비스 리소스 정리 완료")
+                #     except Exception as e:
+                #         logger.error(f"[STREAM_CHAT] RAG 서비스 리소스 정리 중 오류: {str(e)}")
+                
+                # # 비동기 함수를 create_task로 변환하여 실행
+                # task.add_done_callback(lambda _: asyncio.create_task(cleanup_callback(_)))
                 
                 # 상태 추적을 위한 이전 상태 저장 변수
                 prev_status = {}
@@ -683,18 +704,10 @@ async def stream_chat_message(
                                                 }
                                             }, cls=DateTimeEncoder))
                                             
-                                            # response_formatter가 시작되면 응답 스트리밍 단계 시작 알림
-                                            if agent == "response_formatter" and status == "processing" and not response_started:
-                                                response_started = True
-                                                #logger.info("[STREAM_CHAT] 응답 스트리밍 단계 시작")
-                                                await streaming_queue.put(json.dumps({
-                                                    "event": "response_start",
-                                                    "data": {
-                                                        "message": "응답 생성을 시작합니다.",
-                                                        "timestamp": time.time(),
-                                                        "elapsed": elapsed
-                                                    }
-                                                }, cls=DateTimeEncoder))
+                                            # response_formatter가 완료되면 메모리 정리 시작
+                                            if agent == "response_formatter" and status in ["completed", "completed_with_default_plan", "completed_no_data"]:
+                                                logger.info("[STREAM_CHAT] response_formatter 완료 - 메모리 정리 준비")
+                                                # 메모리 정리 로직 준비 (추후 cleanup_callback에서 실행)
                                 
                                 # 현재 상태를 이전 상태로 저장
                                 prev_status = processing_status.copy()
@@ -740,10 +753,21 @@ async def stream_chat_message(
                     # 결과에서 요약 추출
                     summary = result.get("summary", "")
                     # 전체 응답이 스트리밍을 통해 구성되었음
-                    answer = full_response or result.get("answer", "처리가 완료되었으나 응답을 찾을 수 없습니다.")
+                    #answer = full_response or result.get("answer") or "처리가 완료되었으나 응답을 찾을 수 없습니다."
+                    answer = result.get("answer") or "처리가 완료되었으나 응답을 찾을 수 없습니다."
+                    
+                    # answer가 None이거나 기본 메시지인 경우 대안 사용
+                    if not answer or answer == "처리가 완료되었으나 응답을 찾을 수 없습니다.":
+                        # summary나 formatted_response를 대안으로 사용
+                        answer = result.get("summary") or result.get("formatted_response") or "처리가 완료되었으나 응답을 찾을 수 없습니다."
+                        logger.info(f"[STREAM_CHAT] answer 키가 없어서 대안 사용: summary={bool(result.get('summary'))}, formatted_response={bool(result.get('formatted_response'))}")
+                    
+                    # answer가 None이 아닌지 확인
+                    if answer is None:
+                        answer = "처리가 완료되었으나 응답을 찾을 수 없습니다."
                     
                     logger.info("[STREAM_CHAT] 응답 생성 완료 (총 소요시간: {:.2f}초, 응답 길이: {}자)", 
-                               total_time, len(answer))
+                               total_time, len(answer) if answer else 0)
                     
                     # 메모리에 AI 응답 추가
                     await chat_memory_manager.add_ai_message(str(chat_session_id), answer)
@@ -803,8 +827,10 @@ async def stream_chat_message(
                             # 업데이트할 데이터 준비
                             update_data = {}
                             
+                            # 세션에는 agent_results 저장하지 않음.
+                            # 조회할때 시간 걸리는듯.
                             # agent_results 데이터를 해당 세션에 추가
-                            update_data["agent_results"] = remove_null_chars(agent_results)
+                            #update_data["agent_results"] = remove_null_chars(agent_results)
                             
                             # 기존 세션 데이터 확인
                             if not session_data.get("stock_code") and request.stock_code:

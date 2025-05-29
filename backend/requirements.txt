@@ -183,6 +183,7 @@ propcache==0.3.1
 proto-plus==1.26.0
 protobuf==5.29.4
 protoc-gen-openapiv2==0.0.1
+psutil==7.0.0
 psycopg2-binary==2.9.10
 ptyprocess==0.7.0
 pure_eval==0.2.3
@@ -272,3 +273,7 @@ xxhash==3.5.0
 yarg==0.1.9
 yarl==1.20.0
 zstandard==0.23.0
+psutil==7.0.0
+objgraph==3.6.2
+selenium>=4.15.0
+webdriver-manager>=4.0.0 

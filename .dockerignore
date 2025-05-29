@@ -34,7 +34,11 @@ backend/venv/
 *.log
 
 # Data and Media
+backend/stockeasy/local_cache/
+stockeasy/local_cache/
+backend/telegram_files/
 telegram_files/
+backend/tmp_download/
 *.pdf
 *.doc
 *.docx

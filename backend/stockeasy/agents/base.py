@@ -9,20 +9,33 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 class BaseAgent(ABC):
     """모든 에이전트의 기본 인터페이스를 정의하는 추상 클래스"""
     
     def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
-        """에이전트 초기화
+        """
+        베이스 에이전트 초기화
         
         Args:
             name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
             db: 데이터베이스 세션 객체 (선택적)
         """
-        self._name = name or self.__class__.__name__
+        self.name = name or self.__class__.__name__
         self.db = db
+        self.registry = None  # AgentRegistry 인스턴스 (나중에 설정)
         self.prompt_template = None
         self.prompt_template_test = None
+        
+    
+    def set_registry(self, registry):
+        """
+        AgentRegistry 인스턴스를 설정합니다.
+        
+        Args:
+            registry: AgentRegistry 인스턴스
+        """
+        self.registry = registry
     
     @abstractmethod
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -42,7 +55,7 @@ class BaseAgent(ABC):
         Returns:
             에이전트 이름
         """
-        return self._name
+        return self.name
     
     async def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """에이전트를 함수처럼 호출할 수 있게 함

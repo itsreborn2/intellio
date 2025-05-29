@@ -129,6 +129,15 @@ export default function Navbar() {
         <Link href="/" className="mr-6 flex items-center space-x-2">
           <span className="font-bold">Intellio</span>
         </Link>
+        <Link href="/about" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary mr-4">
+          About
+        </Link>
+        <span
+          onClick={() => handleServiceNavigation('doceasy')}
+          className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary mr-4 cursor-pointer"
+        >
+          DocEasy
+        </span>
         <div className="flex-1"></div>
         <div className="flex items-center space-x-4">
           <Link href="https://t.me/maddingStock" target="_blank" rel="noreferrer">

@@ -18,6 +18,7 @@ import asyncio
 import os
 import io
 import json
+import re
 from pathlib import Path
 from loguru import logger
 from sqlalchemy import select
@@ -25,6 +26,7 @@ from sqlalchemy import select
 from common.core.config import settings
 from stockeasy.models.telegram_message import TelegramMessage
 from common.services.storage import GoogleCloudStorageService
+from common.services.notion_crawler import NotionCrawler
 
 # 로깅 설정
 
@@ -164,6 +166,118 @@ class CollectorService:
             logger.info("텔레그램 클라이언트 시작 성공")
     def user_authorized(self):
         return self.client.is_user_authorized()
+
+    def _extract_notion_links(self, text: str) -> List[str]:
+        """텍스트에서 노션 링크를 추출합니다.
+        
+        Args:
+            text (str): 검사할 텍스트
+            
+        Returns:
+            List[str]: 발견된 노션 링크 리스트
+        """
+        if not text:
+            return []
+        
+        # 노션 링크 패턴들
+        notion_patterns = [
+            r'https?://(?:www\.)?notion\.so/[^\s]+',
+            r'https?://[a-zA-Z0-9-]+\.notion\.site/[^\s]+',
+            r'https?://notion\.site/[^\s]+'
+        ]
+        
+        notion_links = []
+        for pattern in notion_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            notion_links.extend(matches)
+        
+        # 중복 제거하면서 순서 보존
+        unique_links = []
+        for link in notion_links:
+            if link not in unique_links:
+                unique_links.append(link)
+        
+        return unique_links
+
+    async def _crawl_notion_content(self, notion_url: str) -> Optional[str]:
+        """노션 페이지를 크롤링하여 텍스트 콘텐츠를 추출합니다.
+        
+        Args:
+            notion_url (str): 크롤링할 노션 URL
+            
+        Returns:
+            Optional[str]: 추출된 텍스트 콘텐츠 또는 None
+        """
+        try:
+            logger.info(f"노션 크롤링 시작: {notion_url}")
+            
+            # NotionCrawler 인스턴스 생성
+            crawler = NotionCrawler()
+            
+            # Selenium을 우선 시도하고, 실패하면 requests 방식으로 폴백
+            try:
+                result = crawler.crawl_with_selenium(notion_url)
+            except Exception as selenium_error:
+                logger.warning(f"Selenium 크롤링 실패, requests 방식으로 폴백: {selenium_error}")
+                result = crawler.crawl_notion_page(notion_url)
+            
+            if not result:
+                logger.warning(f"노션 크롤링 결과가 없습니다: {notion_url}")
+                return None
+            
+            # extract_clean_text로 순수 텍스트 추출
+            clean_text = crawler.extract_clean_text(result)
+            
+            if clean_text and len(clean_text.strip()) > 10:  # 의미있는 텍스트가 있을 때만
+                logger.info(f"노션 크롤링 성공: {len(clean_text)} 문자 추출")
+                return clean_text.strip()
+            else:
+                logger.warning(f"노션 크롤링 결과 텍스트가 부족합니다: {notion_url}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"노션 크롤링 중 오류 발생 ({notion_url}): {str(e)}")
+            return None
+
+    async def _enhance_message_with_notion_content(self, message_text: str) -> str:
+        """메시지 텍스트에서 노션 링크를 찾아 크롤링 결과를 추가합니다.
+        
+        Args:
+            message_text (str): 원본 메시지 텍스트
+            
+        Returns:
+            str: 노션 콘텐츠가 추가된 메시지 텍스트
+        """
+        if not message_text:
+            return message_text
+        
+        # 노션 링크 추출
+        notion_links = self._extract_notion_links(message_text)
+        
+        if not notion_links:
+            return message_text
+        
+        logger.info(f"발견된 노션 링크 {len(notion_links)}개: {notion_links}")
+        
+        enhanced_text = message_text
+        
+        # 각 노션 링크에 대해 크롤링 수행
+        for link in notion_links:
+            try:
+                notion_content = await self._crawl_notion_content(link)
+                
+                if notion_content:
+                    # 노션 콘텐츠를 메시지 텍스트에 추가
+                    enhanced_text += f"\n\n--- 노션 페이지 내용 ({link}) ---\n{notion_content}\n--- 노션 페이지 내용 끝 ---"
+                    logger.info(f"노션 콘텐츠 추가 완료: {len(notion_content)} 문자")
+                else:
+                    logger.warning(f"노션 콘텐츠 추출 실패: {link}")
+                    
+            except Exception as e:
+                logger.error(f"노션 링크 처리 중 오류 ({link}): {str(e)}")
+                continue
+        
+        return enhanced_text
 
     async def _process_message(self, message: Message, channel: Channel, channel_public: bool) -> Optional[Dict[str, Any]]:
         """단일 메시지를 처리하여 Dict 객체로 변환합니다.
@@ -341,6 +455,17 @@ class CollectorService:
             message_created_at = message.date.astimezone(seoul_tz)  # 텔레그램 메세지 생성시간
             collected_at = datetime.now()  # 수집 시간
             
+            # 노션 링크가 있으면 크롤링하여 텍스트에 추가
+            if message_text and message_text != "(내용 없음)" and "notion" in message_text.lower():
+                try:
+                    enhanced_message_text = await self._enhance_message_with_notion_content(message_text)
+                    if enhanced_message_text != message_text:
+                        logger.info(f"메시지 ID {message.id}에 노션 콘텐츠가 추가되었습니다")
+                        message_text = enhanced_message_text
+                except Exception as e:
+                    logger.error(f"노션 콘텐츠 추가 중 오류 발생 (message_id: {message.id}): {str(e)}")
+                    # 오류가 발생해도 원본 message_text는 유지
+
             # Dict 객체 생성
             return {
                 "message_id": message.id,

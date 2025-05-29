@@ -27,6 +27,35 @@ def remove_null_chars(obj):
         return [remove_null_chars(item) for item in obj]
     else:
         return obj
+    
+def extract_json_from_text(text: str) -> str:
+    """
+    텍스트에서 JSON 부분을 추출합니다.
+    
+    Args:
+        text: 텍스트
+        
+    Returns:
+        JSON 텍스트
+    """
+    # JSON 시작과 끝 찾기
+    json_patterns = [
+        r"```json\s*([\s\S]*?)\s*```",  # ```json ... ``` 형식
+        r"```\s*([\s\S]*?)\s*```",      # ``` ... ``` 형식
+        r"\{[\s\S]*\}"                   # { ... } 형식
+    ]
+    
+    for pattern in json_patterns:
+        matches = re.findall(pattern, text)
+        if matches:
+            # 가장 긴 매치를 반환 (완전한 JSON 객체일 가능성이 높음)
+            return max(matches, key=len)
+    
+    # JSON 패턴을 찾지 못한 경우 전체 텍스트가 JSON인지 확인
+    if text.strip().startswith("{") and text.strip().endswith("}"):
+        return text
+        
+    return "" 
 
 def remove_json_block(content:str):
     # 전체 문자열이 코드 블록으로 감싸진 경우

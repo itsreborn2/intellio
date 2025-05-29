@@ -5,6 +5,7 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { ChatMessage, StockOption, IStructuredChatResponseData, MessageComponent } from '../types';
+import { checkTimeRestriction, getRestrictionMessage } from '@/app/utils/timeRestriction';
 import { createChatSession, streamChatMessage } from '@/services/api/chat';
 import { IChatSession, IChatMessageDetail } from '@/types/api/chat';
 import { useTimers } from './useTimers';
@@ -85,6 +86,9 @@ function useMessageProcessing(
   // 스트리밍 응답을 위한 AI 메시지 ID 참조
   const assistantMessageId = useRef<string | null>(null);
   
+  // 상태 메시지 ID 참조
+  const statusMessageId = useRef<string | null>(null);
+  
   // 누적 응답 콘텐츠 저장
   const accumulatedContent = useRef<string>('');
 
@@ -139,6 +143,14 @@ function useMessageProcessing(
     recentStocks: StockOption[],
     isFollowUp: boolean = false
   ) => {
+    // 시간 제한 체크
+    const { isRestricted, nextAvailableTime } = checkTimeRestriction();
+    if (isRestricted) {
+      const restrictionMessage = getRestrictionMessage(nextAvailableTime);
+      toast.error(restrictionMessage);
+      return;
+    }
+
     // 입력값 검증 - 현재 세션이 있으면 종목이 없어도 가능
     if (!inputMessage.trim()) {
       toast.error('메시지를 입력해주세요.');
@@ -186,6 +198,7 @@ function useMessageProcessing(
 
       // 상태 표시 메시지 추가 (직접 IChatMessageDetail 타입으로 생성)
       const statusId = `status-${uuidv4()}`;
+      statusMessageId.current = statusId; // ref에 저장
       const statusMessageObj: IChatMessageDetail = {
         id: statusId,
         role: 'status',
@@ -246,7 +259,19 @@ function useMessageProcessing(
           console.log('새 채팅 세션 생성:', newSession);
         } catch (error: any) {
           console.error('채팅 세션 생성 실패:', error);
-          throw new Error(`채팅 세션 생성 실패: ${error.message || '알 수 없는 오류'}`);
+          
+          // 상태 메시지 제거
+          removeMessage(statusMessageObj.id);
+          
+          // 사용자에게 친화적인 에러 메시지 표시
+          const errorMessage = error.message || '채팅 세션 생성 중 오류가 발생했습니다.';
+          toast.error(errorMessage);
+          
+          // 처리 상태 초기화
+          setProcessing(false);
+          stopTimer();
+          
+          throw new Error(errorMessage);
         }
       }
 
@@ -530,8 +555,20 @@ function useMessageProcessing(
       // 타이머 중지
       stopTimer();
       
+      // 상태 메시지 제거 (존재하는 경우)
+      if (statusMessageId.current) {
+        try {
+          removeMessage(statusMessageId.current);
+        } catch (removeError) {
+          console.log('[MessageProcessing] 상태 메시지 제거 중 오류 (이미 제거됨)');
+        }
+      }
+      
       setProcessing(false);
-      toast.error(`메시지 전송 실패: ${error.message || '알 수 없는 오류'}`);
+      
+      // 에러 메시지 처리 - 백엔드에서 온 명확한 메시지 사용
+      const errorMessage = error.message || '메시지 전송 중 오류가 발생했습니다.';
+      toast.error(errorMessage);
     }
   }, [
     addMessage,

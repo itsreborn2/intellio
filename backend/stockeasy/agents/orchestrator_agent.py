@@ -83,9 +83,8 @@ class OrchestratorAgent(BaseAgent):
             db: 데이터베이스 세션 객체 (선택적)
         """
         super().__init__(name, db)
-        self.llm, self.model_name, self.provider = get_llm_for_agent("orchestrator_agent")
         self.agent_llm = get_agent_llm("orchestrator_agent")
-        logger.info(f"OrchestratorAgent initialized with provider: {self.provider}, model: {self.model_name}")
+        logger.info(f"OrchestratorAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         
         self.web_search_threshold = 3
         # 사용 가능한 에이전트 목록
@@ -102,12 +101,8 @@ class OrchestratorAgent(BaseAgent):
             "response_formatter": "응답 형식화 에이전트",
             "fallback_manager": "오류 처리 에이전트"
         }
-        # VectorStoreManager 초기화
-        self.vs_manager = VectorStoreManager(
-            embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
-            project_name="stockeasy",
-            namespace=settings.PINECONE_NAMESPACE_STOCKEASY
-        )
+        # VectorStoreManager 지연 초기화 (실제 사용 시점에 초기화)
+        self.vs_manager = None
     
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -123,6 +118,14 @@ class OrchestratorAgent(BaseAgent):
             # 성능 측정 시작
             start_time = datetime.now()
             logger.info(f"OrchestratorAgent starting processing")
+            
+            # 상태 업데이트 - 콜백 함수 사용
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "processing")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["orchestrator"] = "processing"
             
             # 질문 분석 결과 추출
             query = state.get("query", "")
@@ -206,8 +209,12 @@ class OrchestratorAgent(BaseAgent):
             state["execution_plan"] = final_plan
             
             # 처리 상태 업데이트
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["orchestrator"] = "completed_with_default_plan"
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed_with_default_plan")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["orchestrator"] = "completed_with_default_plan"
             
             # 성능 지표 업데이트
             end_time = datetime.now()
@@ -221,7 +228,7 @@ class OrchestratorAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.model_name
+                "model_name": self.agent_llm.get_model_name()
             }
             
             logger.info(f"OrchestratorAgent completed in {duration:.2f} seconds")
@@ -236,8 +243,12 @@ class OrchestratorAgent(BaseAgent):
             state["execution_plan"] = execution_plan
             
             # 처리 상태 업데이트
-            state["processing_status"] = state.get("processing_status", {})
-            state["processing_status"]["orchestrator"] = "completed_with_default_plan"
+            if "update_processing_status" in state and "agent_name" in state:
+                state["update_processing_status"](state["agent_name"], "completed_with_default_plan")
+            else:
+                # 기존 방식으로 상태 업데이트 (콜백 함수가 없는 경우)
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["orchestrator"] = "completed_with_default_plan"
             
             return state
     
@@ -383,6 +394,20 @@ class OrchestratorAgent(BaseAgent):
             검색된 리포트 목록
         """
         try:
+            # VectorStoreManager 캐시된 인스턴스 사용 (AgentRegistry에서 관리)
+            if self.vs_manager is None:
+                logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 시작")
+                
+                # 글로벌 캐시 함수를 직접 사용
+                from stockeasy.graph.agent_registry import get_cached_vector_store_manager
+                
+                self.vs_manager = get_cached_vector_store_manager(
+                    embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
+                    namespace=settings.PINECONE_NAMESPACE_STOCKEASY,
+                    project_name="stockeasy"
+                )
+                logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 완료")
+            
             metadata_filter = {}
             # 벡터 스토어 연결
             # vs_manager = VectorStoreManager(
@@ -432,7 +457,9 @@ class OrchestratorAgent(BaseAgent):
                 logger.warning(f"[오케스트레이터, 기업리포트 검색] retriever 실행 중 오류 발생: {str(e)}")
                 raise
             finally:
-                await semantic_retriever.aclose()
+                # 캐시된 VectorStoreManager를 사용하므로 개별 에이전트에서 close하지 않음
+                # await semantic_retriever.aclose()
+                pass
 
         except Exception as e:
             logger.error(f"오케스트레이터, 기업리포트 검색 중 오류 발생: {str(e)}", exc_info=True)

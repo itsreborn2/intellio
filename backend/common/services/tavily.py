@@ -171,7 +171,17 @@ class TavilyService:
         # 세션 관리
         should_close_session = False
         if session is None:
-            session = aiohttp.ClientSession()
+            # 고성능 커넥터 설정
+            connector = aiohttp.TCPConnector(
+                limit=300,              # 전체 최대 연결 수 (기본: 100)
+                limit_per_host=60,      # 호스트당 최대 연결 수 (기본: 30)
+                ttl_dns_cache=300,      # DNS 캐시 TTL (5분)
+                use_dns_cache=True,     # DNS 캐시 사용
+                enable_cleanup_closed=True,  # 닫힌 연결 자동 정리
+                force_close=False,      # keep-alive 연결 유지
+                keepalive_timeout=30    # keep-alive 타임아웃 (30초)
+            )
+            session = aiohttp.ClientSession(connector=connector)
             should_close_session = True
         
         try:
@@ -293,7 +303,18 @@ class TavilyService:
         Returns:
             List[Dict[str, Any]]: 각 쿼리별 검색 결과와 쿼리 정보가 포함된 결과 목록
         """
-        async with aiohttp.ClientSession() as session:
+        # 고성능 커넥터 설정
+        connector = aiohttp.TCPConnector(
+            limit=300,              # 전체 최대 연결 수 (기본: 100)
+            limit_per_host=60,      # 호스트당 최대 연결 수 (기본: 30)
+            ttl_dns_cache=300,      # DNS 캐시 TTL (5분)
+            use_dns_cache=True,     # DNS 캐시 사용
+            enable_cleanup_closed=True,  # 닫힌 연결 자동 정리
+            force_close=False,      # keep-alive 연결 유지
+            keepalive_timeout=30    # keep-alive 타임아웃 (30초)
+        )
+        
+        async with aiohttp.ClientSession(connector=connector) as session:
             tasks = []
             
             for query in queries:

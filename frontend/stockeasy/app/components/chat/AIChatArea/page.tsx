@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { checkTimeRestriction, getRestrictionMessage } from '@/app/utils/timeRestriction';
 import { StockSelectorProvider, useStockSelector } from './context/StockSelectorContext';
 import { ChatLayout, MobileChatLayout } from './layouts';
 import { 
@@ -14,13 +15,11 @@ import {
 } from './components';
 import { useMessageProcessing } from './hooks';
 import { useIsMobile } from './hooks';
-import { HomeIcon, RefreshCcw } from 'lucide-react';
 import { useChatStore } from '@/stores/chatStore';
 import { useTokenUsageStore } from '@/stores/tokenUsageStore';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore } from '@/stores/userModeStore';
 import { StockOption } from './types';
-import { IChatMessageDetail } from '@/types/api/chat';
 
 /**
  * AIChatArea 메인 컴포넌트
@@ -324,6 +323,14 @@ function AIChatAreaContent() {
 
   // 메시지 전송 핸들러
   const handleSendMessage = async () => {
+    // 시간 제한 체크
+    const { isRestricted, nextAvailableTime } = checkTimeRestriction();
+    if (isRestricted) {
+      const restrictionMessage = getRestrictionMessage(nextAvailableTime);
+      toast.error(restrictionMessage);
+      return;
+    }
+
     // ref를 사용하여 즉시 전송 상태 확인
     if (isSendingRef.current || isLoading) {
       console.log('[AIChatAreaContent] 이미 메시지 전송 중입니다.');
@@ -437,8 +444,15 @@ function AIChatAreaContent() {
         setIsUserSending(false);
         isSendingRef.current = false;
       }, 1000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[AIChatAreaContent] 메시지 전송 중 오류 발생:', error);
+      
+      // 에러 메시지 표시 - useMessageProcessing에서 이미 toast가 표시되므로 중복 방지
+      if (!error.message?.includes('채팅 세션 생성')) {
+        const errorMessage = error.message || '메시지 전송 중 오류가 발생했습니다.';
+        toast.error(errorMessage);
+      }
+      
       setIsUserSending(false);
       isSendingRef.current = false;
     }
