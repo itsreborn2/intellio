@@ -132,6 +132,9 @@ export default function Navbar() {
         <Link href="/about" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary mr-4">
           About
         </Link>
+        <Link href="/info" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary mr-4">
+          Info
+        </Link>
         <span
           onClick={() => handleServiceNavigation('doceasy')}
           className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary mr-4 cursor-pointer"
