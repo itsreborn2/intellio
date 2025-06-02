@@ -110,7 +110,7 @@ class CommonSettings(BaseSettings):
     NAVER_OAUTH_CLIENT_SECRET: str
     NAVER_OAUTH_REDIRECT_URI: str
     NAVER_OAUTH_STATE: str
-
+    
     # JWT Settings for OAuth
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")

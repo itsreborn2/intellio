@@ -31,6 +31,50 @@ const initialState: IAuthState = {
   loading: true
 };
 
+// 쿠키 파싱 유틸리티 함수
+const parseCookies = () => {
+  return document.cookie.split(';').reduce((cookies, cookie) => {
+    const [name, value] = cookie.trim().split('=');
+    if (name && value) {
+      cookies[name] = value;
+    }
+    return cookies;
+  }, {} as Record<string, string>);
+};
+
+// 사용자 쿠키 파싱 함수
+const parseUserCookie = (userCookie: string): IUser | null => {
+  try {
+    if (userCookie.includes('%')) {
+      try {
+        const decodedCookie = decodeURIComponent(userCookie);
+        let jsonString = decodedCookie;
+        if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
+          jsonString = jsonString.slice(1, -1).replace(/\\"/g, '"');
+        }
+        return JSON.parse(jsonString);
+      } catch (decodeError) {
+        console.error('[AuthContext] URL 디코딩 실패:', decodeError);
+        return null;
+      }
+    }
+    
+    if (userCookie.startsWith('{')) {
+      return JSON.parse(userCookie);
+    }
+    
+    if (userCookie.startsWith('"') && userCookie.endsWith('"')) {
+      const jsonString = userCookie.slice(1, -1).replace(/\\"/g, '"');
+      return JSON.parse(jsonString);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('[AuthContext] 쿠키 파싱 오류:', error);
+    return null;
+  }
+};
+
 // 인증 컨텍스트 생성
 const AuthContext = createContext<{
   state: IAuthState;
@@ -91,10 +135,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // 초기 인증 상태 확인
+  // 초기 인증 상태 확인 (쿠키 우선, API 폴백)
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        // 먼저 쿠키에서 사용자 정보 확인
+        const cookies = parseCookies();
+        const userCookie = cookies['user'];
+        const tokenCookie = cookies['token'];
+        
+        console.debug('[AuthContext] 쿠키 확인:', { 
+          userCookie: userCookie ? '있음' : '없음',
+          tokenCookie: tokenCookie ? '있음' : '없음'
+        });
+        
+        // 쿠키에 사용자 정보가 있으면 바로 사용
+        if (userCookie && tokenCookie) {
+          const userData = parseUserCookie(userCookie);
+          if (userData) {
+            console.log('[AuthContext] 쿠키에서 사용자 정보 로드:', userData);
+            dispatch({ type: 'SET_AUTH', payload: userData });
+            return;
+          }
+        }
+        
+        // 쿠키가 없거나 파싱 실패시에만 API 호출
+        console.log('[AuthContext] 쿠키 없음, API로 인증 확인');
         const response = await api.checkAuth();
         if (response.user) {
           dispatch({ type: 'SET_AUTH', payload: response.user });
@@ -102,6 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           dispatch({ type: 'LOGOUT' });
         }
       } catch (error) {
+        console.log('[AuthContext] 인증 확인 실패, 로그아웃 처리');
         dispatch({ type: 'LOGOUT' });
       }
     };

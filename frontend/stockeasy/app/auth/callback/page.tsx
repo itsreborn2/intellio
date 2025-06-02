@@ -8,59 +8,64 @@ import { Loader2 } from 'lucide-react';
 function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setUser, setToken, login } = useAuth();
+  const { setUser, login, checkAuth } = useAuth();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   useEffect(() => {
-    const autoLogin = () => {
+    const autoLogin = async () => {
       try {
+        const success = searchParams.get('success');
         const token = searchParams.get('token');
         const userParam = searchParams.get('user');
+        const error = searchParams.get('error');
 
-        if (!token || !userParam) {
-          setStatus('error');
-          setErrorMessage('토큰 또는 사용자 정보가 누락되었습니다.');
-          return;
-        }
+        console.log('[Stockeasy Callback] 상태:', { success, token, userParam, error });
 
-        // 사용자 정보 디코딩
-        try {
-          const userData = JSON.parse(decodeURIComponent(userParam));
-          
-          // 쿠키 설정 (서브도메인에서 접근 가능하도록)
-          document.cookie = `token=${token}; path=/; domain=.intellio.kr`;
-          
-          // 쿠키에 사용자 정보를 안전하게 저장
-          // JSON 문자열로 변환 후 바로 쿠키에 설정 (중간에 encodeURIComponent 사용)
-          const userDataString = JSON.stringify(userData);
-          document.cookie = `user=${encodeURIComponent(userDataString)}; path=/; domain=.intellio.kr`;
-          
-          // 상태 업데이트
-          setToken(token);
-          setUser(userData);
-          login(userData);
-          
-          setStatus('success');
-          
-          // 메인 페이지로 리다이렉션 (페이지 새로고침을 위해 window.location.href 사용)
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 1500);
-        } catch (jsonError) {
-          console.error('사용자 데이터 파싱 오류:', jsonError);
+        if (success === 'true' && userParam) {
+          try {
+            const decodedUserStr = decodeURIComponent(userParam);
+            console.log('[Stockeasy Callback] 디코딩된 사용자 데이터:', decodedUserStr);
+            
+            const userData = JSON.parse(decodedUserStr);
+            console.log('[Stockeasy Callback] 파싱된 사용자 데이터:', userData);
+
+            // 사용자 정보 설정 (쿠키는 백엔드에서 이미 설정됨)
+            setUser(userData);
+            login(userData);
+
+            // 백엔드에서 쿠키를 설정했으므로 인증 상태 다시 확인
+            await checkAuth();
+            
+            setStatus('success');
+            
+            // 메인 페이지로 리다이렉션
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 1500);
+          } catch (parseError) {
+            console.error('[Stockeasy Callback] 사용자 데이터 파싱 오류:', parseError);
+            setStatus('error');
+            setErrorMessage('사용자 데이터 형식이 올바르지 않습니다.');
+          }
+        } else if (error) {
+          console.error('[Stockeasy Callback] 인증 오류:', error);
           setStatus('error');
-          setErrorMessage('사용자 데이터 형식이 올바르지 않습니다.');
+          setErrorMessage(`로그인 오류: ${error}`);
+        } else {
+          console.error('[Stockeasy Callback] 잘못된 콜백 파라미터');
+          setStatus('error');
+          setErrorMessage('로그인 정보가 올바르지 않습니다.');
         }
       } catch (error) {
-        console.error('자동 로그인 오류:', error);
+        console.error('[Stockeasy Callback] 처리 중 오류:', error);
         setStatus('error');
         setErrorMessage('자동 로그인 처리 중 오류가 발생했습니다.');
       }
     };
 
     autoLogin();
-  }, [searchParams, router, setUser, setToken, login]);
+  }, [searchParams, router, setUser, login, checkAuth]);
 
   return (
     <div className="flex min-h-screen items-center justify-center flex-col">

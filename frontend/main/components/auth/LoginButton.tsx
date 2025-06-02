@@ -157,10 +157,13 @@ export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo 
     let backendUrl: string;
     
     if (typeof window !== 'undefined') {
+      console.log('window 환경');
       // 브라우저 환경에서는 현재 도메인 + /api 사용
       const currentDomain = window.location.origin;
-      backendUrl = `${currentDomain}/api`;
+      //backendUrl = `${currentDomain}/api`;
+      backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
     } else {
+      console.log('서버 환경');
       // 서버 환경에서는 환경변수 또는 기본값 사용
       backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
     }

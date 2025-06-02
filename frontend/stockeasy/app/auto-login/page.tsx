@@ -41,7 +41,6 @@ function AutoLoginContent() {
           
           // 쿠키 설정 (서브도메인에서 접근 가능하도록)
           document.cookie = `token=${token}; path=/; domain=.intellio.kr`;
-          document.cookie = `auth_token=${token}; path=/; max-age=2592000`; // auth_token 쿠키 추가
           
           // 쿠키에 사용자 정보를 안전하게 저장
           // JSON 문자열로 변환 후 바로 쿠키에 설정 (중간에 encodeURIComponent 사용)
