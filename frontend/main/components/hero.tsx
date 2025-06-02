@@ -93,6 +93,11 @@ export default function Hero() {
       </div>
       <div className="relative flex gap-6">
         {renderServiceButton(
+          'doceasy', 
+          'DocEasy',
+          'bg-[conic-gradient(from_90deg_at_50%_50%,#393BB2_0%,#E2CBFF_50%,#393BB2_100%)]'
+        )}
+        {renderServiceButton(
           'stockeasy', 
           'StockEasy',
           'bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]'
