@@ -10,7 +10,7 @@ import { useQuestionCountStore } from '@/stores/questionCountStore';
 function AutoLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setUser, setToken, login } = useAuth();
+  const { setUser, login } = useAuth();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
   
@@ -47,8 +47,7 @@ function AutoLoginContent() {
           const userDataString = JSON.stringify(userData);
           document.cookie = `user=${encodeURIComponent(userDataString)}; path=/; domain=.intellio.kr`;
           
-          // 상태 업데이트
-          setToken(token);
+          // 상태 업데이트 (토큰은 쿠키로만 관리)
           setUser(userData);
           login(userData);
           
@@ -81,7 +80,7 @@ function AutoLoginContent() {
     };
 
     autoLogin();
-  }, [searchParams, router, setUser, setToken, login, fetchTokenSummary, fetchQuestionSummary]);
+  }, [searchParams, router, setUser, login, fetchTokenSummary, fetchQuestionSummary]);
 
   // 에러 상태일 때만 화면을 렌더링
   if (status !== 'error') {
