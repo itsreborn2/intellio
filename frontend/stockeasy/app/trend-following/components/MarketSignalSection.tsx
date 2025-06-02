@@ -22,6 +22,7 @@ const signalColorValues: SignalColors = {
 function SignalLight({ label, colors }: { label: string; colors: [string, string, string] }) {
   return (
     <span className="flex flex-row items-center gap-1 mr-4">
+      <span className="text-[16px] font-medium mr-2 whitespace-nowrap" style={{ color: '#ABABAB' }}>{label}</span>
       <span
         className="flex flex-row justify-center items-center bg-gray-900 border border-gray-700 rounded-xl shadow-md px-3 py-1"
         style={{ height: '28px', minWidth: '70px' }}
@@ -39,7 +40,6 @@ function SignalLight({ label, colors }: { label: string; colors: [string, string
           style={{ width: '18px', height: '18px', backgroundColor: colors[2], borderColor: colors[2] + '80' }}
         />
       </span>
-      <span className="text-[18px] font-medium ml-2 whitespace-nowrap" style={{ color: '#ABABAB' }}>{label}</span>
     </span>
   );
 }
@@ -137,7 +137,7 @@ export default function MarketSignalSection() {
         <div className="flex flex-row items-center justify-between w-full">
           {/* 좌측: 시장 신호 제목, 단기/장기 신호등 */}
           <div className="flex flex-row items-center gap-2">
-            <div className="font-semibold flex items-center" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+            <div className="font-semibold flex items-center mr-6" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
               시장 신호
             </div>
             <SignalLight label="단기" colors={shortTermColors} />
