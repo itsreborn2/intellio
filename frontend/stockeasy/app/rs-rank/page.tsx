@@ -1221,6 +1221,8 @@ export default function RSRankPage() {
           data={chartDataArray[index]} 
           marketType={marketType} 
           height={280}
+          kospiIndexData={kospiIndexData}
+          kosdaqIndexData={kosdaqIndexData}
         />
       </div>
     );

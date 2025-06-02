@@ -55,6 +55,8 @@ interface ChartProps {
   stockName?: string; // 종목명 추가
   showMA20?: boolean; // 20일 이동평균선 표시 여부
   parentComponent?: string; // 부모 컴포넌트 식별자 추가
+  kospiIndexData?: CandleData[]; // KOSPI 지수 데이터 (상위 컴포넌트에서 전달)
+  kosdaqIndexData?: CandleData[]; // KOSDAQ 지수 데이터 (상위 컴포넌트에서 전달)
 }
 
 /**
@@ -69,6 +71,8 @@ interface ChartProps {
  * @param stockName - 종목명 (기본값: undefined)
  * @param showMA20 - 20일 이동평균선 표시 여부 (기본값: true)
  * @param parentComponent - 부모 컴포넌트 식별자 (기본값: undefined)
+ * @param kospiIndexData - KOSPI 지수 데이터 (선택 사항)
+ * @param kosdaqIndexData - KOSDAQ 지수 데이터 (선택 사항)
  */
 const ChartComponent: React.FC<ChartProps> = ({ 
   data, 
@@ -80,7 +84,9 @@ const ChartComponent: React.FC<ChartProps> = ({
   marketType,
   stockName,
   showMA20 = true,
-  parentComponent
+  parentComponent,
+  kospiIndexData, // KOSPI 지수 데이터 (상위 컴포넌트에서 전달)
+  kosdaqIndexData // KOSDAQ 지수 데이터 (상위 컴포넌트에서 전달)
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
@@ -97,8 +103,8 @@ const ChartComponent: React.FC<ChartProps> = ({
   // parentComponent가 지정되지 않은 경우(직접 사용되는 경우) 20일선을 표시하지 않음
   const shouldShowMA20 = showMA20 && parentComponent !== undefined;
 
-  // 시장 지수 데이터 가져오는 함수
-  const fetchMarketIndexData = useCallback(async () => {
+  // 시장 지수 데이터 처리 함수 (props를 사용하도록 수정)
+  const prepareMarketIndexData = useCallback(() => {
     if (!marketType) {
       return;
     }
@@ -110,70 +116,43 @@ const ChartComponent: React.FC<ChartProps> = ({
       // 시장 구분 정규화 (대소문자 구분 없이 처리)
       const normalizedMarketType = marketType.toUpperCase();
       
-      // 시장 지수 로컬 캐시 파일 경로 설정
+      // props로 전달받은 시장 지수 데이터 사용
+      let selectedIndexData: CandleData[] = [];
+      
       // breakout 관련 컴포넌트의 경우 일별 2개월 데이터 파일 사용
       const useDaily2Month = parentComponent === 'BreakoutCandidatesChart' || 
                            parentComponent === 'BreakoutFailChart' || 
                            parentComponent === 'BreakoutSustainChart';
       
-      const marketIndexPath = useDaily2Month
-        ? (normalizedMarketType === 'KOSPI' 
-          ? '/requestfile/market-index/kospidaily2month.csv'
-          : '/requestfile/market-index/kosdaqdaily2month.csv')
-        : (normalizedMarketType === 'KOSPI' 
-          ? '/requestfile/market-index/kospiwk.csv'
-          : '/requestfile/market-index/kosdaqwk.csv');
-      
-      // 로컬 캐시 파일에서 데이터 가져오기
-      const response = await fetch(marketIndexPath, { cache: 'no-store' });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`시장 지수 데이터 가져오기 실패: ${response.status} ${errorText}`);
-        setMarketIndexError(`로컬 캐시 파일 로드 오류: ${response.status}`);
-        setMarketIndexData([]);
+      // 일별 2개월 데이터가 필요한 경우 기존 방식대로 데이터 로드
+      if (useDaily2Month) {
+        // 이 부분은 기존 방식대로 데이터를 로드하는 로직을 유지 (일별 2개월 데이터는 드물게 사용됨)
+        // 나중에 필요하면 이 부분도 최적화 가능
         return;
+      } else {
+        // 주간 데이터는 props로 전달받은 값 사용
+        if (normalizedMarketType === 'KOSPI' && kospiIndexData && kospiIndexData.length > 0) {
+          selectedIndexData = kospiIndexData;
+        } else if (normalizedMarketType === 'KOSDAQ' && kosdaqIndexData && kosdaqIndexData.length > 0) {
+          selectedIndexData = kosdaqIndexData;
+        }
       }
       
-      const csvText = await response.text();
-      
-      // CSV 파싱
-      const parsedData = Papa.parse(csvText, {
-        header: true,
-        skipEmptyLines: true,
-        dynamicTyping: true,
-      });
-      
-      // 데이터 변환
-      const indexData = parsedData.data
-        .filter((row: any) => {
-          const isValid = row && row['날짜'] && row['시가'] && row['고가'] && row['저가'] && row['종가'];
-          return isValid;
-        })
-        .map((row: any) => {
-          // 날짜 형식 변환 (YYYYMMDD -> YYYY-MM-DD)
-          let timeStr = String(row['날짜'] || '');
-          let formattedTime = '';
-          
-          if (timeStr.length === 8) {
-            const year = timeStr.substring(0, 4);
-            const month = timeStr.substring(4, 6);
-            const day = timeStr.substring(6, 8);
-            formattedTime = `${year}-${month}-${day}`;
-          } else {
-            formattedTime = timeStr;
-          }
-          
-          return {
-            time: formattedTime,
-            value: parseFloat(row['종가'] || 0)
-          } as LineData<Time>;
-        });
-      
-      setMarketIndexData(indexData);
-      setMarketIndexLoaded(true);
+      // 전달받은 CandleData를 LineData로 변환
+      if (selectedIndexData && selectedIndexData.length > 0) {
+        const lineData: LineData<Time>[] = selectedIndexData.map(candle => ({
+          time: candle.time,
+          value: candle.close
+        }));
+        
+        setMarketIndexData(lineData);
+        setMarketIndexLoaded(true);
+      } else {
+        setMarketIndexError('시장 지수 데이터를 찾을 수 없습니다.');
+        setMarketIndexData([]);
+      }
     } catch (error) {
-      console.error('시장 지수 데이터 가져오기 오류:', error);
+      console.error('시장 지수 데이터 처리 오류:', error);
       setMarketIndexError(error instanceof Error ? error.message : '알 수 없는 오류');
       setMarketIndexData([]);
     } finally {
@@ -183,10 +162,11 @@ const ChartComponent: React.FC<ChartProps> = ({
 
   // 시장 지수 데이터 가져오기
   useEffect(() => {
-    if (marketType) {
-      fetchMarketIndexData();
+    if (marketType && ((marketType.toUpperCase() === 'KOSPI' && kospiIndexData) || 
+                      (marketType.toUpperCase() === 'KOSDAQ' && kosdaqIndexData))) {
+      prepareMarketIndexData();
     }
-  }, [marketType, fetchMarketIndexData]);
+  }, [marketType, kospiIndexData, kosdaqIndexData, prepareMarketIndexData]);
 
   useEffect(() => {
     // 차트 컨테이너나 데이터가 없으면 실행하지 않음

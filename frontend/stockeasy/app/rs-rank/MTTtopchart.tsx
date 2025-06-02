@@ -37,13 +37,15 @@ export default function MTTtopchart() {
 
   // 페이지 로드 시 데이터 로드
   useEffect(() => {
-    loadFileList()
-    loadMarketIndexData()
+    loadFileList() 
   }, [])
 
   // 파일 목록을 JSON에서 동적으로 로드
   const loadFileList = async () => {
     try {
+      // 시장 지수 데이터 로드 (병렬로 시작)
+      const loadMarketIndexPromise = loadMarketIndexData();
+      
       // file_list.json에서 파일 목록 로드
       console.log('file_list.json 로드 시도 중...');
       let fileList: string[] = [];
@@ -95,18 +97,13 @@ export default function MTTtopchart() {
       
       setFileNames(sortedFiles);
       
-      // 파일 목록이 준비되면 차트 데이터 로드
-      if (sortedFiles.length > 0) {
-        await loadAllChartData(sortedFiles);
-      }
-      
-      // 현재 날짜/시간으로 업데이트 일자 설정
-      const now = new Date();
-      const dateString = now.toISOString().split('T')[0]; // YYYY-MM-DD 형식으로 변환
-      const formattedDate = formatDateMMDD(dateString);
-      if (formattedDate) {
-        setUpdateDate(formattedDate);
-      }
+      // 시장 지수 데이터와 차트 데이터를 동시에 로드 (병렬 처리)
+      await Promise.all([
+        loadMarketIndexPromise, // 이미 시작된 프로미스 대기
+        // 파일 목록이 준비되면 차트 데이터 로드
+        sortedFiles.length > 0 ? loadAllChartData(sortedFiles) : Promise.resolve(),
+        loadUpdateDate()
+      ]);
       
       setLoading(false);
     } catch (err) {
@@ -402,6 +399,8 @@ export default function MTTtopchart() {
               showVolume={true}
               marketType={info.marketType}
               stockName={info.name}
+              kospiIndexData={kospiIndexData}
+              kosdaqIndexData={kosdaqIndexData}
             />
           </div>
         </div>
