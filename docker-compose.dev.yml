@@ -26,6 +26,19 @@ services:
     environment:
       - ENV=development
 
+  stock-data-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.stockeasy.collector.dev
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    volumes:
+      - ./backend:/backend:rw,delegated
+    env_file:
+      - ./backend/.env.development
+    environment:
+      - ENV=development
+
   celery-doceasy:
     build:
       context: .
