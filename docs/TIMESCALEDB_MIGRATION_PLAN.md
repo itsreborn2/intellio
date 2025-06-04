@@ -31,7 +31,7 @@
           │
           │
 ┌─────────────────┐    ┌──────────────┐    ┌──────────────┐
-│ Stock Collector │───▶│PgBouncer-TS  │───▶│ TimescaleDB  │
+│ Stock Collector │───▶│PgBouncer-TS  │───▶│ TimescaleDB  │ 
 │                 │    │   :6433      │    │   :5433      │
 │                 │    │(session mode)│    │(주식 데이터)  │
 └─────────────────┘    └──────────────┘    └──────────────┘
