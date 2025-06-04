@@ -710,9 +710,26 @@ class DataCollectorService(LoggerMixin):
                 self.logger.info(f"캐시에서 종목 리스트 반환: {len(result)}개")
                 return result
             
-            # 캐시에 없으면 키움 API에서 조회
+            # 캐시에 없으면 키움 API에서 조회 (Dict 형태로 받음)
             self.logger.info("캐시에 종목 리스트가 없어 키움 API에서 조회")
-            return await self.kiwoom_client.get_stock_list_for_stockai()
+            stock_dict = await self.kiwoom_client.get_all_stock_list_for_stockai()
+            
+            # 키움 API에서 조회한 결과를 캐시에 저장 (Dict 형태 그대로)
+            if stock_dict:
+                # 캐시에 저장 (24시간 TTL)
+                await self.cache_manager.set_cache(
+                    "all_stock_list_for_stockai",
+                    stock_dict,
+                    ttl=86400  # 24시간
+                )
+                
+                self.logger.info(f"키움 API에서 조회한 종목 리스트를 캐시에 저장: {len(stock_dict)}개")
+                
+                # List 형태로 변환해서 반환
+                result = list(stock_dict.values())
+                return result
+            
+            return []
             
         except Exception as e:
             self.logger.error(f"전체 종목 리스트 조회 실패: {e}")
@@ -737,9 +754,26 @@ class DataCollectorService(LoggerMixin):
                 self.logger.info(f"캐시에서 종목 리스트 반환: {len(result)}개")
                 return result
             
-            # 캐시에 없으면 키움 API에서 조회
+            # 캐시에 없으면 키움 API에서 조회 (Dict 형태로 받음)
             self.logger.info("캐시에 종목 리스트가 없어 키움 API에서 조회")
-            return await self.kiwoom_client.get_stock_list_for_frontend()
+            stock_dict = await self.kiwoom_client.get_all_stock_list()
+            
+            # 키움 API에서 조회한 결과를 캐시에 저장 (Dict 형태 그대로)
+            if stock_dict:
+                # 캐시에 저장 (24시간 TTL)
+                await self.cache_manager.set_cache(
+                    "all_stock_list",
+                    stock_dict,
+                    ttl=86400  # 24시간
+                )
+                
+                self.logger.info(f"키움 API에서 조회한 종목 리스트를 캐시에 저장: {len(stock_dict)}개")
+                
+                # List 형태로 변환해서 반환
+                result = list(stock_dict.values())
+                return result
+            
+            return []
             
         except Exception as e:
             self.logger.error(f"전체 종목 리스트 조회 실패: {e}")
@@ -902,4 +936,44 @@ class DataCollectorService(LoggerMixin):
             
         except Exception as e:
             self.logger.error(f"종목 리스트 CSV 파일 저장 실패: {e}")
-            raise 
+            raise
+    
+    async def get_last_update_time(self, update_type: str) -> Optional[datetime]:
+        """
+        키움 API의 마지막 업데이트 시간 조회
+        
+        Args:
+            update_type (str): 업데이트 유형 ("stockai" 또는 "stock")
+            
+        Returns:
+            Optional[datetime]: 마지막 업데이트 시간 또는 None
+        """
+        try:
+            if update_type == "stockai":
+                return getattr(self.kiwoom_client, '_last_stockai_update', None)
+            elif update_type == "stock":
+                return getattr(self.kiwoom_client, '_last_stock_update', None)
+            else:
+                self.logger.warning(f"잘못된 update_type: {update_type}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"마지막 업데이트 시간 조회 실패 [{update_type}]: {e}")
+            return None
+    
+    async def get_all_last_update_times(self) -> Dict[str, Optional[datetime]]:
+        """
+        모든 마지막 업데이트 시간 조회
+        
+        Returns:
+            Dict[str, Optional[datetime]]: 모든 업데이트 시간
+        """
+        try:
+            return {
+                "stockai_update": await self.get_last_update_time("stockai"),
+                "stock_update": await self.get_last_update_time("stock")
+            }
+            
+        except Exception as e:
+            self.logger.error(f"모든 마지막 업데이트 시간 조회 실패: {e}")
+            return {"stockai_update": None, "stock_update": None} 

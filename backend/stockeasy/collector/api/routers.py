@@ -24,6 +24,7 @@ async def get_all_stock_list_for_stockai(
         return {
             "count": len(stock_list),
             "status": "success",
+            "last_update_time": await data_collector.get_last_update_time("stockai"),
             "stocks": stock_list
         }
     except Exception as e:

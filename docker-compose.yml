@@ -1,49 +1,54 @@
 services:
   postgres:
-    image: postgres:15
+    image: pgvector/pgvector:pg15
+    command: postgres -c timezone=Asia/Seoul
+    env_file:
+      - .env.development
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      # 성능 및 안정성 관련 설정
-      POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS:-100}
       PGDATA: /var/lib/postgresql/data/pgdata
-      # 한글 인코딩 설정
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
-      # 타임존 설정
       TZ: Asia/Seoul
-      # 로깅 설정
-      POSTGRES_LOGGING_COLLECTOR: "on"
-      POSTGRES_LOG_DIRECTORY: "pg_log"
-      POSTGRES_LOG_FILENAME: "postgresql-%Y-%m-%d_%H%M%S.log"
-      POSTGRES_LOG_STATEMENT: "ddl"
-      POSTGRES_LOG_CONNECTIONS: "on"
-      POSTGRES_LOG_DISCONNECTIONS: "on"
-    ports:
-      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - postgres_logs:/var/lib/postgresql/data/pg_log
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 512M
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U intellio_user -d intellio"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_HOST=postgres
+      - DB_NAME=${POSTGRES_DB}
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=500
+      - DEFAULT_POOL_SIZE=40
+      - ADMIN_USERS=${POSTGRES_USER}
+      - LISTEN_PORT=6432
+      - AUTH_TYPE=scram-sha-256   # 또는 md5
+    ports:
+      - "6432:6432"
+    depends_on:
+      - postgres
     restart: unless-stopped
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 6432 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   pgadmin:
     image: dpage/pgadmin4
     env_file:
-      - .env
+      - .env.development
     ports:
       - "5055:80"
     networks:
@@ -52,53 +57,76 @@ services:
   redis:
     image: redis:latest
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
-    restart: unless-stopped
-    env_file:
-      - .env
     networks:
       - app-network
-
 
   tika:
     image: apache/tika:latest
     ports:
       - "9998:9998"
-    restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      - JAVA_OPTS=-Xmx1g
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://0.0.0.0:9998/tika"]
+      test: ["CMD", "wget", "--spider", "http://localhost:9998/tika"]
       interval: 10s
       timeout: 5s
       retries: 3
 
+  base-image-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.base.dev
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: intellio-base-dev:latest
+    volumes:
+      - ./backend:/backend
+    profiles: ["build"]
+
   fastapi:
     build:
       context: .
-      dockerfile: Dockerfile.fastapi
+      dockerfile: Dockerfile.fastapi.dev
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    volumes:
+      - ./backend:/backend:rw,delegated
+    env_file:
+      - .env.development
+    environment:
+      - ENV=development
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/backend  # 개발 환경에서만 사용
-    env_file:
-      - .env
     depends_on:
+      - pgbouncer
       - redis
-      - postgres
       - tika
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 4G
-        reservations:
-          cpus: '0.2'
-          memory: 1G
+    #restart: unless-stopped
+    networks:
+      - app-network
+
+  stock-data-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.stockeasy.collector.dev
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    volumes:
+      - ./backend:/backend:rw,delegated
+    env_file:
+      - .env.development
+    environment:
+      - ENV=development
+    ports:
+      - "8001:8001"
+    depends_on:
+      - pgbouncer
+      - redis
     restart: unless-stopped
     networks:
       - app-network
@@ -106,30 +134,36 @@ services:
   celery-doceasy:
     build:
       context: .
-      dockerfile: Dockerfile.celery.doceasy
+      dockerfile: Dockerfile.celery.doceasy.dev
     volumes:
       - ./backend:/backend
     env_file:
-      - .env
+      - .env.development
     depends_on:
+      - pgbouncer
       - redis
-      - postgres
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 4G
-        reservations:
-          cpus: '0.2'
-          memory: 1G
-    restart: unless-stopped
+    #restart: unless-stopped
+    networks:
+      - app-network
+
+  celery-stockeasy:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery.stockeasy.dev
+    volumes:
+      - ./backend:/backend
+    env_file:
+      - .env.development
+    depends_on:
+      - pgbouncer
+      - redis
     networks:
       - app-network
 
   flower:
     image: mher/flower
     env_file:
-      - .env
+      - .env.development
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -142,76 +176,10 @@ services:
     networks:
       - app-network
 
-  celery-stockeasy:
-    build:
-      context: .
-      dockerfile: Dockerfile.celery.stockeasy
-    volumes:
-      - ./backend:/backend
-    env_file:
-      - .env
-    depends_on:
-      - redis
-      - postgres
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 4G
-        reservations:
-          cpus: '0.2'
-          memory: 1G
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  # AI 삭제금지
-  # 개발 버전에서는 Docker에 탑재 보류
-  frontend-doceasy:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend.doceasy
-    ports:
-      - "3010:3010"
-    env_file:
-      - frontend/doceasy/.env.production
-    depends_on:
-      - fastapi
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    restart: unless-stopped
-    networks:
-      - app-network
-   # profiles: ["donotstart"]   
-
-  nginx:
-    image: nginx:latest
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx:/etc/nginx/conf.d
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-      - ./frontend/main/.next:/home/intellio_korea/intellio_prod/frontend/main/.next:ro
-    depends_on:
-      - fastapi
-    networks:
-      - app-network
-    restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
 networks:
   app-network:
     driver: bridge
 
 volumes:
-  redis_data:
   postgres_data:
-  postgres_logs:
+  redis_data: 

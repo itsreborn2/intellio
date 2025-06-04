@@ -78,6 +78,11 @@ services:
       retries: 3
 
   fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile.fastapi.dev
+      args:
+        BUILDKIT_INLINE_CACHE: 1  
     ports:
       - "8000:8000"
     depends_on:
@@ -89,6 +94,11 @@ services:
       - app-network
 
   stock-data-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.stockeasy.collector.dev
+      args:
+        BUILDKIT_INLINE_CACHE: 1  
     ports:
       - "8001:8001"
     depends_on:
@@ -99,6 +109,9 @@ services:
       - app-network
 
   celery-doceasy:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery.doceasy.dev  
     depends_on:
       - pgbouncer
       - redis
@@ -107,6 +120,9 @@ services:
       - app-network
 
   celery-stockeasy:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery.stockeasy.dev  
     depends_on:
       - pgbouncer
       - redis

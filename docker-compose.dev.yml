@@ -35,7 +35,7 @@ services:
     volumes:
       - ./backend:/backend:rw,delegated
     env_file:
-      - ./backend/.env.development
+      - .env.development
     environment:
       - ENV=development
 

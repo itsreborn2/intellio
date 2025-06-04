@@ -220,7 +220,7 @@ export default function ApiTestPage() {
                 <Button
                   onClick={() => callApi({
                     url: '/api/v1/stock/list/refresh',
-                    method: 'POST',
+                    method: 'GET',
                     description: '종목 리스트 새로고침'
                   })}
                   disabled={isLoading}
