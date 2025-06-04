@@ -45,6 +45,67 @@ services:
       timeout: 5s
       retries: 5
 
+  # TimescaleDB 컨테이너 추가
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      POSTGRES_DB: stockeasy_collector
+      POSTGRES_USER: collector_user
+      POSTGRES_PASSWORD: ${COLLECTOR_DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      PGDATA: /var/lib/postgresql/data/pgdata
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      TZ: Asia/Seoul
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./backend/stockeasy/collector/database/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    command: >
+      postgres 
+      -c shared_preload_libraries=timescaledb
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c timezone=Asia/Seoul
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U collector_user -d stockeasy_collector"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB용 PgBouncer 추가
+  pgbouncer-timescale:
+    image: edoburu/pgbouncer:latest
+    environment:
+      - DB_USER=collector_user
+      - DB_PASSWORD=${COLLECTOR_DB_PASSWORD}
+      - DB_HOST=timescaledb
+      - DB_NAME=stockeasy_collector
+      - POOL_MODE=session
+      - MAX_CLIENT_CONN=100
+      - DEFAULT_POOL_SIZE=20
+      - ADMIN_USERS=collector_user
+      - LISTEN_PORT=6432
+      - AUTH_TYPE=scram-sha-256
+    ports:
+      - "6433:6432"
+    depends_on:
+      - timescaledb
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 6432 -U collector_user -d stockeasy_collector"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   pgadmin:
     image: dpage/pgadmin4
     env_file:
@@ -125,7 +186,8 @@ services:
     ports:
       - "8001:8001"
     depends_on:
-      - pgbouncer
+      - pgbouncer              # 기존 DB 연결
+      - pgbouncer-timescale    # TimescaleDB 연결 추가
       - redis
     restart: unless-stopped
     networks:
@@ -182,4 +244,5 @@ networks:
 
 volumes:
   postgres_data:
-  redis_data: 
+  redis_data:
+  timescale_data: 
