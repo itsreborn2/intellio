@@ -8,10 +8,14 @@ import { Loader2 } from 'lucide-react'
 import { useTokenUsageStore } from '@/stores/tokenUsageStore'
 import { useQuestionCountStore } from '@/stores/questionCountStore'
 import { isLoggedIn } from './utils/auth'
+import { useAuthCheck } from '@/hooks/useAuth'
 
 import { NoticePopup } from './components/NoticePopup';
 
 export default function StockEasyLandingPage() {
+  // 쿠키 기반 인증 상태 확인
+  useAuthCheck();
+  
   // 토큰 사용량과 질문 개수 스토어 훅
   const { fetchSummary: fetchTokenSummary } = useTokenUsageStore()
   const { fetchSummary: fetchQuestionSummary } = useQuestionCountStore()

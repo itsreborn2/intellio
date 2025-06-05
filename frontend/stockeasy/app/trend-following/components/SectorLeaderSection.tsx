@@ -4,7 +4,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Papa from 'papaparse';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
-import { TableCopyButton } from '@/app/components/TableCopyButton';
 
 interface SectorData {
   산업: string;
@@ -189,12 +188,6 @@ export default function SectorLeaderSection() {
               updated {updateDate}
             </span>
           )}
-          <TableCopyButton 
-            tableRef={tableContainerRef} 
-            headerRef={headerContainerRef} 
-            tableName="수탁이지_주도섹터"
-            updateDateText={updateDate ? `updated ${updateDate}` : undefined}
-          />
         </div>
       </div>
 

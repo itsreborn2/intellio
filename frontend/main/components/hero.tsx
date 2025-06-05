@@ -30,8 +30,7 @@ export default function Hero() {
   // 서비스 이동 시 로그인 상태 확인
   const handleServiceNavigation = (service: 'doceasy' | 'stockeasy') => {
     if (isAuthenticated) {
-      // 로그인 상태면 해당 서비스로 바로 이동 (토큰과 사용자 정보 포함)
-      const { token, user } = useAuth.getState();
+      // 로그인 상태면 해당 서비스로 바로 이동 (쿠키 기반)
       const domain_url = process.env.NEXT_PUBLIC_ENV === 'production' ? 'https://' : 'http://';
       let service_url
       if( process.env.NEXT_PUBLIC_ENV === 'production')
@@ -43,15 +42,9 @@ export default function Hero() {
         if( service === 'doceasy') service_url = `localhost:3010`;
         else if( service === 'stockeasy') service_url = `localhost:3020`;
       }
-      if (token && user) {
-        // 사용자 정보 인코딩
-        const encodedUser = encodeURIComponent(JSON.stringify(user));
-        // 토큰을 URL 파라미터로 포함
-        window.location.href = `${domain_url}${service_url}/auto-login?token=${token}&user=${encodedUser}`;
-      } else {
-        // 토큰이 없으면 그냥 이동
-        window.location.href = `${domain_url}${service_url}`;
-      }
+      
+      // 쿠키가 자동으로 전달되므로 토큰 파라미터 불필요
+      window.location.href = `${domain_url}${service_url}`;
     } else {
       // 비로그인 상태면 로그인 페이지로 이동 후 리디렉션
       setRedirectTo(service);
@@ -100,6 +93,11 @@ export default function Hero() {
       </div>
       <br />
       <div className="relative flex gap-6">
+        {renderServiceButton(
+          'doceasy', 
+          'DocEasy',
+          'bg-[conic-gradient(from_90deg_at_50%_50%,#393BB2_0%,#E2CBFF_50%,#393BB2_100%)]'
+        )}
         {renderServiceButton(
           'stockeasy', 
           'StockEasy',

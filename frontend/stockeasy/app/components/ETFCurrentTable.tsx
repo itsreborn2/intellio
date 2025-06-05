@@ -161,9 +161,8 @@ export default function ETFCurrentTable() {
   const [csvData, setCsvData] = useState<{ headers: string[]; rows: Record<string, any>[]; groupedData: GroupedData; errors: any[] }>({ headers: [], rows: [], groupedData: {}, errors: [] });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);  
-  const [sortKey, setSortKey] = useState<string | null>(null);  // 정렬 상태 - 기본값으로 산업 컬럼 오름차순 설정
-  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
-  console.log('[ETFCurrentTable] Initial sortKey:', sortKey, 'Initial sortDirection:', sortDirection);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: SortDirection }>({ key: '', direction: 'asc' });
+  console.log('[ETFCurrentTable] Initial sortConfig:', sortConfig);
   const [updateDate, setUpdateDate] = useState<string | null>(null); // 새로운 업데이트 날짜 상태
   // 개별 ETF 차트 데이터 관련 상태 제거됨
   const [tickerMappingInfo, setTickerMappingInfo] = useState<{
@@ -315,27 +314,16 @@ export default function ETFCurrentTable() {
 
   // 정렬 처리 함수
   const handleSort = (key: string) => {
-    // (불필요한 로그 완전 제거)
-// console.log(`정렬 시도: 컴럼 = ${key}, 현재 정렬키 = ${sortKey}, 현재 방향 = ${sortDirection}`);
-    
-    if (sortKey === key) {
-      // 같은 컴럼을 다시 클릭한 경우, 오름차순과 내림차순만 반복하도록 수정
-      const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-      // (불필요한 로그 완전 제거)
-// console.log(`같은 컴럼 클릭: 정렬 방향 변경 ${sortDirection} -> ${newDirection}`);
-      setSortDirection(newDirection);
-    } else {
-      // 다른 컴럼을 클릭한 경우, 해당 컴럼으로 오름차순 정렬
-      // (불필요한 로그 완전 제거)
-// console.log(`새 컴럼 클릭: 정렬키 변경 ${sortKey} -> ${key}, 방향 = asc`);
-      setSortKey(key);
-      setSortDirection('asc');
+    let direction: SortDirection = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
     }
+    setSortConfig({ key, direction });
   };
-  
+
   // 정렬된 데이터 계산
   const sortedData = useMemo(() => {
-    console.log('[ETFCurrentTable useMemo] sortKey:', sortKey, 'sortDirection:', sortDirection);
+    console.log('[ETFCurrentTable useMemo] sortConfig:', sortConfig);
     if (csvData && csvData.rows && csvData.rows.length > 0) {
       console.log('[ETFCurrentTable useMemo] csvData.rows[0]:', JSON.stringify(csvData.rows[0]));
     }
@@ -348,8 +336,8 @@ export default function ETFCurrentTable() {
     }
 
     // 정렬 키나 방향이 없으면 원본 순서(CSV 기본 정렬) 반환
-    if (!sortKey || !sortDirection) {
-      console.log('[ETFCurrentTable useMemo] No sortKey or sortDirection, returning original csvData.rows');
+    if (!sortConfig.key || !sortConfig.direction) {
+      console.log('[ETFCurrentTable useMemo] No sortConfig, returning original csvData.rows');
       return csvData.rows;
     }
 
@@ -357,11 +345,11 @@ export default function ETFCurrentTable() {
     const dataToSort = [...csvData.rows];
 
     const sortRow = (a: any, b: any) => {
-      let aValue = a[sortKey];
-      let bValue = b[sortKey];
+      let aValue = a[sortConfig.key];
+      let bValue = b[sortConfig.key];
 
       // 포지션 컬럼 특별 처리
-      if (sortKey === '포지션') {
+      if (sortConfig.key === '포지션') {
         const extractPositionValue = (ticker: string): number => {
           console.log(`[extractPositionValue] ticker: ${ticker}`);
           const stockName = tickerMappingInfo.stockNameMap[ticker] || '';
@@ -407,43 +395,32 @@ export default function ETFCurrentTable() {
         };
         const aPositionValue = extractPositionValue(a['티커']);
         const bPositionValue = extractPositionValue(b['티커']);
-        console.log(`[sortRow - 포지션] aValue: ${aPositionValue}, bValue: ${bPositionValue}, direction: ${sortDirection}`);
-        if (aPositionValue < bPositionValue) return sortDirection === 'asc' ? -1 : 1;
-        if (aPositionValue > bPositionValue) return sortDirection === 'asc' ? 1 : -1;
+        console.log(`[sortRow - 포지션] aValue: ${aPositionValue}, bValue: ${bPositionValue}, direction: ${sortConfig.direction}`);
+        if (aPositionValue < bPositionValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aPositionValue > bPositionValue) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       } 
       // 등락률 컬럼 처리 (maListMap에서 데이터 가져와서 숫자로 변환)
-      else if (sortKey === '등락율') {
+      else if (sortConfig.key === '등락율' || sortConfig.key === '20일 이격') {
         const extractChangeRateValue = (rowItem: Record<string, any>): number => {
-          const ticker = rowItem['티커'] as string;
-          const stockNameFromCsv = rowItem['종목명'] as string;
-          // 티커를 우선 사용하고, 없으면 CSV의 종목명을 사용
-          const stockNameKey = tickerMappingInfo.stockNameMap[ticker] || stockNameFromCsv || '';
-          if (!stockNameKey) return Number.NEGATIVE_INFINITY;
-
-          const maData = maListMap[stockNameKey.trim()];
-          if (!maData || typeof maData['등락률'] === 'undefined') {
-            // maListMap에 해당 종목이나 등락률 데이터가 없는 경우
-            // CSV의 '등락율' 컬럼 값을 직접 사용 시도 (fallback)
-            const csvChangeRate = rowItem['등락율'];
-            if (typeof csvChangeRate === 'string' && csvChangeRate !== '-' && csvChangeRate.trim() !== ''){
-              const parsedCsvValue = parseFloat(csvChangeRate.replace('%', ''));
-              return isNaN(parsedCsvValue) ? Number.NEGATIVE_INFINITY : parsedCsvValue;
-            }
-            return Number.NEGATIVE_INFINITY;
-          }
-
-          let changeRateStr = String(maData['등락률']);
-          if (changeRateStr === '-' || changeRateStr.trim() === '') return Number.NEGATIVE_INFINITY;
-
-          const parsedValue = parseFloat(changeRateStr.replace('%', ''));
-          return isNaN(parsedValue) ? Number.NEGATIVE_INFINITY : parsedValue;
+          const changeRateStr = rowItem['등락률']?.toString().replace('%', '');
+          return parseFloat(changeRateStr) || 0;
         };
-        aValue = extractChangeRateValue(a);
-        bValue = extractChangeRateValue(b);
+
+        const extractDisparityValue = (rowItem: Record<string, any>): number => {
+          const disparityStr = rowItem['20일 이격']?.toString().replace('%', '');
+          return parseFloat(disparityStr) || 0;
+        };
+        const aValue = sortConfig.key === '등락율' ? extractChangeRateValue(a) : extractDisparityValue(a);
+        const bValue = sortConfig.key === '등락율' ? extractChangeRateValue(b) : extractDisparityValue(b);
+        
+        // 숫자로 변환된 값을 사용하여 비교 후 바로 결과 반환
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
       }
       // 그 외 숫자 형태의 문자열을 숫자로 변환 (시가총액, 거래량 등)
-      else if (['가격', '시가총액', '거래량'].includes(sortKey)) {
+      else if (['가격', '시가총액', '거래량'].includes(sortConfig.key)) {
         aValue = parseFloat(String(aValue).replace(/,/g, ''));
         bValue = parseFloat(String(bValue).replace(/,/g, ''));
       }
@@ -459,13 +436,13 @@ export default function ETFCurrentTable() {
         bValue = String(bValue);
       }
 
-      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     };
 
     return dataToSort.sort(sortRow);
-  }, [csvData.rows, sortKey, sortDirection, maListMap, tickerMappingInfo.stockNameMap]);
+  }, [csvData.rows, sortConfig, maListMap, tickerMappingInfo.stockNameMap]);
 
   // 테이블 본문 렌더링 로직을 수정합니다.
   // 이전에는 industryGroups를 순회했지만, 이제 평탄화된 sortedData (배열)를 직접 사용합니다.
@@ -713,9 +690,9 @@ const orderedIndustries = Object.keys(sortedData);
               >
                 <div className="flex justify-center items-center">
                   섹터
-                  {sortKey === '섹터' && (
+                  {sortConfig.key === '섹터' && (
                     <span className="ml-1">
-                      {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                      {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
                     </span>
                   )}
                 </div>
@@ -733,9 +710,9 @@ const orderedIndustries = Object.keys(sortedData);
               >
                 <div className="flex justify-center items-center">
                   ETF 종목명
-                  {sortKey === '종목명' && (
+                  {sortConfig.key === '종목명' && (
                     <span className="ml-1">
-                      {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                      {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
                     </span>
                   )}
                 </div>
@@ -754,9 +731,9 @@ const orderedIndustries = Object.keys(sortedData);
                 >
                   <div className="flex justify-center items-center">
                     등락률 {/* 표시 텍스트만 변경 */}
-                    {sortKey === header && (
+                    {sortConfig.key === header && (
                       <span className="ml-1">
-                        {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                        {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
                       </span>
                     )}
                   </div>
@@ -785,9 +762,9 @@ const orderedIndustries = Object.keys(sortedData);
                   {/* 기존 div 내용을 Tooltip의 자식으로 이동 */}
                   <div className="flex justify-center items-center">
                     포지션
-                    {sortKey === '포지션' && (
+                    {sortConfig.key === '포지션' && (
                       <span className="ml-1">
-                        {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : ''}
+                        {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
                       </span>
                     )}
                   </div>
@@ -798,12 +775,13 @@ const orderedIndustries = Object.keys(sortedData);
                   key={header}
                   scope="col"
                   // className 수정: font-medium, text-gray-500, uppercase, tracking-wider 추가
-                  className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider border border-gray-200 ${header === '20일 이격' || header === '돌파/이탈' || header === '대표종목(RS)' ? 'cursor-help' : ''} hidden md:table-cell`} // 스타일 클래스 추가 및 cursor-help 유지, text-gray-500 제거
+                  className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider border border-gray-200 ${header === '20일 이격' ? 'cursor-pointer' : header === '돌파/이탈' || header === '대표종목(RS)' ? 'cursor-help' : ''} hidden md:table-cell`} // 20일 이격은 cursor-pointer로 변경, 나머지는 cursor-help 유지
                   style={{
                     color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
                     width: header === '20일 이격' ? '65px' : header === '돌파/이탈' ? '70px' : header === '대표종목(RS)' ? '380px' : '80px',
                     height: '35px'
                   }}
+                  onClick={header === '20일 이격' ? () => handleSort(header) : undefined} // 20일 이격 컬럼에만 정렬 기능 추가
                 >
                   {/* '20일 이격' 헤더일 경우 GuideTooltip으로 감싸기 */}
                   {header === '20일 이격' ? (
@@ -814,7 +792,14 @@ const orderedIndustries = Object.keys(sortedData);
                       width="min(90vw, 360px)" // 반응형 너비
                       collisionPadding={{ left: 260 }} // 왼쪽 여백
                     >
-                      <div className="flex justify-center items-center">{header}</div>
+                      <div className="flex justify-center items-center">
+                        {header}
+                        {sortConfig.key === header && (
+                          <span className="ml-1">
+                            {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
+                          </span>
+                        )}
+                      </div>
                     </GuideTooltip>
                   ) : /* '돌파/이탈' 헤더일 경우 GuideTooltip으로 감싸기 */
                   header === '돌파/이탈' ? (

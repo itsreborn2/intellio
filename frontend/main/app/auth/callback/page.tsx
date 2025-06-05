@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
 function CallbackHandler() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { setUser, setToken, login, redirectTo, checkAuthCookie } = useAuth();
+    const { setUser, login, redirectTo, checkAuth } = useAuth();
     const isProcessing = useRef(false);
 
     useEffect(() => {
@@ -26,7 +26,7 @@ function CallbackHandler() {
                 const error = searchParams.get('error');
                 console.log('[Callback] 상태:', { success, token, userParam, error });
                 
-                if (success === 'true' && token && userParam) {
+                if (success === 'true' && userParam) {
                     try {
                         const decodedUserStr = decodeURIComponent(userParam);
                         console.log('[Callback] 디코딩된 사용자 데이터:', decodedUserStr);
@@ -35,72 +35,54 @@ function CallbackHandler() {
                             const userData = JSON.parse(decodedUserStr);
                             console.log('[Callback] 파싱된 사용자 데이터:', userData);
 
-                            // 토큰 및 사용자 정보 설정
-                            setToken(token);
+                            // 사용자 정보 설정 (쿠키는 백엔드에서 이미 설정됨)
                             setUser(userData);
-                            
-                            // 쿠키 설정 (서브도메인에서 접근 가능하도록)
-                            document.cookie = `token=${token}; path=/; domain=.intellio.kr`;
-
-                            // 쿠키에 사용자 정보를 안전하게 저장
-                            // JSON 문자열로 변환 후 바로 쿠키에 설정 (중간에 encodeURIComponent 사용)
-                            const userDataString = JSON.stringify(userData);
-                            document.cookie = `user=${encodeURIComponent(userDataString)}; path=/; domain=.intellio.kr`;
-
-                            // 추가로 login 호출하여 확실하게 인증 상태 설정
                             login(userData);
 
-                            // 쿠키 확인 (백엔드에서 설정한 쿠키가 있는지 확인)
-                            checkAuthCookie();
+                            // 백엔드에서 쿠키를 설정했으므로 인증 상태 다시 확인
+                            await checkAuth();
 
-                            // 리디렉션 처리 수정
+                            // 리디렉션 처리
                             if (redirectTo === 'doceasy' || redirectTo === 'stockeasy') {
                                 // 다른 도메인으로 리디렉션
-                                window.location.href = `https://${redirectTo}.intellio.kr`;
+                                const domain_url = process.env.NEXT_PUBLIC_ENV === 'production' ? 'https://' : 'http://';
+                                let service_url;
+                                
+                                if (process.env.NEXT_PUBLIC_ENV === 'production') {
+                                    service_url = `${redirectTo}.intellio.kr`;
+                                } else {
+                                    // 개발 환경에서는 localhost 포트 사용
+                                    if (redirectTo === 'doceasy') service_url = `localhost:3010`;
+                                    else if (redirectTo === 'stockeasy') service_url = `localhost:3020`;
+                                }
+                                
+                                console.log('[Callback] 서비스 리디렉션:', `${domain_url}${service_url}`);
+                                // 쿠키가 자동으로 전달되므로 토큰 파라미터 불필요
+                                window.location.href = `${domain_url}${service_url}`;
                             } else {
                                 // 메인 사이트 내부 경로로 리디렉션
                                 const targetPath = redirectTo || '/';
                                 console.log('[Callback] 리디렉션 경로:', targetPath);
                                 router.push(targetPath);
                             }
-                        } catch (jsonError) {
-                            console.error('[Callback] JSON 파싱 오류:', {
-                                error: jsonError,
-                                receivedData: decodedUserStr
-                            });
-                            alert('사용자 데이터 처리 중 오류가 발생했습니다.');
+                        } catch (parseError) {
+                            console.error('[Callback] 사용자 데이터 파싱 오류:', parseError);
+                            alert('사용자 정보를 처리하는 중 오류가 발생했습니다.');
                             router.push('/login');
                         }
                     } catch (decodeError) {
-                        console.error('[Callback] URL 디코딩 오류:', {
-                            error: decodeError,
-                            rawUserParam: userParam
-                        });
-                        alert('사용자 데이터 디코딩 중 오류가 발생했습니다.');
+                        console.error('[Callback] 사용자 데이터 디코딩 오류:', decodeError);
+                        alert('사용자 정보를 디코딩하는 중 오류가 발생했습니다.');
                         router.push('/login');
                     }
-                } else if (success === 'false' && error) {
-                    const errorMessage = decodeURIComponent(error);
-                    console.error('[Callback] 로그인 실패:', {
-                        success,
-                        error: errorMessage,
-                        provider: searchParams.get('provider')
-                    });
-                    alert(`로그인 실패: ${errorMessage}`);
+                } else if (error) {
+                    console.error('[Callback] 인증 오류:', error);
+                    alert(`로그인 오류: ${error}`);
                     router.push('/login');
                 } else {
-                    // 쿠키 기반 인증 확인 시도
-                    console.log('[Callback] 쿼리 파라미터 없음, 쿠키 확인 시도');
-                    checkAuthCookie();
-                    
-                    // 쿠키 확인 후 리디렉션 처리
-                    setTimeout(() => {
-                        if (redirectTo === 'doceasy' || redirectTo === 'stockeasy') {
-                            window.location.href = `https://${redirectTo}.intellio.kr`;
-                        } else {
-                            router.push(redirectTo || '/');
-                        }
-                    }, 1000); // 쿠키 확인을 위한 짧은 지연
+                    console.error('[Callback] 잘못된 콜백 파라미터');
+                    alert('로그인 정보가 올바르지 않습니다.');
+                    router.push('/login');
                 }
             } catch (error) {
                 console.error('Callback 처리 중 오류:', error);
@@ -112,7 +94,7 @@ function CallbackHandler() {
         };
 
         handleCallback();
-    }, [searchParams, router, setUser, setToken, login, redirectTo, checkAuthCookie]);
+    }, [searchParams, router, setUser, login, redirectTo, checkAuth]);
 
     return (
         <div className="text-center">
@@ -129,7 +111,7 @@ export default function AuthCallback() {
             <Suspense fallback={
                 <div className="text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                    
+                    <p className="mt-4 text-muted-foreground">로딩 중...</p>
                 </div>
             }>
                 <CallbackHandler />

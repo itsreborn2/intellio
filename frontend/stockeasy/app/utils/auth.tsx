@@ -31,7 +31,6 @@ export async function logout() {
     }
     
     // 쿠키 삭제
-    document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     document.cookie = 'refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     document.cookie = 'user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     document.cookie = 'session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
@@ -48,7 +47,6 @@ export async function logout() {
     // 각 도메인에 대해 쿠키 삭제 시도
     domains.forEach(domain => {
       const domainStr = domain ? `; domain=${domain}` : '';
-      document.cookie = `auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/${domainStr}`;
       document.cookie = `refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/${domainStr}`;
       document.cookie = `user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/${domainStr}`;
       document.cookie = `session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/${domainStr}`;

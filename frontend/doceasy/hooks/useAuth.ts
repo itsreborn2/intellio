@@ -24,6 +24,7 @@ interface AuthState {
     logout: () => Promise<void>;
     checkAuthCookie: () => void;
     clearAuthState: () => void; // 상태 초기화 함수 추가
+    validateSession: () => Promise<boolean>;
 }
 
 // 쿠키 파싱 유틸리티 함수
@@ -223,51 +224,56 @@ export const useAuth = create<AuthState>()((set, get) => ({
         console.log('[useAuth] 상태 초기화 완료');
     },
 
+    // 세션 유효성 확인 (필요시에만 백엔드 API 호출)
+    validateSession: async () => {
+        try {
+            const response = await fetch(`${API_URL}/v1/auth/me`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+            });
+            
+            if (response.ok) {
+                const userData = await response.json();
+                const cookies = parseCookies();
+                const tokenCookie = cookies['token'];
+                
+                set({
+                    user: userData.user || userData,
+                    token: tokenCookie || null,
+                    isAuthenticated: true
+                });
+                console.log('[useAuth] 세션 유효성 확인 완료:', userData);
+                return true;
+            } else {
+                console.log('[useAuth] 세션 만료 또는 무효:', response.status);
+                get().clearAuthState();
+                return false;
+            }
+        } catch (error) {
+            console.error('[useAuth] 세션 유효성 확인 오류:', error);
+            return false;
+        }
+    },
+
     // 쿠키에서 인증 정보 확인
     checkAuthCookie: async () => {
         try {
-            // 쿠키에서 세션 ID와 인증 정보 확인
+            // 쿠키에서 사용자 정보 확인 (session_id는 httponly이므로 JS에서 접근 불가)
             const cookies = parseCookies();
-            const sessionId = cookies['session_id']; // 백엔드에서 사용하는 세션 쿠키
-            const userCookie = cookies['user']; // 사용자 정보 쿠키
-            const tokenCookie = cookies['token']; // 토큰 쿠키
+            const userCookie = cookies['user'];
+            const tokenCookie = cookies['token'];
             
             console.debug('[useAuth] 쿠키 확인:', { 
-                sessionId, 
-                userCookie: userCookie ? (userCookie.length > 50 ? userCookie.substring(0, 50) + '...' : userCookie) : null,
-                tokenCookie: tokenCookie ? (tokenCookie.length > 20 ? tokenCookie.substring(0, 20) + '...' : tokenCookie) : null
+                userCookie: userCookie ? '있음' : '없음',
+                tokenCookie: tokenCookie ? '있음' : '없음'
             });
             
-            if (sessionId) {
-                // 세션 ID가 있으면 사용자 정보 요청
-                try {
-                    const response = await fetch(`${API_URL}/v1/auth/me`, {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        credentials: 'include', // 쿠키 포함
-                    });
-                    
-                    if (response.ok) {
-                        const userData = await response.json();
-                        set({
-                            user: userData,
-                            token: tokenCookie || null,
-                            isAuthenticated: true
-                        });
-                        console.log('[useAuth] 사용자 정보 로드 완료:', userData);
-                    } else {
-                        console.log('[useAuth] 사용자 정보 로드 실패:', response.status);
-                        // 로그인 실패 시 상태 초기화
-                        get().clearAuthState();
-                    }
-                } catch (error) {
-                    console.error('[useAuth] 사용자 정보 요청 오류:', error);
-                    get().clearAuthState();
-                }
-            } else if (userCookie && tokenCookie) {
-                // 세션 ID는 없지만 user와 token 쿠키가 있는 경우
+            // userCookie와 tokenCookie가 모두 있으면 바로 사용 (네트워크 요청 최적화)
+            if (userCookie && tokenCookie) {
+                console.debug('[useAuth] 사용자 쿠키 원본 데이터:', userCookie);
                 const userData = parseUserCookie(userCookie);
                 
                 if (userData) {
@@ -277,13 +283,54 @@ export const useAuth = create<AuthState>()((set, get) => ({
                         isAuthenticated: true
                     });
                     console.log('[useAuth] 쿠키에서 사용자 정보 로드 완료:', userData);
+                    return;
                 } else {
                     console.error('[useAuth] 사용자 쿠키 파싱 실패');
+                    console.error('[useAuth] 실패한 쿠키 데이터:', { userCookie, tokenCookie });
+                    // 파싱 실패시에도 API 호출 없이 상태 초기화
+                    console.log('[useAuth] 쿠키 파싱 실패로 인한 상태 초기화');
                     get().clearAuthState();
+                    return;
                 }
-            } else {
-                console.log('[useAuth] 인증 쿠키 없음');
-                // 모든 인증 상태 초기화
+            }
+            
+            // 쿠키가 없거나 파싱이 실패한 경우에만 백엔드 API로 세션 확인
+            try {
+                const response = await fetch(`${API_URL}/v1/auth/me`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include', // httponly 쿠키 자동 포함
+                });
+                
+                if (response.ok) {
+                    const userData = await response.json();
+                    set({
+                        user: userData.user || userData,
+                        token: tokenCookie || null,
+                        isAuthenticated: true
+                    });
+                    console.log('[useAuth] 백엔드 API로 사용자 정보 로드 완료:', userData);
+                    return;
+                } else {
+                    console.log('[useAuth] 백엔드 API 인증 실패:', response.status);
+                }
+            } catch (apiError) {
+                console.warn('[useAuth] 백엔드 API 요청 오류:', apiError);
+            }
+            
+            // 모든 방법이 실패한 경우
+            console.log('[useAuth] 인증 정보 없음 또는 모든 인증 방법 실패');
+            
+            // 현재 로컬 스토리지에 인증 정보가 있는지 확인
+            const currentUser = get().user;
+            const currentToken = get().token;
+            const currentIsAuthenticated = get().isAuthenticated;
+            
+            // 로컬 스토리지에 인증 정보가 있지만 쿠키가 없는 경우
+            if (currentUser || currentToken || currentIsAuthenticated) {
+                console.log('[useAuth] 인증 정보 불일치, 로컬 스토리지 인증 정보 삭제');
                 get().clearAuthState();
             }
         } catch (error) {
@@ -295,21 +342,26 @@ export const useAuth = create<AuthState>()((set, get) => ({
 
 // 쿠키 기반 인증 상태 확인을 위한 훅
 export const useAuthCheck = () => {
-    const { checkAuthCookie, isAuthenticated } = useAuth();
+    const { checkAuthCookie, validateSession, isAuthenticated } = useAuth();
     
     useEffect(() => {
-        // 페이지 로드 시 즉시 실행
+        // 페이지 로드 시 즉시 쿠키 확인 (빠른 로딩)
         setTimeout(() => {
             checkAuthCookie();
         }, 0);
         
-        // 주기적으로 쿠키 확인 (선택 사항)
+        // 주기적으로 세션 유효성 확인 (네트워크 요청 최소화)
         const intervalId = setInterval(() => {
-            checkAuthCookie();
-        }, 60000); // 1분마다 확인
+            // 현재 인증된 상태일 때만 세션 유효성 확인
+            if (isAuthenticated) {
+                validateSession();
+            } else {
+                checkAuthCookie();
+            }
+        }, 300000); // 5분마다 확인 (기존 1분에서 5분으로 변경)
         
         return () => clearInterval(intervalId);
-    }, [checkAuthCookie]);
+    }, [checkAuthCookie, validateSession, isAuthenticated]);
     
     return { isAuthenticated };
 };

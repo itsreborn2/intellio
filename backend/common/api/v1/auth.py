@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
 from httpx import request
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordBearer
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from common.core.redis import RedisClient
 from common.core.exceptions import AuthenticationRedirectException
 from common.core.database import get_db_async
@@ -24,14 +24,14 @@ from common.schemas.user import (
 from common.schemas.auth import OAuthLoginResponse
 from common.core.config import settings
 import json
-import logging
+#import logging
 from loguru import logger
 from datetime import datetime, timedelta
 from jose import jwt
 from pydantic import ValidationError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-logger = logging.getLogger(__name__)
+#logger = logging.getLogger(__name__)
 
 # OAuth2 bearer token 설정
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -87,11 +87,11 @@ async def logout(
     db: AsyncSession = Depends(get_db_async)
 ):
     """로그아웃 처리 - 세션 삭제 및 쿠키 제거"""
-    if not session_id:
-        return SessionResponse(
-            success=True,
-            message="이미 로그아웃 되었습니다."
-        )
+    # if not session_id:
+    #     return SessionResponse(
+    #         success=True,
+    #         message="이미 로그아웃 되었습니다."
+    #     )
     logger.info(f"logout - session_id: {session_id}")
     user_service = UserService(db)
     # 세션 삭제
@@ -339,8 +339,12 @@ async def oauth_callback(
         redirect_to = f"{redirect_url}/auth/callback?success=true&token={token}&user={encoded_user_data}"
         logger.info(f"final - oauth_callback - redirect_to: {redirect_to}")
         
-        # 먼저 응답 생성 (Response 객체 사용)
-        response = Response()
+        # 쿠키 도메인 설정 확인
+        cookie_domain = ".intellio.kr" if settings.ENV == "production" else "localhost"
+        logger.info(f"쿠키 설정 - ENV: {settings.ENV}, domain: {cookie_domain}")
+        
+        # 응답 생성 및 쿠키 설정
+        response = RedirectResponse(url=redirect_to, status_code=status.HTTP_302_FOUND)
         
         # 세션 ID 쿠키 설정
         response.set_cookie(
@@ -351,8 +355,9 @@ async def oauth_callback(
             secure=settings.ENV == "production",  # 개발 환경에서는 False
             samesite="lax",
             path="/",
-            domain=".intellio.kr" if settings.ENV == "production" else "localhost"
+            domain=cookie_domain
         )
+        logger.info(f"session_id 쿠키 설정 완료: {session.id}")
         
         # JWT 토큰 쿠키 설정
         response.set_cookie(
@@ -363,8 +368,9 @@ async def oauth_callback(
             secure=settings.ENV == "production",  # 개발 환경에서는 False
             samesite="lax",
             path="/",
-            domain=".intellio.kr" if settings.ENV == "production" else "localhost"
+            domain=cookie_domain
         )
+        logger.info(f"token 쿠키 설정 완료: {token[:20]}...")
 
         # 사용자 정보 쿠키 설정
         response.set_cookie(
@@ -375,13 +381,12 @@ async def oauth_callback(
             secure=settings.ENV == "production",  # 개발 환경에서는 False
             samesite="lax",
             path="/",
-            domain=".intellio.kr" if settings.ENV == "production" else "localhost"
+            domain=cookie_domain
         )
+        logger.info(f"user 쿠키 설정 완료: {user_data}")
         
-        # 쿠키 설정 후 리다이렉션
-        response.headers["Location"] = redirect_to
-        response.status_code = status.HTTP_302_FOUND
-
+        logger.info(f"최종 응답 헤더: {dict(response.headers)}")
+        logger.info(f"리다이렉션 URL: {redirect_to}")
 
         return response
         
@@ -392,16 +397,59 @@ async def oauth_callback(
         redirect_to = f"{settings.DOCEASY_URL}/auth/callback?success=false&error={error_message}"
         return RedirectResponse(url=redirect_to)
 
-@router.get("/me", response_model=OAuthLoginResponse)
-async def get_current_user(
+@router.get("/me")
+async def get_current_user_by_session(
+    session_id: Optional[str] = Cookie(None),
+    db: AsyncSession = Depends(get_db_async)
+):
+    """세션 쿠키 기반 현재 사용자 정보 조회"""
+    if not session_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="세션이 존재하지 않습니다."
+        )
+    
+    user_service = UserService(db)
+    session = await user_service.get_active_session(session_id)
+    
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 세션입니다."
+        )
+    
+    # 세션에서 사용자 정보 가져오기
+    if session.user_id:
+        user = await user_service.get(session.user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+        logger.info(f"[get_current_user_by_session] - session: {session_id}, user: {user.email}")
+        
+        return {
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "name": user.name,
+                "provider": user.oauth_provider or "email"
+            }
+        }
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="익명 세션입니다."
+        )
+
+@router.get("/me/token", response_model=OAuthLoginResponse)
+async def get_current_user_by_token(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db_async)
 ):
-    """현재 로그인한 사용자 정보 조회"""
+    """OAuth2 토큰 기반 현재 사용자 정보 조회 (기존 엔드포인트)"""
     token_data = verify_oauth_token(token)
     user_service = UserService(db)
     user = await user_service.get(token_data["sub"])
-    logger.info(f"[get_current_user] - ID: {user.id}, email: {user.email}, provider: {user.oauth_provider}")
+    logger.info(f"[get_current_user_by_token] - ID: {user.id}, email: {user.email}, provider: {user.oauth_provider}")
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
