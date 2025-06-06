@@ -37,8 +37,8 @@ export default function ApiTestPage() {
   const [stockCode, setStockCode] = useState('005930')
   const [etfCode, setEtfCode] = useState('069500')
   const [searchKeyword, setSearchKeyword] = useState('삼성')
-  const [chartPeriod, setChartPeriod] = useState('1d')
-  const [chartInterval, setChartInterval] = useState('1m')
+  const [chartPeriod, setChartPeriod] = useState('1y')
+  const [chartInterval, setChartInterval] = useState('1d')
 
   // API 호출 함수
   const callApi = async (apiCall: IApiCall) => {
@@ -207,14 +207,38 @@ export default function ApiTestPage() {
                 
                 <Button
                   onClick={() => callApi({
-                    url: `/api/v1/stock/chart/${stockCode}?period=${chartPeriod}&interval=${chartInterval}`,
+                    url: `/api/v1/stock/chart/${stockCode}?period=${chartPeriod}&interval=${chartInterval}&compressed=true&gzip_enabled=true`,
                     method: 'GET',
-                    description: '차트 데이터 조회'
+                    description: '차트 데이터 조회 (압축)'
                   })}
                   disabled={isLoading}
                 >
                   <Send className="w-4 h-4 mr-2" />
-                  차트 데이터
+                  차트 데이터 (압축)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: `/api/v1/stock/supply-demand/${stockCode}?start_date=20241205&end_date=20250606&compressed=false&gzip_enabled=false`,
+                    method: 'GET',
+                    description: '수급 데이터 조회 (표준)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  수급 데이터 (표준)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: `/api/v1/stock/supply-demand/${stockCode}?start_date=20241205&end_date=20250606&compressed=true&gzip_enabled=true`,
+                    method: 'GET',
+                    description: '수급 데이터 조회 (압축)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  수급 데이터 (압축)
                 </Button>
                 
                 <Button
@@ -417,6 +441,18 @@ export default function ApiTestPage() {
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
                   캐시 초기화
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: `/api/v1/admin/debug/supply-demand/${stockCode}?limit=10`,
+                    method: 'GET',
+                    description: '수급 데이터 디버깅'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  수급 데이터 디버깅
                 </Button>
               </div>
             </CardContent>

@@ -70,7 +70,7 @@ timescaledb | 2.20.2
 ## 🔧 Phase 2: 애플리케이션 설정 (예상 시간: 2일)
 
 ### 2.1 설정 파일 업데이트
-- [ ] `backend/stockeasy/collector/core/config.py` TimescaleDB 설정 추가
+- [x] `backend/stockeasy/collector/core/config.py` TimescaleDB 설정 추가
   ```python
   # TimescaleDB 설정
   TIMESCALE_HOST: str = Field(default="pgbouncer-timescale")
@@ -87,13 +87,13 @@ timescaledb | 2.20.2
   def TIMESCALE_ASYNC_DATABASE_URL(self) -> str:
       return f"postgresql+asyncpg://{self.TIMESCALE_USER}:{self.TIMESCALE_PASSWORD}@{self.TIMESCALE_HOST}:{self.TIMESCALE_PORT}/{self.TIMESCALE_DB}"
   ```
-- [ ] 설정 검증 로직 추가
-- [ ] 환경변수 바인딩 테스트
+- [x] 설정 검증 로직 추가
+- [x] 환경변수 바인딩 테스트
 
-**완료 조건**: 설정 값 정상 로드 확인
+**완료 조건**: 설정 값 정상 로드 확인 ✅
 
 ### 2.2 데이터베이스 연결 모듈
-- [ ] `backend/stockeasy/collector/core/timescale_database.py` 생성
+- [x] `backend/stockeasy/collector/core/timescale_database.py` 생성
   ```python
   from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
   from .config import get_settings
@@ -122,23 +122,23 @@ timescaledb | 2.20.2
       async with TimescaleSessionLocal() as session:
           yield session
   ```
-- [ ] 연결 풀 설정 최적화
-- [ ] 세션 생명주기 관리
+- [x] 연결 풀 설정 최적화
+- [x] 세션 생명주기 관리
 
-**완료 조건**: 데이터베이스 연결 성공
+**완료 조건**: 데이터베이스 연결 성공 ✅
 
 ### 2.3 Stock Collector 서비스 의존성 업데이트
-- [ ] `docker-compose.yml`에서 `stock-data-collector` 의존성 추가
+- [x] `docker-compose.yml`에서 `stock-data-collector` 의존성 추가
   ```yaml
   depends_on:
     - pgbouncer              # 기존 DB
     - pgbouncer-timescale    # TimescaleDB
     - redis
   ```
-- [ ] 서비스 재시작 테스트
-- [ ] 의존성 순서 확인
+- [x] 서비스 재시작 테스트
+- [x] 의존성 순서 확인
 
-**완료 조건**: Stock Collector 서비스 정상 시작
+**완료 조건**: Stock Collector 서비스 정상 시작 ✅
 
 ---
 
@@ -349,7 +349,7 @@ timescaledb | 2.20.2
 
 ---
 
-## 📊 Phase 6: TimescaleDB 특화 기능 구현 (예상 시간: 3일)
+## �� Phase 6: TimescaleDB 특화 기능 구현 (예상 시간: 3일)
 
 ### 6.1 연속 집계 (Continuous Aggregates) 설정
 - [ ] 일봉 자동 생성 뷰 생성

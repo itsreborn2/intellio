@@ -48,15 +48,17 @@ services:
   # TimescaleDB 컨테이너 추가
   timescaledb:
     image: timescale/timescaledb:latest-pg15
+    env_file:
+      - backend/stockeasy/collector/.env.development
     environment:
-      POSTGRES_DB: stockeasy_collector
-      POSTGRES_USER: collector_user
-      POSTGRES_PASSWORD: ${COLLECTOR_DB_PASSWORD}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
-      PGDATA: /var/lib/postgresql/data/pgdata
-      LANG: C.UTF-8
-      LC_ALL: C.UTF-8
-      TZ: Asia/Seoul
+      - POSTGRES_DB=${TIMESCALE_DB}
+      - POSTGRES_USER=${TIMESCALE_USER}
+      - POSTGRES_PASSWORD=${TIMESCALE_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=C
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
+      - TZ=Asia/Seoul
     volumes:
       - timescale_data:/var/lib/postgresql/data
       - ./backend/stockeasy/collector/database/init:/docker-entrypoint-initdb.d
@@ -83,14 +85,14 @@ services:
   pgbouncer-timescale:
     image: edoburu/pgbouncer:latest
     environment:
-      - DB_USER=collector_user
-      - DB_PASSWORD=${COLLECTOR_DB_PASSWORD}
+      - DB_USER=${TIMESCALE_USER}
+      - DB_PASSWORD=${TIMESCALE_PASSWORD}
       - DB_HOST=timescaledb
-      - DB_NAME=stockeasy_collector
+      - DB_NAME=${TIMESCALE_DB}
       - POOL_MODE=session
       - MAX_CLIENT_CONN=100
       - DEFAULT_POOL_SIZE=20
-      - ADMIN_USERS=collector_user
+      - ADMIN_USERS=${TIMESCALE_USER}
       - LISTEN_PORT=6432
       - AUTH_TYPE=scram-sha-256
     ports:

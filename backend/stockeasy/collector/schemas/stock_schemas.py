@@ -2,7 +2,7 @@
 주식 데이터용 Pydantic 스키마
 """
 from datetime import datetime, date
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from decimal import Decimal
 
 from pydantic import BaseModel, Field, validator
@@ -195,6 +195,28 @@ class ChartDataResponse(BaseModel):
     total_count: int = Field(..., description="총 데이터 개수")
 
 
+class CompressedChartDataResponse(BaseModel):
+    """압축된 차트 데이터 응답 (대량 데이터용)"""
+    symbol: str = Field(..., description="종목코드")
+    name: str = Field(..., description="종목명")
+    period: str = Field(..., description="조회 기간")
+    interval: str = Field(..., description="간격")
+    
+    # 스키마 정보
+    schema: Dict[str, List[str]] = Field(..., description="데이터 스키마")
+    
+    # 압축된 데이터 (배열의 배열)
+    data: List[List] = Field(..., description="압축된 차트 데이터")
+    total_count: int = Field(..., description="총 데이터 개수")
+    
+    @validator('schema')
+    def validate_schema(cls, v):
+        required_fields = ["timestamp", "open", "high", "low", "close", "volume"]
+        if "fields" not in v or not all(field in v["fields"] for field in required_fields):
+            raise ValueError('스키마에 필수 필드가 누락되었습니다')
+        return v
+
+
 class StockSearchRequest(BaseModel):
     """종목 검색 요청"""
     query: str = Field(..., description="검색어", min_length=1, max_length=100)
@@ -230,4 +252,30 @@ class StockListRequest(BaseModel):
     def validate_sort_order(cls, v):
         if v not in ['asc', 'desc']:
             raise ValueError('정렬 순서는 asc 또는 desc여야 합니다')
-        return v 
+        return v
+
+
+class CompressedSupplyDemandResponse(BaseModel):
+    """압축된 수급 데이터 응답 (대량 데이터용)"""
+    symbol: str = Field(..., description="종목코드")
+    name: str = Field(..., description="종목명")
+    start_date: str = Field(..., description="시작일")
+    end_date: str = Field(..., description="종료일")
+    
+    # 스키마 정보
+    schema: Dict[str, List[str]] = Field(..., description="데이터 스키마")
+    
+    # 압축된 데이터 (배열의 배열)
+    data: List[List] = Field(..., description="압축된 수급 데이터 [[date, current_price, individual_investor, foreign_investor, ...], ...]")
+    
+    total_count: int = Field(..., description="총 데이터 개수")
+
+
+class SupplyDemandResponse(BaseModel):
+    """수급 데이터 응답"""
+    symbol: str = Field(..., description="종목코드")
+    name: str = Field(..., description="종목명")
+    start_date: str = Field(..., description="시작일")
+    end_date: str = Field(..., description="종료일")
+    data: List[Dict[str, Any]] = Field(..., description="수급 데이터")
+    total_count: int = Field(..., description="총 데이터 개수") 

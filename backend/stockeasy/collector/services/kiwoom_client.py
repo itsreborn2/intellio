@@ -1,5 +1,32 @@
 """
 키움증권 REST API 클라이언트
+
+새로운 통합 API 사용법:
+
+# 1. 기본 API 호출
+result = await client.call_api(
+    api_id='ka10001',
+    endpoint='/api/dostk/stkinfo',
+    data={'stk_cd': '005930'}
+)
+
+# 2. 카테고리별 편의 함수 사용
+result = await client.call_stock_info_api('ka10001', {'stk_cd': '005930'})
+result = await client.call_account_api('ka10072', account_data)
+result = await client.call_market_condition_api('ka10063', market_data)
+
+# 3. 특정 TR 전용 함수 사용
+result = await client.get_daily_realized_profit_loss(account_data)
+result = await client.get_investor_trading_by_market(market_data)
+
+# 4. 연속조회 예시
+result = await client.call_api(
+    api_id='ka10099',
+    endpoint='/api/dostk/stkinfo',
+    data={'mrkt_tp': '0'},
+    cont_yn='Y',
+    next_key='received_next_key'
+)
 """
 import asyncio
 import json
@@ -62,6 +89,20 @@ class KiwoomStockListResponse(BaseModel):
     """키움 주식 리스트 응답"""
     output: List[KiwoomStockListItem]
     response_headers: Dict[str, str]
+
+
+class KiwoomChartData(BaseModel):
+    """키움 일봉차트 데이터 (ka10081)"""
+    date: str                          # 날짜
+    open: Optional[str] = None         # 시가
+    high: Optional[str] = None         # 고가  
+    low: Optional[str] = None          # 저가
+    close: Optional[str] = None        # 종가
+    volume: Optional[str] = None       # 거래량
+    trading_value: Optional[str] = None # 거래대금
+    change_amount: Optional[str] = None # 전일대비
+    change_rate: Optional[str] = None   # 등락률
+    previous_close: Optional[str] = None # 전일종가
 
 
 class KiwoomSupplyDemand(BaseModel):
@@ -188,26 +229,43 @@ class KiwoomAPIClient:
             raise
     
     async def _rate_limit(self) -> None:
-        """API 호출 제한 관리"""
+        """API 호출 제한 관리 - 키움 TR 제약: 초당 4.8회 (0.208초 간격)"""
         async with self.semaphore:
             current_time = asyncio.get_event_loop().time()
             time_diff = current_time - self.last_request_time
             
-            # 초당 제한 확인
-            if time_diff < 1.0 / settings.MAX_API_CALLS_PER_SECOND:
-                await asyncio.sleep(1.0 / settings.MAX_API_CALLS_PER_SECOND - time_diff)
+            # 키움 API 제약: 초당 4.8회 = 0.208초 간격
+            MIN_INTERVAL = 0.208  # 초당 4.8회
+            
+            if time_diff < MIN_INTERVAL:
+                sleep_time = MIN_INTERVAL - time_diff
+                logger.debug(f"API 호출 제한 대기: {sleep_time:.3f}초")
+                await asyncio.sleep(sleep_time)
             
             self.last_request_time = asyncio.get_event_loop().time()
             self.request_count += 1
     
-    async def _make_request(
+    async def _make_kiwoom_api_request(
         self,
         api_id: str,
+        endpoint: str,
         data: Dict[str, Any],
         cont_yn: str = 'N',
         next_key: str = ''
     ) -> Dict[str, Any]:
-        """공통 API 요청 처리"""
+        """
+        키움 API 통합 요청 처리 함수
+        
+        Args:
+            api_id (str): TR명 (예: ka10001, ka10059, ka10072, ka10063, ka10099)
+            endpoint (str): API 엔드포인트 (예: /api/dostk/stkinfo, /api/dostk/acnt, /api/dostk/mrkcond)
+            data (Dict[str, Any]): 요청 데이터
+            cont_yn (str): 연속조회여부 ('N' 또는 'Y')
+            next_key (str): 연속조회키
+            
+        Returns:
+            Dict[str, Any]: API 응답 데이터
+        """
         # 인증 실패 시 에러 발생
         if self._auth_failed:
             raise Exception(f"키움 API 인증이 실패했습니다. {api_id} 호출 불가")
@@ -215,7 +273,7 @@ class KiwoomAPIClient:
         await self._rate_limit()
         token = await self._ensure_token()
         
-        url = f"{self.host}/api/dostk/stkinfo"
+        url = f"{self.host}{endpoint}"
         headers = {
             'Content-Type': 'application/json;charset=UTF-8',
             'authorization': f'Bearer {token}',
@@ -231,7 +289,7 @@ class KiwoomAPIClient:
                         result = await response.json()
                         
                         # 실제 API 응답 구조 로깅 (디버깅용)
-                        logger.info(f"키움 API 응답 ({api_id}): {result}")
+                        logger.debug(f"키움 API 응답 ({api_id}): 상태코드={response.status}")
                         
                         # 응답 헤더 정보 추가 (기존 데이터 덮어쓰지 않도록 주의)
                         if 'response_headers' not in result:
@@ -253,7 +311,7 @@ class KiwoomAPIClient:
             error_msg = f"API 요청 중 오류 ({api_id}): {e}"
             logger.error(error_msg)
             raise Exception(error_msg)
-    
+
     async def get_stock_info(self, symbol: str) -> Optional[KiwoomStockInfo]:
         """주식 기본정보 조회 (ka10001) - 실제 API 응답 구조에 맞게 수정"""
         try:
@@ -263,7 +321,7 @@ class KiwoomAPIClient:
                 'stk_cd': symbol
             }
             
-            result = await self._make_request('ka10001', data)
+            result = await self._make_kiwoom_api_request('ka10001', '/api/dostk/stkinfo', data)
             
             # 실제 키움 API 응답 구조: 데이터가 루트 레벨에 있음
             # return_code가 0이면 성공
@@ -299,7 +357,7 @@ class KiwoomAPIClient:
     ) -> Optional[KiwoomSupplyDemand]:
         """종목별 투자자 기관별 정보 조회 (ka10059) - 실제 API 응답 구조에 맞게 수정"""
         try:
-            logger.debug(f"수급데이터 조회: {symbol} {date}")
+            logger.info(f"수급데이터 조회: {symbol} {date}")
             
             data = {
                 'dt': date,
@@ -309,7 +367,7 @@ class KiwoomAPIClient:
                 'unit_tp': unit_tp
             }
             
-            result = await self._make_request('ka10059', data)
+            result = await self._make_kiwoom_api_request('ka10059', '/api/dostk/stkinfo', data)
             
             # 실제 키움 API 응답 구조: return_code 확인
             if result.get('return_code') == 0:
@@ -587,8 +645,7 @@ class KiwoomAPIClient:
                     if not next_key:
                         break
                     
-                    # 연속조회 간격
-                    await asyncio.sleep(0.2)
+                    # API 호출 간격은 _rate_limit()에서 자동 관리됨 (0.208초 간격)
                 else:
                     logger.warning(f"시장 {mrkt_tp} 종목 리스트 조회 실패 - return_code: {result.get('return_code')}")
                     break
@@ -607,45 +664,9 @@ class KiwoomAPIClient:
         next_key: str = ''
     ) -> Dict[str, Any]:
         """
-        주식 리스트 조회 API 요청 (ka10099) - 실제 API 응답 구조에 맞게 수정
+        주식 리스트 조회 API 요청 (ka10099) - 통합 함수 사용으로 간소화
         """
-        url = f"{self.host}/api/dostk/stkinfo"
-        headers = {
-            'Content-Type': 'application/json;charset=UTF-8',
-            'authorization': f'Bearer {token}',
-            'cont-yn': cont_yn,
-            'next-key': next_key,
-            'api-id': 'ka10099',
-        }
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, json=data) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        
-                        # 실제 API 응답 구조 로깅 (디버깅용)
-                        logger.info(f"키움 API ka10099 응답: 총 {len(result['list'])}개 종목")
-                        
-                        # 응답 헤더 정보 추가 (기존 데이터 덮어쓰지 않도록 주의)
-                        if 'response_headers' not in result:
-                            result['response_headers'] = {
-                                'next-key': response.headers.get('next-key', ''),
-                                'cont-yn': response.headers.get('cont-yn', 'N'),
-                                'api-id': response.headers.get('api-id', 'ka10099')
-                            }
-                        
-                        return result
-                    else:
-                        error_text = await response.text()
-                        error_msg = f"종목 리스트 API 호출 실패: {response.status} - {error_text}"
-                        logger.error(error_msg)
-                        raise Exception(error_msg)
-                        
-        except Exception as e:
-            error_msg = f"종목 리스트 API 요청 중 오류: {e}"
-            logger.error(error_msg)
-            raise Exception(error_msg)
+        return await self._make_kiwoom_api_request('ka10099', '/api/dostk/stkinfo', data, cont_yn, next_key)
         
     async def get_stock_list_for_stockai(self) -> List[Dict[str, str]]:
         """
@@ -711,4 +732,524 @@ class KiwoomAPIClient:
         """클라이언트 정리"""
         logger.info("키움 API 클라이언트 정리 중...")
         # 필요한 정리 작업 수행
-        logger.info("키움 API 클라이언트 정리 완료") 
+        logger.info("키움 API 클라이언트 정리 완료")
+
+    async def call_api(
+        self,
+        api_id: str,
+        endpoint: str,
+        data: Dict[str, Any],
+        cont_yn: str = 'N',
+        next_key: str = ''
+    ) -> Dict[str, Any]:
+        """
+        키움 API 직접 호출 함수 (외부에서 사용 가능)
+        
+        Args:
+            api_id (str): TR명 (예: ka10001, ka10059, ka10072, ka10063, ka10099)
+            endpoint (str): API 엔드포인트 (예: /api/dostk/stkinfo, /api/dostk/acnt, /api/dostk/mrkcond)
+            data (Dict[str, Any]): 요청 데이터
+            cont_yn (str): 연속조회여부 ('N' 또는 'Y')
+            next_key (str): 연속조회키
+            
+        Returns:
+            Dict[str, Any]: API 응답 데이터
+        """
+        logger.info(f"키움 API 호출: {api_id} -> {endpoint}")
+        return await self._make_kiwoom_api_request(api_id, endpoint, data, cont_yn, next_key)
+    
+    async def call_stock_info_api(
+        self,
+        api_id: str,
+        data: Dict[str, Any],
+        cont_yn: str = 'N',
+        next_key: str = ''
+    ) -> Dict[str, Any]:
+        """
+        주식정보 관련 API 호출 (/api/dostk/stkinfo)
+        
+        Args:
+            api_id (str): TR명 (예: ka10001, ka10059, ka10099 등)
+            data (Dict[str, Any]): 요청 데이터
+            cont_yn (str): 연속조회여부
+            next_key (str): 연속조회키
+            
+        Returns:
+            Dict[str, Any]: API 응답 데이터
+        """
+        return await self._make_kiwoom_api_request(api_id, '/api/dostk/stkinfo', data, cont_yn, next_key)
+    
+    async def call_account_api(
+        self,
+        api_id: str,
+        data: Dict[str, Any],
+        cont_yn: str = 'N',
+        next_key: str = ''
+    ) -> Dict[str, Any]:
+        """
+        계좌 관련 API 호출 (/api/dostk/acnt)
+        
+        Args:
+            api_id (str): TR명 (예: ka10072 등)
+            data (Dict[str, Any]): 요청 데이터
+            cont_yn (str): 연속조회여부
+            next_key (str): 연속조회키
+            
+        Returns:
+            Dict[str, Any]: API 응답 데이터
+        """
+        return await self._make_kiwoom_api_request(api_id, '/api/dostk/acnt', data, cont_yn, next_key)
+    
+    async def call_market_condition_api(
+        self,
+        api_id: str,
+        data: Dict[str, Any],
+        cont_yn: str = 'N',
+        next_key: str = ''
+    ) -> Dict[str, Any]:
+        """
+        시장상황 관련 API 호출 (/api/dostk/mrkcond)
+        
+        Args:
+            api_id (str): TR명 (예: ka10063 등)
+            data (Dict[str, Any]): 요청 데이터
+            cont_yn (str): 연속조회여부
+            next_key (str): 연속조회키
+            
+        Returns:
+            Dict[str, Any]: API 응답 데이터
+        """
+        return await self._make_kiwoom_api_request(api_id, '/api/dostk/mrkcond', data, cont_yn, next_key)
+    
+    # 특정 TR 전용 편의 함수들
+    async def get_daily_realized_profit_loss(
+        self,
+        data: Dict[str, Any],
+        cont_yn: str = 'N',
+        next_key: str = ''
+    ) -> Dict[str, Any]:
+        """
+        일자별종목별실현손익 조회 (ka10072)
+        
+        Args:
+            data: 요청 데이터 (계좌정보, 일자 등 포함)
+            cont_yn: 연속조회여부
+            next_key: 연속조회키
+            
+        Returns:
+            Dict[str, Any]: 실현손익 데이터
+        """
+        logger.info(f"일자별종목별실현손익 조회: {data}")
+        return await self.call_account_api('ka10072', data, cont_yn, next_key)
+    
+    async def get_investor_trading_by_market(
+        self,
+        data: Dict[str, Any],
+        cont_yn: str = 'N',
+        next_key: str = ''
+    ) -> Dict[str, Any]:
+        """
+        장중투자자별매매 조회 (ka10063)
+        
+        Args:
+            data: 요청 데이터 (날짜, 시장구분 등 포함)
+            cont_yn: 연속조회여부
+            next_key: 연속조회키
+            
+        Returns:
+            Dict[str, Any]: 투자자별 매매 데이터
+        """
+        logger.info(f"장중투자자별매매 조회: {data}")
+        return await self.call_market_condition_api('ka10063', data, cont_yn, next_key)
+
+    async def get_daily_chart_data(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        adjusted_price: str = '1'  # 1:수정주가, 0:원주가
+    ) -> List[KiwoomChartData]:
+        """
+        일봉차트 데이터 조회 (ka10081) - 연속조회 지원
+        
+        Args:
+            symbol (str): 종목코드
+            start_date (str): 시작일자 (YYYYMMDD) - 실제로는 base_dt로 사용됨
+            end_date (str): 종료일자 (YYYYMMDD) - 키움 API에서는 사용하지 않음
+            adjusted_price (str): 수정주가구분 (1:수정주가, 0:원주가)
+            
+        Returns:
+            List[KiwoomChartData]: 차트 데이터 리스트 (최신순)
+        """
+        try:
+            # 기준일자는 end_date(최근일자)를 사용
+            base_date = end_date
+            logger.info(f"일봉차트 데이터 조회: {symbol} (기준일자: {base_date})")
+            
+            all_chart_data = []
+            cont_yn = 'N'
+            next_key = ''
+            
+            while True:
+                # 키움 API ka10081 요청 형식에 맞게 수정
+                data = {
+                    'stk_cd': symbol,
+                    'base_dt': base_date,
+                    'upd_stkpc_tp': adjusted_price
+                }
+                
+                result = await self._make_kiwoom_api_request('ka10081', '/api/dostk/chart', data, cont_yn, next_key)
+                
+                if result.get('return_code') == 0:
+                    # 차트 데이터 추출 - ka10081 응답 구조에 맞게 수정
+                    chart_data = None
+                    if 'stk_dt_pole_chart_qry' in result and isinstance(result['stk_dt_pole_chart_qry'], list):
+                        chart_data = result['stk_dt_pole_chart_qry']
+                    elif 'output' in result and isinstance(result['output'], list):
+                        chart_data = result['output']
+                    elif 'list' in result and isinstance(result['list'], list):
+                        chart_data = result['list']
+                    elif isinstance(result, list):
+                        chart_data = result
+                    
+                    if not chart_data:
+                        break
+                    
+                    # 데이터 변환 및 기간 필터링 - ka10081 실제 필드명 사용
+                    for item in chart_data:
+                        try:
+                            item_date = item.get('dt', '')  # 실제 필드명: dt
+                            
+                            # start_date 이전 데이터는 제외 (기간 필터링)
+                            if item_date and item_date < start_date:
+                                logger.debug(f"기간 필터링: {item_date} < {start_date}, 수집 종료")
+                                return all_chart_data  # 더 이상 진행하지 않고 종료
+                            
+                            # 전일대비 및 등락률 계산
+                            current_price = item.get('cur_prc', '0')  # 현재가
+                            prev_close = item.get('pred_close_pric', '0')  # 전일종가
+                            
+                            change_amount = '0'
+                            change_rate = '0'
+                            if current_price and prev_close and prev_close != '0':
+                                try:
+                                    cur_val = float(current_price)
+                                    prev_val = float(prev_close)
+                                    change_amount = str(int(cur_val - prev_val))
+                                    if prev_val != 0:
+                                        change_rate = str(round((cur_val - prev_val) / prev_val * 100, 2))
+                                except (ValueError, ZeroDivisionError):
+                                    pass
+                            
+                            chart_item = KiwoomChartData(
+                                date=item_date,
+                                open=item.get('open_pric', '0'),      # 시가
+                                high=item.get('high_pric', '0'),      # 고가
+                                low=item.get('low_pric', '0'),        # 저가
+                                close=current_price,                   # 종가 (현재가)
+                                volume=item.get('trde_qty', '0'),     # 거래량
+                                trading_value=item.get('trde_prica', '0'),  # 거래대금
+                                change_amount=change_amount,           # 전일대비 (계산)
+                                change_rate=change_rate,               # 등락률 (계산)
+                                previous_close=prev_close              # 전일종가
+                            )
+                            all_chart_data.append(chart_item)
+                        except Exception as e:
+                            logger.warning(f"차트 데이터 변환 실패: {item}, 오류: {e}")
+                            continue
+                    
+                    logger.debug(f"차트 데이터 배치 조회: {len(chart_data)}개 (총 {len(all_chart_data)}개)")
+                    
+                    # 연속조회 확인
+                    response_headers = result.get('response_headers', {})
+                    if response_headers.get('cont-yn') != 'Y':
+                        break
+                    
+                    # 다음 조회 준비
+                    cont_yn = 'Y'
+                    next_key = response_headers.get('next-key', '')
+                    
+                    if not next_key:
+                        break
+                    
+                    # API 호출 간격은 _rate_limit()에서 자동 관리됨 (0.208초 간격)
+                else:
+                    logger.warning(f"차트 데이터 조회 실패 - return_code: {result.get('return_code')}, return_msg: {result.get('return_msg')}")
+                    break
+            
+            logger.info(f"일봉차트 데이터 조회 완료: {symbol} ({start_date} ~ {base_date}) - {len(all_chart_data)}개")
+            return all_chart_data
+            
+        except Exception as e:
+            logger.error(f"일봉차트 데이터 조회 실패 ({symbol}): {e}")
+            return []
+
+    async def get_supply_demand_detailed(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        amt_qty_tp: str = '1',  # 1:금액, 2:수량
+        trde_tp: str = '0',     # 0:순매수, 1:매수, 2:매도
+        unit_tp: str = '1000'   # 1000:천주, 1:단주
+    ) -> List[Dict[str, Any]]:
+        """
+        수급 데이터 상세 조회 (ka10059) - 연속조회 지원
+        
+        Args:
+            symbol (str): 종목코드
+            start_date (str): 시작일자 (YYYYMMDD)
+            end_date (str): 종료일자 (YYYYMMDD)
+            amt_qty_tp (str): 금액수량구분 (1:금액, 2:수량)
+            trde_tp (str): 매매구분 (0:순매수, 1:매수, 2:매도)
+            unit_tp (str): 단위구분 (1000:천주, 1:단주)
+            
+        Returns:
+            List[Dict[str, Any]]: 수급 데이터 리스트 (최신순)
+        """
+        try:
+            # 기준일자는 end_date(최근일자)를 사용
+            base_date = end_date
+            logger.info(f"수급 데이터 상세 조회: {symbol} (기준일자: {base_date}, 목표일자: {start_date})")
+            
+            all_supply_data = []
+            cont_yn = 'N'
+            next_key = ''
+            
+            from datetime import datetime
+            start_date_obj = datetime.strptime(start_date, '%Y%m%d')
+            
+            while True:
+                try:
+                    data = {
+                        'dt': base_date,
+                        'stk_cd': symbol,
+                        'amt_qty_tp': amt_qty_tp,
+                        'trde_tp': trde_tp,
+                        'unit_tp': unit_tp
+                    }
+                    
+                    result = await self._make_kiwoom_api_request('ka10059', '/api/dostk/stkinfo', data, cont_yn, next_key)
+                    
+                    if result.get('return_code') == 0:
+                        # 배치 데이터 처리 (stk_invsr_orgn 배열)
+                        stk_invsr_orgn = result.get('stk_invsr_orgn', [])
+                        if not stk_invsr_orgn:
+                            logger.warning(f"수급 데이터 없음: {symbol} {base_date}")
+                            break
+                        
+                        batch_data = []
+                        last_date = None
+                        
+                        for item in stk_invsr_orgn:
+                            try:
+                                item_date_str = item.get('dt', '')
+                                if not item_date_str:
+                                    continue
+                                
+                                item_date = datetime.strptime(item_date_str, '%Y%m%d')
+                                last_date = item_date_str
+                                
+                                # 키움 API 필드 → 우리 스키마 필드 매핑
+                                # 가격 정보에서 부호 제거 ("+61300" → "61300")
+                                cur_prc = item.get('cur_prc', '0')
+                                if cur_prc.startswith(('+', '-')):
+                                    current_price = cur_prc[1:]  # 부호 제거
+                                else:
+                                    current_price = cur_prc
+                                
+                                pred_pre = item.get('pred_pre', '0')
+                                if pred_pre.startswith(('+', '-')):
+                                    price_change = pred_pre[1:]  # 부호 제거
+                                    price_change_sign = '+' if pred_pre.startswith('+') else '-'
+                                else:
+                                    price_change = pred_pre
+                                    price_change_sign = '0'
+                                
+                                flu_rt = item.get('flu_rt', '0')
+                                if flu_rt.startswith(('+', '-')):
+                                    price_change_percent = flu_rt[1:]  # 부호 제거
+                                else:
+                                    price_change_percent = flu_rt
+                                
+                                # 수급 데이터 변환
+                                supply_data = {
+                                    'date': item_date_str,
+                                    'symbol': symbol,
+                                    'current_price': current_price,
+                                    'price_change_sign': price_change_sign,
+                                    'price_change': price_change,
+                                    'price_change_percent': price_change_percent,
+                                    'accumulated_volume': item.get('acc_trde_qty'),
+                                    'accumulated_value': item.get('acc_trde_prica'),
+                                    'individual_investor': item.get('ind_invsr'),
+                                    'foreign_investor': item.get('frgnr_invsr'),
+                                    'institution_total': item.get('orgn'),
+                                    'financial_investment': item.get('fnnc_invt'),
+                                    'insurance': item.get('insrnc'),
+                                    'investment_trust': item.get('invtrt'),
+                                    'other_financial': item.get('etc_fnnc'),
+                                    'bank': item.get('bank'),
+                                    'pension_fund': item.get('penfnd_etc'),
+                                    'private_fund': item.get('samo_fund'),
+                                    'government': item.get('natn'),
+                                    'other_corporation': item.get('etc_corp'),
+                                    'domestic_foreign': item.get('natfor')
+                                }
+                                batch_data.append(supply_data)
+                                
+                                # start_date에 도달했으면 중단
+                                if item_date <= start_date_obj:
+                                    break
+                                    
+                            except Exception as e:
+                                logger.warning(f"수급 데이터 변환 실패: {item}, 오류: {e}")
+                                continue
+                        
+                        all_supply_data.extend(batch_data)
+                        logger.debug(f"수급 데이터 배치 조회: {len(batch_data)}개 (총 {len(all_supply_data)}개)")
+                        
+                        # start_date에 도달했으면 중단
+                        if last_date:
+                            last_date_obj = datetime.strptime(last_date, '%Y%m%d')
+                            if last_date_obj <= start_date_obj:
+                                logger.info(f"목표 시작일자({start_date}) 도달: 마지막 조회일자 {last_date}")
+                                break
+                        
+                        # 연속조회 확인
+                        response_headers = result.get('response_headers', {})
+                        if response_headers.get('cont-yn') != 'Y':
+                            break
+                        
+                        # 다음 조회 준비
+                        cont_yn = 'Y'
+                        next_key = response_headers.get('next-key', '')
+                        
+                        if not next_key:
+                            break
+                        
+                        # API 호출 간격은 _rate_limit()에서 자동 관리됨 (0.208초 간격)
+                    else:
+                        logger.warning(f"수급 데이터 조회 실패 - return_code: {result.get('return_code')}, return_msg: {result.get('return_msg')}")
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"수급 데이터 조회 오류 ({symbol} {base_date}): {e}")
+                    break
+            
+            logger.info(f"수급 데이터 상세 조회 완료: {symbol} ({start_date} ~ {end_date}) - {len(all_supply_data)}개")
+            return all_supply_data
+            
+        except Exception as e:
+            logger.error(f"수급 데이터 상세 조회 실패 ({symbol}): {e}")
+            return []
+
+    async def get_multiple_chart_data(
+        self, 
+        symbols: List[str], 
+        start_date: str, 
+        end_date: str,
+        max_concurrent: int = 3  # 사용하지 않음 (하위 호환성을 위해 유지)
+    ) -> Dict[str, List[KiwoomChartData]]:
+        """
+        여러 종목 차트 데이터 순차 조회 (키움 API 제약: 초당 4.8회)
+        
+        Args:
+            symbols (List[str]): 종목코드 리스트
+            start_date (str): 시작일자 (YYYYMMDD)
+            end_date (str): 종료일자 (YYYYMMDD)
+            max_concurrent (int): 사용하지 않음 (하위 호환성)
+            
+        Returns:
+            Dict[str, List[KiwoomChartData]]: {종목코드: 차트데이터리스트}
+        """
+        logger.info(f"여러 종목 차트 데이터 순차 조회: {len(symbols)}개 종목")
+        
+        chart_data_dict = {}
+        success_count = 0
+        
+        # 키움 API 제약: 초당 4.8회 = 0.208초 간격
+        API_CALL_INTERVAL = 0.208  # 초당 4.8회
+        
+        for i, symbol in enumerate(symbols):
+            try:
+                logger.debug(f"차트 데이터 조회 진행: {i+1}/{len(symbols)} - {symbol}")
+                
+                chart_data = await self.get_daily_chart_data(symbol, start_date, end_date)
+                chart_data_dict[symbol] = chart_data
+                
+                if chart_data:
+                    success_count += 1
+                    logger.debug(f"차트 데이터 조회 성공: {symbol} - {len(chart_data)}건")
+                else:
+                    logger.warning(f"차트 데이터 조회 결과 없음: {symbol}")
+                
+                # API 호출 제한 준수 (마지막 호출 제외)
+                if i < len(symbols) - 1:
+                    await asyncio.sleep(API_CALL_INTERVAL)
+                
+            except Exception as e:
+                logger.error(f"종목 차트 데이터 조회 실패 ({symbol}): {e}")
+                chart_data_dict[symbol] = []
+                
+                # 에러 발생 시에도 대기 (API 제한 준수)
+                if i < len(symbols) - 1:
+                    await asyncio.sleep(API_CALL_INTERVAL)
+        
+        logger.info(f"여러 종목 차트 데이터 순차 조회 완료: {success_count}/{len(symbols)}개 성공")
+        return chart_data_dict
+
+    async def get_multiple_supply_demand_data(
+        self, 
+        symbols: List[str], 
+        start_date: str, 
+        end_date: str,
+        max_concurrent: int = 2  # 사용하지 않음 (하위 호환성을 위해 유지)
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        여러 종목 수급 데이터 순차 조회 (키움 API 제약: 초당 4.8회)
+        
+        Args:
+            symbols (List[str]): 종목코드 리스트
+            start_date (str): 시작일자 (YYYYMMDD)
+            end_date (str): 종료일자 (YYYYMMDD)
+            max_concurrent (int): 사용하지 않음 (하위 호환성)
+            
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: {종목코드: 수급데이터리스트}
+        """
+        logger.info(f"여러 종목 수급 데이터 순차 조회: {len(symbols)}개 종목")
+        
+        supply_data_dict = {}
+        success_count = 0
+        
+        # 키움 API 제약: 초당 4.8회 = 0.208초 간격
+        API_CALL_INTERVAL = 0.208  # 초당 4.8회
+        
+        for i, symbol in enumerate(symbols):
+            try:
+                logger.debug(f"수급 데이터 조회 진행: {i+1}/{len(symbols)} - {symbol}")
+                
+                supply_data = await self.get_supply_demand_detailed(symbol, start_date, end_date)
+                supply_data_dict[symbol] = supply_data
+                
+                if supply_data:
+                    success_count += 1
+                    logger.info(f"수급 데이터 조회 성공: {symbol} - {len(supply_data)}건")
+                else:
+                    logger.warning(f"수급 데이터 조회 결과 없음: {symbol}")
+                
+                # API 호출 제한 준수 (마지막 호출 제외)
+                if i < len(symbols) - 1:
+                    await asyncio.sleep(API_CALL_INTERVAL)
+                
+            except Exception as e:
+                logger.error(f"종목 수급 데이터 조회 실패 ({symbol}): {e}")
+                supply_data_dict[symbol] = []
+                
+                # 에러 발생 시에도 대기 (API 제한 준수)
+                if i < len(symbols) - 1:
+                    await asyncio.sleep(API_CALL_INTERVAL)
+        
+        logger.info(f"여러 종목 수급 데이터 순차 조회 완료: {success_count}/{len(symbols)}개 성공")
+        return supply_data_dict 

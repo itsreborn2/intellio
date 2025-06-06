@@ -65,6 +65,23 @@ class Settings(BaseSettings):
     PGBOUNCER_HOST: str = Field(default="pgbouncer", env="PGBOUNCER_HOST")
     PGBOUNCER_PORT: int = Field(default=6432, env="PGBOUNCER_PORT")
     
+    # TimescaleDB 설정 (새로 추가)
+    TIMESCALE_HOST: str = Field(default="pgbouncer-timescale", env="TIMESCALE_HOST")
+    TIMESCALE_PORT: int = Field(default=6432, env="TIMESCALE_PORT")
+    TIMESCALE_USER: str = Field(..., env="TIMESCALE_USER")
+    TIMESCALE_PASSWORD: str = Field(..., env="TIMESCALE_PASSWORD")
+    TIMESCALE_DB: str = Field(default="stockeasy_collector", env="TIMESCALE_DB")
+    
+    @property
+    def TIMESCALE_DATABASE_URL(self) -> str:
+        """TimescaleDB 동기 연결 URL"""
+        return f"postgresql+psycopg2://{self.TIMESCALE_USER}:{self.TIMESCALE_PASSWORD}@{self.TIMESCALE_HOST}:{self.TIMESCALE_PORT}/{self.TIMESCALE_DB}"
+    
+    @property
+    def TIMESCALE_ASYNC_DATABASE_URL(self) -> str:
+        """TimescaleDB 비동기 연결 URL"""
+        return f"postgresql+asyncpg://{self.TIMESCALE_USER}:{self.TIMESCALE_PASSWORD}@{self.TIMESCALE_HOST}:{self.TIMESCALE_PORT}/{self.TIMESCALE_DB}"
+    
     # 데이터베이스 설정
     DATABASE_URL: str = Field(default="postgresql://intellio:intellio123@postgres:5432/intellio", env="DATABASE_URL")
     
@@ -171,6 +188,7 @@ class Settings(BaseSettings):
         case_sensitive = True
         env_file_encoding = 'utf-8'
         env_file = ENV_FILES
+        extra = "ignore"  # 추가 환경변수 무시
 
 
 @lru_cache()
@@ -180,4 +198,8 @@ def get_settings() -> Settings:
     print(f"키움 API 키 로드됨: {s.KIWOOM_APP_KEY}")
     print(f"환경 변수 ENV: {s.ENV}")
     print(f"디버그 모드: {s.DEBUG}")
+    print(f"TimescaleDB 설정: {s.TIMESCALE_USER}")
+    print(f"TIMESCALE_PASSWORD: {s.TIMESCALE_PASSWORD}")
+    print(f"TIMESCALE_DATABASE_URL: {s.TIMESCALE_DATABASE_URL}")
+    print(f"TIMESCALE_ASYNC_DATABASE_URL: {s.TIMESCALE_ASYNC_DATABASE_URL}")
     return s 
