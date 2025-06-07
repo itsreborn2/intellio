@@ -13,6 +13,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from loguru import logger
 from stockeasy.collector.core.config import get_settings
 from stockeasy.collector.core.logger import LoggerMixin, LogContext, log_scheduler_job
+from holidayskr import is_holiday, today_is_holiday, year_holidays
 
 settings = get_settings()
 
@@ -40,6 +41,21 @@ class SchedulerService(LoggerMixin):
         
         logger.info("스케줄러 서비스 초기화 완료")
     
+    def _is_holiday_or_weekend(self) -> bool:
+        """주말 또는 공휴일인지 확인"""
+        now = datetime.now()
+        
+        # 주말 확인 (토요일: 5, 일요일: 6)
+        if now.weekday() >= 5:
+            logger.info(f"주말이므로 스케줄 작업을 건너뜁니다: {now.strftime('%Y-%m-%d %A')}")
+            return True
+        
+        if today_is_holiday():
+            logger.info(f"공휴일이므로 스케줄 작업을 건너뜁니다: {now.strftime('%Y-%m-%d %A')}")
+            return True
+        
+        return False
+
     async def start(self) -> None:
         """스케줄러 시작"""
         if self._is_running:
@@ -80,20 +96,20 @@ class SchedulerService(LoggerMixin):
         """스케줄 작업 등록"""
         logger.info("스케줄 작업 등록 시작")
         
-        # 1. 매일 아침 7시 30분: 전체 종목 리스트 업데이트
+        # 1. 매일 아침 7시 30분: 전체 종목 리스트 업데이트 (평일만)
         self.scheduler.add_job(
             func=self._update_stock_list_job,
-            trigger=CronTrigger(hour=7, minute=30),
+            trigger=CronTrigger(hour=7, minute=30, day_of_week='mon-fri'),
             id="daily_stock_list_update",
             name="일일 종목 리스트 업데이트",
             replace_existing=True,
             max_instances=1
         )
         
-        # 2. 매일 오전 8시: ETF 구성종목 업데이트
+        # 2. 매일 오전 8시: ETF 구성종목 업데이트 (평일만)
         self.scheduler.add_job(
             func=self._update_etf_components_job,
-            trigger=CronTrigger(hour=8, minute=0),
+            trigger=CronTrigger(hour=8, minute=0, day_of_week='mon-fri'),
             id="daily_etf_update",
             name="일일 ETF 구성종목 업데이트",
             replace_existing=True,
@@ -125,6 +141,11 @@ class SchedulerService(LoggerMixin):
     @log_scheduler_job("일일 종목 리스트 업데이트")
     async def _update_stock_list_job(self) -> None:
         """종목 리스트 업데이트 작업"""
+        # 주말/공휴일 확인
+        if self._is_holiday_or_weekend():
+            logger.info("주말 또는 공휴일이므로 종목 리스트 업데이트를 건너뜁니다")
+            return
+        
         try:
             if not self.data_collector:
                 logger.warning("데이터 수집 서비스가 없습니다")
@@ -133,7 +154,7 @@ class SchedulerService(LoggerMixin):
             # 키움 API에서 전체 종목 리스트 조회 (강제 새로고침)
             kiwoom_client = self.data_collector.kiwoom_client
             stock_list = await kiwoom_client.get_all_stock_list(force_refresh=True)
-            stock_list_for_stockai = await self.kiwoom_client.get_stock_list_for_stockai(force_refresh=True)
+            stock_list_for_stockai = await kiwoom_client.get_stock_list_for_stockai(force_refresh=True)
 
             # 캐시에 저장
             if self.cache_manager:
@@ -164,6 +185,11 @@ class SchedulerService(LoggerMixin):
     @log_scheduler_job("일일 ETF 구성종목 업데이트")
     async def _update_etf_components_job(self) -> None:
         """ETF 구성종목 업데이트 작업"""
+        # 주말/공휴일 확인
+        if self._is_holiday_or_weekend():
+            logger.info("주말 또는 공휴일이므로 ETF 구성종목 업데이트를 건너뜁니다")
+            return
+        
         try:
             if not self.data_collector:
                 logger.warning("데이터 수집 서비스가 없습니다")

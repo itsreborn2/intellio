@@ -20,9 +20,7 @@ from ..core.timescale_database import (
 from ..models.timescale_models import (
     StockPrice, 
     SupplyDemand, 
-    RealtimePrice, 
     MarketIndex, 
-    TradingSession,
     TimescaleBase
 )
 from ..schemas.timescale_schemas import (
@@ -686,9 +684,11 @@ class TimescaleService:
                         created_at = EXCLUDED.created_at
                 """)
                 
-                # created_at 필드 추가 및 None 값 처리
+                # created_at 필드 추가 및 None 값 처리, 데이터 유효성 검사
+                valid_supply_dicts = []
                 for supply_dict in supply_dicts:
                     supply_dict['created_at'] = datetime.utcnow()
+                    
                     # 새로운 필드들에 대한 기본값 설정
                     for field in ['current_price', 'price_change_sign', 'price_change', 'price_change_percent',
                                 'accumulated_volume', 'accumulated_value', 'individual_investor', 'foreign_investor', 
@@ -697,6 +697,17 @@ class TimescaleService:
                                 'government', 'other_corporation', 'domestic_foreign']:
                         if field not in supply_dict:
                             supply_dict[field] = None
+                    
+                    # price_change_percent 값 유효성 검사 및 제한
+                    if supply_dict.get('price_change_percent') is not None:
+                        pcp = float(supply_dict['price_change_percent'])
+                        if abs(pcp) > 999999.9999:  # Numeric(10,4) 최대값
+                            self.logger.warning(f"수급 데이터 - 종목 {supply_dict.get('symbol')}, 날짜 {supply_dict.get('date')}: price_change_percent 값이 너무 큼 ({pcp}), 999999.9999로 제한")
+                            supply_dict['price_change_percent'] = 999999.9999 if pcp > 0 else -999999.9999
+                    
+                    valid_supply_dicts.append(supply_dict)
+                
+                supply_dicts = valid_supply_dicts
                 
                 await session.execute(upsert_query, supply_dicts)
                 

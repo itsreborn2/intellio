@@ -1,92 +1,132 @@
--- TimescaleDB 하이퍼테이블 생성 및 최적화 설정
--- 이 스크립트는 01_init_timescaledb.sql 실행 후에 실행됩니다.
+-- TimescaleDB 하이퍼테이블 완전 재생성
+-- 모든 기존 테이블 삭제 후 현재 모델에 맞게 재생성
 
 -- ========================================
--- 기본 테이블 생성 (SQLAlchemy로 생성될 예정이지만 확실히 하기 위해)
+-- 기존 테이블 및 관련 객체 완전 삭제
 -- ========================================
 
--- 주가 데이터 테이블
-CREATE TABLE IF NOT EXISTS stock_prices (
+-- 연속 집계 뷰 삭제
+DROP MATERIALIZED VIEW IF EXISTS daily_candles CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS hourly_realtime_summary CASCADE;
+
+-- 기존 테이블 삭제 (CASCADE로 모든 의존성 포함)
+DROP TABLE IF EXISTS realtime_prices CASCADE;
+DROP TABLE IF EXISTS trading_sessions CASCADE;
+DROP TABLE IF EXISTS stock_prices CASCADE;
+DROP TABLE IF EXISTS supply_demand CASCADE;
+DROP TABLE IF EXISTS market_indices CASCADE;
+
+-- 기존 함수 삭제
+DROP FUNCTION IF EXISTS get_compression_stats();
+DROP FUNCTION IF EXISTS get_hypertable_info();
+
+-- ========================================
+-- 새 테이블 생성 (현재 모델 기준)
+-- ========================================
+
+-- 주가 데이터 테이블 (StockPrice 모델 기준)
+CREATE TABLE stock_prices (
     time TIMESTAMPTZ NOT NULL,
     symbol VARCHAR(10) NOT NULL,
-    interval_type VARCHAR(10) NOT NULL DEFAULT '1m',
+    interval_type VARCHAR(10) NOT NULL DEFAULT '1d',
+    
+    -- OHLCV 기본 데이터
     open NUMERIC(12,2),
     high NUMERIC(12,2),
     low NUMERIC(12,2),
     close NUMERIC(12,2),
     volume BIGINT,
     trading_value BIGINT,
+    
+    -- 변동 정보 (precision 10,4로 변경)
     change_amount NUMERIC(12,2),
-    change_rate NUMERIC(8,4),
+    price_change_percent NUMERIC(10,4),
+    volume_change BIGINT,
+    volume_change_percent NUMERIC(10,4),
+    
+    -- 기준가 정보
+    previous_close_price NUMERIC(12,2),
+    
+    -- 수정주가 관련 정보
+    adjusted_price_type VARCHAR(20),
+    adjustment_ratio NUMERIC(10,6),
+    adjusted_price_event VARCHAR(100),
+    
+    -- 업종 분류
+    major_industry_type VARCHAR(20),
+    minor_industry_type VARCHAR(20),
+    stock_info TEXT,
+    
+    -- 메타데이터
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    
     PRIMARY KEY (time, symbol, interval_type)
 );
 
--- 수급 데이터 테이블
-CREATE TABLE IF NOT EXISTS supply_demand (
+-- 수급 데이터 테이블 (SupplyDemand 모델 기준)
+CREATE TABLE supply_demand (
     date TIMESTAMPTZ NOT NULL,
     symbol VARCHAR(10) NOT NULL,
-    institution_amount BIGINT,
-    foreign_amount BIGINT,
-    individual_amount BIGINT,
-    institution_volume BIGINT,
-    foreign_volume BIGINT,
-    individual_volume BIGINT,
-    institution_cumulative BIGINT,
-    foreign_cumulative BIGINT,
+    
+    -- 현재가 정보
+    current_price NUMERIC(12,2),
+    price_change_sign VARCHAR(5),
+    price_change NUMERIC(12,2),
+    price_change_percent NUMERIC(10,4),  -- precision 10,4로 변경
+    
+    -- 거래 정보
+    accumulated_volume BIGINT,
+    accumulated_value BIGINT,
+    
+    -- 투자자별 수급 데이터
+    individual_investor BIGINT,
+    foreign_investor BIGINT,
+    institution_total BIGINT,
+    
+    -- 기관 세부 분류
+    financial_investment BIGINT,
+    insurance BIGINT,
+    investment_trust BIGINT,
+    other_financial BIGINT,
+    bank BIGINT,
+    pension_fund BIGINT,
+    private_fund BIGINT,
+    
+    -- 기타 분류
+    government BIGINT,
+    other_corporation BIGINT,
+    domestic_foreign BIGINT,
+    
+    -- 메타데이터
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    
     PRIMARY KEY (date, symbol)
 );
 
--- 실시간 가격 테이블
-CREATE TABLE IF NOT EXISTS realtime_prices (
-    time TIMESTAMPTZ NOT NULL,
-    symbol VARCHAR(10) NOT NULL,
-    price NUMERIC(12,2) NOT NULL,
-    volume BIGINT,
-    bid_price NUMERIC(12,2),
-    ask_price NUMERIC(12,2),
-    bid_volume BIGINT,
-    ask_volume BIGINT,
-    change_amount NUMERIC(12,2),
-    change_rate NUMERIC(8,4),
-    trading_value BIGINT,
-    accumulated_volume BIGINT,
-    accumulated_value BIGINT,
-    market_status VARCHAR(20),
-    is_suspended BOOLEAN DEFAULT FALSE,
-    PRIMARY KEY (time, symbol)
-);
-
--- 시장 지수 테이블
-CREATE TABLE IF NOT EXISTS market_indices (
+-- 시장 지수 테이블 (MarketIndex 모델 기준)
+CREATE TABLE market_indices (
     time TIMESTAMPTZ NOT NULL,
     index_code VARCHAR(20) NOT NULL,
+    
+    -- 지수 정보
     index_value NUMERIC(12,2) NOT NULL,
     change_amount NUMERIC(12,2),
-    change_rate NUMERIC(8,4),
+    price_change_percent NUMERIC(10,4),  -- precision 10,4로 변경
+    
+    -- 거래 정보
     volume BIGINT,
     trading_value BIGINT,
+    
+    -- 시장 정보
     rise_count INTEGER,
     fall_count INTEGER,
     unchanged_count INTEGER,
+    
+    -- 메타데이터
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    
     PRIMARY KEY (time, index_code)
-);
-
--- 거래 세션 테이블
-CREATE TABLE IF NOT EXISTS trading_sessions (
-    time TIMESTAMPTZ NOT NULL,
-    market VARCHAR(20) NOT NULL,
-    session_type VARCHAR(30) NOT NULL,
-    session_status VARCHAR(20) NOT NULL,
-    total_volume BIGINT,
-    total_value BIGINT,
-    listed_count INTEGER,
-    trading_count INTEGER,
-    meta_info TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (time, market)
 );
 
 -- ========================================
@@ -109,25 +149,9 @@ SELECT create_hypertable(
     if_not_exists => TRUE
 );
 
--- 실시간 가격 하이퍼테이블 (1시간 청크)
-SELECT create_hypertable(
-    'realtime_prices', 
-    'time',
-    chunk_time_interval => INTERVAL '1 hour',
-    if_not_exists => TRUE
-);
-
 -- 시장 지수 하이퍼테이블 (1일 청크)
 SELECT create_hypertable(
     'market_indices', 
-    'time',
-    chunk_time_interval => INTERVAL '1 day',
-    if_not_exists => TRUE
-);
-
--- 거래 세션 하이퍼테이블 (1일 청크)
-SELECT create_hypertable(
-    'trading_sessions', 
     'time',
     chunk_time_interval => INTERVAL '1 day',
     if_not_exists => TRUE
@@ -138,77 +162,24 @@ SELECT create_hypertable(
 -- ========================================
 
 -- 주가 데이터 인덱스
-CREATE INDEX IF NOT EXISTS idx_stock_prices_symbol_time 
+CREATE INDEX idx_stock_prices_symbol_time 
     ON stock_prices (symbol, time DESC, interval_type);
-CREATE INDEX IF NOT EXISTS idx_stock_prices_symbol_interval 
+CREATE INDEX idx_stock_prices_symbol_interval 
     ON stock_prices (symbol, interval_type);
-CREATE INDEX IF NOT EXISTS idx_stock_prices_time_desc 
+CREATE INDEX idx_stock_prices_time_desc 
     ON stock_prices (time DESC);
 
 -- 수급 데이터 인덱스
-CREATE INDEX IF NOT EXISTS idx_supply_demand_symbol_date 
+CREATE INDEX idx_supply_demand_symbol_date 
     ON supply_demand (symbol, date DESC);
-CREATE INDEX IF NOT EXISTS idx_supply_demand_date_desc 
+CREATE INDEX idx_supply_demand_date_desc 
     ON supply_demand (date DESC);
 
--- 실시간 가격 인덱스
-CREATE INDEX IF NOT EXISTS idx_realtime_prices_symbol_time 
-    ON realtime_prices (symbol, time DESC);
-CREATE INDEX IF NOT EXISTS idx_realtime_prices_time_desc 
-    ON realtime_prices (time DESC);
-CREATE INDEX IF NOT EXISTS idx_realtime_prices_market_status 
-    ON realtime_prices (market_status) WHERE market_status IS NOT NULL;
-
 -- 시장 지수 인덱스
-CREATE INDEX IF NOT EXISTS idx_market_indices_index_time 
+CREATE INDEX idx_market_indices_index_time 
     ON market_indices (index_code, time DESC);
-CREATE INDEX IF NOT EXISTS idx_market_indices_time_desc 
+CREATE INDEX idx_market_indices_time_desc 
     ON market_indices (time DESC);
-
--- 거래 세션 인덱스
-CREATE INDEX IF NOT EXISTS idx_trading_sessions_market_time 
-    ON trading_sessions (market, time DESC);
-CREATE INDEX IF NOT EXISTS idx_trading_sessions_session_type 
-    ON trading_sessions (session_type);
-
--- ========================================
--- 연속 집계 (Continuous Aggregates) 생성
--- ========================================
-
--- 일봉 연속 집계 뷰
-CREATE MATERIALIZED VIEW IF NOT EXISTS daily_candles
-WITH (timescaledb.continuous) AS
-SELECT 
-    time_bucket('1 day', time) as day,
-    symbol,
-    interval_type,
-    first(open, time) as open,
-    max(high) as high,
-    min(low) as low,
-    last(close, time) as close,
-    sum(volume) as volume,
-    sum(trading_value) as trading_value,
-    last(change_amount, time) as change_amount,
-    last(change_rate, time) as change_rate
-FROM stock_prices
-WHERE interval_type = '1m'  -- 1분봉에서만 일봉 생성
-GROUP BY day, symbol, interval_type;
-
--- 시간별 실시간 가격 집계 뷰
-CREATE MATERIALIZED VIEW IF NOT EXISTS hourly_realtime_summary
-WITH (timescaledb.continuous) AS
-SELECT 
-    time_bucket('1 hour', time) as hour,
-    symbol,
-    first(price, time) as open_price,
-    max(price) as high_price,
-    min(price) as low_price,
-    last(price, time) as close_price,
-    sum(volume) as total_volume,
-    sum(trading_value) as total_trading_value,
-    count(*) as tick_count
-FROM realtime_prices
-GROUP BY hour, symbol;
 
 -- ========================================
 -- 압축 설정
@@ -228,24 +199,10 @@ ALTER TABLE supply_demand SET (
     timescaledb.compress_orderby = 'date DESC'
 );
 
--- 실시간 가격 압축 설정 (7일 후)
-ALTER TABLE realtime_prices SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'symbol',
-    timescaledb.compress_orderby = 'time DESC'
-);
-
 -- 시장 지수 압축 설정 (30일 후)
 ALTER TABLE market_indices SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'index_code',
-    timescaledb.compress_orderby = 'time DESC'
-);
-
--- 거래 세션 압축 설정 (90일 후)
-ALTER TABLE trading_sessions SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'market',
     timescaledb.compress_orderby = 'time DESC'
 );
 
@@ -259,24 +216,38 @@ SELECT add_compression_policy('stock_prices', INTERVAL '30 days');
 -- 수급 데이터 압축 정책 (90일 후 압축)
 SELECT add_compression_policy('supply_demand', INTERVAL '90 days');
 
--- 실시간 가격 압축 정책 (7일 후 압축)
-SELECT add_compression_policy('realtime_prices', INTERVAL '7 days');
-
 -- 시장 지수 압축 정책 (30일 후 압축)
 SELECT add_compression_policy('market_indices', INTERVAL '30 days');
-
--- 거래 세션 압축 정책 (90일 후 압축)
-SELECT add_compression_policy('trading_sessions', INTERVAL '90 days');
 
 -- ========================================
 -- 데이터 보관 정책
 -- ========================================
 
--- 실시간 가격은 30일만 보관 (나머지는 압축된 시간별 집계 사용)
-SELECT add_retention_policy('realtime_prices', INTERVAL '30 days');
-
 -- 1분봉 데이터는 1년 보관
 SELECT add_retention_policy('stock_prices', INTERVAL '1 year');
+
+-- ========================================
+-- 연속 집계 (Continuous Aggregates) 생성
+-- ========================================
+
+-- 일봉 연속 집계 뷰 (1분봉에서 일봉 생성)
+CREATE MATERIALIZED VIEW daily_candles
+WITH (timescaledb.continuous) AS
+SELECT 
+    time_bucket('1 day', time) as day,
+    symbol,
+    interval_type,
+    first(open, time) as open,
+    max(high) as high,
+    min(low) as low,
+    last(close, time) as close,
+    sum(volume) as volume,
+    sum(trading_value) as trading_value,
+    last(change_amount, time) as change_amount,
+    last(price_change_percent, time) as price_change_percent
+FROM stock_prices
+WHERE interval_type = '1m'  -- 1분봉에서만 일봉 생성
+GROUP BY day, symbol, interval_type;
 
 -- ========================================
 -- 연속 집계 자동 갱신 정책
@@ -289,42 +260,9 @@ SELECT add_continuous_aggregate_policy('daily_candles',
     schedule_interval => INTERVAL '1 hour'
 );
 
--- 시간별 실시간 집계 자동 갱신 (15분마다)
-SELECT add_continuous_aggregate_policy('hourly_realtime_summary',
-    start_offset => INTERVAL '1 day',
-    end_offset => INTERVAL '15 minutes',
-    schedule_interval => INTERVAL '15 minutes'
-);
-
 -- ========================================
--- 유용한 함수 생성
+-- 유틸리티 함수 생성
 -- ========================================
-
--- 테이블 압축률 확인 함수
-CREATE OR REPLACE FUNCTION get_compression_stats()
-RETURNS TABLE(
-    table_name TEXT,
-    total_chunks INTEGER,
-    compressed_chunks INTEGER,
-    compression_ratio NUMERIC
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        format('%I.%I', schema_name, table_name)::TEXT,
-        total_chunks::INTEGER,
-        number_compressed_chunks::INTEGER,
-        CASE 
-            WHEN total_chunks > 0 
-            THEN ROUND((number_compressed_chunks::NUMERIC / total_chunks::NUMERIC) * 100, 2)
-            ELSE 0::NUMERIC
-        END as compression_ratio
-    FROM timescaledb_information.hypertables h
-    LEFT JOIN timescaledb_information.chunks c ON h.hypertable_name = c.hypertable_name
-    WHERE h.schema_name = 'public'
-    GROUP BY h.schema_name, h.table_name, h.total_chunks, h.number_compressed_chunks;
-END;
-$$ LANGUAGE plpgsql;
 
 -- 하이퍼테이블 상태 확인 함수
 CREATE OR REPLACE FUNCTION get_hypertable_info()
@@ -353,24 +291,74 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 테이블 압축률 확인 함수
+CREATE OR REPLACE FUNCTION get_compression_stats()
+RETURNS TABLE(
+    table_name TEXT,
+    total_chunks INTEGER,
+    compressed_chunks INTEGER,
+    compression_ratio NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        format('%I.%I', schema_name, table_name)::TEXT,
+        total_chunks::INTEGER,
+        number_compressed_chunks::INTEGER,
+        CASE 
+            WHEN total_chunks > 0 
+            THEN ROUND((number_compressed_chunks::NUMERIC / total_chunks::NUMERIC) * 100, 2)
+            ELSE 0::NUMERIC
+        END as compression_ratio
+    FROM timescaledb_information.hypertables h
+    WHERE h.schema_name = 'public'
+    GROUP BY h.schema_name, h.table_name, h.total_chunks, h.number_compressed_chunks;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ========================================
+-- 코멘트 추가
+-- ========================================
+
+-- 테이블 코멘트
+COMMENT ON TABLE stock_prices IS '주가 데이터 - TimescaleDB 하이퍼테이블';
+COMMENT ON TABLE supply_demand IS '수급 데이터 - TimescaleDB 하이퍼테이블';
+COMMENT ON TABLE market_indices IS '시장 지수 데이터 - TimescaleDB 하이퍼테이블';
+
+-- 주요 컬럼 코멘트
+COMMENT ON COLUMN stock_prices.time IS '시간 (UTC)';
+COMMENT ON COLUMN stock_prices.symbol IS '종목코드';
+COMMENT ON COLUMN stock_prices.price_change_percent IS '전일대비 등락율(%) - precision 10,4';
+COMMENT ON COLUMN stock_prices.volume_change_percent IS '전일대비 거래량 증감율(%) - precision 10,4';
+
+COMMENT ON COLUMN supply_demand.date IS '날짜';
+COMMENT ON COLUMN supply_demand.symbol IS '종목코드';
+COMMENT ON COLUMN supply_demand.price_change_percent IS '등락율(%) - precision 10,4';
+
+COMMENT ON COLUMN market_indices.time IS '시간 (UTC)';
+COMMENT ON COLUMN market_indices.index_code IS '지수 코드 (KOSPI, KOSDAQ)';
+COMMENT ON COLUMN market_indices.price_change_percent IS '전일대비 변동률(%) - precision 10,4';
+
 -- ========================================
 -- 완료 메시지
 -- ========================================
 
 DO $$
 BEGIN
-    RAISE NOTICE '=== TimescaleDB 하이퍼테이블 초기화 완료 ===';
+    RAISE NOTICE '=== TimescaleDB 하이퍼테이블 재생성 완료 ===';
+    RAISE NOTICE '삭제된 테이블:';
+    RAISE NOTICE '  - realtime_prices (불필요)';
+    RAISE NOTICE '  - trading_sessions (불필요)';
+    RAISE NOTICE '';
     RAISE NOTICE '생성된 하이퍼테이블:';
-    RAISE NOTICE '  - stock_prices (주가 데이터)';
-    RAISE NOTICE '  - supply_demand (수급 데이터)';
-    RAISE NOTICE '  - realtime_prices (실시간 가격)';
-    RAISE NOTICE '  - market_indices (시장 지수)';
-    RAISE NOTICE '  - trading_sessions (거래 세션)';
+    RAISE NOTICE '  - stock_prices (주가 데이터) - precision 10,4';
+    RAISE NOTICE '  - supply_demand (수급 데이터) - precision 10,4';
+    RAISE NOTICE '  - market_indices (시장 지수) - precision 10,4';
     RAISE NOTICE '';
     RAISE NOTICE '생성된 연속 집계:';
     RAISE NOTICE '  - daily_candles (일봉 집계)';
-    RAISE NOTICE '  - hourly_realtime_summary (시간별 실시간 집계)';
     RAISE NOTICE '';
     RAISE NOTICE '압축 및 보관 정책이 설정되었습니다.';
-    RAISE NOTICE '초기화가 성공적으로 완료되었습니다.';
+    RAISE NOTICE '모든 precision이 10,4로 업데이트되었습니다.';
+    RAISE NOTICE '재생성이 성공적으로 완료되었습니다.';
 END $$; 

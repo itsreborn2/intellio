@@ -1116,7 +1116,7 @@ class DataCollectorService(LoggerMixin):
         progress_callback=None
     ) -> Dict[str, Any]:
         """
-        전종목 일봉 차트 데이터 수집 (24개월)
+        전종목 일봉 차트 데이터 수집 (Producer-Consumer 패턴으로 성능 최적화)
         
         Args:
             months_back: 수집할 개월 수 (기본 24개월)
@@ -1126,7 +1126,7 @@ class DataCollectorService(LoggerMixin):
         Returns:
             Dict: 수집 결과
         """
-        with LogContext(self.logger, f"전종목 일봉 차트 데이터 수집 ({months_back}개월)") as ctx:
+        with LogContext(self.logger, f"전종목 일봉 차트 데이터 수집 ({months_back}개월) - 큐 기반") as ctx:
             try:
                 # 전종목 리스트 조회
                 all_stocks = await self.get_all_stock_list_for_stockai()
@@ -1136,8 +1136,9 @@ class DataCollectorService(LoggerMixin):
                 
                 # 날짜 계산
                 from datetime import datetime, timedelta
+                import asyncio
                 end_date = datetime.now()
-                start_date = end_date - timedelta(days=months_back * 30)  # 대략 계산
+                start_date = end_date - timedelta(days=months_back * 30)
                 start_date_str = start_date.strftime('%Y%m%d')
                 end_date_str = end_date.strftime('%Y%m%d')
                 
@@ -1145,100 +1146,161 @@ class DataCollectorService(LoggerMixin):
                 ctx.log_progress(f"기간: {start_date_str} ~ {end_date_str}")
                 
                 total_stocks = len(all_stocks)
-                processed_stocks = 0
-                success_stocks = 0
-                error_stocks = 0
-                total_records = 0
                 
-                # 배치 단위로 처리
-                for i in range(0, total_stocks, batch_size):
-                    batch_stocks = all_stocks[i:i + batch_size]
-                    symbols = [stock["code"] for stock in batch_stocks]
-                    
+                # 공유 상태 관리
+                stats = {
+                    "processed_stocks": 0,
+                    "success_stocks": 0,
+                    "error_stocks": 0,
+                    "total_records": 0,
+                    "api_finished": False
+                }
+                
+                # 큐 생성 (메모리 기반 - 최대 큐 크기 제한으로 메모리 보호)
+                data_queue = asyncio.Queue(maxsize=10)  # 최대 10개 배치만 메모리에 보관
+                
+                async def api_producer():
+                    """API 호출해서 데이터를 큐에 넣는 Producer"""
                     try:
-                        # 키움 API에서 차트 데이터 조회
-                        if self.settings.KIWOOM_APP_KEY != "test_api_key":
-                            chart_data_dict = await self.kiwoom_client.get_multiple_chart_data(
-                                symbols, start_date_str, end_date_str
-                            )
-                        else:
-                            ctx.logger.warning(f"키움 API 키가 설정되지 않아 배치 {i//batch_size + 1} 건너뜀")
-                            continue
-                        
-                        # TimescaleDB 저장용 데이터 변환
-                        stock_price_data = []
-                        for symbol, chart_data in chart_data_dict.items():
-                            for chart_item in chart_data:
-                                try:
-                                    stock_price = StockPriceCreate(
-                                        time=datetime.strptime(chart_item.date, '%Y%m%d') if hasattr(chart_item, 'date') else datetime.now(),
-                                        symbol=symbol,
-                                        interval_type=IntervalType.ONE_DAY.value,
-                                        open=float(chart_item.open or 0) if hasattr(chart_item, 'open') else 0.0,
-                                        high=float(chart_item.high or 0) if hasattr(chart_item, 'high') else 0.0,
-                                        low=float(chart_item.low or 0) if hasattr(chart_item, 'low') else 0.0,
-                                        close=float(chart_item.close or 0) if hasattr(chart_item, 'close') else 0.0,
-                                        volume=int(chart_item.volume or 0) if hasattr(chart_item, 'volume') else 0,
-                                        trading_value=int(chart_item.trading_value or 0) if hasattr(chart_item, 'trading_value') else 0
-                                    )
-                                    stock_price_data.append(stock_price)
-                                except Exception as e:
-                                    ctx.logger.warning(f"차트 데이터 변환 실패 ({symbol}): {e}")
-                                    continue
-                        
-                                                # TimescaleDB에 저장 (트리거 없음 - 순수 고속 삽입)
-                        if stock_price_data:
-                            # 1단계: 원본 데이터 고속 삽입 (트리거 완전 제거됨)
-                            await timescale_service.bulk_create_stock_prices_with_progress(
-                                stock_price_data,
-                                batch_size=2000,  # 트리거 없음으로 큰 배치 크기 가능
-                                progress_callback=None
-                            )
-                            total_records += len(stock_price_data)
+                        for i in range(0, total_stocks, batch_size):
+                            batch_stocks = all_stocks[i:i + batch_size]
+                            symbols = [stock["code"] for stock in batch_stocks]
                             
-                            # 2단계: 변동률 등 배치 계산 (새로 삽입된 데이터만)
-                            batch_symbols = list(set([price.symbol for price in stock_price_data]))
                             try:
-                                calc_result = await timescale_service.batch_calculate_for_new_data(
-                                    symbols=batch_symbols
-                                )
-                                ctx.logger.info(f"배치 계산 완료: {calc_result.get('total_updated', 0)}건 업데이트")
+                                # 키움 API에서 차트 데이터 조회
+                                if self.settings.KIWOOM_APP_KEY != "test_api_key":
+                                    chart_data_dict = await self.kiwoom_client.get_multiple_chart_data(
+                                        symbols, start_date_str, end_date_str
+                                    )
+                                else:
+                                    ctx.logger.warning(f"키움 API 키가 설정되지 않아 배치 {i//batch_size + 1} 건너뜀")
+                                    continue
+                                
+                                # 데이터 변환
+                                stock_price_data = []
+                                for symbol, chart_data in chart_data_dict.items():
+                                    for chart_item in chart_data:
+                                        try:
+                                            stock_price = StockPriceCreate(
+                                                time=datetime.strptime(chart_item.date, '%Y%m%d') if hasattr(chart_item, 'date') else datetime.now(),
+                                                symbol=symbol,
+                                                interval_type=IntervalType.ONE_DAY.value,
+                                                open=float(chart_item.open or 0) if hasattr(chart_item, 'open') else 0.0,
+                                                high=float(chart_item.high or 0) if hasattr(chart_item, 'high') else 0.0,
+                                                low=float(chart_item.low or 0) if hasattr(chart_item, 'low') else 0.0,
+                                                close=float(chart_item.close or 0) if hasattr(chart_item, 'close') else 0.0,
+                                                volume=int(chart_item.volume or 0) if hasattr(chart_item, 'volume') else 0,
+                                                trading_value=int(chart_item.trading_value or 0) if hasattr(chart_item, 'trading_value') else 0
+                                            )
+                                            stock_price_data.append(stock_price)
+                                        except Exception as e:
+                                            ctx.logger.warning(f"차트 데이터 변환 실패 ({symbol}): {e}")
+                                            continue
+                                
+                                # 큐에 데이터 추가 (배치 정보 포함)
+                                if stock_price_data:
+                                    batch_info = {
+                                        "data": stock_price_data,
+                                        "symbols": symbols,
+                                        "batch_num": i//batch_size + 1
+                                    }
+                                    await data_queue.put(batch_info)
+                                    ctx.logger.info(f"API Producer: 배치 {i//batch_size + 1} 큐에 추가 ({len(stock_price_data)}건)")
+                                
+                                stats["processed_stocks"] += len(symbols)
+                                success_count = len([s for s in symbols if s in chart_data_dict and chart_data_dict[s]])
+                                stats["success_stocks"] += success_count
+                                
                             except Exception as e:
-                                ctx.logger.warning(f"배치 계산 실패 (데이터는 정상 저장됨): {e}")
+                                ctx.logger.error(f"API Producer 배치 처리 실패 (배치 {i//batch_size + 1}): {e}")
+                                stats["error_stocks"] += len(symbols)
+                            
+                            # API 제한 준수
+                            await asyncio.sleep(0.3)
                         
-                        success_stocks += len([s for s in symbols if s in chart_data_dict and chart_data_dict[s]])
+                        # Producer 완료 신호
+                        stats["api_finished"] = True
+                        await data_queue.put(None)  # 종료 신호
+                        ctx.log_progress("API Producer 완료")
                         
                     except Exception as e:
-                        ctx.logger.error(f"배치 처리 실패 (배치 {i//batch_size + 1}): {e}")
-                        error_stocks += len(symbols)
-                    
-                    processed_stocks += len(symbols)
-                    
-                    # 진행상황 알림
-                    if progress_callback:
-                        progress = (processed_stocks / total_stocks) * 100
-                        await progress_callback(
-                            processed_stocks, total_stocks, progress, 
-                            success_stocks, error_stocks, total_records
-                        )
-                    
-                    ctx.log_progress(f"진행상황: {processed_stocks}/{total_stocks} 종목 처리 완료")
-                    
-                    # 배치 간 추가 대기 (API 제한 준수)
-                    await asyncio.sleep(0.5)
+                        ctx.logger.error(f"API Producer 실패: {e}")
+                        stats["api_finished"] = True
+                        await data_queue.put(None)  # 종료 신호
+                
+                async def db_consumer():
+                    """큐에서 데이터를 꺼내서 DB에 저장하는 Consumer"""
+                    try:
+                        while True:
+                            # 큐에서 데이터 가져오기
+                            batch_info = await data_queue.get()
+                            
+                            # 종료 신호 확인
+                            if batch_info is None:
+                                ctx.log_progress("DB Consumer 종료 신호 수신")
+                                break
+                            
+                            try:
+                                stock_price_data = batch_info["data"]
+                                symbols = batch_info["symbols"]
+                                batch_num = batch_info["batch_num"]
+                                
+                                # TimescaleDB에 저장
+                                await timescale_service.bulk_create_stock_prices_with_progress(
+                                    stock_price_data,
+                                    batch_size=2000,
+                                    progress_callback=None
+                                )
+                                stats["total_records"] += len(stock_price_data)
+                                
+                                # 변동률 등 배치 계산
+                                batch_symbols = list(set([price.symbol for price in stock_price_data]))
+                                try:
+                                    calc_result = await timescale_service.batch_calculate_for_new_data(
+                                        symbols=batch_symbols
+                                    )
+                                    ctx.logger.info(f"DB Consumer: 배치 {batch_num} 저장 완료 ({len(stock_price_data)}건), 계산 완료: {calc_result.get('total_updated', 0)}건")
+                                except Exception as e:
+                                    ctx.logger.warning(f"배치 계산 실패 (데이터는 정상 저장됨): {e}")
+                                
+                            except Exception as e:
+                                ctx.logger.error(f"DB Consumer 배치 처리 실패: {e}")
+                            
+                            # 진행상황 알림
+                            if progress_callback:
+                                progress = (stats["processed_stocks"] / total_stocks) * 100
+                                await progress_callback(
+                                    stats["processed_stocks"], total_stocks, progress,
+                                    stats["success_stocks"], stats["error_stocks"], stats["total_records"]
+                                )
+                            
+                            data_queue.task_done()
+                        
+                        ctx.log_progress("DB Consumer 완료")
+                        
+                    except Exception as e:
+                        ctx.logger.error(f"DB Consumer 실패: {e}")
+                
+                # Producer와 Consumer를 병렬 실행
+                ctx.log_progress("Producer-Consumer 병렬 처리 시작")
+                producer_task = asyncio.create_task(api_producer())
+                consumer_task = asyncio.create_task(db_consumer())
+                
+                # 두 태스크 완료 대기
+                await asyncio.gather(producer_task, consumer_task)
                 
                 result = {
                     "success": True,
                     "total_stocks": total_stocks,
-                    "success_stocks": success_stocks,
-                    "error_stocks": error_stocks,
-                    "total_records": total_records,
+                    "success_stocks": stats["success_stocks"],
+                    "error_stocks": stats["error_stocks"],
+                    "total_records": stats["total_records"],
                     "start_date": start_date_str,
                     "end_date": end_date_str,
-                    "message": f"전종목 차트 데이터 수집 완료: {success_stocks}/{total_stocks} 종목, {total_records}건"
+                    "message": f"전종목 차트 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건"
                 }
                 
-                ctx.log_progress(f"전종목 차트 데이터 수집 완료: {success_stocks}/{total_stocks} 종목, {total_records}건")
+                ctx.log_progress(f"전종목 차트 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건")
                 return result
                 
             except Exception as e:
@@ -1252,7 +1314,7 @@ class DataCollectorService(LoggerMixin):
         progress_callback=None
     ) -> Dict[str, Any]:
         """
-        전종목 수급 데이터 수집 (6개월)
+        전종목 수급 데이터 수집 (Producer-Consumer 패턴으로 성능 최적화)
         
         Args:
             months_back: 수집할 개월 수 (기본 6개월)
@@ -1262,7 +1324,7 @@ class DataCollectorService(LoggerMixin):
         Returns:
             Dict: 수집 결과
         """
-        with LogContext(self.logger, f"전종목 수급 데이터 수집 ({months_back}개월)") as ctx:
+        with LogContext(self.logger, f"전종목 수급 데이터 수집 ({months_back}개월) - 큐 기반") as ctx:
             try:
                 # 전종목 리스트 조회
                 all_stocks = await self.get_all_stock_list_for_stockai()
@@ -1272,8 +1334,9 @@ class DataCollectorService(LoggerMixin):
                 
                 # 날짜 계산
                 from datetime import datetime, timedelta
+                import asyncio
                 end_date = datetime.now()
-                start_date = end_date - timedelta(days=months_back * 30)  # 대략 계산
+                start_date = end_date - timedelta(days=months_back * 30)
                 start_date_str = start_date.strftime('%Y%m%d')
                 end_date_str = end_date.strftime('%Y%m%d')
                 
@@ -1281,103 +1344,165 @@ class DataCollectorService(LoggerMixin):
                 ctx.log_progress(f"기간: {start_date_str} ~ {end_date_str}")
                 
                 total_stocks = len(all_stocks)
-                processed_stocks = 0
-                success_stocks = 0
-                error_stocks = 0
-                total_records = 0
                 
-                # 배치 단위로 처리 (수급 데이터는 더 작은 배치로)
-                for i in range(0, total_stocks, batch_size):
-                    batch_stocks = all_stocks[i:i + batch_size]
-                    symbols = [stock["code"] for stock in batch_stocks]
-                    
+                # 공유 상태 관리
+                stats = {
+                    "processed_stocks": 0,
+                    "success_stocks": 0,
+                    "error_stocks": 0,
+                    "total_records": 0,
+                    "api_finished": False
+                }
+                
+                # 큐 생성 (수급 데이터는 더 작은 큐 크기)
+                data_queue = asyncio.Queue(maxsize=5)  # 최대 5개 배치만 메모리에 보관
+                
+                async def api_producer():
+                    """API 호출해서 데이터를 큐에 넣는 Producer"""
                     try:
-                        # 키움 API에서 수급 데이터 조회
-                        if self.settings.KIWOOM_APP_KEY != "test_api_key":
-                            supply_data_dict = await self.kiwoom_client.get_multiple_supply_demand_data(
-                                symbols, start_date_str, end_date_str
-                            )
-                        else:
-                            ctx.logger.warning(f"키움 API 키가 설정되지 않아 배치 {i//batch_size + 1} 건너뜀")
-                            continue
-                        
-                        # TimescaleDB 저장용 데이터 변환
-                        supply_demand_data = []
-                        for symbol, supply_data in supply_data_dict.items():
-                            for supply_item in supply_data:
-                                try:
-                                    supply_demand = SupplyDemandCreate(
-                                        date=datetime.strptime(supply_item['date'], '%Y%m%d'),
-                                        symbol=symbol,
-                                        current_price=float(supply_item.get('current_price', 0)) if supply_item.get('current_price') else None,
-                                        price_change_sign=supply_item.get('price_change_sign'),
-                                        price_change=float(supply_item.get('price_change', 0)) if supply_item.get('price_change') else None,
-                                        price_change_percent=float(supply_item.get('price_change_percent', 0)) if supply_item.get('price_change_percent') else None,
-                                        accumulated_volume=int(supply_item.get('accumulated_volume', 0)) if supply_item.get('accumulated_volume') else None,
-                                        accumulated_value=int(supply_item.get('accumulated_value', 0)) if supply_item.get('accumulated_value') else None,
-                                        individual_investor=int(supply_item.get('individual_investor', 0)) if supply_item.get('individual_investor') else None,
-                                        foreign_investor=int(supply_item.get('foreign_investor', 0)) if supply_item.get('foreign_investor') else None,
-                                        institution_total=int(supply_item.get('institution_total', 0)) if supply_item.get('institution_total') else None,
-                                        financial_investment=int(supply_item.get('financial_investment', 0)) if supply_item.get('financial_investment') else None,
-                                        insurance=int(supply_item.get('insurance', 0)) if supply_item.get('insurance') else None,
-                                        investment_trust=int(supply_item.get('investment_trust', 0)) if supply_item.get('investment_trust') else None,
-                                        other_financial=int(supply_item.get('other_financial', 0)) if supply_item.get('other_financial') else None,
-                                        bank=int(supply_item.get('bank', 0)) if supply_item.get('bank') else None,
-                                        pension_fund=int(supply_item.get('pension_fund', 0)) if supply_item.get('pension_fund') else None,
-                                        private_fund=int(supply_item.get('private_fund', 0)) if supply_item.get('private_fund') else None,
-                                        government=int(supply_item.get('government', 0)) if supply_item.get('government') else None,
-                                        other_corporation=int(supply_item.get('other_corporation', 0)) if supply_item.get('other_corporation') else None,
-                                        domestic_foreign=int(supply_item.get('domestic_foreign', 0)) if supply_item.get('domestic_foreign') else None
+                        for i in range(0, total_stocks, batch_size):
+                            batch_stocks = all_stocks[i:i + batch_size]
+                            symbols = [stock["code"] for stock in batch_stocks]
+                            
+                            try:
+                                # 키움 API에서 수급 데이터 조회
+                                if self.settings.KIWOOM_APP_KEY != "test_api_key":
+                                    supply_data_dict = await self.kiwoom_client.get_multiple_supply_demand_data(
+                                        symbols, start_date_str, end_date_str
                                     )
-                                    supply_demand_data.append(supply_demand)
-                                except Exception as e:
-                                    ctx.logger.warning(f"수급 데이터 변환 실패 ({symbol}): {e}")
+                                else:
+                                    ctx.logger.warning(f"키움 API 키가 설정되지 않아 배치 {i//batch_size + 1} 건너뜀")
                                     continue
+                                
+                                # 데이터 변환
+                                supply_demand_data = []
+                                for symbol, supply_data in supply_data_dict.items():
+                                    for supply_item in supply_data:
+                                        try:
+                                            supply_demand = SupplyDemandCreate(
+                                                date=datetime.strptime(supply_item['date'], '%Y%m%d'),
+                                                symbol=symbol,
+                                                current_price=float(supply_item.get('current_price', 0)) if supply_item.get('current_price') else None,
+                                                price_change_sign=supply_item.get('price_change_sign'),
+                                                price_change=float(supply_item.get('price_change', 0)) if supply_item.get('price_change') else None,
+                                                price_change_percent=float(supply_item.get('price_change_percent', 0)) if supply_item.get('price_change_percent') else None,
+                                                accumulated_volume=int(supply_item.get('accumulated_volume', 0)) if supply_item.get('accumulated_volume') else None,
+                                                accumulated_value=int(supply_item.get('accumulated_value', 0)) if supply_item.get('accumulated_value') else None,
+                                                individual_investor=int(supply_item.get('individual_investor', 0)) if supply_item.get('individual_investor') else None,
+                                                foreign_investor=int(supply_item.get('foreign_investor', 0)) if supply_item.get('foreign_investor') else None,
+                                                institution_total=int(supply_item.get('institution_total', 0)) if supply_item.get('institution_total') else None,
+                                                financial_investment=int(supply_item.get('financial_investment', 0)) if supply_item.get('financial_investment') else None,
+                                                insurance=int(supply_item.get('insurance', 0)) if supply_item.get('insurance') else None,
+                                                investment_trust=int(supply_item.get('investment_trust', 0)) if supply_item.get('investment_trust') else None,
+                                                other_financial=int(supply_item.get('other_financial', 0)) if supply_item.get('other_financial') else None,
+                                                bank=int(supply_item.get('bank', 0)) if supply_item.get('bank') else None,
+                                                pension_fund=int(supply_item.get('pension_fund', 0)) if supply_item.get('pension_fund') else None,
+                                                private_fund=int(supply_item.get('private_fund', 0)) if supply_item.get('private_fund') else None,
+                                                government=int(supply_item.get('government', 0)) if supply_item.get('government') else None,
+                                                other_corporation=int(supply_item.get('other_corporation', 0)) if supply_item.get('other_corporation') else None,
+                                                domestic_foreign=int(supply_item.get('domestic_foreign', 0)) if supply_item.get('domestic_foreign') else None
+                                            )
+                                            supply_demand_data.append(supply_demand)
+                                        except Exception as e:
+                                            ctx.logger.warning(f"수급 데이터 변환 실패 ({symbol}): {e}")
+                                            continue
+                                
+                                # 큐에 데이터 추가
+                                if supply_demand_data:
+                                    batch_info = {
+                                        "data": supply_demand_data,
+                                        "symbols": symbols,
+                                        "batch_num": i//batch_size + 1
+                                    }
+                                    await data_queue.put(batch_info)
+                                    ctx.logger.info(f"API Producer: 배치 {i//batch_size + 1} 큐에 추가 ({len(supply_demand_data)}건)")
+                                
+                                stats["processed_stocks"] += len(symbols)
+                                success_count = len([s for s in symbols if s in supply_data_dict and supply_data_dict[s]])
+                                stats["success_stocks"] += success_count
+                                
+                            except Exception as e:
+                                ctx.logger.error(f"API Producer 배치 처리 실패 (배치 {i//batch_size + 1}): {e}")
+                                stats["error_stocks"] += len(symbols)
+                            
+                            # API 제한 준수 (수급 데이터는 더 긴 대기)
+                            await asyncio.sleep(0.8)
                         
-                        # TimescaleDB에 저장
-                        if supply_demand_data:
-                            await timescale_service.bulk_create_supply_demand_with_progress(
-                                supply_demand_data,
-                                batch_size=500,
-                                progress_callback=None
-                            )
-                            total_records += len(supply_demand_data)
-                        else:
-                            ctx.logger.info(f"수급 데이터 없음: {symbols}")
-                        
-                        success_stocks += len([s for s in symbols if s in supply_data_dict and supply_data_dict[s]])
+                        # Producer 완료 신호
+                        stats["api_finished"] = True
+                        await data_queue.put(None)  # 종료 신호
+                        ctx.log_progress("API Producer 완료")
                         
                     except Exception as e:
-                        ctx.logger.error(f"배치 처리 실패 (배치 {i//batch_size + 1}): {e}")
-                        error_stocks += len(symbols)
-                    
-                    processed_stocks += len(symbols)
-                    
-                    # 진행상황 알림
-                    if progress_callback:
-                        progress = (processed_stocks / total_stocks) * 100
-                        await progress_callback(
-                            processed_stocks, total_stocks, progress, 
-                            success_stocks, error_stocks, total_records
-                        )
-                    
-                    ctx.log_progress(f"진행상황: {processed_stocks}/{total_stocks} 종목 처리 완료")
-                    
-                    # 배치 간 추가 대기 (API 제한 준수)
-                    await asyncio.sleep(1.0)
+                        ctx.logger.error(f"API Producer 실패: {e}")
+                        stats["api_finished"] = True
+                        await data_queue.put(None)  # 종료 신호
+                
+                async def db_consumer():
+                    """큐에서 데이터를 꺼내서 DB에 저장하는 Consumer"""
+                    try:
+                        while True:
+                            # 큐에서 데이터 가져오기
+                            batch_info = await data_queue.get()
+                            
+                            # 종료 신호 확인
+                            if batch_info is None:
+                                ctx.log_progress("DB Consumer 종료 신호 수신")
+                                break
+                            
+                            try:
+                                supply_demand_data = batch_info["data"]
+                                symbols = batch_info["symbols"] 
+                                batch_num = batch_info["batch_num"]
+                                
+                                # TimescaleDB에 저장
+                                await timescale_service.bulk_create_supply_demand_with_progress(
+                                    supply_demand_data,
+                                    batch_size=500,
+                                    progress_callback=None
+                                )
+                                stats["total_records"] += len(supply_demand_data)
+                                
+                                ctx.logger.info(f"DB Consumer: 배치 {batch_num} 저장 완료 ({len(supply_demand_data)}건)")
+                                
+                            except Exception as e:
+                                ctx.logger.error(f"DB Consumer 배치 처리 실패: {e}")
+                            
+                            # 진행상황 알림
+                            if progress_callback:
+                                progress = (stats["processed_stocks"] / total_stocks) * 100
+                                await progress_callback(
+                                    stats["processed_stocks"], total_stocks, progress,
+                                    stats["success_stocks"], stats["error_stocks"], stats["total_records"]
+                                )
+                            
+                            data_queue.task_done()
+                        
+                        ctx.log_progress("DB Consumer 완료")
+                        
+                    except Exception as e:
+                        ctx.logger.error(f"DB Consumer 실패: {e}")
+                
+                # Producer와 Consumer를 병렬 실행
+                ctx.log_progress("Producer-Consumer 병렬 처리 시작")
+                producer_task = asyncio.create_task(api_producer())
+                consumer_task = asyncio.create_task(db_consumer())
+                
+                # 두 태스크 완료 대기
+                await asyncio.gather(producer_task, consumer_task)
                 
                 result = {
                     "success": True,
                     "total_stocks": total_stocks,
-                    "success_stocks": success_stocks,
-                    "error_stocks": error_stocks,
-                    "total_records": total_records,
+                    "success_stocks": stats["success_stocks"],
+                    "error_stocks": stats["error_stocks"],
+                    "total_records": stats["total_records"],
                     "start_date": start_date_str,
                     "end_date": end_date_str,
-                    "message": f"전종목 수급 데이터 수집 완료: {success_stocks}/{total_stocks} 종목, {total_records}건"
+                    "message": f"전종목 수급 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건"
                 }
                 
-                ctx.log_progress(f"전종목 수급 데이터 수집 완료: {success_stocks}/{total_stocks} 종목, {total_records}건")
+                ctx.log_progress(f"전종목 수급 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건")
                 return result
                 
             except Exception as e:

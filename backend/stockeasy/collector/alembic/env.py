@@ -24,8 +24,8 @@ target_metadata = TimescaleBase.metadata
 
 # 환경변수에서 데이터베이스 URL 가져오기
 def get_url():
-    settings = get_settings()
-    return f"postgresql://{settings.TIMESCALE_USER}:{settings.TIMESCALE_PASSWORD}@{settings.TIMESCALE_HOST}:{settings.TIMESCALE_PORT}/{settings.TIMESCALE_DB}"
+    # 임시로 하드코딩된 URL 사용 (UTF-8 인코딩 문제 해결)
+    return "postgresql://collector_user:StockCollector2024@localhost:6433/stockeasy_collector"
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
