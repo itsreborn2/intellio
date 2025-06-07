@@ -28,6 +28,12 @@ export interface StockSearchState {
 /**
  * 종목 검색 컨텍스트 액션 타입
  */
+// 인기 검색 종목 인터페이스 정의
+export interface PopularStock {
+  stock: StockOption;
+  rank: number;
+}
+
 export type StockSearchAction =
   | { type: 'SET_SEARCH_TERM'; payload: string }
   | { type: 'SET_FILTERED_STOCKS'; payload: StockOption[] }

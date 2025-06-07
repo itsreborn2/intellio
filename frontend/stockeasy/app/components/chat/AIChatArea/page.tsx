@@ -19,7 +19,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { useTokenUsageStore } from '@/stores/tokenUsageStore';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore } from '@/stores/userModeStore';
-import { StockOption } from './types';
+import { StockOption, PopularStock } from './types';
 
 /**
  * AIChatArea 메인 컴포넌트
@@ -135,36 +135,48 @@ function AIChatAreaContent() {
     }
   ];
 
-  // 최신 업데이트 종목 데이터 선언 추가
-  const sampleLatestUpdates = [
-    {
-      stock: { 
-        value: '373220', 
-        label: 'LG에너지솔루션', 
-        stockName: 'LG에너지솔루션', 
-        stockCode: '373220' 
-      },
-      updateInfo: '배터리 생산량 증대'
-    },
-    {
-      stock: { 
-        value: '035720', 
-        label: '카카오', 
-        stockName: '카카오', 
-        stockCode: '035720' 
-      },
-      updateInfo: '글로벌 AI 기업과 협력 발표'
-    },
-    {
-      stock: { 
-        value: '049800', 
-        label: '우진플라임', 
-        stockName: '우진플라임', 
-        stockCode: '049800' 
-      },
-      updateInfo: '월별 수출데이터, 잠정치, 실적 등의 통계, 앞으로 전망'
+  // CSV에서 인기 검색 종목 데이터를 가져오기 위한 useEffect
+  useEffect(() => {
+    async function fetchPopularStocks() {
+      try {
+        const response = await fetch('/requestfile/chatarea/top20_searched_stocks_daily.csv');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const csvText = await response.text();
+        
+        const lines = csvText.trim().split('\n');
+        const headers = lines[0].split(',');
+        const dataLines = lines.slice(1);
+
+        const parsedData = dataLines.map(line => {
+          const values = line.split(',');
+          const row = headers.reduce((obj, header, index) => {
+            obj[header.trim()] = values[index].trim();
+            return obj;
+          }, {} as Record<string, string>);
+
+          return {
+            rank: parseInt(row.rank, 10),
+            stock: {
+              value: row.stock_code,
+              label: row.stock_name,
+              stockName: row.stock_name,
+              stockCode: row.stock_code,
+            },
+          };
+        });
+        setPopularStocks(parsedData as PopularStock[]);
+      } catch (error) {
+        console.error("Failed to fetch or parse popular stocks CSV:", error);
+        setPopularStocks([]); 
+      }
     }
-  ];
+    fetchPopularStocks();
+  }, []);
+
+  // 기존 sampleLatestUpdates 배열 정의는 삭제됩니다.
+
   
   // 메시지 처리 로직을 위한 커스텀 훅 사용 - 상태 관리 함수 전달
   const { 
@@ -303,6 +315,8 @@ function AIChatAreaContent() {
   }, []); // 의존성 배열 비움 - 마운트 시 한 번만 실행
 
   // 창 너비 상태 추가
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  const [popularStocks, setPopularStocks] = useState<PopularStock[]>([]); // CSV 데이터를 저장할 상태
   const [windowWidth, setWindowWidth] = useState<number>(1024); // 기본값 설정
 
   // 클라이언트 측에서만 window 객체 접근
@@ -575,18 +589,18 @@ function AIChatAreaContent() {
             width: isMobile ? '100%' : 'min(85%, 1000px)',
             minWidth: isMobile ? 'unset' : '280px',
             maxWidth: '1000px',
-            margin: isMobile ? '50px auto 0' : '12px auto 0',
+            margin: isMobile ? '20px auto 0' : '2px auto 0',
             padding: isMobile ? '0 0' : '0',
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px'
+            gap: '2px'
           }}>
             {/* 데스크탑: 중앙정렬, 모바일: 기존 중앙정렬 유지 */}
             <div
               style={{
                 display: 'flex',
                 flexDirection: isMobile ? 'column' : 'row',
-                gap: isMobile ? '6px' : '8px',
+                gap: isMobile ? '2px' : '2px',
                 width: '100%',
                 justifyContent: isMobile ? 'center' : 'center', // 항상 중앙정렬
                 alignItems: isMobile ? 'center' : 'flex-start', // 데스크탑은 위에서부터 시작
@@ -600,7 +614,7 @@ function AIChatAreaContent() {
             
             {/* 최신 업데이트 종목 컴포넌트 */}
             <LatestUpdates 
-              updates={sampleLatestUpdates}
+              updates={popularStocks} // CSV에서 로드한 데이터 사용
               onSelectUpdate={handleSelectUpdate}
             />
           </div>
