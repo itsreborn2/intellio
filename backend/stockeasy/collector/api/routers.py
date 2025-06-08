@@ -225,6 +225,94 @@ async def get_stock_chart(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"차트 데이터 조회 실패: {str(e)}")
 
+@stock_router.get("/charts/multiple")
+async def get_multiple_stock_charts(
+    symbols: str = Query(..., description="종목 코드들 (쉼표로 구분, 예: 005930,000660,035420)"),
+    period: str = Query("1y", description="조회 기간 (1d, 1w, 1m, 3m, 6m, 1y, 2y, 5y)"),
+    interval: str = Query("1d", description="간격 (1m, 5m, 15m, 30m, 1h, 1d, 1w, 1M)"),
+    compressed: bool = Query(False, description="압축된 형태로 반환 (대량 데이터용)"),
+    gzip_enabled: bool = Query(False, description="gzip 압축 사용 (더 작은 크기)"),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    여러 종목의 차트 데이터 일괄 조회
+    
+    - symbols: 쉼표로 구분된 종목코드들 (최대 20개)
+    - compressed=false: 표준 JSON 형태 (기본값)
+    - compressed=true: 압축된 배열 형태 (데이터 크기 50-70% 절약)
+    - gzip_enabled=true: gzip 압축 적용 (추가 30-50% 절약)
+    """
+    try:
+        # 종목 코드 파싱 및 검증
+        symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+        
+        if not symbol_list:
+            raise HTTPException(status_code=400, detail="최소 1개 이상의 종목 코드가 필요합니다")
+        
+        if len(symbol_list) > 20:
+            raise HTTPException(status_code=400, detail="최대 20개까지의 종목만 조회 가능합니다")
+        
+        logger.info(f"여러 종목 차트 데이터 조회 시작: {symbol_list}")
+        
+        # 각 종목별로 차트 데이터 조회
+        chart_results = {}
+        failed_symbols = []
+        
+        for symbol in symbol_list:
+            try:
+                chart_data = await data_collector.get_chart_data(symbol, period, interval, compressed)
+                chart_results[symbol] = {
+                    "symbol": symbol,
+                    "data": chart_data,
+                    "status": "success"
+                }
+                logger.info(f"종목 {symbol} 차트 데이터 조회 성공")
+            except Exception as e:
+                logger.error(f"종목 {symbol} 차트 데이터 조회 실패: {e}")
+                chart_results[symbol] = {
+                    "symbol": symbol,
+                    "data": None,
+                    "status": "failed",
+                    "error": str(e)
+                }
+                failed_symbols.append(symbol)
+        
+        response_data = {
+            "symbols": symbol_list,
+            "period": period,
+            "interval": interval,
+            "compressed": compressed,
+            "gzip_enabled": gzip_enabled,
+            "total_requested": len(symbol_list),
+            "successful_count": len(symbol_list) - len(failed_symbols),
+            "failed_count": len(failed_symbols),
+            "failed_symbols": failed_symbols,
+            "charts": chart_results,
+            "status": "success" if len(failed_symbols) == 0 else "partial_success"
+        }
+        
+        if gzip_enabled:
+            # JSON을 문자열로 변환 후 gzip 압축
+            json_str = json.dumps(response_data, ensure_ascii=False, default=str)
+            compressed_content = gzip.compress(json_str.encode('utf-8'))
+            
+            return Response(
+                content=compressed_content,
+                media_type="application/json",
+                headers={
+                    "Content-Encoding": "gzip", # 여기서 gzip 을 알려줘야, 프론트에서 자동 압축해제 가능.
+                    "Content-Length": str(len(compressed_content))
+                }
+            )
+        else:
+            return response_data
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"여러 종목 차트 데이터 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"여러 종목 차트 데이터 조회 실패: {str(e)}")
+
 
 # ETF 데이터 라우터
 etf_router = APIRouter()
