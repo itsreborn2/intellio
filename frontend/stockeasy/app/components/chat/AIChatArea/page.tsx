@@ -141,12 +141,12 @@ function AIChatAreaContent() {
   useEffect(() => {
     async function fetchPopularStocks() {
       try {
-        // 백엔드 통계 API 호출
-        const response = await getPopularStocks(24, 20); // 24시간, 상위 20개
+        // 백엔드 통계 API 호출 (Redis 캐시 적용)
+        const response = await getPopularStocks();
         
-        if (response.ok && response.stocks) {
-          // 백엔드 응답을 프론트엔드 데이터 구조에 맞게 변환
-          const parsedData = response.stocks.map((item: IStockPopularityItem, index: number) => ({
+        if (response.ok && response.data_24h?.stocks) {
+          // 24시간 데이터를 프론트엔드 데이터 구조에 맞게 변환
+          const parsedData = response.data_24h.stocks.map((item: IStockPopularityItem, index: number) => ({
             rank: index + 1, // 순위는 배열 인덱스 + 1
             stock: {
               value: item.stock_code,
@@ -157,7 +157,7 @@ function AIChatAreaContent() {
           }));
           
           setPopularStocks(parsedData as PopularStock[]);
-          console.log(`[AIChatArea] 인기 종목 데이터 로드 완료: ${parsedData.length}개`);
+          console.log(`[AIChatArea] 인기 종목 데이터 로드 완료: ${parsedData.length}개 (캐시: ${response.data_24h.from_cache})`);
         } else {
           console.warn('[AIChatArea] 인기 종목 API 응답이 유효하지 않음:', response);
           setPopularStocks([]);

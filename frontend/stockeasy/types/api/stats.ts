@@ -17,12 +17,21 @@ export interface IStockPopularityItem {
 }
 
 /**
- * 인기 종목 응답 인터페이스
+ * 기간별 인기 종목 데이터 인터페이스
  */
-export interface IPopularStocksResponse extends IBaseResponse {
+export interface IPopularStocksPeriodData {
   stocks: IStockPopularityItem[];
   period_hours: number;
   total_count: number;
+  from_cache: boolean;
+}
+
+/**
+ * 인기 종목 응답 인터페이스
+ */
+export interface IPopularStocksResponse extends IBaseResponse {
+  data_24h: IPopularStocksPeriodData;
+  data_7d: IPopularStocksPeriodData;
 }
 
 /**
