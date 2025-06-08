@@ -89,7 +89,7 @@ export function LatestUpdates({ updates, onSelectUpdate }: LatestUpdatesProps) {
                 textOverflow: 'ellipsis',
                 marginRight: '6px'
               }}>
-                {item.rank}위
+                {item.rank}.
               </span>
               <span style={{ 
                 padding: '3px 8px',
@@ -152,7 +152,7 @@ export function LatestUpdates({ updates, onSelectUpdate }: LatestUpdatesProps) {
                 textOverflow: 'ellipsis',
                 marginRight: '6px'
               }}>
-                {item.rank}위
+                {item.rank}.
               </span>
               <span style={{ 
                 padding: '3px 8px',

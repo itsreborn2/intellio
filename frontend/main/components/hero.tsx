@@ -87,10 +87,11 @@ export default function Hero() {
           <br />
           Intellio
         </h1>
-        <p className="mx-auto max-w-[42rem] leading-normal text-muted-foreground sm:text-xl sm:leading-7">
-          가장 빠르고 진보된 AI Power로 업무 자동화와 주식 정보를 전달합니다.
+        <p className="mx-auto leading-normal text-muted-foreground sm:text-xl sm:leading-7">
+          스탁이지(StockEasy)는 주식 전문 AI 어시스턴트로 당신의 리서치 시간을 줄여줍니다.
         </p>
       </div>
+      <br />
       <div className="relative flex gap-6">
         {renderServiceButton(
           'doceasy', 
@@ -103,6 +104,7 @@ export default function Hero() {
           'bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]'
         )}
       </div>
+      <br />
     </section>
   )
 }

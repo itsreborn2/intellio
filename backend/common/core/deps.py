@@ -46,7 +46,7 @@ async def get_current_session(
         if session_id:
             session = await user_service.get_active_session(session_id)
             if session:
-                logger.info(f'유효한 세션 확인: {session.id}')
+                #logger.info(f'유효한 세션 확인: {session.id}')
                 return session
         logger.warning('세션이 없거나 만료됨')
         #status_code = status.HTTP_401_UNAUTHORIZED
