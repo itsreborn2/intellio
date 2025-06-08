@@ -748,53 +748,7 @@ function SidebarContent() {
                 </button>
               </div>
               
-              {/* 설정 버튼 - 클릭 이벤트 추가 (여기서는 Avatar 사용) */}
-              <div 
-                ref={buttonRefs.settings} // Ref 추가
-                className={isMobile ? "sidebar-button" : "sidebar-button-container relative flex items-center w-full"} 
-                onClick={openSettingsPopup}
-                onMouseEnter={() => {
-                  if (!isMobile) {
-                    handleMouseEnter('settings');
-                    if (!isLoggedIn || userId === 'anonymous') {
-                      setShowLoginTooltip(true);
-                    }
-                  }
-                }}
-                onMouseLeave={() => {
-                  if (!isMobile) {
-                    handleMouseLeave();
-                    setShowLoginTooltip(false);
-                  }
-                }}
-                style={{ cursor: 'pointer' }} // Let the class handle padding
-              >
-                {isMobile ? (
-                  <> {/* 모바일: 아바타 + 설정 텍스트 */}
-                    <Avatar className="h-6 w-6 cursor-pointer"> 
-                      <AvatarImage src={userProfileImage} alt={userName || 'User'} />
-                      <AvatarFallback>
-                        {isLoggedIn && userId !== 'anonymous' 
-                          ? (userName ? userName.charAt(0) : 'U') 
-                          : <UserIcon size={14} />}
-                      </AvatarFallback>
-                    </Avatar>
-                    {/* Apply same text style as DocEasy button */}
-                    <span className="ml-2 text-sm text-[#ececf1]">마이페이지</span> 
-                  </>
-                ) : ( 
-                   <> {/* 데스크탑: 아바타만 표시 */}
-                    <Avatar className="h-8 w-8 cursor-pointer">
-                      <AvatarImage src={userProfileImage} alt={userName || 'User'} />
-                      <AvatarFallback>
-                        {isLoggedIn && userId !== 'anonymous' 
-                          ? (userName ? userName.charAt(0) : 'U') 
-                          : <UserIcon size={16} />}
-                      </AvatarFallback>
-                    </Avatar>
-                  </> 
-                )}
-              </div>
+
             </div>
           </div>
         </div>

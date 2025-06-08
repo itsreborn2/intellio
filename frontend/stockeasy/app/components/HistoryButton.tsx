@@ -120,7 +120,7 @@ export default function HistoryButton({
             </button>
             {showTooltip && (
               <div className="absolute top-1/2 left-full transform -translate-y-1/2 ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded-[6px] whitespace-nowrap z-[9999]">
-                히스토리
+                검색 히스토리
               </div>
             )}
           </div>

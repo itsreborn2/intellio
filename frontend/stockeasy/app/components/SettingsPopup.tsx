@@ -250,7 +250,7 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
                   </div>
                   
                   {/* 요약 정보 */}
-                  <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
                     {/* 제목 폰트 크기 조정 */}
                     <h4 className="font-medium mb-2 text-base">총 질문</h4> 
                     {/* 값 폰트 크기 조정 */}
@@ -262,8 +262,6 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
                       )}
                     </div>
                   </div>
-                  
-                 
                 </div>
               ) : (
                 <div className="text-gray-500 py-4">
@@ -271,6 +269,19 @@ export default function SettingsPopup({ isOpen, onClose, userId, userName, userE
                 </div>
               )}
             </div>
+
+            {/* 로그아웃 버튼 추가 */}
+            {isLoaded && (
+              <div className="mt-6 pt-6 border-t dark:border-gray-700">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-gray-700 rounded-md transition-colors duration-150 ease-in-out border border-red-500 dark:border-red-400"
+                >
+                  <LogOut size={16} className="mr-2" />
+                  로그아웃
+                </button>
+              </div>
+            )}
 
             
           </div>
