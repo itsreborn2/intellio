@@ -255,13 +255,21 @@ const Header: React.FC<HeaderProps> = ({
           <div className="text-lg font-semibold pl-[27px] md:pl-0">StockEasy</div>
           {/* 모바일 히스토리 버튼 */}
           {isMobile && pathname === '/' && !isHistoryPanelOpen && (
-            <button
-              onClick={toggleHistoryPanel}
-              className="ml-2 p-1 text-gray-600 hover:text-gray-900"
-              title="히스토리 보기"
-            >
-              <History size={22} />
-            </button>
+            <div className="relative ml-2">
+              <button
+                onClick={toggleHistoryPanel}
+                className="p-1 text-gray-600 hover:text-gray-900"
+                onMouseEnter={() => setToggleVisible(true)}
+                onMouseLeave={() => setToggleVisible(false)}
+              >
+                <History size={22} />
+              </button>
+              {toggleVisible && (
+                <div className="absolute top-1/2 left-full transform -translate-y-1/2 ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded-[6px] whitespace-nowrap z-[9999]">
+                  검색 히스토리
+                </div>
+              )}
+            </div>
           )}
           {/* 헤더 메뉴 */}
           {/* <nav>

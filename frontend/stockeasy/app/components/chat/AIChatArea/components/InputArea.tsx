@@ -77,7 +77,7 @@ export function InputArea({
   // 입력 영역 스타일
   const inputAreaStyle: React.CSSProperties = {
     width: '100%',
-    marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '35vh')) : '0px',
+    marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '27vh')) : '0px',
     marginBottom: '5px',
     position: isInputCentered ? 'relative' : 'fixed',
     bottom: isInputCentered ? 'auto' : '0',

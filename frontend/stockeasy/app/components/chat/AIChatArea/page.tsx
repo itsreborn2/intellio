@@ -585,27 +585,17 @@ function AIChatAreaContent() {
         
         {/* 추천 질문 및 최신 업데이트 종목 영역 - 첫 진입 시 */}
         {isInputCentered && uiMessages.length === 0 && (
-          <div style={{
-            width: isMobile ? '100%' : 'min(85%, 1000px)',
-            minWidth: isMobile ? 'unset' : '280px',
-            maxWidth: '1000px',
-            margin: isMobile ? '20px auto 0' : '2px auto 0',
-            padding: isMobile ? '0 0' : '0',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2px'
-          }}>
-            {/* 데스크탑: 중앙정렬, 모바일: 기존 중앙정렬 유지 */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: isMobile ? 'column' : 'row',
-                gap: isMobile ? '2px' : '2px',
-                width: '100%',
-                justifyContent: isMobile ? 'center' : 'center', // 항상 중앙정렬
-                alignItems: isMobile ? 'center' : 'flex-start', // 데스크탑은 위에서부터 시작
-              }}
-            >
+          <div 
+            style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? '20px' : '20px',
+              width: '100%',
+              justifyContent: 'center', 
+              alignItems: isMobile ? 'center' : 'flex-start',
+              marginTop: isMobile ? '2rem' : '0'
+            }}
+          >
             {/* 추천 질문 컴포넌트 */}
             <RecommendedQuestions 
               questions={sampleRecommendedQuestions}
@@ -618,13 +608,12 @@ function AIChatAreaContent() {
               onSelectUpdate={handleSelectUpdate}
             />
           </div>
-        </div>
-      )}
-      
-      {/* 종목 제안 영역 - 메모이제이션된 props 사용 */}
-      <StockSuggestions {...stockSuggestionsProps} />
-    </>
-  );
+        )}
+        
+        {/* 종목 제안 영역 - 메모이제이션된 props 사용 */}
+        <StockSuggestions {...stockSuggestionsProps} />
+      </>
+    );
 };
 
 // 컴포넌트 마운트 시 종목 데이터 로드 (빈 의존성 배열로 최초 1회만 실행)
