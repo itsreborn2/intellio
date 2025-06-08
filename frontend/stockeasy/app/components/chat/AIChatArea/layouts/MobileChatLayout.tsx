@@ -134,7 +134,7 @@ export function MobileChatLayout({
             margin-left: 0 !important;
             left: 0 !important;
             right: 0 !important;
-            padding-top: 50px !important;
+            padding-top: 0px !important;
             position: absolute !important;
           }
           

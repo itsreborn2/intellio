@@ -6,7 +6,7 @@ import { parseCookies } from 'nookies';
 import { isLoggedIn } from '../utils/auth';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore, useIsClient } from '@/stores/userModeStore';
-import { MessageSquare, Download, Loader2, Share } from 'lucide-react';
+import { MessageSquare, Download, Loader2, Share, History } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -18,7 +18,19 @@ import { useChatShare } from '@/services/api/useChatShare';
  * StockEasy 애플리케이션의 고정 헤더 컴포넌트.
  * 화면 상단에 고정되며, 데스크톱에서는 사이드바 영역을 제외한 너비를 가집니다.
  */
-const Header: React.FC = () => {
+interface HeaderProps {
+  isMobile: boolean;
+  pathname: string;
+  isHistoryPanelOpen: boolean;
+  toggleHistoryPanel: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({
+  isMobile,
+  pathname,
+  isHistoryPanelOpen,
+  toggleHistoryPanel,
+}) => {
   // 사용자 정보 관련 상태
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState('');
@@ -33,8 +45,7 @@ const Header: React.FC = () => {
   // 클라이언트 측 마운트 상태 확인
   const isClient = useIsClient();
 
-  // 현재 경로 가져오기
-  const pathname = usePathname();
+  // pathname is now passed as a prop
   
   // 채팅 스토어에서 메시지 목록과 현재 세션 가져오기
   const { messages: storeMessages, currentSession } = useChatStore();
@@ -241,7 +252,17 @@ const Header: React.FC = () => {
       <div className="flex justify-between items-center w-full">
         <div className="flex items-center">
           {/* 로고 텍스트 */}
-          <div className="text-lg font-semibold pl-[25px] md:pl-0">StockEasy</div>
+          <div className="text-lg font-semibold pl-[27px] md:pl-0">StockEasy</div>
+          {/* 모바일 히스토리 버튼 */}
+          {isMobile && pathname === '/' && !isHistoryPanelOpen && (
+            <button
+              onClick={toggleHistoryPanel}
+              className="ml-2 p-1 text-gray-600 hover:text-gray-900"
+              title="히스토리 보기"
+            >
+              <History size={22} />
+            </button>
+          )}
           {/* 헤더 메뉴 */}
           {/* <nav>
             <ul className="flex items-center ml-4 space-x-4 text-[#3F424A] text-sm">

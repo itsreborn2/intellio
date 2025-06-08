@@ -34,23 +34,42 @@ const LatestUpdatesFallback = () => (
       borderRadius: '4px'
     }} />
     
-    {[1, 2, 3].map(i => (
-      <div key={i} style={{
-        width: '100%',
-        padding: '6px 10px',
-        borderRadius: '8px',
-        border: '1px solid #eee',
-        backgroundColor: '#f9f9f9',
-        height: '36px'
-      }} />
-    ))}
+    <div style={{ display: 'flex', gap: '8px' }}>
+      {/* 첫 번째 열 스켈레톤 */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} style={{
+            width: '100%',
+            padding: '6px 10px',
+            borderRadius: '8px',
+            border: '1px solid #eee',
+            backgroundColor: '#f9f9f9',
+            height: '36px'
+          }} />
+        ))}
+      </div>
+      
+      {/* 두 번째 열 스켈레톤 */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i + 5} style={{
+            width: '100%',
+            padding: '6px 10px',
+            borderRadius: '8px',
+            border: '1px solid #eee',
+            backgroundColor: '#f9f9f9',
+            height: '36px'
+          }} />
+        ))}
+      </div>
+    </div>
   </div>
 );
 
 interface LazyLatestUpdatesProps {
   updates: Array<{
     stock: StockOption;
-    updateInfo: string;
+    rank: number;
   }>;
   onSelectUpdate: (stock: StockOption, question: string) => void;
 }
@@ -63,4 +82,4 @@ export function LazyLatestUpdates({ updates, onSelectUpdate }: LazyLatestUpdates
   );
 }
 
-export default LazyLatestUpdates; 
+export default LazyLatestUpdates;
