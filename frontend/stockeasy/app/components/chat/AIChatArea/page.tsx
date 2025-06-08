@@ -20,6 +20,8 @@ import { useTokenUsageStore } from '@/stores/tokenUsageStore';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore } from '@/stores/userModeStore';
 import { StockOption, PopularStock } from './types';
+import { getPopularStocks } from '@/services/api/stats';
+import type { IStockPopularityItem } from '@/types/api/stats';
 
 /**
  * AIChatArea 메인 컴포넌트
@@ -135,40 +137,34 @@ function AIChatAreaContent() {
     }
   ];
 
-  // CSV에서 인기 검색 종목 데이터를 가져오기 위한 useEffect
+  // API에서 인기 검색 종목 데이터를 가져오기 위한 useEffect
   useEffect(() => {
     async function fetchPopularStocks() {
       try {
-        const response = await fetch('/requestfile/chatarea/top20_searched_stocks_daily.csv');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const csvText = await response.text();
+        // 백엔드 통계 API 호출
+        const response = await getPopularStocks(24, 20); // 24시간, 상위 20개
         
-        const lines = csvText.trim().split('\n');
-        const headers = lines[0].split(',');
-        const dataLines = lines.slice(1);
-
-        const parsedData = dataLines.map(line => {
-          const values = line.split(',');
-          const row = headers.reduce((obj, header, index) => {
-            obj[header.trim()] = values[index].trim();
-            return obj;
-          }, {} as Record<string, string>);
-
-          return {
-            rank: parseInt(row.rank, 10),
+        if (response.ok && response.stocks) {
+          // 백엔드 응답을 프론트엔드 데이터 구조에 맞게 변환
+          const parsedData = response.stocks.map((item: IStockPopularityItem, index: number) => ({
+            rank: index + 1, // 순위는 배열 인덱스 + 1
             stock: {
-              value: row.stock_code,
-              label: row.stock_name,
-              stockName: row.stock_name,
-              stockCode: row.stock_code,
+              value: item.stock_code,
+              label: item.stock_name,
+              stockName: item.stock_name,
+              stockCode: item.stock_code,
             },
-          };
-        });
-        setPopularStocks(parsedData as PopularStock[]);
+          }));
+          
+          setPopularStocks(parsedData as PopularStock[]);
+          console.log(`[AIChatArea] 인기 종목 데이터 로드 완료: ${parsedData.length}개`);
+        } else {
+          console.warn('[AIChatArea] 인기 종목 API 응답이 유효하지 않음:', response);
+          setPopularStocks([]);
+        }
       } catch (error) {
-        console.error("Failed to fetch or parse popular stocks CSV:", error);
+        console.error("[AIChatArea] 인기 종목 API 호출 실패:", error);
+        // API 호출 실패 시 빈 배열로 설정
         setPopularStocks([]); 
       }
     }
