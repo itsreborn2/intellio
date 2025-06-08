@@ -106,6 +106,7 @@ async def _fetch_popular_stocks_from_db(
 
 @stats_router.get("/popular-stocks", response_model=PopularStocksResponse)
 async def get_popular_stocks(
+    limit: int = Query(20, ge=1, le=100, description="반환할 종목 수 (1~100개)"),
     db: AsyncSession = Depends(get_db_async),
     current_session: Session = Depends(get_current_session)
 ) -> PopularStocksResponse:
@@ -114,6 +115,7 @@ async def get_popular_stocks(
     24시간 및 7일 데이터를 Redis 캐시를 통해 효율적으로 제공합니다.
     
     Args:
+        limit: 반환할 종목 수 (기본값: 20개)
         db: 데이터베이스 세션
         current_session: 현재 사용자 세션
         
@@ -121,11 +123,11 @@ async def get_popular_stocks(
         PopularStocksResponse: 24시간과 7일 인기 종목 데이터
     """
     try:
-        logger.info("인기 종목 조회 시작")
+        logger.info(f"인기 종목 조회 시작: limit={limit}")
         
-        # 캐시 키 정의
-        cache_key_24h = "stockeasy:popular_stocks:24h"
-        cache_key_7d = "stockeasy:popular_stocks:7d"
+        # 캐시 키 정의 (limit별로 캐시 분리)
+        cache_key_24h = f"stockeasy:popular_stocks:24h:limit_{limit}"
+        cache_key_7d = f"stockeasy:popular_stocks:7d:limit_{limit}"
         
         # 24시간 데이터 조회 (캐시 우선)
         cached_24h = await redis_client.get_key(cache_key_24h)
@@ -135,7 +137,7 @@ async def get_popular_stocks(
             from_cache_24h = True
         else:
             logger.info("24시간 데이터를 DB에서 조회 후 캐시 저장")
-            stocks_24h = await _fetch_popular_stocks_from_db(24, 20, db)
+            stocks_24h = await _fetch_popular_stocks_from_db(24, limit, db)
             stocks_24h_data = [stock.dict() for stock in stocks_24h]
             # 1시간 캐시 (3600초)
             await redis_client.set_key(cache_key_24h, stocks_24h_data, expire=3600)
@@ -149,7 +151,7 @@ async def get_popular_stocks(
             from_cache_7d = True
         else:
             logger.info("7일 데이터를 DB에서 조회 후 캐시 저장")
-            stocks_7d = await _fetch_popular_stocks_from_db(168, 20, db)  # 7일 = 168시간
+            stocks_7d = await _fetch_popular_stocks_from_db(168, limit, db)  # 7일 = 168시간
             stocks_7d_data = [stock.dict() for stock in stocks_7d]
             # 2시간 캐시 (7200초)
             await redis_client.set_key(cache_key_7d, stocks_7d_data, expire=7200)

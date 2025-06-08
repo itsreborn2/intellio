@@ -10,10 +10,15 @@ const STATS_API_BASE = `${API_ENDPOINT_STOCKEASY}/stats`;
 /**
  * 인기 종목 조회
  * 24시간 및 7일 기간의 인기 종목 데이터를 Redis 캐시를 통해 조회합니다.
+ * @param limit 반환할 종목 수 (기본값: 20)
  * @returns 24시간과 7일 인기 종목 데이터
  */
-export const getPopularStocks = async (): Promise<IPopularStocksResponse> => {
-  const response = await apiFetch(`${STATS_API_BASE}/popular-stocks`);
+export const getPopularStocks = async (
+  limit: number = 20
+): Promise<IPopularStocksResponse> => {
+  const response = await apiFetch(
+    `${STATS_API_BASE}/popular-stocks?limit=${limit}`
+  );
 
   if (!response.ok) {
     throw new Error(`인기 종목 조회 실패: ${response.status}`);

@@ -142,7 +142,7 @@ function AIChatAreaContent() {
     async function fetchPopularStocks() {
       try {
         // 백엔드 통계 API 호출 (Redis 캐시 적용)
-        const response = await getPopularStocks();
+        const response = await getPopularStocks(20); // 상위 20개 종목 요청
         
         if (response.ok && response.data_24h?.stocks) {
           // 24시간 데이터를 프론트엔드 데이터 구조에 맞게 변환
