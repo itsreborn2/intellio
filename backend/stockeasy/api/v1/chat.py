@@ -263,22 +263,30 @@ async def create_chat_session(
 @chat_router.get("/sessions", response_model=ChatSessionListResponse)
 async def get_chat_sessions(
     is_active: Optional[bool] = Query(None, description="활성화 여부 필터"),
+    limit: int = Query(50, ge=1, le=200, description="조회할 최대 세션 수 (기본값: 50, 최대: 200)"),
+    offset: int = Query(0, ge=0, description="조회 시작 위치 (페이징용)"),
     db: AsyncSession = Depends(get_db_async),
     current_session: Session = Depends(get_current_session)
 ) -> ChatSessionListResponse:
     """사용자의 채팅 세션 목록을 조회합니다."""
     try:
-        chat_sessions = await ChatService.get_chat_sessions(
+        start_time = time.time()
+        logger.info(f"[GET_CHAT_SESSIONS] 채팅 세션 목록 조회 시작: is_active={is_active}, limit={limit}, offset={offset}")
+        result = await ChatService.get_chat_sessions(
             db=db,
             user_id=current_session.user_id,
-            is_active=is_active
+            is_active=is_active,
+            limit=limit,
+            offset=offset
         )
+        end_time = time.time()
+        logger.info(f"[GET_CHAT_SESSIONS] 채팅 세션 목록 조회 완료: 소요 시간={end_time - start_time:.2f}초, 총 세션 수={result['total']}, 조회된 세션 수={len(result['sessions'])}")
         
         return ChatSessionListResponse(
             ok=True,
             status_message="채팅 세션 목록 조회 완료",
-            sessions=[ChatSessionResponse(**session) for session in chat_sessions],
-            total=len(chat_sessions)
+            sessions=[ChatSessionResponse(**session) for session in result['sessions']],
+            total=result['total']
         )
         
     except Exception as e:
