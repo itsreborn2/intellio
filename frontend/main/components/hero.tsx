@@ -79,7 +79,7 @@ export default function Hero() {
   };
   
   return (
-    <section className="container relative flex min-h-[calc(75vh-3.5rem)] max-w-screen-2xl flex-col items-center justify-center space-y-6 py-8 mt-10 text-center md:py-12">
+    <section className="container relative flex min-h-[calc(100vh-6rem)] max-w-screen-2xl flex-col items-center justify-center space-y-20 pt-12 pb-8 mt-10 text-center md:pt-16 md:pb-12">
       <div className="absolute inset-0 bg-radial-gradient from-primary to-accent opacity-10 blur-xl"></div>
       <div className="relative space-y-3">
         <h1 className="bg-gradient-to-br from-foreground from-30% via-foreground/90 to-foreground/70 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl md:text-6xl lg:text-7xl">
@@ -91,7 +91,6 @@ export default function Hero() {
           스탁이지(StockEasy)는 주식 전문 AI 어시스턴트로 당신의 리서치 시간을 줄여줍니다.
         </p>
       </div>
-      <br />
       <div className="relative flex gap-6">
         {renderServiceButton(
           'doceasy', 
@@ -104,7 +103,6 @@ export default function Hero() {
           'bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]'
         )}
       </div>
-      <br />
     </section>
   )
 }
