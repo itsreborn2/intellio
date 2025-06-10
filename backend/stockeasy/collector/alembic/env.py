@@ -24,8 +24,14 @@ target_metadata = TimescaleBase.metadata
 
 # 환경변수에서 데이터베이스 URL 가져오기
 def get_url():
-    # 임시로 하드코딩된 URL 사용 (UTF-8 인코딩 문제 해결)
-    return "postgresql://collector_user:StockCollector2024@localhost:6433/stockeasy_collector"
+    # 환경변수에서 데이터베이스 연결 정보 가져오기
+    host = os.getenv("TIMESCALE_HOST", "localhost")
+    port = os.getenv("TIMESCALE_PORT", "6433")
+    user = os.getenv("TIMESCALE_USER", "collector_user")
+    password = os.getenv("TIMESCALE_PASSWORD", "StockCollector2024")
+    database = os.getenv("TIMESCALE_DB", "stockeasy_collector")
+    
+    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

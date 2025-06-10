@@ -19,7 +19,7 @@ class StockPrice(TimescaleBase):
     __tablename__ = "stock_prices"
     
     time = Column(TIMESTAMP(timezone=True), primary_key=True, nullable=False, comment="시간 (UTC)")
-    symbol = Column(String(10), primary_key=True, nullable=False, comment="종목코드")
+    symbol = Column(String(20), primary_key=True, nullable=False, comment="종목코드")
     interval_type = Column(String(10), primary_key=True, nullable=False, default="1d", comment="봉 타입 (1m, 5m, 1d)")
     
     # OHLCV 기본 데이터

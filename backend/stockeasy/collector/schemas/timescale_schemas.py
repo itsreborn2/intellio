@@ -82,8 +82,12 @@ class StockPriceBase(BaseModel):
 
     @validator('symbol')
     def validate_symbol(cls, v):
+        # 업종 지수 허용 (KOSPI, KOSDAQ)
+        if v in ['KOSPI', 'KOSDAQ']:
+            return v
+        # 일반 종목코드는 6자리 숫자
         if not v.isdigit() or len(v) != 6:
-            raise ValueError('종목코드는 6자리 숫자여야 합니다')
+            raise ValueError('종목코드는 6자리 숫자 또는 업종지수(KOSPI, KOSDAQ)여야 합니다')
         return v
 
 
@@ -157,8 +161,12 @@ class SupplyDemandBase(BaseModel):
 
     @validator('symbol')
     def validate_symbol(cls, v):
+        # 업종 지수 허용 (KOSPI, KOSDAQ)
+        if v in ['KOSPI', 'KOSDAQ']:
+            return v
+        # 일반 종목코드는 6자리 숫자
         if not v.isdigit() or len(v) != 6:
-            raise ValueError('종목코드는 6자리 숫자여야 합니다')
+            raise ValueError('종목코드는 6자리 숫자 또는 업종지수(KOSPI, KOSDAQ)여야 합니다')
         return v
 
 
@@ -171,46 +179,6 @@ class SupplyDemandResponse(SupplyDemandBase):
     """수급 데이터 응답 스키마"""
     date: datetime
     created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# ========================================
-# 실시간 가격 데이터 스키마
-# ========================================
-
-class RealtimePriceBase(BaseModel):
-    """실시간 가격 데이터 기본 스키마"""
-    symbol: str = Field(..., max_length=10, description="종목코드")
-    price: Decimal = Field(..., ge=0, description="현재가")
-    volume: Optional[int] = Field(None, ge=0, description="현재 거래량")
-    bid_price: Optional[Decimal] = Field(None, ge=0, description="매수 1호가")
-    ask_price: Optional[Decimal] = Field(None, ge=0, description="매도 1호가")
-    bid_volume: Optional[int] = Field(None, ge=0, description="매수 1호가 잔량")
-    ask_volume: Optional[int] = Field(None, ge=0, description="매도 1호가 잔량")
-    change_amount: Optional[Decimal] = Field(None, description="전일대비 변동금액")
-    price_change_percent: Optional[Decimal] = Field(None, ge=-100, le=100, description="전일대비 변동률(%)")
-    trading_value: Optional[int] = Field(None, ge=0, description="현재 거래대금")
-    accumulated_volume: Optional[int] = Field(None, ge=0, description="누적 거래량")
-    accumulated_value: Optional[int] = Field(None, ge=0, description="누적 거래대금")
-    market_status: Optional[MarketStatus] = Field(default=MarketStatus.OPEN, description="시장 상태")
-    is_suspended: bool = Field(default=False, description="거래정지 여부")
-
-    @validator('symbol')
-    def validate_symbol(cls, v):
-        if not v.isdigit() or len(v) != 6:
-            raise ValueError('종목코드는 6자리 숫자여야 합니다')
-        return v
-
-
-class RealtimePriceCreate(RealtimePriceBase):
-    """실시간 가격 데이터 생성 스키마"""
-    time: datetime = Field(..., description="시간 (UTC)")
-
-
-class RealtimePriceResponse(RealtimePriceBase):
-    """실시간 가격 데이터 응답 스키마"""
-    time: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -536,7 +536,7 @@ class DataCollectorService(LoggerMixin):
             
             # 캐시에 저장
             if components:
-                component_dicts = [component.dict() for component in components]
+                component_dicts = [component.model_dump() for component in components]
                 await self.cache_manager.set_etf_components(etf_code, component_dicts)
                 return component_dicts
             
@@ -715,1484 +715,183 @@ class DataCollectorService(LoggerMixin):
     async def get_market_indices(self) -> List[Dict[str, Any]]:
         """주요 지수 조회"""
         try:
-            # TODO: 실제 API에서 지수 데이터 조회
-            dummy_indices = [
-                {
-                    "index_code": "KOSPI",
-                    "index_name": "코스피",
-                    "current_value": 2580.0 + (hash(str(datetime.now().hour)) % 100 - 50),
-                    "change_amount": 15.2 + (hash(str(datetime.now().minute)) % 20 - 10),
-                    "price_change_percent": 0.59 + (hash(str(datetime.now().second)) % 200 - 100) / 100
-                },
-                {
-                    "index_code": "KOSDAQ",
-                    "index_name": "코스닥",
-                    "current_value": 850.5 + (hash(str(datetime.now().hour)) % 50 - 25),
-                    "change_amount": -8.3 + (hash(str(datetime.now().minute)) % 10 - 5),
-                    "price_change_percent": -0.97 + (hash(str(datetime.now().second)) % 100 - 50) / 100
-                }
+            # 캐시에서 먼저 조회
+            cached_indices = await self.cache_manager.get_market_indices()
+            if cached_indices and cached_indices.get('indices'):
+                self.logger.info("캐시에서 시장 지수 정보 반환")
+                return cached_indices['indices']
+            
+            # 키움 API에서 시장 지수 조회
+            indices_list = []
+            
+            # 코스피(001)와 코스닥(101) 지수 조회
+            market_codes = [
+                {'code': '001', 'name': '코스피'},
+                {'code': '101', 'name': '코스닥'}
             ]
             
-            return dummy_indices
+            for market in market_codes:
+                try:
+                    # ka20003 API로 전업종지수 조회
+                    market_data = await self.kiwoom_client.get_market_indices(market['code'])
+                    
+                    if market_data:
+                        # 안전한 숫자 변환 함수
+                        def safe_float(value, default=0.0):
+                            try:
+                                if value is None or value == '':
+                                    return default
+                                # +/- 기호와 쉼표 제거
+                                clean_value = str(value).replace(',', '').replace('+', '').replace('-', '')
+                                return float(clean_value) if clean_value else default
+                            except (ValueError, TypeError):
+                                return default
+                        
+                        def safe_int(value, default=0):
+                            try:
+                                if value is None or value == '':
+                                    return default
+                                # 쉼표 제거
+                                clean_value = str(value).replace(',', '')
+                                return int(clean_value) if clean_value else default
+                            except (ValueError, TypeError):
+                                return default
+                        
+                        # 전일대비 변동금액 (부호 유지)
+                        change_amount_value = 0.0
+                        if market_data.pred_pre:
+                            try:
+                                # +/- 부호 확인하고 부호 유지
+                                pred_pre_str = str(market_data.pred_pre)
+                                if pred_pre_str.startswith('-'):
+                                    change_amount_value = -safe_float(pred_pre_str[1:])
+                                elif pred_pre_str.startswith('+'):
+                                    change_amount_value = safe_float(pred_pre_str[1:])
+                                else:
+                                    change_amount_value = safe_float(pred_pre_str)
+                            except Exception:
+                                change_amount_value = 0.0
+                        
+                        # 등락률 (부호 유지)
+                        change_percent_value = 0.0
+                        if market_data.flu_rt:
+                            try:
+                                flu_rt_str = str(market_data.flu_rt)
+                                if flu_rt_str.startswith('-'):
+                                    change_percent_value = -safe_float(flu_rt_str[1:])
+                                elif flu_rt_str.startswith('+'):
+                                    change_percent_value = safe_float(flu_rt_str[1:])
+                                else:
+                                    change_percent_value = safe_float(flu_rt_str)
+                            except Exception:
+                                change_percent_value = 0.0
+                        
+                        # 응답 데이터를 우리 형식으로 변환
+                        index_info = {
+                            'index_code': market_data.stk_cd,
+                            'index_name': market_data.stk_nm,
+                            'current_value': safe_float(market_data.cur_prc),
+                            'change_amount': change_amount_value,
+                            'price_change_percent': change_percent_value,
+                            'trading_volume': safe_int(market_data.trde_qty),
+                            'trading_value': safe_int(market_data.trde_prica),
+                            'upper_limit_stocks': safe_int(market_data.upl),
+                            'rising_stocks': safe_int(market_data.rising),
+                            'unchanged_stocks': safe_int(market_data.stdns),
+                            'falling_stocks': safe_int(market_data.fall),
+                            'lower_limit_stocks': safe_int(market_data.lst),
+                            'listed_stocks': safe_int(market_data.flo_stk_num),
+                            'updated_at': datetime.now().isoformat()
+                        }
+                        indices_list.append(index_info)
+                        self.logger.info(f"시장 지수 조회 성공: {market['name']} ({market_data.stk_cd})")
+                    else:
+                        self.logger.warning(f"시장 지수 데이터 없음: {market['name']} ({market['code']})")
+                        
+                except Exception as e:
+                    self.logger.error(f"시장 지수 조회 실패 ({market['name']}): {e}")
+                    continue
+            
+            if indices_list:
+                # Redis에 15분 TTL로 저장
+                cache_data = {
+                    'indices': indices_list,
+                    'cached_at': datetime.now().isoformat()
+                }
+                await self.cache_manager.set_market_indices(cache_data, ttl=900)  #15분, 30분(1800)
+                self.logger.info(f"시장 지수 정보 Redis 저장 완료: {len(indices_list)}개")
+                
+                return indices_list
+            else:
+                self.logger.warning("시장 지수 조회 결과가 없습니다")
+                return []
             
         except Exception as e:
             self.logger.error(f"지수 데이터 조회 실패: {e}")
             return []
     
-    # ===========================================
-    # 통계 및 관리
-    # ===========================================
-    
-    async def get_collection_stats(self) -> Dict[str, Any]:
-        """수집 통계 조회"""
-        try:
-            # 캐시 통계
-            cache_stats = await self.cache_manager.get_cache_stats()
-            
-            # API 호출 통계
-            api_stats = {}
-            for window in ["minute", "hour", "day"]:
-                api_stats[f"calls_per_{window}"] = await self.cache_manager.get_api_call_count("kiwoom", window)
-            
-            # 키움 API 통계
-            kiwoom_stats = self.kiwoom_client.get_stats()
-            
-            # ETF 크롤러 통계
-            etf_stats = self.etf_crawler.get_stats()
-            
-            # 스케줄러 통계
-            scheduler_stats = self.scheduler_service.get_job_stats()
-            
-            return {
-                "collection_stats": self._stats,
-                "cache_stats": cache_stats,
-                "api_stats": api_stats,
-                "kiwoom_stats": kiwoom_stats,
-                "etf_stats": etf_stats,
-                "scheduler_stats": scheduler_stats,
-                "realtime_status": {
-                    "is_running": self._realtime_running,
-                    "active_tasks": len([t for t in self._collection_tasks if not t.done()])
-                }
-            }
-            
-        except Exception as e:
-            self.logger.error(f"통계 조회 실패: {e}")
-            return {}
-    
-    async def update_symbol_mappings(self) -> Dict[str, int]:
-        """종목 코드-이름 매핑 업데이트"""
-        try:
-            # 키움 API에서 종목 목록 조회 (실제 구현 시)
-            if self.settings.KIWOOM_APP_KEY != "test_api_key":
-                # TODO: 키움 API에서 전체 종목 목록 조회
-                pass
-            
-            # 현재는 기본 종목만 업데이트
-            await self._load_initial_symbols()
-            
-            # ETF 목록도 업데이트
-            await self._initialize_etf_data()
-            
-            return {
-                "updated_stocks": self._stats["cached_symbols"],
-                "updated_etfs": len(self.etf_crawler.get_major_etf_list())
-            }
-            
-        except Exception as e:
-            self.logger.error(f"종목 매핑 업데이트 실패: {e}")
-            return {}
-    
-    async def force_cache_refresh(self) -> None:
-        """캐시 강제 갱신"""
-        try:
-            self.logger.info("캐시 강제 갱신 시작")
-            
-            # 실시간 데이터 캐시 클리어
-            await self.cache_manager.clear_realtime_cache()
-            
-            # 종목 매핑 재로드
-            await self.update_symbol_mappings()
-            
-            # ETF 구성종목 캐시 클리어
-            for etf_code in self.etf_crawler.get_major_etf_list().keys():
-                await self.cache_manager.delete_cache_key(f"etf_components:{etf_code}")
-            
-            self.logger.info("캐시 강제 갱신 완료")
-            
-        except Exception as e:
-            self.logger.error(f"캐시 강제 갱신 실패: {e}")
-            raise
-    
-    async def get_all_stock_list_for_stockai(self) -> List[Dict[str, str]]:
-        """
-        전체 종목 리스트 조회 (stock ai용)
-        우선주, 각종 ETF, ETN등 제외
-        
-        Returns:
-            List[Dict[str, str]]: [{"code": "005930", "name": "삼성전자"}, ...]
-        """
-        try:
-            # 캐시에서 먼저 조회
-            cached_list = await self.cache_manager.get_cache("all_stock_list_for_stockai")
-            if cached_list:
-                # 전체 종목 정보를 반환
-                result = []
-                for stock_info in cached_list.values():
-                    result.append(stock_info)
-                
-                self.logger.info(f"캐시에서 종목 리스트 반환: {len(result)}개")
-                return result
-            
-            # 캐시에 없으면 키움 API에서 조회 (Dict 형태로 받음)
-            self.logger.info("캐시에 종목 리스트가 없어 키움 API에서 조회")
-            stock_dict = await self.kiwoom_client.get_all_stock_list_for_stockai()
-            
-            # 키움 API에서 조회한 결과를 캐시에 저장 (Dict 형태 그대로)
-            if stock_dict:
-                # 캐시에 저장 (24시간 TTL)
-                await self.cache_manager.set_cache(
-                    "all_stock_list_for_stockai",
-                    stock_dict,
-                    ttl=86400  # 24시간
-                )
-                
-                self.logger.info(f"키움 API에서 조회한 종목 리스트를 캐시에 저장: {len(stock_dict)}개")
-                
-                # List 형태로 변환해서 반환
-                result = list(stock_dict.values())
-                return result
-            
-            return []
-            
-        except Exception as e:
-            self.logger.error(f"전체 종목 리스트 조회 실패: {e}")
-            return []
-        
-    async def get_all_stock_list(self) -> List[Dict[str, str]]:
-        """
-        전체 종목 리스트 조회 (프론트엔드용)
-        
-        Returns:
-            List[Dict[str, str]]: [{"code": "005930", "name": "삼성전자"}, ...]
-        """
-        try:
-            # 캐시에서 먼저 조회
-            cached_list = await self.cache_manager.get_cache("all_stock_list")
-            if cached_list:
-                # 전체 종목 정보를 반환
-                result = []
-                for stock_info in cached_list.values():
-                    result.append(stock_info)
-                
-                self.logger.info(f"캐시에서 종목 리스트 반환: {len(result)}개")
-                return result
-            
-            # 캐시에 없으면 키움 API에서 조회 (Dict 형태로 받음)
-            self.logger.info("캐시에 종목 리스트가 없어 키움 API에서 조회")
-            stock_dict = await self.kiwoom_client.get_all_stock_list()
-            
-            # 키움 API에서 조회한 결과를 캐시에 저장 (Dict 형태 그대로)
-            if stock_dict:
-                # 캐시에 저장 (24시간 TTL)
-                await self.cache_manager.set_cache(
-                    "all_stock_list",
-                    stock_dict,
-                    ttl=86400  # 24시간
-                )
-                
-                self.logger.info(f"키움 API에서 조회한 종목 리스트를 캐시에 저장: {len(stock_dict)}개")
-                
-                # List 형태로 변환해서 반환
-                result = list(stock_dict.values())
-                return result
-            
-            return []
-            
-        except Exception as e:
-            self.logger.error(f"전체 종목 리스트 조회 실패: {e}")
-            return []
-    
-    async def get_stock_info_by_code(self, code: str) -> Optional[Dict[str, Any]]:
-        """
-        종목코드로 종목 정보 조회
-        
-        Args:
-            code (str): 종목코드
-            
-        Returns:
-            Optional[Dict[str, Any]]: 종목 정보 또는 None
-        """
-        try:
-            # 캐시에서 먼저 조회
-            cached_list = await self.cache_manager.get_cache("all_stock_list")
-            if cached_list and code in cached_list:
-                self.logger.info(f"캐시에서 종목 정보 조회: {cached_list[code]}")
-                return cached_list[code]
-            
-            # 캐시에 없으면 개별 조회
-            info = await self.get_stock_info(code)
-            self.logger.info(f"get_stock_info_by_code: {info}")
-            return info
-            
-        except Exception as e:
-            self.logger.error(f"종목 정보 조회 실패 [{code}]: {e}")
-            return None
-    
-    async def search_stocks_by_name(self, keyword: str, limit: int = 20) -> List[Dict[str, str]]:
-        """
-        종목명으로 종목 검색
-        
-        Args:
-            keyword (str): 검색 키워드
-            limit (int): 결과 제한 수
-            
-        Returns:
-            List[Dict[str, str]]: 검색 결과
-        """
-        try:
-            # 전체 종목 리스트에서 검색
-            cached_list = await self.cache_manager.get_cache("all_stock_list")
-            if not cached_list:
-                # 캐시에 없으면 키움 API에서 조회
-                all_stocks = await self.kiwoom_client.get_all_stock_list()
-                cached_list = all_stocks
-            
-            # 키워드로 필터링
-            results = []
-            keyword_lower = keyword.lower()
-            
-            for stock_info in cached_list.values():
-                if keyword_lower in stock_info["name"].lower():
-                    results.append(stock_info)
-                    
-                    if len(results) >= limit:
-                        break
-            
-            self.logger.info(f"종목 검색 결과: '{keyword}' -> {len(results)}개")
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"종목 검색 실패 [{keyword}]: {e}")
-            return []
-    
-    async def force_refresh_stock_list(self) -> Dict[str, int]:
-        """
-        종목 리스트 강제 새로고침
-        
-        Returns:
-            Dict[str, int]: 업데이트 결과
-        """
-        try:
-            self.logger.info("종목 리스트 강제 새로고침 시작")
-            
-            # 키움 API에서 강제 새로고침
-            stock_list = await self.kiwoom_client.get_all_stock_list(force_refresh=True)
-            
-            # 캐시에 저장
-            await self.cache_manager.set_cache(
-                "all_stock_list", 
-                stock_list, 
-                ttl=86400  # 24시간
-            )
-            
-            stock_list_for_stockai = await self.kiwoom_client.get_all_stock_list_for_stockai(force_refresh=True)
-            # 캐시에 저장(stock ai)
-            await self.cache_manager.set_cache(
-                "all_stock_list_for_stockai", 
-                stock_list_for_stockai, 
-                ttl=86400  # 24시간
-            )
-            
-            # CSV 파일로 저장
-            await self._save_stock_list_to_csv(stock_list_for_stockai)
-            
-            self.logger.info(f"종목 리스트 강제 새로고침 완료: {len(stock_list)}개")
-            self.logger.info(f"stock ai용 종목 리스트 강제 새로고침 완료: {len(stock_list_for_stockai)}개")
-            
-            return {
-                "total_stocks": len(stock_list),
-                "update_time": int(datetime.now().timestamp())
-            }
-            
-        except Exception as e:
-            self.logger.error(f"종목 리스트 강제 새로고침 실패: {e}")
-            return {"total_stocks": 0, "update_time": 0}
-    
-    async def _save_stock_list_to_csv(self, stock_list_data: Dict[str, Dict[str, str]]) -> None:
-        """
-        종목 리스트를 CSV 파일로 저장
-        
-        Args:
-            stock_list_data: 종목 리스트 데이터
-        """
-        try:
-            # CSV 파일 저장 경로 설정
-            csv_dir = "data/csv"
-            os.makedirs(csv_dir, exist_ok=True)
-            
-            # 파일명에 타임스탬프 추가
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            csv_filename = f"stock_list_for_stockai_{timestamp}.csv"
-            csv_filepath = os.path.join(csv_dir, csv_filename)
-            
-            # 최신 파일명도 생성 (덮어쓰기용)
-            latest_csv_filepath = os.path.join(csv_dir, "stock_list_for_stockai_latest.csv")
-            
-            # 데이터를 리스트로 변환
-            stock_list = list(stock_list_data.values())
-            
-            if not stock_list:
-                self.logger.warning("저장할 종목 데이터가 없습니다")
-                return
-            
-            # CSV 파일 작성
-            with open(csv_filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
-                # 첫 번째 항목의 키를 필드명으로 사용
-                fieldnames = stock_list[0].keys()
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                
-                # 헤더 작성
-                writer.writeheader()
-                
-                # 데이터 작성
-                writer.writerows(stock_list)
-            
-            # 최신 파일로도 복사
-            with open(latest_csv_filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(stock_list)
-            
-            self.logger.info(f"종목 리스트 CSV 파일 저장 완료: {csv_filepath}")
-            self.logger.info(f"최신 종목 리스트 CSV 파일 저장 완료: {latest_csv_filepath}")
-            self.logger.info(f"저장된 종목 수: {len(stock_list)}개")
-            
-        except Exception as e:
-            self.logger.error(f"종목 리스트 CSV 파일 저장 실패: {e}")
-            raise
-    
-    async def get_last_update_time(self, update_type: str) -> Optional[datetime]:
-        """
-        키움 API의 마지막 업데이트 시간 조회
-        
-        Args:
-            update_type (str): 업데이트 유형 ("stockai" 또는 "stock")
-            
-        Returns:
-            Optional[datetime]: 마지막 업데이트 시간 또는 None
-        """
-        try:
-            if update_type == "stockai":
-                return getattr(self.kiwoom_client, '_last_stockai_update', None)
-            elif update_type == "stock":
-                return getattr(self.kiwoom_client, '_last_stock_update', None)
-            else:
-                self.logger.warning(f"잘못된 update_type: {update_type}")
-                return None
-                
-        except Exception as e:
-            self.logger.error(f"마지막 업데이트 시간 조회 실패 [{update_type}]: {e}")
-            return None
-    
-    async def get_all_last_update_times(self) -> Dict[str, Optional[datetime]]:
-        """
-        모든 마지막 업데이트 시간 조회
-        
-        Returns:
-            Dict[str, Optional[datetime]]: 모든 업데이트 시간
-        """
-        try:
-            return {
-                "stockai_update": await self.get_last_update_time("stockai"),
-                "stock_update": await self.get_last_update_time("stock")
-            }
-            
-        except Exception as e:
-            self.logger.error(f"모든 마지막 업데이트 시간 조회 실패: {e}")
-            return {"stockai_update": None, "stock_update": None}
-    
-    # ===========================================
-    # 대량 배치 수집 메서드
-    # ===========================================
-    
-    async def collect_all_stock_chart_data(
-        self,
-        months_back: int = 24,
-        batch_size: int = 50,
-        progress_callback=None
-    ) -> Dict[str, Any]:
-        """
-        전종목 일봉 차트 데이터 수집 (Producer-Consumer 패턴으로 성능 최적화)
-        
-        Args:
-            months_back: 수집할 개월 수 (기본 24개월)
-            batch_size: 배치 크기 (동시 처리할 종목 수)
-            progress_callback: 진행상황 콜백 함수
-            
-        Returns:
-            Dict: 수집 결과
-        """
-        with LogContext(self.logger, f"전종목 일봉 차트 데이터 수집 ({months_back}개월) - 큐 기반") as ctx:
-            try:
-                # 전종목 리스트 조회
-                all_stocks = await self.get_all_stock_list_for_stockai()
-                
-                if not all_stocks:
-                    raise Exception("종목 리스트가 비어있습니다")
-                
-                # 날짜 계산
-                from datetime import datetime, timedelta
-                import asyncio
-                end_date = datetime.now()
-                start_date = end_date - timedelta(days=months_back * 30)
-                start_date_str = start_date.strftime('%Y%m%d')
-                end_date_str = end_date.strftime('%Y%m%d')
-                
-                ctx.log_progress(f"수집 대상: {len(all_stocks)}개 종목")
-                ctx.log_progress(f"기간: {start_date_str} ~ {end_date_str}")
-                
-                total_stocks = len(all_stocks)
-                
-                # 공유 상태 관리
-                stats = {
-                    "processed_stocks": 0,
-                    "success_stocks": 0,
-                    "error_stocks": 0,
-                    "total_records": 0,
-                    "api_finished": False
-                }
-                
-                # 큐 생성 (메모리 기반 - 최대 큐 크기 제한으로 메모리 보호)
-                data_queue = asyncio.Queue(maxsize=10)  # 최대 10개 배치만 메모리에 보관
-                
-                async def api_producer():
-                    """API 호출해서 데이터를 큐에 넣는 Producer"""
-                    try:
-                        for i in range(0, total_stocks, batch_size):
-                            batch_stocks = all_stocks[i:i + batch_size]
-                            symbols = [stock["code"] for stock in batch_stocks]
-                            
-                            try:
-                                # 키움 API에서 차트 데이터 조회
-                                if self.settings.KIWOOM_APP_KEY != "test_api_key":
-                                    chart_data_dict = await self.kiwoom_client.get_multiple_chart_data(
-                                        symbols, start_date_str, end_date_str
-                                    )
-                                else:
-                                    ctx.logger.warning(f"키움 API 키가 설정되지 않아 배치 {i//batch_size + 1} 건너뜀")
-                                    continue
-                                
-                                # 데이터 변환
-                                stock_price_data = []
-                                for symbol, chart_data in chart_data_dict.items():
-                                    for chart_item in chart_data:
-                                        try:
-                                            # 안전한 변환 함수들
-                                            def safe_float(value):
-                                                try:
-                                                    return float(value) if value and str(value).strip() else None
-                                                except (ValueError, TypeError):
-                                                    return None
-                                            
-                                            def safe_int(value):
-                                                try:
-                                                    return int(value) if value and str(value).strip() else None
-                                                except (ValueError, TypeError):
-                                                    return None
-                                            
-                                            # 키움 API에서 제공하는 계산값들 추출
-                                            api_change_amount = safe_float(chart_item.change_amount) if hasattr(chart_item, 'change_amount') else None
-                                            api_change_rate = safe_float(chart_item.change_rate) if hasattr(chart_item, 'change_rate') else None
-                                            api_previous_close = safe_float(chart_item.previous_close) if hasattr(chart_item, 'previous_close') else None
-                                            api_volume_change_percent = safe_float(chart_item.volume_change_percent) if hasattr(chart_item, 'volume_change_percent') else None
-                                            
-                                            # 수정주가 관련 필드 추출
-                                            api_adjustment_type = getattr(chart_item, 'adjustment_type', None)
-                                            api_adjustment_ratio = safe_float(getattr(chart_item, 'adjustment_ratio', None))
-                                            api_adjustment_event = getattr(chart_item, 'adjustment_event', None)
-                                            
-                                            stock_price = StockPriceCreate(
-                                                time=datetime.strptime(chart_item.date, '%Y%m%d') if hasattr(chart_item, 'date') else datetime.now(),
-                                                symbol=symbol,
-                                                interval_type=IntervalType.ONE_DAY.value,
-                                                open=safe_float(chart_item.open),
-                                                high=safe_float(chart_item.high),
-                                                low=safe_float(chart_item.low),
-                                                close=safe_float(chart_item.close),
-                                                volume=safe_int(chart_item.volume),
-                                                trading_value=safe_int(chart_item.trading_value),
-                                                # 키움 API에서 제공하는 계산값들 활용
-                                                change_amount=api_change_amount,
-                                                price_change_percent=api_change_rate,
-                                                previous_close_price=api_previous_close,
-                                                volume_change_percent=api_volume_change_percent,
-                                                # 수정주가 관련 정보
-                                                adjusted_price_type=api_adjustment_type,
-                                                adjustment_ratio=api_adjustment_ratio,
-                                                adjusted_price_event=api_adjustment_event,
-                                                # updated_at 필드 추가 (UPSERT 시 갱신 보장)
-                                                updated_at=datetime.now()
-                                            )
-                                            stock_price_data.append(stock_price)
-                                        except Exception as e:
-                                            ctx.logger.warning(f"차트 데이터 변환 실패 ({symbol}): {e}")
-                                            continue
-                                
-                                # 큐에 데이터 추가 (배치 정보 포함)
-                                if stock_price_data:
-                                    batch_info = {
-                                        "data": stock_price_data,
-                                        "symbols": symbols,
-                                        "batch_num": i//batch_size + 1
-                                    }
-                                    await data_queue.put(batch_info)
-                                    ctx.logger.info(f"API Producer: 배치 {i//batch_size + 1} 큐에 추가 ({len(stock_price_data)}건)")
-                                
-                                stats["processed_stocks"] += len(symbols)
-                                success_count = len([s for s in symbols if s in chart_data_dict and chart_data_dict[s]])
-                                stats["success_stocks"] += success_count
-                                
-                            except Exception as e:
-                                ctx.logger.error(f"API Producer 배치 처리 실패 (배치 {i//batch_size + 1}): {e}")
-                                stats["error_stocks"] += len(symbols)
-                            
-                            # API 제한 준수
-                            await asyncio.sleep(0.3)
-                        
-                        # Producer 완료 신호
-                        stats["api_finished"] = True
-                        await data_queue.put(None)  # 종료 신호
-                        ctx.log_progress("API Producer 완료")
-                        
-                    except Exception as e:
-                        ctx.logger.error(f"API Producer 실패: {e}")
-                        stats["api_finished"] = True
-                        await data_queue.put(None)  # 종료 신호
-                
-                async def db_consumer():
-                    """큐에서 데이터를 꺼내서 DB에 저장하는 Consumer"""
-                    try:
-                        while True:
-                            # 큐에서 데이터 가져오기
-                            batch_info = await data_queue.get()
-                            
-                            # 종료 신호 확인
-                            if batch_info is None:
-                                ctx.log_progress("DB Consumer 종료 신호 수신")
-                                break
-                            
-                            try:
-                                stock_price_data = batch_info["data"]
-                                symbols = batch_info["symbols"]
-                                batch_num = batch_info["batch_num"]
-                                
-                                # TimescaleDB에 저장
-                                await timescale_service.bulk_create_stock_prices_with_progress(
-                                    stock_price_data,
-                                    batch_size=2000,
-                                    progress_callback=None
-                                )
-                                stats["total_records"] += len(stock_price_data)
-                                
-                                # 변동률 등 배치 계산
-                                batch_symbols = list(set([price.symbol for price in stock_price_data]))
-                                try:
-                                    calc_result = await timescale_service.batch_calculate_for_new_data(
-                                        symbols=batch_symbols
-                                    )
-                                    ctx.logger.info(f"DB Consumer: 배치 {batch_num} 저장 완료 ({len(stock_price_data)}건), 계산 완료: {calc_result.get('total_updated', 0)}건")
-                                except Exception as e:
-                                    ctx.logger.warning(f"배치 계산 실패 (데이터는 정상 저장됨): {e}")
-                                
-                            except Exception as e:
-                                ctx.logger.error(f"DB Consumer 배치 처리 실패: {e}")
-                            
-                            # 진행상황 알림
-                            if progress_callback:
-                                progress = (stats["processed_stocks"] / total_stocks) * 100
-                                await progress_callback(
-                                    stats["processed_stocks"], total_stocks, progress,
-                                    stats["success_stocks"], stats["error_stocks"], stats["total_records"]
-                                )
-                            
-                            data_queue.task_done()
-                        
-                        ctx.log_progress("DB Consumer 완료")
-                        
-                    except Exception as e:
-                        ctx.logger.error(f"DB Consumer 실패: {e}")
-                
-                # Producer와 Consumer를 병렬 실행
-                ctx.log_progress("Producer-Consumer 병렬 처리 시작")
-                producer_task = asyncio.create_task(api_producer())
-                consumer_task = asyncio.create_task(db_consumer())
-                
-                # 두 태스크 완료 대기
-                await asyncio.gather(producer_task, consumer_task)
-                
-                # 전체 배치 수집 완료 후 최종 배치 계산 실행
-                ctx.log_progress("전체 수집 완료 후 최종 배치 계산 시작")
-                try:
-                    # 성공적으로 수집된 종목들에 대해 최종 배치 계산
-                    successful_symbols = []
-                    if stats["success_stocks"] > 0:
-                        # 실제 DB에서 데이터가 있는 종목들을 조회
-                        from stockeasy.collector.services.timescale_service import timescale_service
-                        from sqlalchemy import text
-                        from stockeasy.collector.core.timescale_database import get_timescale_session_context
-                        
-                        async with get_timescale_session_context() as session:
-                            symbols_query = text("""
-                                SELECT DISTINCT symbol 
-                                FROM stock_prices 
-                                WHERE time >= :start_date::date 
-                                AND time <= :end_date::date
-                                ORDER BY symbol
-                            """)
-                            result_symbols = await session.execute(symbols_query, {
-                                'start_date': start_date_str[:4] + '-' + start_date_str[4:6] + '-' + start_date_str[6:8],
-                                'end_date': end_date_str[:4] + '-' + end_date_str[4:6] + '-' + end_date_str[6:8]
-                            })
-                            successful_symbols = [row[0] for row in result_symbols.fetchall()]
-                    
-                    if successful_symbols:
-                        ctx.log_progress(f"최종 배치 계산 대상: {len(successful_symbols)}개 종목")
-                        final_calc_result = await timescale_service.batch_calculate_stock_price_changes(
-                            symbols=successful_symbols,
-                            days_back=(datetime.strptime(end_date_str, '%Y%m%d') - datetime.strptime(start_date_str, '%Y%m%d')).days + 1,
-                            batch_size=50
-                        )
-                        ctx.log_progress(f"최종 배치 계산 완료: {final_calc_result.get('total_updated', 0)}건 업데이트")
-                    else:
-                        ctx.log_progress("최종 배치 계산 대상 없음")
-                        
-                except Exception as e:
-                    ctx.logger.warning(f"최종 배치 계산 실패 (데이터 수집은 정상 완료): {e}")
-                
-                result = {
-                    "success": True,
-                    "total_stocks": total_stocks,
-                    "success_stocks": stats["success_stocks"],
-                    "error_stocks": stats["error_stocks"],
-                    "total_records": stats["total_records"],
-                    "start_date": start_date_str,
-                    "end_date": end_date_str,
-                    "final_calculation_symbols": len(successful_symbols) if 'successful_symbols' in locals() else 0,
-                    "message": f"전종목 차트 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건"
-                }
-                
-                ctx.log_progress(f"전종목 차트 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건")
-                return result
-                
-            except Exception as e:
-                ctx.logger.error(f"전종목 차트 데이터 수집 실패: {e}")
-                raise
-
-    async def collect_all_supply_demand_data(
-        self,
-        months_back: int = 6,
-        batch_size: int = 20,
-        progress_callback=None
-    ) -> Dict[str, Any]:
-        """
-        전종목 수급 데이터 수집 (Producer-Consumer 패턴으로 성능 최적화)
-        
-        Args:
-            months_back: 수집할 개월 수 (기본 6개월)
-            batch_size: 배치 크기 (동시 처리할 종목 수)
-            progress_callback: 진행상황 콜백 함수
-            
-        Returns:
-            Dict: 수집 결과
-        """
-        with LogContext(self.logger, f"전종목 수급 데이터 수집 ({months_back}개월) - 큐 기반") as ctx:
-            try:
-                # 전종목 리스트 조회
-                all_stocks = await self.get_all_stock_list_for_stockai()
-                
-                if not all_stocks:
-                    raise Exception("종목 리스트가 비어있습니다")
-                
-                # 날짜 계산
-                from datetime import datetime, timedelta
-                import asyncio
-                end_date = datetime.now()
-                start_date = end_date - timedelta(days=months_back * 30)
-                start_date_str = start_date.strftime('%Y%m%d')
-                end_date_str = end_date.strftime('%Y%m%d')
-                
-                ctx.log_progress(f"수집 대상: {len(all_stocks)}개 종목")
-                ctx.log_progress(f"기간: {start_date_str} ~ {end_date_str}")
-                
-                total_stocks = len(all_stocks)
-                
-                # 공유 상태 관리
-                stats = {
-                    "processed_stocks": 0,
-                    "success_stocks": 0,
-                    "error_stocks": 0,
-                    "total_records": 0,
-                    "api_finished": False
-                }
-                
-                # 큐 생성 (수급 데이터는 더 작은 큐 크기)
-                data_queue = asyncio.Queue(maxsize=5)  # 최대 5개 배치만 메모리에 보관
-                
-                async def api_producer():
-                    """API 호출해서 데이터를 큐에 넣는 Producer"""
-                    try:
-                        for i in range(0, total_stocks, batch_size):
-                            batch_stocks = all_stocks[i:i + batch_size]
-                            symbols = [stock["code"] for stock in batch_stocks]
-                            
-                            try:
-                                # 키움 API에서 수급 데이터 조회
-                                if self.settings.KIWOOM_APP_KEY != "test_api_key":
-                                    supply_data_dict = await self.kiwoom_client.get_multiple_supply_demand_data(
-                                        symbols, start_date_str, end_date_str
-                                    )
-                                else:
-                                    ctx.logger.warning(f"키움 API 키가 설정되지 않아 배치 {i//batch_size + 1} 건너뜀")
-                                    continue
-                                
-                                # 데이터 변환
-                                supply_demand_data = []
-                                for symbol, supply_data in supply_data_dict.items():
-                                    for supply_item in supply_data:
-                                        try:
-                                            supply_demand = SupplyDemandCreate(
-                                                date=datetime.strptime(supply_item['date'], '%Y%m%d'),
-                                                symbol=symbol,
-                                                current_price=float(supply_item.get('current_price', 0)) if supply_item.get('current_price') else None,
-                                                price_change_sign=supply_item.get('price_change_sign'),
-                                                price_change=float(supply_item.get('price_change', 0)) if supply_item.get('price_change') else None,
-                                                price_change_percent=float(supply_item.get('price_change_percent', 0)) if supply_item.get('price_change_percent') else None,
-                                                accumulated_volume=int(supply_item.get('accumulated_volume', 0)) if supply_item.get('accumulated_volume') else None,
-                                                accumulated_value=int(supply_item.get('accumulated_value', 0)) if supply_item.get('accumulated_value') else None,
-                                                individual_investor=int(supply_item.get('individual_investor', 0)) if supply_item.get('individual_investor') else None,
-                                                foreign_investor=int(supply_item.get('foreign_investor', 0)) if supply_item.get('foreign_investor') else None,
-                                                institution_total=int(supply_item.get('institution_total', 0)) if supply_item.get('institution_total') else None,
-                                                financial_investment=int(supply_item.get('financial_investment', 0)) if supply_item.get('financial_investment') else None,
-                                                insurance=int(supply_item.get('insurance', 0)) if supply_item.get('insurance') else None,
-                                                investment_trust=int(supply_item.get('investment_trust', 0)) if supply_item.get('investment_trust') else None,
-                                                other_financial=int(supply_item.get('other_financial', 0)) if supply_item.get('other_financial') else None,
-                                                bank=int(supply_item.get('bank', 0)) if supply_item.get('bank') else None,
-                                                pension_fund=int(supply_item.get('pension_fund', 0)) if supply_item.get('pension_fund') else None,
-                                                private_fund=int(supply_item.get('private_fund', 0)) if supply_item.get('private_fund') else None,
-                                                government=int(supply_item.get('government', 0)) if supply_item.get('government') else None,
-                                                other_corporation=int(supply_item.get('other_corporation', 0)) if supply_item.get('other_corporation') else None,
-                                                domestic_foreign=int(supply_item.get('domestic_foreign', 0)) if supply_item.get('domestic_foreign') else None
-                                            )
-                                            supply_demand_data.append(supply_demand)
-                                        except Exception as e:
-                                            ctx.logger.warning(f"수급 데이터 변환 실패 ({symbol}): {e}")
-                                            continue
-                                
-                                # 큐에 데이터 추가
-                                if supply_demand_data:
-                                    batch_info = {
-                                        "data": supply_demand_data,
-                                        "symbols": symbols,
-                                        "batch_num": i//batch_size + 1
-                                    }
-                                    await data_queue.put(batch_info)
-                                    ctx.logger.info(f"API Producer: 배치 {i//batch_size + 1} 큐에 추가 ({len(supply_demand_data)}건)")
-                                
-                                stats["processed_stocks"] += len(symbols)
-                                success_count = len([s for s in symbols if s in supply_data_dict and supply_data_dict[s]])
-                                stats["success_stocks"] += success_count
-                                
-                            except Exception as e:
-                                ctx.logger.error(f"API Producer 배치 처리 실패 (배치 {i//batch_size + 1}): {e}")
-                                stats["error_stocks"] += len(symbols)
-                            
-                            # API 제한 준수 (수급 데이터는 더 긴 대기)
-                            await asyncio.sleep(0.8)
-                        
-                        # Producer 완료 신호
-                        stats["api_finished"] = True
-                        await data_queue.put(None)  # 종료 신호
-                        ctx.log_progress("API Producer 완료")
-                        
-                    except Exception as e:
-                        ctx.logger.error(f"API Producer 실패: {e}")
-                        stats["api_finished"] = True
-                        await data_queue.put(None)  # 종료 신호
-                
-                async def db_consumer():
-                    """큐에서 데이터를 꺼내서 DB에 저장하는 Consumer"""
-                    try:
-                        while True:
-                            # 큐에서 데이터 가져오기
-                            batch_info = await data_queue.get()
-                            
-                            # 종료 신호 확인
-                            if batch_info is None:
-                                ctx.log_progress("DB Consumer 종료 신호 수신")
-                                break
-                            
-                            try:
-                                supply_demand_data = batch_info["data"]
-                                symbols = batch_info["symbols"] 
-                                batch_num = batch_info["batch_num"]
-                                
-                                # TimescaleDB에 저장
-                                await timescale_service.bulk_create_supply_demand_with_progress(
-                                    supply_demand_data,
-                                    batch_size=500,
-                                    progress_callback=None
-                                )
-                                stats["total_records"] += len(supply_demand_data)
-                                
-                                ctx.logger.info(f"DB Consumer: 배치 {batch_num} 저장 완료 ({len(supply_demand_data)}건)")
-                                
-                            except Exception as e:
-                                ctx.logger.error(f"DB Consumer 배치 처리 실패: {e}")
-                            
-                            # 진행상황 알림
-                            if progress_callback:
-                                progress = (stats["processed_stocks"] / total_stocks) * 100
-                                await progress_callback(
-                                    stats["processed_stocks"], total_stocks, progress,
-                                    stats["success_stocks"], stats["error_stocks"], stats["total_records"]
-                                )
-                            
-                            data_queue.task_done()
-                        
-                        ctx.log_progress("DB Consumer 완료")
-                        
-                    except Exception as e:
-                        ctx.logger.error(f"DB Consumer 실패: {e}")
-                
-                # Producer와 Consumer를 병렬 실행
-                ctx.log_progress("Producer-Consumer 병렬 처리 시작")
-                producer_task = asyncio.create_task(api_producer())
-                consumer_task = asyncio.create_task(db_consumer())
-                
-                # 두 태스크 완료 대기
-                await asyncio.gather(producer_task, consumer_task)
-                
-                result = {
-                    "success": True,
-                    "total_stocks": total_stocks,
-                    "success_stocks": stats["success_stocks"],
-                    "error_stocks": stats["error_stocks"],
-                    "total_records": stats["total_records"],
-                    "start_date": start_date_str,
-                    "end_date": end_date_str,
-                    "message": f"전종목 수급 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건"
-                }
-                
-                ctx.log_progress(f"전종목 수급 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건")
-                return result
-                
-            except Exception as e:
-                ctx.logger.error(f"전종목 수급 데이터 수집 실패: {e}")
-                raise
-
-    async def _generate_dummy_supply_data_for_symbols(
-        self, 
-        symbols: List[str], 
-        start_date: datetime, 
-        end_date: datetime
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """종목별 더미 수급 데이터 생성"""
-        dummy_data = {}
-        
-        for symbol in symbols:
-            supply_data = []
-            current_date = start_date
-            
-            while current_date <= end_date:
-                # 주말 제외
-                if current_date.weekday() < 5:
-                    date_str = current_date.strftime('%Y%m%d')
-                    
-                    supply_item = {
-                        'date': date_str,
-                        'symbol': symbol,
-                        'current_price': 50000 + (hash(f"{symbol}{date_str}") % 50000),
-                        'price_change_sign': '+' if hash(f"{symbol}{date_str}sign") % 2 else '-',
-                        'price_change': hash(f"{symbol}{date_str}change") % 5000,
-                        'price_change_percent': (hash(f"{symbol}{date_str}percent") % 1000) / 100,
-                        'accumulated_volume': hash(f"{symbol}{date_str}vol") % 10000000,
-                        'accumulated_value': hash(f"{symbol}{date_str}value") % 1000000000000,
-                        'individual_investor': hash(f"{symbol}{date_str}individual") % 1000000000,
-                        'foreign_investor': hash(f"{symbol}{date_str}foreign") % 1000000000,
-                        'institution_total': hash(f"{symbol}{date_str}institution") % 1000000000,
-                        'financial_investment': hash(f"{symbol}{date_str}financial") % 500000000,
-                        'insurance': hash(f"{symbol}{date_str}insurance") % 100000000,
-                        'investment_trust': hash(f"{symbol}{date_str}trust") % 300000000,
-                        'other_financial': hash(f"{symbol}{date_str}other") % 100000000,
-                        'bank': hash(f"{symbol}{date_str}bank") % 50000000,
-                        'pension_fund': hash(f"{symbol}{date_str}pension") % 200000000,
-                        'private_fund': hash(f"{symbol}{date_str}private") % 150000000,
-                        'government': hash(f"{symbol}{date_str}government") % 50000000,
-                        'other_corporation': hash(f"{symbol}{date_str}corp") % 100000000,
-                        'domestic_foreign': hash(f"{symbol}{date_str}domestic") % 500000000
-                    }
-                    
-                    supply_data.append(supply_item)
-                
-                current_date += timedelta(days=1)
-            
-            dummy_data[symbol] = supply_data
-        
-        return dummy_data
-
-    async def get_batch_collection_status(self) -> Dict[str, Any]:
-        """배치 수집 상태 조회"""
-        try:
-            # TimescaleDB 통계 조회
-            timescale_stats = await timescale_service.get_statistics()
-            
-            # 종목별 데이터 건수 조회
-            stock_price_counts = await timescale_service.get_data_count_by_symbol("stock_prices")
-            supply_demand_counts = await timescale_service.get_data_count_by_symbol("supply_demand")
-            
-            return {
-                "timescale_stats": timescale_stats,
-                "stock_price_counts": stock_price_counts,
-                "supply_demand_counts": supply_demand_counts,
-                "last_update": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            self.logger.error(f"배치 수집 상태 조회 실패: {e}")
-            return {}
-
-    async def start_batch_collection_job(
-        self,
-        collect_chart_data: bool = True,
-        collect_supply_data: bool = True,
-        chart_months: int = 24,
-        supply_months: int = 6
-    ) -> Dict[str, Any]:
-        """
-        대량 배치 수집 작업 시작
-        
-        Args:
-            collect_chart_data: 차트 데이터 수집 여부
-            collect_supply_data: 수급 데이터 수집 여부
-            chart_months: 차트 데이터 수집 개월 수
-            supply_months: 수급 데이터 수집 개월 수
-            
-        Returns:
-            Dict: 작업 시작 결과
-        """
-        try:
-            self.logger.info("대량 배치 수집 작업 시작")
-            
-            results = {}
-            
-            if collect_chart_data:
-                self.logger.info(f"차트 데이터 수집 시작 ({chart_months}개월)")
-                chart_result = await self.collect_all_stock_chart_data(
-                    months_back=chart_months,
-                    batch_size=30
-                )
-                results["chart_data"] = chart_result
-            
-            if collect_supply_data:
-                self.logger.info(f"수급 데이터 수집 시작 ({supply_months}개월)")
-                supply_result = await self.collect_all_supply_demand_data(
-                    months_back=supply_months,
-                    batch_size=15
-                )
-                results["supply_data"] = supply_result
-            
-            self.logger.info("대량 배치 수집 작업 완료")
-            
-            return {
-                "success": True,
-                "message": "대량 배치 수집 작업이 성공적으로 완료되었습니다",
-                "results": results,
-                "completed_at": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            self.logger.error(f"대량 배치 수집 작업 실패: {e}")
-            return {
-                "success": False,
-                "message": f"대량 배치 수집 작업 실패: {str(e)}",
-                "failed_at": datetime.now().isoformat()
-            }
-
-    async def _create_standard_supply_demand_response(
-        self, 
-        supply_demand_data, 
-        symbol: str, 
-        symbol_name: str, 
-        start_date: str, 
-        end_date: str
-    ) -> SupplyDemandResponse:
-        """표준 JSON 형태의 수급 데이터 응답 생성"""
-        from datetime import timezone, timedelta
-        
-        korea_tz = timezone(timedelta(hours=9))  # UTC+9 한국 표준시
-        
-        supply_demand_points = []
-        for data_point in supply_demand_data:
-            # UTC 시간을 한국 시간으로 변환
-            korea_time = data_point.date.replace(tzinfo=timezone.utc).astimezone(korea_tz) if hasattr(data_point.date, 'replace') else data_point.date
-            
-            supply_demand_points.append({
-                "date": korea_time.strftime('%Y-%m-%d') if hasattr(korea_time, 'strftime') else str(data_point.date),
-                "current_price": float(data_point.current_price) if data_point.current_price else None,
-                "price_change_sign": data_point.price_change_sign,
-                "price_change": float(data_point.price_change) if data_point.price_change else None,
-                "price_change_percent": float(data_point.price_change_percent) if data_point.price_change_percent else None,
-                "accumulated_volume": int(data_point.accumulated_volume) if data_point.accumulated_volume else None,
-                "accumulated_value": int(data_point.accumulated_value) if data_point.accumulated_value else None,
-                "individual_investor": int(data_point.individual_investor) if data_point.individual_investor else None,
-                "foreign_investor": int(data_point.foreign_investor) if data_point.foreign_investor else None,
-                "institution_total": int(data_point.institution_total) if data_point.institution_total else None,
-                "financial_investment": int(data_point.financial_investment) if data_point.financial_investment else None,
-                "insurance": int(data_point.insurance) if data_point.insurance else None,
-                "investment_trust": int(data_point.investment_trust) if data_point.investment_trust else None,
-                "other_financial": int(data_point.other_financial) if data_point.other_financial else None,
-                "bank": int(data_point.bank) if data_point.bank else None,
-                "pension_fund": int(data_point.pension_fund) if data_point.pension_fund else None,
-                "private_fund": int(data_point.private_fund) if data_point.private_fund else None,
-                "government": int(data_point.government) if data_point.government else None,
-                "other_corporation": int(data_point.other_corporation) if data_point.other_corporation else None,
-                "domestic_foreign": int(data_point.domestic_foreign) if data_point.domestic_foreign else None
-            })
-        
-        return SupplyDemandResponse(
-            symbol=symbol,
-            name=symbol_name,
-            start_date=start_date,
-            end_date=end_date,
-            data=supply_demand_points,
-            total_count=len(supply_demand_points)
-        )
-    
-    async def _create_compressed_supply_demand_response(
-        self, 
-        supply_demand_data, 
-        symbol: str, 
-        symbol_name: str, 
-        start_date: str, 
-        end_date: str
-    ) -> CompressedSupplyDemandResponse:
-        """압축된 형태의 수급 데이터 응답 생성"""
-        from datetime import timezone, timedelta
-        
-        korea_tz = timezone(timedelta(hours=9))  # UTC+9 한국 표준시
-        
-        # 스키마 정의 (수급 데이터 필드들)
-        schema = {
-            "fields": [
-                "date", "current_price", "price_change_sign", "price_change", "price_change_percent",
-                "accumulated_volume", "accumulated_value", "individual_investor", "foreign_investor",
-                "institution_total", "financial_investment", "insurance", "investment_trust",
-                "other_financial", "bank", "pension_fund", "private_fund", "government",
-                "other_corporation", "domestic_foreign"
-            ],
-            "types": [
-                "date", "decimal", "string", "decimal", "decimal", 
-                "integer", "integer", "integer", "integer", 
-                "integer", "integer", "integer", "integer",
-                "integer", "integer", "integer", "integer", "integer",
-                "integer", "integer"
-            ]
-        }
-        
-        # 압축된 데이터 배열 생성 (소수점 2자리 제한으로 추가 절약)
-        compressed_data = []
-        for data_point in supply_demand_data:
-            # UTC 시간을 한국 시간으로 변환
-            korea_time = data_point.date.replace(tzinfo=timezone.utc).astimezone(korea_tz) if hasattr(data_point.date, 'replace') else data_point.date
-            
-            compressed_data.append([
-                korea_time.strftime('%Y-%m-%d') if hasattr(korea_time, 'strftime') else str(data_point.date),
-                round(float(data_point.current_price), 2) if data_point.current_price else None,
-                data_point.price_change_sign,
-                round(float(data_point.price_change), 2) if data_point.price_change else None,
-                round(float(data_point.price_change_percent), 2) if data_point.price_change_percent else None,
-                int(data_point.accumulated_volume) if data_point.accumulated_volume else None,
-                int(data_point.accumulated_value) if data_point.accumulated_value else None,
-                int(data_point.individual_investor) if data_point.individual_investor else None,
-                int(data_point.foreign_investor) if data_point.foreign_investor else None,
-                int(data_point.institution_total) if data_point.institution_total else None,
-                int(data_point.financial_investment) if data_point.financial_investment else None,
-                int(data_point.insurance) if data_point.insurance else None,
-                int(data_point.investment_trust) if data_point.investment_trust else None,
-                int(data_point.other_financial) if data_point.other_financial else None,
-                int(data_point.bank) if data_point.bank else None,
-                int(data_point.pension_fund) if data_point.pension_fund else None,
-                int(data_point.private_fund) if data_point.private_fund else None,
-                int(data_point.government) if data_point.government else None,
-                int(data_point.other_corporation) if data_point.other_corporation else None,
-                int(data_point.domestic_foreign) if data_point.domestic_foreign else None
-            ])
-        
-        return CompressedSupplyDemandResponse(
-            symbol=symbol,
-            name=symbol_name,
-            start_date=start_date,
-            end_date=end_date,
-            schema=schema,
-            data=compressed_data,
-            total_count=len(compressed_data)
-        ) 
-    
-    async def update_today_chart_data(self, batch_size: int = 100) -> Dict[str, Any]:
-        """당일 차트 데이터만 업데이트 (관심종목정보요청 ka10095 사용, 메모리의 수정주가 정보 포함)"""
-        from stockeasy.collector.services.timescale_service import timescale_service
-        from stockeasy.collector.schemas.timescale_schemas import StockPriceCreate, IntervalType
-        
-        today = datetime.now()
-        today_str = today.strftime('%Y%m%d')
-        
-        try:
-            # 전체 종목 리스트 조회
-            stock_list = await self.get_all_stock_list_for_stockai()
-            if not stock_list:
-                return {
-                    "message": "종목 리스트가 비어있습니다",
-                    "total_stocks": 0,
-                    "updated_stocks": 0,
-                    "with_adjustment": 0,
-                    "errors": 0,
-                    "status": "completed"
-                }
-            
-            total_stocks = len(stock_list)
-            updated_stocks = 0
-            with_adjustment = 0
-            errors = 0
-            
-            self.logger.info(f"당일 차트 데이터 업데이트 시작 (ka10095): 총 {total_stocks}개 종목, 배치크기: {batch_size}")
-            
-            def safe_float(value):
-                """안전한 float 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return 0.0
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return float(clean_value)
-                except (ValueError, TypeError):
-                    return 0.0
-            
-            def safe_int(value):
-                """안전한 int 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return 0
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return int(clean_value)
-                except (ValueError, TypeError):
-                    return 0
-            
-            def clean_price_data(value):
-                """주가 데이터에서 +/- 기호 제거 및 절댓값 반환"""
-                if not value or str(value).strip() == '':
-                    return 0.0
-                try:
-                    # 문자열에서 +/- 기호 제거 후 절댓값 반환
-                    clean_str = str(value).replace(',', '').replace('+', '').replace('-', '')
-                    return float(clean_str) if clean_str else 0.0
-                except (ValueError, TypeError):
-                    return 0.0
-            
-            def safe_change_data(value):
-                """변화율 데이터에서 부호 유지하여 안전하게 변환"""
-                if not value or str(value).strip() == '':
-                    return 0.0
-                try:
-                    # 콤마만 제거하고 +/- 기호는 유지
-                    clean_str = str(value).replace(',', '')
-                    return float(clean_str) if clean_str else 0.0
-                except (ValueError, TypeError):
-                    return 0.0
-            
-            # 종목 코드만 추출
-            all_symbols = [stock["code"] for stock in stock_list]
-            
-            # 100개씩 배치 단위로 처리 (ka10095 최대 100개 제한)
-            for i in range(0, len(all_symbols), batch_size):
-                batch_symbols = all_symbols[i:i + batch_size]
-                stock_price_data = []
-                
-                try:
-                    # 키움 API에서 관심종목정보요청(ka10095)으로 배치 조회
-                    if self.settings.KIWOOM_APP_KEY != "test_api_key":
-                        batch_data = await self.kiwoom_client.get_realtime_stock_prices_batch(
-                            batch_symbols, today_str
-                        )
-                        
-                        # 각 종목별 데이터 처리
-                        for symbol in batch_symbols:
-                            try:
-                                if symbol not in batch_data:
-                                    self.logger.debug(f"종목 {symbol}: ka10095 응답에 데이터 없음")
-                                    continue
-                                
-                                chart_item = batch_data[symbol]
-                                
-                                # 날짜 검증 및 파싱
-                                if not chart_item.date or not str(chart_item.date).strip():
-                                    continue
-                                
-                                try:
-                                    chart_date = datetime.strptime(str(chart_item.date).strip(), '%Y%m%d')
-                                except ValueError:
-                                    continue
-                                
-                                # 가격 데이터 검증 (종가 우선, 없으면 현재가, +/- 기호 제거)
-                                close_price = clean_price_data(chart_item.close)
-                                if close_price <= 0:
-                                    continue
-                                
-                                # 메모리에서 수정주가 정보 조회
-                                adjustment_info = self.get_stored_adjustment_info(symbol)
-                                adjustment_type = None
-                                adjustment_ratio = None
-                                adjustment_event = None
-                                
-                                if adjustment_info:
-                                    adjustment_type = adjustment_info.get("adjustment_type")
-                                    adjustment_ratio = adjustment_info.get("adjustment_ratio")
-                                    adjustment_event = adjustment_info.get("adjustment_event")
-                                    with_adjustment += 1
-                                    self.logger.debug(f"종목 {symbol} 메모리에서 수정주가 정보 조회: type={adjustment_type}, ratio={adjustment_ratio}, event={adjustment_event}")
-                                else:
-                                    self.logger.debug(f"종목 {symbol}: 메모리에 수정주가 정보 없음")
-                                
-                                # TimescaleDB용 데이터 생성 (주가 데이터는 +/- 기호 제거)
-                                stock_price = StockPriceCreate(
-                                    time=chart_date,
-                                    symbol=symbol,
-                                    interval_type=IntervalType.ONE_DAY.value,
-                                    open=clean_price_data(chart_item.open),
-                                    high=clean_price_data(chart_item.high),
-                                    low=clean_price_data(chart_item.low),
-                                    close=clean_price_data(chart_item.close),
-                                    volume=safe_int(chart_item.volume),
-                                    trading_value=safe_int(chart_item.trading_value),
-                                    # ka10095에서 제공하는 계산값들 (변화율은 부호 유지)
-                                    change_amount=safe_change_data(chart_item.change_amount),
-                                    price_change_percent=safe_change_data(chart_item.change_rate),
-                                    previous_close_price=clean_price_data(chart_item.previous_close),
-                                    volume_change_percent=safe_change_data(chart_item.volume_change_percent),
-                                    # 수정주가 정보 추가 (메모리에서 조회한 정보)
-                                    adjusted_price_type=adjustment_type,
-                                    adjustment_ratio=adjustment_ratio,
-                                    adjusted_price_event=adjustment_event,
-                                    # 전일대비기호 추가
-                                    price_change_sign=getattr(chart_item, 'change_sign', None),
-                                    # updated_at 필드 추가 (UPSERT 시 갱신 보장)
-                                    updated_at=datetime.now()
-                                )
-                                stock_price_data.append(stock_price)
-                                updated_stocks += 1
-                                
-                            except Exception as e:
-                                errors += 1
-                                self.logger.error(f"종목 {symbol} 데이터 처리 실패: {e}")
-                                continue
-                    
-                except Exception as e:
-                    self.logger.error(f"배치 {i//batch_size + 1} ka10095 API 호출 실패: {e}")
-                    errors += len(batch_symbols)
-                
-                # 배치 데이터를 TimescaleDB에 저장 (배치별 upsert 방식)
-                if stock_price_data:
-                    try:
-                        # 수정주가 정보 보존 UPSERT 방식 (DELETE 없음, 튜플 제한 문제 해결)
-                        await timescale_service.upsert_today_stock_prices(
-                            stock_price_data,
-                            target_date=today,
-                            batch_size=50  # 적절한 배치 크기로 조정
-                        )
-                        
-                        self.logger.info(f"배치 {i//batch_size + 1} DB upsert 완료: {len(stock_price_data)}건 (수정주가 정보 보존)")
-                        
-                    except Exception as e:
-                        self.logger.error(f"배치 {i//batch_size + 1} DB upsert 실패: {e}")
-                
-                # 진행률 로그
-                progress = min((i + batch_size) / len(all_symbols) * 100, 100)
-                self.logger.info(f"당일 차트 데이터 업데이트 진행률: {progress:.1f}% ({updated_stocks}/{total_stocks})")
-                
-                # API 호출 제한 준수 (초당 4.8회 = 0.208초 간격)
-                if i + batch_size < len(all_symbols):
-                    await asyncio.sleep(0.21)  # 키움 API 제약: 초당 4.8회
-            
-            self.logger.info(f"당일 차트 데이터 업데이트 완료 (ka10095): {updated_stocks}개 종목 (수정주가 포함: {with_adjustment}개)")
-            
-            return {
-                "message": f"당일 차트 데이터 업데이트 완료 (ka10095): {updated_stocks}개 종목 (수정주가 포함: {with_adjustment}개)",
-                "total_stocks": total_stocks,
-                "updated_stocks": updated_stocks,
-                "with_adjustment": with_adjustment,
-                "errors": errors,
-                "status": "completed"
-            }
-            
-        except Exception as e:
-            self.logger.error(f"당일 차트 데이터 업데이트 실패 (ka10095): {e}")
-            return {
-                "message": f"당일 차트 데이터 업데이트 실패 (ka10095): {str(e)}",
-                "total_stocks": 0,
-                "updated_stocks": 0,
-                "with_adjustment": 0,
-                "errors": 1,
-                "status": "failed"
-            }
-    
-    # ===========================================
-    # 수정주가 관련 메서드들
-    # ===========================================
-    
-    def store_adjustment_info(self, symbol: str, adjustment_type: str = None, 
-                            adjustment_ratio: float = None, adjustment_event: str = None) -> None:
-        """수정주가 정보를 메모리에 임시 저장"""
-        today = datetime.now().strftime('%Y-%m-%d')
-        
-        if symbol not in self._adjustment_data_cache["adjusted_stocks"]:
-            self._adjustment_data_cache["adjusted_stocks"][symbol] = {}
-        
-        # 수정주가구분 코드 해석
-        adjustment_type_desc = self._get_adjustment_type_description(adjustment_type)
-        
-        self._adjustment_data_cache["adjusted_stocks"][symbol] = {
-            "adjustment_type": adjustment_type,
-            "adjustment_type_desc": adjustment_type_desc,
-            "adjustment_ratio": adjustment_ratio,
-            "adjustment_event": adjustment_event,
-            "check_date": today
-        }
-        
-        self.logger.info(f"수정주가 정보 저장: {symbol} - 구분: {adjustment_type}({adjustment_type_desc}), 비율: {adjustment_ratio}, 이벤트: {adjustment_event}")
-    
-    def _get_adjustment_type_description(self, adjustment_type: str) -> str:
-        """수정주가구분 코드를 설명으로 변환"""
-        if not adjustment_type or adjustment_type == '0':
-            return "없음"
-        
-        type_map = {
-            "1": "유상증자",
-            "2": "무상증자", 
-            "4": "배당락",
-            "8": "액면분할",
-            "16": "액면병합",
-            "32": "기업합병",
-            "64": "감자",
-            "256": "권리락"
-        }
-        
-        try:
-            type_code = str(int(adjustment_type))
-            return type_map.get(type_code, f"기타({adjustment_type})")
-        except (ValueError, TypeError):
-            return f"알수없음({adjustment_type})"
-    
-    def get_stored_adjustment_info(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """저장된 수정주가 정보 조회"""
-        return self._adjustment_data_cache["adjusted_stocks"].get(symbol)
-    
-    def clear_old_adjustment_cache(self, days_to_keep: int = 30) -> None:
-        """오래된 수정주가 캐시 정리"""
-        cutoff_date = datetime.now() - timedelta(days=days_to_keep)
-        cutoff_str = cutoff_date.strftime('%Y-%m-%d')
-        
-        # 체크 이력 정리
-        self._adjustment_data_cache["check_history"] = [
-            entry for entry in self._adjustment_data_cache["check_history"]
-            if entry.get("check_date", "") >= cutoff_str
-        ]
-        
-        # 조정 주식 정보 정리
-        symbols_to_remove = []
-        for symbol, info in self._adjustment_data_cache["adjusted_stocks"].items():
-            if info.get("check_date", "") < cutoff_str:
-                symbols_to_remove.append(symbol)
-        
-        for symbol in symbols_to_remove:
-            del self._adjustment_data_cache["adjusted_stocks"][symbol]
-        
-        self.logger.info(f"{days_to_keep}일 이전 수정주가 캐시 정리 완료: {len(symbols_to_remove)}개 종목 제거")
-    
     async def check_adjustment_prices_for_stockai(self, batch_size: int = 100) -> Dict[str, Any]:
-        """stockai용 전종목 수정주가 체크 (초당 4.8회 제한)"""
-        today = datetime.now()
-        today_str = today.strftime('%Y%m%d')
-        
+        """stockai용 전종목 수정주가 체크"""
         try:
-            # 전체 종목 리스트 조회
-            stock_list = await self.get_all_stock_list_for_stockai()
-            if not stock_list:
-                return {
-                    "message": "종목 리스트가 비어있습니다",
-                    "total_stocks": 0,
-                    "checked_stocks": 0,
-                    "adjusted_stocks": 0,
-                    "errors": 0,
-                    "status": "completed"
-                }
+            from datetime import datetime, timedelta
+            today = datetime.now().date()
+            today_str = today.strftime('%Y%m%d')
             
-            total_stocks = len(stock_list)
-            checked_stocks = 0
+            # 이미 오늘 체크했는지 확인
+            last_check_date = self._adjustment_data_cache.get("last_check_date")
+            if last_check_date == today_str:
+                self.logger.info(f"오늘({today_str}) 수정주가 체크가 이미 완료됨")
+                return self.get_adjustment_check_stats()
+            
+            # 전체 종목 리스트 가져오기
+            stock_list = await self.get_all_stock_list_for_stockai()
+            symbols = [stock["code"] for stock in stock_list] if stock_list else []
+            
+            if not symbols:
+                raise ValueError("종목 리스트를 가져올 수 없습니다")
+            
+            total_stocks = len(symbols)
             adjusted_stocks = 0
+            checked_stocks = 0
             errors = 0
             
-            self.logger.info(f"수정주가 체크 시작: 총 {total_stocks}개 종목, 배치크기: {batch_size}")
+            self.logger.info(f"수정주가 체크 시작: {total_stocks}개 종목")
             
-            # 배치 단위로 처리
+            # 배치별로 처리
             for i in range(0, total_stocks, batch_size):
-                batch = stock_list[i:i + batch_size]
+                batch_symbols = symbols[i:i + batch_size]
                 
-                for stock in batch:
+                for symbol in batch_symbols:
                     try:
-                        symbol = stock["code"]
+                        # 키움 API에서 차트 데이터 조회 (최근 2일)
+                        end_date = datetime.now()
+                        start_date = end_date - timedelta(days=2)
+                        end_date_str = end_date.strftime('%Y%m%d')
+                        start_date_str = start_date.strftime('%Y%m%d')
                         
-                        # 키움 API에서 당일 일봉차트 데이터 조회 (upd_stkpc_tp='1' 수정주가)
-                        if self.settings.KIWOOM_APP_KEY != "test_api_key":
-                            chart_data = await self.kiwoom_client.get_daily_chart_data(
-                                symbol, today_str, today_str, adjusted_price='1'
-                            )
-                            
-                            # 차트 데이터에서 수정주가 관련 정보 추출
-                            if chart_data and len(chart_data) > 0:
-                                chart_item = chart_data[0]  # 당일 데이터
-                                
-                                # KiwoomChartData 객체에서 수정주가 관련 필드 추출
-                                adjustment_type = getattr(chart_item, 'adjustment_type', None)
-                                adjustment_ratio = getattr(chart_item, 'adjustment_ratio', None)
-                                adjustment_event = getattr(chart_item, 'adjustment_event', None)
-                                
-                                # 디버그 로그 추가
-                                self.logger.debug(f"종목 {symbol} 수정주가 필드 추출: type={adjustment_type}, ratio={adjustment_ratio}, event={adjustment_event}")
-                                
-                                # 수정주가 정보가 있으면 메모리에 저장
-                                if adjustment_type or adjustment_ratio or adjustment_event:
-                                    # 문자열 값을 float로 변환 (adjustment_ratio의 경우)
-                                    ratio_value = None
-                                    if adjustment_ratio:
-                                        try:
-                                            ratio_value = float(adjustment_ratio)
-                                            self.logger.debug(f"수정비율 변환: {adjustment_ratio} -> {ratio_value}")
-                                        except (ValueError, TypeError) as e:
-                                            self.logger.warning(f"수정비율 변환 실패: {adjustment_ratio}, 오류: {e}")
-                                            ratio_value = None
-                                    
-                                    self.store_adjustment_info(
-                                        symbol=symbol,
-                                        adjustment_type=adjustment_type,
-                                        adjustment_ratio=ratio_value,
-                                        adjustment_event=adjustment_event
-                                    )
-                                    
-                                    adjusted_stocks += 1
-                                    self.logger.info(f"수정주가 발견: {symbol} ({stock['name']}) - 구분: {adjustment_type}, 비율: {ratio_value}, 이벤트: {adjustment_event}")
-                                else:
-                                    self.logger.debug(f"종목 {symbol}: 수정주가 정보 없음")
+                        # 차트 데이터에서 수정주가 정보 확인
+                        chart_data = await self.kiwoom_client.get_daily_chart_data(symbol, start_date_str, end_date_str)
+                        
+                        if chart_data:
+                            # 수정주가 이벤트가 있는지 확인
+                            for data_point in chart_data:
+                                if hasattr(data_point, 'adjustment_type') and data_point.adjustment_type:
+                                    adjustment_type = data_point.adjustment_type
+                                    if adjustment_type and adjustment_type != '0':
+                                        # 수정주가 정보 저장
+                                        self._adjustment_data_cache["adjusted_stocks"][symbol] = {
+                                            "date": data_point.date,
+                                            "type": adjustment_type,
+                                            "ratio": getattr(data_point, 'adjustment_ratio', ''),
+                                            "event": getattr(data_point, 'adjustment_event', ''),
+                                            "found_at": today.isoformat()
+                                        }
+                                        adjusted_stocks += 1
+                                        self.logger.info(f"종목 {symbol}: 수정주가 발견 (타입: {adjustment_type})")
+                                        break
+                                        
+                        if symbol not in self._adjustment_data_cache["adjusted_stocks"]:
+                            self.logger.debug(f"종목 {symbol}: 수정주가 정보 없음")
                         
                         checked_stocks += 1
                         
@@ -2259,3 +958,405 @@ class DataCollectorService(LoggerMixin):
                 "total_history_entries": len(self._adjustment_data_cache["check_history"])
             }
         }
+
+    async def collect_sector_chart_data(
+        self,
+        sector_symbol: str,  # 'KOSPI' 또는 'KOSDAQ'
+        months_back: int = 24,
+        force_update: bool = False
+    ) -> Dict[str, Any]:
+        """
+        업종 차트 데이터 수집 (KOSPI, KOSDAQ)
+        
+        Args:
+            sector_symbol: 'KOSPI' 또는 'KOSDAQ'
+            months_back: 수집할 개월 수 (기본 24개월)
+            force_update: 기존 데이터 강제 업데이트 여부
+        """
+        try:
+            # 업종 코드 매핑
+            sector_code_map = {
+                'KOSPI': '001',   # 종합(KOSPI)
+                'KOSDAQ': '101'   # 종합(KOSDAQ)
+            }
+            
+            if sector_symbol not in sector_code_map:
+                raise ValueError(f"지원되지 않는 업종: {sector_symbol} (KOSPI, KOSDAQ만 지원)")
+            
+            sector_code = sector_code_map[sector_symbol]
+            
+            # 날짜 범위 계산
+            from datetime import datetime, timedelta
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=months_back * 30)
+            start_date_str = start_date.strftime('%Y%m%d')
+            end_date_str = end_date.strftime('%Y%m%d')
+            
+            self.logger.info(f"업종 차트 데이터 수집 시작: {sector_symbol} ({sector_code}), {start_date_str} ~ {end_date_str}")
+            
+            # 키움 API에서 업종 차트 데이터 조회
+            if self.settings.KIWOOM_APP_KEY != "test_api_key":
+                sector_data = await self.kiwoom_client.get_sector_chart_data(
+                    sector_code, start_date_str, end_date_str
+                )
+            else:
+                self.logger.warning(f"키움 API 키가 설정되지 않아 더미 데이터 사용")
+                sector_data = []
+            
+            if not sector_data:
+                return {
+                    "message": f"업종 {sector_symbol}의 차트 데이터가 없습니다",
+                    "sector_symbol": sector_symbol,
+                    "period": f"{start_date_str} ~ {end_date_str}",
+                    "total_records": 0,
+                    "status": "no_data"
+                }
+            
+            # TimescaleDB에 저장할 데이터 변환
+            from stockeasy.collector.schemas.timescale_schemas import StockPriceCreate, IntervalType
+            
+            def safe_float(value):
+                """안전한 float 변환"""
+                try:
+                    return float(value) if value and str(value).strip() else 0.0
+                except (ValueError, TypeError):
+                    return 0.0
+            
+            def safe_int(value):
+                """안전한 int 변환"""
+                try:
+                    return int(value) if value and str(value).strip() else 0
+                except (ValueError, TypeError):
+                    return 0
+            
+            def convert_sector_price(value):
+                """
+                업종 차트 가격 데이터 변환 (소수점 2자리 복원)
+                예: 287185 -> 2871.85, 77120 -> 771.20
+                
+                Args:
+                    value: 문자열 또는 숫자형 가격 데이터
+                    
+                Returns:
+                    float: 소수점이 복원된 가격
+                """
+                try:
+                    if value is None or str(value).strip() == '':
+                        return 0.0
+                    
+                    # 문자열을 정수로 변환 후 100으로 나누어 소수점 복원
+                    raw_value = str(value).strip()
+                    if not raw_value.isdigit():
+                        # 이미 소수점이 있는 경우는 그대로 사용
+                        return float(raw_value)
+                    
+                    # 정수 형태인 경우 100으로 나누어 소수점 복원
+                    integer_value = int(raw_value)
+                    converted_value = integer_value / 100.0
+                    
+                    # 변환이 실제로 일어난 경우에만 로깅 (소수점 복원)
+                    if integer_value >= 100:  # 실질적인 변환이 일어난 경우
+                        self.logger.debug(f"업종 가격 변환: {raw_value} -> {converted_value}")
+                    
+                    return converted_value
+                    
+                except (ValueError, TypeError) as e:
+                    self.logger.warning(f"업종 가격 변환 실패 ({value}): {e}")
+                    return 0.0
+            
+            stock_price_data = []
+            for sector_item in sector_data:
+                try:
+                    # 날짜 검증 및 파싱
+                    if not sector_item.dt or not str(sector_item.dt).strip():
+                        self.logger.warning(f"빈 날짜 데이터 건너뜀 ({sector_symbol})")
+                        continue
+                    
+                    try:
+                        chart_date = datetime.strptime(str(sector_item.dt).strip(), '%Y%m%d')
+                    except ValueError as e:
+                        self.logger.warning(f"날짜 파싱 실패 ({sector_symbol}, {sector_item.dt}): {e}")
+                        continue
+                    
+                    # 업종 차트 가격 데이터 변환 (소수점 2자리 복원)
+                    open_price = convert_sector_price(sector_item.open_pric)
+                    high_price = convert_sector_price(sector_item.high_pric)
+                    low_price = convert_sector_price(sector_item.low_pric)
+                    close_price = convert_sector_price(sector_item.cur_prc)
+                    previous_close = convert_sector_price(sector_item.pred_close_pric)
+                    
+                    # 가격 데이터 검증
+                    if close_price <= 0:
+                        self.logger.debug(f"유효하지 않은 종가 데이터 건너뜀 ({sector_symbol}, {sector_item.dt}, 원본 종가: {sector_item.cur_prc}, 변환 종가: {close_price})")
+                        continue
+                    
+                    # 전일 종가 및 변동 계산
+                    change_amount = None
+                    change_rate = None
+                    
+                    if previous_close > 0 and close_price > 0:
+                        change_amount = close_price - previous_close
+                        change_rate = round((change_amount / previous_close) * 100, 4)
+                    
+                    # 업종 가격 변환 결과 로깅 (샘플링)
+                    if len(stock_price_data) < 5:  # 처음 5개 데이터만 로깅
+                        self.logger.info(f"업종 {sector_symbol} {sector_item.dt} 가격 변환 예시: 시가 {sector_item.open_pric}->{open_price}, 고가 {sector_item.high_pric}->{high_price}, 저가 {sector_item.low_pric}->{low_price}, 종가 {sector_item.cur_prc}->{close_price}")
+                    
+                    stock_price = StockPriceCreate(
+                        time=chart_date,
+                        symbol=sector_symbol,  # 'KOSPI' 또는 'KOSDAQ'으로 저장
+                        interval_type=IntervalType.ONE_DAY.value,
+                        open=open_price,
+                        high=high_price,
+                        low=low_price,
+                        close=close_price,
+                        volume=safe_int(sector_item.trde_qty),
+                        trading_value=safe_int(sector_item.trde_prica),
+                        change_amount=change_amount,
+                        price_change_percent=change_rate,
+                        previous_close_price=previous_close,
+                        # 업종 분류 정보
+                        major_industry_type=getattr(sector_item, 'bic_inds_tp', None),
+                        minor_industry_type=getattr(sector_item, 'sm_inds_tp', None),
+                        stock_info=getattr(sector_item, 'stk_infr', None)
+                        # updated_at은 TimescaleService에서 자동 설정됨 (현재 UTC 시간)
+                    )
+                    stock_price_data.append(stock_price)
+                    
+                except Exception as e:
+                    self.logger.warning(f"업종 차트 데이터 변환 실패 ({sector_symbol}, {getattr(sector_item, 'dt', 'N/A')}): {e}")
+                    continue
+            
+            # TimescaleDB에 저장
+            if stock_price_data:
+                from stockeasy.collector.services.timescale_service import timescale_service
+                
+                if force_update:
+                    # 강제 업데이트시 기존 데이터 삭제 후 재생성
+                    await timescale_service.delete_stock_prices_by_symbol_period(
+                        sector_symbol, start_date, end_date
+                    )
+                
+                # 시간순으로 정렬하여 저장 (과거 → 현재)
+                stock_price_data.sort(key=lambda x: x.time)
+                
+                # 업종 차트 데이터는 강제 UPSERT 사용 (가격 변환 보장)
+                from stockeasy.collector.schemas.timescale_schemas import BulkStockPriceCreate
+                
+                await timescale_service.bulk_create_stock_prices_with_upsert(
+                    BulkStockPriceCreate(prices=stock_price_data)
+                )
+                
+                # 변동률 재계산 (업종 데이터용)
+                self.logger.info(f"업종 {sector_symbol} 변동률 재계산 시작")
+                await timescale_service.batch_calculate_for_new_data(
+                    symbols=[sector_symbol],
+                    start_date=start_date
+                )
+                self.logger.info(f"업종 {sector_symbol} 변동률 재계산 완료")
+            
+            # 변환된 가격 데이터 통계 (첫 번째와 마지막 데이터) 및 UPSERT 확인
+            if stock_price_data:
+                first_data = stock_price_data[0]
+                last_data = stock_price_data[-1]
+                self.logger.info(f"업종 {sector_symbol} 가격 변환 및 UPSERT 완료 - 첫째: {first_data.time.strftime('%Y-%m-%d')} 종가 {first_data.close}, 마지막: {last_data.time.strftime('%Y-%m-%d')} 종가 {last_data.close}, 총 {len(stock_price_data)}건")
+                self.logger.info(f"업종 {sector_symbol} updated_at 필드 갱신됨: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            return {
+                "message": f"업종 {sector_symbol} 차트 데이터 수집이 완료되었습니다",
+                "sector_symbol": sector_symbol,
+                "sector_code": sector_code,
+                "period": f"{start_date_str} ~ {end_date_str}",
+                "total_records": len(stock_price_data),
+                "months_back": months_back,
+                "force_update": force_update,
+                "price_conversion": "소수점 2자리 복원 적용",
+                "status": "success"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"업종 {sector_symbol} 차트 데이터 수집 실패: {e}")
+            return {
+                "message": f"업종 {sector_symbol} 차트 데이터 수집 실패: {str(e)}",
+                "sector_symbol": sector_symbol,
+                "total_records": 0,
+                "status": "failed"
+            }
+
+    async def collect_all_sector_chart_data(
+        self,
+        months_back: int = 24,
+        force_update: bool = False
+    ) -> Dict[str, Any]:
+        """
+        전체 업종 차트 데이터 수집 (KOSPI, KOSDAQ)
+        
+        Args:
+            months_back: 수집할 개월 수 (기본 24개월)
+            force_update: 기존 데이터 강제 업데이트 여부
+        """
+        try:
+            self.logger.info(f"전체 업종 차트 데이터 수집 시작: {months_back}개월")
+            
+            sectors = ['KOSPI', 'KOSDAQ']
+            results = {}
+            
+            for sector in sectors:
+                self.logger.info(f"업종 {sector} 차트 데이터 수집 시작")
+                
+                result = await self.collect_sector_chart_data(
+                    sector_symbol=sector,
+                    months_back=months_back,
+                    force_update=force_update
+                )
+                
+                results[sector] = result
+                
+                # API 호출 간격 조절 (키움 API 제약)
+                await asyncio.sleep(0.21)
+            
+            # 전체 결과 요약
+            total_records = sum(result.get('total_records', 0) for result in results.values())
+            success_count = len([r for r in results.values() if r.get('status') == 'success'])
+            
+            return {
+                "message": f"전체 업종 차트 데이터 수집 완료: {success_count}/{len(sectors)}개 성공",
+                "total_sectors": len(sectors),
+                "successful_sectors": success_count,
+                "total_records": total_records,
+                "sector_results": results,
+                "months_back": months_back,
+                "force_update": force_update,
+                "status": "success" if success_count == len(sectors) else "partial_success"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"전체 업종 차트 데이터 수집 실패: {e}")
+            return {
+                "message": f"전체 업종 차트 데이터 수집 실패: {str(e)}",
+                "total_sectors": 0,
+                "successful_sectors": 0,
+                "total_records": 0,
+                "status": "failed"
+            }
+
+    async def _create_standard_supply_demand_response(
+        self, 
+        supply_demand_data, 
+        symbol: str, 
+        symbol_name: str, 
+        start_date: str, 
+        end_date: str
+    ) -> SupplyDemandResponse:
+        """표준 JSON 형태의 수급 응답 생성"""
+        from datetime import timezone, timedelta
+        from stockeasy.collector.schemas.stock_schemas import SupplyDemandDataPoint
+        
+        korea_tz = timezone(timedelta(hours=9))  # UTC+9 한국 표준시
+        
+        supply_demand_points = []
+        for data in supply_demand_data:
+            # UTC 시간을 한국 시간으로 변환
+            korea_time = data.date.replace(tzinfo=timezone.utc).astimezone(korea_tz)
+            
+            supply_demand_points.append(SupplyDemandDataPoint(
+                timestamp=korea_time,
+                current_price=data.current_price,
+                price_change_sign=data.price_change_sign,
+                price_change=data.price_change,
+                price_change_percent=data.price_change_percent,
+                accumulated_volume=data.accumulated_volume,
+                accumulated_value=data.accumulated_value,
+                individual_investor=data.individual_investor,
+                foreign_investor=data.foreign_investor,
+                institution_total=data.institution_total,
+                financial_investment=data.financial_investment,
+                insurance=data.insurance,
+                investment_trust=data.investment_trust,
+                other_financial=data.other_financial,
+                bank=data.bank,
+                pension_fund=data.pension_fund,
+                private_fund=data.private_fund,
+                government=data.government,
+                other_corporation=data.other_corporation,
+                domestic_foreign=data.domestic_foreign
+            ))
+        
+        return SupplyDemandResponse(
+            symbol=symbol,
+            name=symbol_name,
+            start_date=start_date,
+            end_date=end_date,
+            data=supply_demand_points,
+            total_count=len(supply_demand_points)
+        )
+    
+    async def _create_compressed_supply_demand_response(
+        self, 
+        supply_demand_data, 
+        symbol: str, 
+        symbol_name: str, 
+        start_date: str, 
+        end_date: str
+    ) -> CompressedSupplyDemandResponse:
+        """압축된 형태의 수급 응답 생성"""
+        from datetime import timezone, timedelta
+        
+        korea_tz = timezone(timedelta(hours=9))  # UTC+9 한국 표준시
+        
+        # 스키마 정의 (TimescaleDB SupplyDemand 모델 기반)
+        schema = {
+            "fields": [
+                "timestamp", "current_price", "price_change_sign", "price_change", "price_change_percent",
+                "accumulated_volume", "accumulated_value", "individual_investor", "foreign_investor", 
+                "institution_total", "financial_investment", "insurance", "investment_trust", 
+                "other_financial", "bank", "pension_fund", "private_fund", "government", 
+                "other_corporation", "domestic_foreign"
+            ],
+            "types": [
+                "datetime", "decimal", "string", "decimal", "decimal",
+                "integer", "integer", "integer", "integer", 
+                "integer", "integer", "integer", "integer", 
+                "integer", "integer", "integer", "integer", "integer", 
+                "integer", "integer"
+            ]
+        }
+        
+        # 압축된 데이터 배열 생성
+        compressed_data = []
+        for data in supply_demand_data:
+            # UTC 시간을 한국 시간으로 변환
+            korea_time = data.date.replace(tzinfo=timezone.utc).astimezone(korea_tz)
+            
+            compressed_data.append([
+                korea_time.isoformat(),
+                float(data.current_price) if data.current_price else None,
+                data.price_change_sign,
+                float(data.price_change) if data.price_change else None,
+                float(data.price_change_percent) if data.price_change_percent else None,
+                int(data.accumulated_volume) if data.accumulated_volume else None,
+                int(data.accumulated_value) if data.accumulated_value else None,
+                int(data.individual_investor) if data.individual_investor else None,
+                int(data.foreign_investor) if data.foreign_investor else None,
+                int(data.institution_total) if data.institution_total else None,
+                int(data.financial_investment) if data.financial_investment else None,
+                int(data.insurance) if data.insurance else None,
+                int(data.investment_trust) if data.investment_trust else None,
+                int(data.other_financial) if data.other_financial else None,
+                int(data.bank) if data.bank else None,
+                int(data.pension_fund) if data.pension_fund else None,
+                int(data.private_fund) if data.private_fund else None,
+                int(data.government) if data.government else None,
+                int(data.other_corporation) if data.other_corporation else None,
+                int(data.domestic_foreign) if data.domestic_foreign else None
+            ])
+        
+        return CompressedSupplyDemandResponse(
+            symbol=symbol,
+            name=symbol_name,
+            start_date=start_date,
+            end_date=end_date,
+            schema=schema,
+            data=compressed_data,
+            total_count=len(compressed_data)
+        )

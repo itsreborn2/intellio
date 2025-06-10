@@ -255,6 +255,30 @@ class StockListRequest(BaseModel):
         return v
 
 
+class SupplyDemandDataPoint(BaseModel):
+    """수급 데이터 포인트 (TimescaleDB SupplyDemand 모델 기반)"""
+    timestamp: datetime = Field(..., description="날짜")
+    current_price: Optional[Decimal] = Field(None, description="현재가")
+    price_change_sign: Optional[str] = Field(None, description="대비기호")
+    price_change: Optional[Decimal] = Field(None, description="전일대비")
+    price_change_percent: Optional[Decimal] = Field(None, description="등락율(%)")
+    accumulated_volume: Optional[int] = Field(None, description="누적거래량")
+    accumulated_value: Optional[int] = Field(None, description="누적거래대금")
+    individual_investor: Optional[int] = Field(None, description="개인투자자")
+    foreign_investor: Optional[int] = Field(None, description="외국인투자자")
+    institution_total: Optional[int] = Field(None, description="기관계")
+    financial_investment: Optional[int] = Field(None, description="금융투자")
+    insurance: Optional[int] = Field(None, description="보험")
+    investment_trust: Optional[int] = Field(None, description="투신")
+    other_financial: Optional[int] = Field(None, description="기타금융")
+    bank: Optional[int] = Field(None, description="은행")
+    pension_fund: Optional[int] = Field(None, description="연기금등")
+    private_fund: Optional[int] = Field(None, description="사모펀드")
+    government: Optional[int] = Field(None, description="국가")
+    other_corporation: Optional[int] = Field(None, description="기타법인")
+    domestic_foreign: Optional[int] = Field(None, description="내외국인")
+
+
 class CompressedSupplyDemandResponse(BaseModel):
     """압축된 수급 데이터 응답 (대량 데이터용)"""
     symbol: str = Field(..., description="종목코드")
@@ -277,5 +301,5 @@ class SupplyDemandResponse(BaseModel):
     name: str = Field(..., description="종목명")
     start_date: str = Field(..., description="시작일")
     end_date: str = Field(..., description="종료일")
-    data: List[Dict[str, Any]] = Field(..., description="수급 데이터")
+    data: List[SupplyDemandDataPoint] = Field(..., description="수급 데이터")
     total_count: int = Field(..., description="총 데이터 개수") 

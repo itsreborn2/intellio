@@ -60,8 +60,8 @@ class ETFComponent(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     etf_symbol = Column(String(20), nullable=False, index=True, comment="ETF 코드")
-    component_symbol = Column(String(20), nullable=False, index=True, comment="구성종목 코드")
-    component_name = Column(String(100), comment="구성종목명")
+    stock_code = Column(String(20), nullable=False, index=True, comment="구성종목 코드")
+    stock_name = Column(String(100), comment="구성종목명")
     
     # 구성 정보
     weight = Column(Numeric(8, 4), comment="비중(%)")
@@ -73,8 +73,8 @@ class ETFComponent(Base):
     created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
     
     __table_args__ = (
-        UniqueConstraint('etf_symbol', 'component_symbol', 'update_date', name='uq_etf_component_date'),
-        Index('idx_etf_component_symbol', 'etf_symbol', 'component_symbol'),
+        UniqueConstraint('etf_symbol', 'stock_code', 'update_date', name='uq_etf_component_date'),
+        Index('idx_etf_component_symbol', 'etf_symbol', 'stock_code'),
         Index('idx_component_weight', 'weight'),
     )
 

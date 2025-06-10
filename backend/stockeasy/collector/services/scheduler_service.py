@@ -234,9 +234,10 @@ class SchedulerService(LoggerMixin):
                 try:
                     components = await etf_crawler.get_etf_components(etf_code)
                     if components:
-                        # 캐시에 저장
+                        # 캐시에 저장 - ETFComponent 객체를 딕셔너리로 변환
                         if self.cache_manager:
-                            await self.cache_manager.set_etf_components(etf_code, components)
+                            component_dicts = [component.model_dump() for component in components]
+                            await self.cache_manager.set_etf_components(etf_code, component_dicts)
                         updated_count += 1
                     
                     # API 호출 간격 조절
@@ -335,16 +336,6 @@ class SchedulerService(LoggerMixin):
                 for job in self.scheduler.get_jobs()
             ]
         }
-    
-    async def trigger_stock_update_now(self) -> None:
-        """즉시 종목 리스트 업데이트 실행"""
-        logger.info("수동 종목 리스트 업데이트 실행")
-        await self._update_stock_list_job()
-    
-    async def trigger_etf_update_now(self) -> None:
-        """즉시 ETF 구성종목 업데이트 실행"""
-        logger.info("수동 ETF 구성종목 업데이트 실행")
-        await self._update_etf_components_job()
     
     @log_scheduler_job("일일 수정주가 체크 (stockai용)")
     async def _check_adjustment_prices_job(self) -> None:

@@ -8,9 +8,8 @@ import json
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from stockeasy.collector.dependencies import get_data_collector, get_cache_manager
+from stockeasy.collector.dependencies import get_data_collector
 from stockeasy.collector.services.data_collector import DataCollectorService
-from stockeasy.collector.services.cache_manager import CacheManager
 
 from loguru import logger
 # 주식 데이터 라우터( /api/v1/stock )
@@ -1285,6 +1284,140 @@ async def debug_supply_demand_data(
         raise HTTPException(status_code=500, detail=f"수급 데이터 디버깅 실패: {str(e)}")
 
 # ========================================
+# 업종 차트 관련 API (KOSPI, KOSDAQ)
+# ========================================
+
+@admin_router.post("/sector/collect/{sector_symbol}")
+async def collect_sector_chart_data(
+    sector_symbol: str,
+    months_back: int = Query(24, description="수집할 개월 수", ge=1, le=60),
+    force_update: bool = Query(False, description="기존 데이터 강제 업데이트 여부"),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    업종 차트 데이터 수집 (KOSPI, KOSDAQ)
+    
+    Args:
+        sector_symbol: 업종 심볼 (KOSPI, KOSDAQ)
+        months_back: 수집할 개월 수 (기본 24개월)
+        force_update: 기존 데이터 강제 업데이트 여부 (기본 False)
+    """
+    try:
+        # 지원되는 업종 확인
+        if sector_symbol.upper() not in ['KOSPI', 'KOSDAQ']:
+            raise HTTPException(
+                status_code=400, 
+                detail="지원되지 않는 업종입니다. KOSPI 또는 KOSDAQ만 지원됩니다."
+            )
+        
+        logger.info(f"업종 {sector_symbol} 차트 데이터 수집 시작: {months_back}개월, 강제업데이트={force_update}")
+        
+        result = await data_collector.collect_sector_chart_data(
+            sector_symbol=sector_symbol.upper(),
+            months_back=months_back,
+            force_update=force_update
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"업종 {sector_symbol} 차트 데이터 수집 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"업종 {sector_symbol} 차트 데이터 수집 실패: {str(e)}")
+
+@admin_router.post("/sector/collect/all")
+async def collect_all_sector_chart_data(
+    months_back: int = Query(24, description="수집할 개월 수", ge=1, le=60),
+    force_update: bool = Query(False, description="기존 데이터 강제 업데이트 여부"),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    전체 업종 차트 데이터 수집 (KOSPI, KOSDAQ)
+    
+    Args:
+        months_back: 수집할 개월 수 (기본 24개월)
+        force_update: 기존 데이터 강제 업데이트 여부 (기본 False)
+    """
+    try:
+        logger.info(f"전체 업종 차트 데이터 수집 시작: {months_back}개월, 강제업데이트={force_update}")
+        
+        result = await data_collector.collect_all_sector_chart_data(
+            months_back=months_back,
+            force_update=force_update
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"전체 업종 차트 데이터 수집 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"전체 업종 차트 데이터 수집 실패: {str(e)}")
+
+@stock_router.get("/sector/chart/{sector_symbol}")
+async def get_sector_chart_data(
+    sector_symbol: str,
+    period: str = Query("1y", description="조회 기간 (1d, 1w, 1m, 3m, 6m, 1y, 2y, 5y)"),
+    interval: str = Query("1d", description="간격 (1m, 5m, 15m, 30m, 1h, 1d, 1w, 1M)"),
+    compressed: bool = Query(False, description="압축된 형태로 반환 (대량 데이터용)"),
+    gzip_enabled: bool = Query(False, description="gzip 압축 사용 (더 작은 크기)"),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    업종 차트 데이터 조회 (KOSPI, KOSDAQ)
+    
+    - compressed=false: 표준 JSON 형태 (기본값)
+    - compressed=true: 압축된 배열 형태 (데이터 크기 50-70% 절약)
+    - gzip_enabled=true: gzip 압축 적용 (추가 30-50% 절약)
+    """
+    try:
+        # 지원되는 업종 확인
+        if sector_symbol.upper() not in ['KOSPI', 'KOSDAQ']:
+            raise HTTPException(
+                status_code=400, 
+                detail="지원되지 않는 업종입니다. KOSPI 또는 KOSDAQ만 지원됩니다."
+            )
+        
+        # 기존 차트 데이터 조회 로직 재사용 (symbol을 업종 심볼로 전달)
+        chart_data = await data_collector.get_chart_data(
+            symbol=sector_symbol.upper(), 
+            period=period, 
+            interval=interval, 
+            compressed=compressed
+        )
+        
+        response_data = {
+            "sector_symbol": sector_symbol.upper(),
+            "period": period,
+            "interval": interval,
+            "compressed": compressed,
+            "gzip_enabled": gzip_enabled,
+            "data": chart_data,
+            "status": "success"
+        }
+        
+        if gzip_enabled:
+            # JSON을 문자열로 변환 후 gzip 압축
+            json_str = json.dumps(response_data, ensure_ascii=False, default=str)
+            compressed_content = gzip.compress(json_str.encode('utf-8'))
+            
+            return Response(
+                content=compressed_content,
+                media_type="application/json",
+                headers={
+                    "Content-Encoding": "gzip",
+                    "Content-Length": str(len(compressed_content))
+                }
+            )
+        else:
+            return response_data
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"업종 {sector_symbol} 차트 데이터 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"업종 {sector_symbol} 차트 데이터 조회 실패: {str(e)}")
+
+# ========================================
 # 배치 계산 전용 엔드포인트
 # ========================================
 
@@ -1306,9 +1439,15 @@ async def batch_calculate_all_stocks(
         
         from stockeasy.collector.services.timescale_service import timescale_service
         
+        # 전종목 심볼 리스트 가져오기
+        stock_list = await data_collector.get_all_stock_list_for_stockai()
+        symbols = [stock["code"] for stock in stock_list] if stock_list else None
+        
+        logger.info(f"전종목 배치 계산 대상: {len(symbols) if symbols else 0}개 종목")
+        
         # 전종목 배치 계산 실행
         result = await timescale_service.batch_calculate_stock_price_changes(
-            symbols=None,  # None이면 전체 종목
+            symbols=symbols,
             days_back=days_back,
             batch_size=batch_size
         )
@@ -1373,7 +1512,7 @@ async def batch_calculate_specific_symbols(
 @admin_router.post("/batch/calculate/{symbol}")
 async def batch_calculate_single_symbol(
     symbol: str,
-    days_back: int = Query(30, description="계산할 일수", ge=1, le=365),
+    days_back: int = Query(30, description="계산할 일수", ge=1, le=1000),
     data_collector: DataCollectorService = Depends(get_data_collector)
 ):
     """

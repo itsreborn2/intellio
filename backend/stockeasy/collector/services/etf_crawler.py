@@ -18,8 +18,8 @@ settings = get_settings()
 class ETFComponent(BaseModel):
     """ETF 구성종목 정보"""
     etf_code: str
-    component_code: str
-    component_name: str
+    stock_code: str
+    stock_name: str
     weight: float
     quantity: int
     market_value: float
@@ -40,22 +40,75 @@ class ETFCrawler:
     """ETF 구성종목 크롤링 서비스"""
     
     def __init__(self):
-        # 주요 ETF 목록 (확장 가능)
+                # 주요 ETF 목록 (CSV 파일 기반으로 확장)
         self.major_etfs = {
+            # 마켓
             "069500": "KODEX 200",
-            "114800": "KODEX 인버스",
-            "122630": "KODEX 레버리지",
-            "233740": "KODEX 코스닥150",
-            "102110": "TIGER 200",
-            "139260": "TIGER 200 커버드콜",
-            "091160": "KODEX 반도체",
+            "229200": "KODEX 코스닥150",
+            
+            # 방산/우주항공
+            "449450": "PLUS K방산",
+            "421320": "PLUS 우주항공&UAM",
+            
+            # 기타 (엔터, 게임, 로봇)
+            "228810": "TIGER 미디어컨텐츠",
+            "228800": "TIGER 여행레저",
+            "475050": "ACE KPOP포커스",
+            "364990": "TIGER 게임TOP10",
+            "445290": "KODEX K-로봇액티브",
+            
+            # 통신
+            "098560": "TIGER 방송통신",
+            "157490": "TIGER 소프트웨어",
+            "365000": "TIGER 인터넷TOP10",
+            
+            # 헬스케어/바이오
+            "460280": "KIWOOM Fn유전자혁신기술",
+            "261070": "TIGER 코스닥150바이오테크",
+            "463050": "TIMEFOLIO K바이오액티브",
+            "483020": "KIWOOM 의료AI",
+            "227540": "TIGER 200 헬스케어",
+            "464610": "SOL 의료기기소부장Fn",
+            
+            # 전력기기/에너지
+            "433500": "ACE 원자력테마딥서치",
+            "487240": "KODEX AI전력핵심설비",
+            "457990": "PLUS 태양광&ESS",
+            
+            # 금융/보험
+            "102970": "KODEX 증권",
+            "139270": "TIGER 200 금융",
             "091170": "KODEX 은행",
-            "117460": "KODEX 고배당",
-            "148020": "KBSTAR 200",
-            "152100": "ARIRANG 200",
-            "130730": "KOSEF 200",
-            "182490": "TIGER 200선물레버리지",
-            "252670": "KODEX 200선물인버스2X",
+            "140700": "KODEX 보험",
+            
+            # 철강/화학/금속
+            "139250": "TIGER 200 에너지화학",
+            "139240": "TIGER 200 철강소재",
+            
+            # 건설
+            "139220": "TIGER 200 건설",
+            
+            # 소비재/음식료
+            "479850": "HANARO K-뷰티",
+            "438900": "HANARO Fn K-푸드",
+            "228790": "TIGER 화장품",
+            
+            # 2차전지
+            "455860": "SOL 2차전지소부장Fn",
+            "364980": "TIGER 2차전지TOP10",
+            
+            # 자동차
+            "091180": "KODEX 자동차",
+            "464600": "SOL 자동차소부장Fn",
+            
+            # 조선/운송
+            "466920": "SOL 조선TOP3플러스",
+            "140710": "KODEX 운송",
+            
+            # 반도체
+            "475300": "SOL 반도체전공정",
+            "091160": "KODEX 반도체",
+            "475310": "SOL 반도체후공정",
         }
         
         logger.info("ETF 크롤러 초기화 완료")
@@ -123,21 +176,35 @@ class ETFCrawler:
                 return []
             
             components = []
-            for idx, row in components_df.iterrows():
+            for ticker, row in components_df.iterrows():
                 try:
+                    # 종목명 조회 (별도 API 호출 필요)
+                    stock_name = ""
+                    try:
+                        stock_name = await loop.run_in_executor(
+                            None,
+                            lambda: stock.get_market_ticker_name(ticker)
+                        )
+                        # DataFrame이 반환되는 경우 처리
+                        if hasattr(stock_name, 'empty'):
+                            stock_name = ""
+                    except Exception as e:
+                        logger.debug(f"종목명 조회 실패 ({ticker}): {e}")
+                        pass  # 종목명 조회 실패 시 빈 문자열 유지
+                    
                     component = ETFComponent(
                         etf_code=etf_code,
-                        component_code=row.get('종목코드', ''),
-                        component_name=row.get('종목명', ''),
-                        weight=float(row.get('비중(%)', 0.0)),
-                        quantity=int(row.get('수량', 0)),
-                        market_value=float(row.get('시가총액', 0.0)),
+                        stock_code=ticker,  # 인덱스가 종목코드
+                        stock_name=stock_name,
+                        weight=float(row.get('비중', 0.0)),
+                        quantity=int(row.get('계약수', 0)),
+                        market_value=float(row.get('금액', 0.0)),
                         updated_date=date_str
                     )
                     components.append(component)
                     
                 except Exception as e:
-                    logger.warning(f"구성종목 파싱 실패 ({etf_code}): {e}")
+                    logger.warning(f"구성종목 파싱 실패 ({etf_code}, {ticker}): {e}")
                     continue
             
             logger.info(f"ETF 구성종목 조회 완료: {etf_code} - {len(components)}개")

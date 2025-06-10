@@ -386,6 +386,48 @@ class CacheManager(LoggerMixin):
             return None
     
     # ===========================================
+    # 시장 지수 캐싱
+    # ===========================================
+    
+    async def set_market_indices(self, indices_data: Dict[str, Any], ttl: int = 1800) -> None:
+        """
+        시장 지수 정보 저장 (코스피, 코스닥)
+        
+        Args:
+            indices_data: 시장 지수 데이터
+            ttl: 캐시 만료 시간 (기본 30분)
+        """
+        try:
+            key = "market:indices"
+            serialized_data = self._serialize_data(indices_data)
+            
+            await self.redis_client.setex(
+                key,
+                ttl,
+                json.dumps(serialized_data, ensure_ascii=False)
+            )
+            
+            self.logger.info(f"시장 지수 정보 캐시 저장: {len(indices_data)}개")
+            
+        except Exception as e:
+            self.logger.error(f"시장 지수 저장 실패: {e}")
+            raise
+    
+    async def get_market_indices(self) -> Optional[Dict[str, Any]]:
+        """시장 지수 정보 조회"""
+        try:
+            key = "market:indices"
+            data = await self.redis_client.get(key)
+            
+            if data:
+                return self._deserialize_data(json.loads(data))
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"시장 지수 조회 실패: {e}")
+            return None
+    
+    # ===========================================
     # 통계 및 메타데이터
     # ===========================================
     

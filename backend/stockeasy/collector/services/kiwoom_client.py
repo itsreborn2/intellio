@@ -120,6 +120,40 @@ class KiwoomSupplyDemand(BaseModel):
     pns_amt: Optional[str] = None  # 개인 금액
 
 
+class KiwoomSectorData(BaseModel):
+    """키움 업종 일봉 데이터 (ka20006)"""
+    cur_prc: Optional[str] = None  # 현재가
+    trde_qty: Optional[str] = None  # 거래량
+    dt: str  # 일자
+    open_pric: Optional[str] = None  # 시가
+    high_pric: Optional[str] = None  # 고가
+    low_pric: Optional[str] = None  # 저가
+    trde_prica: Optional[str] = None  # 거래대금
+    bic_inds_tp: Optional[str] = None  # 대업종구분
+    sm_inds_tp: Optional[str] = None  # 소업종구분
+    stk_infr: Optional[str] = None  # 종목정보
+    pred_close_pric: Optional[str] = None  # 전일종가
+
+
+class KiwoomMarketIndex(BaseModel):
+    """키움 전업종지수 데이터 (ka20003)"""
+    stk_cd: str  # 종목코드 (001:코스피, 101:코스닥)
+    stk_nm: str  # 종목명
+    cur_prc: str  # 현재가
+    pre_sig: str  # 대비기호
+    pred_pre: str  # 전일대비
+    flu_rt: str  # 등락률
+    trde_qty: str  # 거래량
+    wght: Optional[str] = None  # 비중
+    trde_prica: str  # 거래대금
+    upl: str  # 상한
+    rising: str  # 상승
+    stdns: str  # 보합
+    fall: str  # 하락
+    lst: str  # 하한
+    flo_stk_num: str  # 상장종목수
+
+
 class KiwoomAPIClient:
     """키움증권 REST API 클라이언트"""
     
@@ -150,6 +184,28 @@ class KiwoomAPIClient:
 
         logger.info(f"키움 API 클라이언트 초기화 완료 : {self.app_key}")
     
+    def _clean_price_data(self, value):
+        """주가 데이터에서 +/- 기호 제거 및 절댓값 반환 (float로)"""
+        if not value or str(value).strip() == '':
+            return 0.0
+        try:
+            # 문자열에서 +/- 기호 제거 후 절댓값 반환
+            clean_str = str(value).replace(',', '').replace('+', '').replace('-', '')
+            return float(clean_str) if clean_str else 0.0
+        except (ValueError, TypeError):
+            return 0.0
+    
+    def _clean_price_data_as_string(self, value):
+        """주가 데이터에서 +/- 기호 제거 및 절댓값 반환 (문자열로)"""
+        if not value or str(value).strip() == '':
+            return None
+        try:
+            # 문자열에서 +/- 기호 제거 후 절댓값 반환
+            clean_str = str(value).replace(',', '').replace('+', '').replace('-', '')
+            return clean_str if clean_str else None
+        except (ValueError, TypeError):
+            return None
+
     async def _ensure_token(self) -> str:
         """토큰 유효성 확인 및 갱신"""
         if self._auth_failed:
@@ -827,47 +883,8 @@ class KiwoomAPIClient:
         """
         return await self._make_kiwoom_api_request(api_id, '/api/dostk/mrkcond', data, cont_yn, next_key)
     
-    # 특정 TR 전용 편의 함수들
-    async def get_daily_realized_profit_loss(
-        self,
-        data: Dict[str, Any],
-        cont_yn: str = 'N',
-        next_key: str = ''
-    ) -> Dict[str, Any]:
-        """
-        일자별종목별실현손익 조회 (ka10072)
-        
-        Args:
-            data: 요청 데이터 (계좌정보, 일자 등 포함)
-            cont_yn: 연속조회여부
-            next_key: 연속조회키
-            
-        Returns:
-            Dict[str, Any]: 실현손익 데이터
-        """
-        logger.info(f"일자별종목별실현손익 조회: {data}")
-        return await self.call_account_api('ka10072', data, cont_yn, next_key)
     
-    async def get_investor_trading_by_market(
-        self,
-        data: Dict[str, Any],
-        cont_yn: str = 'N',
-        next_key: str = ''
-    ) -> Dict[str, Any]:
-        """
-        장중투자자별매매 조회 (ka10063)
-        
-        Args:
-            data: 요청 데이터 (날짜, 시장구분 등 포함)
-            cont_yn: 연속조회여부
-            next_key: 연속조회키
-            
-        Returns:
-            Dict[str, Any]: 투자자별 매매 데이터
-        """
-        logger.info(f"장중투자자별매매 조회: {data}")
-        return await self.call_market_condition_api('ka10063', data, cont_yn, next_key)
-
+    
     async def get_daily_chart_data(
         self,
         symbol: str,
@@ -942,18 +959,21 @@ class KiwoomAPIClient:
                             # 전일대비기호 추출 (1=상승, 2=하락, 3=변동없음 등)
                             pred_pre_sig = item.get('pred_pre_sig', '0')
                             
+                            # 현재가 추출
+                            cur_prc = item.get('cur_prc', '0')
+                            
                             # 기준가 (전일종가) 계산
-                            base_pric = clean_price_data(item.get('base_pric'))
-                            if (not base_pric or base_pric == '0') and pred_pre and cur_prc:
+                            base_pric = self._clean_price_data(item.get('base_pric'))
+                            if (not base_pric or base_pric == 0.0) and pred_pre and cur_prc:
                                 try:
                                     # 현재가 - 전일대비 = 전일종가 (부호 포함 계산)
-                                    current_val = float(cur_prc.replace(',', ''))
+                                    current_val = float(str(cur_prc).replace(',', ''))
                                     change_val = float(str(pred_pre).replace(',', ''))  # 부호 포함하여 변환
                                     
                                     # 전일종가 = 현재가 - 전일대비
-                                    base_pric = str(int(abs(current_val - change_val)))  # 절댓값 적용
+                                    base_pric = abs(current_val - change_val)  # 절댓값 적용
                                 except (ValueError, TypeError):
-                                    base_pric = cur_prc
+                                    base_pric = self._clean_price_data(cur_prc)
                             
                             # KiwoomChartData 객체 생성 (ka10081 계산값 포함)
                             chart_item = KiwoomChartData(
@@ -966,9 +986,8 @@ class KiwoomAPIClient:
                                 trading_value=item.get('trde_prica', '0'),  # 거래대금
                                 change_amount=pred_pre,               # 전일대비 (부호 유지)
                                 change_rate=flu_rt,                     # 등락률 (부호 유지)
-                                previous_close=base_pric,               # 전일종가
+                                previous_close=str(base_pric) if base_pric else None,
                                 volume_change_percent=pred_trde_qty_pre,  # 전일거래량대비 (부호 유지)
-                                # 전일대비기호 추가
                                 change_sign=pred_pre_sig
                             )
                             all_chart_data.append(chart_item)
@@ -1332,24 +1351,13 @@ class KiwoomAPIClient:
                             if not symbol:
                                 continue
                             
-                            def clean_price_data(value):
-                                """주가 데이터에서 +/- 기호 제거 및 절댓값 반환"""
-                                if not value or str(value).strip() == '':
-                                    return 0.0
-                                try:
-                                    # 문자열에서 +/- 기호 제거 후 절댓값 반환
-                                    clean_str = str(value).replace(',', '').replace('+', '').replace('-', '')
-                                    return float(clean_str) if clean_str else 0.0
-                                except (ValueError, TypeError):
-                                    return 0.0
-                            
                             # KA10095 실제 응답필드 매핑
-                            cur_prc = clean_price_data(item.get('cur_prc'))  # 현재가
-                            base_pric = clean_price_data(item.get('base_pric'))  # 기준가 (전일종가)
-                            open_pric = clean_price_data(item.get('open_pric'))  # 시가
-                            high_pric = clean_price_data(item.get('high_pric'))  # 고가
-                            low_pric = clean_price_data(item.get('low_pric'))  # 저가
-                            close_pric = clean_price_data(item.get('close_pric'))  # 종가
+                            cur_prc = self._clean_price_data(item.get('cur_prc'))  # 현재가
+                            base_pric = self._clean_price_data(item.get('base_pric'))  # 기준가 (전일종가)
+                            open_pric = self._clean_price_data(item.get('open_pric'))  # 시가
+                            high_pric = self._clean_price_data(item.get('high_pric'))  # 고가
+                            low_pric = self._clean_price_data(item.get('low_pric'))  # 저가
+                            close_pric = self._clean_price_data(item.get('close_pric'))  # 종가
                             
                             # 변화율 데이터 (부호 유지)
                             pred_pre = item.get('pred_pre', '0')  # 전일대비
@@ -1414,4 +1422,167 @@ class KiwoomAPIClient:
                 continue
         
         logger.info(f"실시간 주가 정보 배치 조회 완료: {len(all_stock_data)}/{len(symbols)}개 성공")
-        return all_stock_data 
+        return all_stock_data
+
+    async def get_sector_chart_data(
+        self,
+        sector_code: str,
+        start_date: str,
+        end_date: str
+    ) -> List[KiwoomSectorData]:
+        """
+        업종 일봉 차트 데이터 조회 (ka20006)
+        
+        Args:
+            sector_code: 업종코드 (001:KOSPI, 101:KOSDAQ, 201:KOSPI200 등)
+            start_date: 시작일자 (YYYYMMDD)
+            end_date: 종료일자 (YYYYMMDD)
+        """
+        try:
+            logger.info(f"키움 API 업종 차트 데이터 조회 시작: {sector_code}, {start_date} ~ {end_date}")
+            
+            all_data = []
+            cont_yn = 'N'
+            next_key = ''
+            request_count = 0
+            max_requests = 100  # 최대 요청 수 제한
+            
+            while request_count < max_requests:
+                data = {
+                    "inds_cd": sector_code,  # 업종코드
+                    "base_dt": end_date      # 기준일자 (최신 날짜부터 조회)
+                }
+                
+                logger.info(f"키움 API ka20006 요청 파라미터: {data}")
+                
+                response = await self._make_kiwoom_api_request(
+                    api_id="ka20006",
+                    endpoint="/api/dostk/chart",
+                    data=data,
+                    cont_yn=cont_yn,
+                    next_key=next_key
+                )
+                
+                if not response:
+                    logger.warning(f"키움 API 업종 차트 응답이 비어있음")
+                    break
+                
+                # 응답 데이터 처리 - 실제 구조에 맞게 수정
+                sector_data_list = response.get("inds_dt_pole_qry", [])
+                
+                if not sector_data_list:
+                    logger.info(f"업종 차트 데이터가 더 이상 없음")
+                    break
+                
+                logger.info(f"업종 차트 데이터 수신: {len(sector_data_list)}개")
+                
+                # 데이터 변환 및 필터링
+                batch_data = []
+                reached_start_date = False
+                
+                for item in sector_data_list:
+                    try:
+                        item_date = item.get("dt", "")
+                        if not item_date:
+                            continue
+                        
+                        # 날짜 필터링 (start_date ~ end_date 범위 내의 데이터만 수집)
+                        if item_date < start_date:
+                            reached_start_date = True
+                            continue  # 시작일자 이전 데이터는 스킵
+                        
+                        if item_date > end_date:
+                            continue  # 종료일자 이후 데이터는 스킵
+                        
+                        # 빈 문자열을 None으로 변환하는 헬퍼 함수
+                        def clean_empty_string(value):
+                            return None if value == "" else value
+                        
+                        sector_data = KiwoomSectorData(
+                            cur_prc=self._clean_price_data_as_string(item.get("cur_prc")),
+                            trde_qty=clean_empty_string(item.get("trde_qty")),
+                            dt=item_date,
+                            open_pric=self._clean_price_data_as_string(item.get("open_pric")),
+                            high_pric=self._clean_price_data_as_string(item.get("high_pric")),
+                            low_pric=self._clean_price_data_as_string(item.get("low_pric")),
+                            trde_prica=clean_empty_string(item.get("trde_prica")),
+                            bic_inds_tp=clean_empty_string(item.get("bic_inds_tp")),
+                            sm_inds_tp=clean_empty_string(item.get("sm_inds_tp")),
+                            stk_infr=clean_empty_string(item.get("stk_infr")),
+                            pred_close_pric=self._clean_price_data_as_string(item.get("pred_close_pric"))
+                        )
+                        batch_data.append(sector_data)
+                        
+                    except Exception as e:
+                        logger.warning(f"업종 차트 데이터 변환 실패 ({item.get('dt', 'UNKNOWN')}): {e}")
+                        continue
+                
+                all_data.extend(batch_data)
+                
+                # 연속조회 키 확인
+                response_headers = response.get("response_headers", {})
+                next_key = response_headers.get("next-key", "")
+                cont_yn = response_headers.get("cont-yn", "N")
+                
+                logger.info(f"업종 차트 배치 조회 완료: {len(batch_data)}개 데이터 (총 {len(all_data)}개)")
+                
+                # 더 이상 조회할 데이터가 없거나 시작일자에 도달했으면 종료
+                if cont_yn != 'Y' or not next_key or reached_start_date:
+                    logger.info(f"업종 차트 조회 종료: cont_yn={cont_yn}, next_key={'있음' if next_key else '없음'}, reached_start_date={reached_start_date}")
+                    break
+                
+                request_count += 1
+                await self._rate_limit()  # API 호출 제한
+            
+            # 시간순 정렬 (과거 → 현재)
+            all_data.sort(key=lambda x: x.dt)
+            
+            logger.info(f"키움 API 업종 차트 데이터 조회 완료: {sector_code}, {len(all_data)}개")
+            return all_data
+            
+        except Exception as e:
+            logger.error(f"키움 API 업종 차트 데이터 조회 실패 ({sector_code}): {e}")
+            return [] 
+
+    async def get_market_indices(self, index_code: str) -> Optional[KiwoomMarketIndex]:
+        """
+        전업종지수요청 (ka20003)
+        
+        Args:
+            index_code: 업종코드 (001:종합(KOSPI), 101:종합(KOSDAQ))
+            
+        Returns:
+            KiwoomMarketIndex: 시장 지수 정보
+        """
+        try:
+            logger.info(f"키움 API 전업종지수 조회: {index_code}")
+            
+            data = {
+                "inds_cd": index_code  # 업종코드
+            }
+            
+            result = await self._make_kiwoom_api_request('ka20003', '/api/dostk/sect', data)
+            
+            if result.get('return_code') == 0:
+                # 전업종지수 응답 처리
+                all_inds_idex = result.get('all_inds_idex', [])
+                
+                if not all_inds_idex:
+                    logger.warning(f"전업종지수 데이터 없음: {index_code}")
+                    return None
+                
+                # 요청한 지수 코드와 일치하는 데이터 찾기
+                for index_data in all_inds_idex:
+                    if index_data.get('stk_cd') == index_code:
+                        return KiwoomMarketIndex(**index_data)
+                
+                logger.warning(f"요청한 지수 코드({index_code})와 일치하는 데이터를 찾을 수 없음")
+                return None
+                
+            else:
+                logger.warning(f"전업종지수 조회 실패 - return_code: {result.get('return_code')}, return_msg: {result.get('return_msg')}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"전업종지수 조회 실패 ({index_code}): {e}")
+            return None

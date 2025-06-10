@@ -11,7 +11,7 @@ cont-yn	연속조회여부	String	N	1	다음 데이터가 있을시 Y값 전달
 next-key	연속조회키	String	N	50	다음 데이터가 있을시 다음 키값 전달
 api-id	TR명	String	Y	10	
 
-Body
+-응답 Body
 Element	한글명	type	Required	Length	Description
 atn_stk_infr	관심종목정보	LIST	N		
 - stk_cd	종목코드	String	N	20	
@@ -85,7 +85,7 @@ cont-yn	연속조회여부	String	N	1	다음 데이터가 있을시 Y값 전달
 next-key	연속조회키	String	N	50	다음 데이터가 있을시 다음 키값 전달
 api-id	TR명	String	Y	10	
 
-Body
+-응답 Body
 Element	한글명	type	Required	Length	Description
 stk_cd	종목코드	String	N	6	
 stk_dt_pole_chart_qry	주식일봉차트조회	LIST	N		
@@ -104,8 +104,32 @@ stk_dt_pole_chart_qry	주식일봉차트조회	LIST	N
 - upd_stkpc_event	수정주가이벤트	String	N	20	
 - pred_close_pric	전일종가	String	N	20	
 
+# ka20006, 업종일봉조회요청
+-요청 Body
+Element	한글명	type	Required	Length	Description
+inds_cd	업종코드	String	Y	3	001:종합(KOSPI), 002:대형주, 003:중형주, 004:소형주 101:종합(KOSDAQ), 201:KOSPI200, 302:KOSTAR, 701: KRX100 나머지 ※ 업종코드 참고
+base_dt	기준일자	String	Y	8	YYYYMMDD
+
+-응답 Body
+Element	한글명	type	Required	Length	Description
+inds_cd	업종코드	String	N	20	
+inds_dt_pole_qry	업종일봉조회	LIST	N		
+- cur_prc	현재가	String	N	20	
+- trde_qty	거래량	String	N	20	
+- dt	일자	String	N	20	
+- open_pric	시가	String	N	20	
+- high_pric	고가	String	N	20	
+- low_pric	저가	String	N	20	
+- trde_prica	거래대금	String	N	20	
+- bic_inds_tp	대업종구분	String	N	20	
+- sm_inds_tp	소업종구분	String	N	20	
+- stk_infr	종목정보	String	N	20	
+- pred_close_pric	전일종가	String	N	20	
+
 # KA10059, 종목별투자자기관별요청
-Body
+
+
+-응답 Body
 Element	한글명	type	Required	Length	Description
 stk_invsr_orgn	종목별투자자기관별	LIST	N		
 - dt	일자	String	N	20	
@@ -130,7 +154,7 @@ stk_invsr_orgn	종목별투자자기관별	LIST	N
 - natfor	내외국인	String	N	20	
 
 # KA10060, 종목별투자자기관별차트요청
-Body
+-응답 Body
 Element	한글명	type	Required	Length	Description
 stk_invsr_orgn_chart	종목별투자자기관별차트	LIST	N		
 - dt	일자	String	N	20	

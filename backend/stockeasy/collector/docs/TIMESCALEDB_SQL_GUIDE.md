@@ -4,6 +4,8 @@
 
 TimescaleDB는 PostgreSQL 기반의 시계열 데이터베이스로, **압축**, **하이퍼테이블**, **시간 기반 파티셔닝** 등의 특유한 메커니즘을 가지고 있습니다. 이러한 특성을 고려하지 않은 SQL 작성은 심각한 성능 저하와 **튜플 압축 해제 오류**를 유발할 수 있습니다.
 
+**이 요구사항들은 backend\stockeasy\collector 하위 폴더의 소스에만 적용해야합니다.**
+
 ## 🚨 핵심 위험 요소
 
 ### 1. 튜플 압축 해제 제한 오류
@@ -13,6 +15,24 @@ DETAIL: current limit: 100000, tuples decompressed: 444220
 ```
 
 이 오류는 **압축된 과거 데이터를 대량으로 해제**할 때 발생합니다.
+
+### 2. 함수 구분의 중요성
+
+#### ✅ 안전한 함수들 (압축 상태에서도 작동)
+- **일반 집계 함수**: `SUM()`, `AVG()`, `COUNT()`, `MAX()`, `MIN()`
+- **TimescaleDB 전용**: `first()`, `last()`, `time_bucket()`
+- **시간 범위 조건**: `>=`, `<`, `BETWEEN`
+- **직접 비교**: `=`, `IN`, `!=`
+
+#### ❌ 위험한 함수들 (압축 해제 유발)
+- **날짜 함수**: `DATE()`, `EXTRACT()`, `DATE_TRUNC()` (WHERE절에서)
+- **윈도우 함수**: `LAG()`, `LEAD()`, `ROW_NUMBER()`, `SUM() OVER()`
+- **문자열 함수**: `LIKE '%pattern%'`, `UPPER()`, `LOWER()`
+- **수학 함수**: 컬럼에 적용되는 `ABS()`, `ROUND()` 등
+
+#### 🔑 핵심 규칙
+**집계 함수 자체는 안전합니다!** 
+**윈도우 함수(OVER)와 함께 사용될 때만 위험합니다!**
 
 ## ❌ 위험한 SQL 패턴들
 
@@ -58,7 +78,32 @@ WHERE COALESCE(adjusted_price, price) > 1000
 WHERE NULLIF(volume, 0) IS NOT NULL
 ```
 
-### 5. 대량 DELETE 작업
+### 5. 윈도우 함수들 (매우 위험!)
+```sql
+-- ❌ 대량 압축 해제 유발 - 특히 위험
+LAG(close, 1) OVER (ORDER BY time)
+LEAD(price, 1) OVER (ORDER BY time)
+ROW_NUMBER() OVER (ORDER BY time)
+RANK() OVER (ORDER BY time)
+DENSE_RANK() OVER (ORDER BY time)
+FIRST_VALUE(close) OVER (ORDER BY time)
+LAST_VALUE(close) OVER (ORDER BY time)
+
+-- ❌ 윈도우 함수와 함께 사용되는 집계 함수들 (위험!)
+SUM(volume) OVER (ORDER BY time ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)
+AVG(close) OVER (ORDER BY time ROWS BETWEEN 10 PRECEDING AND CURRENT ROW)
+COUNT(*) OVER (PARTITION BY symbol ORDER BY time)
+MAX(high) OVER (ORDER BY time ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+MIN(low) OVER (ORDER BY time ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+
+-- ❌ 파티션과 함께 사용해도 위험
+LAG(close, 1) OVER (PARTITION BY symbol ORDER BY time)
+SUM(volume) OVER (PARTITION BY symbol ORDER BY time)
+```
+
+**⚠️ 중요**: 위의 집계 함수들은 **윈도우 함수(OVER)와 함께 사용될 때만** 위험합니다!
+
+### 6. 대량 DELETE 작업
 ```sql
 -- ❌ 튜플 제한 오류 유발
 DELETE FROM stock_prices 
@@ -112,6 +157,143 @@ WHERE symbol = '005930'
   AND time >= '2025-06-01'
 ORDER BY time DESC 
 LIMIT 100;
+```
+
+### 3-1. 안전한 집계 함수 사용 (매우 중요!)
+```sql
+-- ✅ 일반 집계 함수는 안전하게 사용 가능
+-- 시간 범위가 있으면 압축 상태에서도 효율적으로 집계
+SELECT 
+    symbol,
+    COUNT(*) as total_records,
+    SUM(volume) as total_volume,
+    AVG(close) as avg_price,
+    MAX(high) as max_price,
+    MIN(low) as min_price,
+    STDDEV(close) as price_volatility
+FROM stock_prices 
+WHERE symbol = '005930'
+  AND time >= '2025-06-01'
+  AND time < '2025-07-01'
+GROUP BY symbol;
+
+-- ✅ 시간별 집계 (TimescaleDB 최적화)
+SELECT 
+    time_bucket('1 day', time) as day,
+    symbol,
+    first(open, time) as day_open,
+    last(close, time) as day_close,
+    max(high) as day_high,
+    min(low) as day_low,
+    sum(volume) as day_volume
+FROM stock_prices 
+WHERE time >= '2025-06-01'
+  AND time < '2025-07-01'
+  AND symbol IN ('005930', '000660')
+GROUP BY day, symbol
+ORDER BY day DESC;
+
+-- ✅ 여러 종목 비교 집계
+SELECT 
+    symbol,
+    DATE_TRUNC('month', time) as month,
+    AVG(close) as avg_monthly_price,
+    SUM(volume) as monthly_volume,
+    COUNT(*) as trading_days
+FROM stock_prices 
+WHERE time >= '2025-01-01'
+  AND time < '2025-07-01'
+  AND interval_type = '1d'
+GROUP BY symbol, month
+ORDER BY symbol, month;
+```
+
+### 4. 윈도우 함수 대안 방법
+```sql
+-- ❌ 위험한 LAG() 사용
+SELECT 
+    time, symbol, close,
+    LAG(close, 1) OVER (ORDER BY time) as prev_close
+FROM stock_prices 
+WHERE symbol = '005930'
+  AND time >= '2025-06-01'
+ORDER BY time;
+
+-- ✅ 안전한 대안: SELF JOIN 사용 (제한된 범위에서)
+SELECT 
+    curr.time, curr.symbol, curr.close,
+    prev.close as prev_close
+FROM stock_prices curr
+LEFT JOIN stock_prices prev ON (
+    prev.symbol = curr.symbol 
+    AND prev.time = (
+        SELECT MAX(time) 
+        FROM stock_prices 
+        WHERE symbol = curr.symbol 
+          AND time < curr.time
+          AND time >= '2025-06-01'  -- 범위 제한 필수
+    )
+)
+WHERE curr.symbol = '005930'
+  AND curr.time >= '2025-06-01'
+  AND curr.time <= '2025-06-02'  -- 단기간만 조회
+ORDER BY curr.time;
+
+-- ✅ 더 안전한 방법: 애플리케이션에서 처리
+-- 1. 데이터를 시간순으로 조회
+SELECT time, symbol, close, volume
+FROM stock_prices 
+WHERE symbol = '005930'
+  AND time >= '2025-06-01'
+  AND time <= '2025-06-02'
+ORDER BY time;
+
+-- 2. 애플리케이션 코드에서 이전 값 계산
+```
+
+### 5. TimescaleDB 전용 최적화 함수들
+```sql
+-- ✅ TimescaleDB 전용 함수들 (압축 상태에서도 최적화됨)
+-- 시간 버킷 집계
+SELECT 
+    time_bucket('1 hour', time) as hour,
+    symbol,
+    first(close, time) as first_price,
+    last(close, time) as last_price,
+    max(high) as max_price,
+    min(low) as min_price
+FROM stock_prices 
+WHERE time >= '2025-06-10'
+  AND time < '2025-06-11'
+GROUP BY hour, symbol;
+
+-- ✅ 연속 집계 (Continuous Aggregates) 활용
+-- 미리 계산된 집계 테이블 사용
+SELECT * FROM daily_stock_summary 
+WHERE time >= '2025-06-01'
+  AND symbol = '005930';
+
+-- ✅ 하이퍼함수 사용
+SELECT 
+    symbol,
+    stats_agg(close) as price_stats,
+    approx_percentile(0.5, percentile_agg(close)) as median_price
+FROM stock_prices 
+WHERE time >= '2025-06-01'
+  AND time < '2025-07-01'
+GROUP BY symbol;
+
+-- ✅ 압축 친화적 시간 범위 집계
+SELECT 
+    time_bucket_gapfill('1 day', time) as day,
+    symbol,
+    locf(avg(close)) as avg_close  -- 결측값 채우기
+FROM stock_prices 
+WHERE time >= '2025-06-01'
+  AND time < '2025-07-01'
+  AND symbol = '005930'
+GROUP BY day, symbol
+ORDER BY day;
 ```
 
 ## 🏗️ 데이터 수정 작업 패턴
@@ -229,6 +411,65 @@ WHERE time >= '2025-06-01'
 ORDER BY time DESC, symbol;
 ```
 
+### 4. 변동률 계산 - 안전한 방법
+```sql
+-- ❌ 위험한 방법 (실제 오류 발생한 쿼리)
+WITH recent_data AS (
+    SELECT
+        time, symbol, interval_type, close, volume,
+        LAG(close, 1) OVER (ORDER BY time) as prev_close,
+        LAG(volume, 1) OVER (ORDER BY time) as prev_volume
+    FROM stock_prices
+    WHERE symbol = '000720'
+      AND time >= '2023-06-21'  -- 2년 전 데이터까지!
+      AND close IS NOT NULL
+    ORDER BY time
+)
+UPDATE stock_prices SET ...  -- 444,220개 튜플 압축 해제!
+
+-- ✅ 안전한 방법 1: 최근 데이터만 처리
+WITH recent_data AS (
+    SELECT 
+        time, symbol, close, volume,
+        LAG(close, 1) OVER (PARTITION BY symbol ORDER BY time) as prev_close
+    FROM stock_prices
+    WHERE symbol = '000720'
+      AND time >= CURRENT_DATE - INTERVAL '7 days'  -- 최근 7일만
+      AND close IS NOT NULL
+    ORDER BY time
+)
+UPDATE stock_prices 
+SET previous_close_price = recent_data.prev_close
+FROM recent_data
+WHERE stock_prices.time = recent_data.time
+  AND stock_prices.symbol = recent_data.symbol;
+
+-- ✅ 안전한 방법 2: 배치 처리
+-- 일자별로 나누어 처리
+SELECT DISTINCT DATE(time) as trade_date
+FROM stock_prices 
+WHERE symbol = '000720'
+  AND time >= '2025-06-01'
+  AND previous_close_price IS NULL
+ORDER BY trade_date
+LIMIT 10;  -- 10일씩 처리
+
+-- 각 일자별로 별도 처리
+WITH daily_data AS (
+    SELECT 
+        time, symbol, close,
+        LAG(close, 1) OVER (ORDER BY time) as prev_close
+    FROM stock_prices
+    WHERE symbol = '000720'
+      AND DATE(time) = '2025-06-01'  -- 하루씩만
+    ORDER BY time
+)
+UPDATE stock_prices 
+SET previous_close_price = daily_data.prev_close
+FROM daily_data
+WHERE stock_prices.time = daily_data.time;
+```
+
 ## ⚡ 성능 모니터링
 
 ### 1. 쿼리 성능 확인
@@ -259,9 +500,11 @@ FROM timescaledb_information.chunk_compression_stats;
 
 1. **DELETE + 대량 데이터**: 튜플 제한 오류 유발
 2. **DATE() 함수**: 모든 압축 데이터 해제
-3. **LIKE '%pattern%'**: 전체 테이블 스캔
-4. **컬럼에 함수 적용**: 인덱스 무력화
-5. **대량 UPDATE**: 압축 무효화
+3. **윈도우 함수 (LAG, LEAD 등)**: 대량 압축 해제 유발
+4. **LIKE '%pattern%'**: 전체 테이블 스캔
+5. **컬럼에 함수 적용**: 인덱스 무력화
+6. **장기간 + 윈도우 함수**: 특히 위험한 조합
+7. **대량 UPDATE**: 압축 무효화
 
 ## ✅ 권장 사항
 
@@ -277,9 +520,12 @@ FROM timescaledb_information.chunk_compression_stats;
 
 - [ ] 시간 컬럼에 함수를 사용했는가?
 - [ ] DATE(), EXTRACT() 등의 함수가 있는가?
+- [ ] **LAG(), LEAD() 등 윈도우 함수를 사용했는가?**
+- [ ] **윈도우 함수 사용 시 시간 범위를 제한했는가?**
 - [ ] 범위 조건 (>=, <) 을 사용했는가?
 - [ ] 배치 크기가 50개 이하인가?
 - [ ] DELETE 대신 UPSERT를 사용했는가?
+- [ ] **과거 2년 이상의 데이터를 대상으로 하는가?**
 
 ## 🔗 참고 자료
 

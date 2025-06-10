@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Union
 from decimal import Decimal
 
-from sqlalchemy import text, select, insert, update, delete, and_, or_, desc, asc
+from sqlalchemy import text, select, and_, desc, asc
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
 from loguru import logger
 
 from ..core.timescale_database import (
@@ -28,8 +28,6 @@ from ..schemas.timescale_schemas import (
     StockPriceResponse,
     SupplyDemandCreate,
     SupplyDemandResponse,
-    RealtimePriceCreate,
-    RealtimePriceResponse,
     MarketIndexCreate,
     MarketIndexResponse,
     IntervalType,
@@ -40,6 +38,9 @@ from ..schemas.timescale_schemas import (
     TimescaleHealthCheck,
     TimescaleStats
 )
+
+# ✅ 한국 공휴일 체크를 위한 import 추가
+from holidayskr import is_holiday
 
 
 class TimescaleService:
@@ -207,14 +208,14 @@ class TimescaleService:
                 # 배치 삽입을 위한 데이터 준비
                 price_dicts = [price.dict() for price in prices.prices]
                 
-                # ON CONFLICT를 사용한 upsert - 새로운 필드 구조 반영
+                # ON CONFLICT를 사용한 upsert - 새로운 필드 구조 반영 (updated_at 포함)
                 upsert_query = text("""
                     INSERT INTO stock_prices (time, symbol, interval_type, open, high, low, close, volume, trading_value, 
                                             adjusted_price_type, adjustment_ratio, adjusted_price_event,
-                                            major_industry_type, minor_industry_type, stock_info, created_at)
+                                            major_industry_type, minor_industry_type, stock_info, created_at, updated_at)
                     VALUES (:time, :symbol, :interval_type, :open, :high, :low, :close, :volume, :trading_value,
                            :adjusted_price_type, :adjustment_ratio, :adjusted_price_event,
-                           :major_industry_type, :minor_industry_type, :stock_info, :created_at)
+                           :major_industry_type, :minor_industry_type, :stock_info, :created_at, :updated_at)
                     ON CONFLICT (time, symbol, interval_type) 
                     DO UPDATE SET
                         open = EXCLUDED.open,
@@ -229,13 +230,19 @@ class TimescaleService:
                         major_industry_type = EXCLUDED.major_industry_type,
                         minor_industry_type = EXCLUDED.minor_industry_type,
                         stock_info = EXCLUDED.stock_info,
-                        created_at = EXCLUDED.created_at
+                        created_at = EXCLUDED.created_at,
+                        updated_at = EXCLUDED.updated_at
                 """)
                 
-                # created_at 필드 추가 및 None 값 처리
+                # created_at 및 updated_at 필드 추가 및 None 값 처리
                 current_time = datetime.utcnow()
                 for price_dict in price_dicts:
-                    price_dict['created_at'] = current_time
+                    # created_at은 기존 값 유지, updated_at은 항상 현재 UTC 시간으로 강제 갱신
+                    if 'created_at' not in price_dict or price_dict['created_at'] is None:
+                        price_dict['created_at'] = current_time
+                    # updated_at은 기존 값과 관계없이 항상 현재 UTC 시간으로 강제 갱신
+                    price_dict['updated_at'] = current_time
+                    
                     # 새로운 필드들에 대한 기본값 설정
                     for field in ['adjusted_price_type', 'adjustment_ratio', 'adjusted_price_event',
                                 'major_industry_type', 'minor_industry_type', 'stock_info']:
@@ -265,10 +272,10 @@ class TimescaleService:
                 upsert_query = text("""
                     INSERT INTO stock_prices (time, symbol, interval_type, open, high, low, close, volume, trading_value, 
                                             adjusted_price_type, adjustment_ratio, adjusted_price_event,
-                                            major_industry_type, minor_industry_type, stock_info, created_at)
+                                            major_industry_type, minor_industry_type, stock_info, created_at, updated_at)
                     VALUES (:time, :symbol, :interval_type, :open, :high, :low, :close, :volume, :trading_value,
                            :adjusted_price_type, :adjustment_ratio, :adjusted_price_event,
-                           :major_industry_type, :minor_industry_type, :stock_info, :created_at)
+                           :major_industry_type, :minor_industry_type, :stock_info, :created_at, :updated_at)
                     ON CONFLICT (time, symbol, interval_type) 
                     DO UPDATE SET
                         open = EXCLUDED.open,
@@ -283,12 +290,19 @@ class TimescaleService:
                         major_industry_type = EXCLUDED.major_industry_type,
                         minor_industry_type = EXCLUDED.minor_industry_type,
                         stock_info = EXCLUDED.stock_info,
-                        created_at = EXCLUDED.created_at
+                        created_at = EXCLUDED.created_at,
+                        updated_at = EXCLUDED.updated_at
                     RETURNING *
                 """)
                 
                 price_dict = stock_price.dict()
-                price_dict['created_at'] = datetime.utcnow()
+                current_time = datetime.utcnow()
+                
+                # created_at은 기존 값 유지, updated_at은 항상 현재 UTC 시간으로 강제 갱신
+                if 'created_at' not in price_dict or price_dict['created_at'] is None:
+                    price_dict['created_at'] = current_time
+                # updated_at은 기존 값과 관계없이 항상 현재 UTC 시간으로 강제 갱신
+                price_dict['updated_at'] = current_time
                 
                 # 새로운 필드들에 대한 기본값 설정
                 for field in ['adjusted_price_type', 'adjustment_ratio', 'adjusted_price_event',
@@ -398,88 +412,6 @@ class TimescaleService:
             
         except Exception as e:
             self.logger.error(f"캔들 데이터 조회 실패: {e}")
-            raise
-    
-    # ========================================
-    # 실시간 가격 데이터 관련 메서드
-    # ========================================
-    
-    async def create_realtime_price(self, realtime_price: RealtimePriceCreate) -> RealtimePriceResponse:
-        """실시간 가격 데이터 생성"""
-        await self.initialize()
-        
-        try:
-            async with get_timescale_session_context() as session:
-                upsert_query = text("""
-                    INSERT INTO realtime_prices (time, symbol, price, volume, bid_price, ask_price, bid_volume, ask_volume, change_amount, price_change_percent, trading_value, accumulated_volume, accumulated_value, market_status, is_suspended)
-                    VALUES (:time, :symbol, :price, :volume, :bid_price, :ask_price, :bid_volume, :ask_volume, :change_amount, :price_change_percent, :trading_value, :accumulated_volume, :accumulated_value, :market_status, :is_suspended)
-                    ON CONFLICT (time, symbol) 
-                    DO UPDATE SET
-                        price = EXCLUDED.price,
-                        volume = EXCLUDED.volume,
-                        bid_price = EXCLUDED.bid_price,
-                        ask_price = EXCLUDED.ask_price,
-                        bid_volume = EXCLUDED.bid_volume,
-                        ask_volume = EXCLUDED.ask_volume,
-                        change_amount = EXCLUDED.change_amount,
-                        price_change_percent = EXCLUDED.price_change_percent,
-                        trading_value = EXCLUDED.trading_value,
-                        accumulated_volume = EXCLUDED.accumulated_volume,
-                        accumulated_value = EXCLUDED.accumulated_value,
-                        market_status = EXCLUDED.market_status,
-                        is_suspended = EXCLUDED.is_suspended
-                    RETURNING *
-                """)
-                
-                result = await session.execute(upsert_query, realtime_price.dict())
-                row = result.fetchone()
-                
-                if row:
-                    # Row 객체를 딕셔너리로 변환 (SQLAlchemy 2.0 호환)
-                    row_dict = {
-                        'time': row[0],
-                        'symbol': row[1],
-                        'price': row[2], 
-                        'volume': row[3],
-                        'bid_price': row[4],
-                        'ask_price': row[5],
-                        'bid_volume': row[6],
-                        'ask_volume': row[7],
-                        'change_amount': row[8],
-                        'price_change_percent': row[9],
-                        'trading_value': row[10],
-                        'accumulated_volume': row[11],
-                        'accumulated_value': row[12],
-                        'market_status': row[13],
-                        'is_suspended': row[14]
-                    }
-                    return RealtimePriceResponse(**row_dict)
-                else:
-                    raise ValueError("실시간 가격 데이터 생성 실패")
-                    
-        except Exception as e:
-            self.logger.error(f"실시간 가격 데이터 생성 실패: {e}")
-            raise
-    
-    async def get_latest_realtime_price(self, symbol: str) -> Optional[RealtimePriceResponse]:
-        """최신 실시간 가격 조회"""
-        await self.initialize()
-        
-        try:
-            async with get_timescale_session_context() as session:
-                query = select(RealtimePrice).where(
-                    RealtimePrice.symbol == symbol
-                ).order_by(desc(RealtimePrice.time)).limit(1)
-                
-                result = await session.execute(query)
-                price = result.scalar_one_or_none()
-                
-                if price:
-                    return RealtimePriceResponse.from_orm(price)
-                return None
-                
-        except Exception as e:
-            self.logger.error(f"최신 실시간 가격 조회 실패: {e}")
             raise
     
     # ========================================
@@ -790,23 +722,20 @@ class TimescaleService:
     async def batch_calculate_stock_price_changes_optimized(
         self, 
         symbols: List[str] = None,
-        days_back: int = 30,
+        days_back: int = 730,  # 2년 전까지 (기본값 복원)
         batch_size: int = 10,  # 더 작은 배치 크기로 안정성 확보
         progress_callback=None
     ) -> Dict[str, Any]:
         """
-        주가 데이터 변동률 최적화 배치 계산
+        안전한 배치 계산 (TimescaleDB 압축 해제 제한 고려)
         
-        성능 개선 사항:
-        1. 윈도우 함수(LAG) 사용으로 서브쿼리 제거
-        2. 단일 CTE로 계산 로직 단순화
-        3. 작은 배치 크기로 메모리 사용량 최적화
-        4. 인덱스 친화적 쿼리 구조
+        ⚠️ 중요: LAG() 윈도우 함수는 압축 해제 오류를 유발하므로 사용 금지
+        ✅ 2년 전 데이터까지 모두 처리하되 일자별 배치 처리 방식 사용
         
         Args:
-            symbols: 계산할 종목 리스트 (None이면 전체)
-            days_back: 계산할 일수 (기본 30일)
-            batch_size: 종목별 배치 크기 (기본 10)
+            symbols: 계산할 종목 리스트
+            days_back: 계산할 일수 (기본 730일 = 2년)
+            batch_size: 사용하지 않음 (일자별 처리)
             progress_callback: 진행률 콜백 함수
             
         Returns:
@@ -819,298 +748,227 @@ class TimescaleService:
             total_updated = 0
             processed_symbols = 0
             
+            # ✅ 2년 전 데이터까지 처리 (기존 요구사항 유지)
+            safe_start_date = datetime.now() - timedelta(days=days_back)
+            safe_end_date = datetime.now()
+            
             # 대상 종목 조회
             async with get_timescale_session_context() as session:
                 if symbols is None:
-                    symbol_query = text(f"""
+                    symbol_query = text("""
                         SELECT DISTINCT symbol 
                         FROM stock_prices 
-                        WHERE time >= NOW() - INTERVAL '{days_back} days'
+                        WHERE time >= :start_date
+                          AND time < :end_date
                           AND close IS NOT NULL
-                          AND close > 0
                         ORDER BY symbol
-                        LIMIT 1000  -- 성능을 위해 종목 수 제한
                     """)
-                    result = await session.execute(symbol_query)
+                    result = await session.execute(symbol_query, {
+                        "start_date": safe_start_date,
+                        "end_date": safe_end_date
+                    })
                     symbols = [row[0] for row in result.fetchall()]
             
             total_symbols = len(symbols)
-            self.logger.info(f"최적화 배치 계산 시작: {total_symbols}개 종목, {days_back}일, 배치크기={batch_size}")
+            self.logger.info(f"안전한 배치 계산 시작: {total_symbols}개 종목, {days_back}일 ({safe_start_date.strftime('%Y-%m-%d')} ~ {safe_end_date.strftime('%Y-%m-%d')})")
             
-            # 종목을 배치 단위로 처리
-            for i in range(0, len(symbols), batch_size):
-                batch_symbols = symbols[i:i + batch_size]
-                batch_num = i // batch_size + 1
+            # ✅ 일자별 배치 처리 방식 (TIMESCALEDB_SQL_GUIDE.md 권장)
+            current_date = safe_start_date.date()
+            end_date = safe_end_date.date()
+            total_days = (end_date - current_date).days + 1
+            processed_days = 0
+            
+            while current_date <= end_date:
+                day_start = datetime.combine(current_date, datetime.min.time())
+                day_end = day_start + timedelta(days=1)
                 
-                self.logger.info(f"배치 {batch_num}/{(len(symbols) + batch_size - 1) // batch_size} 처리 중: {len(batch_symbols)}개 종목")
+                # ✅ 주말 및 한국 공휴일 체크 (효율성 개선)
+                weekday = current_date.weekday()  # 0=월요일, 6=일요일
+                if weekday >= 5 or is_holiday(current_date.strftime('%Y-%m-%d')):  # 토요일(5) 또는 일요일(6), 공휴일
+                    current_date += timedelta(days=1)
+                    continue
                 
-                # 각 배치를 별도 트랜잭션으로 처리
-                async with get_timescale_session_context() as batch_session:
+                self.logger.info(f"일자별 처리: {current_date}")
+                
+                # 각 종목을 개별 처리
+                for symbol in symbols:
                     try:
-                        # 윈도우 함수를 사용한 최적화된 단일 쿼리
-                        optimized_query = text(f"""
-                            WITH price_data AS (
-                                SELECT 
-                                    time,
-                                    symbol,
-                                    interval_type,
-                                    close,
-                                    volume,
-                                    -- 윈도우 함수로 전일 데이터 가져오기 (훨씬 빠름)
-                                    LAG(close, 1) OVER (PARTITION BY symbol, interval_type ORDER BY time) AS prev_close,
-                                    LAG(volume, 1) OVER (PARTITION BY symbol, interval_type ORDER BY time) AS prev_volume
+                        async with get_timescale_session_context() as symbol_session:
+                            # 1. 해당 일자의 데이터 조회 (압축 상태 유지)
+                            data_query = text("""
+                                SELECT time, symbol, interval_type, close, volume
                                 FROM stock_prices
-                                WHERE symbol = ANY(:symbols)
-                                  AND time >= NOW() - INTERVAL '{days_back} days'
+                                WHERE symbol = :symbol
+                                  AND time >= :day_start
+                                  AND time < :day_end
                                   AND close IS NOT NULL
                                   AND close > 0
-                                  AND (
-                                      previous_close_price IS NULL OR
-                                      change_amount IS NULL OR
-                                      price_change_percent IS NULL OR
-                                      volume_change IS NULL OR
-                                      volume_change_percent IS NULL
-                                  )
-                            )
-                            UPDATE stock_prices 
-                            SET 
-                                previous_close_price = COALESCE(stock_prices.previous_close_price, price_data.prev_close),
-                                change_amount = COALESCE(
-                                    stock_prices.change_amount,
-                                    CASE WHEN price_data.prev_close IS NOT NULL 
-                                    THEN stock_prices.close - price_data.prev_close
-                                    ELSE NULL END
-                                ),
-                                price_change_percent = COALESCE(
-                                    stock_prices.price_change_percent,
-                                    CASE WHEN price_data.prev_close > 0 
-                                    THEN ROUND(((stock_prices.close - price_data.prev_close) / price_data.prev_close) * 100, 4)
-                                    ELSE 0 END
-                                ),
-                                volume_change = COALESCE(
-                                    stock_prices.volume_change,
-                                    CASE WHEN price_data.prev_volume IS NOT NULL 
-                                    THEN stock_prices.volume - price_data.prev_volume
-                                    ELSE NULL END
-                                ),
-                                volume_change_percent = COALESCE(
-                                    stock_prices.volume_change_percent,
-                                    CASE WHEN price_data.prev_volume > 0 
-                                    THEN ROUND(((stock_prices.volume - price_data.prev_volume) / price_data.prev_volume) * 100, 4)
-                                    ELSE 0 END
-                                )
-                            FROM price_data
-                            WHERE stock_prices.time = price_data.time
-                              AND stock_prices.symbol = price_data.symbol
-                              AND stock_prices.interval_type = price_data.interval_type
-                        """)
-                        
-                        result = await batch_session.execute(optimized_query, {"symbols": batch_symbols})
-                        batch_updated = result.rowcount
-                        total_updated += batch_updated
-                        processed_symbols += len(batch_symbols)
-                        
-                        self.logger.info(f"배치 {batch_num} 완료: {batch_updated}건 업데이트")
-                        
-                        # 진행률 콜백 호출
-                        if progress_callback:
-                            progress = (processed_symbols / total_symbols) * 100
-                            await progress_callback(processed_symbols, total_symbols, progress, batch_updated)
-                        
-                    except Exception as batch_error:
-                        self.logger.error(f"배치 {batch_num} 실패: {batch_error}")
-                        
-                        # 배치 실패 시 개별 종목으로 재시도 (더 간단한 쿼리)
-                        for symbol in batch_symbols:
-                            async with get_timescale_session_context() as individual_session:
-                                try:
-                                    simple_query = text(f"""
-                                        UPDATE stock_prices sp1
-                                        SET 
-                                            previous_close_price = COALESCE(sp1.previous_close_price, sp2.close),
-                                            change_amount = COALESCE(sp1.change_amount, sp1.close - sp2.close),
-                                            price_change_percent = COALESCE(sp1.price_change_percent,
-                                                CASE WHEN sp2.close > 0 
-                                                THEN ROUND(((sp1.close - sp2.close) / sp2.close) * 100, 4)
-                                                ELSE 0 END),
-                                            volume_change = COALESCE(sp1.volume_change, sp1.volume - COALESCE(sp2.volume, 0)),
-                                            volume_change_percent = COALESCE(sp1.volume_change_percent,
-                                                CASE WHEN sp2.volume > 0 
-                                                THEN ROUND(((sp1.volume - sp2.volume) / sp2.volume) * 100, 4)
-                                                ELSE 0 END)
-                                        FROM stock_prices sp2
-                                        WHERE sp1.symbol = :symbol
-                                          AND sp2.symbol = sp1.symbol
-                                          AND DATE(sp2.time) = DATE(sp1.time) - INTERVAL '1 day'
-                                          AND sp1.time >= NOW() - INTERVAL '{days_back} days'
-                                          AND (
-                                              sp1.previous_close_price IS NULL OR
-                                              sp1.change_amount IS NULL OR
-                                              sp1.price_change_percent IS NULL OR
-                                              sp1.volume_change IS NULL OR
-                                              sp1.volume_change_percent IS NULL
-                                          )
-                                    """)
-                                    
-                                    individual_result = await individual_session.execute(simple_query, {"symbol": symbol})
-                                    individual_updated = individual_result.rowcount
-                                    total_updated += individual_updated
-                                    
-                                    if individual_updated > 0:
-                                        self.logger.debug(f"종목 {symbol} 개별 처리: {individual_updated}건")
+                                ORDER BY time
+                            """)
+                            
+                            result = await symbol_session.execute(data_query, {
+                                "symbol": symbol,
+                                "day_start": day_start,
+                                "day_end": day_end
+                            })
+                            data_rows = result.fetchall()
+                            
+                            if not data_rows:
+                                continue
+                            
+                            # 🔍 해당 일자 데이터 개수 확인
+                            #self.logger.info(f"[디버깅] {symbol} {current_date}: 해당 일자 데이터 {len(data_rows)}건 발견")
+                            
+                            # 2. 이전 일자의 마지막 데이터 조회
+                            prev_day_start = day_start - timedelta(days=7)
+                            prev_query = text("""
+                                SELECT close, volume
+                                FROM stock_prices 
+                                WHERE symbol = :symbol
+                                  AND time >= :prev_day_start
+                                  AND time < :day_start
+                                  AND close IS NOT NULL
+                                  AND close > 0
+                                ORDER BY time DESC
+                                LIMIT 1
+                            """)
+                            
+                            prev_result = await symbol_session.execute(prev_query, {
+                                "symbol": symbol,
+                                "prev_day_start": prev_day_start,
+                                "day_start": day_start
+                            })
+                            prev_row = prev_result.fetchone()
+                            
+                            # 3. 애플리케이션에서 계산 (안전한 방법)
+                            prev_close = float(prev_row.close) if prev_row else None
+                            prev_volume = prev_row.volume if prev_row else None
+                            
+                            # 🔍 이전 데이터 조회 결과 디버깅
+                            # if prev_row is None:
+                            #     self.logger.info(f"[디버깅] {symbol} {current_date}: 이전 일자 데이터 없음 (7일 전부터 조회)")
+                            # else:
+                            #     self.logger.info(f"[디버깅] {symbol} {current_date}: 이전 데이터 발견 - 종가:{prev_close}, 거래량:{prev_volume}")
+
+                            for i, row in enumerate(data_rows):
+                                if i > 0:  # 같은 날 내에서 이전 데이터 사용
+                                    prev_close = float(data_rows[i-1].close)
+                                    prev_volume = data_rows[i-1].volume
+                                
+                                # 🔍 prev_close 상태 추적
+                                if prev_close is None:
+                                    #self.logger.info(f"[디버깅] {symbol} {row.time}: prev_close가 None - 계산 건너뜀")
+                                    continue  # 계산할 수 없으므로 다음 레코드로
+                                
+                                if prev_close is not None:
+                                    try:
+                                        # 개별 업데이트 (안전한 방식)
+                                        change_amount = float(row.close) - prev_close
+                                        price_change_percent = round((change_amount / prev_close) * 100, 4) if prev_close > 0 else 0
                                         
-                                except Exception as individual_error:
-                                    self.logger.error(f"종목 {symbol} 개별 처리 실패: {individual_error}")
-                    
-                    # 배치 간 잠시 대기 (DB 부하 분산)
-                    await asyncio.sleep(0.1)
+                                        volume_change = None
+                                        volume_change_percent = None
+                                        
+                                        # ✅ 거래량 변화율 계산 및 추적
+                                        if prev_volume is not None:
+                                            volume_change = row.volume - prev_volume
+                                            
+                                            if prev_volume > 0:
+                                                volume_change_percent = round((volume_change / prev_volume) * 100, 4)
+                                                
+                                                # 🔍 거래량 변화율 0인 케이스 추적
+                                                if volume_change_percent == 0:
+                                                    if volume_change == 0:
+                                                        self.logger.info(f"[거래량추적] {symbol} {row.time}: 거래량 동일 - 현재:{row.volume}, 이전:{prev_volume}")
+                                                    else:
+                                                        self.logger.info(f"[거래량추적] {symbol} {row.time}: 변화율 반올림으로 0 - 변화량:{volume_change}, 이전:{prev_volume}, 변화율:{(volume_change / prev_volume) * 100:.6f}%")
+                                            else:
+                                                volume_change_percent = 0
+                                                #self.logger.info(f"[거래량추적] {symbol} {row.time}: 이전 거래량 0 - 현재:{row.volume}, 이전:{prev_volume}")
+                                        else:
+                                            self.logger.info(f"[거래량추적] {symbol} {row.time}: 이전 거래량 None - 현재:{row.volume}")
+                                        
+                                        # 🔍 NULL 값이 업데이트되는 케이스 추적
+                                        if volume_change_percent is None:
+                                            self.logger.info(f"[거래량추적] {symbol} {row.time}: volume_change_percent가 None으로 업데이트됨")
+                                        
+                                        # 강제 업데이트 (COALESCE 제거)
+                                        update_query = text("""
+                                            UPDATE stock_prices
+                                            SET 
+                                                previous_close_price = :prev_close,
+                                                change_amount = :change_amount,
+                                                price_change_percent = :price_change_percent,
+                                                volume_change = :volume_change,
+                                                volume_change_percent = :volume_change_percent
+                                            WHERE time = :time
+                                              AND symbol = :symbol
+                                              AND interval_type = :interval_type
+                                        """)
+                                        
+                                        await symbol_session.execute(update_query, {
+                                            'time': row.time,
+                                            'symbol': row.symbol,
+                                            'interval_type': row.interval_type,
+                                            'prev_close': prev_close,
+                                            'change_amount': change_amount,
+                                            'price_change_percent': price_change_percent,
+                                            'volume_change': volume_change,
+                                            'volume_change_percent': volume_change_percent
+                                        })
+                                        total_updated += 1
+                                        
+                                    except Exception as update_error:
+                                        self.logger.info(f"개별 업데이트 실패 ({symbol}, {row.time}): {update_error}")
+                                        continue
+                                
+                                prev_close = float(row.close)
+                                prev_volume = row.volume
+                        
+                    except Exception as symbol_error:
+                        self.logger.error(f"종목 {symbol} 일자 {current_date} 계산 실패: {symbol_error}")
+                        continue
+                
+                # 다음 날로 이동
+                current_date += timedelta(days=1)
+                processed_days += 1
+                
+                # 진행률 콜백 호출
+                if progress_callback and processed_days % 10 == 0:  # 10일마다 콜백
+                    progress = (processed_days / total_days) * 100
+                    await progress_callback(processed_days, total_days, progress, total_updated)
+                
+                # 진행률 로깅
+                if processed_days % 30 == 0:  # 30일마다 로깅
+                    progress = (processed_days / total_days) * 100
+                    self.logger.info(f"진행률: {progress:.1f}% ({processed_days}/{total_days}일)")
+                
+                # 일자별 처리 간 잠시 대기 (DB 부하 분산)
+                await asyncio.sleep(0.01)
             
             # 최종 통계
             end_time = datetime.utcnow()
             duration = (end_time - start_time).total_seconds()
             
             self.logger.info(
-                f"최적화 배치 계산 완료: {total_updated}건 업데이트, "
-                f"{processed_symbols}개 종목 처리, {duration:.2f}초 소요"
+                f"안전한 배치 계산 완료: {total_updated}건 업데이트, "
+                f"{total_symbols}개 종목, {processed_days}일 처리, {duration:.2f}초 소요"
             )
             
             return {
                 "success": True,
-                "method": "최적화 배치 계산 (윈도우 함수 사용)",
-                "total_symbols_processed": processed_symbols,
+                "method": "일자별 배치 계산 (2년 전 데이터까지)",
+                "total_symbols_processed": total_symbols,
+                "total_days_processed": processed_days,
                 "total_updated": total_updated,
-                "batch_size": batch_size,
+                "batch_size": "일자별",
                 "duration_seconds": duration,
                 "records_per_second": round(total_updated / duration) if duration > 0 else 0,
-                "performance_improvement": "LAG 윈도우 함수 + 단순화된 쿼리 구조"
+                "safety_improvements": "LAG 윈도우 함수 제거, 일자별 배치 처리, 2년 전 데이터까지 처리"
             }
             
         except Exception as e:
-            self.logger.error(f"최적화 배치 계산 실패: {e}")
-            raise
-
-    async def batch_calculate_stock_price_changes_incremental(
-        self, 
-        symbols: List[str] = None,
-        days_back: int = 7,  # 짧은 기간만 처리
-        chunk_size: int = 5   # 매우 작은 청크 크기
-    ) -> Dict[str, Any]:
-        """
-        점진적 배치 계산 (매우 작은 단위로 안전하게 처리)
-        
-        대용량 데이터나 성능이 중요한 상황에서 사용
-        
-        Args:
-            symbols: 계산할 종목 리스트
-            days_back: 계산할 일수 (기본 7일)
-            chunk_size: 청크 크기 (기본 5개)
-            
-        Returns:
-            Dict: 계산 결과
-        """
-        await self.initialize()
-        
-        try:
-            start_time = datetime.utcnow()
-            total_updated = 0
-            processed_symbols = 0
-            
-            # 대상 종목 조회 (제한적)
-            async with get_timescale_session_context() as session:
-                if symbols is None:
-                    symbol_query = text(f"""
-                        SELECT DISTINCT symbol 
-                        FROM stock_prices 
-                        WHERE time >= NOW() - INTERVAL '{days_back} days'
-                          AND close IS NOT NULL
-                        ORDER BY symbol
-                        LIMIT 100  -- 안정성을 위해 100개만
-                    """)
-                    result = await session.execute(symbol_query)
-                    symbols = [row[0] for row in result.fetchall()]
-            
-            self.logger.info(f"점진적 배치 계산 시작: {len(symbols)}개 종목, {days_back}일")
-            
-            # 각 종목을 개별적으로 처리 (가장 안전한 방식)
-            for i, symbol in enumerate(symbols):
-                try:
-                    async with get_timescale_session_context() as symbol_session:
-                        # 매우 간단한 업데이트 쿼리
-                        simple_update = text(f"""
-                            WITH ranked_prices AS (
-                                SELECT 
-                                    time, symbol, interval_type, close, volume,
-                                    LAG(close) OVER (ORDER BY time) as prev_close,
-                                    LAG(volume) OVER (ORDER BY time) as prev_volume,
-                                    ROW_NUMBER() OVER (ORDER BY time) as rn
-                                FROM stock_prices
-                                WHERE symbol = :symbol
-                                  AND time >= NOW() - INTERVAL '{days_back} days'
-                                  AND close IS NOT NULL
-                                ORDER BY time
-                            )
-                            UPDATE stock_prices
-                            SET 
-                                previous_close_price = COALESCE(previous_close_price, ranked_prices.prev_close),
-                                change_amount = COALESCE(change_amount, 
-                                    CASE WHEN ranked_prices.prev_close IS NOT NULL 
-                                    THEN close - ranked_prices.prev_close ELSE NULL END),
-                                price_change_percent = COALESCE(price_change_percent,
-                                    CASE WHEN ranked_prices.prev_close > 0 
-                                    THEN ROUND(((close - ranked_prices.prev_close) / ranked_prices.prev_close) * 100, 4)
-                                    ELSE 0 END),
-                                volume_change = COALESCE(volume_change,
-                                    CASE WHEN ranked_prices.prev_volume IS NOT NULL 
-                                    THEN volume - ranked_prices.prev_volume ELSE NULL END),
-                                volume_change_percent = COALESCE(volume_change_percent,
-                                    CASE WHEN ranked_prices.prev_volume > 0 
-                                    THEN ROUND(((volume - ranked_prices.prev_volume) / ranked_prices.prev_volume) * 100, 4)
-                                    ELSE 0 END)
-                            FROM ranked_prices
-                            WHERE stock_prices.time = ranked_prices.time
-                              AND stock_prices.symbol = ranked_prices.symbol
-                              AND stock_prices.interval_type = ranked_prices.interval_type
-                              AND ranked_prices.rn > 1  -- 첫 번째 행은 제외 (전일 데이터 없음)
-                        """)
-                        
-                        result = await symbol_session.execute(simple_update, {"symbol": symbol})
-                        updated_count = result.rowcount
-                        total_updated += updated_count
-                        processed_symbols += 1
-                        
-                        if updated_count > 0:
-                            self.logger.debug(f"종목 {symbol}: {updated_count}건 업데이트")
-                        
-                        # 진행률 로그
-                        if (i + 1) % 10 == 0:
-                            progress = ((i + 1) / len(symbols)) * 100
-                            self.logger.info(f"진행률: {progress:.1f}% ({i + 1}/{len(symbols)})")
-                        
-                except Exception as symbol_error:
-                    self.logger.error(f"종목 {symbol} 처리 실패: {symbol_error}")
-                
-                # 종목 간 잠시 대기
-                await asyncio.sleep(0.05)
-            
-            end_time = datetime.utcnow()
-            duration = (end_time - start_time).total_seconds()
-            
-            self.logger.info(
-                f"점진적 배치 계산 완료: {total_updated}건 업데이트, "
-                f"{processed_symbols}개 종목, {duration:.2f}초"
-            )
-            
-            return {
-                "success": True,
-                "method": "점진적 배치 계산 (개별 종목 처리)",
-                "total_symbols_processed": processed_symbols,
-                "total_updated": total_updated,
-                "duration_seconds": duration,
-                "records_per_second": round(total_updated / duration) if duration > 0 else 0
-            }
-            
-        except Exception as e:
-            self.logger.error(f"점진적 배치 계산 실패: {e}")
+            self.logger.error(f"안전한 배치 계산 실패: {e}")
             raise
 
     async def batch_calculate_stock_price_changes(
@@ -1120,13 +978,17 @@ class TimescaleService:
         batch_size: int = 50
     ) -> Dict[str, Any]:
         """
-        주가 데이터 변동률 배치 계산 (기존 방식 - 호환성 유지)
+        주가 데이터 변동률 배치 계산 (TimescaleDB 안전 모드)
+        
+        TimescaleDB 압축 해제 제한을 고려하여 안전한 처리 방식 사용
         """
-        # 최적화된 메서드로 위임
+       
+        
+        # 안전한 최적화 메서드로 위임
         return await self.batch_calculate_stock_price_changes_optimized(
             symbols=symbols,
             days_back=days_back,
-            batch_size=min(batch_size, 10),  # 안전을 위해 배치 크기 제한
+            batch_size=batch_size,  # 개별 처리로 안정성 확보
             progress_callback=None
         )
 
@@ -1167,24 +1029,181 @@ class TimescaleService:
         start_date: datetime = None
     ) -> Dict[str, Any]:
         """
-        새로 삽입된 데이터에 대한 빠른 배치 계산
+        새로 추가된 데이터에 대한 안전한 배치 계산
         
-        Args:
-            symbols: 계산할 종목 리스트
-            start_date: 계산 시작일 (None이면 최근 7일)
-            
-        Returns:
-            Dict: 계산 결과
+        TimescaleDB 튜플 압축 해제 제한을 고려하여 일자별 배치 처리
+        ⚠️ LAG() 윈도우 함수는 압축 해제 오류를 유발하므로 사용 금지
+        ✅ 2년 전 데이터까지 모두 처리하되 일자별로 나누어 안전하게 처리
         """
-        if start_date is None:
-            start_date = datetime.utcnow() - timedelta(days=7)
+        await self.initialize()
+        
+        try:
+            if not start_date:
+                # 기본적으로 2년 전부터 처리 (기존 로직 유지)
+                start_date = datetime.now() - timedelta(days=730)
             
-        return await self.batch_calculate_stock_price_changes_optimized(
-            symbols=symbols,
-            days_back=(datetime.utcnow() - start_date).days + 1,
-            batch_size=5,  # 더 작은 배치로 안정성 확보
-            progress_callback=None
-        )
+            self.logger.info(f"새 데이터 배치 계산 시작: {len(symbols)}개 종목, {start_date.strftime('%Y-%m-%d')} 이후")
+            
+            total_updated = 0
+            
+            # ✅ 안전한 방식: 일자별 배치 처리 (TIMESCALEDB_SQL_GUIDE.md 권장)
+            # 전체 기간을 일자별로 나누어 처리
+            current_date = start_date.date()
+            end_date = datetime.now().date()
+            
+            while current_date <= end_date:
+                day_start = datetime.combine(current_date, datetime.min.time())
+                day_end = day_start + timedelta(days=1)
+                
+                # ✅ 주말 및 한국 공휴일 체크 (효율성 개선)
+                weekday = current_date.weekday()  # 0=월요일, 6=일요일
+                if weekday >= 5 or is_holiday(current_date.strftime('%Y-%m-%d')):  # 토요일(5) 또는 일요일(6)
+                    #self.logger.info(f"주말 건너뜀: {current_date} ({'토요일' if weekday == 5 else '일요일'})")
+                    current_date += timedelta(days=1)
+                    continue
+                
+                self.logger.info(f"일자별 처리: {current_date}")
+                
+                # 각 종목을 개별 처리
+                for symbol in symbols:
+                    try:
+                        async with get_timescale_session_context() as session:
+                            # 1. 해당 일자의 데이터 조회 (압축 상태 유지)
+                            data_query = text("""
+                                SELECT time, symbol, interval_type, close, volume
+                                FROM stock_prices 
+                                WHERE symbol = :symbol
+                                  AND time >= :day_start
+                                  AND time < :day_end
+                                  AND close IS NOT NULL
+                                  AND close > 0
+                                ORDER BY time
+                            """)
+                            
+                            result = await session.execute(data_query, {
+                                "symbol": symbol,
+                                "day_start": day_start,
+                                "day_end": day_end
+                            })
+                            data_rows = result.fetchall()
+                            
+                            if not data_rows:
+                                continue
+                            
+                            # 🔍 해당 일자 데이터 개수 확인
+                            #self.logger.info(f"[디버깅] {symbol} {current_date}: 해당 일자 데이터 {len(data_rows)}건 발견")
+                            
+                            # 2. 이전 일자의 마지막 데이터 조회 (전일종가용)
+                            prev_day_start = day_start - timedelta(days=7)  # 7일 전까지 조회
+                            prev_query = text("""
+                                SELECT close, volume
+                                FROM stock_prices 
+                                WHERE symbol = :symbol
+                                  AND time >= :prev_day_start
+                                  AND time < :day_start
+                                  AND close IS NOT NULL
+                                  AND close > 0
+                                ORDER BY time DESC
+                                LIMIT 1
+                            """)
+                            
+                            prev_result = await session.execute(prev_query, {
+                                "symbol": symbol,
+                                "prev_day_start": prev_day_start,
+                                "day_start": day_start
+                            })
+                            prev_row = prev_result.fetchone()
+                            
+                            # 3. 애플리케이션에서 계산 (안전한 방법)
+                            prev_close = float(prev_row.close) if prev_row else None
+                            prev_volume = prev_row.volume if prev_row else None
+                            
+                            # 🔍 이전 데이터 조회 결과 디버깅
+                            # if prev_row is None:
+                            #     self.logger.info(f"[디버깅] {symbol} {current_date}: 이전 일자 데이터 없음 (7일 전부터 조회)")
+                            # else:
+                            #     self.logger.info(f"[디버깅] {symbol} {current_date}: 이전 데이터 발견 - 종가:{prev_close}, 거래량:{prev_volume}")
+
+                            for i, row in enumerate(data_rows):
+                                if i > 0:  # 같은 날 내에서 이전 데이터 사용
+                                    prev_close = float(data_rows[i-1].close)
+                                    prev_volume = data_rows[i-1].volume
+                                
+                                # 🔍 prev_close 상태 추적
+                                if prev_close is None:
+                                    #self.logger.info(f"[디버깅] {symbol} {row.time}: prev_close가 None - 계산 건너뜀")
+                                    continue  # 계산할 수 없으므로 다음 레코드로
+                                
+                                if prev_close is not None:
+                                    try:
+                                        # 변동률 계산
+                                        change_amount = float(row.close) - prev_close
+                                        price_change_percent = round((change_amount / prev_close) * 100, 4) if prev_close > 0 else 0
+                                        
+                                        volume_change = None
+                                        volume_change_percent = None
+                                        if prev_volume is not None:
+                                            volume_change = row.volume - prev_volume
+                                            volume_change_percent = round((volume_change / prev_volume) * 100, 4) if prev_volume > 0 else 0
+                                        
+                                        # 개별 업데이트 (강제 업데이트 모드)
+                                        update_query = text("""
+                                            UPDATE stock_prices
+                                            SET 
+                                                previous_close_price = :prev_close,
+                                                change_amount = :change_amount,
+                                                price_change_percent = :price_change_percent,
+                                                volume_change = :volume_change,
+                                                volume_change_percent = :volume_change_percent
+                                            WHERE time = :time
+                                              AND symbol = :symbol
+                                              AND interval_type = :interval_type
+                                        """)
+                                        
+                                        await session.execute(update_query, {
+                                            'time': row.time,
+                                            'symbol': row.symbol,
+                                            'interval_type': row.interval_type,
+                                            'prev_close': prev_close,
+                                            'change_amount': change_amount,
+                                            'price_change_percent': price_change_percent,
+                                            'volume_change': volume_change,
+                                            'volume_change_percent': volume_change_percent
+                                        })
+
+                                        total_updated += 1
+                                        #self.logger.info(f"volume_change_percent: {volume_change_percent}")
+                                        
+                                    except Exception as update_error:
+                                        self.logger.info(f"개별 업데이트 실패 ({symbol}, {row.time}): {update_error}")
+                                        continue
+                                
+                                # 다음 루프를 위해 현재 값 저장
+                                prev_close = float(row.close)
+                                prev_volume = row.volume
+                            
+                    except Exception as symbol_error:
+                        self.logger.error(f"종목 {symbol} 일자 {current_date} 계산 실패: {symbol_error}")
+                        continue
+                
+                # 다음 날로 이동
+                current_date += timedelta(days=1)
+                
+                # 일자별 처리 간 잠시 대기 (DB 부하 분산)
+                await asyncio.sleep(0.01)
+            
+            self.logger.info(f"새 데이터 배치 계산 완료: 총 {total_updated}건 업데이트")
+            return {
+                "success": True,
+                "total_updated": total_updated,
+                "processed_symbols": len(symbols),
+                "start_date": start_date.isoformat(),
+                "method": "일자별 배치 처리 (2년 전 데이터까지)"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"새 데이터 배치 계산 실패: {e}")
+            raise
 
     async def bulk_create_stock_prices_with_progress(
         self, 
@@ -1364,7 +1383,7 @@ class TimescaleService:
                 for query in optimization_queries:
                     try:
                         await session.execute(text(query))
-                        self.logger.debug(f"최적화 설정 적용: {query}")
+                        self.logger.info(f"최적화 설정 적용: {query}")
                     except Exception as e:
                         self.logger.warning(f"최적화 설정 실패 (무시 가능): {query} - {e}")
                 
@@ -1564,7 +1583,7 @@ class TimescaleService:
                     await session.execute(upsert_query, price_dicts)
                     total_upserted += len(price_dicts)
                     
-                    self.logger.debug(f"당일 데이터 배치 UPSERT (수정주가 보존): {len(price_dicts)}건")
+                    self.logger.info(f"당일 데이터 배치 UPSERT (수정주가 보존): {len(price_dicts)}건")
                 
                 self.logger.info(f"당일 주가 데이터 UPSERT 완료 (수정주가 보존): {target_date_str}, 총 {total_upserted}건")
                 
@@ -1663,7 +1682,7 @@ class TimescaleService:
                     await session.execute(upsert_query, price_dicts)
                     total_upserted += len(price_dicts)
                     
-                    self.logger.debug(f"당일 데이터 배치 UPSERT (수정주가 보존): {len(price_dicts)}건")
+                    self.logger.info(f"당일 데이터 배치 UPSERT (수정주가 보존): {len(price_dicts)}건")
                 
                 self.logger.info(f"당일 주가 데이터 UPSERT 완료 (수정주가 보존): {target_date_str}, 총 {total_upserted}건")
                 
@@ -1676,6 +1695,107 @@ class TimescaleService:
                 
         except Exception as e:
             self.logger.error(f"당일 주가 데이터 UPSERT 실패 (수정주가 보존): {e}")
+            raise
+
+
+    async def delete_stock_prices_by_symbol_period(
+        self,
+        symbol: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> Dict[str, Any]:
+        """
+        특정 종목의 기간별 주가 데이터 삭제
+        
+        Args:
+            symbol: 종목 코드
+            start_date: 시작 날짜
+            end_date: 종료 날짜
+            
+        Returns:
+            Dict: 삭제 결과
+        """
+        await self.initialize()
+        
+        try:
+            async with get_timescale_session_context() as session:
+                delete_query = text("""
+                    DELETE FROM stock_prices 
+                    WHERE symbol = :symbol 
+                    AND time >= :start_date 
+                    AND time <= :end_date
+                """)
+                
+                result = await session.execute(delete_query, {
+                    "symbol": symbol,
+                    "start_date": start_date,
+                    "end_date": end_date
+                })
+                
+                deleted_count = result.rowcount
+                self.logger.info(f"주가 데이터 삭제 완료: {symbol}, {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}, {deleted_count}건")
+                
+                return {
+                    "success": True,
+                    "symbol": symbol,
+                    "start_date": start_date.strftime('%Y-%m-%d'),
+                    "end_date": end_date.strftime('%Y-%m-%d'),
+                    "deleted_count": deleted_count,
+                    "message": f"{symbol} 주가 데이터 {deleted_count}건 삭제 완료"
+                }
+                
+        except Exception as e:
+            self.logger.error(f"주가 데이터 삭제 실패 ({symbol}): {e}")
+            raise
+
+    async def delete_supply_demand_by_symbol_period(
+        self,
+        symbol: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> Dict[str, Any]:
+        """
+        특정 종목의 기간별 수급 데이터 삭제
+        
+        Args:
+            symbol: 종목 코드
+            start_date: 시작 날짜
+            end_date: 종료 날짜
+            
+        Returns:
+            Dict: 삭제 결과
+        """
+        await self.initialize()
+        
+        try:
+            async with get_timescale_session_context() as session:
+                delete_query = text("""
+                    DELETE FROM supply_demand 
+                    WHERE symbol = :symbol 
+                    AND date >= :start_date 
+                    AND date <= :end_date
+                """)
+                
+                result = await session.execute(delete_query, {
+                    "symbol": symbol,
+                    "start_date": start_date,
+                    "end_date": end_date
+                })
+                
+                deleted_count = result.rowcount
+                self.logger.info(f"수급 데이터 삭제 완료: {symbol}, {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}, {deleted_count}건")
+                
+                return {
+                    "success": True,
+                    "symbol": symbol,
+                    "start_date": start_date.strftime('%Y-%m-%d'),
+                    "end_date": end_date.strftime('%Y-%m-%d'),
+                    "deleted_count": deleted_count,
+                    "message": f"{symbol} 수급 데이터 {deleted_count}건 삭제 완료"
+                }
+                
+        except Exception as e:
+            self.logger.error(f"수급 데이터 삭제 실패 ({symbol}): {e}")
             raise
 
 
