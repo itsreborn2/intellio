@@ -3,7 +3,7 @@ services:
     image: pgvector/pgvector:pg15
     command: postgres -c timezone=Asia/Seoul
     env_file:
-      - .env.development
+      - .env
     environment:
       PGDATA: /var/lib/postgresql/data/pgdata
       LANG: C.UTF-8
@@ -45,73 +45,10 @@ services:
       timeout: 5s
       retries: 5
 
-  # TimescaleDB 컨테이너 추가
-  timescaledb:
-    image: timescale/timescaledb:latest-pg15
-    env_file:
-      - backend/stockeasy/collector/.env.development
-    environment:
-      - POSTGRES_DB=${TIMESCALE_DB}
-      - POSTGRES_USER=${TIMESCALE_USER}
-      - POSTGRES_PASSWORD=${TIMESCALE_PASSWORD}
-      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=C
-      - PGDATA=/var/lib/postgresql/data/pgdata
-      - LANG=C.UTF-8
-      - LC_ALL=C.UTF-8
-      - TZ=Asia/Seoul
-    volumes:
-      - timescale_data:/var/lib/postgresql/data
-      - ./backend/stockeasy/collector/database/init:/docker-entrypoint-initdb.d
-    ports:
-      - "5433:5432"
-    command: >
-      postgres 
-      -c shared_preload_libraries=timescaledb
-      -c max_connections=200
-      -c shared_buffers=256MB
-      -c effective_cache_size=1GB
-      -c work_mem=4MB
-      -c maintenance_work_mem=64MB
-      -c timezone=Asia/Seoul
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U collector_user -d stockeasy_collector"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # TimescaleDB용 PgBouncer 추가
-  pgbouncer-timescale:
-    image: edoburu/pgbouncer:latest
-    environment:
-      - DB_USER=${TIMESCALE_USER}
-      - DB_PASSWORD=${TIMESCALE_PASSWORD}
-      - DB_HOST=timescaledb
-      - DB_NAME=${TIMESCALE_DB}
-      - POOL_MODE=session
-      - MAX_CLIENT_CONN=100
-      - DEFAULT_POOL_SIZE=20
-      - ADMIN_USERS=${TIMESCALE_USER}
-      - LISTEN_PORT=6432
-      - AUTH_TYPE=scram-sha-256
-    ports:
-      - "6433:6432"
-    depends_on:
-      - timescaledb
-    restart: unless-stopped
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -p 6432 -U collector_user -d stockeasy_collector"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   pgadmin:
     image: dpage/pgadmin4
     env_file:
-      - .env.development
+      - .env
     ports:
       - "5055:80"
     networks:
@@ -140,29 +77,12 @@ services:
       timeout: 5s
       retries: 3
 
-  base-image-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.base.dev
-      args:
-        BUILDKIT_INLINE_CACHE: 1
-    image: intellio-base-dev:latest
-    volumes:
-      - ./backend:/backend
-    profiles: ["build"]
-
   fastapi:
     build:
       context: .
       dockerfile: Dockerfile.fastapi.dev
       args:
-        BUILDKIT_INLINE_CACHE: 1
-    volumes:
-      - ./backend:/backend:rw,delegated
-    env_file:
-      - .env.development
-    environment:
-      - ENV=development
+        BUILDKIT_INLINE_CACHE: 1  
     ports:
       - "8000:8000"
     depends_on:
@@ -178,18 +98,11 @@ services:
       context: .
       dockerfile: Dockerfile.stockeasy.collector.dev
       args:
-        BUILDKIT_INLINE_CACHE: 1
-    volumes:
-      - ./backend:/backend:rw,delegated
-    env_file:
-      - .env.development
-    environment:
-      - ENV=development
+        BUILDKIT_INLINE_CACHE: 1  
     ports:
       - "8001:8001"
     depends_on:
-      - pgbouncer              # 기존 DB 연결
-      - pgbouncer-timescale    # TimescaleDB 연결 추가
+      - pgbouncer
       - redis
     restart: unless-stopped
     networks:
@@ -198,11 +111,7 @@ services:
   celery-doceasy:
     build:
       context: .
-      dockerfile: Dockerfile.celery.doceasy.dev
-    volumes:
-      - ./backend:/backend
-    env_file:
-      - .env.development
+      dockerfile: Dockerfile.celery.doceasy.dev  
     depends_on:
       - pgbouncer
       - redis
@@ -213,11 +122,7 @@ services:
   celery-stockeasy:
     build:
       context: .
-      dockerfile: Dockerfile.celery.stockeasy.dev
-    volumes:
-      - ./backend:/backend
-    env_file:
-      - .env.development
+      dockerfile: Dockerfile.celery.stockeasy.dev  
     depends_on:
       - pgbouncer
       - redis
@@ -227,7 +132,7 @@ services:
   flower:
     image: mher/flower
     env_file:
-      - .env.development
+      - .env
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -247,4 +152,3 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  timescale_data: 

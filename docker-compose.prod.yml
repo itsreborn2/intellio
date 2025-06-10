@@ -1,8 +1,37 @@
-
 services:
   postgres:
     env_file:
       - .env.production
+      
+  # TimescaleDB 프로덕션 오버라이드 (변경되는 부분만)
+  timescaledb:
+    env_file:
+      - backend/stockeasy/collector/.env.production
+    volumes:
+      - timescale_data_prod:/var/lib/postgresql/data
+      - ./backend/stockeasy/collector/database/init:/docker-entrypoint-initdb.d
+    command: >
+      postgres 
+      -c shared_preload_libraries=timescaledb
+      -c max_connections=200
+      -c shared_buffers=512MB
+      -c effective_cache_size=2GB
+      -c work_mem=8MB
+      -c maintenance_work_mem=128MB
+      -c timezone=Asia/Seoul
+      -c log_timezone=Asia/Seoul
+      -c log_statement=error
+      -c log_min_duration_statement=1000
+    healthcheck:
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
   base-image-prod:
     build:
       context: .
@@ -10,7 +39,6 @@ services:
     image: intellio-base-prod:latest
     volumes:
       - ./backend:/backend
-      #- ./backend/stockeasy/telegram_channels.json:/app/backend/stockeasy/telegram_channels.json
     profiles: ["build"]
 
   fastapi:
@@ -23,6 +51,22 @@ services:
       - ENV=production
     volumes:
       - ./backend:/backend
+
+  stock-data-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.stockeasy.collector.prod
+    env_file:
+      - ./backend/stockeasy/collector/.env.production
+    environment:
+      - ENV=production
+    volumes:
+      - ./backend:/backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   celery-doceasy:
     build:
@@ -55,4 +99,11 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+volumes:
+  timescale_data_prod:
+
+networks:
+  app-network:
+    driver: bridge
 
