@@ -76,6 +76,9 @@ class StockPriceBase(BaseModel):
     
     # 추가 정보
     stock_info: Optional[str] = Field(None, max_length=100, description="종목정보")
+    
+    # 업데이트 시간 (UPSERT 시 갱신)
+    updated_at: Optional[datetime] = Field(None, description="업데이트 시간 (UTC)")
 
     @validator('symbol')
     def validate_symbol(cls, v):
@@ -110,6 +113,7 @@ class StockPriceResponse(StockPriceBase):
     """주가 데이터 응답 스키마"""
     time: datetime
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

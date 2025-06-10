@@ -70,6 +70,13 @@ class DataCollectorService(LoggerMixin):
             "etf_stats": {},
             "scheduler_stats": {}
         }
+        
+        # 수정주가 임시 메모리 저장소 추가
+        self._adjustment_data_cache = {
+            "last_check_date": None,  # 마지막 체크 날짜
+            "adjusted_stocks": {},    # {종목코드: {adjustment_type, adjustment_ratio, adjustment_event, check_date}}
+            "check_history": []       # 체크 이력 (최대 30일 보관)
+        }
     
     async def initialize(self) -> None:
         """데이터 수집 서비스 초기화"""
@@ -1181,16 +1188,51 @@ class DataCollectorService(LoggerMixin):
                                 for symbol, chart_data in chart_data_dict.items():
                                     for chart_item in chart_data:
                                         try:
+                                            # 안전한 변환 함수들
+                                            def safe_float(value):
+                                                try:
+                                                    return float(value) if value and str(value).strip() else None
+                                                except (ValueError, TypeError):
+                                                    return None
+                                            
+                                            def safe_int(value):
+                                                try:
+                                                    return int(value) if value and str(value).strip() else None
+                                                except (ValueError, TypeError):
+                                                    return None
+                                            
+                                            # 키움 API에서 제공하는 계산값들 추출
+                                            api_change_amount = safe_float(chart_item.change_amount) if hasattr(chart_item, 'change_amount') else None
+                                            api_change_rate = safe_float(chart_item.change_rate) if hasattr(chart_item, 'change_rate') else None
+                                            api_previous_close = safe_float(chart_item.previous_close) if hasattr(chart_item, 'previous_close') else None
+                                            api_volume_change_percent = safe_float(chart_item.volume_change_percent) if hasattr(chart_item, 'volume_change_percent') else None
+                                            
+                                            # 수정주가 관련 필드 추출
+                                            api_adjustment_type = getattr(chart_item, 'adjustment_type', None)
+                                            api_adjustment_ratio = safe_float(getattr(chart_item, 'adjustment_ratio', None))
+                                            api_adjustment_event = getattr(chart_item, 'adjustment_event', None)
+                                            
                                             stock_price = StockPriceCreate(
                                                 time=datetime.strptime(chart_item.date, '%Y%m%d') if hasattr(chart_item, 'date') else datetime.now(),
                                                 symbol=symbol,
                                                 interval_type=IntervalType.ONE_DAY.value,
-                                                open=float(chart_item.open or 0) if hasattr(chart_item, 'open') else 0.0,
-                                                high=float(chart_item.high or 0) if hasattr(chart_item, 'high') else 0.0,
-                                                low=float(chart_item.low or 0) if hasattr(chart_item, 'low') else 0.0,
-                                                close=float(chart_item.close or 0) if hasattr(chart_item, 'close') else 0.0,
-                                                volume=int(chart_item.volume or 0) if hasattr(chart_item, 'volume') else 0,
-                                                trading_value=int(chart_item.trading_value or 0) if hasattr(chart_item, 'trading_value') else 0
+                                                open=safe_float(chart_item.open),
+                                                high=safe_float(chart_item.high),
+                                                low=safe_float(chart_item.low),
+                                                close=safe_float(chart_item.close),
+                                                volume=safe_int(chart_item.volume),
+                                                trading_value=safe_int(chart_item.trading_value),
+                                                # 키움 API에서 제공하는 계산값들 활용
+                                                change_amount=api_change_amount,
+                                                price_change_percent=api_change_rate,
+                                                previous_close_price=api_previous_close,
+                                                volume_change_percent=api_volume_change_percent,
+                                                # 수정주가 관련 정보
+                                                adjusted_price_type=api_adjustment_type,
+                                                adjustment_ratio=api_adjustment_ratio,
+                                                adjusted_price_event=api_adjustment_event,
+                                                # updated_at 필드 추가 (UPSERT 시 갱신 보장)
+                                                updated_at=datetime.now()
                                             )
                                             stock_price_data.append(stock_price)
                                         except Exception as e:
@@ -1289,6 +1331,45 @@ class DataCollectorService(LoggerMixin):
                 # 두 태스크 완료 대기
                 await asyncio.gather(producer_task, consumer_task)
                 
+                # 전체 배치 수집 완료 후 최종 배치 계산 실행
+                ctx.log_progress("전체 수집 완료 후 최종 배치 계산 시작")
+                try:
+                    # 성공적으로 수집된 종목들에 대해 최종 배치 계산
+                    successful_symbols = []
+                    if stats["success_stocks"] > 0:
+                        # 실제 DB에서 데이터가 있는 종목들을 조회
+                        from stockeasy.collector.services.timescale_service import timescale_service
+                        from sqlalchemy import text
+                        from stockeasy.collector.core.timescale_database import get_timescale_session_context
+                        
+                        async with get_timescale_session_context() as session:
+                            symbols_query = text("""
+                                SELECT DISTINCT symbol 
+                                FROM stock_prices 
+                                WHERE time >= :start_date::date 
+                                AND time <= :end_date::date
+                                ORDER BY symbol
+                            """)
+                            result_symbols = await session.execute(symbols_query, {
+                                'start_date': start_date_str[:4] + '-' + start_date_str[4:6] + '-' + start_date_str[6:8],
+                                'end_date': end_date_str[:4] + '-' + end_date_str[4:6] + '-' + end_date_str[6:8]
+                            })
+                            successful_symbols = [row[0] for row in result_symbols.fetchall()]
+                    
+                    if successful_symbols:
+                        ctx.log_progress(f"최종 배치 계산 대상: {len(successful_symbols)}개 종목")
+                        final_calc_result = await timescale_service.batch_calculate_stock_price_changes(
+                            symbols=successful_symbols,
+                            days_back=(datetime.strptime(end_date_str, '%Y%m%d') - datetime.strptime(start_date_str, '%Y%m%d')).days + 1,
+                            batch_size=50
+                        )
+                        ctx.log_progress(f"최종 배치 계산 완료: {final_calc_result.get('total_updated', 0)}건 업데이트")
+                    else:
+                        ctx.log_progress("최종 배치 계산 대상 없음")
+                        
+                except Exception as e:
+                    ctx.logger.warning(f"최종 배치 계산 실패 (데이터 수집은 정상 완료): {e}")
+                
                 result = {
                     "success": True,
                     "total_stocks": total_stocks,
@@ -1297,6 +1378,7 @@ class DataCollectorService(LoggerMixin):
                     "total_records": stats["total_records"],
                     "start_date": start_date_str,
                     "end_date": end_date_str,
+                    "final_calculation_symbols": len(successful_symbols) if 'successful_symbols' in locals() else 0,
                     "message": f"전종목 차트 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건"
                 }
                 
@@ -1756,3 +1838,424 @@ class DataCollectorService(LoggerMixin):
             data=compressed_data,
             total_count=len(compressed_data)
         ) 
+    
+    async def update_today_chart_data(self, batch_size: int = 100) -> Dict[str, Any]:
+        """당일 차트 데이터만 업데이트 (관심종목정보요청 ka10095 사용, 메모리의 수정주가 정보 포함)"""
+        from stockeasy.collector.services.timescale_service import timescale_service
+        from stockeasy.collector.schemas.timescale_schemas import StockPriceCreate, IntervalType
+        
+        today = datetime.now()
+        today_str = today.strftime('%Y%m%d')
+        
+        try:
+            # 전체 종목 리스트 조회
+            stock_list = await self.get_all_stock_list_for_stockai()
+            if not stock_list:
+                return {
+                    "message": "종목 리스트가 비어있습니다",
+                    "total_stocks": 0,
+                    "updated_stocks": 0,
+                    "with_adjustment": 0,
+                    "errors": 0,
+                    "status": "completed"
+                }
+            
+            total_stocks = len(stock_list)
+            updated_stocks = 0
+            with_adjustment = 0
+            errors = 0
+            
+            self.logger.info(f"당일 차트 데이터 업데이트 시작 (ka10095): 총 {total_stocks}개 종목, 배치크기: {batch_size}")
+            
+            def safe_float(value):
+                """안전한 float 변환"""
+                try:
+                    if not value or str(value).strip() == '':
+                        return 0.0
+                    # 콤마 제거 후 변환
+                    clean_value = str(value).replace(',', '')
+                    return float(clean_value)
+                except (ValueError, TypeError):
+                    return 0.0
+            
+            def safe_int(value):
+                """안전한 int 변환"""
+                try:
+                    if not value or str(value).strip() == '':
+                        return 0
+                    # 콤마 제거 후 변환
+                    clean_value = str(value).replace(',', '')
+                    return int(clean_value)
+                except (ValueError, TypeError):
+                    return 0
+            
+            def clean_price_data(value):
+                """주가 데이터에서 +/- 기호 제거 및 절댓값 반환"""
+                if not value or str(value).strip() == '':
+                    return 0.0
+                try:
+                    # 문자열에서 +/- 기호 제거 후 절댓값 반환
+                    clean_str = str(value).replace(',', '').replace('+', '').replace('-', '')
+                    return float(clean_str) if clean_str else 0.0
+                except (ValueError, TypeError):
+                    return 0.0
+            
+            def safe_change_data(value):
+                """변화율 데이터에서 부호 유지하여 안전하게 변환"""
+                if not value or str(value).strip() == '':
+                    return 0.0
+                try:
+                    # 콤마만 제거하고 +/- 기호는 유지
+                    clean_str = str(value).replace(',', '')
+                    return float(clean_str) if clean_str else 0.0
+                except (ValueError, TypeError):
+                    return 0.0
+            
+            # 종목 코드만 추출
+            all_symbols = [stock["code"] for stock in stock_list]
+            
+            # 100개씩 배치 단위로 처리 (ka10095 최대 100개 제한)
+            for i in range(0, len(all_symbols), batch_size):
+                batch_symbols = all_symbols[i:i + batch_size]
+                stock_price_data = []
+                
+                try:
+                    # 키움 API에서 관심종목정보요청(ka10095)으로 배치 조회
+                    if self.settings.KIWOOM_APP_KEY != "test_api_key":
+                        batch_data = await self.kiwoom_client.get_realtime_stock_prices_batch(
+                            batch_symbols, today_str
+                        )
+                        
+                        # 각 종목별 데이터 처리
+                        for symbol in batch_symbols:
+                            try:
+                                if symbol not in batch_data:
+                                    self.logger.debug(f"종목 {symbol}: ka10095 응답에 데이터 없음")
+                                    continue
+                                
+                                chart_item = batch_data[symbol]
+                                
+                                # 날짜 검증 및 파싱
+                                if not chart_item.date or not str(chart_item.date).strip():
+                                    continue
+                                
+                                try:
+                                    chart_date = datetime.strptime(str(chart_item.date).strip(), '%Y%m%d')
+                                except ValueError:
+                                    continue
+                                
+                                # 가격 데이터 검증 (종가 우선, 없으면 현재가, +/- 기호 제거)
+                                close_price = clean_price_data(chart_item.close)
+                                if close_price <= 0:
+                                    continue
+                                
+                                # 메모리에서 수정주가 정보 조회
+                                adjustment_info = self.get_stored_adjustment_info(symbol)
+                                adjustment_type = None
+                                adjustment_ratio = None
+                                adjustment_event = None
+                                
+                                if adjustment_info:
+                                    adjustment_type = adjustment_info.get("adjustment_type")
+                                    adjustment_ratio = adjustment_info.get("adjustment_ratio")
+                                    adjustment_event = adjustment_info.get("adjustment_event")
+                                    with_adjustment += 1
+                                    self.logger.debug(f"종목 {symbol} 메모리에서 수정주가 정보 조회: type={adjustment_type}, ratio={adjustment_ratio}, event={adjustment_event}")
+                                else:
+                                    self.logger.debug(f"종목 {symbol}: 메모리에 수정주가 정보 없음")
+                                
+                                # TimescaleDB용 데이터 생성 (주가 데이터는 +/- 기호 제거)
+                                stock_price = StockPriceCreate(
+                                    time=chart_date,
+                                    symbol=symbol,
+                                    interval_type=IntervalType.ONE_DAY.value,
+                                    open=clean_price_data(chart_item.open),
+                                    high=clean_price_data(chart_item.high),
+                                    low=clean_price_data(chart_item.low),
+                                    close=clean_price_data(chart_item.close),
+                                    volume=safe_int(chart_item.volume),
+                                    trading_value=safe_int(chart_item.trading_value),
+                                    # ka10095에서 제공하는 계산값들 (변화율은 부호 유지)
+                                    change_amount=safe_change_data(chart_item.change_amount),
+                                    price_change_percent=safe_change_data(chart_item.change_rate),
+                                    previous_close_price=clean_price_data(chart_item.previous_close),
+                                    volume_change_percent=safe_change_data(chart_item.volume_change_percent),
+                                    # 수정주가 정보 추가 (메모리에서 조회한 정보)
+                                    adjusted_price_type=adjustment_type,
+                                    adjustment_ratio=adjustment_ratio,
+                                    adjusted_price_event=adjustment_event,
+                                    # 전일대비기호 추가
+                                    price_change_sign=getattr(chart_item, 'change_sign', None),
+                                    # updated_at 필드 추가 (UPSERT 시 갱신 보장)
+                                    updated_at=datetime.now()
+                                )
+                                stock_price_data.append(stock_price)
+                                updated_stocks += 1
+                                
+                            except Exception as e:
+                                errors += 1
+                                self.logger.error(f"종목 {symbol} 데이터 처리 실패: {e}")
+                                continue
+                    
+                except Exception as e:
+                    self.logger.error(f"배치 {i//batch_size + 1} ka10095 API 호출 실패: {e}")
+                    errors += len(batch_symbols)
+                
+                # 배치 데이터를 TimescaleDB에 저장 (배치별 upsert 방식)
+                if stock_price_data:
+                    try:
+                        # 수정주가 정보 보존 UPSERT 방식 (DELETE 없음, 튜플 제한 문제 해결)
+                        await timescale_service.upsert_today_stock_prices(
+                            stock_price_data,
+                            target_date=today,
+                            batch_size=50  # 적절한 배치 크기로 조정
+                        )
+                        
+                        self.logger.info(f"배치 {i//batch_size + 1} DB upsert 완료: {len(stock_price_data)}건 (수정주가 정보 보존)")
+                        
+                    except Exception as e:
+                        self.logger.error(f"배치 {i//batch_size + 1} DB upsert 실패: {e}")
+                
+                # 진행률 로그
+                progress = min((i + batch_size) / len(all_symbols) * 100, 100)
+                self.logger.info(f"당일 차트 데이터 업데이트 진행률: {progress:.1f}% ({updated_stocks}/{total_stocks})")
+                
+                # API 호출 제한 준수 (초당 4.8회 = 0.208초 간격)
+                if i + batch_size < len(all_symbols):
+                    await asyncio.sleep(0.21)  # 키움 API 제약: 초당 4.8회
+            
+            self.logger.info(f"당일 차트 데이터 업데이트 완료 (ka10095): {updated_stocks}개 종목 (수정주가 포함: {with_adjustment}개)")
+            
+            return {
+                "message": f"당일 차트 데이터 업데이트 완료 (ka10095): {updated_stocks}개 종목 (수정주가 포함: {with_adjustment}개)",
+                "total_stocks": total_stocks,
+                "updated_stocks": updated_stocks,
+                "with_adjustment": with_adjustment,
+                "errors": errors,
+                "status": "completed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"당일 차트 데이터 업데이트 실패 (ka10095): {e}")
+            return {
+                "message": f"당일 차트 데이터 업데이트 실패 (ka10095): {str(e)}",
+                "total_stocks": 0,
+                "updated_stocks": 0,
+                "with_adjustment": 0,
+                "errors": 1,
+                "status": "failed"
+            }
+    
+    # ===========================================
+    # 수정주가 관련 메서드들
+    # ===========================================
+    
+    def store_adjustment_info(self, symbol: str, adjustment_type: str = None, 
+                            adjustment_ratio: float = None, adjustment_event: str = None) -> None:
+        """수정주가 정보를 메모리에 임시 저장"""
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        if symbol not in self._adjustment_data_cache["adjusted_stocks"]:
+            self._adjustment_data_cache["adjusted_stocks"][symbol] = {}
+        
+        # 수정주가구분 코드 해석
+        adjustment_type_desc = self._get_adjustment_type_description(adjustment_type)
+        
+        self._adjustment_data_cache["adjusted_stocks"][symbol] = {
+            "adjustment_type": adjustment_type,
+            "adjustment_type_desc": adjustment_type_desc,
+            "adjustment_ratio": adjustment_ratio,
+            "adjustment_event": adjustment_event,
+            "check_date": today
+        }
+        
+        self.logger.info(f"수정주가 정보 저장: {symbol} - 구분: {adjustment_type}({adjustment_type_desc}), 비율: {adjustment_ratio}, 이벤트: {adjustment_event}")
+    
+    def _get_adjustment_type_description(self, adjustment_type: str) -> str:
+        """수정주가구분 코드를 설명으로 변환"""
+        if not adjustment_type or adjustment_type == '0':
+            return "없음"
+        
+        type_map = {
+            "1": "유상증자",
+            "2": "무상증자", 
+            "4": "배당락",
+            "8": "액면분할",
+            "16": "액면병합",
+            "32": "기업합병",
+            "64": "감자",
+            "256": "권리락"
+        }
+        
+        try:
+            type_code = str(int(adjustment_type))
+            return type_map.get(type_code, f"기타({adjustment_type})")
+        except (ValueError, TypeError):
+            return f"알수없음({adjustment_type})"
+    
+    def get_stored_adjustment_info(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """저장된 수정주가 정보 조회"""
+        return self._adjustment_data_cache["adjusted_stocks"].get(symbol)
+    
+    def clear_old_adjustment_cache(self, days_to_keep: int = 30) -> None:
+        """오래된 수정주가 캐시 정리"""
+        cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+        cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+        
+        # 체크 이력 정리
+        self._adjustment_data_cache["check_history"] = [
+            entry for entry in self._adjustment_data_cache["check_history"]
+            if entry.get("check_date", "") >= cutoff_str
+        ]
+        
+        # 조정 주식 정보 정리
+        symbols_to_remove = []
+        for symbol, info in self._adjustment_data_cache["adjusted_stocks"].items():
+            if info.get("check_date", "") < cutoff_str:
+                symbols_to_remove.append(symbol)
+        
+        for symbol in symbols_to_remove:
+            del self._adjustment_data_cache["adjusted_stocks"][symbol]
+        
+        self.logger.info(f"{days_to_keep}일 이전 수정주가 캐시 정리 완료: {len(symbols_to_remove)}개 종목 제거")
+    
+    async def check_adjustment_prices_for_stockai(self, batch_size: int = 100) -> Dict[str, Any]:
+        """stockai용 전종목 수정주가 체크 (초당 4.8회 제한)"""
+        today = datetime.now()
+        today_str = today.strftime('%Y%m%d')
+        
+        try:
+            # 전체 종목 리스트 조회
+            stock_list = await self.get_all_stock_list_for_stockai()
+            if not stock_list:
+                return {
+                    "message": "종목 리스트가 비어있습니다",
+                    "total_stocks": 0,
+                    "checked_stocks": 0,
+                    "adjusted_stocks": 0,
+                    "errors": 0,
+                    "status": "completed"
+                }
+            
+            total_stocks = len(stock_list)
+            checked_stocks = 0
+            adjusted_stocks = 0
+            errors = 0
+            
+            self.logger.info(f"수정주가 체크 시작: 총 {total_stocks}개 종목, 배치크기: {batch_size}")
+            
+            # 배치 단위로 처리
+            for i in range(0, total_stocks, batch_size):
+                batch = stock_list[i:i + batch_size]
+                
+                for stock in batch:
+                    try:
+                        symbol = stock["code"]
+                        
+                        # 키움 API에서 당일 일봉차트 데이터 조회 (upd_stkpc_tp='1' 수정주가)
+                        if self.settings.KIWOOM_APP_KEY != "test_api_key":
+                            chart_data = await self.kiwoom_client.get_daily_chart_data(
+                                symbol, today_str, today_str, adjusted_price='1'
+                            )
+                            
+                            # 차트 데이터에서 수정주가 관련 정보 추출
+                            if chart_data and len(chart_data) > 0:
+                                chart_item = chart_data[0]  # 당일 데이터
+                                
+                                # KiwoomChartData 객체에서 수정주가 관련 필드 추출
+                                adjustment_type = getattr(chart_item, 'adjustment_type', None)
+                                adjustment_ratio = getattr(chart_item, 'adjustment_ratio', None)
+                                adjustment_event = getattr(chart_item, 'adjustment_event', None)
+                                
+                                # 디버그 로그 추가
+                                self.logger.debug(f"종목 {symbol} 수정주가 필드 추출: type={adjustment_type}, ratio={adjustment_ratio}, event={adjustment_event}")
+                                
+                                # 수정주가 정보가 있으면 메모리에 저장
+                                if adjustment_type or adjustment_ratio or adjustment_event:
+                                    # 문자열 값을 float로 변환 (adjustment_ratio의 경우)
+                                    ratio_value = None
+                                    if adjustment_ratio:
+                                        try:
+                                            ratio_value = float(adjustment_ratio)
+                                            self.logger.debug(f"수정비율 변환: {adjustment_ratio} -> {ratio_value}")
+                                        except (ValueError, TypeError) as e:
+                                            self.logger.warning(f"수정비율 변환 실패: {adjustment_ratio}, 오류: {e}")
+                                            ratio_value = None
+                                    
+                                    self.store_adjustment_info(
+                                        symbol=symbol,
+                                        adjustment_type=adjustment_type,
+                                        adjustment_ratio=ratio_value,
+                                        adjustment_event=adjustment_event
+                                    )
+                                    
+                                    adjusted_stocks += 1
+                                    self.logger.info(f"수정주가 발견: {symbol} ({stock['name']}) - 구분: {adjustment_type}, 비율: {ratio_value}, 이벤트: {adjustment_event}")
+                                else:
+                                    self.logger.debug(f"종목 {symbol}: 수정주가 정보 없음")
+                        
+                        checked_stocks += 1
+                        
+                        # API 호출 제한 (초당 4.8회)
+                        await asyncio.sleep(1.0 / 4.8)
+                        
+                    except Exception as e:
+                        errors += 1
+                        self.logger.error(f"종목 {symbol} 수정주가 체크 실패: {e}")
+                        continue
+                
+                # 배치 완료 로그
+                progress = min((i + batch_size) / total_stocks * 100, 100)
+                self.logger.info(f"수정주가 체크 진행률: {progress:.1f}% ({checked_stocks}/{total_stocks})")
+            
+            # 체크 이력 저장
+            check_result = {
+                "check_date": today_str,
+                "total_stocks": total_stocks,
+                "checked_stocks": checked_stocks,
+                "adjusted_stocks": adjusted_stocks,
+                "errors": errors,
+                "check_time": today.isoformat()
+            }
+            
+            self._adjustment_data_cache["check_history"].append(check_result)
+            self._adjustment_data_cache["last_check_date"] = today_str
+            
+            # 최대 30일 이력만 보관
+            if len(self._adjustment_data_cache["check_history"]) > 30:
+                self._adjustment_data_cache["check_history"] = self._adjustment_data_cache["check_history"][-30:]
+            
+            self.logger.info(f"수정주가 체크 완료: {adjusted_stocks}개 종목에서 수정주가 발견")
+            
+            return {
+                "message": f"수정주가 체크 완료: {adjusted_stocks}개 종목에서 수정주가 발견",
+                "total_stocks": total_stocks,
+                "checked_stocks": checked_stocks,
+                "adjusted_stocks": adjusted_stocks,
+                "errors": errors,
+                "status": "completed"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"수정주가 체크 실패: {e}")
+            return {
+                "message": f"수정주가 체크 실패: {str(e)}",
+                "total_stocks": 0,
+                "checked_stocks": 0,
+                "adjusted_stocks": 0,
+                "errors": 1,
+                "status": "failed"
+            }
+    
+    def get_adjustment_check_stats(self) -> Dict[str, Any]:
+        """수정주가 체크 통계 조회"""
+        return {
+            "last_check_date": self._adjustment_data_cache.get("last_check_date"),
+            "total_adjusted_stocks": len(self._adjustment_data_cache["adjusted_stocks"]),
+            "adjusted_stocks": dict(self._adjustment_data_cache["adjusted_stocks"]),
+            "check_history": self._adjustment_data_cache["check_history"][-10:],  # 최근 10회만
+            "cache_stats": {
+                "total_cached_stocks": len(self._adjustment_data_cache["adjusted_stocks"]),
+                "total_history_entries": len(self._adjustment_data_cache["check_history"])
+            }
+        }

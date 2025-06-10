@@ -106,6 +106,16 @@ class SchedulerService(LoggerMixin):
             max_instances=1
         )
         
+        # 1-1. 매일 아침 7시 31분: stockai용 수정주가 체크 (평일만)
+        self.scheduler.add_job(
+            func=self._check_adjustment_prices_job,
+            trigger=CronTrigger(hour=7, minute=31, day_of_week='mon-fri'),
+            id="daily_adjustment_check",
+            name="일일 수정주가 체크 (stockai용)",
+            replace_existing=True,
+            max_instances=1
+        )
+        
         # 2. 매일 오전 8시: ETF 구성종목 업데이트 (평일만)
         self.scheduler.add_job(
             func=self._update_etf_components_job,
@@ -132,6 +142,26 @@ class SchedulerService(LoggerMixin):
             trigger=CronTrigger(day_of_week='sat', hour=18, minute=0),
             id="weekly_cache_refresh",
             name="주간 전체 캐시 새로고침",
+            replace_existing=True,
+            max_instances=1
+        )
+        
+        # 5. 당일 차트 데이터 업데이트 (오후 3시 35분, 오후 8시 5분) - 평일만
+        # ka10095 관심종목정보요청을 사용하여 100개씩 배치로 처리
+        self.scheduler.add_job(
+            func=self._update_today_chart_data_job,
+            trigger=CronTrigger(hour=15, minute=35, day_of_week='mon-fri'),
+            id="daily_chart_update_afternoon",
+            name="당일 차트 데이터 업데이트 (오후)",
+            replace_existing=True,
+            max_instances=1
+        )
+        
+        self.scheduler.add_job(
+            func=self._update_today_chart_data_job,
+            trigger=CronTrigger(hour=20, minute=5, day_of_week='mon-fri'),
+            id="daily_chart_update_evening",
+            name="당일 차트 데이터 업데이트 (저녁)",
             replace_existing=True,
             max_instances=1
         )
@@ -255,6 +285,28 @@ class SchedulerService(LoggerMixin):
         except Exception as e:
             logger.error(f"전체 캐시 새로고침 실패: {e}")
     
+    @log_scheduler_job("당일 차트 데이터 업데이트")
+    async def _update_today_chart_data_job(self) -> None:
+        """당일 차트 데이터 업데이트 작업"""
+        # 주말/공휴일 확인
+        if self._is_holiday_or_weekend():
+            logger.info("주말 또는 공휴일이므로 당일 차트 데이터 업데이트를 건너뜁니다")
+            return
+        
+        try:
+            if not self.data_collector:
+                logger.warning("데이터 수집 서비스가 없습니다")
+                return
+            
+            # 차트 데이터 업데이트
+            await self.data_collector.update_today_chart_data()
+            
+            logger.success("당일 차트 데이터 업데이트 완료")
+            
+        except Exception as e:
+            logger.error(f"당일 차트 데이터 업데이트 실패: {e}")
+            raise
+    
     def _job_executed_listener(self, event) -> None:
         """작업 성공 이벤트 리스너"""
         self._job_stats["total_jobs"] += 1
@@ -293,6 +345,48 @@ class SchedulerService(LoggerMixin):
         """즉시 ETF 구성종목 업데이트 실행"""
         logger.info("수동 ETF 구성종목 업데이트 실행")
         await self._update_etf_components_job()
+    
+    @log_scheduler_job("일일 수정주가 체크 (stockai용)")
+    async def _check_adjustment_prices_job(self) -> None:
+        """stockai용 수정주가 체크 작업"""
+        # 주말/공휴일 확인
+        if self._is_holiday_or_weekend():
+            logger.info("주말 또는 공휴일이므로 수정주가 체크를 건너뜁니다")
+            return
+        
+        try:
+            if not self.data_collector:
+                logger.warning("데이터 수집 서비스가 없습니다")
+                return
+            
+            # 수정주가 체크 실행
+            result = await self.data_collector.check_adjustment_prices_for_stockai()
+            
+            logger.success(f"수정주가 체크 완료: {result.get('message', '정보 없음')}")
+            
+        except Exception as e:
+            logger.error(f"수정주가 체크 실패: {e}")
+            raise
+    
+    async def trigger_stock_update_now(self) -> None:
+        """즉시 종목 리스트 업데이트 실행"""
+        logger.info("수동 종목 리스트 업데이트 실행")
+        await self._update_stock_list_job()
+    
+    async def trigger_etf_update_now(self) -> None:
+        """즉시 ETF 구성종목 업데이트 실행"""
+        logger.info("수동 ETF 구성종목 업데이트 실행")
+        await self._update_etf_components_job()
+    
+    async def trigger_today_chart_update_now(self) -> None:
+        """즉시 당일 차트 데이터 업데이트 실행"""
+        logger.info("수동 당일 차트 데이터 업데이트 실행")
+        await self._update_today_chart_data_job()
+    
+    async def trigger_adjustment_check_now(self) -> None:
+        """즉시 수정주가 체크 실행"""
+        logger.info("수동 수정주가 체크 실행")
+        await self._check_adjustment_prices_job()
     
     def is_running(self) -> bool:
         """스케줄러 실행 상태 확인"""

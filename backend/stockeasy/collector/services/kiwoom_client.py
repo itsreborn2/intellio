@@ -92,7 +92,7 @@ class KiwoomStockListResponse(BaseModel):
 
 
 class KiwoomChartData(BaseModel):
-    """키움 일봉차트 데이터 (ka10081)"""
+    """키움 일봉차트 데이터 (ka10081) 및 관심종목정보 (ka10095)"""
     date: str                          # 날짜
     open: Optional[str] = None         # 시가
     high: Optional[str] = None         # 고가  
@@ -103,6 +103,12 @@ class KiwoomChartData(BaseModel):
     change_amount: Optional[str] = None # 전일대비
     change_rate: Optional[str] = None   # 등락률
     previous_close: Optional[str] = None # 전일종가
+    volume_change_percent: Optional[str] = None # 전일거래량대비 (ka10095 전용)
+    change_sign: Optional[str] = None   # 전일대비기호 (ka10095 전용)
+    # 수정주가 관련 필드 (ka10081 전용)
+    adjustment_type: Optional[str] = None    # 수정주가구분
+    adjustment_ratio: Optional[str] = None   # 수정비율
+    adjustment_event: Optional[str] = None   # 수정주가이벤트
 
 
 class KiwoomSupplyDemand(BaseModel):
@@ -884,16 +890,19 @@ class KiwoomAPIClient:
         try:
             # 기준일자는 end_date(최근일자)를 사용
             base_date = end_date
-            logger.info(f"일봉차트 데이터 조회: {symbol} (기준일자: {base_date})")
+            
+            # SOR 타입 종목코드로 변환 (키움 일봉차트 조회용)
+            sor_symbol = f"{symbol}_AL"
+            logger.info(f"일봉차트 데이터 조회: {symbol} -> {sor_symbol} (기준일자: {base_date})")
             
             all_chart_data = []
             cont_yn = 'N'
             next_key = ''
             
             while True:
-                # 키움 API ka10081 요청 형식에 맞게 수정
+                # 키움 API ka10081 요청 형식에 맞게 수정 - SOR 타입 종목코드 사용
                 data = {
-                    'stk_cd': symbol,
+                    'stk_cd': sor_symbol,
                     'base_dt': base_date,
                     'upd_stkpc_tp': adjusted_price
                 }
@@ -925,33 +934,42 @@ class KiwoomAPIClient:
                                 logger.debug(f"기간 필터링: {item_date} < {start_date}, 수집 종료")
                                 return all_chart_data  # 더 이상 진행하지 않고 종료
                             
-                            # 전일대비 및 등락률 계산
-                            current_price = item.get('cur_prc', '0')  # 현재가
-                            prev_close = item.get('pred_close_pric', '0')  # 전일종가
+                            # 전일대비, 등락률, 전일거래량대비 추출 (전일대비는 부호 유지)
+                            pred_pre = item.get('pred_pre', '0')
+                            flu_rt = item.get('flu_rt', '0')
+                            pred_trde_qty_pre = item.get('pred_trde_qty_pre', '0')
                             
-                            change_amount = '0'
-                            change_rate = '0'
-                            if current_price and prev_close and prev_close != '0':
+                            # 전일대비기호 추출 (1=상승, 2=하락, 3=변동없음 등)
+                            pred_pre_sig = item.get('pred_pre_sig', '0')
+                            
+                            # 기준가 (전일종가) 계산
+                            base_pric = clean_price_data(item.get('base_pric'))
+                            if (not base_pric or base_pric == '0') and pred_pre and cur_prc:
                                 try:
-                                    cur_val = float(current_price)
-                                    prev_val = float(prev_close)
-                                    change_amount = str(int(cur_val - prev_val))
-                                    if prev_val != 0:
-                                        change_rate = str(round((cur_val - prev_val) / prev_val * 100, 2))
-                                except (ValueError, ZeroDivisionError):
-                                    pass
+                                    # 현재가 - 전일대비 = 전일종가 (부호 포함 계산)
+                                    current_val = float(cur_prc.replace(',', ''))
+                                    change_val = float(str(pred_pre).replace(',', ''))  # 부호 포함하여 변환
+                                    
+                                    # 전일종가 = 현재가 - 전일대비
+                                    base_pric = str(int(abs(current_val - change_val)))  # 절댓값 적용
+                                except (ValueError, TypeError):
+                                    base_pric = cur_prc
                             
+                            # KiwoomChartData 객체 생성 (ka10081 계산값 포함)
                             chart_item = KiwoomChartData(
                                 date=item_date,
                                 open=item.get('open_pric', '0'),      # 시가
                                 high=item.get('high_pric', '0'),      # 고가
                                 low=item.get('low_pric', '0'),        # 저가
-                                close=current_price,                   # 종가 (현재가)
+                                close=item.get('cur_prc', '0'),         # 종가 (현재가)
                                 volume=item.get('trde_qty', '0'),     # 거래량
                                 trading_value=item.get('trde_prica', '0'),  # 거래대금
-                                change_amount=change_amount,           # 전일대비 (계산)
-                                change_rate=change_rate,               # 등락률 (계산)
-                                previous_close=prev_close              # 전일종가
+                                change_amount=pred_pre,               # 전일대비 (부호 유지)
+                                change_rate=flu_rt,                     # 등락률 (부호 유지)
+                                previous_close=base_pric,               # 전일종가
+                                volume_change_percent=pred_trde_qty_pre,  # 전일거래량대비 (부호 유지)
+                                # 전일대비기호 추가
+                                change_sign=pred_pre_sig
                             )
                             all_chart_data.append(chart_item)
                         except Exception as e:
@@ -977,11 +995,11 @@ class KiwoomAPIClient:
                     logger.warning(f"차트 데이터 조회 실패 - return_code: {result.get('return_code')}, return_msg: {result.get('return_msg')}")
                     break
             
-            logger.info(f"일봉차트 데이터 조회 완료: {symbol} ({start_date} ~ {base_date}) - {len(all_chart_data)}개")
+            logger.info(f"일봉차트 데이터 조회 완료: {symbol} -> {sor_symbol} ({start_date} ~ {base_date}) - {len(all_chart_data)}개")
             return all_chart_data
             
         except Exception as e:
-            logger.error(f"일봉차트 데이터 조회 실패 ({symbol}): {e}")
+            logger.error(f"일봉차트 데이터 조회 실패 ({symbol} -> {sor_symbol}): {e}")
             return []
 
     async def get_supply_demand_detailed(
@@ -1252,4 +1270,148 @@ class KiwoomAPIClient:
                     await asyncio.sleep(API_CALL_INTERVAL)
         
         logger.info(f"여러 종목 수급 데이터 순차 조회 완료: {success_count}/{len(symbols)}개 성공")
-        return supply_data_dict 
+        return supply_data_dict
+
+    async def get_realtime_stock_prices_batch(
+        self,
+        symbols: List[str],
+        target_date: str
+    ) -> Dict[str, KiwoomChartData]:
+        """
+        관심종목정보요청 (ka10095)을 사용하여 실시간 주가 정보를 배치로 조회
+        최대 100개씩 종목을 묶어서 처리
+        
+        Args:
+            symbols (List[str]): 종목코드 리스트
+            target_date (str): 대상 날짜 (YYYYMMDD 형식)
+            
+        Returns:
+            Dict[str, KiwoomChartData]: {종목코드: 차트데이터}
+        """
+        logger.info(f"실시간 주가 정보 배치 조회: {len(symbols)}개 종목")
+        
+        all_stock_data = {}
+        
+        # 100개씩 청크로 나누어 처리
+        chunk_size = 100
+        for i in range(0, len(symbols), chunk_size):
+            batch_symbols = symbols[i:i + chunk_size]
+            
+            try:
+                logger.info(f"ka10095 배치 {i//chunk_size + 1} 처리: {len(batch_symbols)}개 종목")
+                
+                # SOR 타입 종목코드로 변환 (거래소통합 타입)
+                sor_symbols = [f"{symbol}_AL" for symbol in batch_symbols]
+                stk_cd_param = "|".join(sor_symbols)
+                
+                # ka10095 관심종목정보요청 API 호출
+                data = {
+                    "stk_cd": stk_cd_param
+                }
+                
+                result = await self._make_kiwoom_api_request('ka10095', '/api/dostk/stkinfo', data)
+                
+                if result.get('return_code') == 0:
+                    # 관심종목정보 응답 처리
+                    atn_stk_infr = result.get('atn_stk_infr', [])
+                    
+                    if not atn_stk_infr:
+                        logger.warning(f"배치 {i//chunk_size + 1}: 응답 데이터 없음")
+                        continue
+                    
+                    # 각 종목별 데이터 변환
+                    for item in atn_stk_infr:
+                        try:
+                            # 종목코드에서 '_AL' 제거
+                            raw_symbol = item.get('stk_cd', '')
+                            if raw_symbol.endswith('_AL'):
+                                symbol = raw_symbol[:-3]
+                            else:
+                                symbol = raw_symbol
+                            
+                            if not symbol:
+                                continue
+                            
+                            def clean_price_data(value):
+                                """주가 데이터에서 +/- 기호 제거 및 절댓값 반환"""
+                                if not value or str(value).strip() == '':
+                                    return 0.0
+                                try:
+                                    # 문자열에서 +/- 기호 제거 후 절댓값 반환
+                                    clean_str = str(value).replace(',', '').replace('+', '').replace('-', '')
+                                    return float(clean_str) if clean_str else 0.0
+                                except (ValueError, TypeError):
+                                    return 0.0
+                            
+                            # KA10095 실제 응답필드 매핑
+                            cur_prc = clean_price_data(item.get('cur_prc'))  # 현재가
+                            base_pric = clean_price_data(item.get('base_pric'))  # 기준가 (전일종가)
+                            open_pric = clean_price_data(item.get('open_pric'))  # 시가
+                            high_pric = clean_price_data(item.get('high_pric'))  # 고가
+                            low_pric = clean_price_data(item.get('low_pric'))  # 저가
+                            close_pric = clean_price_data(item.get('close_pric'))  # 종가
+                            
+                            # 변화율 데이터 (부호 유지)
+                            pred_pre = item.get('pred_pre', '0')  # 전일대비
+                            flu_rt = item.get('flu_rt', '0')  # 등락율
+                            pred_trde_qty_pre = item.get('pred_trde_qty_pre', '0')  # 전일거래량대비
+                            pred_pre_sig = item.get('pred_pre_sig', '0')  # 전일대비기호
+                            
+                            # 거래 정보
+                            trde_qty = item.get('trde_qty', '0')  # 거래량
+                            trde_prica = item.get('trde_prica', '0')  # 거래대금
+                            dt = item.get('dt', '')  # 일자
+                            
+                            # 가격 검증 (종가 > 현재가 > 기준가 순으로 우선순위)
+                            final_price = close_pric if close_pric > 0 else (cur_prc if cur_prc > 0 else base_pric)
+                            if final_price <= 0:
+                                continue
+                            
+                            # 전일종가 계산 (기준가 우선, 없으면 현재가 - 전일대비)
+                            previous_close = base_pric
+                            if not previous_close and pred_pre and cur_prc:
+                                try:
+                                    # 현재가 - 전일대비 = 전일종가 (부호 고려)
+                                    pred_pre_float = float(str(pred_pre).replace(',', ''))
+                                    previous_close = cur_prc - pred_pre_float
+                                except (ValueError, TypeError):
+                                    previous_close = 0.0
+                            
+                            # KiwoomChartData 객체 생성 (ka10095 계산값 포함)
+                            chart_data = KiwoomChartData(
+                                date=dt if dt else datetime.now().strftime('%Y%m%d'),
+                                open=str(open_pric) if open_pric else None,
+                                high=str(high_pric) if high_pric else None,
+                                low=str(low_pric) if low_pric else None,
+                                close=str(close_pric) if close_pric else str(cur_prc),
+                                volume=str(trde_qty).replace(',', '') if trde_qty else None,
+                                trading_value=str(trde_prica).replace(',', '') if trde_prica else None,
+                                change_amount=str(pred_pre) if pred_pre else None,  # 전일대비 (부호 유지)
+                                change_rate=str(flu_rt) if flu_rt else None,  # 등락율 (부호 유지)
+                                previous_close=str(previous_close) if previous_close else None,
+                                volume_change_percent=str(pred_trde_qty_pre) if pred_trde_qty_pre else None,  # 전일거래량대비 (부호 유지)
+                                change_sign=str(pred_pre_sig) if pred_pre_sig else None  # 전일대비기호
+                            )
+                            
+                            all_stock_data[symbol] = chart_data
+                            
+                        except Exception as e:
+                            logger.error(f"종목 {symbol} 데이터 처리 실패: {e}")
+                            continue
+                    
+                    success_count = len([s for s in batch_symbols if s in all_stock_data])
+                    logger.info(f"ka10095 배치 {i//chunk_size + 1} 완료: {len(atn_stk_infr)}개 수신, {success_count}개 성공")
+                    
+                else:
+                    logger.warning(f"배치 {i//chunk_size + 1} API 호출 실패 - return_code: {result.get('return_code')}, return_msg: {result.get('return_msg')}")
+                
+                # API 호출 간격 조절
+                if i + chunk_size < len(symbols):
+                    await asyncio.sleep(0.21)  # 키움 API 제약: 초당 4.8회
+                
+            except Exception as e:
+                logger.error(f"배치 {i//chunk_size + 1} 처리 실패: {e}")
+                continue
+        
+        logger.info(f"실시간 주가 정보 배치 조회 완료: {len(all_stock_data)}/{len(symbols)}개 성공")
+        return all_stock_data 

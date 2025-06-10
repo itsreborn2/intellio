@@ -480,15 +480,93 @@ async def trigger_stock_update(
 async def trigger_etf_update(
     data_collector: DataCollectorService = Depends(get_data_collector)
 ):
-    """즉시 ETF 구성종목 업데이트 실행"""
+    """ETF 구성종목 업데이트 수동 실행"""
     try:
         await data_collector.scheduler_service.trigger_etf_update_now()
+        return {"message": "ETF 구성종목 업데이트가 시작되었습니다"}
+    except Exception as e:
+        logger.error(f"ETF 구성종목 업데이트 트리거 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"ETF 구성종목 업데이트 실패: {str(e)}")
+
+@admin_router.post("/scheduler/trigger/today-chart")
+async def trigger_today_chart_update(
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """당일 차트 데이터 업데이트 수동 실행"""
+    try:
+        logger.info("수동 당일 차트 데이터 업데이트 실행")
+        result = await data_collector.update_today_chart_data()
         return {
-            "message": "ETF 구성종목 업데이트 실행 완료",
+            "message": "당일 차트 데이터 업데이트가 완료되었습니다",
+            "result": result
+        }
+    except Exception as e:
+        logger.error(f"당일 차트 데이터 업데이트 트리거 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"당일 차트 데이터 업데이트 실패: {str(e)}")
+
+@admin_router.post("/scheduler/trigger/adjustment-check")
+async def trigger_adjustment_check(
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """수정주가 체크 수동 실행"""
+    try:
+        logger.info("수동 수정주가 체크 실행")
+        await data_collector.scheduler_service.trigger_adjustment_check_now()
+        return {
+            "message": "수정주가 체크가 완료되었습니다"
+        }
+    except Exception as e:
+        logger.error(f"수정주가 체크 트리거 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"수정주가 체크 실패: {str(e)}")
+
+@admin_router.get("/adjustment/stats")
+async def get_adjustment_check_stats(
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """수정주가 체크 통계 조회"""
+    try:
+        stats = data_collector.get_adjustment_check_stats()
+        return {
+            "adjustment_stats": stats,
             "status": "success"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ETF 구성종목 업데이트 실행 실패: {str(e)}")
+        logger.error(f"수정주가 체크 통계 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"수정주가 체크 통계 조회 실패: {str(e)}")
+
+@admin_router.post("/adjustment/check")
+async def check_adjustment_prices_for_stockai(
+    batch_size: int = Query(100, description="배치 크기", ge=50, le=200),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """stockai용 전종목 수정주가 체크 실행"""
+    try:
+        logger.info("stockai용 수정주가 체크 시작")
+        result = await data_collector.check_adjustment_prices_for_stockai(batch_size=batch_size)
+        return {
+            "message": "수정주가 체크가 완료되었습니다",
+            "result": result,
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"수정주가 체크 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"수정주가 체크 실패: {str(e)}")
+
+@admin_router.post("/adjustment/cache/clear")
+async def clear_adjustment_cache(
+    days_to_keep: int = Query(30, description="보관할 일수", ge=1, le=90),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """수정주가 캐시 정리"""
+    try:
+        data_collector.clear_old_adjustment_cache(days_to_keep=days_to_keep)
+        return {
+            "message": f"{days_to_keep}일 이전 수정주가 캐시가 정리되었습니다",
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"수정주가 캐시 정리 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"수정주가 캐시 정리 실패: {str(e)}")
 
 @admin_router.post("/start-collection")
 async def start_realtime_collection(
@@ -593,9 +671,36 @@ async def get_etf_crawler_stats(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ETF 크롤러 통계 조회 실패: {str(e)}")
 
-# ========================================
-# 대량 배치 수집 엔드포인트
-# ========================================
+# ===========================================
+# 배치 수집 관련 API
+# ===========================================
+
+@admin_router.post("/batch/collect/today")
+async def update_today_chart_data(
+    batch_size: int = Query(100, description="배치 크기", ge=50, le=200),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    당일 차트 데이터만 업데이트
+    기존 당일 데이터를 덮어쓰기하여 최신 상태로 유지
+    전체 업데이트보다 훨씬 빠름 (약 5-10분 내 완료)
+    """
+    try:
+        logger.info("당일 차트 데이터 업데이트 시작")
+        
+        result = await data_collector.update_today_chart_data(
+            batch_size=batch_size
+        )
+        
+        logger.info(f"당일 차트 데이터 업데이트 완료: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"당일 차트 데이터 업데이트 실패: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"당일 차트 데이터 업데이트 실패: {str(e)}"
+        )
 
 @admin_router.post("/batch/collect/start")
 async def start_batch_collection(
@@ -692,6 +797,321 @@ async def collect_supply_data_only(
     except Exception as e:
         logger.error(f"수급 데이터 수집 실패: {e}")
         raise HTTPException(status_code=500, detail=f"수급 데이터 수집 실패: {str(e)}")
+
+@admin_router.post("/batch/collect/chart/{symbol}")
+async def collect_single_stock_chart_data(
+    symbol: str,
+    months_back: int = Query(24, description="수집할 개월 수", ge=1, le=60),
+    force_update: bool = Query(False, description="기존 데이터 강제 업데이트 여부"),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    특정 종목의 차트 데이터만 수집
+    
+    Args:
+        symbol: 종목 코드 (예: 005930)
+        months_back: 수집할 개월 수 (기본 24개월)
+        force_update: 기존 데이터 강제 업데이트 여부 (기본 False)
+    """
+    try:
+        logger.info(f"종목 {symbol} 차트 데이터 수집 시작: {months_back}개월, 강제업데이트={force_update}")
+        
+        # 날짜 범위 계산
+        from datetime import datetime, timedelta
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=months_back * 30)
+        start_date_str = start_date.strftime('%Y%m%d')
+        end_date_str = end_date.strftime('%Y%m%d')
+        
+        # 키움 API에서 차트 데이터 조회
+        if data_collector.settings.KIWOOM_APP_KEY != "test_api_key":
+            chart_data = await data_collector.kiwoom_client.get_daily_chart_data(
+                symbol, start_date_str, end_date_str
+            )
+        else:
+            logger.warning(f"키움 API 키가 설정되지 않아 더미 데이터 사용")
+            chart_data = []
+        
+        if not chart_data:
+            return {
+                "message": f"종목 {symbol}의 차트 데이터가 없습니다 (키움 API 응답 없음 또는 상장폐지/거래정지)",
+                "symbol": symbol,
+                "period": f"{start_date_str} ~ {end_date_str}",
+                "total_records": 0,
+                "api_calculated_records": 0,
+                "calculation_coverage": "0/0",
+                "months_back": months_back,
+                "force_update": force_update,
+                "status": "no_data"
+            }
+        
+        # TimescaleDB에 저장할 데이터 변환
+        from stockeasy.collector.schemas.timescale_schemas import StockPriceCreate, IntervalType
+        
+        def safe_float(value):
+            """안전한 float 변환"""
+            try:
+                return float(value) if value and str(value).strip() else 0.0
+            except (ValueError, TypeError):
+                return 0.0
+        
+        def safe_int(value):
+            """안전한 int 변환"""
+            try:
+                return int(value) if value and str(value).strip() else 0
+            except (ValueError, TypeError):
+                return 0
+        
+        stock_price_data = []
+        for chart_item in chart_data:
+            try:
+                # 날짜 검증 및 파싱
+                if not chart_item.date or not str(chart_item.date).strip():
+                    logger.warning(f"빈 날짜 데이터 건너뜀 ({symbol})")
+                    continue
+                
+                try:
+                    chart_date = datetime.strptime(str(chart_item.date).strip(), '%Y%m%d')
+                except ValueError as e:
+                    logger.warning(f"날짜 파싱 실패 ({symbol}, {chart_item.date}): {e}")
+                    continue
+                
+                # 가격 데이터 검증
+                close_price = safe_float(chart_item.close)
+                if close_price <= 0:
+                    logger.debug(f"유효하지 않은 종가 데이터 건너뜀 ({symbol}, {chart_item.date}, 종가: {chart_item.close})")
+                    continue
+                
+                # 키움 API에서 제공하는 계산값들 추출
+                api_change_amount = safe_float(chart_item.change_amount) if hasattr(chart_item, 'change_amount') and chart_item.change_amount else None
+                api_change_rate = safe_float(chart_item.change_rate) if hasattr(chart_item, 'change_rate') and chart_item.change_rate else None
+                api_previous_close = safe_float(chart_item.previous_close) if hasattr(chart_item, 'previous_close') and chart_item.previous_close else None
+                api_volume_change_percent = safe_float(chart_item.volume_change_percent) if hasattr(chart_item, 'volume_change_percent') and chart_item.volume_change_percent else None
+                
+                logger.debug(f"종목 {symbol} API 계산값: 변동금액={api_change_amount}, 변동률={api_change_rate}%, 전일종가={api_previous_close}, 거래량변동률={api_volume_change_percent}%")
+                
+                stock_price = StockPriceCreate(
+                    time=chart_date,
+                    symbol=symbol,
+                    interval_type=IntervalType.ONE_DAY.value,
+                    open=safe_float(chart_item.open),
+                    high=safe_float(chart_item.high),
+                    low=safe_float(chart_item.low),
+                    close=close_price,
+                    volume=safe_int(chart_item.volume),
+                    trading_value=safe_int(chart_item.trading_value),
+                    # 키움 API에서 제공하는 계산값들 활용
+                    change_amount=api_change_amount,
+                    price_change_percent=api_change_rate,
+                    previous_close_price=api_previous_close,
+                    volume_change_percent=api_volume_change_percent,
+                    # updated_at 필드 추가 (UPSERT 시 갱신 보장)
+                    updated_at=datetime.now()
+                )
+                stock_price_data.append(stock_price)
+                
+            except Exception as e:
+                logger.warning(f"차트 데이터 변환 실패 ({symbol}, {getattr(chart_item, 'date', 'N/A')}): {e}")
+                continue
+        
+        # TimescaleDB에 저장
+        if stock_price_data:
+            from stockeasy.collector.services.timescale_service import timescale_service
+            
+            if force_update:
+                # 강제 업데이트시 기존 데이터 삭제 후 재생성
+                await timescale_service.delete_stock_prices_by_symbol_period(
+                    symbol, start_date, end_date
+                )
+            
+            # 시간순으로 정렬하여 저장 (과거 → 현재)
+            stock_price_data.sort(key=lambda x: x.time)
+            
+            # 거래량 변화량 계산 (전일 거래량과 비교)
+            for i in range(1, len(stock_price_data)):
+                current = stock_price_data[i]
+                previous = stock_price_data[i-1]
+                
+                # 거래량 변화량 계산
+                if previous.volume and previous.volume > 0:
+                    volume_change = current.volume - previous.volume
+                    current.volume_change = volume_change
+                    
+                    # 거래량 변화율이 API에서 제공되지 않는 경우 계산
+                    if not current.volume_change_percent:
+                        current.volume_change_percent = round((volume_change / previous.volume) * 100, 4) if previous.volume > 0 else 0
+            
+            await timescale_service.bulk_create_stock_prices_with_progress(
+                stock_price_data,
+                batch_size=1000
+            )
+            
+            # 누락된 변동률 등 재계산 (개별 종목용)
+            logger.info(f"종목 {symbol} 변동률 재계산 시작")
+            await timescale_service.batch_calculate_for_new_data(
+                symbols=[symbol],
+                start_date=start_date
+            )
+            logger.info(f"종목 {symbol} 변동률 재계산 완료")
+        
+        # 키움 API 계산값 통계
+        api_calculated_count = len([p for p in stock_price_data if p.change_amount is not None])
+        
+        return {
+            "message": f"종목 {symbol} 차트 데이터 수집이 완료되었습니다",
+            "symbol": symbol,
+            "period": f"{start_date_str} ~ {end_date_str}",
+            "total_records": len(stock_price_data),
+            "api_calculated_records": api_calculated_count,
+            "calculation_coverage": f"{api_calculated_count}/{len(stock_price_data)}" if stock_price_data else "0/0",
+            "months_back": months_back,
+            "force_update": force_update,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"종목 {symbol} 차트 데이터 수집 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"종목 {symbol} 차트 데이터 수집 실패: {str(e)}")
+
+@admin_router.post("/batch/collect/supply/{symbol}")
+async def collect_single_stock_supply_data(
+    symbol: str,
+    months_back: int = Query(6, description="수집할 개월 수", ge=1, le=24),
+    force_update: bool = Query(False, description="기존 데이터 강제 업데이트 여부"),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    특정 종목의 수급 데이터만 수집
+    
+    Args:
+        symbol: 종목 코드 (예: 005930)
+        months_back: 수집할 개월 수 (기본 6개월)
+        force_update: 기존 데이터 강제 업데이트 여부 (기본 False)
+    """
+    try:
+        logger.info(f"종목 {symbol} 수급 데이터 수집 시작: {months_back}개월, 강제업데이트={force_update}")
+        
+        # 날짜 범위 계산
+        from datetime import datetime, timedelta
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=months_back * 30)
+        start_date_str = start_date.strftime('%Y%m%d')
+        end_date_str = end_date.strftime('%Y%m%d')
+        
+        # 키움 API에서 수급 데이터 조회
+        if data_collector.settings.KIWOOM_APP_KEY != "test_api_key":
+            supply_data = await data_collector.kiwoom_client.get_daily_supply_demand_data(
+                symbol, start_date_str, end_date_str
+            )
+        else:
+            logger.warning(f"키움 API 키가 설정되지 않아 더미 데이터 사용")
+            supply_data = []
+        
+        if not supply_data:
+            return {
+                "message": f"종목 {symbol}의 수급 데이터가 없습니다",
+                "symbol": symbol,
+                "period": f"{start_date_str} ~ {end_date_str}",
+                "total_records": 0,
+                "status": "success"
+            }
+        
+        # TimescaleDB에 저장할 데이터 변환
+        from stockeasy.collector.schemas.timescale_schemas import SupplyDemandCreate
+        
+        def safe_float_or_none(value):
+            """안전한 float 변환 (None 허용)"""
+            try:
+                if value is None or str(value).strip() == '':
+                    return None
+                return float(value)
+            except (ValueError, TypeError):
+                return None
+        
+        def safe_int_or_none(value):
+            """안전한 int 변환 (None 허용)"""
+            try:
+                if value is None or str(value).strip() == '':
+                    return None
+                return int(value)
+            except (ValueError, TypeError):
+                return None
+        
+        supply_demand_data = []
+        for supply_item in supply_data:
+            try:
+                # 날짜 검증 및 파싱
+                item_date = supply_item.get('date', '')
+                if not item_date or not str(item_date).strip():
+                    logger.warning(f"빈 날짜 데이터 건너뜀 ({symbol})")
+                    continue
+                
+                try:
+                    supply_date = datetime.strptime(str(item_date).strip(), '%Y%m%d')
+                except ValueError as e:
+                    logger.warning(f"날짜 파싱 실패 ({symbol}, {item_date}): {e}")
+                    continue
+                
+                supply_demand = SupplyDemandCreate(
+                    date=supply_date,
+                    symbol=symbol,
+                    current_price=safe_float_or_none(supply_item.get('current_price')),
+                    price_change_sign=supply_item.get('price_change_sign'),
+                    price_change=safe_float_or_none(supply_item.get('price_change')),
+                    price_change_percent=safe_float_or_none(supply_item.get('price_change_percent')),
+                    accumulated_volume=safe_int_or_none(supply_item.get('accumulated_volume')),
+                    accumulated_value=safe_int_or_none(supply_item.get('accumulated_value')),
+                    individual_investor=safe_int_or_none(supply_item.get('individual_investor')),
+                    foreign_investor=safe_int_or_none(supply_item.get('foreign_investor')),
+                    institution_total=safe_int_or_none(supply_item.get('institution_total')),
+                    financial_investment=safe_int_or_none(supply_item.get('financial_investment')),
+                    insurance=safe_int_or_none(supply_item.get('insurance')),
+                    investment_trust=safe_int_or_none(supply_item.get('investment_trust')),
+                    other_financial=safe_int_or_none(supply_item.get('other_financial')),
+                    bank=safe_int_or_none(supply_item.get('bank')),
+                    pension_fund=safe_int_or_none(supply_item.get('pension_fund')),
+                    private_fund=safe_int_or_none(supply_item.get('private_fund')),
+                    government=safe_int_or_none(supply_item.get('government')),
+                    other_corporation=safe_int_or_none(supply_item.get('other_corporation')),
+                    domestic_foreign=safe_int_or_none(supply_item.get('domestic_foreign'))
+                )
+                supply_demand_data.append(supply_demand)
+                
+            except Exception as e:
+                logger.warning(f"수급 데이터 변환 실패 ({symbol}, {supply_item.get('date', 'N/A')}): {e}")
+                continue
+        
+        # TimescaleDB에 저장
+        if supply_demand_data:
+            from stockeasy.collector.services.timescale_service import timescale_service
+            
+            if force_update:
+                # 강제 업데이트시 기존 데이터 삭제 후 재생성
+                await timescale_service.delete_supply_demand_by_symbol_period(
+                    symbol, start_date, end_date
+                )
+            
+            # 시간순으로 정렬하여 저장 (과거 → 현재)
+            supply_demand_data.sort(key=lambda x: x.date)
+            
+            await timescale_service.bulk_create_supply_demand_with_progress(
+                supply_demand_data,
+                batch_size=1000
+            )
+        
+        return {
+            "message": f"종목 {symbol} 수급 데이터 수집이 완료되었습니다",
+            "symbol": symbol,
+            "period": f"{start_date_str} ~ {end_date_str}",
+            "total_records": len(supply_demand_data),
+            "months_back": months_back,
+            "force_update": force_update,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"종목 {symbol} 수급 데이터 수집 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"종목 {symbol} 수급 데이터 수집 실패: {str(e)}")
 
 @admin_router.get("/batch/status")
 async def get_batch_collection_status(
@@ -862,4 +1282,151 @@ async def debug_supply_demand_data(
             
     except Exception as e:
         logger.error(f"수급 데이터 디버깅 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"수급 데이터 디버깅 실패: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"수급 데이터 디버깅 실패: {str(e)}")
+
+# ========================================
+# 배치 계산 전용 엔드포인트
+# ========================================
+
+@admin_router.post("/batch/calculate/all")
+async def batch_calculate_all_stocks(
+    days_back: int = Query(30, description="계산할 일수", ge=1, le=1000),
+    batch_size: int = Query(50, description="배치 크기", ge=5, le=200),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    전종목 배치 계산 (변동률, 거래량 증감률, 전일종가 등)
+    
+    Args:
+        days_back: 계산할 일수 (기본 30일)
+        batch_size: 배치 크기 (기본 50)
+    """
+    try:
+        logger.info(f"전종목 배치 계산 시작: {days_back}일, 배치크기={batch_size}")
+        
+        from stockeasy.collector.services.timescale_service import timescale_service
+        
+        # 전종목 배치 계산 실행
+        result = await timescale_service.batch_calculate_stock_price_changes(
+            symbols=None,  # None이면 전체 종목
+            days_back=days_back,
+            batch_size=batch_size
+        )
+        
+        return {
+            "message": "전종목 배치 계산이 완료되었습니다",
+            "result": result,
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"전종목 배치 계산 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"전종목 배치 계산 실패: {str(e)}")
+
+@admin_router.post("/batch/calculate/symbols")
+async def batch_calculate_specific_symbols(
+    symbols: str = Query(..., description="종목 코드들 (쉼표로 구분, 예: 005930,000660,035420)"),
+    days_back: int = Query(30, description="계산할 일수", ge=1, le=365),
+    batch_size: int = Query(20, description="배치 크기", ge=5, le=100),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    특정 종목들 배치 계산
+    
+    Args:
+        symbols: 쉼표로 구분된 종목코드들 (최대 100개)
+        days_back: 계산할 일수 (기본 30일)
+        batch_size: 배치 크기 (기본 20)
+    """
+    try:
+        # 종목 코드 파싱 및 검증
+        symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+        
+        if not symbol_list:
+            raise HTTPException(status_code=400, detail="최소 1개 이상의 종목 코드가 필요합니다")
+        
+        if len(symbol_list) > 100:
+            raise HTTPException(status_code=400, detail="최대 100개까지의 종목만 계산 가능합니다")
+        
+        logger.info(f"특정 종목들 배치 계산 시작: {len(symbol_list)}개 종목, {days_back}일")
+        
+        from stockeasy.collector.services.timescale_service import timescale_service
+        
+        # 특정 종목들 배치 계산 실행
+        result = await timescale_service.batch_calculate_stock_price_changes(
+            symbols=symbol_list,
+            days_back=days_back,
+            batch_size=batch_size
+        )
+        
+        return {
+            "message": f"특정 종목들({len(symbol_list)}개) 배치 계산이 완료되었습니다",
+            "symbols": symbol_list,
+            "result": result,
+            "status": "success"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"특정 종목들 배치 계산 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"특정 종목들 배치 계산 실패: {str(e)}")
+
+@admin_router.post("/batch/calculate/{symbol}")
+async def batch_calculate_single_symbol(
+    symbol: str,
+    days_back: int = Query(30, description="계산할 일수", ge=1, le=365),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    단일 종목 배치 계산
+    
+    Args:
+        symbol: 종목 코드 (예: 005930)
+        days_back: 계산할 일수 (기본 30일)
+    """
+    try:
+        logger.info(f"종목 {symbol} 배치 계산 시작: {days_back}일")
+        
+        from stockeasy.collector.services.timescale_service import timescale_service
+        
+        # 단일 종목 배치 계산 실행
+        result = await timescale_service.batch_calculate_stock_price_changes(
+            symbols=[symbol],
+            days_back=days_back,
+            batch_size=1
+        )
+        
+        return {
+            "message": f"종목 {symbol} 배치 계산이 완료되었습니다",
+            "symbol": symbol,
+            "result": result,
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"종목 {symbol} 배치 계산 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"종목 {symbol} 배치 계산 실패: {str(e)}")
+
+@admin_router.get("/batch/calculate/status")
+async def get_batch_calculation_status():
+    """배치 계산 상태 및 트리거 정보 조회"""
+    try:
+        from stockeasy.collector.services.timescale_service import timescale_service
+        
+        # 트리거 상태 확인
+        trigger_status = await timescale_service.check_trigger_status()
+        
+        return {
+            "trigger_status": trigger_status,
+            "calculation_info": {
+                "method": "API 호출 기반 배치 계산",
+                "features": [
+                    "기존 API 계산값 보존",
+                    "NULL 값만 새로 계산", 
+                    "COALESCE 함수로 안전한 업데이트",
+                    "배치 단위 처리로 고성능"
+                ]
+            },
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"배치 계산 상태 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"배치 계산 상태 조회 실패: {str(e)}") 
