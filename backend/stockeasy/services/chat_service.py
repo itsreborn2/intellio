@@ -9,7 +9,7 @@ import json
 from datetime import datetime, timedelta, timezone
 import pytz
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 from fastapi import HTTPException
@@ -111,68 +111,105 @@ class ChatService:
     async def get_chat_sessions(
         db: AsyncSession, 
         user_id: UUID,
-        is_active: Optional[bool] = None
-    ) -> List[Dict[str, Any]]:
+        is_active: Optional[bool] = None,
+        limit: int = 50,  # 기본값 50개로 제한
+        offset: int = 0   # 페이징을 위한 offset
+    ) -> Dict[str, Any]:
         """사용자의 채팅 세션 목록을 조회합니다.
         
         Args:
             db: 데이터베이스 세션
             user_id: 사용자 ID
             is_active: 활성화 상태 필터 (선택)
+            limit: 조회할 최대 세션 수 (기본값: 50)
+            offset: 조회 시작 위치 (기본값: 0)
             
         Returns:
-            List[Dict[str, Any]]: 채팅 세션 목록
+            Dict[str, Any]: 채팅 세션 목록과 총 개수
         """
         try:
-            # 쿼리 기본 설정
-            query = select(StockChatSession).where(StockChatSession.user_id == user_id)
+            # 총 개수 조회를 위한 쿼리
+            count_query = select(func.count(StockChatSession.id)).where(StockChatSession.user_id == user_id)
+            if is_active is not None:
+                count_query = count_query.where(StockChatSession.is_active == is_active)
+            
+            count_result = await db.execute(count_query)
+            total_count = count_result.scalar() or 0
+            
+            # 필요한 필드만 선택하여 쿼리 최적화 (agent_results 제외)
+            query = select(
+                StockChatSession.id,
+                StockChatSession.user_id,
+                StockChatSession.title,
+                StockChatSession.is_active,
+                StockChatSession.stock_code,
+                StockChatSession.stock_name,
+                StockChatSession.stock_info,
+                StockChatSession.created_at,
+                StockChatSession.updated_at
+            ).where(StockChatSession.user_id == user_id)
             
             # 활성화 상태 필터 추가
             if is_active is not None:
                 query = query.where(StockChatSession.is_active == is_active)
             
-            # 최신순 정렬
-            query = query.order_by(StockChatSession.updated_at.desc())
+            # 최신순 정렬, 페이징 적용
+            query = query.order_by(StockChatSession.updated_at.desc()).limit(limit).offset(offset)
             
             # 쿼리 실행
             result = await db.execute(query)
-            chat_sessions = result.scalars().all()
+            rows = result.fetchall()
             
-            # 결과를 딕셔너리 리스트로 변환
-            return [
+            # 딕셔너리 변환 최적화
+            sessions = [
                 {
                     "ok": True,
                     "status_message": "채팅 세션 목록 조회 완료",
-                    "id": str(chat_session.id),
-                    "user_id": str(chat_session.user_id),
-                    "title": chat_session.title,
-                    "is_active": chat_session.is_active,
-                    "stock_code": chat_session.stock_code,
-                    "stock_name": chat_session.stock_name,
-                    "stock_info": chat_session.stock_info,
-                    "created_at": chat_session.created_at.isoformat() if chat_session.created_at else None,
-                    "updated_at": chat_session.updated_at.isoformat() if chat_session.updated_at else None
+                    "id": str(row.id),
+                    "user_id": str(row.user_id),
+                    "title": row.title,
+                    "is_active": row.is_active,
+                    "stock_code": row.stock_code,
+                    "stock_name": row.stock_name,
+                    "stock_info": row.stock_info,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None
                 }
-                for chat_session in chat_sessions
+                for row in rows
             ]
+            
+            return {
+                "sessions": sessions,
+                "total": total_count,
+                "limit": limit,
+                "offset": offset,
+                "has_more": offset + len(sessions) < total_count
+            }
             
         except Exception as e:
             logger.error(f"채팅 세션 조회 중 오류 발생: {str(e)}")
-            return [
-                {
-                    "ok": False,
-                    "status_message": "채팅 세션 조회에 실패하였습니다.",
-                    "id": None,
-                    "user_id": None,
-                    "title": None,
-                    "is_active": None,
-                    "stock_code": None,
-                    "stock_name": None,
-                    "stock_info": None,
-                    "created_at": None,
-                    "updated_at": None
-                }
-            ]    
+            return {
+                "sessions": [
+                    {
+                        "ok": False,
+                        "status_message": "채팅 세션 조회에 실패하였습니다.",
+                        "id": None,
+                        "user_id": None,
+                        "title": None,
+                        "is_active": None,
+                        "stock_code": None,
+                        "stock_name": None,
+                        "stock_info": None,
+                        "created_at": None,
+                        "updated_at": None
+                    }
+                ],
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False
+            }
+    
     @staticmethod
     async def get_chat_session(
         db: AsyncSession, 

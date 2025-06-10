@@ -755,6 +755,7 @@ class MakeFinancialDataDB:
             if start_page == -1: # 시작 문자열 찾기.
                 for i, line in enumerate(lines):
                     stripped_line = remove_number_prefix_toc(line)
+                    org_line = line
                     #print(f"test : {stripped_line}")
                     if start_at_연결재무제표 and stripped_line in keyword and not bOnTryFindStartKeyword:
                         bOnTryFindStartKeyword = True
@@ -765,7 +766,10 @@ class MakeFinancialDataDB:
                     
 
                     if stripped_line in start_keyword:
-                        #logger.info(f"start keyword 발견11: {stripped_line}")
+                        if re.search('^[가-힣]\.', org_line, re.IGNORECASE):
+                            logger.info(f"접두사 한글. 패스: {stripped_line}({org_line})")
+                            continue
+                        logger.info(f"start keyword 발견11: {stripped_line}")
                         start_line = i
                         start_page = page
                         found_keyword_start = stripped_line
@@ -778,13 +782,15 @@ class MakeFinancialDataDB:
                         # 예: "재무상태표" -> ".*재무.*상태.*표.*"
                         # 또는 더 단순하게 문자열 포함 여부 확인
                         pattern = f".*{keyword}.*"
-                        #print(f"패턴체크 : {keyword}")
+                        print(f"패턴체크 : {stripped_line}({org_line}), {keyword}")
                         if re.search(pattern, stripped_line, re.IGNORECASE):
-                            #print(f"end keyword 체크 : '{stripped_line}', 키워드:'{keyword}', 시작페이지:{start_page}, 현재페이지 {page}")
+                            print(f"end keyword 체크 : '{stripped_line}', 키워드:'{keyword}', 시작페이지:{start_page}, 현재페이지 {page}")
                             if start_page <= page: # start보다 뒤쪽에서 만나야제.
                                 start_line = i
                                 start_page = page
                                 found_keyword_start = stripped_line
+                                if "연결" in stripped_line:
+                                    b연결 = True
                                 break
                     if start_page >= 0:
                         break
