@@ -18,17 +18,48 @@ stock_router = APIRouter()
 
 @stock_router.get("/list_for_stockai")
 async def get_all_stock_list_for_stockai(
+    gzip_enabled: bool = Query(False, description="gzip 압축 사용 (더 작은 크기)"),
     data_collector: DataCollectorService = Depends(get_data_collector)
 ):
-    """전체 종목 리스트 조회 (code, name만)"""
+    """
+    전체 종목 리스트 조회 (code, name만) - 압축된 배열 형태로 반환
+    
+    - 기본: 압축된 배열 형태 (데이터 크기 50-70% 절약)
+    - gzip_enabled=true: gzip 압축 적용 (추가 30-50% 절약)
+    """
     try:
         stock_list = await data_collector.get_all_stock_list_for_stockai()
-        return {
+        
+        # 항상 압축된 형태로 반환: 헤더와 데이터 배열 분리
+        response_data = {
             "count": len(stock_list),
             "status": "success",
+            "compressed": True,
+            "gzip_enabled": gzip_enabled,
             "last_update_time": await data_collector.get_last_update_time("stockai"),
-            "stocks": stock_list
+            "headers": ["code", "name", "market"],
+            "data": [
+                [stock["code"], stock["name"], stock.get("market", "")]
+                for stock in stock_list
+            ]
         }
+        
+        if gzip_enabled:
+            # JSON을 문자열로 변환 후 gzip 압축
+            json_str = json.dumps(response_data, ensure_ascii=False, default=str)
+            compressed_content = gzip.compress(json_str.encode('utf-8'))
+            
+            return Response(
+                content=compressed_content,
+                media_type="application/json",
+                headers={
+                    "Content-Encoding": "gzip", # 여기서 gzip 을 알려줘야, 프론트에서 자동 압축해제 가능.
+                    "Content-Length": str(len(compressed_content))
+                }
+            )
+        else:
+            return response_data
+            
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"종목 리스트 조회 실패: {str(e)}")
 
@@ -318,33 +349,115 @@ etf_router = APIRouter()
 
 @etf_router.get("/list")
 async def get_etf_list(
+    gzip_enabled: bool = Query(False, description="gzip 압축 사용 (더 작은 크기)"),
     data_collector: DataCollectorService = Depends(get_data_collector)
 ):
-    """ETF 목록 조회"""
+    """
+    ETF 목록 조회 (항상 압축된 형태로 반환)
+    
+    - 압축된 배열 형태로 반환 (데이터 크기 50-70% 절약)
+    - gzip_enabled=true: gzip 압축 적용 (추가 30-50% 절약)
+    """
     try:
         etf_list = await data_collector.get_etf_list()
-        return {
-            "etfs": etf_list,
+        
+        # 항상 압축된 형태로 반환: 헤더와 데이터 배열 분리
+        response_data = {
             "count": len(etf_list),
-            "status": "success"
+            "compressed": True,
+            "gzip_enabled": gzip_enabled,
+            "status": "success",
+            "headers": ["code", "name"],
+            "data": [
+                [etf.get("code", ""), etf.get("name", "")]
+                for etf in etf_list
+            ]
         }
+        
+        if gzip_enabled:
+            # JSON을 문자열로 변환 후 gzip 압축
+            json_str = json.dumps(response_data, ensure_ascii=False, default=str)
+            compressed_content = gzip.compress(json_str.encode('utf-8'))
+            
+            return Response(
+                content=compressed_content,
+                media_type="application/json",
+                headers={
+                    "Content-Encoding": "gzip", # 여기서 gzip 을 알려줘야, 프론트에서 자동 압축해제 가능.
+                    "Content-Length": str(len(compressed_content))
+                }
+            )
+        else:
+            return response_data
+            
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ETF 목록 조회 실패: {str(e)}")
 
 @etf_router.get("/components/{etf_code}")
 async def get_etf_components(
     etf_code: str,
+    gzip_enabled: bool = Query(False, description="gzip 압축 사용 (더 작은 크기)"),
     data_collector: DataCollectorService = Depends(get_data_collector)
 ):
-    """ETF 구성종목 조회 (pykrx)"""
+    """
+    ETF 구성종목 조회 (pykrx)
+    
+    - compressed=true: 표준 JSON 형태 (기본값)
+    - compressed=true: 압축된 배열 형태 (데이터 크기 50-70% 절약)
+    - gzip_enabled=true: gzip 압축 적용 (추가 30-50% 절약)
+    """
     try:
         components = await data_collector.get_etf_components(etf_code)
-        return {
-            "etf_code": etf_code,
-            "components": components,
-            "count": len(components),
-            "status": "success"
-        }
+        
+        if components:
+            # 압축된 형태로 반환: 헤더와 데이터 배열 분리
+            response_data = {
+                "etf_code": etf_code,
+                "count": len(components),
+                "compressed": True,
+                "gzip_enabled": gzip_enabled,
+                "status": "success",
+                "headers": ["etf_code", "stock_code", "stock_name", "weight", "quantity", "market_value", "updated_date"],
+                "data": [
+                    [
+                        component.get("etf_code", etf_code),
+                        component.get("stock_code", ""),
+                        component.get("stock_name", ""),
+                        component.get("weight", 0),
+                        component.get("quantity", 0),
+                        component.get("market_value", 0),
+                        component.get("updated_date", "")
+                    ]
+                    for component in components
+                ]
+            }
+        else:
+            # 표준 형태로 반환
+            response_data = {
+                "etf_code": etf_code,
+                "components": components,
+                "count": len(components),
+                "compressed": False,
+                "gzip_enabled": gzip_enabled,
+                "status": "success"
+            }
+        
+        if gzip_enabled:
+            # JSON을 문자열로 변환 후 gzip 압축
+            json_str = json.dumps(response_data, ensure_ascii=False, default=str)
+            compressed_content = gzip.compress(json_str.encode('utf-8'))
+            
+            return Response(
+                content=compressed_content,
+                media_type="application/json",
+                headers={
+                    "Content-Encoding": "gzip", # 여기서 gzip 을 알려줘야, 프론트에서 자동 압축해제 가능.
+                    "Content-Length": str(len(compressed_content))
+                }
+            )
+        else:
+            return response_data
+            
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ETF 구성종목 조회 실패: {str(e)}")
 
@@ -491,17 +604,31 @@ async def trigger_etf_update(
 async def trigger_today_chart_update(
     data_collector: DataCollectorService = Depends(get_data_collector)
 ):
-    """당일 차트 데이터 업데이트 수동 실행"""
+    """스케줄러: 당일 차트 데이터 업데이트 즉시 실행"""
     try:
-        logger.info("수동 당일 차트 데이터 업데이트 실행")
-        result = await data_collector.update_today_chart_data()
-        return {
-            "message": "당일 차트 데이터 업데이트가 완료되었습니다",
-            "result": result
-        }
+        await data_collector.scheduler_service.trigger_today_chart_update_now()
+        return {"message": "당일 차트 데이터 업데이트 트리거 완료"}
     except Exception as e:
         logger.error(f"당일 차트 데이터 업데이트 트리거 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"당일 차트 데이터 업데이트 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"당일 차트 데이터 업데이트 트리거 실패: {str(e)}"
+        )
+
+@admin_router.post("/scheduler/trigger/today-supply")
+async def trigger_today_supply_demand_update(
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """스케줄러: 당일 수급 데이터 업데이트 즉시 실행"""
+    try:
+        await data_collector.scheduler_service.trigger_today_supply_demand_update_now()
+        return {"message": "당일 수급 데이터 업데이트 트리거 완료"}
+    except Exception as e:
+        logger.error(f"당일 수급 데이터 업데이트 트리거 실패: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"당일 수급 데이터 업데이트 트리거 실패: {str(e)}"
+        )
 
 @admin_router.post("/scheduler/trigger/adjustment-check")
 async def trigger_adjustment_check(
@@ -566,34 +693,6 @@ async def clear_adjustment_cache(
     except Exception as e:
         logger.error(f"수정주가 캐시 정리 실패: {e}")
         raise HTTPException(status_code=500, detail=f"수정주가 캐시 정리 실패: {str(e)}")
-
-@admin_router.post("/start-collection")
-async def start_realtime_collection(
-    data_collector: DataCollectorService = Depends(get_data_collector)
-):
-    """실시간 데이터 수집 시작"""
-    try:
-        await data_collector.start_realtime_collection()
-        return {
-            "message": "실시간 데이터 수집 시작됨",
-            "status": "success"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"실시간 수집 시작 실패: {str(e)}")
-
-@admin_router.post("/stop-collection")
-async def stop_realtime_collection(
-    data_collector: DataCollectorService = Depends(get_data_collector)
-):
-    """실시간 데이터 수집 중지"""
-    try:
-        await data_collector.stop_realtime_collection()
-        return {
-            "message": "실시간 데이터 수집 중지됨",
-            "status": "success"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"실시간 수집 중지 실패: {str(e)}")
 
 @admin_router.get("/stats")
 async def get_collection_stats(
@@ -680,25 +779,54 @@ async def update_today_chart_data(
     data_collector: DataCollectorService = Depends(get_data_collector)
 ):
     """
-    당일 차트 데이터만 업데이트
-    기존 당일 데이터를 덮어쓰기하여 최신 상태로 유지
-    전체 업데이트보다 훨씬 빠름 (약 5-10분 내 완료)
+    당일 차트 데이터 업데이트 (ka10095 관심종목정보요청 사용)
+    
+    - 전종목의 당일 차트 데이터만 업데이트
+    - 수정주가 정보가 메모리에 있으면 함께 저장
+    - 배치 단위로 처리하여 API 제한 준수
     """
     try:
-        logger.info("당일 차트 데이터 업데이트 시작")
+        result = await data_collector.update_today_chart_data(batch_size=batch_size)
         
-        result = await data_collector.update_today_chart_data(
-            batch_size=batch_size
-        )
-        
-        logger.info(f"당일 차트 데이터 업데이트 완료: {result}")
-        return result
+        return {
+            "success": True,
+            "data": result,
+            "message": result.get("message", "당일 차트 데이터 업데이트 완료")
+        }
         
     except Exception as e:
         logger.error(f"당일 차트 데이터 업데이트 실패: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"당일 차트 데이터 업데이트 실패: {str(e)}"
+        )
+
+@admin_router.post("/batch/collect/today-supply")
+async def update_today_supply_demand_data(
+    batch_size: int = Query(50, description="배치 크기", ge=20, le=100),
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """
+    당일 수급 데이터 업데이트
+    
+    - 전종목(stockai용)의 당일 수급 데이터만 업데이트
+    - 배치 단위로 처리하여 API 제한 준수
+    - 기존 데이터가 있으면 UPSERT로 업데이트
+    """
+    try:
+        result = await data_collector.update_today_supply_demand_data(batch_size=batch_size)
+        
+        return {
+            "success": True,
+            "data": result,
+            "message": result.get("message", "당일 수급 데이터 업데이트 완료")
+        }
+        
+    except Exception as e:
+        logger.error(f"당일 수급 데이터 업데이트 실패: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"당일 수급 데이터 업데이트 실패: {str(e)}"
         )
 
 @admin_router.post("/batch/collect/start")

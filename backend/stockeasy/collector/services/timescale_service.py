@@ -642,6 +642,7 @@ class TimescaleService:
                 supply_dicts = valid_supply_dicts
                 
                 await session.execute(upsert_query, supply_dicts)
+                # await session.commit()  # session context에서 자동 커밋하므로 제거
                 
                 self.logger.info(f"수급 데이터 {len(supply_dicts)}건 대량 삽입 완료")
                 
@@ -1796,6 +1797,112 @@ class TimescaleService:
                 
         except Exception as e:
             self.logger.error(f"수급 데이터 삭제 실패 ({symbol}): {e}")
+            raise
+
+    async def upsert_today_supply_demand_data(
+        self, 
+        supply_data_list: List[SupplyDemandCreate],
+        target_date: datetime,
+        batch_size: int = 500
+    ) -> Dict[str, Any]:
+        """
+        당일 수급 데이터 UPSERT (기존 데이터가 있으면 업데이트, 없으면 생성)
+        
+        Args:
+            supply_data_list: 수급 데이터 리스트
+            target_date: 대상 날짜
+            batch_size: 배치 크기
+            
+        Returns:
+            Dict: 처리 결과
+        """
+        await self.initialize()
+        
+        try:
+            async with get_timescale_session_context() as session:
+                target_date_str = target_date.strftime('%Y-%m-%d')
+                total_upserted = 0
+                current_time = datetime.utcnow()
+                
+                self.logger.info(f"당일 수급 데이터 UPSERT 시작: {target_date_str}, {len(supply_data_list)}건")
+                
+                for i in range(0, len(supply_data_list), batch_size):
+                    batch_supply_data = supply_data_list[i:i + batch_size]
+                    
+                    # 배치 UPSERT를 위한 데이터 준비
+                    supply_dicts = []
+                    for supply_data in batch_supply_data:
+                        supply_dict = supply_data.dict()
+                        supply_dict['created_at'] = current_time
+                        
+                        # 새로운 필드들에 대한 기본값 설정
+                        for field in ['current_price', 'price_change_sign', 'price_change', 'price_change_percent',
+                                    'accumulated_volume', 'accumulated_value', 'individual_investor', 'foreign_investor', 
+                                    'institution_total', 'financial_investment', 'insurance', 'investment_trust', 
+                                    'other_financial', 'bank', 'pension_fund', 'private_fund',
+                                    'government', 'other_corporation', 'domestic_foreign']:
+                            if field not in supply_dict:
+                                supply_dict[field] = None
+                        
+                        # price_change_percent 값 유효성 검사 및 제한
+                        if supply_dict.get('price_change_percent') is not None:
+                            pcp = float(supply_dict['price_change_percent'])
+                            if abs(pcp) > 999999.9999:  # Numeric(10,4) 최대값
+                                self.logger.warning(f"수급 데이터 - 종목 {supply_dict.get('symbol')}, 날짜 {supply_dict.get('date')}: price_change_percent 값이 너무 큼 ({pcp}), 999999.9999로 제한")
+                                supply_dict['price_change_percent'] = 999999.9999 if pcp > 0 else -999999.9999
+                        
+                        supply_dicts.append(supply_dict)
+                    
+                    # UPSERT 쿼리
+                    upsert_query = text("""
+                        INSERT INTO supply_demand (date, symbol, current_price, price_change_sign, price_change, price_change_percent,
+                                                 accumulated_volume, accumulated_value, individual_investor, foreign_investor, institution_total,
+                                                 financial_investment, insurance, investment_trust, other_financial, bank, pension_fund, private_fund,
+                                                 government, other_corporation, domestic_foreign, created_at)
+                        VALUES (:date, :symbol, :current_price, :price_change_sign, :price_change, :price_change_percent,
+                               :accumulated_volume, :accumulated_value, :individual_investor, :foreign_investor, :institution_total,
+                               :financial_investment, :insurance, :investment_trust, :other_financial, :bank, :pension_fund, :private_fund,
+                               :government, :other_corporation, :domestic_foreign, :created_at)
+                        ON CONFLICT (date, symbol) 
+                        DO UPDATE SET
+                            current_price = EXCLUDED.current_price,
+                            price_change_sign = EXCLUDED.price_change_sign,
+                            price_change = EXCLUDED.price_change,
+                            price_change_percent = EXCLUDED.price_change_percent,
+                            accumulated_volume = EXCLUDED.accumulated_volume,
+                            accumulated_value = EXCLUDED.accumulated_value,
+                            individual_investor = EXCLUDED.individual_investor,
+                            foreign_investor = EXCLUDED.foreign_investor,
+                            institution_total = EXCLUDED.institution_total,
+                            financial_investment = EXCLUDED.financial_investment,
+                            insurance = EXCLUDED.insurance,
+                            investment_trust = EXCLUDED.investment_trust,
+                            other_financial = EXCLUDED.other_financial,
+                            bank = EXCLUDED.bank,
+                            pension_fund = EXCLUDED.pension_fund,
+                            private_fund = EXCLUDED.private_fund,
+                            government = EXCLUDED.government,
+                            other_corporation = EXCLUDED.other_corporation,
+                            domestic_foreign = EXCLUDED.domestic_foreign,
+                            created_at = EXCLUDED.created_at
+                    """)
+                    
+                    await session.execute(upsert_query, supply_dicts)
+                    total_upserted += len(supply_dicts)
+                    
+                    self.logger.info(f"당일 수급 데이터 배치 UPSERT: {len(supply_dicts)}건")
+                
+                self.logger.info(f"당일 수급 데이터 UPSERT 완료: {target_date_str}, 총 {total_upserted}건")
+                
+                return {
+                    "success": True,
+                    "target_date": target_date_str,
+                    "total_upserted": total_upserted,
+                    "message": f"{target_date_str} 수급 데이터 {total_upserted}건 UPSERT 완료"
+                }
+                
+        except Exception as e:
+            self.logger.error(f"당일 수급 데이터 UPSERT 실패: {e}")
             raise
 
 

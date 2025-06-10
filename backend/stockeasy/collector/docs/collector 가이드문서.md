@@ -174,3 +174,71 @@ stk_invsr_orgn_chart	종목별투자자기관별차트	LIST	N
 - natn	국가	String	N	20	
 - etc_corp	기타법인	String	N	20	
 - natfor	내외국인	String	N	20	
+
+# ka20003, 전업종지수요청
+- 요청 Body
+Element	한글명	type	Required	Length	Description
+inds_cd	업종코드	String	Y	3	001:종합(KOSPI), 002:대형주, 003:중형주, 004:소형주 101:종합(KOSDAQ), 201:KOSPI200, 302:KOSTAR, 701: KRX100 나머지 ※ 업종코드 참고
+
+-응답 Body
+Element	한글명	type	Required	Length	Description
+all_inds_idex	전업종지수	LIST	N		
+- stk_cd	종목코드	String	N	20	
+- stk_nm	종목명	String	N	20	
+- cur_prc	현재가	String	N	20	
+- pre_sig	대비기호	String	N	20	
+- pred_pre	전일대비	String	N	20	
+- flu_rt	등락률	String	N	20	
+- trde_qty	거래량	String	N	20	
+- wght	비중	String	N	20	
+- trde_prica	거래대금	String	N	20	
+- upl	상한	String	N	20	
+- rising	상승	String	N	20	
+- stdns	보합	String	N	20	
+- fall	하락	String	N	20	
+- lst	하한	String	N	20	
+- flo_stk_num	상장종목수	String	N	20	
+
+응답샘플)
+{
+	"all_inds_idex":
+		[
+			{
+				"stk_cd":"001",
+				"stk_nm":"종합(KOSPI)",
+				"cur_prc":"-2393.33",
+				"pre_sig":"5",
+				"pred_pre":"-279.63",
+				"flu_rt":"-10.46",
+				"trde_qty":"993",
+				"wght":"",
+				"trde_prica":"46494",
+				"upl":"0",
+				"rising":"17",
+				"stdns":"184",
+				"fall":"129",
+				"lst":"4",
+				"flo_stk_num":"960"
+			},
+			{
+				"stk_cd":"002",
+				"stk_nm":"대형주",
+				"cur_prc":"-2379.14",
+				"pre_sig":"5",
+				"pred_pre":"-326.94",
+				"flu_rt":"-12.08",
+				"trde_qty":"957",
+				"wght":"",
+				"trde_prica":"44563",
+				"upl":"0",
+				"rising":"6",
+				"stdns":"32",
+				"fall":"56",
+				"lst":"2",
+				"flo_stk_num":"100"
+			}
+		],
+	"return_code":0,
+	"return_msg":"정상적으로 처리되었습니다"
+}
+

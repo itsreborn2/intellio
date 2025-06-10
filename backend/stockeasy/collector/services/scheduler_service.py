@@ -119,7 +119,7 @@ class SchedulerService(LoggerMixin):
         # 2. 매일 오전 8시: ETF 구성종목 업데이트 (평일만)
         self.scheduler.add_job(
             func=self._update_etf_components_job,
-            trigger=CronTrigger(hour=8, minute=0, day_of_week='mon-fri'),
+            trigger=CronTrigger(hour=7, minute=35, day_of_week='mon-fri'),
             id="daily_etf_update",
             name="일일 ETF 구성종목 업데이트",
             replace_existing=True,
@@ -146,22 +146,55 @@ class SchedulerService(LoggerMixin):
             max_instances=1
         )
         
-        # 5. 당일 차트 데이터 업데이트 (오후 3시 35분, 오후 8시 5분) - 평일만
+        # 5. 당일 차트 데이터 업데이트 - 평일만
         # ka10095 관심종목정보요청을 사용하여 100개씩 배치로 처리
+        
+        # 5-1. 8시 15분, 30분, 45분
         self.scheduler.add_job(
             func=self._update_today_chart_data_job,
-            trigger=CronTrigger(hour=15, minute=35, day_of_week='mon-fri'),
-            id="daily_chart_update_afternoon",
-            name="당일 차트 데이터 업데이트 (오후)",
+            trigger=CronTrigger(hour=8, minute='15,30,45', day_of_week='mon-fri'),
+            id="daily_chart_update_08",
+            name="당일 차트 데이터 업데이트 (8시대)",
             replace_existing=True,
             max_instances=1
         )
         
+        # 5-2. 9시부터 16까지 매 15분 간격 (00, 15, 30, 45분)
+        self.scheduler.add_job(
+            func=self._update_today_chart_data_job,
+            trigger=CronTrigger(hour='9-15', minute='0,15,30,45', day_of_week='mon-fri'),
+            id="daily_chart_update_regular",
+            name="당일 차트 데이터 업데이트 (정규)",
+            replace_existing=True,
+            max_instances=1
+        )
+
+        # 5-3. 16시~19시(NXT 시간외)
+        self.scheduler.add_job(
+            func=self._update_today_chart_data_job,
+            trigger=CronTrigger(hour='16-19', minute='0,30', day_of_week='mon-fri'),
+            id="daily_chart_update_after_hours",
+            name="당일 차트 데이터 업데이트 (시간외)",
+            replace_existing=True,
+            max_instances=1
+        )
+        
+        # 5-4. 20시 5분 최종 업데이트
         self.scheduler.add_job(
             func=self._update_today_chart_data_job,
             trigger=CronTrigger(hour=20, minute=5, day_of_week='mon-fri'),
-            id="daily_chart_update_evening",
-            name="당일 차트 데이터 업데이트 (저녁)",
+            id="daily_chart_update_final",
+            name="당일 차트 데이터 업데이트 (최종)",
+            replace_existing=True,
+            max_instances=1
+        )
+        
+        # 6. 당일 수급 데이터 업데이트 - 평일 15시 50분 (시장 마감 직후)
+        self.scheduler.add_job(
+            func=self._update_today_supply_demand_data_job,
+            trigger=CronTrigger(hour=15, minute=50, day_of_week='mon-fri'),
+            id="daily_supply_demand_update",
+            name="당일 수급 데이터 업데이트",
             replace_existing=True,
             max_instances=1
         )
@@ -184,7 +217,7 @@ class SchedulerService(LoggerMixin):
             # 키움 API에서 전체 종목 리스트 조회 (강제 새로고침)
             kiwoom_client = self.data_collector.kiwoom_client
             stock_list = await kiwoom_client.get_all_stock_list(force_refresh=True)
-            stock_list_for_stockai = await kiwoom_client.get_stock_list_for_stockai(force_refresh=True)
+            stock_list_for_stockai = await kiwoom_client.get_all_stock_list_for_stockai(force_refresh=True)
 
             # 캐시에 저장
             if self.cache_manager:
@@ -299,13 +332,35 @@ class SchedulerService(LoggerMixin):
                 logger.warning("데이터 수집 서비스가 없습니다")
                 return
             
-            # 차트 데이터 업데이트
-            await self.data_collector.update_today_chart_data()
+            # 차트 데이터 업데이트 (스케줄러 모드)
+            await self.data_collector.update_today_chart_data(scheduler_mode=True)
             
             logger.success("당일 차트 데이터 업데이트 완료")
             
         except Exception as e:
             logger.error(f"당일 차트 데이터 업데이트 실패: {e}")
+            raise
+    
+    @log_scheduler_job("당일 수급 데이터 업데이트")
+    async def _update_today_supply_demand_data_job(self) -> None:
+        """당일 수급 데이터 업데이트 작업"""
+        # 주말/공휴일 확인
+        if self._is_holiday_or_weekend():
+            logger.info("주말 또는 공휴일이므로 당일 수급 데이터 업데이트를 건너뜁니다")
+            return
+        
+        try:
+            if not self.data_collector:
+                logger.warning("데이터 수집 서비스가 없습니다")
+                return
+            
+            # 수급 데이터 업데이트 (스케줄러 모드)
+            result = await self.data_collector.update_today_supply_demand_data(scheduler_mode=True)
+            
+            logger.success(f"당일 수급 데이터 업데이트 완료: {result.get('message', '정보 없음')}")
+            
+        except Exception as e:
+            logger.error(f"당일 수급 데이터 업데이트 실패: {e}")
             raise
     
     def _job_executed_listener(self, event) -> None:
@@ -373,6 +428,11 @@ class SchedulerService(LoggerMixin):
         """즉시 당일 차트 데이터 업데이트 실행"""
         logger.info("수동 당일 차트 데이터 업데이트 실행")
         await self._update_today_chart_data_job()
+    
+    async def trigger_today_supply_demand_update_now(self) -> None:
+        """즉시 당일 수급 데이터 업데이트 실행"""
+        logger.info("수동 당일 수급 데이터 업데이트 실행")
+        await self._update_today_supply_demand_data_job()
     
     async def trigger_adjustment_check_now(self) -> None:
         """즉시 수정주가 체크 실행"""

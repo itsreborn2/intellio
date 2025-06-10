@@ -181,6 +181,8 @@ class KiwoomAPIClient:
         self._stockai_stocks_cache: Dict[str, Dict[str, str]] = {}
         self._last_stockai_update: Optional[datetime] = None
         
+        # 스케줄러 모드 플래그 (로그 억제용)
+        self._scheduler_mode = False
 
         logger.info(f"키움 API 클라이언트 초기화 완료 : {self.app_key}")
     
@@ -374,8 +376,8 @@ class KiwoomAPIClient:
             logger.error(error_msg)
             raise Exception(error_msg)
 
-    async def get_stock_info(self, symbol: str) -> Optional[KiwoomStockInfo]:
-        """주식 기본정보 조회 (ka10001) - 실제 API 응답 구조에 맞게 수정"""
+    async def get_stock_info(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """주식 기본정보 조회 (ka10001) - 전체 응답 필드 리턴"""
         try:
             logger.info(f"[kiwoom]주식 기본정보 조회: {symbol}")
             
@@ -388,19 +390,64 @@ class KiwoomAPIClient:
             # 실제 키움 API 응답 구조: 데이터가 루트 레벨에 있음
             # return_code가 0이면 성공
             if result.get('return_code') == 0 and result.get('stk_cd'):
-                # 키움 API 응답을 우리가 정의한 KiwoomStockInfo 구조로 변환
-                stock_info_data = {
-                    'stk_cd': result.get('stk_cd', symbol),
-                    'stk_nm': result.get('stk_nm', f'종목_{symbol}'),
-                    'mkt_gb': 'KOSPI',  # 기본값, 실제로는 별도 API에서 가져와야 함
-                    'stk_gb': 'ST',     # 기본값
-                    'lst_dt': result.get('lst_pric', '20100101'),  # 상장일 정보가 없어서 임시
-                    'stk_cnt': result.get('flo_stk', '1000000000'),  # 유통주식수를 총주식수로 사용
-                    'par_pr': result.get('repl_pric', '500')  # 대용가를 액면가로 사용
+                # ka10001의 전체 응답 필드를 Dict 형태로 리턴
+                stock_info = {
+                    'symbol': result.get('stk_cd', symbol),  # 표준화된 키명 추가
+                    'name': result.get('stk_nm', f'종목_{symbol}'),  # 표준화된 키명 추가
+                    # ka10001 원본 응답 필드들 (전체)
+                    'stk_cd': result.get('stk_cd'),  # 종목코드
+                    'stk_nm': result.get('stk_nm'),  # 종목명
+                    'setl_mm': result.get('setl_mm'),  # 결산월
+                    'fav': result.get('fav'),  # 액면가
+                    'cap': result.get('cap'),  # 자본금
+                    'flo_stk': result.get('flo_stk'),  # 상장주식
+                    'crd_rt': result.get('crd_rt'),  # 신용비율
+                    'oyr_hgst': result.get('oyr_hgst'),  # 연중최고
+                    'oyr_lwst': result.get('oyr_lwst'),  # 연중최저
+                    'mac': result.get('mac'),  # 시가총액
+                    'mac_wght': result.get('mac_wght'),  # 시가총액비중
+                    'for_exh_rt': result.get('for_exh_rt'),  # 외인소진률
+                    'repl_pric': result.get('repl_pric'),  # 대용가
+                    'per': result.get('per'),  # PER
+                    'eps': result.get('eps'),  # EPS
+                    'roe': result.get('roe'),  # ROE
+                    'pbr': result.get('pbr'),  # PBR
+                    'ev': result.get('ev'),  # EV
+                    'bps': result.get('bps'),  # BPS
+                    'sale_amt': result.get('sale_amt'),  # 매출액
+                    'bus_pro': result.get('bus_pro'),  # 영업이익
+                    'cup_nga': result.get('cup_nga'),  # 당기순이익
+                    '250hgst': result.get('250hgst'),  # 250최고
+                    '250lwst': result.get('250lwst'),  # 250최저
+                    'high_pric': result.get('high_pric'),  # 고가
+                    'open_pric': result.get('open_pric'),  # 시가
+                    'low_pric': result.get('low_pric'),  # 저가
+                    'upl_pric': result.get('upl_pric'),  # 상한가
+                    'lst_pric': result.get('lst_pric'),  # 하한가
+                    'base_pric': result.get('base_pric'),  # 기준가
+                    'exp_cntr_pric': result.get('exp_cntr_pric'),  # 예상체결가
+                    'exp_cntr_qty': result.get('exp_cntr_qty'),  # 예상체결수량
+                    '250hgst_pric_dt': result.get('250hgst_pric_dt'),  # 250최고가일
+                    '250hgst_pric_pre_rt': result.get('250hgst_pric_pre_rt'),  # 250최고가대비율
+                    '250lwst_pric_dt': result.get('250lwst_pric_dt'),  # 250최저가일
+                    '250lwst_pric_pre_rt': result.get('250lwst_pric_pre_rt'),  # 250최저가대비율
+                    'cur_prc': result.get('cur_prc'),  # 현재가
+                    'pre_sig': result.get('pre_sig'),  # 대비기호
+                    'pred_pre': result.get('pred_pre'),  # 전일대비
+                    'flu_rt': result.get('flu_rt'),  # 등락율
+                    'trde_qty': result.get('trde_qty'),  # 거래량
+                    'trde_pre': result.get('trde_pre'),  # 거래대비
+                    'fav_unit': result.get('fav_unit'),  # 액면가단위
+                    'dstr_stk': result.get('dstr_stk'),  # 유통주식
+                    'dstr_rt': result.get('dstr_rt'),  # 유통비율
+                    # 호환성을 위한 추가 필드들
+                    'listing_date': result.get('lst_pric', ''),  # 하한가를 임시로 상장일로 사용
+                    'total_shares': result.get('flo_stk', ''),  # 상장주식을 총주식수로 사용
+                    'par_value': result.get('repl_pric', '')  # 대용가를 액면가로 사용
                 }
                 
-                logger.debug(f"종목정보 변환 완료: {stock_info_data}")
-                return KiwoomStockInfo(**stock_info_data)
+                logger.debug(f"종목정보 전체 필드 변환 완료: {symbol}")
+                return stock_info
             else:
                 logger.warning(f"종목정보 조회 실패 - return_code: {result.get('return_code')}, return_msg: {result.get('return_msg')}")
                 return None
@@ -450,7 +497,7 @@ class KiwoomAPIClient:
             logger.error(f"수급데이터 조회 실패 ({symbol} {date}): {e}")
             return None
     
-    async def get_multiple_stock_info(self, symbols: List[str]) -> List[KiwoomStockInfo]:
+    async def get_multiple_stock_info(self, symbols: List[str]) -> List[Dict[str, Any]]:
         """여러 종목 기본정보 일괄 조회"""
         logger.info(f"종목 기본정보 일괄 조회 시작: {len(symbols)}개 종목")
         
@@ -730,28 +777,28 @@ class KiwoomAPIClient:
         """
         return await self._make_kiwoom_api_request('ka10099', '/api/dostk/stkinfo', data, cont_yn, next_key)
         
-    async def get_stock_list_for_stockai(self) -> List[Dict[str, str]]:
-        """
-        프론트엔드용 종목 리스트 반환 (code, name만)
+    # async def get_stock_list_for_stockai(self, force_refresh: bool = False) -> List[Dict[str, str]]:
+    #     """
+    #     프론트엔드용 종목 리스트 반환 (code, name만)
         
-        Returns:
-            List[Dict[str, str]]: [{"code": "005930", "name": "삼성전자"}, ...]
-        """
-        try:
-            all_stocks = await self.get_all_stock_list_for_stockai()
+    #     Returns:
+    #         List[Dict[str, str]]: [{"code": "005930", "name": "삼성전자"}, ...]
+    #     """
+    #     try:
+    #         all_stocks = await self.get_all_stock_list_for_stockai(force_refresh)
             
-            # code, name만 추출
-            result = []
-            for stock_info in all_stocks.values():
-                result.append(stock_info)
+    #         # code, name만 추출
+    #         result = []
+    #         for stock_info in all_stocks.values():
+    #             result.append(stock_info)
             
-            logger.info(f"stock ai용 종목 리스트 반환: {len(result)}개")
-            return result
+    #         logger.info(f"stock ai용 종목 리스트 반환: {len(result)}개")
+    #         return result
             
-        except Exception as e:
-            error_msg = f"stock ai용 종목 리스트 조회 실패: {e}"
-            logger.error(error_msg)
-            raise Exception(error_msg)
+    #     except Exception as e:
+    #         error_msg = f"stock ai용 종목 리스트 조회 실패: {e}"
+    #         logger.error(error_msg)
+    #         raise Exception(error_msg)
         
     async def get_stock_list_for_frontend(self) -> List[Dict[str, str]]:
         """
@@ -1047,7 +1094,8 @@ class KiwoomAPIClient:
         try:
             # 기준일자는 end_date(최근일자)를 사용
             base_date = end_date
-            logger.info(f"수급 데이터 상세 조회: {symbol} (기준일자: {base_date}, 목표일자: {start_date})")
+            if not self._scheduler_mode:
+                logger.info(f"수급 데이터 상세 조회: {symbol} (기준일자: {base_date}, 목표일자: {start_date})")
             
             all_supply_data = []
             cont_yn = 'N'
@@ -1150,7 +1198,8 @@ class KiwoomAPIClient:
                         if last_date:
                             last_date_obj = datetime.strptime(last_date, '%Y%m%d')
                             if last_date_obj <= start_date_obj:
-                                logger.info(f"목표 시작일자({start_date}) 도달: 마지막 조회일자 {last_date}")
+                                if not self._scheduler_mode:
+                                    logger.info(f"목표 시작일자({start_date}) 도달: 마지막 조회일자 {last_date}")
                                 break
                         
                         # 연속조회 확인
@@ -1174,7 +1223,8 @@ class KiwoomAPIClient:
                     logger.error(f"수급 데이터 조회 오류 ({symbol} {base_date}): {e}")
                     break
             
-            logger.info(f"수급 데이터 상세 조회 완료: {symbol} ({start_date} ~ {end_date}) - {len(all_supply_data)}개")
+            if not self._scheduler_mode:
+                logger.info(f"수급 데이터 상세 조회 완료: {symbol} ({start_date} ~ {end_date}) - {len(all_supply_data)}개")
             return all_supply_data
             
         except Exception as e:
@@ -1205,9 +1255,6 @@ class KiwoomAPIClient:
         chart_data_dict = {}
         success_count = 0
         
-        # 키움 API 제약: 초당 4.8회 = 0.208초 간격
-        API_CALL_INTERVAL = 0.208  # 초당 4.8회
-        
         for i, symbol in enumerate(symbols):
             try:
                 logger.debug(f"차트 데이터 조회 진행: {i+1}/{len(symbols)} - {symbol}")
@@ -1217,21 +1264,15 @@ class KiwoomAPIClient:
                 
                 if chart_data:
                     success_count += 1
-                    logger.debug(f"차트 데이터 조회 성공: {symbol} - {len(chart_data)}건")
+                    if not self._scheduler_mode:
+                        logger.debug(f"차트 데이터 조회 성공: {symbol} - {len(chart_data)}건")
                 else:
-                    logger.warning(f"차트 데이터 조회 결과 없음: {symbol}")
-                
-                # API 호출 제한 준수 (마지막 호출 제외)
-                if i < len(symbols) - 1:
-                    await asyncio.sleep(API_CALL_INTERVAL)
+                    if not self._scheduler_mode:
+                        logger.warning(f"차트 데이터 조회 결과 없음: {symbol}")
                 
             except Exception as e:
                 logger.error(f"종목 차트 데이터 조회 실패 ({symbol}): {e}")
                 chart_data_dict[symbol] = []
-                
-                # 에러 발생 시에도 대기 (API 제한 준수)
-                if i < len(symbols) - 1:
-                    await asyncio.sleep(API_CALL_INTERVAL)
         
         logger.info(f"여러 종목 차트 데이터 순차 조회 완료: {success_count}/{len(symbols)}개 성공")
         return chart_data_dict
@@ -1255,13 +1296,11 @@ class KiwoomAPIClient:
         Returns:
             Dict[str, List[Dict[str, Any]]]: {종목코드: 수급데이터리스트}
         """
-        logger.info(f"여러 종목 수급 데이터 순차 조회: {len(symbols)}개 종목")
+        if not self._scheduler_mode:
+            logger.info(f"여러 종목 수급 데이터 순차 조회: {len(symbols)}개 종목")
         
         supply_data_dict = {}
         success_count = 0
-        
-        # 키움 API 제약: 초당 4.8회 = 0.208초 간격
-        API_CALL_INTERVAL = 0.208  # 초당 4.8회
         
         for i, symbol in enumerate(symbols):
             try:
@@ -1272,23 +1311,18 @@ class KiwoomAPIClient:
                 
                 if supply_data:
                     success_count += 1
-                    logger.info(f"수급 데이터 조회 성공: {symbol} - {len(supply_data)}건")
+                    if not self._scheduler_mode:
+                        logger.info(f"수급 데이터 조회 성공: {symbol} - {len(supply_data)}건")
                 else:
-                    logger.warning(f"수급 데이터 조회 결과 없음: {symbol}")
-                
-                # API 호출 제한 준수 (마지막 호출 제외)
-                if i < len(symbols) - 1:
-                    await asyncio.sleep(API_CALL_INTERVAL)
+                    if not self._scheduler_mode:
+                        logger.warning(f"수급 데이터 조회 결과 없음: {symbol}")
                 
             except Exception as e:
                 logger.error(f"종목 수급 데이터 조회 실패 ({symbol}): {e}")
                 supply_data_dict[symbol] = []
-                
-                # 에러 발생 시에도 대기 (API 제한 준수)
-                if i < len(symbols) - 1:
-                    await asyncio.sleep(API_CALL_INTERVAL)
         
-        logger.info(f"여러 종목 수급 데이터 순차 조회 완료: {success_count}/{len(symbols)}개 성공")
+        if not self._scheduler_mode:
+            logger.info(f"여러 종목 수급 데이터 순차 조회 완료: {success_count}/{len(symbols)}개 성공")
         return supply_data_dict
 
     async def get_realtime_stock_prices_batch(

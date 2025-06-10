@@ -178,7 +178,7 @@ export default function ApiTestPage() {
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   onClick={() => callApi({
-                    url: '/api/v1/stock/list_for_stockai',
+                    url: '/api/v1/stock/list_for_stockai?gzip_enabled=true',
                     method: 'GET',
                     description: '전체 종목 리스트 조회'
                   })}

@@ -41,10 +41,6 @@ async def lifespan(app: FastAPI):
         await data_collector.initialize()
         dependencies.set_data_collector(data_collector)
         
-        # 실시간 데이터 수집 시작
-        if settings.AUTO_START_REALTIME:
-            asyncio.create_task(data_collector.start_realtime_collection())
-        
         logger.info("증권 데이터 수집 서비스 시작 완료 (스케줄러 포함)")
         logger.info("매일 아침 7시 30분에 자동으로 종목 리스트가 업데이트됩니다.")
         
