@@ -14,7 +14,7 @@ fi
 
 BACKUP_ZIP="$1"
 # Docker Compose로 생성되는 실제 컨테이너 이름 자동 감지
-CONTAINER_NAME=$(docker-compose -f docker-compose.yml -f docker-compose.prod.yml ps -q timescaledb | head -1)
+CONTAINER_NAME=$(docker compose -f docker-compose.yml -f docker-compose.prod.yml ps -q timescaledb | head -1)
 if [ -z "$CONTAINER_NAME" ]; then
     echo "❌ TimescaleDB 컨테이너를 찾을 수 없습니다."
     exit 1

@@ -10,6 +10,7 @@ services:
     volumes:
       - timescale_data_prod:/var/lib/postgresql/data
       - ./backend/stockeasy/collector/database/init:/docker-entrypoint-initdb.d
+      - ./backend/stockeasy/collector/database/config/pg_hba.conf:/etc/postgresql/pg_hba.conf
     command: >
       postgres 
       -c shared_preload_libraries=timescaledb
@@ -20,8 +21,10 @@ services:
       -c maintenance_work_mem=128MB
       -c timezone=Asia/Seoul
       -c log_timezone=Asia/Seoul
-      -c log_statement=error
+      -c log_statement=mod
       -c log_min_duration_statement=1000
+      -c hba_file=/etc/postgresql/pg_hba.conf
+      -c listen_addresses='*'
     healthcheck:
       interval: 30s
       timeout: 10s
