@@ -101,7 +101,7 @@ export function InputArea({
     width: '100%',
     minHeight: isMobile ? '2.2rem' : (windowWidth < 768 ? '2.3rem' : '2.5rem'),
     height: 'auto',
-    border: '1px solid #ccc',
+    border: 'none',
     borderRadius: isMobile ? '6px' : '8px',
     paddingTop: '0',
     paddingRight: isMobile ? '35px' : '40px',
@@ -112,7 +112,11 @@ export function InputArea({
     boxSizing: 'border-box',
     resize: 'none',
     overflow: 'hidden',
-    maxWidth: '100%'
+    maxWidth: '100%',
+    backgroundColor: 'white',
+    color: 'oklch(0.372 0.044 257.287)',
+    WebkitAppearance: 'none',
+    appearance: 'none'
   };
   
   // 종목 필터링 함수

@@ -573,7 +573,7 @@ function SidebarContent() {
             opacity: 1
           }}
         >
-          {hoveredButton === 'home' && '스탁 AI'}
+          {hoveredButton === 'home' && '스탁이지 AI'}
           {hoveredButton === 'trendFollowing' && '추세추종'}
           {hoveredButton === 'chart' && 'RS순위'}
           {hoveredButton === 'etfSector' && 'ETF/섹터'}
@@ -638,7 +638,7 @@ function SidebarContent() {
                   >
                     <Bot className="icon" />
                     {/* 모바일 환경에서는 아이콘 옆에 텍스트 표시 */}
-                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">스탁 AI</span>}
+                    {isMobile && <span className="ml-2 text-sm text-[#ececf1]">스탁이지 AI</span>}
                   </button>
                 </div>
                 

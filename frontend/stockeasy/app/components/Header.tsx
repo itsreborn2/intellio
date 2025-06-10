@@ -258,7 +258,7 @@ const Header: React.FC<HeaderProps> = ({
             <div className="relative ml-2">
               <button
                 onClick={toggleHistoryPanel}
-                className="p-1 text-gray-600 hover:text-gray-900"
+                className="p-1 text-gray-600 hover:text-gray-900 flex items-center"
                 onMouseEnter={() => setToggleVisible(true)}
                 onMouseLeave={() => setToggleVisible(false)}
               >
