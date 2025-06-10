@@ -4,12 +4,13 @@ import type React from "react"
 import type { Metadata } from "next"
 import MouseMoveEffect from "@/components/ui/mouse-move-effect"
 import Navbar from "@/components/navbar"
+import Footer from "../components/footer"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "인텔리오",
-  description: "주식 전문 AI 어시스턴트 스탁이지 개발 기업으로 금융관련 서비스를 제공합니다.",
+  title: "스탁이지 - 인텔리오",
+  description: "주식 전용 AI 어시스턴트 스탁이지, 당신의 투자 리서치 시간을 줄여줍니다.",
 }
 
 export default function RootLayout({
@@ -19,12 +20,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark h-full">
-      <body className={`${inter.className} bg-background text-foreground antialiased h-full flex flex-col`}>
+      <body className={`${inter.className} bg-background text-foreground antialiased h-full flex flex-col min-h-screen`}>
         <MouseMoveEffect />
         <Navbar />
-        <main className="flex-grow overflow-y-auto">
+        <main className="flex-1">
           {children}
         </main>
+        <Footer />
       </body>
     </html>
   )
