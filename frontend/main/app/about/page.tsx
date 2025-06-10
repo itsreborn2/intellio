@@ -32,7 +32,7 @@ export default function AboutPage() {
         <p>인텔리오는 단순한 정보 제공을 넘어, 투자자들이 시장에서 지속적으로 성공할 수 있도록 돕는 것을 목표로 합니다. AI와 데이터를 활용하여 보다 정교하고 실용적인 투자 도구를 개발하고, 개별 투자자부터 기관 투자자까지 누구나 쉽게 활용할 수 있는 솔루션을 제공합니다.</p>
         <p>우리는 빠르게 변화하는 금융 시장 속에서, 투자자들이 데이터에 기반한 합리적인 판단을 내릴 수 있도록 지원하며, 궁극적으로는 금융 시장에서의 정보 격차를 해소하는 것을 목표로 합니다.</p>
 
-        <p className="mt-10 text-xl font-semibold text-center text-foreground/90">인텔리오와 함께, AI가 열어주는 새로운 투자 기회를 경험해 보세요!</p>
+        <p className="mt-10 text-xl font-semibold text-center text-foreground/90">인텔리오와 함께, 스탁이지 AI가 열어주는 새로운 투자 기회를 경험해 보세요!</p>
       
       </div>
     </div>
