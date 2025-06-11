@@ -45,6 +45,7 @@ class ParallelSearchAgent(BaseAgent):
             "financial_analyzer", 
             "industry_analyzer",
             "confidential_analyzer",
+            "technical_analyzer",
             "web_search",
         ]
     
@@ -218,6 +219,9 @@ class ParallelSearchAgent(BaseAgent):
                     should_execute = True
                 elif agent_name == "web_search" and data_requirements.get("web_search_needed", False):
                     logger.info(f"웹 검색 데이터 필요: {agent_name}, {data_requirements}")
+                    should_execute = True
+                elif agent_name == "technical_analyzer" and data_requirements.get("technical_analysis_needed", False):
+                    logger.info(f"기술적 분석 데이터 필요: {agent_name}, {data_requirements}")
                     should_execute = True
             #logger.info(f"데이터 요구사항: {should_execute} {agent_name}, {data_requirements}")
             # 에이전트가 존재하고 실행이 필요한 경우 목록에 추가

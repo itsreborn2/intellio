@@ -357,6 +357,7 @@ class StockAnalysisGraph:
             "financial_analyzer": self.agents.get("financial_analyzer"),
             "industry_analyzer": self.agents.get("industry_analyzer"),
             "confidential_analyzer": self.agents.get("confidential_analyzer"),
+            "technical_analyzer": self.agents.get("technical_analyzer"),
             "web_search": self.agents.get("web_search"),
         }, graph=self)  # 현재 그래프 인스턴스 전달
         
