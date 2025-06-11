@@ -63,8 +63,6 @@ services:
       - ./backend/stockeasy/collector/.env.production
     environment:
       - ENV=production
-    volumes:
-      - ./backend:/backend
     logging:
       driver: "json-file"
       options:
@@ -105,6 +103,7 @@ services:
 
 volumes:
   timescale_data_prod:
+  collector_logs_prod:
 
 networks:
   app-network:

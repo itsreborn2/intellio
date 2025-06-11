@@ -18,11 +18,22 @@ ENV PATH="/venv/bin:$PATH"
 ENV ENV=production
 ENV DEBUG=false
 
-# 비root 사용자로 실행 (보안)
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# 비root 사용자로 실행 (보안) - 호스트 사용자와 UID/GID 맞춤
+RUN groupadd -r appuser -g 1000 && useradd -r -g appuser -u 1000 appuser
+
+# 홈 디렉토리 생성 및 matplotlib 설정 디렉토리 생성
+RUN mkdir -p /home/appuser/.config/matplotlib && \
+    chown -R appuser:appuser /home/appuser
+
+# matplotlib 설정 디렉토리 환경변수 설정
+ENV MPLCONFIGDIR=/home/appuser/.config/matplotlib
 
 # 로그 디렉토리 생성 및 권한 설정
-RUN mkdir -p logs && chown -R appuser:appuser /backend/stockeasy/collector
+RUN mkdir -p logs && \
+    mkdir -p /tmp/stockeasy_logs && \
+    chown -R appuser:appuser /backend/stockeasy/collector && \
+    chmod -R 755 /backend/stockeasy/collector/logs
+
 USER appuser
 
 # 포트 노출
@@ -32,5 +43,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/health || exit 1
 
-# 프로덕션용 실행 명령 (--reload 제거, workers 추가)
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"] 
+# 프로덕션용 실행 명령 (기본 단일 프로세스 모드, access log 활성화)
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--access-log"] 

@@ -1524,7 +1524,7 @@ class TimescaleService:
                 total_upserted = 0
                 current_time = datetime.utcnow()
                 
-                self.logger.info(f"당일 주가 데이터 UPSERT 시작 (수정주가 보존): {target_date_str}, {len(symbols_to_update)}개 종목")
+                self.logger.debug(f"당일 주가 데이터 UPSERT 시작 (수정주가 보존): {target_date_str}, {len(symbols_to_update)}개 종목")
                 
                 for i in range(0, len(prices), batch_size):
                     batch_prices = prices[i:i + batch_size]
@@ -1584,9 +1584,9 @@ class TimescaleService:
                     await session.execute(upsert_query, price_dicts)
                     total_upserted += len(price_dicts)
                     
-                    self.logger.info(f"당일 데이터 배치 UPSERT (수정주가 보존): {len(price_dicts)}건")
+                    self.logger.debug(f"당일 데이터 배치 UPSERT (수정주가 보존): {len(price_dicts)}건")
                 
-                self.logger.info(f"당일 주가 데이터 UPSERT 완료 (수정주가 보존): {target_date_str}, 총 {total_upserted}건")
+                self.logger.debug(f"당일 주가 데이터 UPSERT 완료 (수정주가 보존): {target_date_str}, 총 {total_upserted}건")
                 
                 return {
                     "success": True,

@@ -185,6 +185,7 @@ services:
         BUILDKIT_INLINE_CACHE: 1
     volumes:
       - ./backend:/backend:rw,delegated
+      - ./backend/stockeasy/collector/logs:/backend/stockeasy/collector/logs:rw
     env_file:
       - .env.development
     environment:

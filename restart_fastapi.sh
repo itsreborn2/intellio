@@ -23,7 +23,7 @@ sleep 5
 
 # fastapi 서비스 시작
 echo "fastapi 서비스를 시작합니다..." >> $LOG_FILE
-docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d fastapi >> $LOG_FILE 2>&1
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d fastapi >> $LOG_FILE 2>&1
 
 # 상태 확인
 echo "서비스 상태 확인:" >> $LOG_FILE

@@ -11,6 +11,12 @@ RUN /venv/bin/pip install -r requirements.txt
 ENV PYTHONPATH=/backend
 ENV PATH="/venv/bin:$PATH"
 
+# 로그 디렉토리 생성 및 권한 설정 (개발환경)
+RUN mkdir -p logs && \
+    mkdir -p /tmp/stockeasy_logs && \
+    chmod -R 777 logs && \
+    chmod -R 777 /tmp/stockeasy_logs
+
 # 포트 노출
 EXPOSE 8001 8002
 

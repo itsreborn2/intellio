@@ -237,10 +237,14 @@ class KiwoomAPIClient:
         
         try:
             logger.info("키움 API 토큰 발급 중...")
+            logger.info(f"앱키 첫 4자리: {self.app_key[:4]}****")
+            logger.info(f"시크릿키 첫 4자리: {self.secret_key[:4]}****")
             
             url = f"{self.host}/oauth2/token"
             headers = {
                 'Content-Type': 'application/json;charset=UTF-8',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'application/json',
             }
             data = {
                 'grant_type': 'client_credentials',
@@ -248,44 +252,75 @@ class KiwoomAPIClient:
                 'secretkey': self.secret_key,
             }
             
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, json=data) as response:
-                    result = await response.json()
-                    
-                    # 디버그용 응답 로깅
-                    logger.info(f"키움 API 응답 상태: {response.status}")
+            # 임시로 requests 라이브러리로 동기 호출 테스트
+            import requests
+            
+            logger.info(f"키움 API 토큰 요청 URL: {url}")
+            logger.info(f"키움 API 토큰 요청 헤더: {headers}")
+            logger.info(f"키움 API 토큰 요청 데이터: {data}")
+            
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            
+            logger.info(f"키움 API 응답 상태: {response.status_code}")
+            logger.info(f"키움 API 응답 헤더: {dict(response.headers)}")
+            
+            # content-type 확인
+            content_type = response.headers.get('content-type', '')
+            logger.info(f"키움 API 응답 Content-Type: {content_type}")
+            
+            if 'application/json' in content_type:
+                try:
+                    result = response.json()
                     logger.info(f"키움 API 응답 데이터: {result}")
+                except Exception as json_error:
+                    error_text = response.text
+                    logger.error(f"JSON 파싱 실패: {json_error}")
+                    logger.error(f"응답 텍스트: {error_text[:500]}...")
+                    raise Exception(f"JSON 파싱 실패: {json_error}")
+            else:
+                error_text = response.text
+                logger.error(f"HTML 응답 수신: {error_text[:500]}...")
+                
+                # HTML 응답에서 특정 오류 메시지 확인
+                if "Invalid client" in error_text or "invalid_client" in error_text:
+                    raise Exception("키움 API 클라이언트 인증 실패: 앱키 또는 시크릿키가 잘못되었습니다")
+                elif "Service Unavailable" in error_text or "503" in error_text:
+                    raise Exception("키움 API 서버 점검 중이거나 일시적으로 사용할 수 없습니다")
+                elif "Bad Gateway" in error_text or "502" in error_text:
+                    raise Exception("키움 API 서버 게이트웨이 오류")
+                else:
+                    raise Exception(f"예상하지 못한 응답 타입: {content_type}")
+            
+            if response.status_code == 200:
+                # 성공 응답 확인 - 실제 키움 API는 token 필드 사용
+                if 'token' in result and result.get('return_code') == 0:
+                    token_info = KiwoomTokenResponse(**result)
                     
-                    if response.status == 200:
-                        # 성공 응답 확인 - 실제 키움 API는 token 필드 사용
-                        if 'token' in result and result.get('return_code') == 0:
-                            token_info = KiwoomTokenResponse(**result)
-                            
-                            self.access_token = token_info.token
-                            
-                            # expires_dt를 datetime으로 파싱 (예: "20250602004341" -> 2025-06-02 00:43:41)
-                            try:
-                                expires_dt = datetime.strptime(token_info.expires_dt, "%Y%m%d%H%M%S")
-                                # 5분 여유시간 적용
-                                self.token_expires_at = expires_dt - timedelta(minutes=5)
-                            except ValueError:
-                                # 파싱 실패 시 1시간 후 만료로 설정
-                                self.token_expires_at = datetime.now() + timedelta(hours=1)
-                            
-                            logger.info(f"키움 API 토큰 발급 성공 (만료: {self.token_expires_at})")
-                            self._auth_failed = False
-                        else:
-                            # 에러 응답 처리
-                            error_msg = f"키움 API 토큰 발급 실패: {result.get('return_msg', '알 수 없는 오류')} (코드: {result.get('return_code', -1)})"
-                            logger.error(error_msg)
-                            self._auth_failed = True
-                            raise Exception(error_msg)
-                    else:
-                        error_text = await response.text()
-                        error_msg = f"키움 API 토큰 발급 실패: HTTP {response.status} - {error_text}"
-                        logger.error(error_msg)
-                        self._auth_failed = True
-                        raise Exception(error_msg)
+                    self.access_token = token_info.token
+                    
+                    # expires_dt를 datetime으로 파싱 (예: "20250602004341" -> 2025-06-02 00:43:41)
+                    try:
+                        expires_dt = datetime.strptime(token_info.expires_dt, "%Y%m%d%H%M%S")
+                        # 5분 여유시간 적용
+                        self.token_expires_at = expires_dt - timedelta(minutes=5)
+                    except ValueError:
+                        # 파싱 실패 시 1시간 후 만료로 설정
+                        self.token_expires_at = datetime.now() + timedelta(hours=1)
+                    
+                    logger.info(f"키움 API 토큰 발급 성공 (만료: {self.token_expires_at})")
+                    self._auth_failed = False
+                else:
+                    # 에러 응답 처리
+                    error_msg = f"키움 API 토큰 발급 실패: {result.get('return_msg', '알 수 없는 오류')} (코드: {result.get('return_code', -1)})"
+                    logger.error(error_msg)
+                    self._auth_failed = True
+                    raise Exception(error_msg)
+            else:
+                error_text = response.text
+                error_msg = f"키움 API 토큰 발급 실패: HTTP {response.status_code} - {error_text}"
+                logger.error(error_msg)
+                self._auth_failed = True
+                raise Exception(error_msg)
                         
         except Exception as e:
             logger.error(f"키움 API 토큰 발급 중 오류: {e}")
@@ -340,6 +375,7 @@ class KiwoomAPIClient:
         url = f"{self.host}{endpoint}"
         headers = {
             'Content-Type': 'application/json;charset=UTF-8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'authorization': f'Bearer {token}',
             'cont-yn': cont_yn,
             'next-key': next_key,
@@ -353,7 +389,7 @@ class KiwoomAPIClient:
                         result = await response.json()
                         
                         # 실제 API 응답 구조 로깅 (디버깅용)
-                        logger.debug(f"키움 API 응답 ({api_id}): 상태코드={response.status}")
+                        #logger.debug(f"키움 API 응답 ({api_id}): 상태코드={response.status}")
                         
                         # 응답 헤더 정보 추가 (기존 데이터 덮어쓰지 않도록 주의)
                         if 'response_headers' not in result:
@@ -363,11 +399,11 @@ class KiwoomAPIClient:
                                 'api-id': response.headers.get('api-id', api_id)
                             }
                         
-                        logger.debug(f"API 호출 성공: {api_id}")
+                        #logger.debug(f"API 호출 성공: {api_id}")
                         return result
                     else:
                         error_text = await response.text()
-                        error_msg = f"API 호출 실패 ({api_id}): {response.status} - {error_text}"
+                        error_msg = f"API 호출 실패 ({api_id}): 요청헤더: {headers}\n요청바디: {data}\n 응답: {response.status} - 응답바디: {error_text}"
                         logger.error(error_msg)
                         raise Exception(error_msg)
                         
@@ -777,28 +813,7 @@ class KiwoomAPIClient:
         """
         return await self._make_kiwoom_api_request('ka10099', '/api/dostk/stkinfo', data, cont_yn, next_key)
         
-    # async def get_stock_list_for_stockai(self, force_refresh: bool = False) -> List[Dict[str, str]]:
-    #     """
-    #     프론트엔드용 종목 리스트 반환 (code, name만)
-        
-    #     Returns:
-    #         List[Dict[str, str]]: [{"code": "005930", "name": "삼성전자"}, ...]
-    #     """
-    #     try:
-    #         all_stocks = await self.get_all_stock_list_for_stockai(force_refresh)
-            
-    #         # code, name만 추출
-    #         result = []
-    #         for stock_info in all_stocks.values():
-    #             result.append(stock_info)
-            
-    #         logger.info(f"stock ai용 종목 리스트 반환: {len(result)}개")
-    #         return result
-            
-    #     except Exception as e:
-    #         error_msg = f"stock ai용 종목 리스트 조회 실패: {e}"
-    #         logger.error(error_msg)
-    #         raise Exception(error_msg)
+
         
     async def get_stock_list_for_frontend(self) -> List[Dict[str, str]]:
         """
@@ -837,6 +852,35 @@ class KiwoomAPIClient:
             "last_stockai_update": self._last_stockai_update.isoformat() if self._last_stockai_update else None,
         }
     
+    async def test_api_connection(self) -> Dict[str, Any]:
+        """키움 API 연결 테스트"""
+        try:
+            logger.info("키움 API 연결 테스트 시작")
+            
+            # 단순 HTTP 연결 테스트
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.host}") as response:
+                    logger.info(f"키움 API 기본 연결 상태: {response.status}")
+                    
+            # 토큰 발급 테스트
+            await self._refresh_token()
+            
+            return {
+                "status": "success",
+                "message": "키움 API 연결 성공",
+                "host": self.host,
+                "token_available": bool(self.access_token)
+            }
+            
+        except Exception as e:
+            logger.error(f"키움 API 연결 테스트 실패: {e}")
+            return {
+                "status": "failed",
+                "message": str(e),
+                "host": self.host,
+                "token_available": False
+            }
+
     async def close(self) -> None:
         """클라이언트 정리"""
         logger.info("키움 API 클라이언트 정리 중...")

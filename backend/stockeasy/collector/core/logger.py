@@ -19,11 +19,49 @@ def setup_loguru() -> None:
     logger.remove()
     
     # 로그 디렉토리 설정
-    log_dir = Path("/backend/stockeasy/logs")
-    if settings.ENV == "development" or not log_dir.exists():
+    if settings.ENV == "development":
         log_dir = Path("./logs")
+    else:
+        # 프로덕션 환경에서는 여러 경로 순서대로 시도
+        log_paths = [
+            Path("/backend/stockeasy/collector/logs"),  # Docker 볼륨 마운트 경로
+            Path("./logs")
+        ]
+        
+        log_dir = None
+        for path in log_paths:
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+                # 테스트 파일 생성해서 권한 확인
+                test_file = path / "test_write.tmp"
+                test_file.write_text("test")
+                test_file.unlink()
+                log_dir = path
+                break
+            except (PermissionError, OSError) as e:
+                print(f"로그 경로 {path} 사용 불가: {e}")
+                continue
+        
+        if log_dir is None:
+            # 모든 경로가 실패하면 /tmp 사용 (강제)
+            log_dir = Path("/tmp/stockeasy_logs")
+            print(f"모든 로그 경로 실패, fallback 경로 사용: {log_dir}")
     
-    log_dir.mkdir(parents=True, exist_ok=True)
+    # 최종 로그 디렉토리 생성 및 권한 확인
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        # 최종 권한 테스트
+        test_file = log_dir / "final_test.tmp"
+        test_file.write_text("final test")
+        test_file.unlink()
+        print(f"로그 디렉토리 설정 완료: {log_dir}")
+    except Exception as e:
+        print(f"로그 디렉토리 생성 실패: {log_dir}, 오류: {e}")
+        # 최후의 수단: 시스템 임시 디렉토리 사용
+        import tempfile
+        log_dir = Path(tempfile.gettempdir()) / "stockeasy_collector_logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        print(f"임시 로그 디렉토리 사용: {log_dir}")
     
     # 로그 레벨 설정
     log_level = settings.LOG_LEVEL.upper()
@@ -77,6 +115,9 @@ def setup_loguru() -> None:
             enqueue=True,
             serialize=True  # JSON 형태로 출력
         )
+    
+    # uvicorn 기본 로깅은 그대로 두고 loguru와 공존
+    # (uvicorn access log를 건드리지 않음)
     
     # 성공적으로 설정되었음을 로그
     logger.info("Loguru 로깅 시스템 초기화 완료")
@@ -235,4 +276,18 @@ try:
     setup_loguru()
 except Exception as e:
     # fallback to print if logger setup fails
-    print(f"로거 설정 실패: {e}") 
+    print(f"로거 설정 실패: {e}")
+    print("기본 콘솔 로거로 fallback 합니다.")
+    # 최소한의 콘솔 로거라도 설정
+    try:
+        logger.remove()
+        logger.add(
+            sys.stderr,
+            level="INFO",
+            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>",
+            colorize=True
+        )
+        print("기본 콘솔 로거 설정 완료")
+    except Exception as fallback_error:
+        print(f"기본 로거 설정도 실패: {fallback_error}")
+        # 이 경우에는 print만 사용

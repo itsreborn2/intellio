@@ -78,6 +78,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# HTTP 요청 로깅은 uvicorn 기본 access log 사용
+# (별도 미들웨어 불필요)
+
 # UTF-8 인코딩 미들웨어 추가
 @app.middleware("http")
 async def add_charset_middleware(request, call_next):
@@ -156,5 +159,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8001,
         reload=settings.DEBUG,
-        log_level="info"
+        log_level="info",
+        access_log=True  # uvicorn 기본 access log 활성화
     ) 
