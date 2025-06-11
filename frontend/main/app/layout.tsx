@@ -4,7 +4,6 @@ import type React from "react"
 import type { Metadata } from "next"
 import MouseMoveEffect from "@/components/ui/mouse-move-effect"
 import Navbar from "@/components/navbar"
-import Footer from "../components/footer"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -26,7 +25,6 @@ export default function RootLayout({
         <main className="flex-1">
           {children}
         </main>
-        <Footer />
       </body>
     </html>
   )

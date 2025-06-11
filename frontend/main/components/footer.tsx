@@ -4,7 +4,7 @@ import { Github, Twitter, Linkedin } from "lucide-react"
 export default function Footer() {
   return (
     <footer className="border-0 mt-auto pt-12">
-      <div className="container py-16">
+      <div className="container pt-16">
         <div className="mx-auto max-w-4xl text-center">
           <div className="mb-4">
             <p className="font-medium text-sm">주식회사 인텔리오</p>

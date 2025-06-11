@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -17,6 +17,14 @@ export default function AppClientLayout({ children }: AppClientLayoutProps) {
   const [isPanelContentVisible, setIsPanelContentVisible] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const pathname = usePathname();
+  const mainScrollRef = useRef<HTMLElement>(null);
+
+  // pathname이 변경될 때마다 스크롤을 최상단으로 이동
+  useEffect(() => {
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTop = 0;
+    }
+  }, [pathname]);
 
   useEffect(() => {
     const checkIfMobile = () => {
@@ -59,7 +67,7 @@ export default function AppClientLayout({ children }: AppClientLayoutProps) {
         isHistoryPanelOpen={isHistoryPanelOpen}
         toggleHistoryPanel={toggleHistoryPanel}
       /> 
-      <main className="fixed top-[44px] bottom-0 right-0 left-0 md:left-[59px] overflow-auto">
+      <main ref={mainScrollRef} className="fixed top-[44px] bottom-0 right-0 left-0 md:left-[59px] overflow-auto">
         <div className="content-container">
           {children}
         </div>

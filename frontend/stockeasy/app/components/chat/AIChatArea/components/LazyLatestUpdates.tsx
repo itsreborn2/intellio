@@ -66,18 +66,21 @@ const LatestUpdatesFallback = () => (
   </div>
 );
 
+interface PopularStock {
+  stock: StockOption;
+  rank: number;
+}
+
 interface LazyLatestUpdatesProps {
-  updates: Array<{
-    stock: StockOption;
-    rank: number;
-  }>;
+  updatesDaily: PopularStock[];
+  updatesWeekly: PopularStock[];
   onSelectUpdate: (stock: StockOption, question: string) => void;
 }
 
-export function LazyLatestUpdates({ updates, onSelectUpdate }: LazyLatestUpdatesProps) {
+export function LazyLatestUpdates({ updatesDaily, updatesWeekly, onSelectUpdate }: LazyLatestUpdatesProps) {
   return (
     <Suspense fallback={<LatestUpdatesFallback />}>
-      <LatestUpdates updates={updates} onSelectUpdate={onSelectUpdate} />
+      <LatestUpdates updatesDaily={updatesDaily} updatesWeekly={updatesWeekly} onSelectUpdate={onSelectUpdate} />
     </Suspense>
   );
 }

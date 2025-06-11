@@ -42,29 +42,9 @@ export default function RootLayout({
         <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link href="//spoqa.github.io/spoqa-han-sans/css/SpoqaHanSansNeo.css" rel="stylesheet" type="text/css" />
-        {/* 페이지 로드 시 스크롤 위치를 최상단으로 설정하는 인라인 스크립트 */}
-        <script dangerouslySetInnerHTML={{
-          __html: `
-            window.onload = function() {
-              window.scrollTo(0, 0);
-            };
-            if (document.readyState === 'complete') {
-              window.scrollTo(0, 0);
-            }
-          `
-        }} />
       </head>
       <body>
         <AppClientLayout>{children}</AppClientLayout>
-        {/* 페이지 로드 후 스크롤 위치를 최상단으로 설정하는 스크립트 */}
-        <Script id="reset-scroll" strategy="afterInteractive">
-          {`
-            window.scrollTo(0, 0);
-            setTimeout(function() {
-              window.scrollTo(0, 0);
-            }, 100);
-          `}
-        </Script>
       </body>
     </html>
   );
