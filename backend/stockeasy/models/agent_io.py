@@ -210,6 +210,64 @@ class RetrievedWebSearchResult(TypedDict):
     search_date: datetime           # 검색 시간
 
 
+# 기술적 분석 관련 데이터 모델들
+class TechnicalIndicators(TypedDict, total=False):
+    """기술적 지표 분석 결과"""
+    sma_20: Optional[float]         # 20일 단순이동평균
+    sma_60: Optional[float]         # 60일 단순이동평균
+    ema_12: Optional[float]         # 12일 지수이동평균
+    ema_26: Optional[float]         # 26일 지수이동평균
+    rs: Optional[float]             # 상대강도
+    rsi: Optional[float]            # RSI 지표
+    macd: Optional[float]           # MACD 값
+    macd_signal: Optional[float]    # MACD 신호선
+    macd_histogram: Optional[float] # MACD 히스토그램
+    bollinger_upper: Optional[float] # 볼린저 밴드 상단
+    bollinger_middle: Optional[float] # 볼린저 밴드 중간
+    bollinger_lower: Optional[float] # 볼린저 밴드 하단
+    stochastic_k: Optional[float]   # 스토캐스틱 %K
+    stochastic_d: Optional[float]   # 스토캐스틱 %D
+
+class ChartPatternAnalysis(TypedDict, total=False):
+    """차트 패턴 분석 결과"""
+    support_levels: List[float]     # 지지선 가격 수준들
+    resistance_levels: List[float]  # 저항선 가격 수준들
+    trend_direction: Literal["상승", "하락", "횡보", "불명확"] # 추세 방향
+    trend_strength: Literal["강함", "보통", "약함"]  # 추세 강도
+    patterns: List[str]             # 식별된 차트 패턴들
+    breakout_signals: List[Dict[str, Any]] # 돌파 신호들
+
+class TradingSignals(TypedDict, total=False):
+    """매매 신호 분석 결과"""
+    overall_signal: Literal["강력매수", "매수", "중립", "매도", "강력매도"] # 종합 매매 신호
+    confidence: float               # 신호 신뢰도 (0.0 ~ 1.0)
+    signals: List[Dict[str, Any]]   # 개별 지표별 신호들
+    entry_points: List[float]       # 매수 진입 포인트들
+    exit_points: List[float]        # 매도 탈출 포인트들
+    stop_loss: Optional[float]      # 손절가 제안
+    target_price: Optional[float]   # 목표가 제안
+
+class MarketSentiment(TypedDict, total=False):
+    """시장 정서 분석 결과"""
+    volume_trend: Literal["증가", "감소", "보통"] # 거래량 추이
+    price_volume_relation: Literal["긍정적", "부정적", "중립"] # 가격-거래량 관계
+    foreign_flow: Optional[Literal["순매수", "순매도", "균형"]] # 외국인 자금 흐름
+    institution_flow: Optional[Literal["순매수", "순매도", "균형"]] # 기관 자금 흐름
+
+class TechnicalAnalysisResult(TypedDict, total=False):
+    """기술적 분석 종합 결과"""
+    stock_code: str                 # 종목코드
+    stock_name: str                 # 종목명
+    analysis_date: datetime         # 분석 일시
+    current_price: float            # 현재가
+    chart_patterns: ChartPatternAnalysis # 차트 패턴 분석
+    technical_indicators: TechnicalIndicators # 기술적 지표
+    trading_signals: TradingSignals # 매매 신호
+    market_sentiment: MarketSentiment # 시장 정서
+    summary: str                    # 종합 분석 요약
+    recommendations: List[str]      # 투자 권고사항
+
+
 class RetrievedAllAgentData(TypedDict, total=False):
     """검색 및 분석된 모든 데이터"""
     telegram_messages: Dict[str, Any] # 텔레그램 메시지
@@ -309,59 +367,3 @@ class AgentState(TypedDict, total=False):
     
     # 스트리밍 콜백 함수 (비동기 함수 객체)
     streaming_callback: Any         # 스트리밍 응답 콜백 함수
-
-# 기술적 분석 관련 데이터 모델들
-class TechnicalIndicators(TypedDict, total=False):
-    """기술적 지표 분석 결과"""
-    sma_20: Optional[float]         # 20일 단순이동평균
-    sma_60: Optional[float]         # 60일 단순이동평균
-    ema_12: Optional[float]         # 12일 지수이동평균
-    ema_26: Optional[float]         # 26일 지수이동평균
-    rsi: Optional[float]            # RSI 지표
-    macd: Optional[float]           # MACD 값
-    macd_signal: Optional[float]    # MACD 신호선
-    macd_histogram: Optional[float] # MACD 히스토그램
-    bollinger_upper: Optional[float] # 볼린저 밴드 상단
-    bollinger_middle: Optional[float] # 볼린저 밴드 중간
-    bollinger_lower: Optional[float] # 볼린저 밴드 하단
-    stochastic_k: Optional[float]   # 스토캐스틱 %K
-    stochastic_d: Optional[float]   # 스토캐스틱 %D
-
-class ChartPatternAnalysis(TypedDict, total=False):
-    """차트 패턴 분석 결과"""
-    support_levels: List[float]     # 지지선 가격 수준들
-    resistance_levels: List[float]  # 저항선 가격 수준들
-    trend_direction: Literal["상승", "하락", "횡보", "불명확"] # 추세 방향
-    trend_strength: Literal["강함", "보통", "약함"]  # 추세 강도
-    patterns: List[str]             # 식별된 차트 패턴들
-    breakout_signals: List[Dict[str, Any]] # 돌파 신호들
-
-class TradingSignals(TypedDict, total=False):
-    """매매 신호 분석 결과"""
-    overall_signal: Literal["강력매수", "매수", "중립", "매도", "강력매도"] # 종합 매매 신호
-    confidence: float               # 신호 신뢰도 (0.0 ~ 1.0)
-    signals: List[Dict[str, Any]]   # 개별 지표별 신호들
-    entry_points: List[float]       # 매수 진입 포인트들
-    exit_points: List[float]        # 매도 탈출 포인트들
-    stop_loss: Optional[float]      # 손절가 제안
-    target_price: Optional[float]   # 목표가 제안
-
-class MarketSentiment(TypedDict, total=False):
-    """시장 정서 분석 결과"""
-    volume_trend: Literal["증가", "감소", "보통"] # 거래량 추이
-    price_volume_relation: Literal["긍정적", "부정적", "중립"] # 가격-거래량 관계
-    foreign_flow: Optional[Literal["순매수", "순매도", "균형"]] # 외국인 자금 흐름
-    institution_flow: Optional[Literal["순매수", "순매도", "균형"]] # 기관 자금 흐름
-
-class TechnicalAnalysisResult(TypedDict, total=False):
-    """기술적 분석 종합 결과"""
-    stock_code: str                 # 종목코드
-    stock_name: str                 # 종목명
-    analysis_date: datetime         # 분석 일시
-    current_price: float            # 현재가
-    chart_patterns: ChartPatternAnalysis # 차트 패턴 분석
-    technical_indicators: TechnicalIndicators # 기술적 지표
-    trading_signals: TradingSignals # 매매 신호
-    market_sentiment: MarketSentiment # 시장 정서
-    summary: str                    # 종합 분석 요약
-    recommendations: List[str]      # 투자 권고사항
