@@ -11,6 +11,7 @@ const STATS_API_BASE = `${API_ENDPOINT_STOCKEASY}/stats`;
  * 인기 종목 조회
  * 24시간 및 7일 기간의 인기 종목 데이터를 Redis 캐시를 통해 조회합니다.
  * @param limit 반환할 종목 수 (기본값: 20)
+ * @param period 조회 기간 ('daily' 또는 'weekly', 기본값: 'daily')
  * @returns 24시간과 7일 인기 종목 데이터
  */
 export const getPopularStocks = async (

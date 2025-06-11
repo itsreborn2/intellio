@@ -15,7 +15,6 @@ interface RecommendedQuestion {
 }
 
 interface RecommendedQuestionsProps {
-  questions: RecommendedQuestion[];
   onSelectQuestion: (stock: StockOption, question: string) => void;
 }
 
@@ -25,7 +24,7 @@ interface CSVData {
   question: string;
 }
 
-export function RecommendedQuestions({ questions /* 사용자가 제공한 10개 데이터로 임시 교체 */, onSelectQuestion }: RecommendedQuestionsProps) {
+export function RecommendedQuestions({ onSelectQuestion }: RecommendedQuestionsProps) {
   const isMobile = useIsMobile();
   const [recommendedQuestions, setRecommendedQuestions] = useState<RecommendedQuestion[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);

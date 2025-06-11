@@ -88,93 +88,77 @@ function AIChatAreaContent() {
   const questionStore = useQuestionCountStore();
   const questionCount = questionStore.summary?.total_questions || 0;
 
-  // 추천 질문 데이터 선언 추가
-  const sampleRecommendedQuestions = [
-    {
-      stock: { 
-        value: '005930', 
-        label: '삼성전자', 
-        stockName: '삼성전자', 
-        stockCode: '005930' 
-      },
-      question: '최근 HBM 개발 상황은?'
-    },
-    {
-      stock: { 
-        value: '000660', 
-        label: 'SK하이닉스', 
-        stockName: 'SK하이닉스', 
-        stockCode: '000660' 
-      },
-      question: 'AI 반도체 시장 전망은?'
-    },
-    {
-      stock: { 
-        value: '005380', 
-        label: '현대차', 
-        stockName: '현대차', 
-        stockCode: '005380' 
-      },
-      question: '전기차 시장에서의 경쟁력은?'
-    },
-    {
-      stock: { 
-        value: '373220', 
-        label: 'LG에너지솔루션', 
-        stockName: 'LG에너지솔루션', 
-        stockCode: '373220' 
-      },
-      question: '배터리 기술 개발 현황은?'
-    },
-    {
-      stock: { 
-        value: '035420', 
-        label: 'NAVER', 
-        stockName: 'NAVER', 
-        stockCode: '035420' 
-      },
-      question: '인공지능 사업 확장과 전망은?'
+  
+  // 창 너비 상태 추가
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  const [popularStocksDaily, setPopularStocksDaily] = useState<PopularStock[]>([]);
+  const [popularStocksWeekly, setPopularStocksWeekly] = useState<PopularStock[]>([]); // CSV 데이터를 저장할 상태
+  const [windowWidth, setWindowWidth] = useState<number>(1024); // 기본값 설정
+
+  // API에서 인기 검색 종목 데이터를 가져오기 위한 함수 (useCallback으로 메모이제이션)
+  const fetchPopularStocks = useCallback(async () => {
+    console.log('[AIChatArea] fetchPopularStocks 호출됨');
+    try {
+      const response = await getPopularStocks(10); // API 한 번만 호출
+      console.log('[AIChatArea] 인기 종목 API 응답:', response);
+      console.log('[AIChatArea] API 응답 상세 - data_24h:', JSON.stringify(response.data_24h, null, 2));
+      console.log('[AIChatArea] API 응답 상세 - data_7d:', JSON.stringify(response.data_7d, null, 2));
+
+      // 당일 데이터 처리 (data_24h 사용)
+      if (response.ok && response.data_24h?.stocks) {
+        const parsedDailyData = response.data_24h.stocks.map((item: IStockPopularityItem, index: number) => ({
+          rank: index + 1,
+          stock: {
+            value: item.stock_code,
+            label: item.stock_name,
+            stockName: item.stock_name,
+            stockCode: item.stock_code,
+          },
+        }));
+        setPopularStocksDaily(parsedDailyData);
+      } else {
+        console.error('[AIChatArea] 당일 인기 종목 데이터 처리 실패:', response.data_24h, 'API 응답:', response);
+        setPopularStocksDaily([]);
+      }
+
+      // 주간 데이터 처리 (data_7d 사용)
+      if (response.ok && response.data_7d?.stocks) {
+        const parsedWeeklyData = response.data_7d.stocks.map((item: IStockPopularityItem, index: number) => ({
+          rank: index + 1,
+          stock: {
+            value: item.stock_code,
+            label: item.stock_name,
+            stockName: item.stock_name,
+            stockCode: item.stock_code,
+          },
+        }));
+        setPopularStocksWeekly(parsedWeeklyData);
+      } else {
+        console.error('[AIChatArea] 주간 인기 종목 데이터 처리 실패:', response.data_7d, 'API 응답:', response);
+        setPopularStocksWeekly([]);
+      }
+    } catch (error) {
+      console.error('[AIChatArea] 인기 검색어 API 호출 중 에러 발생:', error);
+      setPopularStocksDaily([]);
+      setPopularStocksWeekly([]);
     }
-  ];
+  }, [getPopularStocks, setPopularStocksDaily, setPopularStocksWeekly]); // useCallback 의존성 배열에 필요한 함수들 추가
 
   // API에서 인기 검색 종목 데이터를 가져오기 위한 useEffect
   useEffect(() => {
-    async function fetchPopularStocks() {
-      try {
-        // 백엔드 통계 API 호출 (Redis 캐시 적용)
-        const response = await getPopularStocks(20); // 상위 20개 종목 요청
-        
-        if (response.ok && response.data_24h?.stocks) {
-          // 24시간 데이터를 프론트엔드 데이터 구조에 맞게 변환
-          const parsedData = response.data_24h.stocks.map((item: IStockPopularityItem, index: number) => ({
-            rank: index + 1, // 순위는 배열 인덱스 + 1
-            stock: {
-              value: item.stock_code,
-              label: item.stock_name,
-              stockName: item.stock_name,
-              stockCode: item.stock_code,
-            },
-          }));
-          
-          setPopularStocks(parsedData as PopularStock[]);
-          console.log(`[AIChatArea] 인기 종목 데이터 로드 완료: ${parsedData.length}개 (캐시: ${response.data_24h.from_cache})`);
-        } else {
-          console.warn('[AIChatArea] 인기 종목 API 응답이 유효하지 않음:', response);
-          setPopularStocks([]);
-        }
-      } catch (error) {
-        console.error("[AIChatArea] 인기 종목 API 호출 실패:", error);
-        // API 호출 실패 시 빈 배열로 설정
-        setPopularStocks([]); 
-      }
-    }
     fetchPopularStocks();
-  }, []);
+  }, [fetchPopularStocks]); // useEffect의 의존성 배열에 fetchPopularStocks 추가
 
-  // 기존 sampleLatestUpdates 배열 정의는 삭제됩니다.
+  useEffect(() => {
+    console.log('[AIChatArea] popularStocksDaily 상태 변경:', popularStocksDaily);
+  }, [popularStocksDaily]);
 
-  
-  // 메시지 처리 로직을 위한 커스텀 훅 사용 - 상태 관리 함수 전달
+  useEffect(() => {
+    console.log('[AIChatArea] popularStocksWeekly 상태 변경:', popularStocksWeekly);
+  }, [popularStocksWeekly]);
+
+  // 사용자가 주식 종목을 선택했을 때 호출되는 함수
+  // useCallback을 사용하여 함수 재생성 방지관리 함수 전달
   const { 
     elapsedTime: processingElapsedTime, 
     sendMessage
@@ -309,11 +293,6 @@ function AIChatAreaContent() {
       delete window.__resetAIChatArea;
     };
   }, []); // 의존성 배열 비움 - 마운트 시 한 번만 실행
-
-  // 창 너비 상태 추가
-  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
-  const [popularStocks, setPopularStocks] = useState<PopularStock[]>([]); // CSV 데이터를 저장할 상태
-  const [windowWidth, setWindowWidth] = useState<number>(1024); // 기본값 설정
 
   // 클라이언트 측에서만 window 객체 접근
   useEffect(() => {
@@ -511,28 +490,29 @@ function AIChatAreaContent() {
   const renderChatContent = () => {
     // 메모이제이션된 StockSuggestions Props 생성
     const stockSuggestionsProps = useMemo(() => ({
+      onSelectStock: handleSelectStock,
+      popularStocksDaily,
+      popularStocksWeekly,
+      recentStocks: stockState.recentStocks,
+      isMobile,
+      isInputCentered,
+      searchTerm: stockState.searchTerm,
       isLoading: stockState.isLoading,
       error: stockState.error,
       filteredStocks: stockState.filteredStocks,
-      recentStocks: stockState.recentStocks,
-      stockOptions: stockState.stockOptions,
-      onSelectStock: (stock: StockOption) => {
-        //console.log(`[디버깅:AIChatArea] 종목 제안에서 선택: ${stock.stockName}(${stock.stockCode})`);
-        handleSelectStock(stock);
-      },
       onClearRecentStocks: clearRecentStocks,
-      isInputCentered: isInputCentered,
-      searchTerm: stockState.searchTerm
     }), [
+      handleSelectStock,
+      popularStocksDaily,
+      popularStocksWeekly,
+      stockState.recentStocks,
+      isMobile,
+      isInputCentered,
+      stockState.searchTerm,
       stockState.isLoading,
       stockState.error,
       stockState.filteredStocks,
-      stockState.recentStocks,
-      stockState.stockOptions,
-      stockState.searchTerm,
-      isInputCentered,
-      handleSelectStock,
-      clearRecentStocks
+      clearRecentStocks,
     ]);
 
     return (
@@ -594,13 +574,13 @@ function AIChatAreaContent() {
           >
             {/* 추천 질문 컴포넌트 */}
             <RecommendedQuestions 
-              questions={sampleRecommendedQuestions}
               onSelectQuestion={handleSelectQuestion}
             />
             
             {/* 최신 업데이트 종목 컴포넌트 */}
             <LatestUpdates 
-              updates={popularStocks} // CSV에서 로드한 데이터 사용
+              updatesDaily={popularStocksDaily}
+              updatesWeekly={popularStocksWeekly}
               onSelectUpdate={handleSelectUpdate}
             />
           </div>

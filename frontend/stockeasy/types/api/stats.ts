@@ -30,8 +30,8 @@ export interface IPopularStocksPeriodData {
  * 인기 종목 응답 인터페이스
  */
 export interface IPopularStocksResponse extends IBaseResponse {
-  data_24h: IPopularStocksPeriodData;
-  data_7d: IPopularStocksPeriodData;
+  data_24h?: IPopularStocksPeriodData; // 24시간 데이터
+  data_7d?: IPopularStocksPeriodData;  // 7일 데이터
 }
 
 /**
@@ -42,4 +42,4 @@ export interface ISessionCountResponse extends IBaseResponse {
   total_sessions: number;
   sessions_with_stock: number;
   sessions_without_stock: number;
-} 
+}
