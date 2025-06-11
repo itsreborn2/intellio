@@ -33,7 +33,7 @@ services:
       - LISTEN_PORT=6432
       - AUTH_TYPE=scram-sha-256   # 또는 md5
     ports:
-      - "6432:6432"
+      - "127.0.0.1:6432:6432"  # localhost에서만 접근 가능
     depends_on:
       - postgres
     restart: unless-stopped
@@ -64,8 +64,8 @@ services:
       - timescale_data:/var/lib/postgresql/data
       - ./backend/stockeasy/collector/database/init:/docker-entrypoint-initdb.d
       - ./backend/stockeasy/collector/database/config/pg_hba.conf:/etc/postgresql/pg_hba.conf
-    ports:
-      - "5433:5432"
+    # ports 제거 - pgbouncer를 통해서만 접근
+    # - "127.0.0.1:5433:5432"
     command: >
       postgres 
       -c shared_preload_libraries=timescaledb
@@ -100,7 +100,7 @@ services:
       - LISTEN_PORT=6432
       - AUTH_TYPE=scram-sha-256
     ports:
-      - "6433:6432"
+      - "127.0.0.1:6433:6432"  # localhost에서만 접근 가능
     depends_on:
       - timescaledb
     restart: unless-stopped
@@ -168,7 +168,7 @@ services:
     environment:
       - ENV=development
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"  # localhost에서만 접근 가능
     depends_on:
       - pgbouncer
       - redis
@@ -191,7 +191,7 @@ services:
     environment:
       - ENV=development
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"  # localhost에서만 접근 가능
     depends_on:
       - pgbouncer              # 기존 DB 연결
       - pgbouncer-timescale    # TimescaleDB 연결 추가
