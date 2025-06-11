@@ -17,7 +17,7 @@ const initialState: StockSearchState = {
   showStockSuggestions: false,
   isLoading: false,
   error: null,
-  searchMode: false,
+  searchMode: true, // 새로고침 시 처음부터 '종목명 또는 종목코드 검색' 표시하도록 설정
   stockOptions: [] // 종목 목록 추가
 };
 

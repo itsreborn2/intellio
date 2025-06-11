@@ -42,12 +42,8 @@ export function MobileChatLayout({
     }
   }, []);
   
-  // 모바일 디바이스가 아닌데 이 레이아웃을 사용하려고 하면 경고
-  useEffect(() => {
-    if (!isMobile) {
-      console.warn('MobileChatLayout is being used on a non-mobile device.');
-    }
-  }, [isMobile]);
+  // 개발자 도구에서도 모바일 레이아웃을 사용할 수 있도록 경고 제거
+  // F12로 모바일 환경 테스트 시에도 오류가 발생하지 않도록 수정
   
   // 페이지 초기화 (body 스타일 직접 적용)
   useEffect(() => {

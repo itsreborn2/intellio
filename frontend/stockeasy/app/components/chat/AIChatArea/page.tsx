@@ -97,12 +97,8 @@ function AIChatAreaContent() {
 
   // API에서 인기 검색 종목 데이터를 가져오기 위한 함수 (useCallback으로 메모이제이션)
   const fetchPopularStocks = useCallback(async () => {
-    console.log('[AIChatArea] fetchPopularStocks 호출됨');
     try {
       const response = await getPopularStocks(10); // API 한 번만 호출
-      console.log('[AIChatArea] 인기 종목 API 응답:', response);
-      console.log('[AIChatArea] API 응답 상세 - data_24h:', JSON.stringify(response.data_24h, null, 2));
-      console.log('[AIChatArea] API 응답 상세 - data_7d:', JSON.stringify(response.data_7d, null, 2));
 
       // 당일 데이터 처리 (data_24h 사용)
       if (response.ok && response.data_24h?.stocks) {
@@ -117,7 +113,6 @@ function AIChatAreaContent() {
         }));
         setPopularStocksDaily(parsedDailyData);
       } else {
-        console.error('[AIChatArea] 당일 인기 종목 데이터 처리 실패:', response.data_24h, 'API 응답:', response);
         setPopularStocksDaily([]);
       }
 
@@ -134,7 +129,6 @@ function AIChatAreaContent() {
         }));
         setPopularStocksWeekly(parsedWeeklyData);
       } else {
-        console.error('[AIChatArea] 주간 인기 종목 데이터 처리 실패:', response.data_7d, 'API 응답:', response);
         setPopularStocksWeekly([]);
       }
     } catch (error) {
@@ -146,46 +140,13 @@ function AIChatAreaContent() {
 
   // API에서 인기 검색 종목 데이터를 가져오기 위한 useEffect
   useEffect(() => {
-<<<<<<< HEAD
-=======
-    async function fetchPopularStocks() {
-      try {
-        // 백엔드 통계 API 호출 (Redis 캐시 적용)
-        const response = await getPopularStocks(20); // 상위 20개 종목 요청
-        if (response.ok && response.data_24h?.stocks) {
-          // 24시간 데이터를 프론트엔드 데이터 구조에 맞게 변환
-          const parsedData = response.data_24h.stocks.map((item: IStockPopularityItem, index: number) => ({
-            rank: index + 1, // 순위는 배열 인덱스 + 1
-            stock: {
-              value: item.stock_code,
-              label: item.stock_name,
-              stockName: item.stock_name,
-              stockCode: item.stock_code,
-            },
-          }));
-          
-          setPopularStocks(parsedData as PopularStock[]);
-          console.log(`[AIChatArea] 인기 종목 데이터 로드 완료: ${parsedData.length}개 (캐시: ${response.data_24h.from_cache})`);
-        } else {
-          console.warn('[AIChatArea] 인기 종목 API 응답이 유효하지 않음:', response);
-          setPopularStocks([]);
-        }
-      } catch (error) {
-        console.error("[AIChatArea] 인기 종목 API 호출 실패:", error);
-        // API 호출 실패 시 빈 배열로 설정
-        setPopularStocks([]); 
-      }
-    }
->>>>>>> develop
     fetchPopularStocks();
   }, [fetchPopularStocks]); // useEffect의 의존성 배열에 fetchPopularStocks 추가
 
   useEffect(() => {
-    console.log('[AIChatArea] popularStocksDaily 상태 변경:', popularStocksDaily);
   }, [popularStocksDaily]);
 
   useEffect(() => {
-    console.log('[AIChatArea] popularStocksWeekly 상태 변경:', popularStocksWeekly);
   }, [popularStocksWeekly]);
 
   // 사용자가 주식 종목을 선택했을 때 호출되는 함수
@@ -228,14 +189,12 @@ function AIChatAreaContent() {
 
   // 마운트/언마운트 이벤트 핸들링
   useEffect(() => {
-    console.log('[AIChatArea] 컴포넌트 마운트: 이벤트 리스너 설정');
     
     // AIChatArea 컴포넌트가 마운트되었음을 알리는 이벤트 발생
     const mountEvent = new CustomEvent('aiChatAreaMounted', { detail: { isMounted: true } });
     window.dispatchEvent(mountEvent);
     
     // 초기 마운트 시 항상 상태 초기화 - 페이지 새로고침 또는 다른 페이지에서 이동 시 적용
-    console.log('[AIChatArea] 컴포넌트 마운트 - 초기 상태로 초기화');
     
     // 리액트 상태 초기화
     setInputCentered(true);
@@ -296,7 +255,6 @@ function AIChatAreaContent() {
     };
     
     // 이벤트 리스너 등록 - document에도 등록 시도
-    console.log('[AIChatArea] homeButtonClick 이벤트 리스너 등록');
     window.addEventListener('homeButtonClick', handleHomeButtonClick);
     document.addEventListener('homeButtonClick', handleHomeButtonClick);
     
@@ -343,6 +301,11 @@ function AIChatAreaContent() {
 
   // 메시지 전송 핸들러
   const handleSendMessage = async () => {
+    // 입력창을 즉시 중앙에서 해제하여 하단 입력창이 보이지 않도록 함
+    if (isInputCentered) {
+      setInputCentered(false);
+    }
+    
     // 시간 제한 체크
     const { isRestricted, nextAvailableTime } = checkTimeRestriction();
     if (isRestricted) {
@@ -507,11 +470,14 @@ function AIChatAreaContent() {
     // ChatStore에 상태 업데이트
     handleSelectStock(stock);
     
-    // 업데이트 정보를 입력창에 설정
-    setSearchTerm(updateInfo);
+    // 입력창을 비워서 placeholder("이 종목에 관하여 궁금한 점을 물어보세요")가 보이도록 설정
+    setSearchTerm("");
     
     // 종목 제안 팝업 닫기
     showSuggestions(false);
+    
+    // searchMode를 false로 설정하여 "이 종목에 관하여 궁금한 점을 물어보세요" 문구가 표시되도록 함
+    setSearchMode(false);
   };
 
   // ChatStore에서 UI용 메시지 가져오기
@@ -565,7 +531,7 @@ function AIChatAreaContent() {
 
         {/* 입력 영역 (상단 중앙 또는 하단에 위치) */}
         {/* 후속 질문 일단 차단.*/}
-        {!currentSession && (
+        {!currentSession && !isUserSending && (
           <InputArea
             inputMessage={stockState.searchTerm || ''}
             setInputMessage={setSearchTerm}
@@ -629,13 +595,10 @@ useEffect(() => {
   let isFirstLoad = true;
 
   if (isFirstLoad) {
-    console.log('[AIChatAreaContent] 컴포넌트 마운트 - 종목 데이터 로드 검사');
     const { stockOptions } = stockState;
     if (stockOptions.length === 0) {
-      console.log('[AIChatAreaContent] 종목 데이터 없음 - 로드 시작');
       fetchStockList();
     } else {
-      console.log('[AIChatAreaContent] 종목 데이터 이미 로드됨 (', stockOptions.length, '개)');
     }
     isFirstLoad = false;
   }

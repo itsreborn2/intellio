@@ -55,11 +55,79 @@ export function InputArea({
   onSearchModeChange,
   onClearRecentStocks,
   scrollToBottom,
-  showTitle = false,
+  showTitle,
   currentChatSession
 }: InputAreaProps) {
+  // 입력창이 처음부터 정확한 크기를 갖도록 초기화 플래그 추가
+  const [initialized, setInitialized] = useState<boolean>(false);
+  
+  // 입력창의 초기 로딩 상태 추적 - 깨빡임 방지를 위해 완전히 로드될 때까지 화면에 표시하지 않음
+  const [isInputReady, setInputReady] = useState<boolean>(false);
+  
+  // 렌더링 순서 제어를 통한 깨빡임 방지
+  useEffect(() => {
+    // 초기에는 입력창을 표시하지 않음
+    setInputReady(false);
+    
+    // 사전에 CSS 스타일 정의
+    const styleElement = document.createElement('style');
+    styleElement.innerHTML = `
+      .integrated-input-field {
+        display: block;
+        height: 40px !important;
+        min-height: 40px !important;
+        max-height: 40px !important;
+        resize: none !important;
+        transition: none !important;
+        animation: none !important;
+        overflow-y: hidden !important;
+      }
+      
+      .input-area-hidden {
+        opacity: 0;
+        visibility: hidden;
+      }
+      
+      .input-area-visible {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 0.1s ease-out;
+      }
+    `;
+    document.head.appendChild(styleElement);
+    
+    // 일정 시간 후에 입력창 표시 (렌더링 완료 때까지 대기)
+    const timer = setTimeout(() => {
+      if (inputRef.current) {
+        // 높이 고정 적용
+        inputRef.current.style.height = '40px';
+        inputRef.current.style.minHeight = '40px';
+        inputRef.current.style.maxHeight = '40px';
+        inputRef.current.style.overflow = 'hidden';
+        
+        // 준비가 되었음을 표시
+        setInitialized(true);
+        // 입력창 표시
+        setInputReady(true);
+      }
+    }, 100); // 최소한의 대기 시간 적용
+    
+    return () => {
+      clearTimeout(timer);
+      document.head.removeChild(styleElement);
+    };
+  }, []);
+  
+  // 입력창 텍스트 변경시 텍스트영역 상태를 고정 높이로 유지
+  useEffect(() => {
+    if (inputRef.current && initialized) {
+      // 고정 높이 유지
+      inputRef.current.style.height = '40px';
+    }
+  }, [inputMessage, searchMode, initialized]);
+
   const isMobile = useIsMobile();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const inputBoxRef = useRef<HTMLDivElement>(null);
   const stockSuggestionsRef = useRef<HTMLDivElement>(null);
   
@@ -97,15 +165,17 @@ export function InputArea({
     padding: 0
   };
   
+  // 입력박스의 스타일을 고정값으로 설정하여 렌더링 시 크기 변경 방지
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    minHeight: isMobile ? '2.2rem' : (windowWidth < 768 ? '2.3rem' : '2.5rem'),
-    height: 'auto',
+    height: '40px',
+    minHeight: '40px',
+    maxHeight: '40px',
     border: 'none',
     borderRadius: isMobile ? '6px' : '8px',
-    paddingTop: '0',
+    paddingTop: '8px',
     paddingRight: isMobile ? '35px' : '40px',
-    paddingBottom: '0',
+    paddingBottom: '8px',
     paddingLeft: selectedStock ? (isMobile ? '75px' : '85px') : (isMobile ? '6px' : '8px'),
     fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'),
     outline: 'none',
@@ -116,7 +186,11 @@ export function InputArea({
     backgroundColor: 'white',
     color: 'oklch(0.372 0.044 257.287)',
     WebkitAppearance: 'none',
-    appearance: 'none'
+    appearance: 'none',
+    lineHeight: '1.5',
+    transition: 'none',
+    display: 'block', // 특정 브라우저에서 렌더링 개선
+    position: 'relative' // 포지션 고정하여 레이아웃 안정성 향상
   };
   
   // 종목 필터링 함수
@@ -502,9 +576,11 @@ export function InputArea({
   const handleDisplayedStocksChange = useCallback((stocks: StockOption[]) => {
     setDisplayedStocks(stocks);
   }, []);
+
+  // 자동 높이 조절 기능 제거 - 일관된 고정 높이 유지 위해 해당 기능을 비활성화함
   
   return (
-    <div className="input-area" ref={inputBoxRef} style={inputAreaStyle}>
+    <div className={`input-area ${isInputReady ? 'input-area-visible' : 'input-area-hidden'}`} ref={inputBoxRef} style={inputAreaStyle}>
       <div className="integrated-input" style={integratedInputStyle}>
         {/* 텍스트 박스 바로 위 안내 문구 */}
         {showTitle && isInputCentered && !isMobile && (
@@ -554,15 +630,14 @@ export function InputArea({
             />
           )}
           
-          <input
+          <textarea
             ref={inputRef}
             placeholder={showStockSuggestions || searchMode 
               ? "종목명 또는 종목코드 검색" 
               : (hasActiveSession
                 ? "생성된 문서 내에서 이어지는 질문을 해보세요. 다른 종목은 새 채팅을 시작해주세요."
                 : "이 종목에 관하여 궁금한 점을 물어보세요.")}
-            className="integrated-input-field"
-            type="text"
+            className="integrated-input-field fixed-height-textarea"
             value={inputMessage}
             onChange={handleInputChange}
             onFocus={(e) => {
@@ -583,7 +658,12 @@ export function InputArea({
               paddingLeft: isMobile ? '8px' : '16px',
               flex: 1,
               borderRadius: '6px',
-              cursor: isProcessing ? 'not-allowed' : 'text'
+              cursor: isProcessing ? 'not-allowed' : 'text',
+              resize: 'none',
+              overflow: 'hidden',
+              minHeight: '40px',
+              maxHeight: '120px',
+              lineHeight: '1.5',
             }}
           />
           

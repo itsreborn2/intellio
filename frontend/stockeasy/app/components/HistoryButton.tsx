@@ -100,6 +100,12 @@ export default function HistoryButton({
 
   const [showTooltip, setShowTooltip] = useState(false);
 
+  // 히스토리 패널이 닫힐 때 툴팁이 여전히 표시되는 문제 해결
+  useEffect(() => {
+    // 히스토리 패널 상태가 변경될 때 툴팁 상태 초기화
+    setShowTooltip(false);
+  }, [isHistoryPanelOpen]);
+
   return (
     <>
       {/* 히스토리 버튼 - 데스크톱: 패널 닫힘, 메인 페이지, 모바일 아님 */}
@@ -111,6 +117,7 @@ export default function HistoryButton({
               className={`flex items-center justify-center w-10 h-10 p-2 text-neutral-900 hover:text-neutral-700`}
               onClick={(e) => {
                 e.stopPropagation(); // 이벤트 버블링 방지
+                setShowTooltip(false); // 클릭 시 툴팁 즉시 숨김
                 toggleHistoryPanel(); // Call prop
               }}
               onMouseEnter={() => setShowTooltip(true)}

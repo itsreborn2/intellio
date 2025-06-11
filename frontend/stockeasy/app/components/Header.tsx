@@ -44,6 +44,11 @@ const Header: React.FC<HeaderProps> = ({
 
   // 클라이언트 측 마운트 상태 확인
   const isClient = useIsClient();
+  
+  // 히스토리 패널 상태가 변경될 때 툴팁 상태 초기화
+  useEffect(() => {
+    setToggleVisible(false);
+  }, [isHistoryPanelOpen]);
 
   // pathname is now passed as a prop
   
@@ -257,7 +262,10 @@ const Header: React.FC<HeaderProps> = ({
           {isMobile && pathname === '/' && !isHistoryPanelOpen && (
             <div className="relative ml-2">
               <button
-                onClick={toggleHistoryPanel}
+                onClick={() => {
+                  setToggleVisible(false); // 클릭 시 툴팁 즉시 숨김
+                  toggleHistoryPanel();
+                }}
                 className="p-1 text-gray-600 hover:text-gray-900 flex items-center"
                 onMouseEnter={() => setToggleVisible(true)}
                 onMouseLeave={() => setToggleVisible(false)}
