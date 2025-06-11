@@ -3,7 +3,7 @@
 ## 1. 루트 디렉토리 구조
 
 ```
-backend_new/
+backend_new/ 
 ├── alembic/              # 데이터베이스 마이그레이션 관련
 ├── app/                  # 메인 애플리케이션 코드
 ├── logs/                 # 로그 파일 저장

@@ -69,7 +69,7 @@ export default function Hero() {
         <span className={`absolute inset-[-1000%] animate-[spin_2s_linear_infinite] ${gradientClass}`} />
         <Button 
           size="lg" 
-          className="relative rounded-full bg-background px-8 py-4 text-lg font-semibold leading-none tracking-tight inline-flex h-full w-full cursor-pointer items-center justify-center text-foreground hover:bg-accent/10 transition-colors"
+          className="relative rounded-full bg-background px-14 py-6 text-xl font-semibold leading-none tracking-tight inline-flex h-20 w-full cursor-pointer items-center justify-center text-foreground hover:bg-accent/10 transition-colors"
           disabled={isAuthLoading}
         >
           {buttonContent}
@@ -79,33 +79,22 @@ export default function Hero() {
   };
   
   return (
-    <section className="container relative flex min-h-[calc(75vh-3.5rem)] max-w-screen-2xl flex-col items-center justify-center space-y-6 py-8 mt-10 text-center md:py-12">
+    <section className="container relative flex min-h-[calc(100vh-6rem)] max-w-screen-2xl flex-col items-center justify-center space-y-10 pt-12 pb-8 mt-10 text-center md:pt-16 md:pb-12">
       <div className="absolute inset-0 bg-radial-gradient from-primary to-accent opacity-10 blur-xl"></div>
       <div className="relative space-y-3">
-        <h1 className="bg-gradient-to-br from-foreground from-30% via-foreground/90 to-foreground/70 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl md:text-6xl lg:text-7xl">
-          Innovate Faster with
-          <br />
-          Intellio
-        </h1>
-        <p className="mx-auto leading-normal text-muted-foreground sm:text-xl sm:leading-7">
-          스탁이지(StockEasy)는 주식 전문 AI 어시스턴트로 당신의 리서치 시간을 줄여줍니다.
-        </p>
+        <h1 className="bg-gradient-to-br from-foreground from-30% via-foreground/90 to-foreground/70 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl md:text-6xl lg:text-7xl leading-tight">
+  전업 투자자들이 직접 만든 AI
+  <span className="block mt-[0.5em] leading-tight">스탁이지</span>
+  <span className="block mt-[0.5em] leading-loose text-[40%] font-normal ">실전 투자에 필요한 정보로 당신의 리서치 시간을 줄여줍니다.</span>
+</h1>
       </div>
-      <br />
-      <div className="relative flex gap-6">
-        {renderServiceButton(
-          'doceasy', 
-          'DocEasy',
-          'bg-[conic-gradient(from_90deg_at_50%_50%,#393BB2_0%,#E2CBFF_50%,#393BB2_100%)]'
-        )}
+      <div className="relative flex gap-6 justify-center mt-8">
         {renderServiceButton(
           'stockeasy', 
-          'StockEasy',
+          '스탁이지 무료체험 시작하기',
           'bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]'
         )}
       </div>
-      <br />
     </section>
   )
 }
-

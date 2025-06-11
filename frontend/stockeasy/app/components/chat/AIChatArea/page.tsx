@@ -146,6 +146,37 @@ function AIChatAreaContent() {
 
   // API에서 인기 검색 종목 데이터를 가져오기 위한 useEffect
   useEffect(() => {
+<<<<<<< HEAD
+=======
+    async function fetchPopularStocks() {
+      try {
+        // 백엔드 통계 API 호출 (Redis 캐시 적용)
+        const response = await getPopularStocks(20); // 상위 20개 종목 요청
+        if (response.ok && response.data_24h?.stocks) {
+          // 24시간 데이터를 프론트엔드 데이터 구조에 맞게 변환
+          const parsedData = response.data_24h.stocks.map((item: IStockPopularityItem, index: number) => ({
+            rank: index + 1, // 순위는 배열 인덱스 + 1
+            stock: {
+              value: item.stock_code,
+              label: item.stock_name,
+              stockName: item.stock_name,
+              stockCode: item.stock_code,
+            },
+          }));
+          
+          setPopularStocks(parsedData as PopularStock[]);
+          console.log(`[AIChatArea] 인기 종목 데이터 로드 완료: ${parsedData.length}개 (캐시: ${response.data_24h.from_cache})`);
+        } else {
+          console.warn('[AIChatArea] 인기 종목 API 응답이 유효하지 않음:', response);
+          setPopularStocks([]);
+        }
+      } catch (error) {
+        console.error("[AIChatArea] 인기 종목 API 호출 실패:", error);
+        // API 호출 실패 시 빈 배열로 설정
+        setPopularStocks([]); 
+      }
+    }
+>>>>>>> develop
     fetchPopularStocks();
   }, [fetchPopularStocks]); // useEffect의 의존성 배열에 fetchPopularStocks 추가
 

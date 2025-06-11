@@ -9,7 +9,7 @@ import AppClientLayout from './components/AppClientLayout'; // 클라이언트 �
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "StockEasy - AI 기반 주식정보 솔루션",
+  title: "스탁이지 - AI 기반 주식정보 솔루션",
   description: "스탁이지(StockEasy) AI 기반 주식정보 솔루션. 인텔리오(Intellio), 닥이지(DocEasy). 추세추종/RS순위/RS랭크/ETF섹터/밸류 솔루션 제공. 당일 주도주, 당일 주도섹터",
   icons: {
     icon: "/favicon.ico",
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "StockEasy - AI 기반 주식정보 솔루션",
+    title: "스탁이지- AI 기반 주식정보 솔루션",
     description: "스탁이지(StockEasy) AI 기반 주식정보 솔루션. 인텔리오(Intellio), 닥이지(DocEasy). 추세추종/RS순위/RS랭크/ETF섹터/밸류 솔루션 제공. 당일 주도주, 당일 주도섹터",
     images: [
       {
