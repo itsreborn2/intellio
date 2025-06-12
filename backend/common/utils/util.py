@@ -110,7 +110,7 @@ def measure_time_async(func: Callable) -> Callable:
         result = func(*args, **kwargs)
         end_time = time.time()
         execution_time = end_time - start_time
-        logger.warn(f"함수 실행시간 : {func.__name__} : {execution_time:.2f} sec\n")
+        logger.warn(f"함수 실행시간 : {func.__name__} : {execution_time:.2f} sec")
         return result
 
     return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper

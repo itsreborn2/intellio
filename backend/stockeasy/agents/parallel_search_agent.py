@@ -212,18 +212,18 @@ class ParallelSearchAgent(BaseAgent):
                 elif agent_name == "industry_analyzer" and data_requirements.get("industry_data_needed", False):
                     should_execute = True
                 elif agent_name == "confidential_analyzer" and data_requirements.get("confidential_data_needed", False):
-                    logger.info(f"비공개 자료 필요: {agent_name}, {data_requirements}")
+                    #logger.info(f"비공개 자료 필요: {agent_name}, {data_requirements}")
                     should_execute = True
                 elif agent_name == "revenue_breakdown" and data_requirements.get("revenue_data_needed", False):
-                    logger.info(f"매출 및 수주 현황 데이터 필요: {agent_name}, {data_requirements}")
+                    #logger.info(f"매출 및 수주 현황 데이터 필요: {agent_name}, {data_requirements}")
                     should_execute = True
                 elif agent_name == "web_search" and data_requirements.get("web_search_needed", False):
-                    logger.info(f"웹 검색 데이터 필요: {agent_name}, {data_requirements}")
+                    #logger.info(f"웹 검색 데이터 필요: {agent_name}, {data_requirements}")
                     should_execute = True
                 elif agent_name == "technical_analyzer" and data_requirements.get("technical_analysis_needed", False):
                     logger.info(f"기술적 분석 데이터 필요: {agent_name}, {data_requirements}")
                     should_execute = True
-            #logger.info(f"데이터 요구사항: {should_execute} {agent_name}, {data_requirements}")
+            logger.info(f"데이터 요구사항: {should_execute} {agent_name}, {data_requirements}")
             # 에이전트가 존재하고 실행이 필요한 경우 목록에 추가
             if should_execute and agent_name in self.agents and self.agents[agent_name]:
                 search_agents.append((agent_name, self.agents[agent_name]))
@@ -243,28 +243,24 @@ class ParallelSearchAgent(BaseAgent):
         def update_processing_status(agent_name: str, status: str) -> None:
             """원본 state의 processing_status를 업데이트하는 콜백 함수"""
             state["processing_status"][agent_name] = status
-            logger.info(f"콜백 함수를 통해 {agent_name} 상태를 {status}로 업데이트")
             
         def update_agent_results(agent_name: str, result: Dict[str, Any]) -> None:
             """원본 state의 agent_results를 업데이트하는 콜백 함수"""
             if "agent_results" not in state:
                 state["agent_results"] = {}
             state["agent_results"][agent_name] = result
-            logger.debug(f"콜백 함수를 통해 {agent_name} 결과 업데이트")
             
         def update_retrieved_data(agent_name: str, data: Any) -> None:
             """원본 state의 retrieved_data를 업데이트하는 콜백 함수"""
             if "retrieved_data" not in state:
                 state["retrieved_data"] = {}
             state["retrieved_data"][agent_name] = data
-            logger.debug(f"콜백 함수를 통해 {agent_name} 검색 데이터 업데이트")
             
         def update_metrics(agent_name: str, metrics: Dict[str, Any]) -> None:
             """원본 state의 metrics를 업데이트하는 콜백 함수"""
             if "metrics" not in state:
                 state["metrics"] = {}
             state["metrics"][agent_name] = metrics
-            logger.debug(f"콜백 함수를 통해 {agent_name} 메트릭 업데이트")
             
         # 각 에이전트를 실행할 비동기 작업 생성
         tasks = []

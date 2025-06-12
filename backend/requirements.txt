@@ -107,7 +107,7 @@ langchain-anthropic==0.3.10
 langchain-community==0.3.16
 langchain-core==0.3.58
 langchain-fireworks==0.2.7
-langchain-google-genai==2.0.9
+langchain-google-genai==2.1.5
 langchain-google-vertexai==2.0.12
 langchain-openai==0.3.7
 langchain-pinecone==0.2.6

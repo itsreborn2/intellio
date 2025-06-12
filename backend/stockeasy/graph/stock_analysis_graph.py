@@ -13,9 +13,11 @@ import psutil
 import gc
 import objgraph
 from pathlib import Path
+import numpy as np
 
 from langgraph.graph import END, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
+import json
 from datetime import datetime
 from loguru import logger
 
@@ -28,6 +30,47 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # 메모리 추적 On/Off 설정 변수
 ENABLE_MEMORY_TRACKING = os.getenv("ENABLE_MEMORY_TRACKING", "true").lower() == "true"
+
+def convert_numpy_types(obj):
+    """NumPy 데이터 타입을 Python 기본 데이터 타입으로 변환합니다."""
+    if obj is None:
+        return None
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        converted_list = [convert_numpy_types(item) for item in obj]
+        return converted_list if isinstance(obj, list) else tuple(converted_list)
+    elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64,
+                         np.uint8, np.uint16, np.uint32, np.uint64)):
+        return int(obj)
+    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, np.bool_):  # bool_ 타입 처리
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif hasattr(obj, 'item'):  # numpy scalar 타입 처리
+        return obj.item()
+    elif hasattr(obj, 'tolist'):  # numpy array-like 객체 처리
+        return obj.tolist()
+    return obj
+
+class SafeMemorySaver(MemorySaver):
+    """NumPy 타입을 자동으로 변환하는 안전한 MemorySaver"""
+    
+    def put(self, config, checkpoint, metadata, new_versions):
+        """체크포인트 저장 시 NumPy 타입을 Python 타입으로 변환"""
+        # checkpoint의 'channel_values' 부분을 변환
+        if hasattr(checkpoint, 'channel_values'):
+            checkpoint.channel_values = convert_numpy_types(checkpoint.channel_values)
+        elif isinstance(checkpoint, dict) and 'channel_values' in checkpoint:
+            checkpoint['channel_values'] = convert_numpy_types(checkpoint['channel_values'])
+        
+        # metadata도 변환
+        if metadata:
+            metadata = convert_numpy_types(metadata)
+            
+        return super().put(config, checkpoint, metadata, new_versions)
 
 def should_use_telegram(state: AgentState) -> bool:
     """텔레그램 검색 에이전트를 사용해야 하는지 결정합니다."""
@@ -164,8 +207,8 @@ class StockAnalysisGraph:
         self.agents = agents or {}
         # 그래프 초기화는 register_agents에서 수행
         self.graph = None
-        # 메모리 저장소 초기화
-        self.memory_saver = MemorySaver()
+        # 안전한 메모리 저장소 초기화 (NumPy 타입 자동 변환)
+        self.memory_saver = SafeMemorySaver()
         # 콜백 함수 저장을 위한 딕셔너리 추가
         self.callbacks = {
             'agent_start': [],
@@ -498,8 +541,8 @@ class StockAnalysisGraph:
         def parallel_search_router(state: AgentState) -> str:
             """병렬 검색 이후 라우팅 결정"""
             # 로그에 전체 상태 출력 (디버깅용)
-            logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
-            logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
+            #logger.info(f"병렬 검색 이후 상태 확인 - processing_status: {state.get('processing_status', {})}")
+            #logger.info(f"병렬 검색 이후 상태 확인 - retrieved_data 키: {list(state.get('retrieved_data', {}).keys())}")
             
             # 타임스탬프 오류 재시작 플래그 확인 - 재시작 직후라면 knowledge_integrator로 바로 라우팅
             if state.get("restart_after_timestamp_error", False):
@@ -555,14 +598,14 @@ class StockAnalysisGraph:
             retrieved_data = state.get("retrieved_data", {})
             
             # 검색 데이터 키 로깅
-            logger.info(f"검색 데이터 키: {list(retrieved_data.keys())}")
+            #logger.info(f"검색 데이터 키: {list(retrieved_data.keys())}")
             
             # 실제 데이터 포함 항목만 확인
             has_data = False
             for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "revenue_breakdown"]:
                 if key in retrieved_data and retrieved_data[key]:
                     has_data = True
-                    logger.info(f"데이터가 검색됨: {key}에 {len(retrieved_data[key])}개 항목이 있습니다.")
+                    #logger.info(f"데이터가 검색됨: {key}에 {len(retrieved_data[key])}개 항목이 있습니다.")
                     break
             
             # 병렬 검색이 실행되었다면, 검색 결과가 없어도 계속 진행
@@ -622,7 +665,7 @@ class StockAnalysisGraph:
         # 시작점 설정
         workflow.set_entry_point("session_manager")
         
-        # 그래프 컴파일 (체크포인트 저장소 설정)
+        # 그래프 컴파일 (SafeMemorySaver로 NumPy 타입 자동 변환)
         return workflow.compile(checkpointer=self.memory_saver)
 
     def _create_wrapped_process(self, agent_name: str, original_process):
@@ -1053,11 +1096,14 @@ class StockAnalysisGraph:
                 if result and 'streaming_callback' in result:
                     del result['streaming_callback']
                 
+                # NumPy 타입을 Python 기본 타입으로 변환하여 JSON 직렬화 오류 방지
+                result = convert_numpy_types(result)
+                
                 # Background GC 작업 (메인 플로우와 병렬)
                 async def background_gc_work():
                     try:
                         collected = await asyncio.to_thread(gc.collect)
-                        logger.info(f"[GC정보-백그라운드] {agent_name} - 실행시간: {execution_time:.2f}s, 수집된 객체: {collected}")
+                        #logger.info(f"[GC정보-백그라운드] {agent_name} - 실행시간: {execution_time:.2f}s, 수집된 객체: {collected}")
                     except Exception as e:
                         logger.warning(f"[GC정보-백그라운드] {agent_name} - GC 작업 중 오류: {e}")
                 
@@ -1138,6 +1184,9 @@ class StockAnalysisGraph:
                 # streaming_callback 함수 제거 (직렬화 불가능)
                 if 'streaming_callback' in state:
                     del state['streaming_callback']
+                
+                # NumPy 타입을 Python 기본 타입으로 변환하여 JSON 직렬화 오류 방지
+                state = convert_numpy_types(state)
                 
                 # 에이전트 오류 콜백 실행
                 await self._execute_callbacks("agent_error", agent_name, state)
@@ -1273,6 +1322,9 @@ class StockAnalysisGraph:
                 "parallel_search_executed": False,  # 병렬 검색 실행 여부 초기화
                 **kwargs_copy  # streaming_callback을 제외한 나머지 인자
             }
+            
+            # 초기 상태에서 NumPy 타입을 Python 기본 타입으로 변환
+            initial_state = convert_numpy_types(initial_state)
             chat_history = kwargs.get("conversation_history", [])
             if chat_history:
                 logger.info(f"[process_query] 과거 대화 이력: {chat_history[:300]}")
@@ -1318,7 +1370,7 @@ class StockAnalysisGraph:
                 
             # LangGraph 호출
             trace_id = f"{session_id}_{int(time.time())}"  # 고유 추적 ID 생성
-            logger.info(f"[process_query] 그래프 호출 시작 - trace_id: {trace_id}")
+            #logger.info(f"[process_query] 그래프 호출 시작 - trace_id: {trace_id}")
             
             # AgentState 타입에 conversation_history가 포함되도록 상태 관리
             # StateGraph 타입 제약 때문에 발생하는 문제 해결
@@ -1340,7 +1392,7 @@ class StockAnalysisGraph:
                 # 오류가 타입 관련 문제인 경우 conversation_history를 상태에서 제거하고 다시 시도
                 raise
                 
-            logger.info(f"[process_query] 그래프 호출 완료 - trace_id: {trace_id}")
+            #logger.info(f"[process_query] 그래프 호출 완료 - trace_id: {trace_id}")
             
                 
             # 그래프 종료 콜백 실행
@@ -1363,6 +1415,9 @@ class StockAnalysisGraph:
             
             # 트레이스 정보 기록
             logger.info(f"트레이스 ID: {trace_id} - 처리 완료")
+            
+            # NumPy 타입을 Python 기본 타입으로 변환하여 JSON 직렬화 오류 방지
+            result = convert_numpy_types(result)
             
             return result
             
@@ -1398,7 +1453,7 @@ class StockAnalysisGraph:
                 except Exception as fallback_error:
                     logger.error(f"폴백 매니저 호출 중 추가 오류 발생: {str(fallback_error)}")
                 
-            return {
+            error_result = {
                 "query": query,
                 "errors": [{
                     "agent": "stock_analysis_graph",
@@ -1408,6 +1463,9 @@ class StockAnalysisGraph:
                 }],
                 "summary": "처리 중 오류가 발생했습니다."
             }
+            
+            # NumPy 타입을 Python 기본 타입으로 변환하여 JSON 직렬화 오류 방지
+            return convert_numpy_types(error_result)
     
     def get_thread_ids(self) -> List[str]:
         """

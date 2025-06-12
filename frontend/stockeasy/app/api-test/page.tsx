@@ -226,6 +226,18 @@ export default function ApiTestPage() {
                 
                 <Button
                   onClick={() => callApi({
+                    url: `/api/v1/stock/chart/${stockCode}?period=${chartPeriod}&interval=${chartInterval}&compressed=true&gzip_enabled=false`,
+                    method: 'GET',
+                    description: '차트 데이터 조회 (표준)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  차트 데이터 (표준)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
                     url: `/api/v1/stock/chart/${stockCode}?period=${chartPeriod}&interval=${chartInterval}&compressed=true&gzip_enabled=true`,
                     method: 'GET',
                     description: '차트 데이터 조회 (압축)'

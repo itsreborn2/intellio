@@ -1237,30 +1237,27 @@ class QuestionAnalyzerAgent(BaseAgent):
                 reasoning.append(f"매매 신호 키워드 감지: {keyword_scores['trading_signals']['matched_keywords']}")
                 logger.info(f"[기술적분석감지] ✅ 규칙3 통과 - 매매 신호 키워드 감지")
             
-            # 4. 차트 패턴 + 가격 움직임 조합 확인
+            # 4. 차트 패턴 기반 판단 (패턴 키워드 1개만 있어도 기술적 분석으로 분류)
             chart_pattern_matches = keyword_scores["chart_patterns"]["matches"]
+            technical_indicator_matches = keyword_scores["technical_indicators"]["matches"]
             price_movement_matches = keyword_scores["price_movements"]["matches"]
-            logger.info(f"[기술적분석감지] 규칙4 확인 - chart_patterns: {chart_pattern_matches}개, price_movements: {price_movement_matches}개")
+            logger.info(f"[기술적분석감지] 규칙4 확인 - chart_patterns: {chart_pattern_matches}개, technical_indicators: {technical_indicator_matches}개, price_movements: {price_movement_matches}개")
             
-            if chart_pattern_matches >= 1 and price_movement_matches >= 1:
+            if chart_pattern_matches >= 1:
                 needs_technical_analysis = True
-                reasoning.append(f"차트패턴+가격움직임 조합 감지: {keyword_scores['chart_patterns']['matched_keywords']} + {keyword_scores['price_movements']['matched_keywords']}")
-                logger.info(f"[기술적분석감지] ✅ 규칙4a 통과 - 차트패턴+가격움직임 조합 감지")
-            elif chart_pattern_matches >= 2:
-                needs_technical_analysis = True
-                reasoning.append(f"차트 패턴 키워드 다중 감지: {keyword_scores['chart_patterns']['matched_keywords']}")
-                logger.info(f"[기술적분석감지] ✅ 규칙4b 통과 - 차트 패턴 키워드 다중 감지")
+                reasoning.append(f"차트패턴 키워드 감지: {keyword_scores['chart_patterns']['matched_keywords']}")
+                logger.info(f"[기술적분석감지] ✅ 규칙4a 통과 - 차트패턴 키워드 감지 (1개 이상)")
             elif price_movement_matches >= 2:
                 # 가격 움직임만으로는 약하지만 2개 이상이면 고려
                 reasoning.append(f"가격 움직임 키워드 다중 감지: {keyword_scores['price_movements']['matched_keywords']}")
-                logger.info(f"[기술적분석감지] 📝 규칙4c - 가격 움직임 키워드 다중 감지 (후보)")
+                logger.info(f"[기술적분석감지] 📝 규칙4b - 가격 움직임 키워드 다중 감지 (후보)")
             
             # 5. 전체 매칭 키워드 수가 많으면 기술적 분석 가능성 높음
             logger.info(f"[기술적분석감지] 규칙5 확인 - 총 매칭 키워드: {total_matches}개, 현재 결과: {needs_technical_analysis}")
-            if total_matches >= 3 and not needs_technical_analysis:
+            if total_matches >= 2 and not needs_technical_analysis:
                 needs_technical_analysis = True
                 reasoning.append(f"기술적 분석 관련 키워드 다수 감지 (총 {total_matches}개)")
-                logger.info(f"[기술적분석감지] ✅ 규칙5 통과 - 키워드 다수 감지")
+                logger.info(f"[기술적분석감지] ✅ 규칙5 통과 - 키워드 다수 감지 (2개 이상)")
             
             # 최종 판단 로깅
             if needs_technical_analysis:

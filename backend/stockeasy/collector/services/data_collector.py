@@ -1557,28 +1557,33 @@ class DataCollectorService(LoggerMixin):
             # UTC 시간을 한국 시간으로 변환
             korea_time = data_point.date.replace(tzinfo=timezone.utc).astimezone(korea_tz) if hasattr(data_point.date, 'replace') else data_point.date
             
-            supply_demand_points.append({
-                "date": korea_time.strftime('%Y-%m-%d') if hasattr(korea_time, 'strftime') else str(data_point.date),
-                "current_price": float(data_point.current_price) if data_point.current_price else None,
-                "price_change_sign": data_point.price_change_sign,
-                "price_change": float(data_point.price_change) if data_point.price_change else None,
-                "price_change_percent": float(data_point.price_change_percent) if data_point.price_change_percent else None,
-                "accumulated_volume": int(data_point.accumulated_volume) if data_point.accumulated_volume else None,
-                "accumulated_value": int(data_point.accumulated_value) if data_point.accumulated_value else None,
-                "individual_investor": int(data_point.individual_investor) if data_point.individual_investor else None,
-                "foreign_investor": int(data_point.foreign_investor) if data_point.foreign_investor else None,
-                "institution_total": int(data_point.institution_total) if data_point.institution_total else None,
-                "financial_investment": int(data_point.financial_investment) if data_point.financial_investment else None,
-                "insurance": int(data_point.insurance) if data_point.insurance else None,
-                "investment_trust": int(data_point.investment_trust) if data_point.investment_trust else None,
-                "other_financial": int(data_point.other_financial) if data_point.other_financial else None,
-                "bank": int(data_point.bank) if data_point.bank else None,
-                "pension_fund": int(data_point.pension_fund) if data_point.pension_fund else None,
-                "private_fund": int(data_point.private_fund) if data_point.private_fund else None,
-                "government": int(data_point.government) if data_point.government else None,
-                "other_corporation": int(data_point.other_corporation) if data_point.other_corporation else None,
-                "domestic_foreign": int(data_point.domestic_foreign) if data_point.domestic_foreign else None
-            })
+            # SupplyDemandDataPoint 객체 생성 (timestamp 필드 사용)
+            from stockeasy.collector.schemas.stock_schemas import SupplyDemandDataPoint
+            
+            supply_demand_point = SupplyDemandDataPoint(
+                timestamp=korea_time,  # timestamp 필드 사용
+                current_price=float(data_point.current_price) if data_point.current_price else None,
+                price_change_sign=data_point.price_change_sign,
+                price_change=float(data_point.price_change) if data_point.price_change else None,
+                price_change_percent=float(data_point.price_change_percent) if data_point.price_change_percent else None,
+                accumulated_volume=int(data_point.accumulated_volume) if data_point.accumulated_volume else None,
+                accumulated_value=int(data_point.accumulated_value) if data_point.accumulated_value else None,
+                individual_investor=int(data_point.individual_investor) if data_point.individual_investor else None,
+                foreign_investor=int(data_point.foreign_investor) if data_point.foreign_investor else None,
+                institution_total=int(data_point.institution_total) if data_point.institution_total else None,
+                financial_investment=int(data_point.financial_investment) if data_point.financial_investment else None,
+                insurance=int(data_point.insurance) if data_point.insurance else None,
+                investment_trust=int(data_point.investment_trust) if data_point.investment_trust else None,
+                other_financial=int(data_point.other_financial) if data_point.other_financial else None,
+                bank=int(data_point.bank) if data_point.bank else None,
+                pension_fund=int(data_point.pension_fund) if data_point.pension_fund else None,
+                private_fund=int(data_point.private_fund) if data_point.private_fund else None,
+                government=int(data_point.government) if data_point.government else None,
+                other_corporation=int(data_point.other_corporation) if data_point.other_corporation else None,
+                domestic_foreign=int(data_point.domestic_foreign) if data_point.domestic_foreign else None
+            )
+            
+            supply_demand_points.append(supply_demand_point)
         
         return SupplyDemandResponse(
             symbol=symbol,
@@ -1673,6 +1678,13 @@ class DataCollectorService(LoggerMixin):
         today = datetime.now()
         today_str = today.strftime('%Y%m%d')
         
+        # 스케줄러 모드에서도 중요한 정보는 로깅
+        start_log_msg = f"당일 차트 데이터 업데이트 시작 - 오늘: {today_str} ({today.strftime('%A')})"
+        if scheduler_mode:
+            self.logger.info(f"[스케줄러] {start_log_msg}")
+        else:
+            self.logger.info(start_log_msg)
+        
         try:
             # 전체 종목 리스트 조회
             stock_list = await self.get_all_stock_list_for_stockai()
@@ -1683,6 +1695,7 @@ class DataCollectorService(LoggerMixin):
                     "updated_stocks": 0,
                     "with_adjustment": 0,
                     "errors": 0,
+                    "date": today_str,
                     "status": "completed"
                 }
             
@@ -1695,7 +1708,7 @@ class DataCollectorService(LoggerMixin):
                 self.logger.info(f"당일 차트 데이터 업데이트 시작 (ka10095): 총 {total_stocks}개 종목, 배치크기: {batch_size}")
             else:
                 self.logger.info(f"[스케줄러] 당일 차트 데이터 업데이트 시작: {total_stocks}개 종목")
-            
+
             def safe_float(value):
                 """안전한 float 변환"""
                 try:
@@ -1765,13 +1778,24 @@ class DataCollectorService(LoggerMixin):
                                 
                                 chart_item = batch_data[symbol]
                                 
-                                # 날짜 검증 및 파싱
+                                # 날짜 검증 및 파싱 강화
                                 if not chart_item.date or not str(chart_item.date).strip():
+                                    if not scheduler_mode:
+                                        self.logger.debug(f"종목 {symbol}: 날짜 데이터 없음")
                                     continue
                                 
                                 try:
                                     chart_date = datetime.strptime(str(chart_item.date).strip(), '%Y%m%d')
-                                except ValueError:
+                                except ValueError as e:
+                                    if not scheduler_mode:
+                                        self.logger.warning(f"종목 {symbol}: 날짜 파싱 실패 ({chart_item.date}): {e}")
+                                    continue
+                                
+                                # 오늘 날짜 확인 강화
+                                chart_date_str = chart_date.strftime('%Y%m%d')
+                                if chart_date_str != today_str:
+                                    if not scheduler_mode:
+                                        self.logger.debug(f"종목 {symbol}: 오늘 날짜가 아님 ({chart_date_str} != {today_str})")
                                     continue
                                 
                                 # 가격 데이터 검증 (종가 우선, 없으면 현재가, +/- 기호 제거)
@@ -1875,6 +1899,7 @@ class DataCollectorService(LoggerMixin):
                 "updated_stocks": updated_stocks,
                 "with_adjustment": with_adjustment,
                 "errors": errors,
+                "date": today_str,
                 "status": "completed"
             }
             
@@ -1890,6 +1915,7 @@ class DataCollectorService(LoggerMixin):
                 "updated_stocks": 0,
                 "with_adjustment": 0,
                 "errors": 1,
+                "date": today_str,
                 "status": "failed"
             }
         finally:

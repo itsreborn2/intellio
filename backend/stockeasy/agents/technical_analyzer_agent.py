@@ -216,8 +216,8 @@ class TechnicalAnalyzerAgent(BaseAgent):
             stock_name, technical_indicators, trading_signals, user_id
         )
         
-        # 결과 구성
-        current_price = df['close'].iloc[-1] if not df.empty else 0.0
+        # 결과 구성 (numpy 타입을 Python 타입으로 안전하게 변환)
+        current_price = float(df['close'].iloc[-1]) if not df.empty else 0.0
         
         return {
             "stock_code": stock_code,
@@ -260,7 +260,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
     # 데이터 수집 메서드들 (Phase 2.2)
     # ========================================
     
-    async def _fetch_chart_data(self, stock_code: str, period: str = "1y", interval: str = "1d") -> Optional[Dict[str, Any]]:
+    async def _fetch_chart_data(self, stock_code: str, period: str = "1y", interval: str = "1d") -> Optional[List[Dict[str, Any]]]:
         """
         stock-data-collector API에서 주가 차트 데이터를 가져옵니다.
         
@@ -270,23 +270,77 @@ class TechnicalAnalyzerAgent(BaseAgent):
             interval: 간격 (1m, 5m, 15m, 30m, 1h, 1d, 1w, 1M)
             
         Returns:
-            차트 데이터 또는 None (실패 시)
+            파싱된 차트 데이터 리스트 또는 None (실패 시)
         """
         try:
             url = f"{self.api_base_url}/api/v1/stock/chart/{stock_code}"
             params = {
                 "period": period,
                 "interval": interval,
-                "compressed": False
+                "compressed": "true"
             }
             
             logger.info(f"주가 데이터 요청: {url}, 파라미터: {params}")
             
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
-                    data = await response.json()
-                    logger.info(f"주가 데이터 수신 성공: {len(data.get('data', []))}개 레코드")
-                    return data.get('data', [])
+                    response_data = await response.json()
+                    
+                    # 응답 구조 확인
+                    if not isinstance(response_data, dict) or 'data' not in response_data:
+                        logger.error("잘못된 응답 구조: data 필드가 없습니다.")
+                        return None
+                    
+                    inner_data = response_data['data']
+                    
+                    # 스키마 필드 순서 확인
+                    schema = inner_data.get('schema', {})
+                    fields = schema.get('fields', [])
+                    
+                    if not fields:
+                        logger.error("스키마 필드 정보가 없습니다.")
+                        return None
+                    
+                    # 실제 데이터 배열 가져오기
+                    data_rows = inner_data.get('data', [])
+                    
+                    if not data_rows:
+                        logger.warning("주가 데이터가 비어있습니다.")
+                        return []
+                    
+                    logger.info(f"주가 데이터 수신 성공: {len(data_rows)}개 레코드")
+                    logger.info(f"스키마 필드: {fields}")
+                    
+                    # 데이터 파싱
+                    chart_data = []
+                    for row in data_rows:
+                        if len(row) < len(fields):
+                            logger.warning(f"불완전한 데이터 행: {row}")
+                            continue
+                        
+                        # 필드명과 값을 매핑하여 딕셔너리 생성
+                        row_dict = {}
+                        for i, field in enumerate(fields):
+                            value = row[i]
+                            
+                            # timestamp를 date로 변환
+                            if field == 'timestamp':
+                                row_dict['date'] = value
+                            else:
+                                row_dict[field] = value
+                        
+                        chart_data.append(row_dict)
+                    
+                    # 최신 5개 데이터 샘플 로깅
+                    if chart_data:
+                        recent_data = chart_data[-5:] if len(chart_data) >= 5 else chart_data
+                        logger.info(f"최신 {len(recent_data)}개 주가 데이터 샘플:")
+                        for i, item in enumerate(recent_data, 1):
+                            date_val = item.get('date')
+                            close_val = item.get('close')
+                            logger.info(f"  {i}. {date_val}: 종가 {close_val}")
+                    
+                    return chart_data
                 else:
                     logger.error(f"주가 데이터 요청 실패: HTTP {response.status}")
                     return None
@@ -295,7 +349,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
             logger.error(f"주가 데이터 수집 중 오류: {str(e)}")
             return None
     
-    async def _fetch_supply_demand_data(self, stock_code: str, days_back: int = 30) -> Optional[Dict[str, Any]]:
+    async def _fetch_supply_demand_data(self, stock_code: str, days_back: int = 30) -> Optional[List[Dict[str, Any]]]:
         """
         stock-data-collector API에서 수급 데이터를 가져옵니다.
         
@@ -304,7 +358,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
             days_back: 조회할 일수 (기본 30일)
             
         Returns:
-            수급 데이터 또는 None (실패 시)
+            파싱된 수급 데이터 리스트 또는 None (실패 시)
         """
         try:
             end_date = datetime.now()
@@ -314,16 +368,72 @@ class TechnicalAnalyzerAgent(BaseAgent):
             params = {
                 "start_date": start_date.strftime("%Y%m%d"),
                 "end_date": end_date.strftime("%Y%m%d"),
-                "compressed": False
+                "compressed": "true"
             }
             
             logger.info(f"수급 데이터 요청: {url}, 파라미터: {params}")
             
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
-                    data = await response.json()
-                    logger.info(f"수급 데이터 수신 성공: {len(data.get('data', []))}개 레코드")
-                    return data.get('data', [])
+                    response_data = await response.json()
+                    
+                    # 응답 구조 확인
+                    if not isinstance(response_data, dict) or 'data' not in response_data:
+                        logger.error("잘못된 응답 구조: data 필드가 없습니다.")
+                        return None
+                    
+                    inner_data = response_data['data']
+                    
+                    # 스키마 필드 순서 확인
+                    schema = inner_data.get('schema', {})
+                    fields = schema.get('fields', [])
+                    
+                    if not fields:
+                        logger.error("스키마 필드 정보가 없습니다.")
+                        return None
+                    
+                    # 실제 데이터 배열 가져오기
+                    data_rows = inner_data.get('data', [])
+                    
+                    if not data_rows:
+                        logger.warning("수급 데이터가 비어있습니다.")
+                        return []
+                    
+                    logger.info(f"수급 데이터 수신 성공: {len(data_rows)}개 레코드")
+                    logger.info(f"스키마 필드: {fields}")
+                    
+                    # 데이터 파싱
+                    supply_data = []
+                    for row in data_rows:
+                        if len(row) < len(fields):
+                            logger.warning(f"불완전한 데이터 행: {row}")
+                            continue
+                        
+                        # 필드명과 값을 매핑하여 딕셔너리 생성
+                        row_dict = {}
+                        for i, field in enumerate(fields):
+                            value = row[i]
+                            
+                            # null 값 처리
+                            if value is None:
+                                row_dict[field] = None
+                            else:
+                                row_dict[field] = value
+                        
+                        supply_data.append(row_dict)
+                    
+                    # 최신 5개 데이터 샘플 로깅
+                    if supply_data:
+                        recent_data = supply_data[-5:] if len(supply_data) >= 5 else supply_data
+                        logger.info(f"최신 {len(recent_data)}개 수급 데이터 샘플:")
+                        for i, item in enumerate(recent_data, 1):
+                            date_val = item.get('date')
+                            individual = item.get('individual_investor')
+                            foreign = item.get('foreign_investor')
+                            institution = item.get('institution_total')
+                            logger.info(f"  {i}. {date_val}: 개인 {individual}, 외국인 {foreign}, 기관 {institution}")
+                    
+                    return supply_data
                 else:
                     logger.warning(f"수급 데이터 요청 실패: HTTP {response.status}")
                     return None
@@ -437,12 +547,21 @@ class TechnicalAnalyzerAgent(BaseAgent):
             # 스토캐스틱 계산
             stochastic = self._calculate_stochastic(high, low, close) if len(close) >= 14 else {}
             
+            # 안전한 float 변환 함수
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None:
+                    return None
+                if pd.isna(value):  # pandas isna로 확인
+                    return None
+                return float(value)
+            
             indicators = {
-                "sma_20": float(sma_20) if sma_20 is not None and not pd.isna(sma_20) else None,
-                "sma_60": float(sma_60) if sma_60 is not None and not pd.isna(sma_60) else None,
-                "ema_12": float(ema_12) if ema_12 is not None and not pd.isna(ema_12) else None,
-                "ema_26": float(ema_26) if ema_26 is not None and not pd.isna(ema_26) else None,
-                "rsi": float(rsi) if rsi is not None and not pd.isna(rsi) else None,
+                "sma_20": safe_float(sma_20),
+                "sma_60": safe_float(sma_60),
+                "ema_12": safe_float(ema_12),
+                "ema_26": safe_float(ema_26),
+                "rsi": safe_float(rsi),
                 "macd": macd_values.get("macd"),
                 "macd_signal": macd_values.get("signal"),
                 "macd_histogram": macd_values.get("histogram"),
@@ -475,6 +594,12 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _calculate_macd(self, close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Dict[str, Optional[float]]:
         """MACD 지표를 계산합니다."""
         try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
             ema_fast = close.ewm(span=fast).mean()
             ema_slow = close.ewm(span=slow).mean()
             macd = ema_fast - ema_slow
@@ -482,9 +607,9 @@ class TechnicalAnalyzerAgent(BaseAgent):
             macd_histogram = macd - macd_signal
             
             return {
-                "macd": float(macd.iloc[-1]) if not pd.isna(macd.iloc[-1]) else None,
-                "signal": float(macd_signal.iloc[-1]) if not pd.isna(macd_signal.iloc[-1]) else None,
-                "histogram": float(macd_histogram.iloc[-1]) if not pd.isna(macd_histogram.iloc[-1]) else None
+                "macd": safe_float(macd.iloc[-1]),
+                "signal": safe_float(macd_signal.iloc[-1]),
+                "histogram": safe_float(macd_histogram.iloc[-1])
             }
         except:
             return {"macd": None, "signal": None, "histogram": None}
@@ -492,6 +617,12 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _calculate_bollinger_bands(self, close: pd.Series, period: int = 20, std_dev: int = 2) -> Dict[str, Optional[float]]:
         """볼린저 밴드를 계산합니다."""
         try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
             sma = close.rolling(window=period).mean()
             std = close.rolling(window=period).std()
             
@@ -499,9 +630,9 @@ class TechnicalAnalyzerAgent(BaseAgent):
             lower = sma - (std * std_dev)
             
             return {
-                "upper": float(upper.iloc[-1]) if not pd.isna(upper.iloc[-1]) else None,
-                "middle": float(sma.iloc[-1]) if not pd.isna(sma.iloc[-1]) else None,
-                "lower": float(lower.iloc[-1]) if not pd.isna(lower.iloc[-1]) else None
+                "upper": safe_float(upper.iloc[-1]),
+                "middle": safe_float(sma.iloc[-1]),
+                "lower": safe_float(lower.iloc[-1])
             }
         except:
             return {"upper": None, "middle": None, "lower": None}
@@ -509,6 +640,12 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _calculate_stochastic(self, high: pd.Series, low: pd.Series, close: pd.Series, k_period: int = 14, d_period: int = 3) -> Dict[str, Optional[float]]:
         """스토캐스틱 지표를 계산합니다."""
         try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
             lowest_low = low.rolling(window=k_period).min()
             highest_high = high.rolling(window=k_period).max()
             
@@ -516,8 +653,8 @@ class TechnicalAnalyzerAgent(BaseAgent):
             d_percent = k_percent.rolling(window=d_period).mean()
             
             return {
-                "k": float(k_percent.iloc[-1]) if not pd.isna(k_percent.iloc[-1]) else None,
-                "d": float(d_percent.iloc[-1]) if not pd.isna(d_percent.iloc[-1]) else None
+                "k": safe_float(k_percent.iloc[-1]),
+                "d": safe_float(d_percent.iloc[-1])
             }
         except:
             return {"k": None, "d": None}
@@ -618,10 +755,10 @@ class TechnicalAnalyzerAgent(BaseAgent):
             sma_5 = close.rolling(5).mean()
             sma_20 = close.rolling(20).mean()
             
-            # 현재 가격과 이동평균 비교
-            current_price = close.iloc[-1]
-            sma_5_current = sma_5.iloc[-1]
-            sma_20_current = sma_20.iloc[-1]
+            # 현재 가격과 이동평균 비교 (numpy 타입을 Python 타입으로 변환)
+            current_price = float(close.iloc[-1])
+            sma_5_current = float(sma_5.iloc[-1])
+            sma_20_current = float(sma_20.iloc[-1])
             
             # 추세 방향 결정
             if current_price > sma_5_current > sma_20_current:
@@ -700,18 +837,18 @@ class TechnicalAnalyzerAgent(BaseAgent):
             
             close = df['close']
             volume = df['volume']
-            current_price = close.iloc[-1]
-            avg_volume = volume.tail(20).mean()
-            recent_volume = volume.iloc[-1]
+            current_price = float(close.iloc[-1])
+            avg_volume = float(volume.tail(20).mean())
+            recent_volume = float(volume.iloc[-1])
             
             # 저항선 돌파 확인
             for resistance in resistance_levels:
                 if current_price > resistance * 1.01:  # 1% 이상 돌파
                     signals.append({
                         "type": "저항선_돌파",
-                        "level": resistance,
+                        "level": float(resistance),
                         "current_price": float(current_price),
-                        "volume_confirmation": recent_volume > avg_volume * 1.5
+                        "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
                     })
             
             # 지지선 이탈 확인
@@ -719,9 +856,9 @@ class TechnicalAnalyzerAgent(BaseAgent):
                 if current_price < support * 0.99:  # 1% 이상 이탈
                     signals.append({
                         "type": "지지선_이탈",
-                        "level": support,
+                        "level": float(support),
                         "current_price": float(current_price),
-                        "volume_confirmation": recent_volume > avg_volume * 1.5
+                        "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
                     })
             
             return signals

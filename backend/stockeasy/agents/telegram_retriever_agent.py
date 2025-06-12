@@ -401,8 +401,6 @@ class TelegramRetrieverAgent(BaseAgent):
                 return self._fallback_toc_results(default_overall_summary, found_messages, section_id_to_title)
 
             llm_output_str = response.content
-            # 응답 길이 로깅
-            logger.info(f"LLM 응답 길이: {len(llm_output_str)}자")
             
             match = re.search(r"```json\s*([\s\S]*?)\s*```", llm_output_str, re.IGNORECASE)
             json_str = match.group(1) if match else llm_output_str
@@ -418,7 +416,6 @@ class TelegramRetrieverAgent(BaseAgent):
             
             # LLM의 출력은 title을 키로 사용
             llm_toc_data = parsed_llm_output
-            logger.info(f"LLM 응답 구조: {len(llm_toc_data)} 최상위 키, type:{type(llm_toc_data)}")
             
             # LLM 응답 키 로깅
             if isinstance(llm_toc_data, dict):

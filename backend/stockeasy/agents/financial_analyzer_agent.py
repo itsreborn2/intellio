@@ -127,7 +127,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             logger.info(f"[성능개선] PDF 데이터 조회 완료 - 소요시간: {pdf_duration:.2f}초")
             
             # DB 데이터 조회 (빠름)
-            logger.info("[성능개선] DB 데이터 조회 시작")
+            #logger.info("[성능개선] DB 데이터 조회 시작")
             db_start_time = datetime.now()
             
             try:
@@ -137,7 +137,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 db_search_data = {}
             
             db_duration = (datetime.now() - db_start_time).total_seconds()
-            logger.info(f"[성능개선] DB 데이터 조회 완료 - 소요시간: {db_duration:.2f}초")
+            #logger.info(f"[성능개선] DB 데이터 조회 완료 - 소요시간: {db_duration:.2f}초")
 
             # content를 제외한 메타데이터만 로깅
             log_data = {

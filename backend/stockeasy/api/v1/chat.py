@@ -32,6 +32,7 @@ import gc
 from stockeasy.schemas.chat import ShareLinkResponse, SharedChatResponse, SharedChatSessionResponse, SharedChatMessageResponse
 from sqlalchemy import select
 from stockeasy.models.chat import StockChatSession
+from common.core.config import settings
 
 # 챗 라우터 정의 위에 도우미 함수 추가
 def get_user_friendly_agent_message(agent: str, status: str) -> str:
@@ -713,8 +714,8 @@ async def stream_chat_message(
                                             }, cls=DateTimeEncoder))
                                             
                                             # response_formatter가 완료되면 메모리 정리 시작
-                                            if agent == "response_formatter" and status in ["completed", "completed_with_default_plan", "completed_no_data"]:
-                                                logger.info("[STREAM_CHAT] response_formatter 완료 - 메모리 정리 준비")
+                                            # if agent == "response_formatter" and status in ["completed", "completed_with_default_plan", "completed_no_data"]:
+                                            #     logger.info("[STREAM_CHAT] response_formatter 완료 - 메모리 정리 준비")
                                                 # 메모리 정리 로직 준비 (추후 cleanup_callback에서 실행)
                                 
                                 # 현재 상태를 이전 상태로 저장
@@ -859,8 +860,10 @@ async def stream_chat_message(
                             logger.info("[STREAM_CHAT] 세션에 에이전트 결과 저장 완료")
                         
                         # 완료 이벤트 전송
-                        logger.info("[STREAM_CHAT] 완료 이벤트 전송")
-                        logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
+                        #logger.info("[STREAM_CHAT] 완료 이벤트 전송")
+                        if settings.ENV != "prod":
+                            logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
+
                         # 구조화된 채팅 응답 구성
                         structured_response = StructuredChatResponse(
                             message_id=assistant_message_id,
