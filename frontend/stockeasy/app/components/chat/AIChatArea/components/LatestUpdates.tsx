@@ -100,25 +100,31 @@ export function LatestUpdates({ updatesDaily, updatesWeekly, onSelectUpdate }: L
       maxWidth: '420px',
       overflow: 'hidden',
     }}>
-      <div style={{ 
-        fontSize: '13px',
-        marginBottom: '8px',
-        color: '#333',
-        fontWeight: '500' 
-      }}>
-        인기 검색 종목 순위
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'baseline', marginBottom: '8px' }}>
+        {/* Column 1 */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingRight: '10px' }}>
+          <span style={{ fontSize: '13px', color: '#333', fontWeight: '500' }}>
+            검색 순위
+          </span>
+          <span style={{ fontSize: '12px', color: '#888', fontWeight: '500' }}>
+            당일
+          </span>
+        </div>
+        {/* Column 2 */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', paddingRight: '10px' }}>
+          <span style={{ fontSize: '12px', color: '#888', fontWeight: '500' }}>
+            일주일
+          </span>
+        </div>
       </div>
-      
       <div style={{ display: 'flex', gap: '12px' }}>
         {/* 첫 번째 열: 당일 */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ fontSize: '12px', color: '#555', fontWeight: '500', textAlign: 'center', marginBottom: '4px' }}>당일</div>
           {renderStockList(updatesDaily)}
         </div>
         
         {/* 두 번째 열: 일주일 */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ fontSize: '12px', color: '#555', fontWeight: '500', textAlign: 'center', marginBottom: '4px' }}>일주일</div>
           {renderStockList(updatesWeekly)}
         </div>
       </div>
