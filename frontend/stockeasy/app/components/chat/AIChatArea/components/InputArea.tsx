@@ -61,12 +61,25 @@ export function InputArea({
   // 입력창 텍스트 길이에 따라 높이 자동 조절
   useEffect(() => {
     if (inputRef.current) {
+      const textarea = inputRef.current;
+      const MIN_TEXTAREA_HEIGHT_PX = 40; // 한 줄일 때의 textarea 높이 (패딩 포함)
+      const LINE_CONTENT_HEIGHT_PX = 24; // 한 줄의 순수 텍스트 내용 높이 (font-size, line-height 등 기반)
+      const TOTAL_VERTICAL_PADDING_PX = 16; // py-2 (0.5rem * 2 = 8px * 2 = 16px)
+      const MAX_LINES = 3;
+      const MAX_TEXTAREA_HEIGHT_PX = (MAX_LINES * LINE_CONTENT_HEIGHT_PX) + TOTAL_VERTICAL_PADDING_PX; // (3 * 24px) + 16px = 88px
+
       // 높이를 먼저 최소 높이로 리셋하여, 텍스트가 줄어들었을 때도 높이가 작아지도록 함
-      inputRef.current.style.height = '40px';
+      textarea.style.height = `${MIN_TEXTAREA_HEIGHT_PX}px`;
       
-      // scrollHeight를 사용하여 실제 내용에 맞는 높이로 설정
-      const scrollHeight = inputRef.current.scrollHeight;
-      inputRef.current.style.height = `${scrollHeight}px`;
+      const scrollHeight = textarea.scrollHeight;
+
+      if (scrollHeight > MAX_TEXTAREA_HEIGHT_PX) {
+        textarea.style.height = `${MAX_TEXTAREA_HEIGHT_PX}px`;
+        textarea.style.overflowY = 'auto'; // 내용이 최대 높이를 넘으면 스크롤 바 표시
+      } else {
+        textarea.style.height = `${scrollHeight}px`;
+        textarea.style.overflowY = 'hidden'; // 내용이 최대 높이 이내면 스크롤 바 숨김
+      }
     }
   }, [inputMessage]);
 
