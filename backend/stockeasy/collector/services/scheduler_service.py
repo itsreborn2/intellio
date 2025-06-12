@@ -4,7 +4,7 @@
 """
 import asyncio
 from datetime import datetime, time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -103,7 +103,8 @@ class SchedulerService(LoggerMixin):
             id="daily_stock_list_update",
             name="일일 종목 리스트 업데이트",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=300  # 5분 늦어도 실행
         )
         
         # 1-1. 매일 아침 7시 31분: stockai용 수정주가 체크 (평일만)
@@ -113,7 +114,8 @@ class SchedulerService(LoggerMixin):
             id="daily_adjustment_check",
             name="일일 수정주가 체크 (stockai용)",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=300  # 5분 늦어도 실행
         )
         
         # 2. 매일 오전 8시: ETF 구성종목 업데이트 (평일만)
@@ -123,7 +125,8 @@ class SchedulerService(LoggerMixin):
             id="daily_etf_update",
             name="일일 ETF 구성종목 업데이트",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=300  # 5분 늦어도 실행
         )
         
         # 3. 매시간: 캐시 정리
@@ -133,7 +136,8 @@ class SchedulerService(LoggerMixin):
             id="hourly_cache_cleanup",
             name="시간별 캐시 정리",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=1800  # 30분 늦어도 실행
         )
         
         # 4. 주말 오후 6시: 전체 캐시 새로고침
@@ -143,7 +147,8 @@ class SchedulerService(LoggerMixin):
             id="weekly_cache_refresh",
             name="주간 전체 캐시 새로고침",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=3600  # 1시간 늦어도 실행
         )
         
         # 5. 당일 차트 데이터 업데이트 - 평일만
@@ -156,7 +161,8 @@ class SchedulerService(LoggerMixin):
             id="daily_chart_update_08",
             name="당일 차트 데이터 업데이트 (8시대)",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=600  # 10분 늦어도 실행
         )
         
         # 5-2. 9시부터 16까지 매 15분 간격 (00, 15, 30, 45분)
@@ -166,17 +172,19 @@ class SchedulerService(LoggerMixin):
             id="daily_chart_update_regular",
             name="당일 차트 데이터 업데이트 (정규)",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=600  # 10분 늦어도 실행
         )
 
-        # 5-3. 16시~19시(NXT 시간외)
+        # 5-3. 16시~19시(NXT 시간외) - misfire_grace_time 늘림
         self.scheduler.add_job(
             func=self._update_today_chart_data_job,
             trigger=CronTrigger(hour='16-19', minute='0,30', day_of_week='mon-fri'),
             id="daily_chart_update_after_hours",
             name="당일 차트 데이터 업데이트 (시간외)",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=600  # 10분 늦어도 실행 (시간외는 여유롭게)
         )
         
         # 5-4. 20시 5분 최종 업데이트
@@ -186,7 +194,8 @@ class SchedulerService(LoggerMixin):
             id="daily_chart_update_final",
             name="당일 차트 데이터 업데이트 (최종)",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=3600  # 1시간 늦어도 실행 (최종은 반드시)
         )
         
         # 6. 당일 수급 데이터 업데이트 - 평일 15시 50분 (시장 마감 직후)
@@ -196,7 +205,8 @@ class SchedulerService(LoggerMixin):
             id="daily_supply_demand_update",
             name="당일 수급 데이터 업데이트",
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=1800  # 30분 늦어도 실행
         )
         
         logger.info("스케줄 작업 등록 완료")
@@ -322,6 +332,10 @@ class SchedulerService(LoggerMixin):
     @log_scheduler_job("당일 차트 데이터 업데이트")
     async def _update_today_chart_data_job(self) -> None:
         """당일 차트 데이터 업데이트 작업"""
+        # 작업 시작 로깅
+        now = datetime.now()
+        logger.info(f"[스케줄러] 당일 차트 데이터 업데이트 시작: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        
         # 주말/공휴일 확인
         if self._is_holiday_or_weekend():
             logger.info("주말 또는 공휴일이므로 당일 차트 데이터 업데이트를 건너뜁니다")
@@ -333,12 +347,14 @@ class SchedulerService(LoggerMixin):
                 return
             
             # 차트 데이터 업데이트 (스케줄러 모드)
-            await self.data_collector.update_today_chart_data(scheduler_mode=True)
+            result = await self.data_collector.update_today_chart_data(scheduler_mode=True)
             
-            logger.success("당일 차트 데이터 업데이트 완료")
+            # 결과 상세 로깅
+            logger.success(f"[스케줄러] 당일 차트 데이터 업데이트 완료: {result.get('message', '정보 없음')}")
+            logger.info(f"[스케줄러] 업데이트 통계 - 전체: {result.get('total_stocks', 0)}, 성공: {result.get('updated_stocks', 0)}, 수정주가 포함: {result.get('with_adjustment', 0)}, 오류: {result.get('errors', 0)}")
             
         except Exception as e:
-            logger.error(f"당일 차트 데이터 업데이트 실패: {e}")
+            logger.error(f"[스케줄러] 당일 차트 데이터 업데이트 실패: {e}")
             raise
     
     @log_scheduler_job("당일 수급 데이터 업데이트")
@@ -368,14 +384,24 @@ class SchedulerService(LoggerMixin):
         self._job_stats["total_jobs"] += 1
         self._job_stats["successful_jobs"] += 1
         
-        logger.info(f"스케줄 작업 실행 완료: {event.job_id}")
+        # 실행 시간 정보 추가
+        run_time = getattr(event, 'run_time', None)
+        duration = getattr(event, 'duration', None)
+        
+        if run_time and duration:
+            logger.info(f"스케줄 작업 실행 완료: {event.job_id}, 실행시간: {run_time}, 소요시간: {duration}")
+        else:
+            logger.info(f"스케줄 작업 실행 완료: {event.job_id}")
     
     def _job_error_listener(self, event) -> None:
         """작업 실패 이벤트 리스너"""
         self._job_stats["total_jobs"] += 1
         self._job_stats["failed_jobs"] += 1
         
-        logger.error(f"스케줄 작업 실행 실패: {event.job_id} - {event.exception}")
+        # 더 상세한 오류 정보 로깅
+        logger.error(f"스케줄 작업 실행 실패: {event.job_id}")
+        logger.error(f"오류 내용: {event.exception}")
+        logger.error(f"추적 정보: {getattr(event, 'traceback', 'N/A')}")
     
     def get_job_stats(self) -> Dict[str, Any]:
         """작업 통계 조회"""
@@ -438,6 +464,88 @@ class SchedulerService(LoggerMixin):
         """즉시 수정주가 체크 실행"""
         logger.info("수동 수정주가 체크 실행")
         await self._check_adjustment_prices_job()
+    
+    async def force_trigger_today_chart_update(self) -> Dict[str, Any]:
+        """강제로 당일 차트 데이터 업데이트 실행 (주말/공휴일 체크 무시)"""
+        logger.info("강제 당일 차트 데이터 업데이트 실행 (주말/공휴일 무시)")
+        
+        try:
+            if not self.data_collector:
+                logger.warning("데이터 수집 서비스가 없습니다")
+                return {"success": False, "message": "데이터 수집 서비스가 없습니다"}
+            
+            # 주말/공휴일 체크 없이 직접 실행
+            result = await self.data_collector.update_today_chart_data(scheduler_mode=False)
+            
+            logger.success(f"강제 당일 차트 데이터 업데이트 완료: {result.get('message', '정보 없음')}")
+            return {"success": True, "result": result}
+            
+        except Exception as e:
+            logger.error(f"강제 당일 차트 데이터 업데이트 실패: {e}")
+            return {"success": False, "message": str(e)}
+    
+    def get_scheduler_status(self) -> Dict[str, Any]:
+        """스케줄러 상태 상세 조회"""
+        try:
+            current_time = datetime.now()
+            
+            status_info = {
+                "is_running": self._is_running,
+                "current_time": current_time.isoformat(),
+                "scheduler_state": str(self.scheduler.state) if hasattr(self.scheduler, 'state') else "Unknown",
+                "timezone": str(self.scheduler.timezone) if hasattr(self.scheduler, 'timezone') else "Unknown",
+                "job_count": len(self.scheduler.get_jobs()),
+                "scheduled_jobs": [],
+                "recent_missed_jobs": []
+            }
+            
+            # 스케줄된 작업 정보
+            for job in self.scheduler.get_jobs():
+                job_info = {
+                    "id": job.id,
+                    "name": job.name,
+                    "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
+                    "trigger": str(job.trigger),
+                    "max_instances": job.max_instances,
+                    "misfire_grace_time": getattr(job, 'misfire_grace_time', None)
+                }
+                status_info["scheduled_jobs"].append(job_info)
+            
+            # 작업 통계
+            status_info.update(self._job_stats)
+            
+            return status_info
+            
+        except Exception as e:
+            logger.error(f"스케줄러 상태 조회 실패: {e}")
+            return {
+                "is_running": self._is_running,
+                "error": str(e),
+                "current_time": datetime.now().isoformat()
+            }
+    
+    def check_missed_jobs(self) -> List[Dict[str, Any]]:
+        """놓친 작업들 확인"""
+        try:
+            missed_jobs = []
+            current_time = datetime.now()
+            
+            for job in self.scheduler.get_jobs():
+                if job.next_run_time and job.next_run_time < current_time:
+                    # 다음 실행 시간이 현재 시간보다 과거라면 놓친 작업일 가능성
+                    missed_info = {
+                        "job_id": job.id,
+                        "job_name": job.name,
+                        "scheduled_time": job.next_run_time.isoformat(),
+                        "delay_minutes": (current_time - job.next_run_time).total_seconds() / 60
+                    }
+                    missed_jobs.append(missed_info)
+            
+            return missed_jobs
+            
+        except Exception as e:
+            logger.error(f"놓친 작업 확인 실패: {e}")
+            return []
     
     def is_running(self) -> bool:
         """스케줄러 실행 상태 확인"""
