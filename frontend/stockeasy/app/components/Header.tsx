@@ -379,9 +379,9 @@ const Header: React.FC<HeaderProps> = ({
           {isUserLoggedIn && (
             <div className="flex items-center gap-0.5">
               <MessageSquare size={16} className="text-gray-600" />
-              <Badge variant="outline" className="h-5 text-xs px-1.5 ml-0.5 rounded-md flex items-center justify-center">
+              <button className="border py-0.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground h-5 text-xs px-1.5 ml-0.5 rounded-[6px] flex items-center justify-center hover:bg-accent hover:text-accent-foreground">
                 {isQuestionLoading ? "..." : `${10 - (questionSummary?.total_questions || 0)}`}
-              </Badge>
+              </button>
             </div>
           )}
           {/* 아바타 */}
