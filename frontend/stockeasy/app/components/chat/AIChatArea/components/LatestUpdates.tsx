@@ -12,6 +12,11 @@ import { useIsMobile } from '../hooks';
 interface PopularStock {
   stock: StockOption;
   rank: number;
+  rankChange?: {
+    change_type: 'UP' | 'DOWN' | 'SAME' | 'NEW' | 'OUT';
+    change_value: number;
+    previous_rank?: number;
+  };
 }
 
 interface LatestUpdatesProps {
@@ -23,66 +28,89 @@ interface LatestUpdatesProps {
 export function LatestUpdates({ updatesDaily, updatesWeekly, onSelectUpdate }: LatestUpdatesProps) {
   const isMobile = useIsMobile();
 
+  // 순위 변동 텍스트 생성 함수
+  const getRankChangeText = (rankChange?: PopularStock['rankChange']) => {
+    if (!rankChange) return null;
+    
+    const { change_type, change_value } = rankChange;
+    
+    switch (change_type) {
+      case 'NEW':
+        return { text: 'NEW', color: '#10b981' }; // 초록색
+      case 'UP':
+        return { text: `+${change_value}`, color: '#ef4444' }; // 빨간색 (상승)
+      case 'DOWN':
+        return { text: `${change_value}`, color: '#3b82f6' }; // 파란색 (하락)
+      case 'SAME':
+      default:
+        return null; // 변동 없으면 표시하지 않음
+    }
+  };
+
   const renderStockList = (stocks: PopularStock[]) => {
-    return stocks.map((item) => (
-      <button
-        key={`rank-${item.rank}-${item.stock.stockCode}`}
-        style={{
-          width: '100%',
-          padding: '6px 10px',
-          borderRadius: '8px',
-          border: '1px solid #ddd',
-          backgroundColor: '#f5f5f5',
-          textAlign: 'left',
-          cursor: 'pointer',
-          transition: 'background-color 0.2s',
-          fontSize: '13px',
-          color: '#333',
-          display: 'flex',
-          alignItems: 'center',
-          overflow: 'hidden',
-        }}
-        onClick={() => onSelectUpdate(item.stock, '')}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = '#ffffff';
-          e.currentTarget.style.backgroundColor = '#40414F';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = '#333';
-          e.currentTarget.style.backgroundColor = '#f5f5f5';
-        }}
-      >
-        <span style={{ 
-          fontSize: '13px',
-          color: '#333',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          marginRight: '6px' 
-        }}>
-          {item.rank}.
-        </span>
-        <span style={{ 
-          padding: '3px 8px',
-          height: '24px',
-          borderRadius: '6px',
-          border: '1px solid #ddd',
-          backgroundColor: '#f5f5f5',
-          color: '#333',
-          fontSize: '13px',
-          fontWeight: 'normal',
-          whiteSpace: 'nowrap',
-          display: 'flex',
-          alignItems: 'center',
-          flexShrink: 0,
-          maxWidth: '70%',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}>
-          {item.stock.stockName}
-        </span>
-      </button>
-    ));
+    return stocks.map((item) => {
+      const rankChangeInfo = getRankChangeText(item.rankChange);
+      
+      return (
+        <button
+          key={`rank-${item.rank}-${item.stock.stockCode}`}
+          style={{
+            width: '100%',
+            padding: '6px 10px',
+            borderRadius: '8px',
+            border: '1px solid #ddd',
+            backgroundColor: '#f5f5f5',
+            textAlign: 'left',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s',
+            fontSize: '13px',
+            color: '#333',
+            display: 'flex',
+            alignItems: 'center',
+            overflow: 'hidden',
+          }}
+          onClick={() => onSelectUpdate(item.stock, '')}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#ffffff';
+            e.currentTarget.style.backgroundColor = '#40414F';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#333';
+            e.currentTarget.style.backgroundColor = '#f5f5f5';
+          }}
+        >
+          <span style={{ 
+            fontSize: '13px',
+            color: '#333',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            marginRight: '6px' 
+          }}>
+            {item.rank}.
+          </span>
+          <span style={{ 
+            padding: '3px 8px',
+            height: '24px',
+            borderRadius: '6px',
+            border: '1px solid #ddd',
+            backgroundColor: '#f5f5f5',
+            color: '#333',
+            fontSize: '13px',
+            fontWeight: 'normal',
+            whiteSpace: 'nowrap',
+            display: 'flex',
+            alignItems: 'center',
+            flexShrink: 0,
+            maxWidth: rankChangeInfo ? '60%' : '70%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {item.stock.stockName}
+          </span>
+        </button>
+      );
+    });
   };
 
   return (

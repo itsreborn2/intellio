@@ -110,6 +110,7 @@ function AIChatAreaContent() {
             stockName: item.stock_name,
             stockCode: item.stock_code,
           },
+          rankChange: item.rank_change, // 순위 변동 정보 추가
         }));
         setPopularStocksDaily(parsedDailyData);
       } else {
@@ -126,6 +127,7 @@ function AIChatAreaContent() {
             stockName: item.stock_name,
             stockCode: item.stock_code,
           },
+          rankChange: item.rank_change, // 순위 변동 정보 추가
         }));
         setPopularStocksWeekly(parsedWeeklyData);
       } else {
