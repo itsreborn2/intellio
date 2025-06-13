@@ -569,6 +569,8 @@ class StockAnalysisGraph:
             industry_status = processing_status.get("industry_analyzer")
             confidential_status = processing_status.get("confidential_analyzer")
             revenue_breakdown_status = processing_status.get("revenue_breakdown")
+            technical_status = processing_status.get("technical_analyzer")
+            web_search_status = processing_status.get("web_search")
             
             # 완료 상태 목록
             completed_statuses = ["completed", "completed_with_default_plan", "completed_no_data"]
@@ -580,7 +582,9 @@ class StockAnalysisGraph:
                 financial_status in completed_statuses,
                 industry_status in completed_statuses,
                 confidential_status in completed_statuses,
-                revenue_breakdown_status in completed_statuses
+                revenue_breakdown_status in completed_statuses,
+                technical_status in completed_statuses,
+                web_search_status in completed_statuses
             ])
             
             # 검색 에이전트가 실행되지 않았는지 확인
@@ -602,7 +606,7 @@ class StockAnalysisGraph:
             
             # 실제 데이터 포함 항목만 확인
             has_data = False
-            for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "revenue_breakdown"]:
+            for key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "revenue_breakdown", "technical_analysis_data", "web_search_results"]:
                 if key in retrieved_data and retrieved_data[key]:
                     has_data = True
                     #logger.info(f"데이터가 검색됨: {key}에 {len(retrieved_data[key])}개 항목이 있습니다.")
@@ -613,7 +617,7 @@ class StockAnalysisGraph:
             if not has_data:
                 # 모든 하위 에이전트가 실패했거나 완료되었는지 확인
                 all_agents_completed_or_failed = True
-                for agent_name in ["telegram_retriever", "report_analyzer", "financial_analyzer", "industry_analyzer", "confidential_analyzer", "revenue_breakdown"]:
+                for agent_name in ["telegram_retriever", "report_analyzer", "financial_analyzer", "industry_analyzer", "confidential_analyzer", "revenue_breakdown", "technical_analyzer", "web_search"]:
                     status = processing_status.get(agent_name)
                     if status and status not in completed_statuses and status != "failed" and status != "error":
                         all_agents_completed_or_failed = False

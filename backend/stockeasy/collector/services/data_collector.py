@@ -769,11 +769,18 @@ class DataCollectorService(LoggerMixin):
         """
         try:
             # 캐시에서 먼저 조회
-            cached_list = await self.cache_manager.get_cache("all_stock_list_for_stockai")
-            if cached_list:
+            cached_data = await self.cache_manager.get_cache("all_stock_list_for_stockai")
+            if cached_data:
+                # 메타데이터 구조인지 확인
+                if isinstance(cached_data, dict) and "data" in cached_data:
+                    stock_dict = cached_data["data"]
+                else:
+                    # 기존 형태의 캐시 데이터 (하위 호환성)
+                    stock_dict = cached_data
+                
                 # 전체 종목 정보를 반환
                 result = []
-                for stock_info in cached_list.values():
+                for stock_info in stock_dict.values():
                     result.append(stock_info)
                 
                 self.logger.info(f"캐시에서 종목 리스트 반환: {len(result)}개")
@@ -783,12 +790,22 @@ class DataCollectorService(LoggerMixin):
             self.logger.info("캐시에 종목 리스트가 없어 키움 API에서 조회")
             stock_dict = await self.kiwoom_client.get_all_stock_list_for_stockai()
             
-            # 키움 API에서 조회한 결과를 캐시에 저장 (Dict 형태 그대로)
+            # 키움 API에서 조회한 결과를 캐시에 저장 (메타데이터 포함)
             if stock_dict:
+                # 메타데이터와 함께 저장
+                cache_data = {
+                    "data": stock_dict,
+                    "metadata": {
+                        "updated_at": datetime.now().isoformat(),
+                        "total_count": len(stock_dict),
+                        "source": "kiwoom_api"
+                    }
+                }
+                
                 # 캐시에 저장 (24시간 TTL)
                 await self.cache_manager.set_cache(
                     "all_stock_list_for_stockai",
-                    stock_dict,
+                    cache_data,
                     ttl=86400  # 24시간
                 )
                 
@@ -813,11 +830,18 @@ class DataCollectorService(LoggerMixin):
         """
         try:
             # 캐시에서 먼저 조회
-            cached_list = await self.cache_manager.get_cache("all_stock_list")
-            if cached_list:
+            cached_data = await self.cache_manager.get_cache("all_stock_list")
+            if cached_data:
+                # 메타데이터 구조인지 확인
+                if isinstance(cached_data, dict) and "data" in cached_data:
+                    stock_dict = cached_data["data"]
+                else:
+                    # 기존 형태의 캐시 데이터 (하위 호환성)
+                    stock_dict = cached_data
+                
                 # 전체 종목 정보를 반환
                 result = []
-                for stock_info in cached_list.values():
+                for stock_info in stock_dict.values():
                     result.append(stock_info)
                 
                 self.logger.info(f"캐시에서 종목 리스트 반환: {len(result)}개")
@@ -827,12 +851,22 @@ class DataCollectorService(LoggerMixin):
             self.logger.info("캐시에 종목 리스트가 없어 키움 API에서 조회")
             stock_dict = await self.kiwoom_client.get_all_stock_list()
             
-            # 키움 API에서 조회한 결과를 캐시에 저장 (Dict 형태 그대로)
+            # 키움 API에서 조회한 결과를 캐시에 저장 (메타데이터 포함)
             if stock_dict:
+                # 메타데이터와 함께 저장
+                cache_data = {
+                    "data": stock_dict,
+                    "metadata": {
+                        "updated_at": datetime.now().isoformat(),
+                        "total_count": len(stock_dict),
+                        "source": "kiwoom_api"
+                    }
+                }
+                
                 # 캐시에 저장 (24시간 TTL)
                 await self.cache_manager.set_cache(
                     "all_stock_list",
-                    stock_dict,
+                    cache_data,
                     ttl=86400  # 24시간
                 )
                 
@@ -900,8 +934,15 @@ class DataCollectorService(LoggerMixin):
         """
         try:
             # 전체 종목 리스트에서 검색
-            cached_list = await self.cache_manager.get_cache("all_stock_list")
-            if not cached_list:
+            cached_data = await self.cache_manager.get_cache("all_stock_list")
+            if cached_data:
+                # 메타데이터 구조인지 확인
+                if isinstance(cached_data, dict) and "data" in cached_data:
+                    cached_list = cached_data["data"]
+                else:
+                    # 기존 형태의 캐시 데이터 (하위 호환성)
+                    cached_list = cached_data
+            else:
                 # 캐시에 없으면 키움 API에서 조회
                 all_stocks = await self.kiwoom_client.get_all_stock_list()
                 cached_list = all_stocks
@@ -937,18 +978,34 @@ class DataCollectorService(LoggerMixin):
             # 키움 API에서 강제 새로고침
             stock_list = await self.kiwoom_client.get_all_stock_list(force_refresh=True)
             
-            # 캐시에 저장
+            # 캐시에 저장 (메타데이터 포함)
+            cache_data = {
+                "data": stock_list,
+                "metadata": {
+                    "updated_at": datetime.now().isoformat(),
+                    "total_count": len(stock_list),
+                    "source": "kiwoom_api_force_refresh"
+                }
+            }
             await self.cache_manager.set_cache(
                 "all_stock_list", 
-                stock_list, 
+                cache_data, 
                 ttl=86400  # 24시간
             )
             
             stock_list_for_stockai = await self.kiwoom_client.get_all_stock_list_for_stockai(force_refresh=True)
-            # 캐시에 저장(stock ai)
+            # 캐시에 저장(stock ai) - 메타데이터 포함
+            cache_data_stockai = {
+                "data": stock_list_for_stockai,
+                "metadata": {
+                    "updated_at": datetime.now().isoformat(),
+                    "total_count": len(stock_list_for_stockai),
+                    "source": "kiwoom_api_force_refresh"
+                }
+            }
             await self.cache_manager.set_cache(
                 "all_stock_list_for_stockai", 
-                stock_list_for_stockai, 
+                cache_data_stockai, 
                 ttl=86400  # 24시간
             )
             
@@ -1022,7 +1079,7 @@ class DataCollectorService(LoggerMixin):
     
     async def get_last_update_time(self, update_type: str) -> Optional[datetime]:
         """
-        키움 API의 마지막 업데이트 시간 조회
+        마지막 업데이트 시간 조회 (캐시 메타데이터 우선, 키움 API 보조)
         
         Args:
             update_type (str): 업데이트 유형 ("stockai" 또는 "stock")
@@ -1031,10 +1088,29 @@ class DataCollectorService(LoggerMixin):
             Optional[datetime]: 마지막 업데이트 시간 또는 None
         """
         try:
+            # 1. 먼저 캐시에서 메타데이터 조회
             if update_type == "stockai":
+                cache_key = "all_stock_list_for_stockai"
+                cache_data = await self.cache_manager.get_cache(cache_key)
+                if cache_data and isinstance(cache_data, dict) and 'metadata' in cache_data:
+                    updated_at = cache_data['metadata'].get('updated_at')
+                    if updated_at:
+                        return datetime.fromisoformat(updated_at) if isinstance(updated_at, str) else updated_at
+                
+                # 캐시에 메타데이터가 없으면 키움 클라이언트에서 조회
                 return getattr(self.kiwoom_client, '_last_stockai_update', None)
+                
             elif update_type == "stock":
+                cache_key = "all_stock_list"
+                cache_data = await self.cache_manager.get_cache(cache_key)
+                if cache_data and isinstance(cache_data, dict) and 'metadata' in cache_data:
+                    updated_at = cache_data['metadata'].get('updated_at')
+                    if updated_at:
+                        return datetime.fromisoformat(updated_at) if isinstance(updated_at, str) else updated_at
+                
+                # 캐시에 메타데이터가 없으면 키움 클라이언트에서 조회
                 return getattr(self.kiwoom_client, '_last_stock_update', None)
+                
             else:
                 self.logger.warning(f"잘못된 update_type: {update_type}")
                 return None

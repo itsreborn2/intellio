@@ -229,18 +229,37 @@ class SchedulerService(LoggerMixin):
             stock_list = await kiwoom_client.get_all_stock_list(force_refresh=True)
             stock_list_for_stockai = await kiwoom_client.get_all_stock_list_for_stockai(force_refresh=True)
 
-            # 캐시에 저장
+            # 캐시에 저장 (메타데이터 포함)
             if self.cache_manager:
+                from datetime import datetime
+                
+                # 일반 종목 리스트 캐시 저장
+                cache_data = {
+                    "data": stock_list,
+                    "metadata": {
+                        "updated_at": datetime.now().isoformat(),
+                        "total_count": len(stock_list),
+                        "source": "scheduler_update"
+                    }
+                }
                 await self.cache_manager.set_cache(
                     "all_stock_list", 
-                    stock_list, 
+                    cache_data, 
                     ttl=86400  # 24시간
                 )
                 
-                # 캐시에 저장(stock ai)
+                # stockai용 종목 리스트 캐시 저장
+                cache_data_stockai = {
+                    "data": stock_list_for_stockai,
+                    "metadata": {
+                        "updated_at": datetime.now().isoformat(),
+                        "total_count": len(stock_list_for_stockai),
+                        "source": "scheduler_update"
+                    }
+                }
                 await self.cache_manager.set_cache(
                     "all_stock_list_for_stockai", 
-                    stock_list_for_stockai, 
+                    cache_data_stockai, 
                     ttl=86400  # 24시간
                 )
 

@@ -180,6 +180,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
         logger.info(f"종목 {stock_code}에 대한 기술적 분석 수행 중...")
         
         # 1. 주가 데이터 수집
+        logger.info("주가/수급 데이터 수집 중...")
         chart_data = await self._fetch_chart_data(stock_code, period="1y", interval="1d")
         if not chart_data:
             raise Exception("주가 데이터를 가져올 수 없습니다.")
@@ -194,24 +195,30 @@ class TechnicalAnalyzerAgent(BaseAgent):
         df = self._convert_to_dataframe(chart_data)
         
         # 5. 기술적 지표 계산
+        logger.info("기술적 지표 계산 중...")
         technical_indicators = self._calculate_technical_indicators(df)
         
         # 6. 차트 패턴 분석
+        logger.info("차트 패턴 분석 중...")
         chart_patterns = self._analyze_chart_patterns(df)
         
         # 7. 매매 신호 생성
+        logger.info("매매 신호 생성 중...")
         trading_signals = self._generate_trading_signals(df, technical_indicators)
         
         # 8. 시장 정서 분석
+        logger.info("시장 정서 분석 중...")
         market_sentiment = self._analyze_market_sentiment(df, supply_demand_data)
         
         # 9. LLM을 사용한 종합 분석
+        logger.info("LLM을 사용한 종합 분석 중...")
         summary = await self._generate_analysis_summary(
             stock_name, technical_indicators, chart_patterns, 
             trading_signals, market_sentiment, query, user_id
         )
         
         # 10. 투자 권고사항 생성
+        logger.info("투자 권고사항 생성 중...")
         recommendations = await self._generate_recommendations(
             stock_name, technical_indicators, trading_signals, user_id
         )

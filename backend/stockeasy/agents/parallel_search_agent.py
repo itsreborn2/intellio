@@ -359,7 +359,7 @@ class ParallelSearchAgent(BaseAgent):
         # 검색 결과가 비어있는지 확인
         has_data = False
         for key, value in state["retrieved_data"].items():
-            if key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "web_search_results"] and value:
+            if key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "web_search_results", "technical_analysis_data"] and value:
                 has_data = True
                 #logger.info(f"검색 결과 있음: {key}에 {len(value)}개 항목")
                 break

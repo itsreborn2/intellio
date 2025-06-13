@@ -6,6 +6,7 @@
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from langchain_google_genai import ChatGoogleGenerativeAI
 from loguru import logger
 import asyncio
 import json
@@ -117,6 +118,12 @@ class SummarizerAgent(BaseAgent):
             #state["agent_results"]["financial_analyzer"]["competitor_info"] = competitor_info
             competitors_infos = state.get("agent_results", {}).get("financial_analyzer", {}).get("competitor_infos", [])
             
+            # 기술적 분석 데이터 추출
+            technical_analysis_data = state.get("agent_results", {}).get("technical_analyzer", {}).get("data", {})
+            
+            # 테스트 모드 설정 (기술적 분석 섹션만 생성)
+            technical_analysis_only = True
+            
             summary, summary_by_section = await self.generate_sectioned_summary_v2(
                 query=query, 
                 user_id=user_id, 
@@ -125,8 +132,10 @@ class SummarizerAgent(BaseAgent):
                 toc_data_telegram_agent=toc_data_telegram_agent,
                 other_agents_context_str=other_agents_context_str,
                 competitors_infos=competitors_infos,
+                technical_analysis_data=technical_analysis_data,
                 stock_name=stock_name,
-                stock_code=stock_code
+                stock_code=stock_code,
+                technical_analysis_only=technical_analysis_only
             )
             
             state["summary"] = summary
@@ -155,17 +164,26 @@ class SummarizerAgent(BaseAgent):
                                          toc_data_telegram_agent: Dict[str, List[RetrievedTelegramMessage]],
                                          other_agents_context_str: str,
                                          competitors_infos: List[Dict[str, Any]],
+                                         technical_analysis_data: Optional[Dict[str, Any]] = None,
                                          stock_name: Optional[str] = None,
-                                         stock_code: Optional[str] = None
+                                         stock_code: Optional[str] = None,
+                                         technical_analysis_only: bool = False
                                          ):
         """
         동적 목차에 따라 섹션별로 요약을 생성하고 통합하는 함수 (v2: 핵심요약 후생성).
         1. "핵심 요약"을 제외한 나머지 섹션들을 병렬로 생성.
         2. 생성된 다른 섹션들의 내용을 바탕으로 "핵심 요약" 섹션을 생성.
         3. 모든 섹션 내용을 통합하여 최종 보고서와 섹션별 내용 맵을 반환.
+        
+        Args:
+            technical_analysis_only (bool): True인 경우 기술적 분석 섹션만 생성합니다. (테스트 모드)
         """
         logger.info("[SummarizerAgent] 동적 목차 기반 섹션별 요약 생성 시작 (v2: 핵심요약 후생성)")
         competitor_keywords = ["경쟁사", "경쟁업체", "경쟁기업", "라이벌", "경쟁자", "업계 경쟁", "경쟁 업체"]
+        technical_analysis_keywords = ["기술적", "기술적분석", "차트", "차트분석", "기술분석", "매매신호", "기술지표", "트레이딩"]
+        
+        if technical_analysis_only:
+            logger.info("[SummarizerAgent] 기술적 분석 섹션만 생성하는 테스트 모드로 실행됩니다.")
         
         toc_reports_summary_for_log = {k: len(v) for k, v in toc_data_company_report.items()}
         logger.info(f"[SummarizerAgent] 전달받은 toc_data_company_report (키: 리포트 수): {toc_reports_summary_for_log}")
@@ -247,7 +265,20 @@ class SummarizerAgent(BaseAgent):
             formatted_report_docs = self._format_documents_for_section(current_section_company_report)
             formatted_telegram_msgs = self._format_telegram_messages_for_section(current_section_telegram_msgs)
             
-            combined_context_for_current_section = f"{formatted_report_docs}\n\n{formatted_telegram_msgs}\n\n{other_agents_context_str}"
+            # 기술적 분석 섹션인지 확인
+            is_technical_analysis_section = any(keyword in current_section_title.lower() for keyword in technical_analysis_keywords)
+            
+            if is_technical_analysis_section:
+                # 기술적 분석 섹션은 기술적 분석 데이터만 사용 (토큰 절약)
+                logger.info(f"[SummarizerAgent] 기술적 분석 섹션 '{current_section_title}' - 기술적 분석 데이터만 사용")
+                formatted_technical_data = self._format_technical_analysis_data(technical_analysis_data)
+                combined_context_for_current_section = f"{formatted_technical_data}"
+            else:
+                if technical_analysis_only:
+                    # 테스트 모드에서는 기술적 분석 섹션이 아닌 경우 건너뜁니다.
+                    logger.info(f"[SummarizerAgent] 테스트 모드: 기술적 분석 섹션이 아닌 '{current_section_title}' 건너뜁니다.")
+                    continue
+                combined_context_for_current_section = f"{formatted_report_docs}\n\n{formatted_telegram_msgs}\n\n{other_agents_context_str}"
             
             # 경쟁사 목차이면, 경쟁사의 최근 분기별 재무데이터 추가.
             if any(keyword in current_section_title.lower() for keyword in competitor_keywords):
@@ -493,5 +524,132 @@ class SummarizerAgent(BaseAgent):
             formatted_data = "경쟁사 재무 데이터를 찾을 수 없습니다."
             
         return formatted_data
+        
+    def _format_technical_analysis_data(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
+        """
+        기술적 분석 데이터를 LLM 프롬프트에 적합한 문자열로 변환합니다.
+        
+        Args:
+            technical_analysis_data: 기술적 분석 결과 데이터
+            
+        Returns:
+            포맷팅된 기술적 분석 데이터 문자열
+        """
+        if not technical_analysis_data:
+            return "기술적 분석 데이터가 없습니다."
+        
+        formatted_text = "<기술적분석>\n"
+        
+        # 기본 정보
+        stock_name = technical_analysis_data.get("stock_name", "")
+        stock_code = technical_analysis_data.get("stock_code", "")
+        current_price = technical_analysis_data.get("current_price", 0)
+        analysis_date = technical_analysis_data.get("analysis_date", "")
+        
+        formatted_text += f"종목: {stock_name} ({stock_code})\n"
+        formatted_text += f"현재가: {current_price:,}원\n"
+        formatted_text += f"분석일시: {analysis_date}\n\n"
+        
+        # 기술적 지표
+        indicators = technical_analysis_data.get("technical_indicators", {})
+        if indicators:
+            formatted_text += "기술적 지표:\n"
+            for key, value in indicators.items():
+                if value is not None:
+                    if key.startswith("sma") or key.startswith("ema"):
+                        formatted_text += f"  {key.upper()}: {value:.2f}\n"
+                    elif key == "rsi":
+                        formatted_text += f"  RSI: {value:.2f}\n"
+                    elif key.startswith("macd"):
+                        formatted_text += f"  {key.upper()}: {value:.4f}\n"
+                    elif key.startswith("bollinger"):
+                        formatted_text += f"  {key.replace('_', ' ').title()}: {value:.2f}\n"
+                    elif key.startswith("stochastic"):
+                        formatted_text += f"  {key.replace('_', ' ').title()}: {value:.2f}\n"
+            formatted_text += "\n"
+        
+        # 차트 패턴
+        chart_patterns = technical_analysis_data.get("chart_patterns", {})
+        if chart_patterns:
+            formatted_text += "차트 패턴:\n"
+            
+            trend_direction = chart_patterns.get("trend_direction")
+            trend_strength = chart_patterns.get("trend_strength")
+            if trend_direction and trend_strength:
+                formatted_text += f"  추세: {trend_direction} ({trend_strength})\n"
+            
+            support_levels = chart_patterns.get("support_levels", [])
+            if support_levels:
+                formatted_text += f"  지지선: {', '.join([f'{level:.0f}' for level in support_levels])}\n"
+            
+            resistance_levels = chart_patterns.get("resistance_levels", [])
+            if resistance_levels:
+                formatted_text += f"  저항선: {', '.join([f'{level:.0f}' for level in resistance_levels])}\n"
+            
+            patterns = chart_patterns.get("patterns", [])
+            if patterns:
+                formatted_text += f"  식별된 패턴: {', '.join(patterns)}\n"
+            
+            formatted_text += "\n"
+        
+        # 매매 신호
+        trading_signals = technical_analysis_data.get("trading_signals", {})
+        if trading_signals:
+            formatted_text += "매매 신호:\n"
+            
+            overall_signal = trading_signals.get("overall_signal")
+            confidence = trading_signals.get("confidence", 0)
+            if overall_signal:
+                formatted_text += f"  종합 신호: {overall_signal} (신뢰도: {confidence:.2f})\n"
+            
+            stop_loss = trading_signals.get("stop_loss")
+            target_price = trading_signals.get("target_price")
+            if stop_loss:
+                formatted_text += f"  손절가: {stop_loss:.0f}원\n"
+            if target_price:
+                formatted_text += f"  목표가: {target_price:.0f}원\n"
+            
+            signals = trading_signals.get("signals", [])
+            if signals:
+                formatted_text += "  개별 신호:\n"
+                for signal in signals:
+                    indicator = signal.get("indicator", "")
+                    signal_type = signal.get("signal", "")
+                    reason = signal.get("reason", "")
+                    strength = signal.get("strength", 0)
+                    formatted_text += f"    {indicator}: {signal_type} ({reason}, 강도: {strength:.2f})\n"
+            
+            formatted_text += "\n"
+        
+        # 시장 정서
+        market_sentiment = technical_analysis_data.get("market_sentiment", {})
+        if market_sentiment:
+            formatted_text += "시장 정서:\n"
+            
+            volume_trend = market_sentiment.get("volume_trend")
+            if volume_trend:
+                formatted_text += f"  거래량 추이: {volume_trend}\n"
+            
+            price_volume_relation = market_sentiment.get("price_volume_relation")
+            if price_volume_relation:
+                formatted_text += f"  가격-거래량 관계: {price_volume_relation}\n"
+            
+            formatted_text += "\n"
+        
+        # 요약 및 권고사항
+        summary = technical_analysis_data.get("summary", "")
+        if summary:
+            formatted_text += f"분석 요약:\n{summary}\n\n"
+        
+        recommendations = technical_analysis_data.get("recommendations", [])
+        if recommendations:
+            formatted_text += "투자 권고사항:\n"
+            for i, rec in enumerate(recommendations, 1):
+                formatted_text += f"  {i}. {rec}\n"
+            formatted_text += "\n"
+        
+        formatted_text += "</기술적분석>"
+        
+        return formatted_text
         
     

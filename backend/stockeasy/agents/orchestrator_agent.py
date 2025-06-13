@@ -265,6 +265,7 @@ class OrchestratorAgent(BaseAgent):
         # 모든 에이전트를 포함하는 기본 계획 생성
         agents_list = []
 
+
         # 에이전트별 우선순위 설정        
         if web_search_mode:
             priority_map = {
@@ -335,6 +336,23 @@ class OrchestratorAgent(BaseAgent):
         if technical_analysis_needed:
             execution_order.insert(execution_order.index("industry_analyzer") + 1, "technical_analyzer")
 
+        # 기능 테스트 모드용. 기술적 분석 에이전트만 실행
+        test_mode = True
+        if test_mode:
+            priority_map = {
+                "technical_analyzer": 6,
+                "knowledge_integrator": 4,
+                "summarizer": 3,
+                "response_formatter": 2,
+                "fallback_manager": 1
+            }
+            execution_order = [
+                "technical_analyzer",
+                "knowledge_integrator",
+                "summarizer",
+                "response_formatter",
+                "fallback_manager"
+            ]
         
          # execution_order에 있는 것만 포함.
         for agent_name in self.available_agents.keys():
