@@ -1,10 +1,27 @@
 /**
- * 스탁이지 통계 API 타입 정의
+ * 스탁이지 통계 API 관련 타입 정의
  */
 
+/**
+ * 기본 응답 인터페이스
+ */
 export interface IBaseResponse {
   ok: boolean;
   status_message: string;
+}
+
+/**
+ * 순위 변동 타입
+ */
+export type RankChangeType = 'UP' | 'DOWN' | 'SAME' | 'NEW' | 'OUT';
+
+/**
+ * 순위 변동 정보 인터페이스
+ */
+export interface IRankChange {
+  change_type: RankChangeType;
+  change_value: number;
+  previous_rank?: number;
 }
 
 /**
@@ -14,6 +31,8 @@ export interface IStockPopularityItem {
   stock_code: string;
   stock_name: string;
   query_count: number;
+  rank: number;
+  rank_change?: IRankChange;
 }
 
 /**
@@ -35,7 +54,7 @@ export interface IPopularStocksResponse extends IBaseResponse {
 }
 
 /**
- * 세션 개수 응답 인터페이스
+ * 세션 수 응답 인터페이스
  */
 export interface ISessionCountResponse extends IBaseResponse {
   period_hours: number;
