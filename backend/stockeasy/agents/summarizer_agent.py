@@ -697,7 +697,7 @@ class SummarizerAgent(BaseAgent):
             # 최근 5개 데이터만 표시
             recent_supply_data = supply_demand_data[-5:] if len(supply_demand_data) > 5 else supply_demand_data
             formatted_text += f"  데이터 기간: 최근 {len(recent_supply_data)}일\n"
-            
+            #formatted_text += f"  데이터 단위: {unit}\n"
             if recent_supply_data:
                 # 기간별 누적 매매대금 계산
                 total_individual = 0
@@ -715,14 +715,14 @@ class SummarizerAgent(BaseAgent):
                     total_foreign += foreign
                     total_institution += institution
                     
-                    # 천원 단위로 표시
-                    formatted_text += f"    {date}: 개인 {individual/1000:+,.0f}천원, 외국인 {foreign/1000:+,.0f}천원, 기관 {institution/1000:+,.0f}천원\n"
+                    # 억원 단위로 표시
+                    formatted_text += f"    {date}: 개인 {individual/100:+,.1f}억원, 외국인 {foreign/100:+,.1f}억원, 기관 {institution/100:+,.1f}억원\n"
                 
                 # 기간별 누적 요약
                 formatted_text += "  기간별 누적 매매대금:\n"
-                formatted_text += f"    개인투자자: {total_individual/1000:+,.0f}천원\n"
-                formatted_text += f"    외국인투자자: {total_foreign/1000:+,.0f}천원\n"
-                formatted_text += f"    기관투자자: {total_institution/1000:+,.0f}천원\n"
+                formatted_text += f"    개인투자자: {total_individual/100:+,.1f}억원\n"
+                formatted_text += f"    외국인투자자: {total_foreign/100:+,.1f}억원\n"
+                formatted_text += f"    기관투자자: {total_institution/100:+,.1f}억원\n"
                 
                 # 주도 세력 분석
                 abs_individual = abs(total_individual)

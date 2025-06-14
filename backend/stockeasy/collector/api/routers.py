@@ -182,6 +182,7 @@ async def get_supply_demand(
             "end_date": end_date or start_date,
             "compressed": compressed,
             "gzip_enabled": gzip_enabled,
+            "unit" : "1000000",
             "data": supply_demand,
             "status": "success"
         }
@@ -644,6 +645,21 @@ async def trigger_adjustment_check(
     except Exception as e:
         logger.error(f"수정주가 체크 트리거 실패: {e}")
         raise HTTPException(status_code=500, detail=f"수정주가 체크 실패: {str(e)}")
+
+@admin_router.post("/scheduler/trigger/rs-update")
+async def trigger_rs_update(
+    data_collector: DataCollectorService = Depends(get_data_collector)
+):
+    """RS 데이터 업데이트 수동 실행"""
+    try:
+        logger.info("수동 RS 데이터 업데이트 실행")
+        await data_collector.scheduler_service.trigger_rs_update_now()
+        return {
+            "message": "RS 데이터 업데이트가 완료되었습니다"
+        }
+    except Exception as e:
+        logger.error(f"RS 데이터 업데이트 트리거 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"RS 데이터 업데이트 실패: {str(e)}")
 
 @admin_router.get("/adjustment/stats")
 async def get_adjustment_check_stats(
@@ -1410,6 +1426,161 @@ async def debug_supply_demand_data(
     except Exception as e:
         logger.error(f"수급 데이터 디버깅 실패: {e}")
         raise HTTPException(status_code=500, detail=f"수급 데이터 디버깅 실패: {str(e)}")
+
+# ========================================
+# ========================================
+# RS(상대강도) 데이터 라우터
+# ========================================
+
+# RS 데이터 라우터
+rs_router = APIRouter()
+
+@rs_router.get("/list")
+async def get_all_rs_data(
+    compressed: bool = Query(False, description="압축된 형태로 반환 (대량 데이터용)"),
+    gzip_enabled: bool = Query(False, description="gzip 압축 사용 (더 작은 크기)"),
+    force_update: bool = Query(False, description="강제 업데이트 여부")
+):
+    """
+    전체 종목의 RS(상대강도) 데이터 조회
+    
+    - compressed=false: 표준 JSON 형태 (기본값)
+    - compressed=true: 압축된 배열 형태 (데이터 크기 50-70% 절약)
+    - gzip_enabled=true: gzip 압축 적용 (추가 30-50% 절약)
+    - force_update=true: 캐시 무시하고 구글 시트에서 최신 데이터 가져오기
+    """
+    try:
+        from stockeasy.collector.services.rs_service import rs_service
+        
+        # RS 데이터 조회
+        rs_data_list = await rs_service.get_all_rs_data(force_update=force_update)
+        
+        if compressed:
+            # 압축된 형태로 응답
+            response_data = await rs_service.create_compressed_response(rs_data_list)
+        else:
+            # 표준 형태로 응답
+            response_data = await rs_service.create_standard_response(rs_data_list)
+        
+        # gzip 압축 적용
+        if gzip_enabled:
+            import json
+            import gzip
+            
+            # JSON을 문자열로 변환 후 gzip 압축
+            json_str = json.dumps(response_data.dict(), ensure_ascii=False, default=str)
+            compressed_content = gzip.compress(json_str.encode('utf-8'))
+            
+            return Response(
+                content=compressed_content,
+                media_type="application/json",
+                headers={
+                    "Content-Encoding": "gzip",
+                    "Content-Length": str(len(compressed_content))
+                }
+            )
+        else:
+            return response_data
+            
+    except Exception as e:
+        logger.error(f"RS 데이터 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"RS 데이터 조회 실패: {str(e)}")
+
+@rs_router.get("/{stock_code}")
+async def get_rs_data_by_code(
+    stock_code: str
+):
+    """
+    특정 종목의 RS(상대강도) 데이터 조회
+    
+    Args:
+        stock_code: 종목코드 (예: 005930)
+    """
+    try:
+        from stockeasy.collector.services.rs_service import rs_service
+        from stockeasy.collector.schemas.rs_schemas import SingleRSDataResponse
+        
+        # 종목별 RS 데이터 조회
+        rs_data = await rs_service.get_rs_data_by_code(stock_code)
+        
+        if rs_data is None:
+            return SingleRSDataResponse(
+                stock_code=stock_code,
+                data=None,
+                status="not_found",
+                message=f"종목 {stock_code}의 RS 데이터를 찾을 수 없습니다"
+            )
+        
+        return SingleRSDataResponse(
+            stock_code=stock_code,
+            data=rs_data,
+            status="success",
+            message="RS 데이터 조회 성공"
+        )
+        
+    except Exception as e:
+        logger.error(f"종목 {stock_code} RS 데이터 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"RS 데이터 조회 실패: {str(e)}")
+
+@rs_router.post("/update")
+async def update_rs_data(
+    force_update: bool = Query(True, description="강제 업데이트 여부")
+):
+    """
+    RS 데이터 수동 업데이트 (스케줄러 대신 사용 가능)
+    
+    - 구글 시트에서 최신 RS 데이터를 가져와서 캐시를 업데이트합니다
+    - force_update=true: 캐시 무시하고 강제로 최신 데이터 가져오기
+    """
+    try:
+        from stockeasy.collector.services.rs_service import rs_service
+        from stockeasy.collector.schemas.rs_schemas import RSUpdateResponse
+        
+        # RS 데이터 업데이트 실행
+        result = await rs_service.update_rs_data(force_update=force_update)
+        
+        return RSUpdateResponse(
+            message=result["message"],
+            updated_count=result["updated_count"],
+            last_updated=result["last_updated"],
+            status=result["status"]
+        )
+        
+    except Exception as e:
+        logger.error(f"RS 데이터 업데이트 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"RS 데이터 업데이트 실패: {str(e)}")
+
+@rs_router.get("/stats/summary")
+async def get_rs_data_stats():
+    """
+    RS 데이터 통계 및 상태 조회
+    """
+    try:
+        from stockeasy.collector.services.rs_service import rs_service
+        
+        # 전체 데이터 조회 (캐시 사용)
+        rs_data_list = await rs_service.get_all_rs_data(force_update=False)
+        last_update = rs_service.get_last_update_time()
+        
+        # 통계 계산
+        total_count = len(rs_data_list)
+        rs_available_count = len([data for data in rs_data_list if data.rs is not None])
+        rs_1m_available_count = len([data for data in rs_data_list if data.rs_1m is not None])
+        sector_available_count = len([data for data in rs_data_list if data.sector is not None])
+        
+        return {
+            "total_stocks": total_count,
+            "rs_available": rs_available_count,
+            "rs_1m_available": rs_1m_available_count,
+            "sector_available": sector_available_count,
+            "last_updated": last_update,
+            "cache_status": "active" if rs_service._cache_data is not None else "empty",
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"RS 데이터 통계 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"RS 데이터 통계 조회 실패: {str(e)}")
 
 # ========================================
 # 업종 차트 관련 API (KOSPI, KOSDAQ)
