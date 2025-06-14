@@ -364,7 +364,7 @@ class TimescaleService:
                         StockPrice.time >= start_date,
                         StockPrice.time <= end_date
                     )
-                ).order_by(desc(StockPrice.time)).limit(limit)
+                ).order_by(asc(StockPrice.time)).limit(limit)
                 
                 result = await session.execute(query)
                 prices = result.scalars().all()

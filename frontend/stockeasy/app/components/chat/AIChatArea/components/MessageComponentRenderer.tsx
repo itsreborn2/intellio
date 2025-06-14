@@ -9,7 +9,8 @@ import {
   MessageComponent, 
   IBarChartComponent, 
   ILineChartComponent,
-  IMixedChartComponent
+  IMixedChartComponent,
+  IPriceChartComponent
 } from '../types/chat';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,6 +20,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ComposedChart, Area,
   Cell, Sector, PieChart, Pie, RadialBarChart, RadialBar, ReferenceArea
 } from 'recharts';
+import { createChart, ColorType, LineStyle, CandlestickSeries, HistogramSeries, LineSeries, Time } from 'lightweight-charts';
 import { useMediaQuery } from '../hooks';
 
 // 차트 색상 테마 정의
@@ -857,6 +859,41 @@ export function MessageComponentRenderer({
       );
     }
     
+    case 'price_chart': {
+      const { title, data } = component as IPriceChartComponent;
+      
+      // 주가차트 컨테이너 스타일
+      const containerStyle: CSSProperties = {
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        borderRadius: '12px',
+        padding: '1em',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+        margin: '1em 0',
+        width: '100%'
+      };
+      
+      // 차트 높이 설정
+      const chartHeight = isMobile ? 400 : 500;
+      
+      return (
+        <div style={containerStyle}>
+          {title && <div style={{ 
+            fontWeight: 'bold', 
+            marginBottom: '0.5em',
+            fontSize: '1.2em',
+            textAlign: 'center',
+            color: '#333'
+          }}>{title}</div>}
+          
+          <PriceChart 
+            data={data}
+            height={chartHeight}
+            isMobile={isMobile}
+          />
+        </div>
+      );
+    }
+    
     case 'table': {
       const { title, data } = component as any;
       
@@ -1170,6 +1207,176 @@ const globalStyle = `
     stroke-opacity: 0.6;
   }
 `;
+
+// PriceChart 컴포넌트 - Lightweight Charts를 사용한 주가차트
+const PriceChart: React.FC<{
+  data: any;
+  height: number;
+  isMobile: boolean;
+}> = ({ data, height, isMobile }) => {
+  const chartContainerRef = React.useRef<HTMLDivElement>(null);
+  const chartRef = React.useRef<any>(null);
+  
+  React.useEffect(() => {
+    if (!chartContainerRef.current || !data.candle_data || data.candle_data.length === 0) {
+      return;
+    }
+    
+    // 차트 생성
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: height,
+      layout: {
+        background: { color: '#ffffff' },
+        textColor: '#333333',
+      },
+      grid: {
+        vertLines: {
+          color: '#e1e1e1',
+        },
+        horzLines: {
+          color: '#e1e1e1',
+        },
+      },
+      rightPriceScale: {
+        borderColor: '#cccccc',
+      },
+      timeScale: {
+        borderColor: '#cccccc',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    });
+    
+    chartRef.current = chart;
+    
+    // 캔들스틱 시리즈 추가
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#26a69a',
+      downColor: '#ef5350',
+      borderUpColor: '#26a69a',
+      borderDownColor: '#ef5350',
+      wickUpColor: '#26a69a',
+      wickDownColor: '#ef5350',
+    });
+    
+    // 캔들 데이터 설정
+    const candleData = data.candle_data.map((item: any) => ({
+      time: item.time as Time,
+      open: item.open,
+      high: item.high,
+      low: item.low,
+      close: item.close,
+    }));
+    
+    candlestickSeries.setData(candleData);
+    
+    // 거래량 데이터가 있으면 추가
+    if (data.volume_data && data.volume_data.length > 0) {
+      const volumeSeries = chart.addSeries(HistogramSeries, {
+        color: '#26a69a',
+        priceFormat: {
+          type: 'volume',
+        },
+        priceScaleId: 'volume',
+      });
+      
+      chart.priceScale('volume').applyOptions({
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        },
+      });
+      
+      volumeSeries.setData(data.volume_data.map((item: any) => ({
+        time: item.time as Time,
+        value: item.value,
+        color: item.color
+      })));
+    }
+    
+    // 이동평균선 추가
+    if (data.moving_averages && data.moving_averages.length > 0) {
+      const maSeries = chart.addSeries(LineSeries, {
+        color: '#ff6b35',
+        lineWidth: 2,
+      });
+      
+      maSeries.setData(data.moving_averages.map((item: any) => ({
+        time: item.time as Time,
+        value: item.value
+      })));
+    }
+    
+    // 지지선 추가
+    if (data.support_lines && data.support_lines.length > 0) {
+      data.support_lines.forEach((line: any) => {
+        const supportSeries = chart.addSeries(LineSeries, {
+          color: line.color || '#4ade80',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+        });
+        
+        // 지지선은 수평선으로 표시
+        const supportData = candleData.map((item: any) => ({
+          time: item.time,
+          value: line.price,
+        }));
+        
+        supportSeries.setData(supportData);
+      });
+    }
+    
+    // 저항선 추가
+    if (data.resistance_lines && data.resistance_lines.length > 0) {
+      data.resistance_lines.forEach((line: any) => {
+        const resistanceSeries = chart.addSeries(LineSeries, {
+          color: line.color || '#f87171',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+        });
+        
+        // 저항선은 수평선으로 표시
+        const resistanceData = candleData.map((item: any) => ({
+          time: item.time,
+          value: line.price,
+        }));
+        
+        resistanceSeries.setData(resistanceData);
+      });
+    }
+    
+    // 리사이즈 핸들러
+    const handleResize = () => {
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+        });
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    // 정리
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (chartRef.current) {
+        chartRef.current.remove();
+      }
+    };
+  }, [data, height]);
+  
+  return (
+    <div 
+      ref={chartContainerRef} 
+      style={{ 
+        width: '100%', 
+        height: `${height}px`,
+        position: 'relative'
+      }}
+    />
+  );
+};
 
 // default export 수정
 export default function EnhancedChartPairRenderer(props: { components: MessageComponent[] }) {

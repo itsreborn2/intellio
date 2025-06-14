@@ -24,7 +24,7 @@ from common.schemas.chat_components import (
     HeadingComponent, ParagraphComponent, ListComponent, ListItemComponent,
     CodeBlockComponent, BarChartComponent, LineChartComponent, ImageComponent,
     TableComponent, TableHeader, TableData, BarChartData, LineChartData,
-    MixedChartComponent, MixedChartData
+    MixedChartComponent, MixedChartData, PriceChartComponent, PriceChartData
 )
 from langchain_core.tools import tool
 
@@ -52,7 +52,335 @@ class ResponseFormatterAgent(BaseAgent):
         self.parser = StrOutputParser()
         self.prompt_template = FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT
 
-    async def _process_section_async(self, section_data: Dict[str, Any], summary_by_section: Dict[str, str], llm_with_tools: Any, tools: List[Callable], section_content_fallback: str) -> tuple[List[Dict[str, Any]], str, str]:
+        self.chart_placeholder = "[CHART_PLACEHOLDER:PRICE_CHART]"
+
+    def _format_date_for_chart(self, date_value: Any) -> str:
+        """
+        다양한 날짜 형식을 yyyy-mm-dd 형식으로 변환합니다.
+        
+        Args:
+            date_value: 날짜 값 (ISO 문자열, datetime 객체, 문자열 등)
+            
+        Returns:
+            yyyy-mm-dd 형식의 날짜 문자열
+        """
+        try:
+            if not date_value:
+                return ""
+            
+            # 이미 yyyy-mm-dd 형식인지 확인
+            if isinstance(date_value, str) and re.match(r'^\d{4}-\d{2}-\d{2}$', date_value):
+                return date_value
+            
+            # ISO 형식 문자열 처리 (2025-06-12T00:00:00+09:00)
+            if isinstance(date_value, str):
+                # ISO 형식에서 날짜 부분만 추출
+                if 'T' in date_value:
+                    date_part = date_value.split('T')[0]
+                    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_part):
+                        return date_part
+                
+                # 다른 형식의 날짜 문자열 파싱 시도
+                try:
+                    from datetime import datetime
+                    parsed_date = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
+                    return parsed_date.strftime('%Y-%m-%d')
+                except ValueError:
+                    # 일반적인 날짜 파싱 시도
+                    try:
+                        parsed_date = datetime.strptime(date_value, '%Y-%m-%d')
+                        return parsed_date.strftime('%Y-%m-%d')
+                    except ValueError:
+                        pass
+            
+            # datetime 객체 처리
+            if hasattr(date_value, 'strftime'):
+                return date_value.strftime('%Y-%m-%d')
+            
+            # 문자열로 변환 후 재시도
+            date_str = str(date_value)
+            if 'T' in date_str:
+                date_part = date_str.split('T')[0]
+                if re.match(r'^\d{4}-\d{2}-\d{2}$', date_part):
+                    return date_part
+            
+            logger.warning(f"날짜 형식 변환 실패: {date_value} (type: {type(date_value)})")
+            return str(date_value)  # 변환 실패 시 원본 반환
+            
+        except Exception as e:
+            logger.error(f"날짜 형식 변환 중 오류: {e}, 입력값: {date_value}")
+            return str(date_value) if date_value else ""
+    
+    def _create_price_chart_component_directly(self, tech_agent_result: Dict[str, Any], stock_code: str, stock_name: str) -> Dict[str, Any]:
+        """
+        tech agent 결과를 사용하여 PriceChartComponent를 직접 생성합니다.
+        """
+        logger.info(f"[DEBUG] _create_price_chart_component_directly 시작")
+        logger.info(f"[DEBUG] tech_agent_result 키들: {list(tech_agent_result.keys()) if tech_agent_result else 'None'}")
+        
+        # tech_agent_result 구조 확인
+        # tech_agent_result는 다음 구조를 가집니다:
+        # {
+        #   "agent_name": "technical_analyzer",
+        #   "status": "success", 
+        #   "data": {
+        #     "chart_data": [{"date": "...", "open": ..., "high": ..., "low": ..., "close": ..., "volume": ...}, ...],
+        #     "chart_patterns": {"support_levels": [...], "resistance_levels": [...], ...},
+        #     ...
+        #   },
+        #   ...
+        # }
+        
+        # 실제 데이터는 data 키 안에 있음
+        actual_data = tech_agent_result.get("data", {})
+        logger.info(f"[DEBUG] actual_data 키들: {list(actual_data.keys()) if actual_data else 'None'}")
+        
+        chart_data = actual_data.get("chart_data", [])
+        chart_patterns = actual_data.get("chart_patterns", {})
+        
+        logger.info(f"[DEBUG] chart_data 타입: {type(chart_data)}, 길이: {len(chart_data) if isinstance(chart_data, list) else 'N/A'}")
+        logger.info(f"[DEBUG] chart_patterns 키들: {list(chart_patterns.keys()) if chart_patterns else 'None'}")
+        
+        # OHLCV 데이터 변환
+        candle_data = []
+        logger.info(f"[DEBUG] OHLCV 데이터 변환 시작")
+        
+        if isinstance(chart_data, list) and chart_data:
+            logger.info(f"[DEBUG] chart_data는 리스트이고 {len(chart_data)}개 항목 존재")
+            for i, item in enumerate(chart_data):
+                if i < 3:  # 처음 3개만 로깅
+                    logger.info(f"[DEBUG] 데이터 항목 {i}: {item}")
+                if isinstance(item, dict):
+                    # timestamp를 date로 변환하거나 date 필드 사용
+                    time_value = item.get("date") or item.get("timestamp", "")
+                    
+                    # ISO 날짜 형식을 yyyy-mm-dd 형식으로 변환
+                    formatted_time = self._format_date_for_chart(time_value)
+                    
+                    candle_item = {
+                        "time": formatted_time,
+                        "open": float(item.get("open", 0)),
+                        "high": float(item.get("high", 0)),
+                        "low": float(item.get("low", 0)),
+                        "close": float(item.get("close", 0)),
+                        "volume": int(item.get("volume", 0))
+                    }
+                    candle_data.append(candle_item)
+                    if i < 3:  # 처음 3개만 로깅
+                        logger.info(f"[DEBUG] 캔들 데이터 추가: {candle_item}")
+                else:
+                    if i < 3:  # 처음 3개만 로깅
+                        logger.warning(f"[DEBUG] 유효하지 않은 데이터 항목 {i}: {item}")
+        else:
+            logger.warning(f"[DEBUG] chart_data가 리스트가 아니거나 비어있음: {type(chart_data)}")
+        
+        # 지지선/저항선 데이터 변환
+        support_lines = []
+        resistance_lines = []
+        
+        if chart_patterns:
+            support_levels = chart_patterns.get("support_levels", [])
+            resistance_levels = chart_patterns.get("resistance_levels", [])
+            
+            logger.info(f"[DEBUG] support_levels: {support_levels}")
+            logger.info(f"[DEBUG] resistance_levels: {resistance_levels}")
+            
+            for level in support_levels:
+                if level is not None:
+                    support_lines.append({
+                        "price": float(level),
+                        "label": f"지지선 {level:,.0f}원",
+                        "color": "#4ade80"  # 녹색
+                    })
+            
+            for level in resistance_levels:
+                if level is not None:
+                    resistance_lines.append({
+                        "price": float(level),
+                        "label": f"저항선 {level:,.0f}원",
+                        "color": "#f87171"  # 빨간색
+                    })
+        
+        # PriceChartComponent 생성
+        logger.info(f"[DEBUG] 최종 데이터 요약:")
+        logger.info(f"[DEBUG] - candle_data 개수: {len(candle_data)}")
+        logger.info(f"[DEBUG] - support_lines 개수: {len(support_lines)}")
+        logger.info(f"[DEBUG] - resistance_lines 개수: {len(resistance_lines)}")
+        
+        price_chart_component = create_price_chart({
+            "symbol": stock_code,
+            "name": stock_name,
+            "title": f"{stock_name}({stock_code}) 주가차트 분석",
+            "candle_data": candle_data,
+            "support_lines": support_lines if support_lines else None,
+            "resistance_lines": resistance_lines if resistance_lines else None,
+            "period": "1년",
+            "interval": "1일",
+            "metadata": {
+                "source": "technical_analyzer_agent",
+                "timestamp": datetime.now().isoformat()
+            }
+        })
+        
+        logger.info(f"[DEBUG] 생성된 price_chart_component: {price_chart_component}")
+        return price_chart_component
+     
+    def _find_placeholder_in_component(self, component: Dict[str, Any]) -> str:
+        """
+        컴포넌트에서 플레이스홀더가 포함된 필드를 찾아 반환합니다.
+        반환값: 플레이스홀더가 있는 필드명 (없으면 None)
+        """
+        component_type = component.get("type")
+        logger.info(f"[DEBUG] _find_placeholder_in_component: type={component_type}")
+        
+        # 컴포넌트 타입별로 플레이스홀더 검색 필드 정의
+        search_fields = {
+            "paragraph": ["content"],
+            "image": ["url", "alt", "caption"],
+            "heading": ["content"],
+            "code_block": ["content"],
+            "table": ["title"]  # 필요에 따라 더 추가 가능
+        }
+        
+        fields_to_search = search_fields.get(component_type, [])
+        logger.info(f"[DEBUG] 검색할 필드 목록: {fields_to_search}")
+        
+        for field in fields_to_search:
+            field_value = component.get(field, "")
+            logger.info(f"[DEBUG] 필드 '{field}' 검사 중: '{str(field_value)[:50]}...' (type: {type(field_value)})")
+            
+            if isinstance(field_value, str) and self.chart_placeholder in field_value:
+                logger.info(f"[DEBUG] 플레이스홀더 발견! 필드: {field}, 값: '{field_value}'")
+                return field
+            else:
+                if isinstance(field_value, str):
+                    logger.info(f"[DEBUG] 필드 '{field}'에서 플레이스홀더 없음")
+                else:
+                    logger.info(f"[DEBUG] 필드 '{field}'는 문자열이 아님: {type(field_value)}")
+        
+        logger.info(f"[DEBUG] 컴포넌트에서 플레이스홀더를 찾지 못함")
+        return None
+    
+    def _insert_price_chart_at_marker(self, components: List[Dict[str, Any]], price_chart_component: Dict[str, Any]) -> None:
+        """
+        컴포넌트 리스트에서 플레이스홀더를 찾아서 주가차트 컴포넌트로 교체합니다.
+        다양한 컴포넌트 타입의 여러 필드에서 플레이스홀더를 검색합니다.
+        """
+        logger.info(f"[DEBUG] _insert_price_chart_at_marker 시작")
+        logger.info(f"[DEBUG] 입력 컴포넌트 개수: {len(components)}")
+        logger.info(f"[DEBUG] 찾을 플레이스홀더: '{self.chart_placeholder}'")
+        
+        # 전체 컴포넌트에서 플레이스홀더 존재 여부 사전 확인
+        placeholder_exists = False
+        for idx, comp in enumerate(components):
+            comp_type = comp.get("type", "unknown")
+            if comp_type == "paragraph":
+                content = comp.get("content", "")
+                if self.chart_placeholder in content:
+                    placeholder_exists = True
+                    logger.info(f"[DEBUG] 컴포넌트 {idx} (paragraph)에서 플레이스홀더 발견: '{content[:100]}...'")
+            elif comp_type == "image":
+                url = comp.get("url", "")
+                if self.chart_placeholder in url:
+                    placeholder_exists = True
+                    logger.info(f"[DEBUG] 컴포넌트 {idx} (image)에서 플레이스홀더 발견: url='{url}'")
+        
+        if not placeholder_exists:
+            logger.warning(f"[DEBUG] 전체 컴포넌트에서 플레이스홀더 '{self.chart_placeholder}'를 찾을 수 없음")
+        
+        marker_found = False
+        for i, component in enumerate(components):
+            logger.info(f"[DEBUG] 컴포넌트 {i} 검사 중: type={component.get('type')}")
+            
+            placeholder_field = self._find_placeholder_in_component(component)
+            logger.info(f"[DEBUG] 컴포넌트 {i} 플레이스홀더 필드 검색 결과: {placeholder_field}")
+            
+            if placeholder_field:
+                marker_found = True
+                component_type = component.get("type")
+                field_value = component.get(placeholder_field, "")
+                
+                logger.info(f"[DEBUG] 플레이스홀더 발견! 컴포넌트 {i}: type={component_type}, field={placeholder_field}")
+                logger.info(f"[DEBUG] 필드 값: '{field_value}'")
+                
+                if component_type == "paragraph" and placeholder_field == "content":
+                    logger.info(f"[DEBUG] paragraph 컴포넌트 텍스트 분리 처리 시작")
+                    
+                    # paragraph의 content는 텍스트 분리 후 재구성
+                    parts = field_value.split(self.chart_placeholder)
+                    before_text = parts[0].strip()
+                    after_text = parts[1].strip() if len(parts) > 1 else ""
+                    
+                    logger.info(f"[DEBUG] 텍스트 분리 결과:")
+                    logger.info(f"[DEBUG] - before_text: '{before_text}'")
+                    logger.info(f"[DEBUG] - after_text: '{after_text}'")
+                    logger.info(f"[DEBUG] - parts 개수: {len(parts)}")
+                    
+                    # 원래 컴포넌트 제거
+                    removed_component = components.pop(i)
+                    logger.info(f"[DEBUG] 원본 컴포넌트 {i} 제거: {removed_component}")
+                    
+                    insert_index = i
+                    
+                    # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
+                    if before_text:
+                        before_comp = create_paragraph({"content": before_text})
+                        components.insert(insert_index, before_comp)
+                        logger.info(f"[DEBUG] before_text 컴포넌트 삽입 at {insert_index}: {before_comp}")
+                        insert_index += 1
+                    
+                    # 주가차트 컴포넌트 삽입
+                    components.insert(insert_index, price_chart_component)
+                    logger.info(f"[DEBUG] 주가차트 컴포넌트 삽입 at {insert_index}")
+                    insert_index += 1
+                    
+                    # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
+                    if after_text:
+                        after_comp = create_paragraph({"content": after_text})
+                        components.insert(insert_index, after_comp)
+                        logger.info(f"[DEBUG] after_text 컴포넌트 삽입 at {insert_index}: {after_comp}")
+                    
+                    logger.info(f"[DEBUG] paragraph 처리 완료. 주가차트 컴포넌트를 {component_type}.{placeholder_field} 마커 위치에 삽입했습니다.")
+                
+                else:
+                    logger.info(f"[DEBUG] 비-paragraph 컴포넌트 전체 교체 처리")
+                    original_component = components[i]
+                    components[i] = price_chart_component
+                    logger.info(f"[DEBUG] 컴포넌트 {i} 교체: {original_component} -> 주가차트")
+                    logger.info(f"[DEBUG] 주가차트 컴포넌트를 {component_type}.{placeholder_field} 마커 위치에 삽입했습니다.")
+                
+                break
+        
+        # 마커를 찾지 못한 경우 마지막에 추가
+        if not marker_found:
+            components.append(price_chart_component)
+            logger.warning("[DEBUG] 주가차트 플레이스홀더를 찾지 못해 섹션 마지막에 추가했습니다.")
+        
+        logger.info(f"[DEBUG] _insert_price_chart_at_marker 완료")
+        logger.info(f"[DEBUG] 최종 컴포넌트 개수: {len(components)}")
+        logger.info(f"[DEBUG] 마커 발견 여부: {marker_found}")
+        
+        # 최종 컴포넌트 리스트에서 플레이스홀더 잔존 여부 확인
+        remaining_placeholders = 0
+        for idx, comp in enumerate(components):
+            comp_type = comp.get("type", "unknown")
+            if comp_type == "paragraph":
+                content = comp.get("content", "")
+                if self.chart_placeholder in content:
+                    remaining_placeholders += 1
+                    logger.warning(f"[DEBUG] 처리 후에도 컴포넌트 {idx}에 플레이스홀더 잔존: '{content}'")
+            elif comp_type == "image":
+                url = comp.get("url", "")
+                if self.chart_placeholder in url:
+                    remaining_placeholders += 1
+                    logger.warning(f"[DEBUG] 처리 후에도 컴포넌트 {idx}에 플레이스홀더 잔존: url='{url}'")
+        
+        if remaining_placeholders > 0:
+            logger.error(f"[DEBUG] 경고: 처리 후에도 {remaining_placeholders}개의 플레이스홀더가 남아있습니다!")
+        else:
+            logger.info(f"[DEBUG] 확인: 모든 플레이스홀더가 정상적으로 처리되었습니다.")
+     
+    async def _process_section_async(self, section_data: Dict[str, Any], summary_by_section: Dict[str, str], llm_with_tools: Any, tools: List[Callable], section_content_fallback: str, tech_agent_result: Dict[str, Any] = None, stock_code: str = "", stock_name: str = "") -> tuple[List[Dict[str, Any]], str, str]:
         """
         개별 섹션을 비동기적으로 처리하여 컴포넌트와 포맷된 텍스트를 생성합니다.
         반환값: (생성된 컴포넌트 리스트, 해당 섹션의 LLM 텍스트 응답, 섹션 제목)
@@ -69,6 +397,13 @@ class ResponseFormatterAgent(BaseAgent):
 
         if section_title in summary_by_section and summary_by_section[section_title]:
             section_content = summary_by_section[section_title]
+            
+            # 플레이스홀더 처리 - 직접 컴포넌트 생성 방식
+            price_chart_component = None
+            if self.chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
+                # 주가차트 컴포넌트를 미리 생성
+                price_chart_component = self._create_price_chart_component_directly(tech_agent_result, stock_code, stock_name)
+                logger.info(f"주가차트 플레이스홀더 발견. 컴포넌트 생성: {section_title}")
             
             # 본문에 섹션 제목이 있으니, 여기서는 추가하지 않음.
             # 1. 섹션 제목 컴포넌트 추가 (항상 추가)  
@@ -110,6 +445,7 @@ class ResponseFormatterAgent(BaseAgent):
   4. 특히 매출액/영업이익/순이익과 같은 주요 지표와 그에 대한 증감률을 동시에 표현할 때
   5. **중요**: line_datasets의 각 라벨은 구체적이어야 합니다. "YoY (%)"가 아닌 "매출액 YoY (%)", "영업이익 YoY (%)" 형태로 작성하세요.
 
+
 표 데이터를 발견하면 단순히 테이블로 변환하지 말고, 다음 규칙을 따르세요:
 1. 시간 순서(연도별, 분기별)로 나열된 수치 데이터는 바차트나 라인차트로 변환하세요.
 2. 특히 '매출액', '영업이익', '당기순이익'과 같은 재무 지표와 '(YoY)', '(QoQ)' 같은 증감률 데이터는 함께 나타날 경우 혼합 차트(mixed_chart)로 표현하세요.
@@ -122,6 +458,8 @@ class ResponseFormatterAgent(BaseAgent):
 표, 차트, 목록 등은 내용에 적합한 경우에만 사용하세요.
 섹션 제목은 이미 추가되었으니 다시 추가하지 마세요.
 주의: 마크다운 볼드체(**text** 또는 __text__)는 반드시 컴포넌트의 실제 내용 값에 포함되어야 합니다.
+
+**중요**: [CHART_PLACEHOLDER:PRICE_CHART] 문자열이 있다면 이를 그대로 유지하고 변경하지 마세요. 이는 주가차트 위치를 표시하는 플레이스홀더입니다.
 """
             try:
                 section_response = await llm_with_tools.ainvoke(input=tool_calling_prompt)
@@ -202,6 +540,10 @@ class ResponseFormatterAgent(BaseAgent):
                     
                     # 처리된 컴포넌트들 추가
                     section_components.extend(processed_components)
+                    
+                    # 주가차트 컴포넌트가 있으면 마커를 찾아서 교체
+                    if price_chart_component:
+                        self._insert_price_chart_at_marker(section_components, price_chart_component)
                 
                 elif llm_generated_text_for_section.strip(): # 툴 콜 없이 텍스트만 반환된 경우
                     logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에 대해 Tool calling 없이 일반 텍스트 응답을 받았습니다.")
@@ -250,6 +592,10 @@ class ResponseFormatterAgent(BaseAgent):
             summary = state.get("summary", "")
             summary_by_section = state.get("summary_by_section", {})
             final_report_toc = state.get("final_report_toc") # 동적 목차 정보 가져오기
+            
+            # 플레이스홀더 처리를 위해 agent_results에서 technical_analyzer 결과 가져오기
+            agent_results = state.get("agent_results", {})
+            tech_agent_result = agent_results.get("technical_analyzer", {})
             
             processing_status = state.get("processing_status", {})
             summarizer_status = processing_status.get("summarizer", "not_started")
@@ -328,7 +674,10 @@ class ResponseFormatterAgent(BaseAgent):
                         summary_by_section, 
                         llm_with_tools, 
                         tools,
-                        section_content_fallback_for_task
+                        section_content_fallback_for_task,
+                        tech_agent_result,
+                        stock_code,
+                        stock_name
                     ))
                 
                 # section_results_with_exceptions: List[Union[Tuple[List[Dict], str, str], Exception]]]
@@ -379,15 +728,18 @@ class ResponseFormatterAgent(BaseAgent):
            
             # 최종 formatted_response 조합
             formatted_response = "".join(formatted_response_parts).strip()
-
+            
+            # 플레이스홀더 제거 (컴포넌트에서는 이미 대체되었지만 텍스트에서는 남아있을 수 있음)
+            formatted_response = formatted_response.replace(self.chart_placeholder, "")
+            
             # 컴포넌트가 제목 외에 없는 경우 (모든 섹션 내용이 없거나 파싱 실패)
             if len(all_components) <= 1: # 보고서 전체 제목 컴포넌트만 있는 경우
                 logger.warning("ResponseFormatterAgent: 동적 목차 기반 컴포넌트 생성 결과가 거의 비어있습니다. 기존 요약(summary)으로 대체 처리를 시도합니다.")
                 if summary: 
-                    state["formatted_response"] = summary 
+                    state["formatted_response"] = summary.replace(self.chart_placeholder, "")
                     all_components_fallback = await self.make_full_components(state)
                     all_components = [comp.dict() for comp in all_components_fallback if hasattr(comp, 'dict')]
-                    formatted_response = summary 
+                    formatted_response = summary.replace(self.chart_placeholder, "")
                 else: 
                     logger.warning("ResponseFormatterAgent: 대체할 summary 내용도 없습니다.")
                     # 이미 title 컴포넌트는 추가되어 있을 수 있음
@@ -396,9 +748,9 @@ class ResponseFormatterAgent(BaseAgent):
                     if not formatted_response: # 텍스트 응답도 비어있다면
                          formatted_response = "보고서 내용을 생성하지 못했습니다."
 
-            # 결과 저장
-            state["formatted_response"] = summary
-            state["answer"] = summary 
+            # 결과 저장 (플레이스홀더 제거된 텍스트 사용)
+            state["formatted_response"] = formatted_response
+            state["answer"] = formatted_response
             state["components"] = all_components
             
             # answer 키 설정 확인 로그 추가
@@ -1448,6 +1800,50 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
 def create_code_block(language: Optional[str], content: str) -> Dict:
     """코드 블록 컴포넌트를 생성합니다. language는 언어(선택), content는 코드 내용입니다."""
     return CodeBlockComponent(language=language, content=content).dict()
+
+@tool
+def create_price_chart(
+    symbol: str, 
+    name: str, 
+    title: Optional[str] = None,
+    candle_data: Optional[List[Dict[str, Any]]] = None,
+    volume_data: Optional[List[Dict[str, Any]]] = None,
+    moving_averages: Optional[List[Dict[str, Any]]] = None,
+    support_lines: Optional[List[Dict[str, Any]]] = None,
+    resistance_lines: Optional[List[Dict[str, Any]]] = None,
+    period: Optional[str] = None,
+    interval: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None
+) -> Dict:
+    """주가차트 컴포넌트를 생성합니다.
+    symbol은 종목코드, name은 종목명, title은 차트 제목,
+    candle_data는 OHLCV 캔들 데이터, volume_data는 거래량 데이터,
+    moving_averages는 이동평균선 데이터, support_lines는 지지선 데이터,
+    resistance_lines는 저항선 데이터입니다."""
+    
+    # 기본 캔들 데이터가 없는 경우 빈 리스트로 초기화
+    if candle_data is None:
+        candle_data = []
+    
+    # 기본 제목 설정
+    if title is None:
+        title = f"{name}({symbol}) 주가차트"
+    
+    return PriceChartComponent(
+        title=title,
+        data=PriceChartData(
+            symbol=symbol,
+            name=name,
+            candle_data=candle_data,
+            volume_data=volume_data,
+            moving_averages=moving_averages,
+            support_lines=support_lines,
+            resistance_lines=resistance_lines,
+            period=period,
+            interval=interval,
+            metadata=metadata
+        )
+    ).dict()
 
 @tool
 def create_image(url: str, alt: str, caption: Optional[str] = None) -> Dict:

@@ -6,6 +6,7 @@ Pydantic 모델들을 정의합니다.
 """
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Literal, Union, Optional
+from datetime import datetime
 
 
 # --- 복합 컴포넌트 ---
@@ -49,6 +50,27 @@ class MixedChartComponent(BaseModel):
     type: Literal['mixed_chart'] = 'mixed_chart'
     title: Optional[str] = Field(None, description="차트 제목")
     data: MixedChartData = Field(..., description="차트 데이터")
+
+
+class PriceChartData(BaseModel):
+    """주가차트 데이터 모델"""
+    symbol: str = Field(..., description="종목코드")
+    name: str = Field(..., description="종목명")
+    candle_data: List[Dict[str, Any]] = Field(..., description="캔들스틱 데이터 (OHLCV)")
+    volume_data: Optional[List[Dict[str, Any]]] = Field(None, description="거래량 데이터")
+    moving_averages: Optional[List[Dict[str, Any]]] = Field(None, description="이동평균선 데이터")
+    support_lines: Optional[List[Dict[str, Any]]] = Field(None, description="지지선 데이터")
+    resistance_lines: Optional[List[Dict[str, Any]]] = Field(None, description="저항선 데이터")
+    period: Optional[str] = Field(None, description="조회 기간")
+    interval: Optional[str] = Field(None, description="차트 간격")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="추가 메타데이터")
+
+
+class PriceChartComponent(BaseModel):
+    """주가차트 컴포넌트 모델"""
+    type: Literal['price_chart'] = 'price_chart'
+    title: Optional[str] = Field(None, description="차트 제목")
+    data: PriceChartData = Field(..., description="주가차트 데이터")
 
 
 class ImageComponent(BaseModel):
@@ -121,6 +143,7 @@ MessageComponent = Union[
     BarChartComponent,
     LineChartComponent,
     MixedChartComponent,
+    PriceChartComponent,
     ImageComponent,
     TableComponent,
     # 필요시 추가 컴포넌트 정의

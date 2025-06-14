@@ -16,7 +16,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 from stockeasy.models.agent_io import CompanyReportData, RetrievedTelegramMessage
 from stockeasy.services.financial.stock_info_service import StockInfoService
-from stockeasy.prompts.summarizer_section_prompt import create_all_section_content, format_other_agent_data, PROMPT_GENERATE_SECTION_CONTENT, PROMPT_GENERATE_EXECUTIVE_SUMMARY
+from stockeasy.prompts.summarizer_section_prompt import create_all_section_content, format_other_agent_data, PROMPT_GENERATE_SECTION_CONTENT, PROMPT_GENERATE_EXECUTIVE_SUMMARY, PROMPT_GENERATE_TECHNICAL_ANALYSIS_SECTION
 from common.models.token_usage import ProjectType
 from stockeasy.prompts.summarizer_prompt import DEEP_RESEARCH_SYSTEM_PROMPT, create_prompt
 from stockeasy.agents.base import BaseAgent
@@ -270,7 +270,7 @@ class SummarizerAgent(BaseAgent):
             
             if is_technical_analysis_section:
                 # 기술적 분석 섹션은 기술적 분석 데이터만 사용 (토큰 절약)
-                logger.info(f"[SummarizerAgent] 기술적 분석 섹션 '{current_section_title}' - 기술적 분석 데이터만 사용")
+                logger.info(f"[SummarizerAgent] 기술적 분석 섹션 '{current_section_title}' - 기술적 분석 데이터만 사용 및 차트 플레이스홀더 활성화")
                 formatted_technical_data = self._format_technical_analysis_data(technical_analysis_data)
                 combined_context_for_current_section = f"{formatted_technical_data}"
             else:
@@ -286,13 +286,23 @@ class SummarizerAgent(BaseAgent):
                 formatted_data = self._format_competitor_financial_data(competitors_infos)
                 combined_context_for_current_section += f"\n<경쟁사 분기별 재무데이터>\n{formatted_data}\n</경쟁사 분기별 재무데이터>"
 
-            prompt_str_current = PROMPT_GENERATE_SECTION_CONTENT.format(
-                query=query,
-                section_title=current_section_title,
-                section_description=current_section_description,
-                subsections_info=subsections_text_current,
-                all_analyses=combined_context_for_current_section
-            )
+            # 프롬프트 선택: 기술적 분석 섹션이면 전용 프롬프트 사용
+            if is_technical_analysis_section:
+                prompt_str_current = PROMPT_GENERATE_TECHNICAL_ANALYSIS_SECTION.format(
+                    query=query,
+                    section_title=current_section_title,
+                    section_description=current_section_description,
+                    subsections_info=subsections_text_current,
+                    all_analyses=combined_context_for_current_section
+                )
+            else:
+                prompt_str_current = PROMPT_GENERATE_SECTION_CONTENT.format(
+                    query=query,
+                    section_title=current_section_title,
+                    section_description=current_section_description,
+                    subsections_info=subsections_text_current,
+                    all_analyses=combined_context_for_current_section
+                )
             messages_current = [HumanMessage(content=prompt_str_current)]
             task_current = asyncio.create_task(self.agent_llm.ainvoke_with_fallback(
                 messages_current, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db
@@ -325,6 +335,12 @@ class SummarizerAgent(BaseAgent):
             
             section_text_content = raw_result.content if hasattr(raw_result, 'content') else str(raw_result)
             logger.info(f"[SummarizerAgent] '{original_section_title}' (목차인덱스 {section_detail['original_toc_index']}) 생성 완료 (길이: {len(section_text_content)})")
+            
+            # 차트 플레이스홀더 확인 및 로깅
+            import re
+            chart_placeholders = re.findall(r'\[CHART_PLACEHOLDER:[A-Z_]+\]', section_text_content)
+            if chart_placeholders:
+                logger.info(f"[SummarizerAgent] '{original_section_title}'에서 차트 플레이스홀더 발견: {chart_placeholders}")
             
             #generated_texts_for_summary_input.append(f"## {original_section_title}\n{section_text_content}")
             generated_texts_for_summary_input.append(section_text_content)
@@ -636,6 +652,98 @@ class SummarizerAgent(BaseAgent):
             
             formatted_text += "\n"
         
+        # 차트 데이터 (최근 가격 동향)
+        chart_data = technical_analysis_data.get("chart_data", [])
+        if chart_data:
+            formatted_text += "최근 주가 동향:\n"
+            
+            # 최근 10개 데이터만 표시
+            recent_data = chart_data[-10:] if len(chart_data) > 10 else chart_data
+            formatted_text += f"  데이터 기간: 최근 {len(recent_data)}일\n"
+            
+            if recent_data:
+                # 첫 번째와 마지막 데이터로 변화율 계산
+                first_close = recent_data[0].get("close", 0)
+                last_close = recent_data[-1].get("close", 0)
+                
+                if first_close > 0:
+                    change_rate = ((last_close - first_close) / first_close) * 100
+                    formatted_text += f"  기간 변화율: {change_rate:+.2f}%\n"
+                
+                # 최고가, 최저가
+                closes = [data.get("close", 0) for data in recent_data if data.get("close")]
+                if closes:
+                    max_price = max(closes)
+                    min_price = min(closes)
+                    formatted_text += f"  기간 내 최고가: {max_price:,.0f}원\n"
+                    formatted_text += f"  기간 내 최저가: {min_price:,.0f}원\n"
+                
+                # 최근 한달 데이터 상세
+                recent_1month = recent_data[-22:] if len(recent_data) >= 3 else recent_data
+                formatted_text += "  최근 한달 상세:\n"
+                for data in recent_1month:
+                    date = data.get("date", "")
+                    close = data.get("close", 0)
+                    volume = data.get("volume", 0)
+                    formatted_text += f"    {date}: 종가 {close:,.0f}원, 거래량 {volume:,}주\n"
+            
+            formatted_text += "\n"
+        
+        # 수급 데이터 (투자주체별 거래현황)
+        supply_demand_data = technical_analysis_data.get("supply_demand_data", [])
+        if supply_demand_data:
+            formatted_text += "투자주체별 거래현황:\n"
+            
+            # 최근 5개 데이터만 표시
+            recent_supply_data = supply_demand_data[-5:] if len(supply_demand_data) > 5 else supply_demand_data
+            formatted_text += f"  데이터 기간: 최근 {len(recent_supply_data)}일\n"
+            
+            if recent_supply_data:
+                # 기간별 누적 매매대금 계산
+                total_individual = 0
+                total_foreign = 0
+                total_institution = 0
+                
+                formatted_text += "  일별 수급 현황:\n"
+                for data in recent_supply_data:
+                    date = data.get("date", "")
+                    individual = data.get("individual_investor", 0) or 0
+                    foreign = data.get("foreign_investor", 0) or 0
+                    institution = data.get("institution_total", 0) or 0
+                    
+                    total_individual += individual
+                    total_foreign += foreign
+                    total_institution += institution
+                    
+                    # 천원 단위로 표시
+                    formatted_text += f"    {date}: 개인 {individual/1000:+,.0f}천원, 외국인 {foreign/1000:+,.0f}천원, 기관 {institution/1000:+,.0f}천원\n"
+                
+                # 기간별 누적 요약
+                formatted_text += "  기간별 누적 매매대금:\n"
+                formatted_text += f"    개인투자자: {total_individual/1000:+,.0f}천원\n"
+                formatted_text += f"    외국인투자자: {total_foreign/1000:+,.0f}천원\n"
+                formatted_text += f"    기관투자자: {total_institution/1000:+,.0f}천원\n"
+                
+                # 주도 세력 분석
+                abs_individual = abs(total_individual)
+                abs_foreign = abs(total_foreign)
+                abs_institution = abs(total_institution)
+                
+                max_amount = max(abs_individual, abs_foreign, abs_institution)
+                if max_amount == abs_individual:
+                    main_player = "개인투자자"
+                    trend = "순매수" if total_individual > 0 else "순매도"
+                elif max_amount == abs_foreign:
+                    main_player = "외국인투자자"
+                    trend = "순매수" if total_foreign > 0 else "순매도"
+                else:
+                    main_player = "기관투자자"
+                    trend = "순매수" if total_institution > 0 else "순매도"
+                
+                formatted_text += f"  주도세력: {main_player} ({trend})\n"
+            
+            formatted_text += "\n"
+        
         # 요약 및 권고사항
         summary = technical_analysis_data.get("summary", "")
         if summary:
@@ -652,4 +760,61 @@ class SummarizerAgent(BaseAgent):
         
         return formatted_text
         
+    def replace_chart_placeholders_with_components(self, content: str, chart_components: Dict[str, Dict[str, Any]]) -> str:
+        """
+        생성된 섹션 내용에서 차트 플레이스홀더를 실제 차트 컴포넌트로 교체합니다.
+        
+        Args:
+            content: 플레이스홀더가 포함된 섹션 내용
+            chart_components: 플레이스홀더 타입별 차트 컴포넌트 데이터
+            
+        Returns:
+            차트 컴포넌트로 교체된 섹션 내용
+        """
+        import re
+        
+        def replace_placeholder(match):
+            placeholder_type = match.group(1)  # PRICE_CHART, CANDLESTICK_CHART 등
+            
+            if placeholder_type in chart_components:
+                chart_data = chart_components[placeholder_type]
+                # 차트 컴포넌트를 마크다운 형식으로 변환
+                chart_markdown = self._format_chart_component_to_markdown(chart_data)
+                return chart_markdown
+            else:
+                logger.warning(f"[SummarizerAgent] 차트 컴포넌트를 찾을 수 없음: {placeholder_type}")
+                return f"*차트 데이터를 찾을 수 없습니다: {placeholder_type}*"
+        
+        # 플레이스홀더 패턴: [CHART_PLACEHOLDER:TYPE]
+        pattern = r'\[CHART_PLACEHOLDER:([A-Z_]+)\]'
+        replaced_content = re.sub(pattern, replace_placeholder, content)
+        
+        return replaced_content
     
+    def _format_chart_component_to_markdown(self, chart_data: Dict[str, Any]) -> str:
+        """
+        차트 컴포넌트 데이터를 마크다운 형식으로 변환합니다.
+        
+        Args:
+            chart_data: 차트 컴포넌트 데이터
+            
+        Returns:
+            마크다운 형식의 차트 표현
+        """
+        chart_type = chart_data.get('type', 'chart')
+        chart_title = chart_data.get('title', '차트')
+        
+        # 기본적인 차트 표현 (실제로는 프론트엔드에서 렌더링될 컴포넌트 정보)
+        markdown = f"\n**{chart_title}**\n\n"
+        
+        # 차트 데이터가 있다면 간단한 텍스트 표현 추가
+        if 'data' in chart_data:
+            markdown += "```\n"
+            markdown += f"차트 타입: {chart_type}\n"
+            markdown += f"데이터 포인트: {len(chart_data['data'])}개\n"
+            markdown += "```\n\n"
+        
+        # 차트 컴포넌트 메타데이터 (프론트엔드에서 사용)
+        markdown += f"<!-- CHART_COMPONENT: {chart_data} -->\n\n"
+        
+        return markdown

@@ -16,7 +16,7 @@ import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.output_parsers import JsonOutputParser
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional as PydanticOptional
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from common.models.token_usage import ProjectType
@@ -40,11 +40,31 @@ class Entities(BaseModel):
     stock_name: PydanticOptional[str] = Field(None, description="종목명 또는 null")
     stock_code: PydanticOptional[str] = Field(None, description="종목코드 또는 null")
     sector: PydanticOptional[str] = Field(None, description="종목이 속한 산업/섹터 또는 null")
-    subgroup: PydanticOptional[list] = Field(None, description="종목이 속한 subgroup 또는 null")
+    subgroup: PydanticOptional[List[str]] = Field(None, description="종목이 속한 subgroup 또는 null")
     time_range: PydanticOptional[str] = Field(None, description="시간범위 또는 null")
     financial_metric: PydanticOptional[str] = Field(None, description="재무지표 또는 null")
     competitor: PydanticOptional[str] = Field(None, description="경쟁사 또는 null")
     product: PydanticOptional[str] = Field(None, description="제품/서비스 또는 null")
+
+    @validator('subgroup', pre=True)
+    def validate_subgroup(cls, v):
+        """subgroup 필드의 안전한 처리를 위한 validator"""
+        if v is None or v == "null" or v == "":
+            return None
+        if isinstance(v, str):
+            # 문자열인 경우 JSON 파싱 시도
+            try:
+                import json
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, ValueError):
+                pass
+            # JSON 파싱 실패 시 빈 리스트 반환
+            return None
+        if isinstance(v, list):
+            return v
+        return None
 
 
 
@@ -521,10 +541,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                     
                     # AIMessage에서 JSON 파싱 시도
                     try:
-                        import re
-                        import json
-                        
-                        # JSON 패턴 찾기 (중괄호로 감싸진 부분)
+                        # JSON 패턴 찾기 (중괄호로 감싸진 부분) - re 모듈은 이미 최상단에 import됨
                         json_str = extract_json_from_text(ai_response.content)
                         
                         if json_str:
@@ -591,9 +608,9 @@ class QuestionAnalyzerAgent(BaseAgent):
                 except Exception:
                     subgroup_list = []
                 
-                # 기술적 분석 필요성 판단 - 기본 구조에서는 False로 설정
-                logger.info("[기본분석구조] 기술적분석 필요성을 False로 설정 (fallback 구조)")
-                ta_needed_default = False
+                # 기술적 분석 필요성 판단 - 기본 구조에서도 정상적으로 판단
+                ta_needed_default = self._detect_technical_analysis_need(query)
+                logger.info(f"[기본분석구조] 기술적분석 필요성 설정: {ta_needed_default} (fallback 구조)")
                 
                 return {
                     "entities": {
