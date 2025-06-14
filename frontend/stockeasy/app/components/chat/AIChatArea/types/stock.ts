@@ -32,6 +32,11 @@ export interface StockSearchState {
 export interface PopularStock {
   stock: StockOption;
   rank: number;
+  rankChange?: {
+    change_type: 'UP' | 'DOWN' | 'SAME' | 'NEW' | 'OUT';
+    change_value: number;
+    previous_rank?: number;
+  };
 }
 
 export type StockSearchAction =
