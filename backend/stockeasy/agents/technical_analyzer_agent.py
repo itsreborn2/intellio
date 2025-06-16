@@ -179,48 +179,60 @@ class TechnicalAnalyzerAgent(BaseAgent):
         """
         logger.info(f"종목 {stock_code}에 대한 기술적 분석 수행 중...")
         
-        # 1. 주가 데이터 수집
+        # 1. 종목 기본 정보 수집
+        logger.info("종목 기본 정보 수집 중...")
+        stock_info = await self._fetch_stock_info(stock_code)
+        
+        # 2. 주가 데이터 수집 (ATR 등 순차적 지표의 정확성을 위해 2년치 데이터 수집)
         logger.info("주가/수급 데이터 수집 중...")
-        chart_data = await self._fetch_chart_data(stock_code, period="1y", interval="1d")
+        chart_data = await self._fetch_chart_data(stock_code, period="2y", interval="1d")
         if not chart_data:
             raise Exception("주가 데이터를 가져올 수 없습니다.")
         
-        # 2. 수급 데이터 수집
+        # 3. 수급 데이터 수집
         supply_demand_data = await self._fetch_supply_demand_data(stock_code)
         
-        # 3. 시장지수 데이터 수집
+        # 4. RS(상대강도) 데이터 수집
+        logger.info("RS(상대강도) 데이터 수집 중...")
+        rs_data = await self._fetch_rs_data(stock_code, stock_info)
+        
+        # 5. 시장지수 데이터 수집
         market_indices = await self._fetch_market_indices()
         
-        # 4. 데이터를 DataFrame으로 변환
+        # 6. 데이터를 DataFrame으로 변환
         df = self._convert_to_dataframe(chart_data)
         
-        # 5. 기술적 지표 계산
+        # 7. 기술적 지표 계산
         logger.info("기술적 지표 계산 중...")
         technical_indicators = self._calculate_technical_indicators(df)
         
-        # 6. 차트 패턴 분석
+        # 7-1. 차트용 지표 시계열 데이터 생성
+        logger.info("차트용 지표 시계열 데이터 생성 중...")
+        chart_indicators_data = self._generate_chart_indicators_data(df)
+        
+        # 8. 차트 패턴 분석
         logger.info("차트 패턴 분석 중...")
         chart_patterns = self._analyze_chart_patterns(df)
         
-        # 7. 매매 신호 생성
+        # 9. 매매 신호 생성
         logger.info("매매 신호 생성 중...")
         trading_signals = self._generate_trading_signals(df, technical_indicators)
         
-        # 8. 시장 정서 분석
+        # 10. 시장 정서 분석
         logger.info("시장 정서 분석 중...")
         market_sentiment = self._analyze_market_sentiment(df, supply_demand_data)
         
-        # 9. LLM을 사용한 종합 분석
+        # 11. LLM을 사용한 종합 분석
         logger.info("LLM을 사용한 종합 분석 중...")
         summary = await self._generate_analysis_summary(
             stock_name, technical_indicators, chart_patterns, 
-            trading_signals, market_sentiment, query, user_id
+            trading_signals, market_sentiment, rs_data, stock_info, query, user_id
         )
         
-        # 10. 투자 권고사항 생성
+        # 12. 투자 권고사항 생성
         logger.info("투자 권고사항 생성 중...")
         recommendations = await self._generate_recommendations(
-            stock_name, technical_indicators, trading_signals, user_id
+            stock_name, technical_indicators, trading_signals, rs_data, user_id
         )
         
         # 결과 구성 (numpy 타입을 Python 타입으로 안전하게 변환)
@@ -231,9 +243,12 @@ class TechnicalAnalyzerAgent(BaseAgent):
             "stock_name": stock_name,
             "analysis_date": datetime.now(),
             "current_price": float(current_price),
+            "stock_info": stock_info,
             "chart_patterns": chart_patterns,
             "chart_data": chart_data,
+            "chart_indicators_data": chart_indicators_data,
             "supply_demand_data": supply_demand_data,
+            "rs_data": rs_data,
             "market_indices": market_indices,
             "technical_indicators": technical_indicators,
             "trading_signals": trading_signals,
@@ -269,6 +284,47 @@ class TechnicalAnalyzerAgent(BaseAgent):
     # ========================================
     # 데이터 수집 메서드들 (Phase 2.2)
     # ========================================
+    
+    async def _fetch_stock_info(self, stock_code: str) -> Optional[Dict[str, Any]]:
+        """
+        stock-data-collector API에서 종목 기본 정보를 가져옵니다.
+        
+        Args:
+            stock_code: 종목코드
+            
+        Returns:
+            파싱된 종목 기본 정보 또는 None (실패 시)
+        """
+        try:
+            url = f"{self.api_base_url}/api/v1/stock/info/{stock_code}"
+            
+            logger.info(f"종목 기본 정보 요청: {url}")
+            
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    response_data = await response.json()
+                    
+                    # 응답 구조 확인
+                    if not isinstance(response_data, dict):
+                        logger.error("잘못된 종목 기본 정보 응답 구조")
+                        return None
+                    
+                    stock_info = response_data.get('data', {})
+                    if not stock_info:
+                        logger.warning("종목 기본 정보가 비어있습니다.")
+                        return None
+                    
+                    logger.info(f"종목 기본 정보 수신 성공")
+                    logger.info(f"종목명: {stock_info.get('name')}, 시장: {stock_info.get('market')}, 업종: {stock_info.get('sector')}")
+                    
+                    return stock_info
+                else:
+                    logger.warning(f"종목 기본 정보 요청 실패: HTTP {response.status}")
+                    return None
+                    
+        except Exception as e:
+            logger.warning(f"종목 기본 정보 수집 중 오류: {str(e)}")
+            return None
     
     async def _fetch_chart_data(self, stock_code: str, period: str = "1y", interval: str = "1d") -> Optional[List[Dict[str, Any]]]:
         """
@@ -452,6 +508,316 @@ class TechnicalAnalyzerAgent(BaseAgent):
             logger.warning(f"수급 데이터 수집 중 오류: {str(e)}")
             return None
     
+    async def _fetch_rs_data(self, stock_code: str, stock_info: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """
+        stock-data-collector API에서 RS(상대강도) 데이터를 가져옵니다.
+        현재 종목 + KOSPI + KOSDAQ을 함께 조회하여 시장 대비 비교 분석이 가능합니다.
+        
+        Args:
+            stock_code: 종목코드
+            
+        Returns:
+            파싱된 RS 데이터 (종목 + 시장 지수 포함) 또는 None (실패 시)
+        """
+        try:
+            # 종목의 market_code에 맞는 시장지수만 가져오기
+            market_code = stock_info.get('market') if stock_info else None
+            codes_to_fetch = [stock_code]
+            
+            if market_code in ["KOSPI", "KOSDAQ"]:
+                codes_to_fetch.append(market_code)
+            else:
+                # 시장 정보가 없거나 기타인 경우 KOSPI를 기본으로
+                codes_to_fetch.append("KOSPI")
+                market_code = "KOSPI"
+            
+            codes_param = ",".join(codes_to_fetch)
+            
+            url = f"{self.api_base_url}/api/v1/rs/multiple"
+            params = {
+                "codes": codes_param,
+                "compressed": "false",
+                "gzip_enabled": "false"
+            }
+            
+            logger.info(f"여러 종목 RS 데이터 요청: {url}, 종목들: {codes_to_fetch}")
+            
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    response_data = await response.json()
+                    
+                    # 응답 구조 확인
+                    if not isinstance(response_data, dict) or 'data' not in response_data:
+                        logger.error("잘못된 RS 응답 구조")
+                        return None
+                    
+                    data_list = response_data.get('data', [])
+                    successful_count = response_data.get('successful_count', 0)
+                    failed_codes = response_data.get('failed_codes', [])
+                    
+                    logger.info(f"RS 데이터 조회 결과: {successful_count}개 성공, 실패: {failed_codes}")
+                    
+                    # 종목별로 데이터 분류
+                    target_stock_data = None
+                    market_data = None
+                    
+                    for rs_data in data_list:
+                        code = rs_data.get("stock_code")
+                        if code == stock_code:
+                            target_stock_data = rs_data
+                        elif code == market_code:
+                            market_data = rs_data
+                    
+                    # 메인 종목 데이터가 없으면 실패로 처리
+                    if target_stock_data is None:
+                        logger.warning(f"종목 {stock_code}의 RS 데이터가 없습니다")
+                        return None
+                    
+                    logger.info(f"종목 {stock_code} RS 데이터 수신 성공")
+                    logger.info(f"RS 값: {target_stock_data.get('rs')}, RS_1M: {target_stock_data.get('rs_1m')}, 업종: {target_stock_data.get('sector')}")
+                    
+                    # 시장 지수 정보 로깅
+                    if market_data:
+                        logger.info(f"{market_code} RS: {market_data.get('rs')}")
+                    
+                    # 시장 비교 정보 구성
+                    market_comparison = {
+                        "market_code": market_code,
+                        "market_rs": market_data.get("rs") if market_data else None,
+                        "market_rs_1m": market_data.get("rs_1m") if market_data else None,
+                        "market_rs_3m": market_data.get("rs_3m") if market_data else None,
+                        "market_rs_6m": market_data.get("rs_6m") if market_data else None
+                    }
+                    
+                    # 종합 RS 데이터 구성
+                    rs_summary = {
+                        # 메인 종목 정보
+                        "stock_code": target_stock_data.get("stock_code"),
+                        "stock_name": target_stock_data.get("stock_name"),
+                        "sector": target_stock_data.get("sector"),
+                        "rs": target_stock_data.get("rs"),
+                        "rs_1m": target_stock_data.get("rs_1m"),
+                        "rs_3m": target_stock_data.get("rs_3m"),
+                        "rs_6m": target_stock_data.get("rs_6m"),
+                        "mmt": target_stock_data.get("mmt"),
+                        "updated_at": target_stock_data.get("updated_at"),
+                        
+                        # 시장 지수 비교 정보 (시장별 맞춤)
+                        "market_comparison": market_comparison,
+                        
+                        # 상대적 강도 분석
+                        "relative_strength_analysis": self._analyze_relative_strength(
+                            target_stock_data, market_data, market_code, stock_info
+                        )
+                    }
+                    
+                    return rs_summary
+                        
+                elif response.status == 404:
+                    logger.warning(f"RS 데이터를 찾을 수 없습니다")
+                    return None
+                else:
+                    logger.error(f"RS 데이터 요청 실패: HTTP {response.status}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"RS 데이터 수집 중 오류: {str(e)}")
+            return None
+    
+
+    def _analyze_relative_strength(self, target_stock: Dict, market_data: Optional[Dict], market_code: str, stock_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        종목의 RS를 해당 시장 지수와 비교하여 상대적 강도를 분석합니다.
+        
+        Args:
+            target_stock: 분석 대상 종목의 RS 데이터
+            market_data: 시장 지수 RS 데이터 (KOSPI 또는 KOSDAQ)
+            market_code: 시장 코드 (KOSPI 또는 KOSDAQ)
+            stock_info: 종목 기본 정보 (시장, 업종 등)
+            
+        Returns:
+            상대적 강도 분석 결과
+        """
+        try:
+            analysis = {
+                "vs_market": None,
+                "market_code": market_code,
+                "relative_trend": None,
+                "market_specific_analysis": None
+            }
+            
+            target_rs = target_stock.get("rs")
+            target_rs_1m = target_stock.get("rs_1m")
+            target_rs_3m = target_stock.get("rs_3m")
+            target_rs_6m = target_stock.get("rs_6m")
+            
+            if target_rs is None or market_data is None:
+                return analysis
+            
+            # 해당 시장 대비 분석
+            market_rs = market_data.get("rs")
+            market_rs_1m = market_data.get("rs_1m")
+            market_rs_3m = market_data.get("rs_3m")
+            market_rs_6m = market_data.get("rs_6m")
+            
+            analysis["vs_market"] = {
+                "market_name": market_code,
+                "difference": round(target_rs - market_rs, 2),
+                "outperforming": target_rs > market_rs,
+                "strength_level": self._get_relative_strength_level(target_rs - market_rs)
+            }
+            
+            # 다기간 트렌드 비교
+            trends = {}
+            if target_rs_1m is not None and market_rs_1m is not None:
+                current_gap = target_rs - market_rs
+                prev_gap_1m = target_rs_1m - market_rs_1m
+                trends["1m"] = "improving" if current_gap > prev_gap_1m else "weakening"
+            
+            if target_rs_3m is not None and market_rs_3m is not None:
+                current_gap = target_rs - market_rs
+                prev_gap_3m = target_rs_3m - market_rs_3m
+                trends["3m"] = "improving" if current_gap > prev_gap_3m else "weakening"
+            
+            if target_rs_6m is not None and market_rs_6m is not None:
+                current_gap = target_rs - market_rs
+                prev_gap_6m = target_rs_6m - market_rs_6m
+                trends["6m"] = "improving" if current_gap > prev_gap_6m else "weakening"
+            
+            if trends:
+                analysis["vs_market"]["trends"] = trends
+                # 전반적인 트렌드 평가
+                improving_count = sum(1 for trend in trends.values() if trend == "improving")
+                analysis["vs_market"]["overall_trend"] = "improving" if improving_count > len(trends) / 2 else "weakening"
+            
+            # 전반적인 상대적 트렌드 (다기간 분석)
+            trend_analysis = {}
+            
+            if target_rs_1m is not None:
+                rs_change_1m = target_rs - target_rs_1m
+                trend_analysis["1m"] = {
+                    "direction": "strengthening" if rs_change_1m > 0 else "weakening",
+                    "change": round(rs_change_1m, 2),
+                    "momentum": self._get_momentum_level(abs(rs_change_1m))
+                }
+            
+            if target_rs_3m is not None:
+                rs_change_3m = target_rs - target_rs_3m
+                trend_analysis["3m"] = {
+                    "direction": "strengthening" if rs_change_3m > 0 else "weakening",
+                    "change": round(rs_change_3m, 2),
+                    "momentum": self._get_momentum_level(abs(rs_change_3m))
+                }
+            
+            if target_rs_6m is not None:
+                rs_change_6m = target_rs - target_rs_6m
+                trend_analysis["6m"] = {
+                    "direction": "strengthening" if rs_change_6m > 0 else "weakening",
+                    "change": round(rs_change_6m, 2),
+                    "momentum": self._get_momentum_level(abs(rs_change_6m))
+                }
+            
+            if trend_analysis:
+                analysis["relative_trend"] = trend_analysis
+                
+                # 전반적인 트렌드 방향 평가
+                strengthening_count = sum(1 for period_data in trend_analysis.values() 
+                                        if period_data["direction"] == "strengthening")
+                total_periods = len(trend_analysis)
+                
+                analysis["overall_trend_direction"] = {
+                    "direction": "strengthening" if strengthening_count > total_periods / 2 else "weakening",
+                    "consistency": "consistent" if strengthening_count  in [0, total_periods] else "mixed",
+                    "periods_analyzed": list(trend_analysis.keys())
+                }
+            
+            # 시장별 특화 분석
+            market_analysis = self._get_market_specific_analysis(
+                market_code, target_rs, market_rs
+            )
+            analysis["market_specific_analysis"] = market_analysis
+            
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"상대적 강도 분석 중 오류: {e}")
+            return {
+                "vs_kospi": None,
+                "vs_kosdaq": None, 
+                "market_leadership": None,
+                "relative_trend": None
+            }
+    
+    def _get_relative_strength_level(self, difference: float) -> str:
+        """RS 차이값에 따른 강도 레벨 반환"""
+        if difference >= 20:
+            return "매우 강함"
+        elif difference >= 10:
+            return "강함"
+        elif difference >= 0:
+            return "보통"
+        elif difference >= -10:
+            return "약함"
+        else:
+            return "매우 약함"
+    
+    def _get_momentum_level(self, change: float) -> str:
+        """RS 변화량에 따른 모멘텀 레벨 반환"""
+        if change >= 10:
+            return "강한 모멘텀"
+        elif change >= 5:
+            return "중간 모멘텀"
+        elif change >= 2:
+            return "약한 모멘텀"
+        else:
+            return "모멘텀 없음"
+    
+
+    
+    def _get_market_specific_analysis(self, market_code: str, target_rs: float, market_rs: float) -> Dict[str, Any]:
+        """
+        종목이 속한 시장에 따른 특화 분석을 제공합니다.
+        
+        Args:
+            market_code: 시장 코드 (KOSPI, KOSDAQ 등)
+            target_rs: 종목의 RS 값
+            market_rs: 시장 지수의 RS 값
+            
+        Returns:
+            시장별 특화 분석 결과
+        """
+        try:
+            diff = target_rs - market_rs
+            
+            if diff >= 20:
+                market_position = f"{market_code} 내 강력한 우위"
+                recommendation = f"동종 시장({market_code}) 내에서 매우 우수한 성과를 보이고 있어 긍정적입니다."
+            elif diff >= 0:
+                market_position = f"{market_code} 내 우위"
+                recommendation = f"{market_code} 시장 평균보다 양호한 성과를 보이고 있습니다."
+            elif diff >= -10:
+                market_position = f"{market_code} 내 평균 수준"
+                recommendation = f"{market_code} 시장 평균과 비슷한 수준입니다."
+            else:
+                market_position = f"{market_code} 내 하위"
+                recommendation = f"{market_code} 시장 평균 대비 부진한 모습이므로 주의가 필요합니다."
+            
+            return {
+                "target_market": market_code,
+                "market_position": market_position,
+                "recommendation": recommendation,
+                "difference": round(diff, 2)
+            }
+            
+        except Exception as e:
+            logger.error(f"시장별 특화 분석 중 오류: {e}")
+            return {
+                "target_market": market_code,
+                "market_position": "분석 불가",
+                "recommendation": "시장별 분석에 오류가 발생했습니다.",
+                "difference": None
+            }
+
     async def _fetch_market_indices(self) -> Optional[Dict[str, Any]]:
         """
         stock-data-collector API에서 시장지수 데이터를 가져옵니다.
@@ -548,14 +914,24 @@ class TechnicalAnalyzerAgent(BaseAgent):
             # RSI 계산
             rsi = self._calculate_rsi(close) if len(close) >= 14 else None
             
-            # MACD 계산
+            # # MACD 계산
             macd_values = self._calculate_macd(close) if len(close) >= 26 else {}
             
             # 볼린저 밴드 계산
             bollinger = self._calculate_bollinger_bands(close) if len(close) >= 20 else {}
             
-            # 스토캐스틱 계산
+            #스토캐스틱 계산
             stochastic = self._calculate_stochastic(high, low, close) if len(close) >= 14 else {}
+            
+            # 추세추종 지표들 계산
+            # ADX 계산
+            adx_values = self._calculate_adx(high, low, close) if len(close) >= 14 else {}
+            
+            # ADR 계산 (개별 종목용)
+            adr_values = self._calculate_adr(close) if len(close) >= 20 else {}
+            
+            # 슈퍼트렌드 계산
+            supertrend_values = self._calculate_supertrend(high, low, close) if len(close) >= 14 else {}
             
             # 안전한 float 변환 함수
             def safe_float(value):
@@ -579,7 +955,15 @@ class TechnicalAnalyzerAgent(BaseAgent):
                 "bollinger_middle": bollinger.get("middle"),
                 "bollinger_lower": bollinger.get("lower"),
                 "stochastic_k": stochastic.get("k"),
-                "stochastic_d": stochastic.get("d")
+                "stochastic_d": stochastic.get("d"),
+                # 추세추종 지표들
+                "adx": adx_values.get("adx"),
+                "adx_plus_di": adx_values.get("plus_di"),
+                "adx_minus_di": adx_values.get("minus_di"),
+                "adr": adr_values.get("adr"),
+                "adr_ma": adr_values.get("adr_ma"),
+                "supertrend": supertrend_values.get("supertrend"),
+                "supertrend_direction": supertrend_values.get("direction")
             }
             
             logger.info(f"기술적 지표 계산 완료")
@@ -590,12 +974,17 @@ class TechnicalAnalyzerAgent(BaseAgent):
             return {}
     
     def _calculate_rsi(self, close: pd.Series, period: int = 14) -> Optional[float]:
-        """RSI 지표를 계산합니다."""
+        """RSI 지표를 계산합니다 (Wilder's Smoothing 적용)."""
         try:
             delta = close.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-            rs = gain / loss
+            gain = delta.where(delta > 0, 0)
+            loss = -delta.where(delta < 0, 0)
+            
+            # Wilder's Smoothing 적용
+            gain_smooth = self._wilders_smoothing(gain, period)
+            loss_smooth = self._wilders_smoothing(loss, period)
+            
+            rs = gain_smooth / loss_smooth
             rsi = 100 - (100 / (1 + rs))
             return rsi.iloc[-1]
         except:
@@ -668,6 +1057,340 @@ class TechnicalAnalyzerAgent(BaseAgent):
             }
         except:
             return {"k": None, "d": None}
+    
+    def _calculate_adx(self, high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> Dict[str, Optional[float]]:
+        """ADX 지표를 계산합니다."""
+        try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
+            # ADX 시계열 데이터 계산
+            adx_series = self._calculate_adx_series(high, low, close, period)
+            
+            return {
+                "adx": safe_float(adx_series["adx"].iloc[-1]),
+                "plus_di": safe_float(adx_series["plus_di"].iloc[-1]),
+                "minus_di": safe_float(adx_series["minus_di"].iloc[-1])
+            }
+        except:
+            return {"adx": None, "plus_di": None, "minus_di": None}
+    
+    def _calculate_adr(self, close: pd.Series, period: int = 20) -> Dict[str, Optional[float]]:
+        """ADR 지표를 계산합니다."""
+        try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
+            # ADR 시계열 데이터 계산
+            adr_series = self._calculate_adr_series(close, period)
+            
+            return {
+                "adr": safe_float(adr_series["adr"].iloc[-1]),
+                "adr_ma": safe_float(adr_series["adr_ma"].iloc[-1])
+            }
+        except:
+            return {"adr": None, "adr_ma": None}
+    
+    def _calculate_supertrend(self, high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14, multiplier: float = 3.0) -> Dict[str, Optional[float]]:
+        """슈퍼트렌드 지표를 계산합니다."""
+        try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
+            # 슈퍼트렌드 시계열 데이터 계산
+            supertrend_series = self._calculate_supertrend_series(high, low, close, period, multiplier)
+            
+            return {
+                "supertrend": safe_float(supertrend_series["supertrend"].iloc[-1]),
+                "direction": safe_float(supertrend_series["direction"].iloc[-1])
+            }
+        except:
+            return {"supertrend": None, "direction": None}
+    
+    def _calculate_atr(self, high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+        """ATR 지표를 계산합니다 (Wilder's Smoothing 적용)."""
+        try:
+            true_range1 = high - low
+            true_range2 = abs(high - close.shift(1))
+            true_range3 = abs(low - close.shift(1))
+            true_range = pd.concat([true_range1, true_range2, true_range3], axis=1).max(axis=1)
+            
+            # Wilder's Smoothing 적용 (단순이동평균 대신)
+            atr = self._wilders_smoothing(true_range, period)
+            return atr
+        except:
+            return pd.Series()
+    
+    def _generate_chart_indicators_data(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        차트에 그릴 지표들의 1년 시계열 데이터를 생성합니다.
+        
+        Args:
+            df: 주가 DataFrame (2년치 데이터)
+            
+        Returns:
+            차트용 지표 시계열 데이터 (1년치 표시)
+        """
+        try:
+            if df.empty:
+                return {}
+            
+            # 전체 2년 데이터로 지표 계산 후 최근 1년만 추출 (일관성 및 정확성 확보)
+            # 슈퍼트렌드, ATR, ADX 등 순차 계산 지표는 전체 기간으로 계산해야 정확함
+            close = df['close']
+            high = df['high']
+            low = df['low']
+            volume = df['volume']
+            
+            # 차트 표시용 기간 설정 (최근 1년, 약 250일)
+            chart_length = 250
+            chart_start_idx = max(0, len(df) - chart_length)
+            
+            # 날짜 인덱스를 문자열로 변환 (차트 표시 구간만)
+            dates = [date.strftime('%Y-%m-%d') for date in df.index[chart_start_idx:]]
+            
+            # 안전한 변환 함수 (차트 표시 구간만 추출)
+            def safe_series_to_list(series):
+                """pandas Series를 안전하게 리스트로 변환 (차트 구간만)"""
+                if series is None or series.empty:
+                    return []
+                chart_series = series.iloc[chart_start_idx:]
+                return [float(x) if not pd.isna(x) else None for x in chart_series]
+            
+            chart_data = {
+                "dates": dates,
+                "close": safe_series_to_list(close),
+                "high": safe_series_to_list(high),
+                "low": safe_series_to_list(low),
+                "volume": safe_series_to_list(volume)
+            }
+            
+            # 이동평균선
+            if len(close) >= 20:
+                sma_20 = close.rolling(window=20).mean()
+                chart_data["sma_20"] = safe_series_to_list(sma_20)
+            
+            if len(close) >= 60:
+                sma_60 = close.rolling(window=60).mean()
+                chart_data["sma_60"] = safe_series_to_list(sma_60)
+            
+            # 지수이동평균
+            if len(close) >= 12:
+                ema_12 = close.ewm(span=12).mean()
+                chart_data["ema_12"] = safe_series_to_list(ema_12)
+            
+            if len(close) >= 26:
+                ema_26 = close.ewm(span=26).mean()
+                chart_data["ema_26"] = safe_series_to_list(ema_26)
+            
+            # RSI
+            if len(close) >= 14:
+                rsi_series = self._calculate_rsi_series(close)
+                chart_data["rsi"] = safe_series_to_list(rsi_series)
+            
+            # MACD
+            if len(close) >= 26:
+                macd_series = self._calculate_macd_series(close)
+                chart_data["macd"] = safe_series_to_list(macd_series["macd"])
+                chart_data["macd_signal"] = safe_series_to_list(macd_series["signal"])
+                chart_data["macd_histogram"] = safe_series_to_list(macd_series["histogram"])
+            
+            # 볼린저 밴드
+            if len(close) >= 20:
+                bollinger_series = self._calculate_bollinger_bands_series(close)
+                chart_data["bollinger_upper"] = safe_series_to_list(bollinger_series["upper"])
+                chart_data["bollinger_middle"] = safe_series_to_list(bollinger_series["middle"])
+                chart_data["bollinger_lower"] = safe_series_to_list(bollinger_series["lower"])
+            
+            # ADX
+            if len(close) >= 14:
+                adx_series = self._calculate_adx_series(high, low, close)
+                chart_data["adx"] = safe_series_to_list(adx_series["adx"])
+                chart_data["adx_plus_di"] = safe_series_to_list(adx_series["plus_di"])
+                chart_data["adx_minus_di"] = safe_series_to_list(adx_series["minus_di"])
+            
+            # ADR
+            if len(close) >= 20:
+                adr_series = self._calculate_adr_series(close)
+                chart_data["adr"] = safe_series_to_list(adr_series["adr"])
+                chart_data["adr_ma"] = safe_series_to_list(adr_series["adr_ma"])
+            
+            # 슈퍼트렌드 (14일 기본값 사용)
+            if len(close) >= 14:
+                supertrend_series = self._calculate_supertrend_series(high, low, close)
+                chart_data["supertrend"] = safe_series_to_list(supertrend_series["supertrend"])
+                chart_data["supertrend_direction"] = safe_series_to_list(supertrend_series["direction"])
+            
+            logger.info(f"차트용 지표 데이터 생성 완료: 전체 {len(df)}일 중 최근 {len(dates)}일 표시")
+            return chart_data
+            
+        except Exception as e:
+            logger.error(f"차트용 지표 데이터 생성 중 오류: {str(e)}")
+            return {}
+    
+    def _calculate_rsi_series(self, close: pd.Series, period: int = 14) -> pd.Series:
+        """RSI 시계열 데이터를 계산합니다 (Wilder's Smoothing 적용)."""
+        try:
+            delta = close.diff()
+            gain = delta.where(delta > 0, 0)
+            loss = -delta.where(delta < 0, 0)
+            
+            # Wilder's Smoothing 적용
+            gain_smooth = self._wilders_smoothing(gain, period)
+            loss_smooth = self._wilders_smoothing(loss, period)
+            
+            rs = gain_smooth / loss_smooth
+            rsi = 100 - (100 / (1 + rs))
+            return rsi
+        except:
+            return pd.Series()
+    
+    def _calculate_macd_series(self, close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Dict[str, pd.Series]:
+        """MACD 시계열 데이터를 계산합니다."""
+        try:
+            ema_fast = close.ewm(span=fast).mean()
+            ema_slow = close.ewm(span=slow).mean()
+            macd = ema_fast - ema_slow
+            macd_signal = macd.ewm(span=signal).mean()
+            macd_histogram = macd - macd_signal
+            
+            return {
+                "macd": macd,
+                "signal": macd_signal,
+                "histogram": macd_histogram
+            }
+        except:
+            return {"macd": pd.Series(), "signal": pd.Series(), "histogram": pd.Series()}
+    
+    def _calculate_bollinger_bands_series(self, close: pd.Series, period: int = 20, std_dev: int = 2) -> Dict[str, pd.Series]:
+        """볼린저 밴드 시계열 데이터를 계산합니다."""
+        try:
+            sma = close.rolling(window=period).mean()
+            std = close.rolling(window=period).std()
+            
+            upper = sma + (std * std_dev)
+            lower = sma - (std * std_dev)
+            
+            return {
+                "upper": upper,
+                "middle": sma,
+                "lower": lower
+            }
+        except:
+            return {"upper": pd.Series(), "middle": pd.Series(), "lower": pd.Series()}
+    
+    def _calculate_adx_series(self, high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> Dict[str, pd.Series]:
+        """ADX 시계열 데이터를 계산합니다 (Wilder's Smoothing 적용)."""
+        try:
+            # True Range 계산
+            tr1 = high - low
+            tr2 = abs(high - close.shift(1))
+            tr3 = abs(low - close.shift(1))
+            true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            
+            # +DM, -DM 계산
+            dm_plus = high - high.shift(1)
+            dm_minus = low.shift(1) - low
+            
+            dm_plus = dm_plus.where((dm_plus > dm_minus) & (dm_plus > 0), 0)
+            dm_minus = dm_minus.where((dm_minus > dm_plus) & (dm_minus > 0), 0)
+            
+            # Wilder's Smoothing 적용 (단순이동평균 대신)
+            atr = self._wilders_smoothing(true_range, period)
+            dm_plus_smooth = self._wilders_smoothing(dm_plus, period)
+            dm_minus_smooth = self._wilders_smoothing(dm_minus, period)
+            
+            # +DI, -DI 계산
+            di_plus = (dm_plus_smooth / atr) * 100
+            di_minus = (dm_minus_smooth / atr) * 100
+            
+            # DX 계산
+            dx = abs(di_plus - di_minus) / (di_plus + di_minus) * 100
+            
+            # ADX 계산 (DX에 Wilder's Smoothing 적용)
+            adx = self._wilders_smoothing(dx, period)
+            
+            return {
+                "adx": adx,
+                "plus_di": di_plus,
+                "minus_di": di_minus
+            }
+        except:
+            return {"adx": pd.Series(), "plus_di": pd.Series(), "minus_di": pd.Series()}
+
+    def _wilders_smoothing(self, series: pd.Series, period: int) -> pd.Series:
+        """Welles Wilder의 스무딩을 적용합니다."""
+        alpha = 1.0 / period
+        return series.ewm(alpha=alpha, adjust=False).mean()
+    
+    def _calculate_adr_series(self, close: pd.Series, period: int = 20) -> Dict[str, pd.Series]:
+        """ADR 시계열 데이터를 계산합니다 (개별 종목용 - 상승일/하락일 비율)."""
+        try:
+            # 전일 대비 상승/하락 계산
+            price_change = close.diff()
+            
+            # 상승일과 하락일 카운트 (rolling window)
+            up_days = (price_change > 0).rolling(window=period).sum()
+            down_days = (price_change < 0).rolling(window=period).sum()
+            
+            # ADR 계산 (상승일/하락일 비율)
+            adr = up_days / (down_days + 1)  # 0으로 나누기 방지
+            
+            # ADR 이동평균
+            adr_ma = adr.rolling(window=period).mean()
+            
+            return {
+                "adr": adr,
+                "adr_ma": adr_ma
+            }
+        except:
+            return {"adr": pd.Series(), "adr_ma": pd.Series()}
+    
+    def _calculate_supertrend_series(self, high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14, multiplier: float = 3.0) -> Dict[str, pd.Series]:
+        """슈퍼트렌드 시계열 데이터를 계산합니다."""
+        try:
+            # ATR 계산
+            atr = self._calculate_atr(high, low, close, period)
+            
+            # HL2 (High + Low) / 2
+            hl2 = (high + low) / 2
+            
+            # 상위 및 하위 밴드 계산
+            upper_band = hl2 + (multiplier * atr)
+            lower_band = hl2 - (multiplier * atr)
+            
+            # 슈퍼트렌드 초기화
+            supertrend = pd.Series(index=close.index, dtype=float)
+            direction = pd.Series(index=close.index, dtype=int)
+            
+            # 첫 번째 값 설정
+            supertrend.iloc[0] = upper_band.iloc[0]
+            direction.iloc[0] = 1
+            
+            # 슈퍼트렌드 계산
+            for i in range(1, len(close)):
+                if close.iloc[i] <= supertrend.iloc[i-1]:
+                    supertrend.iloc[i] = upper_band.iloc[i]
+                    direction.iloc[i] = -1  # 하락 추세
+                else:
+                    supertrend.iloc[i] = lower_band.iloc[i]
+                    direction.iloc[i] = 1   # 상승 추세
+            
+            return {
+                "supertrend": supertrend,
+                "direction": direction
+            }
+        except:
+            return {"supertrend": pd.Series(), "direction": pd.Series()}
     
     def _analyze_chart_patterns(self, df: pd.DataFrame) -> ChartPatternAnalysis:
         """
@@ -906,26 +1629,118 @@ class TechnicalAnalyzerAgent(BaseAgent):
             
             current_price = float(df['close'].iloc[-1])
             
-            # RSI 신호 분석
+            # 추세추종 지표 먼저 분석 (추세 방향 파악)
+            adx = technical_indicators.get("adx")
+            adx_plus_di = technical_indicators.get("adx_plus_di")
+            adx_minus_di = technical_indicators.get("adx_minus_di")
+            supertrend_direction = technical_indicators.get("supertrend_direction")
+            
+            # 추세 상태 판단
+            trend_strength = "약함"
+            trend_direction = "중립"
+            
+            if adx is not None:
+                if adx >= 25:
+                    trend_strength = "강함"
+                    if adx_plus_di is not None and adx_minus_di is not None:
+                        if adx_plus_di > adx_minus_di:
+                            trend_direction = "상승"
+                        else:
+                            trend_direction = "하락"
+                elif adx >= 20:
+                    trend_strength = "보통"
+                else:
+                    trend_strength = "약함"
+            
+            # 슈퍼트렌드로 추세 방향 보완
+            if supertrend_direction is not None:
+                if supertrend_direction == 1:
+                    trend_direction = "상승" if trend_direction == "중립" else trend_direction
+                elif supertrend_direction == -1:
+                    trend_direction = "하락" if trend_direction == "중립" else trend_direction
+            
+            # RSI 신호 분석 (추세 상태에 따라 조정)
             rsi = technical_indicators.get("rsi")
             if rsi is not None:
-                if rsi < 30:
-                    signals.append({"indicator": "RSI", "signal": "매수", "strength": 0.8, "value": rsi, "reason": "과매도"})
-                elif rsi > 70:
-                    signals.append({"indicator": "RSI", "signal": "매도", "strength": 0.8, "value": rsi, "reason": "과매수"})
+                if trend_strength == "강함":
+                    # 강한 추세 중에는 RSI 기준을 완화
+                    if trend_direction == "상승":
+                        # 상승추세에서는 RSI > 30일 때만 매수 고려
+                        if rsi < 40:
+                            signals.append({"indicator": "RSI", "signal": "매수", "strength": 0.6, "value": rsi, "reason": "상승추세 중 과매도"})
+                        elif rsi > 80:
+                            signals.append({"indicator": "RSI", "signal": "매도", "strength": 0.4, "value": rsi, "reason": "상승추세 중 극도과매수"})
+                        else:
+                            signals.append({"indicator": "RSI", "signal": "중립", "strength": 0.2, "value": rsi, "reason": "상승추세 중 정상범위"})
+                    elif trend_direction == "하락":
+                        # 하락추세에서는 RSI < 70일 때만 매도 고려
+                        if rsi > 60:
+                            signals.append({"indicator": "RSI", "signal": "매도", "strength": 0.6, "value": rsi, "reason": "하락추세 중 과매수"})
+                        elif rsi < 20:
+                            signals.append({"indicator": "RSI", "signal": "매수", "strength": 0.4, "value": rsi, "reason": "하락추세 중 극도과매도"})
+                        else:
+                            signals.append({"indicator": "RSI", "signal": "중립", "strength": 0.2, "value": rsi, "reason": "하락추세 중 정상범위"})
+                    else:
+                        # 강한 추세이지만 방향 불명확
+                        if rsi < 25:
+                            signals.append({"indicator": "RSI", "signal": "매수", "strength": 0.5, "value": rsi, "reason": "극도과매도"})
+                        elif rsi > 75:
+                            signals.append({"indicator": "RSI", "signal": "매도", "strength": 0.5, "value": rsi, "reason": "극도과매수"})
+                        else:
+                            signals.append({"indicator": "RSI", "signal": "중립", "strength": 0.3, "value": rsi, "reason": "중립"})
                 else:
-                    signals.append({"indicator": "RSI", "signal": "중립", "strength": 0.3, "value": rsi, "reason": "중립"})
+                    # 약한 추세나 횡보 시에는 전통적인 RSI 신호 활용
+                    if rsi < 30:
+                        signals.append({"indicator": "RSI", "signal": "매수", "strength": 0.8, "value": rsi, "reason": "과매도"})
+                    elif rsi > 70:
+                        signals.append({"indicator": "RSI", "signal": "매도", "strength": 0.8, "value": rsi, "reason": "과매수"})
+                    else:
+                        signals.append({"indicator": "RSI", "signal": "중립", "strength": 0.3, "value": rsi, "reason": "중립"})
             
-            # MACD 신호 분석
+            # ADX 추세강도 신호
+            if adx is not None:
+                if adx >= 25:
+                    if trend_direction == "상승":
+                        signals.append({"indicator": "ADX", "signal": "매수", "strength": 0.7, "value": adx, "reason": f"강한 상승추세 (ADX: {adx:.1f})"})
+                    elif trend_direction == "하락":
+                        signals.append({"indicator": "ADX", "signal": "매도", "strength": 0.7, "value": adx, "reason": f"강한 하락추세 (ADX: {adx:.1f})"})
+                    else:
+                        signals.append({"indicator": "ADX", "signal": "중립", "strength": 0.4, "value": adx, "reason": f"강한 추세이나 방향 불명확 (ADX: {adx:.1f})"})
+                elif adx >= 20:
+                    if trend_direction == "상승":
+                        signals.append({"indicator": "ADX", "signal": "매수", "strength": 0.5, "value": adx, "reason": f"보통 상승추세 (ADX: {adx:.1f})"})
+                    elif trend_direction == "하락":
+                        signals.append({"indicator": "ADX", "signal": "매도", "strength": 0.5, "value": adx, "reason": f"보통 하락추세 (ADX: {adx:.1f})"})
+                    else:
+                        signals.append({"indicator": "ADX", "signal": "중립", "strength": 0.3, "value": adx, "reason": f"보통 추세 (ADX: {adx:.1f})"})
+                else:
+                    signals.append({"indicator": "ADX", "signal": "중립", "strength": 0.5, "value": adx, "reason": f"약한 추세/횡보 (ADX: {adx:.1f})"})
+            
+            # 슈퍼트렌드 신호
+            if supertrend_direction is not None:
+                if supertrend_direction == 1:
+                    strength = 0.7 if trend_strength == "강함" else 0.5
+                    signals.append({"indicator": "슈퍼트렌드", "signal": "매수", "strength": strength, "value": supertrend_direction, "reason": "상승추세 확인"})
+                elif supertrend_direction == -1:
+                    strength = 0.7 if trend_strength == "강함" else 0.5
+                    signals.append({"indicator": "슈퍼트렌드", "signal": "매도", "strength": strength, "value": supertrend_direction, "reason": "하락추세 확인"})
+            
+            # MACD 신호 분석 (모멘텀 확인용, 추세와 일치할 때 가중치 증가)
             macd = technical_indicators.get("macd")
             macd_signal = technical_indicators.get("macd_signal")
             macd_histogram = technical_indicators.get("macd_histogram")
             
             if macd is not None and macd_signal is not None:
                 if macd > macd_signal and macd_histogram is not None and macd_histogram > 0:
-                    signals.append({"indicator": "MACD", "signal": "매수", "strength": 0.7, "value": macd, "reason": "상승교차"})
+                    # MACD 상승교차가 추세와 일치하는지 확인
+                    strength = 0.7 if trend_direction == "상승" else 0.4
+                    reason = "상승교차 (추세일치)" if trend_direction == "상승" else "상승교차"
+                    signals.append({"indicator": "MACD", "signal": "매수", "strength": strength, "value": macd, "reason": reason})
                 elif macd < macd_signal and macd_histogram is not None and macd_histogram < 0:
-                    signals.append({"indicator": "MACD", "signal": "매도", "strength": 0.7, "value": macd, "reason": "하락교차"})
+                    # MACD 하락교차가 추세와 일치하는지 확인
+                    strength = 0.7 if trend_direction == "하락" else 0.4
+                    reason = "하락교차 (추세일치)" if trend_direction == "하락" else "하락교차"
+                    signals.append({"indicator": "MACD", "signal": "매도", "strength": strength, "value": macd, "reason": reason})
                 else:
                     signals.append({"indicator": "MACD", "signal": "중립", "strength": 0.3, "value": macd, "reason": "중립"})
             
@@ -1029,6 +1844,8 @@ class TechnicalAnalyzerAgent(BaseAgent):
         chart_patterns: ChartPatternAnalysis, 
         trading_signals: TradingSignals, 
         market_sentiment: MarketSentiment, 
+        rs_data: Optional[Dict[str, Any]],
+        stock_info: Optional[Dict[str, Any]],
         query: str, 
         user_id: Optional[str]
     ) -> str:
@@ -1036,17 +1853,123 @@ class TechnicalAnalyzerAgent(BaseAgent):
         LLM을 사용하여 기술적 분석 종합 요약을 생성합니다.
         """
         try:
+            # 종목 기본 정보 추가
+            stock_basic_info = ""
+            if stock_info:
+                market = stock_info.get('market', 'N/A')
+                sector = stock_info.get('sector', 'N/A')
+                stock_basic_info = f"""
+종목 기본 정보:
+- 소속 시장: {market}
+- 업종: {sector}
+"""
+
+            # RS 데이터 정보 추가 (시장 비교 포함)
+            rs_info = ""
+            if rs_data:
+                # 기본 RS 정보
+                rs_info = f"""
+RS(상대강도) 정보:
+- 현재 RS: {rs_data.get('rs', 'N/A')}
+- RS 1개월: {rs_data.get('rs_1m', 'N/A')}
+- RS 3개월: {rs_data.get('rs_3m', 'N/A')}
+- 업종: {rs_data.get('sector', 'N/A')}
+- MMT: {rs_data.get('mmt', 'N/A')}
+"""
+                
+                # 시장 비교 정보 추가
+                market_comparison = rs_data.get('market_comparison', {})
+                if market_comparison:
+                    market_code = market_comparison.get('market_code')
+                    market_rs = market_comparison.get('market_rs')
+                    market_rs_1m = market_comparison.get('market_rs_1m')
+                    market_rs_3m = market_comparison.get('market_rs_3m')
+                    market_rs_6m = market_comparison.get('market_rs_6m')
+                    
+                    if market_code and market_rs is not None:
+                        rs_info += f"""
+시장 지수 비교:
+- {market_code} RS: {market_rs} (1M: {market_rs_1m or 'N/A'}, 3M: {market_rs_3m or 'N/A'}, 6M: {market_rs_6m or 'N/A'})
+"""
+                
+                # 상대적 강도 분석 추가
+                relative_analysis = rs_data.get('relative_strength_analysis', {})
+                if relative_analysis:
+                    vs_market = relative_analysis.get('vs_market')
+                    if vs_market:
+                        market_name = vs_market.get('market_name', '시장')
+                        strength_level = vs_market.get('strength_level', 'N/A')
+                        difference = vs_market.get('difference', 0)
+                        rs_info += f"""
+시장 대비 분석: {market_name} 대비 {strength_level} ({'+' if difference >= 0 else ''}{difference})
+"""
+            
+            # 추세추종 지표 정보 추가
+            trend_indicators_info = ""
+            
+            # ADX 정보
+            adx = technical_indicators.get('adx')
+            adx_plus_di = technical_indicators.get('adx_plus_di')
+            adx_minus_di = technical_indicators.get('adx_minus_di')
+            if adx is not None:
+                trend_strength = "강한 추세" if adx >= 25 else "약한 추세" if adx <= 20 else "보통 추세"
+                trend_indicators_info += f"""
+ADX (추세강도 지표):
+- ADX: {adx:.2f} ({trend_strength})
+- +DI: {adx_plus_di:.2f if adx_plus_di else 'N/A'}
+- -DI: {adx_minus_di:.2f if adx_minus_di else 'N/A'}
+"""
+            
+            # ADR 정보
+            adr = technical_indicators.get('adr')
+            adr_ma = technical_indicators.get('adr_ma')
+            if adr is not None:
+                adr_signal = "상승 우세" if adr > 1.2 else "하락 우세" if adr < 0.8 else "균형"
+                trend_indicators_info += f"""
+ADR (상승일/하락일 비율):
+- ADR: {adr:.2f} ({adr_signal})
+- ADR 이동평균: {adr_ma:.2f if adr_ma else 'N/A'}
+"""
+            
+            # 슈퍼트렌드 정보
+            supertrend = technical_indicators.get('supertrend')
+            supertrend_direction = technical_indicators.get('supertrend_direction')
+            if supertrend is not None:
+                trend_signal = "상승추세" if supertrend_direction == 1 else "하락추세" if supertrend_direction == -1 else "중립"
+                trend_indicators_info += f"""
+슈퍼트렌드:
+- 현재값: {supertrend:,.0f}원
+- 추세방향: {trend_signal}
+"""
+
             prompt = f"""
 당신은 전문 기술적 분석가입니다. {stock_name}의 기술적 분석 결과를 바탕으로 종합적인 분석 요약을 작성해주세요.
 
-기술적 지표:
+{stock_basic_info}
+
+기본 기술적 지표:
 - RSI: {technical_indicators.get('rsi', 'N/A')}
 - MACD: {technical_indicators.get('macd', 'N/A')}
 - 종합 매매 신호: {trading_signals.get('overall_signal', 'N/A')}
 
+추세추종 지표:{trend_indicators_info}
+
+{rs_info}
+
 사용자 질문: {query}
 
-3-4문장으로 간결하게 현재 기술적 상황과 투자 시사점을 설명해주세요.
+다음 지표들의 의미:
+- RS(상대강도): 시장 대비 주식의 상대적 강도를 나타내며, 높을수록 시장을 아웃퍼폼
+- ADX: 25 이상이면 강한 추세, 20 이하면 약한 추세
+- ADR: 1.2 이상이면 상승 우세, 0.8 이하면 하락 우세
+- 슈퍼트렌드: 추세 변화를 감지하는 지표
+
+분석 시 고려사항:
+1. 종목이 소속된 시장(코스피/코스닥)의 특성을 고려하여 분석하세요.
+2. 시장별 상대강도 분석 결과가 있다면 이를 적극 활용하세요.
+3. 추세추종 지표들과 시장 소속정보를 종합하여 투자 관점을 제시하세요.
+
+추세추종 지표들(ADX, ADR, 슈퍼트렌드)과 시장별 RS 분석을 중심으로 현재 추세 상황과 투자 시사점을 3-4문장으로 간결하게 설명해주세요.
 """
             
             response = await self.agent_llm.ainvoke_with_fallback(
@@ -1067,6 +1990,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
         stock_name: str, 
         technical_indicators: TechnicalIndicators, 
         trading_signals: TradingSignals, 
+        rs_data: Optional[Dict[str, Any]],
         user_id: Optional[str]
     ) -> List[str]:
         """
@@ -1078,6 +2002,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
             overall_signal = trading_signals.get("overall_signal", "중립")
             confidence = trading_signals.get("confidence", 0)
             
+            # 기본 매매 신호 추천
             if overall_signal == "강력매수":
                 recommendations.append("강력한 매수 신호가 확인되었습니다.")
             elif overall_signal == "매수":
@@ -1087,6 +2012,66 @@ class TechnicalAnalyzerAgent(BaseAgent):
             else:
                 recommendations.append("현재 중립적 상황입니다.")
             
+            # RS 데이터 기반 추가 권고사항 (향상된 분석)
+            if rs_data:
+                rs_value = rs_data.get('rs')
+                rs_1m = rs_data.get('rs_1m')
+                
+                # 기본 RS 수준 분석
+                if rs_value is not None:
+                    try:
+                        rs_float = float(rs_value)
+                        if rs_float >= 80:
+                            recommendations.append("RS(상대강도)가 매우 높아 시장 대비 강세를 보이고 있습니다.")
+                        elif rs_float >= 60:
+                            recommendations.append("RS(상대강도)가 양호하여 시장 대비 우수한 성과를 보이고 있습니다.")
+                        elif rs_float <= 20:
+                            recommendations.append("RS(상대강도)가 낮아 시장 대비 약세를 보이고 있으므로 주의가 필요합니다.")
+                        elif rs_float <= 40:
+                            recommendations.append("RS(상대강도)가 평균 이하로 시장 대비 부진한 모습입니다.")
+                    except (ValueError, TypeError):
+                        pass
+                
+                # 시장 대비 상대강도 분석
+                relative_analysis = rs_data.get('relative_strength_analysis', {})
+                if relative_analysis:
+                    vs_market = relative_analysis.get('vs_market')
+                    if vs_market:
+                        market_name = vs_market.get('market_name', '시장')
+                        outperforming = vs_market.get('outperforming', False)
+                        strength_level = vs_market.get('strength_level', '')
+                        
+                        if outperforming:
+                            recommendations.append(f"{market_name} 대비 상대적 우위를 보이고 있습니다. ({strength_level})")
+                        else:
+                            recommendations.append(f"{market_name} 대비 상대적으로 부진한 모습입니다. ({strength_level})")
+                        
+                        # 트렌드 분석
+                        overall_trend = vs_market.get('overall_trend')
+                        trends = vs_market.get('trends', {})
+                        
+                        if overall_trend == 'improving':
+                            improving_periods = [period for period, trend in trends.items() if trend == 'improving']
+                            if improving_periods:
+                                recommendations.append(f"{market_name} 대비 상대강도가 {', '.join(improving_periods)} 기간에서 개선되는 추세입니다.")
+                        elif overall_trend == 'weakening':
+                            weakening_periods = [period for period, trend in trends.items() if trend == 'weakening']
+                            if weakening_periods:
+                                recommendations.append(f"{market_name} 대비 상대강도가 {', '.join(weakening_periods)} 기간에서 약화되는 추세입니다.")
+                    
+                    # 시장별 특화 분석 기반 권고
+                    market_analysis = relative_analysis.get('market_specific_analysis')
+                    if market_analysis:
+                        market_recommendation = market_analysis.get('recommendation')
+                        if market_recommendation:
+                            recommendations.append(market_recommendation)
+                
+                # 업종 정보 추가
+                sector = rs_data.get('sector')
+                if sector:
+                    recommendations.append(f"{sector} 섹터의 동향도 함께 고려하시기 바랍니다.")
+            
+            # 공통 권고사항
             recommendations.append("분할 매수/매도를 통해 리스크를 관리하세요.")
             recommendations.append("손절선을 미리 설정하고 감정적 거래를 피하세요.")
             

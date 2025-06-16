@@ -132,6 +132,32 @@ export interface IPriceChartComponent extends IMessageComponentBase {
     data: IPriceChartData;
 }
 
+export interface ITechnicalIndicatorData {
+    name: string;
+    data: number[];
+    color?: string;
+    chart_type: 'line' | 'bar' | 'area';
+    y_axis_id?: string;
+    line_style: 'solid' | 'dashed' | 'dotted';
+}
+
+export interface ITechnicalIndicatorChartData {
+    symbol: string;
+    name: string;
+    dates: string[];
+    candle_data?: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number; [key: string]: any }>;
+    indicators: ITechnicalIndicatorData[];
+    y_axis_configs?: Record<string, Record<string, any>>;
+    period?: string;
+    metadata?: Record<string, any>;
+}
+
+export interface ITechnicalIndicatorChartComponent extends IMessageComponentBase {
+    type: 'technical_indicator_chart';
+    title?: string;
+    data: ITechnicalIndicatorChartData;
+}
+
 export interface IImageComponent extends IMessageComponentBase {
   type: 'image';
   url: string;
@@ -194,7 +220,8 @@ export type MessageComponent =
   | IImageComponent
   | ITableComponent
   | IMixedChartComponent
-  | IPriceChartComponent;
+  | IPriceChartComponent
+  | ITechnicalIndicatorChartComponent;
 
 // --- 'complete' SSE 이벤트 데이터 인터페이스 ---
 export interface IStructuredChatResponseData {

@@ -73,6 +73,35 @@ class PriceChartComponent(BaseModel):
     data: PriceChartData = Field(..., description="주가차트 데이터")
 
 
+class TechnicalIndicatorData(BaseModel):
+    """기술적 지표 데이터 모델 (시계열 데이터)"""
+    name: str = Field(..., description="지표명")
+    data: List[float] = Field(..., description="지표 값 배열")
+    color: Optional[str] = Field(None, description="지표 색상")
+    chart_type: Literal['line', 'bar', 'area'] = Field(default='line', description="차트 타입")
+    y_axis_id: Optional[str] = Field(default='primary', description="Y축 ID (primary, secondary)")
+    line_style: Literal['solid', 'dashed', 'dotted'] = Field(default='solid', description="선 스타일")
+
+
+class TechnicalIndicatorChartData(BaseModel):
+    """기술적 지표 차트 데이터 모델"""
+    symbol: str = Field(..., description="종목코드")
+    name: str = Field(..., description="종목명")
+    dates: List[str] = Field(..., description="날짜 배열 (X축)")
+    candle_data: Optional[List[Dict[str, Any]]] = Field(None, description="주가 캔들 데이터 (선택적)")
+    indicators: List[TechnicalIndicatorData] = Field(..., max_items=5, description="기술적 지표 목록 (최대 5개)")
+    y_axis_configs: Optional[Dict[str, Dict[str, Any]]] = Field(None, description="Y축 설정")
+    period: Optional[str] = Field(None, description="조회 기간")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="추가 메타데이터")
+
+
+class TechnicalIndicatorChartComponent(BaseModel):
+    """기술적 지표 차트 컴포넌트 모델"""
+    type: Literal['technical_indicator_chart'] = 'technical_indicator_chart'
+    title: Optional[str] = Field(None, description="차트 제목")
+    data: TechnicalIndicatorChartData = Field(..., description="기술적 지표 차트 데이터")
+
+
 class ImageComponent(BaseModel):
     """이미지 컴포넌트 모델"""
     type: Literal['image'] = 'image'
@@ -144,6 +173,7 @@ MessageComponent = Union[
     LineChartComponent,
     MixedChartComponent,
     PriceChartComponent,
+    TechnicalIndicatorChartComponent,
     ImageComponent,
     TableComponent,
     # 필요시 추가 컴포넌트 정의

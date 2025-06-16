@@ -570,8 +570,8 @@ class DataCollectorService(LoggerMixin):
             
             # 코스피(001)와 코스닥(101) 지수 조회
             market_codes = [
-                {'code': '001', 'name': '코스피'},
-                {'code': '101', 'name': '코스닥'}
+                {'code': '001', 'name': 'KOSPI'},
+                {'code': '101', 'name': 'KOSDAQ'}
             ]
             
             for market in market_codes:
@@ -906,6 +906,16 @@ class DataCollectorService(LoggerMixin):
             stock_info = await self.kiwoom_client.get_stock_info(code)
             
             if stock_info:
+                cached_data = await self.cache_manager.get_cache("all_stock_list_for_stockai")
+                
+                # 캐시 데이터에서 해당 종목의 market 정보 찾기
+                market = 'KOSPI'  # 기본값
+                if cached_data and 'data' in cached_data:
+                    # data는 [code, name, market] 형태의 배열들
+                    data_list = cached_data['data']
+                    market = data_list[code]['market']
+                
+                stock_info['market'] = market
                 # 캐시에 저장 (1시간 TTL)
                 await self.cache_manager.set_cache(
                     cache_key,

@@ -604,15 +604,15 @@ class KiwoomAPIClient:
         
         # 시장 구분별로 조회, ETF list는 따로 조회 처리.
         market_types = {
-            "0": "코스피",
-            "10": "코스닥", 
+            "0": "KOSPI",
+            "10": "KOSDAQ", 
         }
 
         exclude_list = [ 'msci', 'kodex', 'kindex', 'tiger', 'arirang', 'focus', 'hanaro', 
                         'koact', 'rise', 'kiwoom', '1q', 'ace', 'sol ', 'WON ','PLUS ', 'TIMEFOLIO', '에셋플러스 ',
                         'HK ', 'BNK ', '파워 ', 'TRUSTON ', '마이티', '마이다스 ', 'VITA ', 'TRUSTON ', 'UNICORN ',
                         'KCGI ', 'DAISHIN343', 'ITF ', 'TREX ', 
-                        'kbstar', 'kosef', '레버리지', '인버스', '코스피', '코스닥', '스팩',
+                        'kbstar', 'kosef', '레버리지', '인버스', '코스피', '코스닥', '스팩', 'KOSPI', 'KOSDAQ',
                          'etn', 'etf', '원유', '일본' ]
         
         for mrkt_tp, market_name in market_types.items():

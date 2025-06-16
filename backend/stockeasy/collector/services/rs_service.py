@@ -251,6 +251,34 @@ class RSService:
             logger.error(f"종목 {stock_code} RS 데이터 조회 실패: {e}")
             return None
     
+    async def get_multiple_rs_data(self, stock_codes: List[str]) -> Dict[str, Optional[RSData]]:
+        """여러 종목의 RS 데이터 조회"""
+        try:
+            # 모든 데이터를 한 번에 가져오기
+            all_data = await self.get_all_rs_data()
+            
+            # 종목코드를 키로 하는 딕셔너리 생성
+            rs_dict = {rs_data.stock_code: rs_data for rs_data in all_data}
+            
+            # 요청된 종목들의 데이터 수집
+            results = {}
+            found_count = 0
+            
+            for stock_code in stock_codes:
+                if stock_code in rs_dict:
+                    results[stock_code] = rs_dict[stock_code]
+                    found_count += 1
+                else:
+                    results[stock_code] = None
+            
+            logger.info(f"여러 종목 RS 데이터 조회 완료: {found_count}/{len(stock_codes)}개 성공")
+            return results
+            
+        except Exception as e:
+            logger.error(f"여러 종목 RS 데이터 조회 실패: {e}")
+            # 실패 시 모든 종목을 None으로 반환
+            return {stock_code: None for stock_code in stock_codes}
+    
     async def update_rs_data(self, force_update: bool = False) -> Dict[str, Any]:
         """RS 데이터 업데이트"""
         try:

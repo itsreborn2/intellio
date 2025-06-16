@@ -1486,6 +1486,109 @@ async def get_all_rs_data(
         logger.error(f"RS 데이터 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=f"RS 데이터 조회 실패: {str(e)}")
 
+@rs_router.get("/multiple")
+async def get_multiple_rs_data(
+    codes: str = Query(..., description="종목 코드들 (쉼표로 구분, 예: 005930,000660,035420)"),
+    compressed: bool = Query(False, description="압축된 형태로 반환"),
+    gzip_enabled: bool = Query(False, description="gzip 압축 사용")
+):
+    """
+    여러 종목의 RS(상대강도) 데이터 일괄 조회
+    
+    Args:
+        codes: 쉼표로 구분된 종목코드들 (최대 50개)
+        compressed: 압축된 형태로 반환 여부
+        gzip_enabled: gzip 압축 사용 여부
+    """
+    try:
+        from stockeasy.collector.services.rs_service import rs_service
+        import json
+        import gzip
+        
+        # 종목 코드 파싱 및 검증
+        stock_codes = [code.strip() for code in codes.split(",") if code.strip()]
+        
+        if not stock_codes:
+            raise HTTPException(status_code=400, detail="최소 1개 이상의 종목 코드가 필요합니다")
+        
+        if len(stock_codes) > 50:
+            raise HTTPException(status_code=400, detail="최대 50개까지의 종목만 조회 가능합니다")
+        
+        logger.info(f"여러 종목 RS 데이터 조회 시작: {stock_codes}")
+        
+        # 여러 종목 RS 데이터 조회
+        rs_results = await rs_service.get_multiple_rs_data(stock_codes)
+        
+        # 성공/실패 종목 분류
+        successful_data = []
+        failed_codes = []
+        
+        for code in stock_codes:
+            if code in rs_results and rs_results[code] is not None:
+                successful_data.append(rs_results[code])
+            else:
+                failed_codes.append(code)
+        
+        if compressed:
+            # 압축된 형태로 응답
+            response_data = {
+                "total_requested": len(stock_codes),
+                "successful_count": len(successful_data),
+                "failed_count": len(failed_codes),
+                "failed_codes": failed_codes,
+                "compressed": True,
+                "gzip_enabled": gzip_enabled,
+                "headers": ["stock_code", "stock_name", "sector", "rs", "rs_1m", "rs_3m", "rs_6m", "mmt"],
+                "data": [
+                    [
+                        rs_data.get("stock_code", ""),
+                        rs_data.get("stock_name", ""),
+                        rs_data.get("sector", ""),
+                        rs_data.get("rs"),
+                        rs_data.get("rs_1m"),
+                        rs_data.get("rs_3m"),
+                        rs_data.get("rs_6m"),
+                        rs_data.get("mmt")
+                    ]
+                    for rs_data in successful_data
+                ],
+                "status": "success" if len(failed_codes) == 0 else "partial_success"
+            }
+        else:
+            # 표준 형태로 응답
+            response_data = {
+                "total_requested": len(stock_codes),
+                "successful_count": len(successful_data),
+                "failed_count": len(failed_codes),
+                "failed_codes": failed_codes,
+                "compressed": False,
+                "gzip_enabled": gzip_enabled,
+                "data": successful_data,
+                "status": "success" if len(failed_codes) == 0 else "partial_success"
+            }
+        
+        if gzip_enabled:
+            # JSON을 문자열로 변환 후 gzip 압축
+            json_str = json.dumps(response_data, ensure_ascii=False, default=str)
+            compressed_content = gzip.compress(json_str.encode('utf-8'))
+            
+            return Response(
+                content=compressed_content,
+                media_type="application/json",
+                headers={
+                    "Content-Encoding": "gzip",
+                    "Content-Length": str(len(compressed_content))
+                }
+            )
+        else:
+            return response_data
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"여러 종목 RS 데이터 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"여러 종목 RS 데이터 조회 실패: {str(e)}")
+
 @rs_router.get("/{stock_code}")
 async def get_rs_data_by_code(
     stock_code: str

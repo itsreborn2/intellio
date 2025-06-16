@@ -10,7 +10,8 @@ import {
   IBarChartComponent, 
   ILineChartComponent,
   IMixedChartComponent,
-  IPriceChartComponent
+  IPriceChartComponent,
+  ITechnicalIndicatorChartComponent
 } from '../types/chat';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -20,7 +21,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ComposedChart, Area,
   Cell, Sector, PieChart, Pie, RadialBarChart, RadialBar, ReferenceArea
 } from 'recharts';
-import { createChart, ColorType, LineStyle, CandlestickSeries, HistogramSeries, LineSeries, Time } from 'lightweight-charts';
+import { createChart, ColorType, LineStyle, CandlestickSeries, HistogramSeries, LineSeries, AreaSeries, Time } from 'lightweight-charts';
 import { useMediaQuery } from '../hooks';
 
 // 차트 색상 테마 정의
@@ -894,6 +895,41 @@ export function MessageComponentRenderer({
       );
     }
     
+    case 'technical_indicator_chart': {
+      const { title, data } = component as ITechnicalIndicatorChartComponent;
+      
+      // 기술적 지표 차트 컨테이너 스타일
+      const containerStyle: CSSProperties = {
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        borderRadius: '12px',
+        padding: '1em',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+        margin: '1em 0',
+        width: '100%'
+      };
+      
+      // 차트 높이 설정
+      const chartHeight = isMobile ? 350 : 420;
+      
+      return (
+        <div style={containerStyle}>
+          {title && <div style={{ 
+            fontWeight: 'bold', 
+            marginBottom: '0.5em',
+            fontSize: '1.2em',
+            textAlign: 'center',
+            color: '#333'
+          }}>{title}</div>}
+          
+          <TechnicalIndicatorChart 
+            data={data}
+            height={chartHeight}
+            isMobile={isMobile}
+          />
+        </div>
+      );
+    }
+    
     case 'table': {
       const { title, data } = component as any;
       
@@ -1246,19 +1282,56 @@ const PriceChart: React.FC<{
         timeVisible: true,
         secondsVisible: false,
       },
+      crosshair: {
+        mode: 1, // Normal crosshair mode
+        vertLine: {
+          width: 1,
+          color: '#999999',
+          style: 2, // LightweightCharts.LineStyle.Dashed
+        },
+        horzLine: {
+          width: 1,
+          color: '#999999',
+          style: 2, // LightweightCharts.LineStyle.Dashed
+        },
+      },
+      localization: {
+        timeFormatter: (time: any) => {
+          // yyyy-mm-dd 형식으로 변환
+          if (typeof time === 'string') {
+            return time; // 이미 문자열 형태면 그대로 반환
+          }
+          const date = new Date(time * 1000);
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        },
+      },
     });
     
     chartRef.current = chart;
     
-    // 캔들스틱 시리즈 추가
+    // 캔들스틱 시리즈 추가 - 한국 스타일 (상승: 빨간색, 하락: 파란색)
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      borderUpColor: '#26a69a',
-      borderDownColor: '#ef5350',
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
+      upColor: '#ef5350',
+      downColor: '#2196f3',
+      borderUpColor: '#ef5350',
+      borderDownColor: '#2196f3',
+      wickUpColor: '#ef5350',
+      wickDownColor: '#2196f3',
+      title: '주가',
     });
+    
+    // 주가 스케일 설정 - 거래량이 있으면 상단 70% 영역 사용
+    if (data.volume_data && data.volume_data.length > 0) {
+      chart.priceScale('right').applyOptions({
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.3, // 하단 30%는 거래량을 위해 여백 확보
+        },
+      });
+    }
     
     // 캔들 데이터 설정
     const candleData = data.candle_data.map((item: any) => ({
@@ -1271,28 +1344,68 @@ const PriceChart: React.FC<{
     
     candlestickSeries.setData(candleData);
     
+    // 거래량 데이터 처리 - volume_data가 있으면 사용하고, 없으면 candle_data에서 추출
+    let volumeDataToUse = data.volume_data;
+    
+    // volume_data가 없지만 candle_data에 volume 정보가 있는 경우 추출
+    if ((!volumeDataToUse || volumeDataToUse.length === 0) && data.candle_data && data.candle_data.length > 0) {
+      // candle_data에서 volume 정보만 추출하여 volume_data 형태로 변환
+      volumeDataToUse = data.candle_data
+        .filter((candle: any) => candle.volume !== undefined && candle.volume > 0)
+        .map((candle: any) => ({
+          time: candle.time,
+          value: candle.volume,
+        }));
+    }
+    
     // 거래량 데이터가 있으면 추가
-    if (data.volume_data && data.volume_data.length > 0) {
+    if (volumeDataToUse && volumeDataToUse.length > 0) {
       const volumeSeries = chart.addSeries(HistogramSeries, {
         color: '#26a69a',
         priceFormat: {
           type: 'volume',
         },
         priceScaleId: 'volume',
+        title: '거래량',
       });
       
+      // 거래량 스케일 설정 - 하단 30% 영역 사용
       chart.priceScale('volume').applyOptions({
         scaleMargins: {
-          top: 0.8,
+          top: 0.7, // 상단 70% 지점부터 시작
           bottom: 0,
         },
+        borderColor: '#cccccc',
+        textColor: '#666',
+        entireTextOnly: false,
+        ticksVisible: true,
+        borderVisible: true,
       });
       
-      volumeSeries.setData(data.volume_data.map((item: any) => ({
-        time: item.time as Time,
-        value: item.value,
-        color: item.color
-      })));
+      // 거래량 데이터 처리 - 전일 대비 증감으로 색상 결정
+      const volumeData = volumeDataToUse.map((item: any, index: number) => {
+        let volumeColor = '#ef535080'; // 기본 상승 색상 (반투명)
+        
+        // 전일 거래량과 비교하여 색상 결정
+        if (index > 0 && volumeDataToUse[index - 1]) {
+          const prevVolume = volumeDataToUse[index - 1].value;
+          const currentVolume = item.value;
+          
+          // 전일 대비 거래량 증가: 빨간색, 감소: 파란색 (반투명)
+          volumeColor = currentVolume >= prevVolume ? '#ef535080' : '#2196f380';
+        } else if (item.color) {
+          // 별도로 색상이 지정된 경우 사용 (반투명 처리)
+          volumeColor = item.color + '80';
+        }
+        
+        return {
+          time: item.time as Time,
+          value: item.value,
+          color: volumeColor,
+        };
+      });
+      
+      volumeSeries.setData(volumeData);
     }
     
     // 이동평균선 추가
@@ -1311,38 +1424,38 @@ const PriceChart: React.FC<{
     // 지지선 추가
     if (data.support_lines && data.support_lines.length > 0) {
       data.support_lines.forEach((line: any) => {
-        const supportSeries = chart.addSeries(LineSeries, {
-          color: line.color || '#4ade80',
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-        });
-        
-        // 지지선은 수평선으로 표시
-        const supportData = candleData.map((item: any) => ({
-          time: item.time,
-          value: line.price,
-        }));
-        
-        supportSeries.setData(supportData);
+        // 캔들스틱 시리즈에 직접 프라이스 라인 추가 (중복 방지)
+        if (candlestickSeries && line.show_label) {
+          candlestickSeries.createPriceLine({
+            price: line.price,
+            color: line.color || '#2196f3',
+            lineWidth: line.line_width || 2,
+            lineStyle: line.line_style === 'solid' ? LineStyle.Solid :
+                      line.line_style === 'dotted' ? LineStyle.Dotted :
+                      LineStyle.Dashed,
+            axisLabelVisible: false, // 오른쪽 Y축 라벨 제거
+            title: line.label,
+          });
+        }
       });
     }
     
     // 저항선 추가
     if (data.resistance_lines && data.resistance_lines.length > 0) {
       data.resistance_lines.forEach((line: any) => {
-        const resistanceSeries = chart.addSeries(LineSeries, {
-          color: line.color || '#f87171',
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-        });
-        
-        // 저항선은 수평선으로 표시
-        const resistanceData = candleData.map((item: any) => ({
-          time: item.time,
-          value: line.price,
-        }));
-        
-        resistanceSeries.setData(resistanceData);
+        // 캔들스틱 시리즈에 직접 프라이스 라인 추가 (중복 방지)
+        if (candlestickSeries && line.show_label) {
+          candlestickSeries.createPriceLine({
+            price: line.price,
+            color: line.color || '#ef5350',
+            lineWidth: line.line_width || 2,
+            lineStyle: line.line_style === 'solid' ? LineStyle.Solid :
+                      line.line_style === 'dotted' ? LineStyle.Dotted :
+                      LineStyle.Dashed,
+            axisLabelVisible: false, // 오른쪽 Y축 라벨 제거
+            title: line.label,
+          });
+        }
       });
     }
     
@@ -1366,15 +1479,468 @@ const PriceChart: React.FC<{
     };
   }, [data, height]);
   
+  // 범례 정보 표시용 컴포넌트
+  const renderLegend = () => {
+    const legendItems = [];
+    
+    // 캔들스틱 범례
+    if (data.candle_data && data.candle_data.length > 0) {
+      legendItems.push({
+        name: '주가',
+        color: '#26a69a',
+        type: 'candle'
+      });
+    }
+    
+    // 거래량 범례 - volume_data가 있거나 candle_data에 volume이 있는 경우
+    const hasVolumeData = (data.volume_data && data.volume_data.length > 0) || 
+                         (data.candle_data && data.candle_data.length > 0 && 
+                          data.candle_data.some((candle: any) => candle.volume !== undefined && candle.volume > 0));
+    
+    if (hasVolumeData) {
+      legendItems.push({
+        name: '거래량',
+        color: '#666',
+        type: 'bar'
+      });
+    }
+    
+    // 이동평균선 범례
+    if (data.moving_averages && data.moving_averages.length > 0) {
+      legendItems.push({
+        name: '이동평균선',
+        color: '#ff6b35',
+        type: 'line'
+      });
+    }
+    
+                // 지지선 범례 - 실제 라인 색상과 일치
+    if (data.support_lines && data.support_lines.length > 0) {
+      const supportLineColor = data.support_lines[0]?.color || '#2196f3';
+      legendItems.push({
+        name: '지지선',
+        color: supportLineColor,
+        type: 'line'
+      });
+    }
+    
+    // 저항선 범례 - 실제 라인 색상과 일치
+    if (data.resistance_lines && data.resistance_lines.length > 0) {
+      const resistanceLineColor = data.resistance_lines[0]?.color || '#ef5350';
+      legendItems.push({
+        name: '저항선',
+        color: resistanceLineColor,
+        type: 'line'
+      });
+    }
+    
+    if (legendItems.length === 0) return null;
+    
+    return (
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '15px',
+        marginTop: '10px',
+        padding: '8px',
+        fontSize: '0.75em',
+        fontWeight: 500,
+      }}>
+        {legendItems.map((item, index) => (
+          <div key={`legend-${index}`} style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+          }}>
+            <div style={{
+              width: item.type === 'candle' ? '8px' : '12px',
+              height: item.type === 'candle' ? '12px' : item.type === 'bar' ? '8px' : '2px',
+              backgroundColor: item.color,
+              borderRadius: item.type === 'candle' ? '1px' : '1px',
+              border: item.type === 'candle' ? `1px solid ${item.color}` : 'none',
+            }} />
+            <span style={{ color: '#333' }}>{item.name}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+  
   return (
-    <div 
-      ref={chartContainerRef} 
-      style={{ 
-        width: '100%', 
-        height: `${height}px`,
-        position: 'relative'
-      }}
-    />
+    <div style={{ width: '100%' }}>
+      {/* 차트 영역 */}
+      <div 
+        ref={chartContainerRef} 
+        style={{ 
+          width: '100%', 
+          height: `${height}px`,
+          position: 'relative'
+        }}
+      />
+      
+      {/* 범례 */}
+      {renderLegend()}
+    </div>
+  );
+};
+
+// TechnicalIndicatorChart 컴포넌트 - Lightweight Charts를 사용한 기술적 지표 차트
+const TechnicalIndicatorChart: React.FC<{
+  data: any;
+  height: number;
+  isMobile: boolean;
+}> = ({ data, height, isMobile }) => {
+  const chartContainerRef = React.useRef<HTMLDivElement>(null);
+  const chartRef = React.useRef<any>(null);
+  
+  React.useEffect(() => {
+    if (!chartContainerRef.current || !data.dates || data.dates.length === 0) {
+      return;
+    }
+    
+    // 차트 생성
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: height,
+      layout: {
+        background: { color: '#ffffff' },
+        textColor: '#333333',
+      },
+      grid: {
+        vertLines: {
+          color: '#e1e1e1',
+        },
+        horzLines: {
+          color: '#e1e1e1',
+        },
+      },
+      rightPriceScale: {
+        borderColor: '#cccccc',
+        visible: true,
+      },
+      leftPriceScale: {
+        borderColor: '#cccccc',
+        visible: true,
+      },
+      timeScale: {
+        borderColor: '#cccccc',
+        timeVisible: false,
+        secondsVisible: false,
+      },
+      crosshair: {
+        mode: 1, // Normal crosshair mode
+        vertLine: {
+          width: 1,
+          color: '#999999',
+          style: 2, // LightweightCharts.LineStyle.Dashed
+        },
+        horzLine: {
+          width: 1,
+          color: '#999999',
+          style: 2, // LightweightCharts.LineStyle.Dashed
+        },
+      },
+      localization: {
+        timeFormatter: (time: any) => {
+          // yyyy-mm-dd 형식으로 변환
+          if (typeof time === 'string') {
+            return time; // 이미 문자열 형태면 그대로 반환
+          }
+          const date = new Date(time * 1000);
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        },
+      },
+    });
+    
+    chartRef.current = chart;
+    
+    // 선 스타일 변환 함수
+    const getLineStyle = (lineStyle: string): LineStyle => {
+      switch (lineStyle) {
+        case 'dashed':
+          return LineStyle.Dashed;
+        case 'dotted':
+          return LineStyle.Dotted;
+        default:
+          return LineStyle.Solid;
+      }
+    };
+    
+    // Y축 설정
+    const primaryAxisConfig = data.y_axis_configs?.primary || {
+      title: "Primary",
+      position: "left",
+      color: "#3b82f6"
+    };
+
+    const secondaryAxisConfig = data.y_axis_configs?.secondary || {
+      title: "Secondary", 
+      position: "right",
+      color: "#8b5cf6"
+    };
+    
+    // 캔들 데이터가 있는 경우 캔들스틱 시리즈 추가 - 한국 스타일
+    if (data.candle_data && data.candle_data.length > 0) {
+      const candlestickSeries = chart.addSeries(CandlestickSeries, {
+        upColor: '#ef5350',
+        downColor: '#2196f3', 
+        borderUpColor: '#ef5350',
+        borderDownColor: '#2196f3',
+        wickUpColor: '#ef5350',
+        wickDownColor: '#2196f3',
+        priceScaleId: 'candle', // 별도 스케일 사용
+      });
+      
+      // 캔들 데이터 설정
+      const candleData = data.candle_data.map((item: any) => ({
+        time: item.time as Time,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+      }));
+      
+      candlestickSeries.setData(candleData);
+      
+      // 캔들 전용 스케일 설정 (오른쪽 끝에 배치)
+      chart.priceScale('candle').applyOptions({
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.6, // 기술적 지표를 위한 공간 확보
+        },
+        borderColor: '#485158',
+      });
+    }
+
+    // 지표별 시리즈 생성
+    data.indicators.forEach((indicator: any, index: number) => {
+      const color = indicator.color || CHART_COLORS[index % CHART_COLORS.length];
+      const lineStyle = getLineStyle(indicator.line_style);
+      const priceScaleId = indicator.y_axis_id === 'secondary' ? 'right' : 'left';
+      
+      // 슈퍼트렌드 지표인지 확인
+      const isSupertrend = indicator.name && indicator.name.toLowerCase().includes('supertrend');
+      
+      // 시계열 데이터 생성 - 슈퍼트렌드의 경우 항상 실제 값 사용
+      let seriesData;
+      if (isSupertrend) {
+        // 슈퍼트렌드는 실제 가격 값을 사용 (data 필드에 이미 실제 값이 들어있음)
+        seriesData = data.dates.map((date: string, idx: number) => ({
+          time: date as Time,
+          value: indicator.data[idx] || 0, // 백엔드에서 이미 실제 값으로 설정됨
+        }));
+      } else {
+        seriesData = data.dates.map((date: string, idx: number) => ({
+          time: date as Time,
+          value: indicator.data[idx] || 0,
+        }));
+      }
+      
+      // 차트 타입에 따라 시리즈 생성
+      if (indicator.chart_type === 'bar') {
+        const histogramSeries = chart.addSeries(HistogramSeries, {
+          color: color,
+          priceFormat: {
+            type: 'price',
+            precision: 2,
+            minMove: 0.01,
+          },
+          priceScaleId: priceScaleId,
+        });
+        
+        // 막대 차트용 데이터 형식으로 변환
+        const histogramData = seriesData.map((item: any) => ({
+          time: item.time,
+          value: item.value,
+          color: color,
+        }));
+        
+        histogramSeries.setData(histogramData);
+        
+      } else if (indicator.chart_type === 'area') {
+        const areaSeries = chart.addSeries(AreaSeries, {
+          topColor: color,
+          bottomColor: `${color}20`, // 투명도 적용
+          lineColor: color,
+          lineWidth: 2,
+          lineStyle: lineStyle,
+          priceFormat: {
+            type: 'price',
+            precision: 2,
+            minMove: 0.01,
+          },
+          priceScaleId: priceScaleId,
+        });
+        
+        areaSeries.setData(seriesData);
+        
+      } else {
+        // 기본값: line
+        // 슈퍼트렌드의 경우 방향에 따라 색상 변경 가능 - 한국 스타일
+        let lineColor = color;
+        if (isSupertrend && indicator.directions && indicator.directions.length > 0) {
+          // 최신 방향에 따라 색상 설정 (상승: 빨간색, 하락: 파란색)
+          const latestDirection = indicator.directions[indicator.directions.length - 1];
+          lineColor = latestDirection === 1 ? '#ef5350' : latestDirection === -1 ? '#2196f3' : color;
+        }
+        
+        const lineSeries = chart.addSeries(LineSeries, {
+          color: lineColor,
+          lineWidth: 2,
+          lineStyle: lineStyle,
+          priceFormat: {
+            type: 'price',
+            precision: 2,
+            minMove: 0.01,
+          },
+          priceScaleId: priceScaleId,
+        });
+        
+        lineSeries.setData(seriesData);
+      }
+    });
+    
+    // Y축 스케일 설정
+    if (data.y_axis_configs) {
+      if (primaryAxisConfig.title) {
+        chart.priceScale('left').applyOptions({
+          borderColor: primaryAxisConfig.color,
+          scaleMargins: {
+            top: data.candle_data && data.candle_data.length > 0 ? 0.6 : 0.1,
+            bottom: 0.1,
+          },
+        });
+      }
+      
+      if (secondaryAxisConfig.title) {
+        chart.priceScale('right').applyOptions({
+          borderColor: secondaryAxisConfig.color,
+          scaleMargins: {
+            top: data.candle_data && data.candle_data.length > 0 ? 0.6 : 0.1,
+            bottom: 0.1,
+          },
+        });
+      }
+    }
+    
+    // 리사이즈 핸들러
+    const handleResize = () => {
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+        });
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    // 정리
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (chartRef.current) {
+        chartRef.current.remove();
+      }
+    };
+  }, [data, height]);
+  
+  // 범례 정보 표시용 컴포넌트
+  const renderLegend = () => {
+    return (
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '15px',
+        marginTop: '10px',
+        padding: '8px',
+        fontSize: '0.75em',
+        fontWeight: 500,
+      }}>
+        {/* 캔들 범례 - 한국 스타일 */}
+        {data.candle_data && data.candle_data.length > 0 && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+          }}>
+            <div style={{
+              width: '8px',
+              height: '12px',
+              backgroundColor: '#ef5350',
+              borderRadius: '1px',
+              border: '1px solid #ef5350',
+            }} />
+            <span style={{ color: '#333' }}>캔들스틱</span>
+          </div>
+        )}
+        
+        {/* 지표 범례 */}
+        {data.indicators.map((indicator: any, index: number) => {
+          const color = indicator.color || CHART_COLORS[index % CHART_COLORS.length];
+          return (
+            <div key={`legend-${index}`} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+            }}>
+              <div style={{
+                width: '12px',
+                height: '2px',
+                backgroundColor: color,
+                borderRadius: '1px',
+              }} />
+              <span style={{ color: '#333' }}>{indicator.name}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+  
+  return (
+    <div style={{ width: '100%' }}>
+      {/* Y축 라벨 */}
+      {data.y_axis_configs && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginBottom: '5px',
+          fontSize: '0.75em',
+          fontWeight: 'bold',
+          color: '#666',
+        }}>
+          {data.y_axis_configs.primary?.title && (
+            <span style={{ color: data.y_axis_configs.primary.color }}>
+              {data.y_axis_configs.primary.title}
+            </span>
+          )}
+          {data.y_axis_configs.secondary?.title && (
+            <span style={{ color: data.y_axis_configs.secondary.color }}>
+              {data.y_axis_configs.secondary.title}
+            </span>
+          )}
+        </div>
+      )}
+      
+      {/* 차트 영역 */}
+      <div 
+        ref={chartContainerRef} 
+        style={{ 
+          width: '100%', 
+          height: `${height}px`,
+          position: 'relative'
+        }}
+      />
+      
+      {/* 범례 */}
+      {renderLegend()}
+    </div>
   );
 };
 

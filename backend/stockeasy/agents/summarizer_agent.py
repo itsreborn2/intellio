@@ -271,7 +271,19 @@ class SummarizerAgent(BaseAgent):
             if is_technical_analysis_section:
                 # 기술적 분석 섹션은 기술적 분석 데이터만 사용 (토큰 절약)
                 logger.info(f"[SummarizerAgent] 기술적 분석 섹션 '{current_section_title}' - 기술적 분석 데이터만 사용 및 차트 플레이스홀더 활성화")
-                formatted_technical_data = self._format_technical_analysis_data(technical_analysis_data)
+                
+                # 섹션 제목에 따라 다른 차트 플레이스홀더 사용
+                if "추세추종" in current_section_title or "추세" in current_section_title:
+                    formatted_technical_data = self._format_technical_analysis_data_for_trend(technical_analysis_data)
+                    logger.info(f"[SummarizerAgent] 추세추종 지표 섹션 '{current_section_title}' - 추세추종 차트 플레이스홀더 사용")
+                elif "모멘텀" in current_section_title:
+                    formatted_technical_data = self._format_technical_analysis_data_for_momentum(technical_analysis_data)
+                    logger.info(f"[SummarizerAgent] 모멘텀 지표 섹션 '{current_section_title}' - 모멘텀 차트 플레이스홀더 사용")
+                else:
+                    # 기존 기술적 분석 데이터 포맷 사용 (호환성 유지)
+                    formatted_technical_data = self._format_technical_analysis_data(technical_analysis_data)
+                    logger.info(f"[SummarizerAgent] 일반 기술적 분석 섹션 '{current_section_title}' - 기존 차트 플레이스홀더 사용")
+                
                 combined_context_for_current_section = f"{formatted_technical_data}"
             else:
                 if technical_analysis_only:
@@ -541,6 +553,182 @@ class SummarizerAgent(BaseAgent):
             
         return formatted_data
         
+    def _format_technical_analysis_data_for_trend(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
+        """
+        추세추종 지표 섹션용 기술적 분석 데이터 포맷팅 (ADX, ADR, SuperTrend 포함)
+        """
+        if not technical_analysis_data:
+            return "추세추종 지표 분석을 위한 기술적 분석 데이터가 없습니다."
+
+        formatted_text = ""
+        current_price = technical_analysis_data.get("current_price", 0)
+        
+        if current_price:
+            formatted_text += f"현재가: {current_price:,}원\n"
+        
+        # 추세추종 지표들을 위한 차트 플레이스홀더 추가
+        formatted_text += "추세추종 지표 차트 분석:\n"
+        formatted_text += "[CHART_PLACEHOLDER:TREND_FOLLOWING_CHART]\n\n"
+        
+        # 추세추종 지표만 포함 (ADX, ADR, SuperTrend)
+        indicators = technical_analysis_data.get("technical_indicators", {})
+        if indicators:
+            formatted_text += "추세추종 지표 분석:\n"
+            
+            # ADX (추세 강도 지표)
+            adx = indicators.get("adx")
+            adx_plus_di = indicators.get("adx_plus_di")
+            adx_minus_di = indicators.get("adx_minus_di")
+            if adx is not None:
+                if adx >= 25:
+                    trend_strength = "강한 추세 (추세 매매 적합)"
+                elif adx <= 20:
+                    trend_strength = "약한 추세 (횡보 구간)"
+                else:
+                    trend_strength = "보통 추세"
+                
+                formatted_text += f"  ADX (Average Directional Index): {adx:.2f} - {trend_strength}\n"
+                
+                if adx_plus_di and adx_minus_di:
+                    if adx_plus_di > adx_minus_di:
+                        direction_signal = "상승 추세 우세"
+                    elif adx_minus_di > adx_plus_di:
+                        direction_signal = "하락 추세 우세"
+                    else:
+                        direction_signal = "방향성 불분명"
+                    
+                    formatted_text += f"    - +DI: {adx_plus_di:.2f}, -DI: {adx_minus_di:.2f} ({direction_signal})\n"
+                    formatted_text += f"    - ADX 25 이상시 강한 추세, 20 이하시 횡보 구간으로 판단됩니다.\n"
+            
+            # ADR (Advance Decline Ratio - 상승일/하락일 비율)
+            adr = indicators.get("adr")
+            adr_ma = indicators.get("adr_ma")
+            if adr is not None:
+                if adr > 1.2:
+                    adr_status = "상승 우세 (강세장 신호)"
+                elif adr < 0.8:
+                    adr_status = "하락 우세 (약세장 신호)"
+                else:
+                    adr_status = "균형 상태"
+                
+                formatted_text += f"  ADR (상승일/하락일 비율): {adr:.2f} - {adr_status}\n"
+                
+                if adr_ma:
+                    if adr > adr_ma:
+                        adr_trend = "상승 추세"
+                    elif adr < adr_ma:
+                        adr_trend = "하락 추세"
+                    else:
+                        adr_trend = "횡보 추세"
+                    formatted_text += f"    - ADR 이동평균: {adr_ma:.2f} (현재 {adr_trend})\n"
+                
+                formatted_text += f"    - ADR 1.2 이상시 상승 우세, 0.8 이하시 하락 우세로 판단됩니다.\n"
+            
+            # 슈퍼트렌드 (SuperTrend)
+            supertrend = indicators.get("supertrend")
+            supertrend_direction = indicators.get("supertrend_direction")
+            if supertrend is not None:
+                if supertrend_direction == 1:
+                    trend_signal = "상승추세 (매수 신호)"
+                    signal_description = "주가가 슈퍼트렌드 라인 위에 위치하여 상승 추세를 나타냅니다."
+                elif supertrend_direction == -1:
+                    trend_signal = "하락추세 (매도 신호)"
+                    signal_description = "주가가 슈퍼트렌드 라인 아래에 위치하여 하락 추세를 나타냅니다."
+                else:
+                    trend_signal = "중립 (추세 전환 구간)"
+                    signal_description = "추세 전환 구간으로 매매 신호가 불분명합니다."
+                
+                price_vs_supertrend = current_price - supertrend
+                price_difference_pct = (price_vs_supertrend / supertrend) * 100
+                
+                formatted_text += f"  슈퍼트렌드: {supertrend:,.0f}원 - {trend_signal}\n"
+                formatted_text += f"    - 현재가와 차이: {price_vs_supertrend:+,.0f}원 ({price_difference_pct:+.1f}%)\n"
+                formatted_text += f"    - {signal_description}\n"
+        
+        return formatted_text
+
+    def _format_technical_analysis_data_for_momentum(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
+        """
+        모멘텀 지표 섹션용 기술적 분석 데이터 포맷팅 (RSI, MACD, 스토캐스틱 포함)
+        """
+        if not technical_analysis_data:
+            return "모멘텀 지표 분석을 위한 기술적 분석 데이터가 없습니다."
+
+        formatted_text = ""
+        current_price = technical_analysis_data.get("current_price", 0)
+        
+        if current_price:
+            formatted_text += f"현재가: {current_price:,}원\n"
+        
+        # 모멘텀 지표들을 위한 차트 플레이스홀더 추가
+        formatted_text += "모멘텀 지표 차트 분석:\n"
+        formatted_text += "[CHART_PLACEHOLDER:MOMENTUM_CHART]\n\n"
+        
+        # 모멘텀 지표만 포함 (RSI, MACD, 스토캐스틱)
+        indicators = technical_analysis_data.get("technical_indicators", {})
+        if indicators:
+            formatted_text += "모멘텀 지표 분석:\n"
+            
+            # RSI (기본 지표)
+            rsi = indicators.get("rsi")
+            if rsi is not None:
+                if rsi < 30:
+                    rsi_status = "과매도 상태 (매수 신호)"
+                elif rsi > 70:
+                    rsi_status = "과매수 상태 (매도 신호)"
+                else:
+                    rsi_status = "중립 상태"
+                
+                formatted_text += f"  RSI (14일): {rsi:.2f} - {rsi_status}\n"
+                formatted_text += f"    - RSI가 30 이하면 과매도, 70 이상이면 과매수로 판단됩니다.\n"
+            
+            # MACD (모멘텀 지표)
+            macd = indicators.get("macd")
+            macd_signal = indicators.get("macd_signal")
+            macd_histogram = indicators.get("macd_histogram")
+            if macd is not None and macd_signal is not None:
+                # MACD 신호 판단
+                if macd > macd_signal:
+                    if macd_histogram and macd_histogram > 0:
+                        macd_status = "상승 모멘텀 (매수 신호)"
+                    else:
+                        macd_status = "상승 전환 시도"
+                elif macd < macd_signal:
+                    if macd_histogram and macd_histogram < 0:
+                        macd_status = "하락 모멘텀 (매도 신호)"
+                    else:
+                        macd_status = "하락 전환 시도"
+                else:
+                    macd_status = "중립 상태"
+                
+                formatted_text += f"  MACD: {macd:.3f} - {macd_status}\n"
+                formatted_text += f"    - MACD 라인: {macd:.3f}, 시그널 라인: {macd_signal:.3f}\n"
+                if macd_histogram is not None:
+                    formatted_text += f"    - MACD 히스토그램: {macd_histogram:.3f}\n"
+                formatted_text += f"    - MACD가 시그널 라인을 상향 돌파하면 매수신호, 하향 돌파하면 매도신호로 판단됩니다.\n"
+            
+            # 스토캐스틱 (모멘텀 지표)
+            stochastic_k = indicators.get("stochastic_k")
+            stochastic_d = indicators.get("stochastic_d")
+            if stochastic_k is not None and stochastic_d is not None:
+                # 스토캐스틱 신호 판단
+                if stochastic_k < 20 and stochastic_d < 20:
+                    stoch_status = "과매도 상태 (매수 신호)"
+                elif stochastic_k > 80 and stochastic_d > 80:
+                    stoch_status = "과매수 상태 (매도 신호)"
+                elif stochastic_k > stochastic_d:
+                    stoch_status = "상승 모멘텀"
+                elif stochastic_k < stochastic_d:
+                    stoch_status = "하락 모멘텀"
+                else:
+                    stoch_status = "중립 상태"
+                
+                formatted_text += f"  스토캐스틱: %K {stochastic_k:.1f}, %D {stochastic_d:.1f} - {stoch_status}\n"
+                formatted_text += f"    - %K가 20 이하면 과매도, 80 이상이면 과매수로 판단됩니다.\n"
+                formatted_text += f"    - %K가 %D를 상향 돌파하면 매수신호, 하향 돌파하면 매도신호로 판단됩니다.\n"
+        
+        return formatted_text
+    
     def _format_technical_analysis_data(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
         """
         기술적 분석 데이터를 LLM 프롬프트에 적합한 문자열로 변환합니다.
@@ -566,22 +754,295 @@ class SummarizerAgent(BaseAgent):
         formatted_text += f"현재가: {current_price:,}원\n"
         formatted_text += f"분석일시: {analysis_date}\n\n"
         
-        # 기술적 지표
+        # 추세추종 지표들을 위한 차트 플레이스홀더 추가
+        formatted_text += "차트 분석:\n"
+        formatted_text += "[CHART_PLACEHOLDER:TECHNICAL_INDICATOR_CHART]\n\n"
+        
+                    # 기술적 지표
         indicators = technical_analysis_data.get("technical_indicators", {})
         if indicators:
-            formatted_text += "기술적 지표:\n"
-            for key, value in indicators.items():
-                if value is not None:
-                    if key.startswith("sma") or key.startswith("ema"):
-                        formatted_text += f"  {key.upper()}: {value:.2f}\n"
-                    elif key == "rsi":
-                        formatted_text += f"  RSI: {value:.2f}\n"
-                    elif key.startswith("macd"):
-                        formatted_text += f"  {key.upper()}: {value:.4f}\n"
-                    elif key.startswith("bollinger"):
-                        formatted_text += f"  {key.replace('_', ' ').title()}: {value:.2f}\n"
-                    elif key.startswith("stochastic"):
-                        formatted_text += f"  {key.replace('_', ' ').title()}: {value:.2f}\n"
+            formatted_text += "기술적 지표 분석:\n"
+            
+            # 기술적 지표 요약 테이블
+            formatted_text += "\n기술적 지표 요약:\n"
+            formatted_text += "|지표|현재값|신호|설명|\n"
+            formatted_text += "|---|---|---|---|\n"
+            
+            # 테이블용 데이터 수집
+            table_data = []
+            
+            # 모멘텀 지표들 (RSI, MACD, 스토캐스틱)
+            # RSI (기본 지표)
+            rsi = indicators.get("rsi")
+            if rsi is not None:
+                if rsi < 30:
+                    rsi_status = "과매도 상태 (매수 신호)"
+                    rsi_signal = "매수"
+                elif rsi > 70:
+                    rsi_status = "과매수 상태 (매도 신호)"
+                    rsi_signal = "매도"
+                else:
+                    rsi_status = "중립 상태"
+                    rsi_signal = "중립"
+                
+                table_data.append(f"|RSI (14일)|{rsi:.2f}|{rsi_signal}|{rsi_status}|")
+                formatted_text += f"  RSI (14일): {rsi:.2f} - {rsi_status}\n"
+                formatted_text += f"    - RSI가 30 이하면 과매도, 70 이상이면 과매수로 판단됩니다.\n"
+            
+            # MACD (모멘텀 지표)
+            macd = indicators.get("macd")
+            macd_signal = indicators.get("macd_signal")
+            macd_histogram = indicators.get("macd_histogram")
+            if macd is not None and macd_signal is not None:
+                # MACD 신호 판단
+                if macd > macd_signal:
+                    if macd_histogram and macd_histogram > 0:
+                        macd_status = "상승 모멘텀 (매수 신호)"
+                        macd_signal_type = "매수"
+                    else:
+                        macd_status = "상승 전환 시도"
+                        macd_signal_type = "관심"
+                elif macd < macd_signal:
+                    if macd_histogram and macd_histogram < 0:
+                        macd_status = "하락 모멘텀 (매도 신호)"
+                        macd_signal_type = "매도"
+                    else:
+                        macd_status = "하락 전환 시도"
+                        macd_signal_type = "주의"
+                else:
+                    macd_status = "중립 상태"
+                    macd_signal_type = "중립"
+                
+                table_data.append(f"|MACD|{macd:.3f}|{macd_signal_type}|{macd_status}|")
+                formatted_text += f"  MACD: {macd:.3f} - {macd_status}\n"
+                formatted_text += f"    - MACD 라인: {macd:.3f}, 시그널 라인: {macd_signal:.3f}\n"
+                if macd_histogram is not None:
+                    formatted_text += f"    - MACD 히스토그램: {macd_histogram:.3f}\n"
+                formatted_text += f"    - MACD가 시그널 라인을 상향 돌파하면 매수신호, 하향 돌파하면 매도신호로 판단됩니다.\n"
+            
+            # 스토캐스틱 (모멘텀 지표)
+            stochastic_k = indicators.get("stochastic_k")
+            stochastic_d = indicators.get("stochastic_d")
+            if stochastic_k is not None and stochastic_d is not None:
+                # 스토캐스틱 신호 판단
+                if stochastic_k < 20 and stochastic_d < 20:
+                    stoch_status = "과매도 상태 (매수 신호)"
+                    stoch_signal = "매수"
+                elif stochastic_k > 80 and stochastic_d > 80:
+                    stoch_status = "과매수 상태 (매도 신호)"
+                    stoch_signal = "매도"
+                elif stochastic_k > stochastic_d:
+                    stoch_status = "상승 모멘텀"
+                    stoch_signal = "긍정"
+                elif stochastic_k < stochastic_d:
+                    stoch_status = "하락 모멘텀"
+                    stoch_signal = "부정"
+                else:
+                    stoch_status = "중립 상태"
+                    stoch_signal = "중립"
+                
+                table_data.append(f"|스토캐스틱|%K: {stochastic_k:.1f}, %D: {stochastic_d:.1f}|{stoch_signal}|{stoch_status}|")
+                formatted_text += f"  스토캐스틱: %K {stochastic_k:.1f}, %D {stochastic_d:.1f} - {stoch_status}\n"
+                formatted_text += f"    - %K가 20 이하면 과매도, 80 이상이면 과매수로 판단됩니다.\n"
+                formatted_text += f"    - %K가 %D를 상향 돌파하면 매수신호, 하향 돌파하면 매도신호로 판단됩니다.\n"
+            
+            # ADX (추세 강도 지표)
+            adx = indicators.get("adx")
+            adx_plus_di = indicators.get("adx_plus_di")
+            adx_minus_di = indicators.get("adx_minus_di")
+            if adx is not None:
+                if adx >= 25:
+                    trend_strength = "강한 추세 (추세 매매 적합)"
+                elif adx <= 20:
+                    trend_strength = "약한 추세 (횡보 구간)"
+                else:
+                    trend_strength = "보통 추세"
+                
+                # ADX 신호 결정
+                if adx >= 25:
+                    if adx_plus_di and adx_minus_di:
+                        if adx_plus_di > adx_minus_di:
+                            adx_signal = "강한 상승추세"
+                        else:
+                            adx_signal = "강한 하락추세"
+                    else:
+                        adx_signal = "강한 추세"
+                elif adx <= 20:
+                    adx_signal = "횡보"
+                else:
+                    adx_signal = "보통 추세"
+                
+                table_data.append(f"|ADX|{adx:.2f}|{adx_signal}|{trend_strength}|")
+                formatted_text += f"  ADX (Average Directional Index): {adx:.2f} - {trend_strength}\n"
+                
+                if adx_plus_di and adx_minus_di:
+                    if adx_plus_di > adx_minus_di:
+                        direction_signal = "상승 추세 우세"
+                    elif adx_minus_di > adx_plus_di:
+                        direction_signal = "하락 추세 우세"
+                    else:
+                        direction_signal = "방향성 불분명"
+                    
+                    formatted_text += f"    - +DI: {adx_plus_di:.2f}, -DI: {adx_minus_di:.2f} ({direction_signal})\n"
+                    formatted_text += f"    - ADX 25 이상시 강한 추세, 20 이하시 횡보 구간으로 판단됩니다.\n"
+            
+            # ADR (Advance Decline Ratio - 상승일/하락일 비율)
+            adr = indicators.get("adr")
+            adr_ma = indicators.get("adr_ma")
+            if adr is not None:
+                if adr > 1.2:
+                    adr_status = "상승 우세 (강세장 신호)"
+                elif adr < 0.8:
+                    adr_status = "하락 우세 (약세장 신호)"
+                else:
+                    adr_status = "균형 상태"
+                
+                # ADR 신호 결정
+                if adr > 1.2:
+                    adr_signal = "상승 우세"
+                elif adr < 0.8:
+                    adr_signal = "하락 우세"
+                else:
+                    adr_signal = "균형"
+                
+                table_data.append(f"|ADR|{adr:.2f}|{adr_signal}|{adr_status}|")
+                formatted_text += f"  ADR (상승일/하락일 비율): {adr:.2f} - {adr_status}\n"
+                
+                if adr_ma:
+                    if adr > adr_ma:
+                        adr_trend = "상승 추세"
+                    elif adr < adr_ma:
+                        adr_trend = "하락 추세"
+                    else:
+                        adr_trend = "횡보 추세"
+                    formatted_text += f"    - ADR 이동평균: {adr_ma:.2f} (현재 {adr_trend})\n"
+                
+                formatted_text += f"    - ADR 1.2 이상시 상승 우세, 0.8 이하시 하락 우세로 판단됩니다.\n"
+            
+            # 슈퍼트렌드 (SuperTrend)
+            supertrend = indicators.get("supertrend")
+            supertrend_direction = indicators.get("supertrend_direction")
+            if supertrend is not None:
+                if supertrend_direction == 1:
+                    trend_signal = "상승추세 (매수 신호)"
+                    signal_description = "주가가 슈퍼트렌드 라인 위에 위치하여 상승 추세를 나타냅니다."
+                elif supertrend_direction == -1:
+                    trend_signal = "하락추세 (매도 신호)"
+                    signal_description = "주가가 슈퍼트렌드 라인 아래에 위치하여 하락 추세를 나타냅니다."
+                else:
+                    trend_signal = "중립 (추세 전환 구간)"
+                    signal_description = "추세 전환 구간으로 매매 신호가 불분명합니다."
+                
+                # SuperTrend 신호 결정
+                if supertrend_direction == 1:
+                    supertrend_signal = "매수"
+                elif supertrend_direction == -1:
+                    supertrend_signal = "매도"
+                else:
+                    supertrend_signal = "중립"
+                
+                price_vs_supertrend = current_price - supertrend
+                price_difference_pct = (price_vs_supertrend / supertrend) * 100
+                
+                table_data.append(f"|SuperTrend|{supertrend:,.0f}원|{supertrend_signal}|{trend_signal}|")
+                formatted_text += f"  슈퍼트렌드: {supertrend:,.0f}원 - {trend_signal}\n"
+                formatted_text += f"    - 현재가와 차이: {price_vs_supertrend:+,.0f}원 ({price_difference_pct:+.1f}%)\n"
+                formatted_text += f"    - {signal_description}\n"
+            
+            # 테이블 출력
+            if table_data:
+                for row in table_data:
+                    formatted_text += row + "\n"
+                formatted_text += "\n"
+            
+            # 종합적 지표 분석
+            formatted_text += "종합적 지표 분석:\n"
+            
+            # 각 지표의 신호를 수집하고 종합 판단
+            signals = []
+            
+            # RSI 신호
+            if rsi is not None:
+                if rsi < 30:
+                    signals.append("매수")
+                elif rsi > 70:
+                    signals.append("매도")
+                else:
+                    signals.append("중립")
+            
+            # MACD 신호
+            if macd is not None and macd_signal is not None:
+                if macd > macd_signal:
+                    if macd_histogram and macd_histogram > 0:
+                        signals.append("매수")
+                    else:
+                        signals.append("중립")
+                elif macd < macd_signal:
+                    if macd_histogram and macd_histogram < 0:
+                        signals.append("매도")
+                    else:
+                        signals.append("중립")
+                else:
+                    signals.append("중립")
+            
+            # 스토캐스틱 신호
+            if stochastic_k is not None and stochastic_d is not None:
+                if stochastic_k < 20 and stochastic_d < 20:
+                    signals.append("매수")
+                elif stochastic_k > 80 and stochastic_d > 80:
+                    signals.append("매도")
+                else:
+                    signals.append("중립")
+            
+            # ADX 신호
+            if adx is not None and adx_plus_di and adx_minus_di:
+                if adx >= 25:
+                    if adx_plus_di > adx_minus_di:
+                        signals.append("매수")
+                    else:
+                        signals.append("매도")
+                else:
+                    signals.append("중립")
+            
+            # ADR 신호
+            if adr is not None:
+                if adr > 1.2:
+                    signals.append("매수")
+                elif adr < 0.8:
+                    signals.append("매도")
+                else:
+                    signals.append("중립")
+            
+            # SuperTrend 신호
+            if supertrend_direction is not None:
+                if supertrend_direction == 1:
+                    signals.append("매수")
+                elif supertrend_direction == -1:
+                    signals.append("매도")
+                else:
+                    signals.append("중립")
+            
+            # 신호 종합
+            if signals:
+                buy_count = signals.count("매수")
+                sell_count = signals.count("매도")
+                neutral_count = signals.count("중립")
+                total_signals = len(signals)
+                
+                formatted_text += f"  - 총 {total_signals}개 지표 중 매수 신호: {buy_count}개, 매도 신호: {sell_count}개, 중립: {neutral_count}개\n"
+                
+                if buy_count > sell_count and buy_count > neutral_count:
+                    overall_signal = "매수 우세"
+                    signal_strength = buy_count / total_signals * 100
+                elif sell_count > buy_count and sell_count > neutral_count:
+                    overall_signal = "매도 우세"
+                    signal_strength = sell_count / total_signals * 100
+                else:
+                    overall_signal = "혼조 또는 중립"
+                    signal_strength = max(buy_count, sell_count, neutral_count) / total_signals * 100
+                
+                formatted_text += f"  - 종합 신호: {overall_signal} (신호 강도: {signal_strength:.1f}%)\n"
+            
             formatted_text += "\n"
         
         # 차트 패턴
@@ -715,7 +1176,7 @@ class SummarizerAgent(BaseAgent):
                     total_foreign += foreign
                     total_institution += institution
                     
-                    # 억원 단위로 표시
+                    # 수급 데이터를 억원 단위로 표시 (원본 데이터는 백만원 단위)
                     formatted_text += f"    {date}: 개인 {individual/100:+,.1f}억원, 외국인 {foreign/100:+,.1f}억원, 기관 {institution/100:+,.1f}억원\n"
                 
                 # 기간별 누적 요약
@@ -760,61 +1221,4 @@ class SummarizerAgent(BaseAgent):
         
         return formatted_text
         
-    def replace_chart_placeholders_with_components(self, content: str, chart_components: Dict[str, Dict[str, Any]]) -> str:
-        """
-        생성된 섹션 내용에서 차트 플레이스홀더를 실제 차트 컴포넌트로 교체합니다.
-        
-        Args:
-            content: 플레이스홀더가 포함된 섹션 내용
-            chart_components: 플레이스홀더 타입별 차트 컴포넌트 데이터
-            
-        Returns:
-            차트 컴포넌트로 교체된 섹션 내용
-        """
-        import re
-        
-        def replace_placeholder(match):
-            placeholder_type = match.group(1)  # PRICE_CHART, CANDLESTICK_CHART 등
-            
-            if placeholder_type in chart_components:
-                chart_data = chart_components[placeholder_type]
-                # 차트 컴포넌트를 마크다운 형식으로 변환
-                chart_markdown = self._format_chart_component_to_markdown(chart_data)
-                return chart_markdown
-            else:
-                logger.warning(f"[SummarizerAgent] 차트 컴포넌트를 찾을 수 없음: {placeholder_type}")
-                return f"*차트 데이터를 찾을 수 없습니다: {placeholder_type}*"
-        
-        # 플레이스홀더 패턴: [CHART_PLACEHOLDER:TYPE]
-        pattern = r'\[CHART_PLACEHOLDER:([A-Z_]+)\]'
-        replaced_content = re.sub(pattern, replace_placeholder, content)
-        
-        return replaced_content
     
-    def _format_chart_component_to_markdown(self, chart_data: Dict[str, Any]) -> str:
-        """
-        차트 컴포넌트 데이터를 마크다운 형식으로 변환합니다.
-        
-        Args:
-            chart_data: 차트 컴포넌트 데이터
-            
-        Returns:
-            마크다운 형식의 차트 표현
-        """
-        chart_type = chart_data.get('type', 'chart')
-        chart_title = chart_data.get('title', '차트')
-        
-        # 기본적인 차트 표현 (실제로는 프론트엔드에서 렌더링될 컴포넌트 정보)
-        markdown = f"\n**{chart_title}**\n\n"
-        
-        # 차트 데이터가 있다면 간단한 텍스트 표현 추가
-        if 'data' in chart_data:
-            markdown += "```\n"
-            markdown += f"차트 타입: {chart_type}\n"
-            markdown += f"데이터 포인트: {len(chart_data['data'])}개\n"
-            markdown += "```\n\n"
-        
-        # 차트 컴포넌트 메타데이터 (프론트엔드에서 사용)
-        markdown += f"<!-- CHART_COMPONENT: {chart_data} -->\n\n"
-        
-        return markdown
