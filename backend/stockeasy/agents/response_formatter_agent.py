@@ -121,38 +121,25 @@ class ResponseFormatterAgent(BaseAgent):
         """
         tech agent 결과를 사용하여 PriceChartComponent를 직접 생성합니다.
         """
-        logger.info(f"[DEBUG] _create_price_chart_component_directly 시작")
-        logger.info(f"[DEBUG] tech_agent_result 키들: {list(tech_agent_result.keys()) if tech_agent_result else 'None'}")
-        
-        # tech_agent_result 구조 확인
-        # tech_agent_result는 다음 구조를 가집니다:
-        # {
-        #   "agent_name": "technical_analyzer",
-        #   "status": "success", 
-        #   "data": {
-        #     "chart_data": [{"date": "...", "open": ..., "high": ..., "low": ..., "close": ..., "volume": ...}, ...],
-        #     "chart_patterns": {"support_levels": [...], "resistance_levels": [...], ...},
-        #     ...
-        #   },
-        #   ...
-        # }
-        
         # 실제 데이터는 data 키 안에 있음
         actual_data = tech_agent_result.get("data", {})
-        logger.info(f"[DEBUG] actual_data 키들: {list(actual_data.keys()) if actual_data else 'None'}")
         
         chart_data = actual_data.get("chart_data", [])
         chart_patterns = actual_data.get("chart_patterns", {})
         
-        logger.info(f"[DEBUG] chart_data 타입: {type(chart_data)}, 길이: {len(chart_data) if isinstance(chart_data, list) else 'N/A'}")
-        logger.info(f"[DEBUG] chart_patterns 키들: {list(chart_patterns.keys()) if chart_patterns else 'None'}")
-        
         # OHLCV 데이터 변환
         candle_data = []
-        logger.info(f"[DEBUG] OHLCV 데이터 변환 시작")
+        
+        # 안전한 int 변환 함수
+        def safe_int(value, default=0):
+            if value is None or value == '':
+                return default
+            try:
+                return int(float(value))  # float로 먼저 변환 후 int로
+            except (ValueError, TypeError):
+                return default
         
         if isinstance(chart_data, list) and chart_data:
-            logger.info(f"[DEBUG] chart_data는 리스트이고 {len(chart_data)}개 항목 존재")
             for i, item in enumerate(chart_data):
                 if i < 3:  # 처음 3개만 로깅
                     logger.info(f"[DEBUG] 데이터 항목 {i}: {item}")
@@ -165,18 +152,13 @@ class ResponseFormatterAgent(BaseAgent):
                     
                     candle_item = {
                         "time": formatted_time,
-                        "open": int(item.get("open", 0)),
-                        "high": int(item.get("high", 0)),
-                        "low": int(item.get("low", 0)),
-                        "close": int(item.get("close", 0)),
-                        "volume": int(item.get("volume", 0))
+                        "open": safe_int(item.get("open", 0)),
+                        "high": safe_int(item.get("high", 0)),
+                        "low": safe_int(item.get("low", 0)),
+                        "close": safe_int(item.get("close", 0)),
+                        "volume": safe_int(item.get("volume", 0))
                     }
                     candle_data.append(candle_item)
-                    if i < 3:  # 처음 3개만 로깅
-                        logger.info(f"[DEBUG] 캔들 데이터 추가: {candle_item}")
-                else:
-                    if i < 3:  # 처음 3개만 로깅
-                        logger.warning(f"[DEBUG] 유효하지 않은 데이터 항목 {i}: {item}")
         else:
             logger.warning(f"[DEBUG] chart_data가 리스트가 아니거나 비어있음: {type(chart_data)}")
         
@@ -194,7 +176,7 @@ class ResponseFormatterAgent(BaseAgent):
             for level in support_levels:
                 if level is not None:
                     support_lines.append({
-                        "price": int(level),
+                        "price": safe_int(level),
                         "label": f"지지선 {level:,.0f}원",
                         "color": "#4ade80",  # 녹색
                         "show_label": True,
@@ -206,7 +188,7 @@ class ResponseFormatterAgent(BaseAgent):
             for level in resistance_levels:
                 if level is not None:
                     resistance_lines.append({
-                        "price": int(level),
+                        "price": safe_int(level),
                         "label": f"저항선 {level:,.0f}원",
                         "color": "#f87171",  # 빨간색
                         "show_label": True,
@@ -215,26 +197,21 @@ class ResponseFormatterAgent(BaseAgent):
                         "line_width": 2
                     })
         
-        # PriceChartComponent 생성
-        logger.info(f"[DEBUG] 최종 데이터 요약:")
-        logger.info(f"[DEBUG] - candle_data 개수: {len(candle_data)}")
-        logger.info(f"[DEBUG] - support_lines 개수: {len(support_lines)}")
-        logger.info(f"[DEBUG] - resistance_lines 개수: {len(resistance_lines)}")
-        
-        price_chart_component = create_price_chart({
-            "symbol": stock_code,
-            "name": stock_name,
-            "title": f"{stock_name}({stock_code}) 주가차트 분석",
-            "candle_data": candle_data,
-            "support_lines": support_lines if support_lines else None,
-            "resistance_lines": resistance_lines if resistance_lines else None,
-            "period": "1년",
-            "interval": "1일",
-            "metadata": {
+       
+        price_chart_component = create_price_chart(
+            symbol=stock_code,
+            name=stock_name,
+            title=f"{stock_name}({stock_code}) 주가차트 분석",
+            candle_data=candle_data,
+            support_lines=support_lines if support_lines else None,
+            resistance_lines=resistance_lines if resistance_lines else None,
+            period="1년",
+            interval="1일",
+            metadata={
                 "source": "technical_analyzer_agent",
                 "timestamp": datetime.now().isoformat()
             }
-        })
+        )
         
         #logger.info(f"[DEBUG] 생성된 price_chart_component: {price_chart_component}")
         return price_chart_component
@@ -275,7 +252,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "data": processed_adx,
                 "color": "#3b82f6",  # 파란색
                 "chart_type": "line",
-                "y_axis_id": "secondary",
+                "y_axis_id": "primary",
                 "line_style": "solid"
             })
             logger.info(f"[기술지표차트] ADX 지표 추가 완료 - 데이터 포인트: {len(processed_adx)}개")
@@ -289,7 +266,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "data": processed_plus_di,
                 "color": "#10b981",  # 녹색
                 "chart_type": "line",
-                "y_axis_id": "secondary",
+                "y_axis_id": "primary",
                 "line_style": "solid"
             })
             logger.info(f"[기술지표차트] +DI 지표 추가 완료 - 데이터 포인트: {len(processed_plus_di)}개")
@@ -303,35 +280,41 @@ class ResponseFormatterAgent(BaseAgent):
                 "data": processed_minus_di,
                 "color": "#ef4444",  # 빨간색
                 "chart_type": "line",
-                "y_axis_id": "secondary",
+                "y_axis_id": "primary",
                 "line_style": "solid"
             })
             logger.info(f"[기술지표차트] -DI 지표 추가 완료 - 데이터 포인트: {len(processed_minus_di)}개")
         
-        # 4. ADR (Advance Decline Ratio)
+        # 4. ADR (Advance Decline Ratio) - 차트에서는 제외하지만 description에는 포함
         adr_data = chart_indicators_data.get("adr", [])
-        if adr_data and any(x is not None for x in adr_data) and len(indicators) < 5:
-            processed_adr = [float(x) if x is not None else 0.0 for x in adr_data]
-            indicators.append({
-                "name": "ADR (상승하락비율)",
-                "data": processed_adr,
-                "color": "#8b5cf6",  # 보라색
-                "chart_type": "line",
-                "y_axis_id": "secondary",
-                "line_style": "solid"
-            })
-            logger.info(f"[기술지표차트] ADR 지표 추가 완료 - 데이터 포인트: {len(processed_adr)}개")
+        adr_current_value = None
+        if adr_data and any(x is not None for x in adr_data):
+            adr_current_value = adr_data[-1]  # 현재값 저장 (description용)
+            logger.info(f"[기술지표차트] ADR 지표는 차트에서 제외하지만 현재값 저장: {adr_current_value}")
+            # indicators.append() 호출하지 않음 - 차트에서 제외
         
         # 5. 슈퍼트렌드 (SuperTrend)
         supertrend_data = chart_indicators_data.get("supertrend", [])
         supertrend_direction_data = chart_indicators_data.get("supertrend_direction", [])
+        
+        logger.info(f"[슈퍼트렌드] 데이터 확인:")
+        logger.info(f"  - supertrend_data 길이: {len(supertrend_data) if supertrend_data else 0}")
+        logger.info(f"  - supertrend_direction_data 길이: {len(supertrend_direction_data) if supertrend_direction_data else 0}")
+        logger.info(f"  - supertrend_direction_data 첫 10개: {supertrend_direction_data[:10] if supertrend_direction_data else '없음'}")
+        logger.info(f"  - chart_indicators_data 키 목록: {list(chart_indicators_data.keys())}")
+        
         if supertrend_data and any(x is not None for x in supertrend_data) and len(indicators) < 5:
             # 슈퍼트렌드 실제 값 사용
             processed_supertrend_values = [float(x) if x is not None else 0.0 for x in supertrend_data]
             
             # 방향 데이터도 함께 전달 (프론트에서 색상 변경 등에 활용 가능)
             processed_supertrend_directions = []
-            for direction in supertrend_direction_data:
+            logger.info(f"[슈퍼트렌드] 방향 데이터 처리 시작: {len(supertrend_direction_data)}개")
+            
+            for i, direction in enumerate(supertrend_direction_data):
+                if i < 5:  # 처음 5개만 로깅
+                    logger.info(f"  방향 데이터 {i}: {direction} (타입: {type(direction)})")
+                    
                 if direction == 1:
                     processed_supertrend_directions.append(1.0)  # 상승추세
                 elif direction == -1:
@@ -339,16 +322,27 @@ class ResponseFormatterAgent(BaseAgent):
                 else:
                     processed_supertrend_directions.append(0.0)  # 중립
             
-            indicators.append({
+            logger.info(f"[슈퍼트렌드] 처리된 방향 데이터: {len(processed_supertrend_directions)}개")
+            logger.info(f"  처리된 첫 10개: {processed_supertrend_directions[:10]}")
+            
+            supertrend_indicator = {
                 "name": "슈퍼트렌드",
                 "data": processed_supertrend_values,  # 실제 가격 값 사용
                 "values": processed_supertrend_values,  # 프론트에서 참조할 수 있도록 추가
                 "directions": processed_supertrend_directions,  # 방향 정보도 추가
                 "color": "#f59e0b",  # 주황색
                 "chart_type": "line",  # 라인 차트로 변경
-                "y_axis_id": "primary",  # 가격 캔들 차트와 동일한 Y축 사용 (왼쪽)
+                "y_axis_id": "secondary",  # 가격 캔들 차트와 동일한 Y축 사용 (오른쪽)
                 "line_style": "solid"
-            })
+            }
+            
+            logger.info(f"[슈퍼트렌드] 최종 지표 객체 생성:")
+            logger.info(f"  - name: {supertrend_indicator['name']}")
+            logger.info(f"  - data 길이: {len(supertrend_indicator['data'])}")
+            logger.info(f"  - directions 길이: {len(supertrend_indicator['directions'])}")
+            logger.info(f"  - directions 포함 여부: {'directions' in supertrend_indicator}")
+            
+            indicators.append(supertrend_indicator)
             logger.info(f"[기술지표차트] 슈퍼트렌드 지표 추가 완료 - 데이터 포인트: {len(processed_supertrend_values)}개")
         
         # 지표가 없는 경우 처리
@@ -356,17 +350,17 @@ class ResponseFormatterAgent(BaseAgent):
             logger.warning("[기술지표차트] 사용 가능한 기술적 지표 데이터가 없습니다")
             return create_paragraph("기술적 지표 데이터가 충분하지 않습니다.")
         
-        # Y축 설정 - 왼쪽은 캔들 데이터(주가) 기준, 오른쪽은 지표 값 기준
+        # Y축 설정 - 오른쪽은 캔들 데이터(주가) 기준, 왼쪽은 지표 값 기준
         y_axis_configs = {
             "primary": {
-                "title": "가격 (원)",
+                "title": "ADX / DI 값",
                 "position": "left",
-                "color": "#f59e0b"
+                "color": "#3b82f6"
             },
             "secondary": {
-                "title": "ADX / DI / ADR 값",
+                "title": "가격 (원)",
                 "position": "right", 
-                "color": "#3b82f6"
+                "color": "#f59e0b"
             }
         }
         
@@ -385,17 +379,15 @@ class ResponseFormatterAgent(BaseAgent):
                     trend_strength = "보통 추세"
                 description_parts.append(f"ADX: {adx_current:.1f} ({trend_strength})")
         
-        # ADR 현재값
-        if adr_data and len(adr_data) > 0:
-            adr_current = adr_data[-1]  # 마지막 값
-            if adr_current is not None:
-                if adr_current > 1.2:
-                    adr_status = "상승 우세"
-                elif adr_current < 0.8:
-                    adr_status = "하락 우세"
-                else:
-                    adr_status = "균형"
-                description_parts.append(f"ADR: {adr_current:.2f} ({adr_status})")
+        # ADR 현재값 (차트에는 없지만 description에는 포함)
+        if adr_current_value is not None:
+            if adr_current_value > 1.2:
+                adr_status = "상승 우세"
+            elif adr_current_value < 0.8:
+                adr_status = "하락 우세"
+            else:
+                adr_status = "균형"
+            description_parts.append(f"ADR: {adr_current_value:.2f} ({adr_status})")
         
         # 슈퍼트렌드 현재값
         if supertrend_data and len(supertrend_data) > 0:
@@ -417,6 +409,15 @@ class ResponseFormatterAgent(BaseAgent):
         candle_data = []
         logger.info(f"[기술지표차트] OHLCV 데이터 변환 시작")
         
+        # 안전한 int 변환 함수
+        def safe_int(value, default=0):
+            if value is None or value == '':
+                return default
+            try:
+                return int(float(value))  # float로 먼저 변환 후 int로
+            except (ValueError, TypeError):
+                return default
+        
         if isinstance(chart_data, list) and chart_data:
             logger.info(f"[기술지표차트] chart_data는 리스트이고 {len(chart_data)}개 항목 존재")
             for i, item in enumerate(chart_data):
@@ -431,11 +432,11 @@ class ResponseFormatterAgent(BaseAgent):
                     
                     candle_item = {
                         "time": formatted_time,
-                        "open": int(item.get("open", 0)),
-                        "high": int(item.get("high", 0)),
-                        "low": int(item.get("low", 0)),
-                        "close": int(item.get("close", 0)),
-                        "volume": int(item.get("volume", 0))
+                        "open": safe_int(item.get("open", 0)),
+                        "high": safe_int(item.get("high", 0)),
+                        "low": safe_int(item.get("low", 0)),
+                        "close": safe_int(item.get("close", 0)),
+                        "volume": safe_int(item.get("volume", 0))
                     }
                     candle_data.append(candle_item)
                     if i < 3:  # 처음 3개만 로깅
@@ -458,18 +459,18 @@ class ResponseFormatterAgent(BaseAgent):
         
         logger.info(f"[기술지표차트] 캔들 데이터 개수: {len(candle_data)}")
         
-        # 기술적 지표 차트 컴포넌트 생성
-        technical_indicator_chart = create_technical_indicator_chart({
-            "symbol": stock_code,
-            "name": stock_name,
-            "dates": dates,
-            "indicators": indicators,
-            "title": f"{stock_name}({stock_code}) 기술적 지표 분석",
-            "candle_data": candle_data if candle_data else None,  # 캔들 데이터 포함
-            "y_axis_configs": y_axis_configs,
-            "period": None,
-            "metadata": metadata
-        })
+        # 추세추종 지표 차트 컴포넌트 생성
+        technical_indicator_chart = create_technical_indicator_chart(
+            symbol=stock_code,
+            name=stock_name,
+            dates=dates,
+            indicators=indicators,
+            title=f"{stock_name}({stock_code}) 추세추종 지표 분석",
+            candle_data=candle_data if candle_data else None,  # 캔들 데이터 포함
+            y_axis_configs=y_axis_configs,
+            period=None,
+            metadata=metadata
+        )
         
         logger.info(f"[기술지표차트] 추세추종 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
         return technical_indicator_chart
@@ -524,7 +525,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "data": processed_macd_line,
                 "color": "#2196f3",  # 파란색
                 "chart_type": "line",
-                "y_axis_id": "secondary",
+                "y_axis_id": "hidden",  # 범용 hidden 축 사용
                 "line_style": "solid"
             })
             logger.info(f"[모멘텀지표차트] MACD Line 지표 추가 완료 - 데이터 포인트: {len(processed_macd_line)}개")
@@ -538,7 +539,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "data": processed_macd_signal,
                 "color": "#ff9800",  # 주황색
                 "chart_type": "line",
-                "y_axis_id": "secondary",
+                "y_axis_id": "hidden",  # 범용 hidden 축 사용
                 "line_style": "dashed"
             })
             logger.info(f"[모멘텀지표차트] MACD Signal 지표 추가 완료 - 데이터 포인트: {len(processed_macd_signal)}개")
@@ -550,9 +551,9 @@ class ResponseFormatterAgent(BaseAgent):
             indicators.append({
                 "name": "MACD Histogram",
                 "data": processed_macd_histogram,
-                "color": "#4caf50",  # 녹색
+                "color": "#4caf5080",  # 불투명한 녹색 (50% 투명도)
                 "chart_type": "bar",
-                "y_axis_id": "secondary",
+                "y_axis_id": "hidden",  # 범용 hidden 축 사용
                 "line_style": "solid"
             })
             logger.info(f"[모멘텀지표차트] MACD Histogram 지표 추가 완료 - 데이터 포인트: {len(processed_macd_histogram)}개")
@@ -586,9 +587,16 @@ class ResponseFormatterAgent(BaseAgent):
                 "max": 100
             },
             "secondary": {
-                "title": "MACD",
+                "title": "기타지표",
                 "position": "right", 
                 "color": "#2196f3"
+            },
+            "hidden": {
+                "title": "Hidden Axis",
+                "position": "right",
+                "color": "#2196f3",
+                "display": False,  # hidden 축으로 설정
+                "visible": False   # 축 자체를 숨김
             }
         }
         
@@ -629,6 +637,15 @@ class ResponseFormatterAgent(BaseAgent):
         candle_data = []
         logger.info(f"[모멘텀지표차트] OHLCV 데이터 변환 시작")
         
+        # 안전한 int 변환 함수
+        def safe_int(value, default=0):
+            if value is None or value == '':
+                return default
+            try:
+                return int(float(value))  # float로 먼저 변환 후 int로
+            except (ValueError, TypeError):
+                return default
+        
         if isinstance(chart_data, list) and chart_data:
             logger.info(f"[모멘텀지표차트] chart_data는 리스트이고 {len(chart_data)}개 항목 존재")
             for i, item in enumerate(chart_data):
@@ -643,11 +660,11 @@ class ResponseFormatterAgent(BaseAgent):
                     
                     candle_item = {
                         "time": formatted_time,
-                        "open": int(item.get("open", 0)),
-                        "high": int(item.get("high", 0)),
-                        "low": int(item.get("low", 0)),
-                        "close": int(item.get("close", 0)),
-                        "volume": int(item.get("volume", 0))
+                        "open": safe_int(item.get("open", 0)),
+                        "high": safe_int(item.get("high", 0)),
+                        "low": safe_int(item.get("low", 0)),
+                        "close": safe_int(item.get("close", 0)),
+                        "volume": safe_int(item.get("volume", 0))
                     }
                     candle_data.append(candle_item)
                     if i < 3:  # 처음 3개만 로깅
@@ -672,17 +689,17 @@ class ResponseFormatterAgent(BaseAgent):
         logger.info(f"[모멘텀지표차트] 캔들 데이터 개수: {len(candle_data)}")
         
         # 모멘텀 지표 차트 컴포넌트 생성
-        momentum_chart = create_technical_indicator_chart({
-            "symbol": stock_code,
-            "name": stock_name,
-            "dates": dates,
-            "indicators": indicators,
-            "title": f"{stock_name}({stock_code}) 모멘텀 지표 분석",
-            "candle_data": candle_data if candle_data else None,  # 캔들 데이터 포함
-            "y_axis_configs": y_axis_configs,
-            "period": None,
-            "metadata": metadata
-        })
+        momentum_chart = create_technical_indicator_chart(
+            symbol=stock_code,
+            name=stock_name,
+            dates=dates,
+            indicators=indicators,
+            title=f"{stock_name}({stock_code}) 모멘텀 지표 분석",
+            candle_data=candle_data if candle_data else None,  # 캔들 데이터 포함
+            y_axis_configs=y_axis_configs,
+            period=None,
+            metadata=metadata
+        )
         
         logger.info(f"[모멘텀지표차트] 모멘텀 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
         return momentum_chart
@@ -709,12 +726,22 @@ class ResponseFormatterAgent(BaseAgent):
         
         for field in fields_to_search:
             field_value = component.get(field, "")
-            logger.info(f"[DEBUG] 필드 '{field}' 검사 중: '{str(field_value)[:50]}...' (type: {type(field_value)})")
-            
-            if isinstance(field_value, str) and self.chart_placeholder in field_value:
-                logger.info(f"[DEBUG] 플레이스홀더 발견! 필드: {field}, 값: '{field_value}'")
-                return field
+            # 전체 내용을 로그로 출력하되, 너무 길면 앞뒤만 표시
+            if isinstance(field_value, str):
+                if len(field_value) > 200:
+                    truncated_value = f"{field_value[:100]}...{field_value[-100:]}"
+                    logger.info(f"[DEBUG] 필드 '{field}' 검사 중 (길이 {len(field_value)}): '{truncated_value}' (type: {type(field_value)})")
+                else:
+                    logger.info(f"[DEBUG] 필드 '{field}' 검사 중: '{field_value}' (type: {type(field_value)})")
+                
+                # 플레이스홀더 검색
+                if self.chart_placeholder in field_value:
+                    logger.info(f"[DEBUG] 플레이스홀더 발견! 필드: {field}, 전체 내용: '{field_value}'")
+                    return field
+                else:
+                    logger.info(f"[DEBUG] 필드 '{field}'에서 플레이스홀더 '{self.chart_placeholder}' 없음")
             else:
+                logger.info(f"[DEBUG] 필드 '{field}' 검사 중: '{str(field_value)[:100]}...' (type: {type(field_value)})")
                 if isinstance(field_value, str):
                     logger.info(f"[DEBUG] 필드 '{field}'에서 플레이스홀더 없음")
                 else:
@@ -1155,6 +1182,24 @@ class ResponseFormatterAgent(BaseAgent):
             #section_components.append(section_heading_component)
             
             # 2. 섹션 내용에 대한 구조화된 컴포넌트 생성 시도
+            # 플레이스홀더를 임시 마스크로 변경하여 LLM이 제거하지 않도록 처리
+            # placeholder_masks = {
+            #     self.chart_placeholder: "아래에서 주가차트 분석 결과를 확인할 수 있습니다.",
+            #     self.technical_indicator_chart_placeholder: "아래에서 기술적지표차트 분석 결과를 확인할 수 있습니다.", 
+            #     self.trend_following_chart_placeholder: "아래에서 추세추종지표차트 분석 결과를 확인할 수 있습니다.",
+            #     self.momentum_chart_placeholder: "아래에서 모멘텀지표차트 분석 결과를 확인할 수 있습니다."
+            # }
+            
+            # # 역방향 매핑 (복원용)
+            # mask_to_placeholder = {v: k for k, v in placeholder_masks.items()}
+            
+            # # 섹션 내용에서 플레이스홀더를 마스크로 변경
+            # masked_section_content = section_content
+            # for placeholder, mask in placeholder_masks.items():
+            #     if placeholder in masked_section_content:
+            #         logger.info(f"[DEBUG] 플레이스홀더 마스킹: {placeholder} -> {mask}")
+            #         masked_section_content = masked_section_content.replace(placeholder, mask)
+            
             tool_calling_prompt = f"""
 다음 섹션의 내용을 구조화된 컴포넌트로 변환하세요:
 
@@ -1203,12 +1248,16 @@ class ResponseFormatterAgent(BaseAgent):
 섹션 제목은 이미 추가되었으니 다시 추가하지 마세요.
 주의: 마크다운 볼드체(**text** 또는 __text__)는 반드시 컴포넌트의 실제 내용 값에 포함되어야 합니다.
 
-**중요**: [CHART_PLACEHOLDER:PRICE_CHART] 문자열이 있다면 이를 그대로 유지하고 변경하지 마세요. 이는 주가차트 위치를 표시하는 플레이스홀더입니다.
+**중요**: '[CHART_PLACEHOLDER:'로 시작하는 문자열은 create_paragraph 컴포넌트를 호출합니다.
 """
             try:
+                if "기술적 분석" in section_title:
+                    logger.info(f"[DEBUG] tool_calling_prompt: {tool_calling_prompt}")
                 section_response = await llm_with_tools.ainvoke(input=tool_calling_prompt)
                 
                 llm_generated_text_for_section = section_response.content if hasattr(section_response, 'content') else ""
+                if "기술적 분석" in section_title:
+                    logger.info(f"[DEBUG] after llm call: {section_response}")
 
                 if hasattr(section_response, 'tool_calls') and section_response.tool_calls:
                     first_heading_found = False
@@ -1222,7 +1271,7 @@ class ResponseFormatterAgent(BaseAgent):
                             tool_args['level'] = int(tool_args['level'])
                         
                         tool_func = next((t for t in tools if t.name == tool_name), None)
-                        #logger.info(f"Tool name : {tool_name}, args : {tool_args}, tool_func: {tool_func}")
+                        logger.info(f"Tool name : {tool_name}, args : {tool_args}, tool_func: {tool_func}")
                         if tool_func:
                             component_dict = tool_func.invoke(tool_args)
 
@@ -1327,8 +1376,16 @@ class ResponseFormatterAgent(BaseAgent):
                     section_components.append(create_heading({"level": 2, "content": section_title}))
                     
                     cleaned_text = remove_json_block(llm_generated_text_for_section)
-                    if cleaned_text.strip():
-                         section_components.append(create_paragraph({"content": cleaned_text}))
+                    
+                    # 텍스트에서 마스크를 플레이스홀더로 복원
+                    restored_text = cleaned_text
+                    for mask, placeholder in mask_to_placeholder.items():
+                        if mask in restored_text:
+                            logger.info(f"[DEBUG] 텍스트 마스크 복원: {mask} -> {placeholder}")
+                            restored_text = restored_text.replace(mask, placeholder)
+                    
+                    if restored_text.strip():
+                         section_components.append(create_paragraph(restored_text))
                 
                 # 성공적으로 처리되면 (툴콜이 있든 없든) 컴포넌트들과 LLM 텍스트, 제목 반환
                 logger.info(f"섹션 '{section_title}' 처리 완료: 소요시간 {datetime.now() - start_time_process_section}")
@@ -1337,9 +1394,17 @@ class ResponseFormatterAgent(BaseAgent):
             except Exception as e:
                 logger.error(f"비동기 섹션 '{section_title}' 컴포넌트 생성 중 오류: {str(e)}")
                 # 오류 발생 시, 이미 추가된 섹션 제목 컴포넌트 외에 원본 내용을 단락으로 추가
-                section_components.append(create_paragraph({"content": section_content_fallback}))
+                
+                # 오류 복구 시에도 마스크를 플레이스홀더로 복원
+                restored_fallback = section_content_fallback
+                for mask, placeholder in mask_to_placeholder.items():
+                    if mask in restored_fallback:
+                        logger.info(f"[DEBUG] 오류 복구 시 마스크 복원: {mask} -> {placeholder}")
+                        restored_fallback = restored_fallback.replace(mask, placeholder)
+                
+                section_components.append(create_paragraph(restored_fallback))
                 # 오류 시 LLM 생성 텍스트는 없고, 원본 내용을 텍스트로 반환 (오류 복구용)
-                return section_components, section_content_fallback, section_title
+                return section_components, restored_fallback, section_title
         else: # summary_by_section에 내용이 없는 경우
             logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에 대한 내용이 summary_by_section에 없습니다. 빈 컴포넌트를 반환합니다.")
             # 제목 컴포넌트만 있는 리스트와 빈 텍스트, 제목 반환
@@ -1401,7 +1466,7 @@ class ResponseFormatterAgent(BaseAgent):
                 create_bar_chart,
                 create_line_chart,
                 create_mixed_chart,
-                create_image
+                #create_image
             ]
             
             llm_with_tools = self.agent_llm_for_tools.get_llm().bind_tools(tools)
@@ -1616,12 +1681,16 @@ class ResponseFormatterAgent(BaseAgent):
                                         # 숫자 데이터인 경우 숫자로 변환 시도
                                         cell_value = row_cells[idx] if idx < len(row_cells) else ""
                                         try:
-                                            # 콤마 제거 후 숫자 변환 시도
-                                            cell_value_clean = cell_value.replace(',', '')
-                                            if '.' in cell_value_clean and cell_value_clean.replace('.', '').replace('-', '').isdigit():
-                                                cell_value = float(cell_value_clean)
-                                            elif cell_value_clean.replace('-', '').isdigit():
-                                                cell_value = int(cell_value_clean)
+                                            # None 체크 추가
+                                            if cell_value is None or cell_value == '':
+                                                cell_value = ""
+                                            else:
+                                                # 콤마 제거 후 숫자 변환 시도
+                                                cell_value_clean = str(cell_value).replace(',', '')
+                                                if '.' in cell_value_clean and cell_value_clean.replace('.', '').replace('-', '').isdigit():
+                                                    cell_value = float(cell_value_clean)
+                                                elif cell_value_clean.replace('-', '').isdigit():
+                                                    cell_value = int(cell_value_clean)
                                         except (ValueError, TypeError):
                                             # 숫자 변환 실패 시 텍스트 그대로 사용
                                             pass
@@ -2094,6 +2163,55 @@ plt.show()
         ))
         
         return components
+
+    def _restore_placeholders_in_component(self, component_dict: Dict[str, Any], mask_to_placeholder: Dict[str, str]) -> Dict[str, Any]:
+        """
+        컴포넌트의 텍스트 필드에서 마스크를 원래 플레이스홀더로 복원합니다.
+        """
+        if not component_dict or not mask_to_placeholder:
+            return component_dict
+        
+        # 복사본 생성
+        restored_component = component_dict.copy()
+        
+        # 텍스트 필드들을 검사하여 마스크 복원
+        text_fields = ['content', 'title', 'alt', 'caption']
+        
+        for field in text_fields:
+            if field in restored_component and isinstance(restored_component[field], str):
+                original_text = restored_component[field]
+                restored_text = original_text
+                
+                # 모든 마스크를 플레이스홀더로 복원
+                for mask, placeholder in mask_to_placeholder.items():
+                    if mask in restored_text:
+                        logger.info(f"[DEBUG] 마스크 복원: {mask} -> {placeholder} in {field}")
+                        restored_text = restored_text.replace(mask, placeholder)
+                
+                restored_component[field] = restored_text
+        
+        # 리스트 항목들도 처리 (list 컴포넌트의 경우)
+        if 'items' in restored_component and isinstance(restored_component['items'], list):
+            restored_items = []
+            for item in restored_component['items']:
+                if isinstance(item, dict) and 'content' in item:
+                    restored_item = item.copy()
+                    original_content = restored_item['content']
+                    restored_content = original_content
+                    
+                    for mask, placeholder in mask_to_placeholder.items():
+                        if mask in restored_content:
+                            logger.info(f"[DEBUG] 리스트 항목 마스크 복원: {mask} -> {placeholder}")
+                            restored_content = restored_content.replace(mask, placeholder)
+                    
+                    restored_item['content'] = restored_content
+                    restored_items.append(restored_item)
+                else:
+                    restored_items.append(item)
+            
+            restored_component['items'] = restored_items
+        
+        return restored_component
 
 # 각 컴포넌트에 대한 도구 함수 정의
 @tool
@@ -2577,7 +2695,6 @@ def create_code_block(language: Optional[str], content: str) -> Dict:
     """코드 블록 컴포넌트를 생성합니다. language는 언어(선택), content는 코드 내용입니다."""
     return CodeBlockComponent(language=language, content=content).dict()
 
-@tool
 def create_price_chart(
     symbol: str, 
     name: str, 
@@ -2621,7 +2738,6 @@ def create_price_chart(
         )
     ).dict()
 
-@tool
 def create_technical_indicator_chart(
     symbol: str,
     name: str,
@@ -2644,15 +2760,23 @@ def create_technical_indicator_chart(
     
     # 지표 데이터 변환 및 검증
     processed_indicators = []
-    for i, indicator in enumerate(indicators[:5]):  # 최대 5개만 허용
-        processed_indicators.append(TechnicalIndicatorData(
+    #for i, indicator in enumerate(indicators[:5]):  # 최대 5개만 허용
+    for i, indicator in enumerate(indicators):  # 최대 5개만 허용
+        # directions 필드 처리 추가
+        indicator_data = TechnicalIndicatorData(
             name=indicator.get('name', f'지표{i+1}'),
             data=indicator.get('data', []),
             color=indicator.get('color'),
             chart_type=indicator.get('chart_type', 'line'),
             y_axis_id=indicator.get('y_axis_id', 'primary'),
             line_style=indicator.get('line_style', 'solid')
-        ))
+        )
+        
+        # directions 필드가 있으면 추가 (슈퍼트렌드용)
+        if 'directions' in indicator:
+            indicator_data.directions = indicator.get('directions', [])
+        
+        processed_indicators.append(indicator_data)
     
     return TechnicalIndicatorChartComponent(
         title=title,
@@ -2673,4 +2797,6 @@ def create_technical_indicator_chart(
 def create_image(url: str, alt: str, caption: Optional[str] = None) -> Dict:
     """이미지 컴포넌트를 생성합니다. url은 이미지 주소, alt는 대체 텍스트, caption은 캡션(선택)입니다."""
     return ImageComponent(url=url, alt=alt, caption=caption).dict()
+
+
 

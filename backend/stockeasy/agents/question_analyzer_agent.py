@@ -441,7 +441,9 @@ class QuestionAnalyzerAgent(BaseAgent):
                 
                 try:
                     # LLM 호출로 분석 수행
-                    raw_response = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
+                    agent_temp = get_agent_llm("gemini-2.0-flash")
+                    #raw_response = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
+                    raw_response = await agent_temp.with_structured_output(QuestionAnalysis).ainvoke(
                         prompt,
                         user_id=user_id,
                         project_type=ProjectType.STOCKEASY,
@@ -499,10 +501,10 @@ class QuestionAnalyzerAgent(BaseAgent):
                     response.data_requirements.confidential_data_needed = True
                     response.data_requirements.revenue_data_needed = True
                     
-                    # 기술적 분석 필요성 감지
-                    ta_needed = self._detect_technical_analysis_need(query)
+                    # 기술적 분석은 무조건 필요로 설정 (키워드 감지와 관계없이)
+                    ta_needed = True  # self._detect_technical_analysis_need(query) 대신 무조건 True
                     response.data_requirements.technical_analysis_needed = ta_needed
-                    logger.info(f"[데이터요구사항] technical_analysis_needed 설정: {ta_needed} (쿼리: '{query}')")
+                    logger.info(f"[데이터요구사항] technical_analysis_needed 설정: {ta_needed} (무조건 활성화)")
                     
                     # 분석 결과 로깅
                     logger.info(f"Analysis result: {response}")
@@ -574,7 +576,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                                     "confidential_data_needed": True,
                                     "revenue_data_needed": True,
                                     "web_search_needed": parsed_data.get("data_requirements", {}).get("web_search_needed", False),
-                                    "technical_analysis_needed": self._detect_technical_analysis_need(query)
+                                    "technical_analysis_needed": True  # 무조건 활성화
                                 },
                                 "keywords": parsed_data.get("keywords", []),
                                 "detail_level": parsed_data.get("detail_level", "보통")
@@ -608,9 +610,9 @@ class QuestionAnalyzerAgent(BaseAgent):
                 except Exception:
                     subgroup_list = []
                 
-                # 기술적 분석 필요성 판단 - 기본 구조에서도 정상적으로 판단
-                ta_needed_default = self._detect_technical_analysis_need(query)
-                logger.info(f"[기본분석구조] 기술적분석 필요성 설정: {ta_needed_default} (fallback 구조)")
+                # 기술적 분석은 무조건 필요로 설정 (기본 구조에서도)
+                ta_needed_default = True  # self._detect_technical_analysis_need(query) 대신 무조건 True
+                logger.info(f"[기본분석구조] 기술적분석 필요성 설정: {ta_needed_default} (무조건 활성화)")
                 
                 return {
                     "entities": {

@@ -644,6 +644,86 @@ class SummarizerAgent(BaseAgent):
                 formatted_text += f"  슈퍼트렌드: {supertrend:,.0f}원 - {trend_signal}\n"
                 formatted_text += f"    - 현재가와 차이: {price_vs_supertrend:+,.0f}원 ({price_difference_pct:+.1f}%)\n"
                 formatted_text += f"    - {signal_description}\n"
+            
+            # RS (상대강도) 분석 - technical_analysis_data에서 rs_data 추출
+            rs_data = technical_analysis_data.get("rs_data")
+            if rs_data:
+                formatted_text += f"  RS (상대강도) 분석:\n"
+                
+                # 기본 RS 정보
+                rs_value = rs_data.get("rs")
+                rs_1m = rs_data.get("rs_1m")
+                rs_3m = rs_data.get("rs_3m")
+                rs_6m = rs_data.get("rs_6m")
+                sector = rs_data.get("sector")
+                
+                if rs_value is not None:
+                    if rs_value >= 80:
+                        rs_status = "매우 강한 상대강도"
+                    elif rs_value >= 60:
+                        rs_status = "강한 상대강도"
+                    elif rs_value >= 40:
+                        rs_status = "보통 상대강도"
+                    elif rs_value >= 20:
+                        rs_status = "약한 상대강도"
+                    else:
+                        rs_status = "매우 약한 상대강도"
+                    
+                    formatted_text += f"    - 현재 RS: {rs_value:.1f} - {rs_status}\n"
+                
+                # 시간별 RS 추이
+                if rs_1m is not None or rs_3m is not None or rs_6m is not None:
+                    formatted_text += f"    - RS 추이: "
+                    if rs_1m is not None:
+                        formatted_text += f"1개월 {rs_1m:.1f}"
+                    if rs_3m is not None:
+                        formatted_text += f", 3개월 {rs_3m:.1f}"
+                    if rs_6m is not None:
+                        formatted_text += f", 6개월 {rs_6m:.1f}"
+                    formatted_text += "\n"
+                
+                # 시장 비교 분석
+                market_comparison = rs_data.get("market_comparison")
+                if market_comparison:
+                    market_code = market_comparison.get("market_code")
+                    market_rs = market_comparison.get("market_rs")
+                    if market_code and market_rs is not None:
+                        rs_diff = rs_value - market_rs if rs_value is not None else 0
+                        if rs_diff > 10:
+                            market_status = f"{market_code} 대비 강세"
+                        elif rs_diff > 0:
+                            market_status = f"{market_code} 대비 우위"
+                        elif rs_diff > -10:
+                            market_status = f"{market_code}와 비슷한 수준"
+                        else:
+                            market_status = f"{market_code} 대비 약세"
+                        
+                        formatted_text += f"    - {market_code} 비교: RS {market_rs:.1f} vs 종목 RS {rs_value:.1f} ({market_status})\n"
+                
+                # 상대적 강도 분석
+                relative_analysis = rs_data.get("relative_strength_analysis")
+                if relative_analysis:
+                    vs_market = relative_analysis.get("vs_market")
+                    if vs_market:
+                        outperforming = vs_market.get("outperforming", False)
+                        strength_level = vs_market.get("strength_level", "")
+                        if outperforming:
+                            formatted_text += f"    - 시장 아웃퍼폼: {strength_level}\n"
+                        else:
+                            formatted_text += f"    - 시장 언더퍼폼: {strength_level}\n"
+                    
+                    # 시장별 특화 분석
+                    market_specific = relative_analysis.get("market_specific_analysis")
+                    if market_specific:
+                        market_position = market_specific.get("market_position")
+                        if market_position:
+                            formatted_text += f"    - 시장 내 위치: {market_position}\n"
+                
+                if sector:
+                    formatted_text += f"    - 업종: {sector}\n"
+                
+                formatted_text += f"    - RS 70 이상시 강세, 50 이하시 약세로 판단됩니다.\n"
+                formatted_text += f"    - 상대강도가 높은 종목은 추세추종 전략에 유리합니다.\n"
         
         return formatted_text
 

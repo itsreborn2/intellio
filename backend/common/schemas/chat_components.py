@@ -81,6 +81,7 @@ class TechnicalIndicatorData(BaseModel):
     chart_type: Literal['line', 'bar', 'area'] = Field(default='line', description="차트 타입")
     y_axis_id: Optional[str] = Field(default='primary', description="Y축 ID (primary, secondary)")
     line_style: Literal['solid', 'dashed', 'dotted'] = Field(default='solid', description="선 스타일")
+    directions: Optional[List[float]] = Field(None, description="방향 데이터 배열 (슈퍼트렌드용: 1=상승, -1=하락)")
 
 
 class TechnicalIndicatorChartData(BaseModel):

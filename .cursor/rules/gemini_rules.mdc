@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# response formatter
+- Gemini의 @tool 데코레이터는 파라미터로 dictionary를 넘겨야한다.
+- 정상 : create_paragraph({"content": before_text})
+- 오류 : create_paragraph(content=before_text) : 이렇게 수정은 절대 금지

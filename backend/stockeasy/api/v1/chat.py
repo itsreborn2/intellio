@@ -87,6 +87,10 @@ def get_user_friendly_agent_message(agent: str, status: str) -> str:
             "start": "비공개 정보 분석 중...",
             "complete": "비공개 정보 분석 완료"
         },
+        "technical_analyzer": {
+            "start": "기술적 분석 중...",
+            "complete": "기술적 분석 완료"
+        },
         "knowledge_integrator": {
             "start": "수집된 정보 통합 중...",
             "complete": "정보 통합 완료"
@@ -861,8 +865,8 @@ async def stream_chat_message(
                         
                         # 완료 이벤트 전송
                         #logger.info("[STREAM_CHAT] 완료 이벤트 전송")
-                        if settings.ENV != "prod":
-                            logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
+                        # if settings.ENV != "prod":
+                        #     logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
 
                         # 구조화된 채팅 응답 구성
                         structured_response = StructuredChatResponse(

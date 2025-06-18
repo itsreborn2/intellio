@@ -114,8 +114,8 @@ class LLMFactory:
                 "temperature": temperature,
                 "max_output_tokens": max_tokens,
                 "top_p": top_p,
-                "streaming": streaming,
                 "callbacks": callbacks,
+                "model_kwargs": {"streaming": streaming},  # streaming은 model_kwargs로 이동
                 **kwargs
             }
             

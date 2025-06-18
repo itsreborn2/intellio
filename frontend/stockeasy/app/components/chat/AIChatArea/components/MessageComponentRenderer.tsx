@@ -136,7 +136,7 @@ export function MessageComponentRenderer({
   switch (component.type as string) {
     case 'heading': {
       const { level, content } = component as any;
-      console.log(`lv ${level} - ${content}`);
+      //console.log(`lv ${level} - ${content}`);
       // 헤딩 레벨에 따라 적절한 스타일 적용
       const styles: React.CSSProperties = {
         fontWeight: 'bold',
@@ -1252,6 +1252,13 @@ const PriceChart: React.FC<{
 }> = ({ data, height, isMobile }) => {
   const chartContainerRef = React.useRef<HTMLDivElement>(null);
   const chartRef = React.useRef<any>(null);
+  const [crosshairData, setCrosshairData] = React.useState<{
+    time: string;
+    candle?: { open: number; high: number; low: number; close: number };
+    indicators: { name: string; value: number | string; color: string }[];
+    mouseX: number;
+    mouseY: number;
+  } | null>(null);
   
   React.useEffect(() => {
     if (!chartContainerRef.current || !data.candle_data || data.candle_data.length === 0) {
@@ -1312,6 +1319,9 @@ const PriceChart: React.FC<{
     
     chartRef.current = chart;
     
+    // 시리즈 참조들을 저장할 배열
+    const seriesRefs: Array<{ series: any; name: string; color: string; type: 'candle' | 'indicator' | 'volume' | 'ma' }> = [];
+    
     // 캔들스틱 시리즈 추가 - 한국 스타일 (상승: 빨간색, 하락: 파란색)
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#ef5350',
@@ -1320,7 +1330,7 @@ const PriceChart: React.FC<{
       borderDownColor: '#2196f3',
       wickUpColor: '#ef5350',
       wickDownColor: '#2196f3',
-      title: '주가',
+      //title: '주가',
     });
     
     // 주가 스케일 설정 - 거래량이 있으면 상단 70% 영역 사용
@@ -1344,6 +1354,14 @@ const PriceChart: React.FC<{
     
     candlestickSeries.setData(candleData);
     
+    // 캔들스틱 시리즈 참조 저장
+    seriesRefs.push({
+      series: candlestickSeries,
+      name: '캔들스틱',
+      color: '#ef5350',
+      type: 'candle'
+    });
+    
     // 거래량 데이터 처리 - volume_data가 있으면 사용하고, 없으면 candle_data에서 추출
     let volumeDataToUse = data.volume_data;
     
@@ -1366,7 +1384,7 @@ const PriceChart: React.FC<{
           type: 'volume',
         },
         priceScaleId: 'volume',
-        title: '거래량',
+        //title: '거래량',
       });
       
       // 거래량 스케일 설정 - 하단 30% 영역 사용
@@ -1406,6 +1424,14 @@ const PriceChart: React.FC<{
       });
       
       volumeSeries.setData(volumeData);
+      
+      // 거래량 시리즈 참조 저장 (대표 색상으로 표시)
+      seriesRefs.push({
+        series: volumeSeries,
+        name: '거래량',
+        color: '#26a69a',
+        type: 'volume'
+      });
     }
     
     // 이동평균선 추가
@@ -1415,10 +1441,20 @@ const PriceChart: React.FC<{
         lineWidth: 2,
       });
       
-      maSeries.setData(data.moving_averages.map((item: any) => ({
+      const maData = data.moving_averages.map((item: any) => ({
         time: item.time as Time,
         value: item.value
-      })));
+      }));
+      
+      maSeries.setData(maData);
+      
+      // 이동평균선 시리즈 참조 저장
+      seriesRefs.push({
+        series: maSeries,
+        name: '이동평균선',
+        color: '#ff6b35',
+        type: 'ma'
+      });
     }
     
     // 지지선 추가
@@ -1459,6 +1495,79 @@ const PriceChart: React.FC<{
       });
     }
     
+    // 마우스 이벤트를 위한 차트 컨테이너에 이벤트 리스너 추가
+    let currentMouseX = 0;
+    let currentMouseY = 0;
+    
+    const handleMouseMove = (event: MouseEvent) => {
+      const rect = chartContainerRef.current?.getBoundingClientRect();
+      if (rect) {
+        currentMouseX = event.clientX - rect.left;
+        currentMouseY = event.clientY - rect.top;
+      }
+    };
+    
+    chartContainerRef.current.addEventListener('mousemove', handleMouseMove);
+    
+    // 크로스헤어 이벤트 리스너 추가
+    chart.subscribeCrosshairMove((param: any) => {
+      if (!param.time) {
+        setCrosshairData(null);
+        return;
+      }
+      
+      const indicators: { name: string; value: number | string; color: string }[] = [];
+      let candleData: { open: number; high: number; low: number; close: number } | undefined;
+      
+      // 모든 시리즈에서 해당 시점의 데이터 수집
+      seriesRefs.forEach(({ series, name, color, type }) => {
+        const dataPoint = param.seriesData?.get(series);
+        if (dataPoint) {
+          if (type === 'candle') {
+            candleData = {
+              open: dataPoint.open,
+              high: dataPoint.high,
+              low: dataPoint.low,
+              close: dataPoint.close,
+            };
+          } else {
+            // 지표, 거래량, 이동평균선 데이터
+            const value = dataPoint.value !== undefined ? dataPoint.value : dataPoint;
+            let displayValue: string;
+            
+            if (type === 'volume') {
+              // 거래량은 천 단위로 표시
+              displayValue = typeof value === 'number' ? 
+                (value >= 1000000 ? (value / 1000000).toFixed(1) + 'M' :
+                 value >= 1000 ? (value / 1000).toFixed(0) + 'K' :
+                 value.toString()) : value.toString();
+            } else {
+              // 일반 지표는 소수점 2자리로 표시
+              displayValue = typeof value === 'number' ? value.toFixed(2) : value.toString();
+            }
+            
+            indicators.push({
+              name,
+              value: displayValue,
+              color
+            });
+          }
+        }
+      });
+      
+      // 시간 포맷팅
+      const timeStr = typeof param.time === 'string' ? param.time : 
+                     new Date(param.time * 1000).toISOString().split('T')[0];
+      
+      setCrosshairData({
+        time: timeStr,
+        candle: candleData,
+        indicators,
+        mouseX: currentMouseX,
+        mouseY: currentMouseY
+      });
+    });
+    
     // 리사이즈 핸들러
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
@@ -1473,6 +1582,9 @@ const PriceChart: React.FC<{
     // 정리
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (chartContainerRef.current) {
+        chartContainerRef.current.removeEventListener('mousemove', handleMouseMove);
+      }
       if (chartRef.current) {
         chartRef.current.remove();
       }
@@ -1578,7 +1690,137 @@ const PriceChart: React.FC<{
           height: `${height}px`,
           position: 'relative'
         }}
-      />
+      >
+        {/* 크로스헤어 데이터 표시 - 마우스 팝업 */}
+        {crosshairData && (() => {
+          // 팝업 위치 계산 (화면 경계를 벗어나지 않도록 조정)
+          const popupWidth = 300; // 예상 팝업 너비
+          const popupHeight = 80; // 예상 팝업 높이
+          
+          let left = crosshairData.mouseX + 15; // 마우스 오른쪽에 표시
+          let top = crosshairData.mouseY - 40; // 마우스 위쪽에 표시
+          
+          // 오른쪽 경계 체크
+          if (left + popupWidth > chartContainerRef.current?.clientWidth!) {
+            left = crosshairData.mouseX - popupWidth - 15; // 마우스 왼쪽에 표시
+          }
+          
+          // 위쪽 경계 체크
+          if (top < 0) {
+            top = crosshairData.mouseY + 15; // 마우스 아래쪽에 표시
+          }
+          
+          // 아래쪽 경계 체크
+          if (top + popupHeight > chartContainerRef.current?.clientHeight!) {
+            top = chartContainerRef.current?.clientHeight! - popupHeight - 10;
+          }
+          
+          return (
+            <div style={{
+              position: 'absolute',
+              left: `${left}px`,
+              top: `${top}px`,
+              zIndex: 1000,
+              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98))',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(226, 232, 240, 0.6)',
+              borderRadius: '10px',
+              padding: '10px 14px',
+              fontSize: '0.85em',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              minWidth: '200px',
+              maxWidth: '300px',
+              lineHeight: '1.3',
+              transition: 'all 0.15s ease',
+              pointerEvents: 'none', // 마우스 이벤트 무시
+            }}>
+              {/* 시간 표시 */}
+              <div style={{ 
+                fontSize: '0.9em',
+                fontWeight: '600',
+                color: '#1e293b',
+                marginBottom: '4px',
+                textAlign: 'center'
+              }}>
+                📅 {crosshairData.time}
+              </div>
+              
+              {/* 캔들 데이터 표시 */}
+              {crosshairData.candle && (
+                <div style={{ 
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: '8px',
+                  padding: '6px',
+                  backgroundColor: 'rgba(248, 113, 113, 0.08)',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(248, 113, 113, 0.2)'
+                }}>
+                  {[
+                    { label: '시가', value: crosshairData.candle.open, color: '#64748b' },
+                    { label: '고가', value: crosshairData.candle.high, color: '#dc2626' },
+                    { label: '저가', value: crosshairData.candle.low, color: '#2563eb' },
+                    { label: '종가', value: crosshairData.candle.close, color: '#1e293b' }
+                  ].map(({ label, value, color }, idx) => (
+                    <div key={idx} style={{ textAlign: 'center' }}>
+                      <div style={{ 
+                        fontSize: '0.75em', 
+                        color: '#64748b',
+                        fontWeight: '500',
+                        marginBottom: '2px'
+                      }}>{label}</div>
+                      <div style={{ 
+                        color: color,
+                        fontWeight: '600',
+                        fontSize: '0.85em'
+                      }}>{value.toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* 지표 데이터 표시 */}
+              {crosshairData.indicators.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {crosshairData.indicators.map((indicator, index) => (
+                    <div key={index} style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '3px 6px',
+                      backgroundColor: 'rgba(99, 102, 241, 0.06)',
+                      borderRadius: '4px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          backgroundColor: indicator.color,
+                        }} />
+                        <span style={{ 
+                          color: '#475569',
+                          fontSize: '0.8em',
+                          fontWeight: '500'
+                        }}>{indicator.name}</span>
+                      </div>
+                      <span style={{ 
+                        color: '#1e293b',
+                        fontWeight: '600',
+                        fontSize: '0.85em'
+                      }}>{indicator.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
       
       {/* 범례 */}
       {renderLegend()}
@@ -1594,6 +1836,13 @@ const TechnicalIndicatorChart: React.FC<{
 }> = ({ data, height, isMobile }) => {
   const chartContainerRef = React.useRef<HTMLDivElement>(null);
   const chartRef = React.useRef<any>(null);
+  const [crosshairData, setCrosshairData] = React.useState<{
+    time: string;
+    candle?: { open: number; high: number; low: number; close: number };
+    indicators: { name: string; value: number | string; color: string }[];
+    mouseX: number;
+    mouseY: number;
+  } | null>(null);
   
   React.useEffect(() => {
     if (!chartContainerRef.current || !data.dates || data.dates.length === 0) {
@@ -1659,6 +1908,9 @@ const TechnicalIndicatorChart: React.FC<{
     
     chartRef.current = chart;
     
+    // 시리즈 참조들을 저장할 배열
+    const seriesRefs: Array<{ series: any; name: string; color: string; type: 'candle' | 'indicator' }> = [];
+    
     // 선 스타일 변환 함수
     const getLineStyle = (lineStyle: string): LineStyle => {
       switch (lineStyle) {
@@ -1683,6 +1935,8 @@ const TechnicalIndicatorChart: React.FC<{
       position: "right",
       color: "#8b5cf6"
     };
+
+    const hiddenAxisConfig = data.y_axis_configs?.hidden || null;
     
     // 캔들 데이터가 있는 경우 캔들스틱 시리즈 추가 - 한국 스타일
     if (data.candle_data && data.candle_data.length > 0) {
@@ -1693,7 +1947,7 @@ const TechnicalIndicatorChart: React.FC<{
         borderDownColor: '#2196f3',
         wickUpColor: '#ef5350',
         wickDownColor: '#2196f3',
-        priceScaleId: 'candle', // 별도 스케일 사용
+        priceScaleId: 'right', // 오른쪽 스케일 사용
       });
       
       // 캔들 데이터 설정
@@ -1707,24 +1961,48 @@ const TechnicalIndicatorChart: React.FC<{
       
       candlestickSeries.setData(candleData);
       
-      // 캔들 전용 스케일 설정 (오른쪽 끝에 배치)
-      chart.priceScale('candle').applyOptions({
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.6, // 기술적 지표를 위한 공간 확보
-        },
-        borderColor: '#485158',
+      // 캔들스틱 시리즈 참조 저장
+      seriesRefs.push({
+        series: candlestickSeries,
+        name: '캔들스틱',
+        color: '#ef5350',
+        type: 'candle'
       });
     }
 
     // 지표별 시리즈 생성
+    console.log('=== TechnicalIndicatorChart 분석 시작 ===');
+    console.log('전체 데이터:', data);
+    console.log('지표 목록:', data.indicators);
+    
     data.indicators.forEach((indicator: any, index: number) => {
       const color = indicator.color || CHART_COLORS[index % CHART_COLORS.length];
       const lineStyle = getLineStyle(indicator.line_style);
-      const priceScaleId = indicator.y_axis_id === 'secondary' ? 'right' : 'left';
       
       // 슈퍼트렌드 지표인지 확인
-      const isSupertrend = indicator.name && indicator.name.toLowerCase().includes('supertrend');
+      const isSupertrend = indicator.name && (
+        indicator.name.toLowerCase().includes('supertrend') || 
+        indicator.name.includes('슈퍼트렌드')
+      );
+      
+      console.log(`지표 ${index + 1} 분석:`, {
+        name: indicator.name,
+        isSupertrend,
+        hasDirections: !!indicator.directions,
+        directionsLength: indicator.directions?.length,
+        directions: indicator.directions,
+        dataLength: indicator.data?.length
+      });
+      
+      // 스케일 ID 결정: 슈퍼트렌드는 캔들 데이터와 동일한 스케일 사용
+      let priceScaleId;
+      if (isSupertrend && data.candle_data && data.candle_data.length > 0) {
+        priceScaleId = 'right'; // 캔들 데이터와 동일한 스케일 사용 (오른쪽)
+      } else if (indicator.y_axis_id === 'hidden') {
+        priceScaleId = 'hidden'; // 범용 hidden 축 사용
+      } else {
+        priceScaleId = indicator.y_axis_id === 'secondary' ? 'right' : 'left'; // secondary는 오른쪽, primary는 왼쪽
+      }
       
       // 시계열 데이터 생성 - 슈퍼트렌드의 경우 항상 실제 값 사용
       let seriesData;
@@ -1781,27 +2059,121 @@ const TechnicalIndicatorChart: React.FC<{
         
       } else {
         // 기본값: line
-        // 슈퍼트렌드의 경우 방향에 따라 색상 변경 가능 - 한국 스타일
-        let lineColor = color;
+        // 슈퍼트렌드의 경우 방향에 따라 구간별 색상 변경
+        // console.log('🟡 슈퍼트렌드 체크:', { 
+        //   name: indicator.name,
+        //   isSupertrend, 
+        //   hasDirections: !!indicator.directions, 
+        //   directionsLength: indicator.directions?.length,
+        //   directions: indicator.directions?.slice(0, 10), // 처음 10개만 로깅
+        //   seriesDataLength: seriesData.length
+        // });
         if (isSupertrend && indicator.directions && indicator.directions.length > 0) {
-          // 최신 방향에 따라 색상 설정 (상승: 빨간색, 하락: 파란색)
-          const latestDirection = indicator.directions[indicator.directions.length - 1];
-          lineColor = latestDirection === 1 ? '#ef5350' : latestDirection === -1 ? '#2196f3' : color;
+          // 방향 변화 지점을 찾아서 구간별로 시리즈 생성
+          const segments: Array<{data: any[], direction: number}> = [];
+          let currentSegment: any[] = [];
+          let currentDirection = indicator.directions[0];
+          
+          seriesData.forEach((point: any, idx: number) => {
+            const direction = indicator.directions[idx];
+            
+            // 방향이 바뀌는 지점
+            if (direction !== currentDirection && currentSegment.length > 0) {
+              // 이전 구간을 저장 (연결점 포함)
+              segments.push({
+                data: [...currentSegment, point], // 연결을 위해 현재 포인트도 포함
+                direction: currentDirection
+              });
+              
+              // 새 구간 시작 (연결점으로 현재 포인트부터 시작)
+              currentSegment = [point];
+              currentDirection = direction;
+            } else {
+              currentSegment.push(point);
+            }
+          });
+          
+          // 마지막 구간 저장
+          if (currentSegment.length > 0) {
+            segments.push({
+              data: currentSegment,
+              direction: currentDirection
+            });
+          }
+          
+          // 각 구간별로 시리즈 생성
+          //console.log(`🔵 슈퍼트렌드 구간 개수: ${segments.length}`);
+          segments.forEach((segment, segmentIdx) => {
+            const segmentColor = segment.direction === 1 ? '#34A853' : '#ef5350'; // 상승: 초록색, 하락: 빨간색
+            const segmentName = segment.direction === 1 ? '상승' : '하락';
+            
+            if (segment.data.length > 1) { // 최소 2개 포인트가 있어야 선을 그릴 수 있음
+              const segmentSeries = chart.addSeries(LineSeries, {
+                color: segmentColor,
+                lineWidth: 3, // 슈퍼트렌드는 좀 더 굵게
+                lineStyle: lineStyle,
+                priceFormat: {
+                  type: 'price',
+                  precision: 2,
+                  minMove: 0.01,
+                },
+                priceScaleId: priceScaleId,
+                title: segmentIdx === 0 ? indicator.name : '', // 첫 번째 구간에만 이름 표시
+                lastValueVisible: false, // 마지막 값 표시 숨김
+                priceLineVisible: false, // 프라이스 라인 표시 숨김
+              });
+              
+              segmentSeries.setData(segment.data);
+              
+              // 첫 번째 구간만 참조로 저장 (전체 지표를 대표)
+              if (segmentIdx === 0) {
+                seriesRefs.push({
+                  series: segmentSeries,
+                  name: indicator.name,
+                  color: color,
+                  type: 'indicator'
+                });
+              }
+
+            } else {
+              console.log(`❌ 구간 ${segmentIdx + 1} 스킵 (데이터 부족: ${segment.data.length}개)`);
+            }
+          });
+          console.log('🟢 슈퍼트렌드 방향별 색상 적용 완료!');
+        } else {
+          // 일반 지표는 기존 방식으로 처리
+          console.log(`🔴 일반 지표 처리: ${indicator.name}`);
+          const lineSeriesOptions: any = {
+            color: color,
+            lineWidth: 2,
+            lineStyle: lineStyle,
+            priceFormat: {
+              type: 'price',
+              precision: 2,
+              minMove: 0.01,
+            },
+            priceScaleId: priceScaleId,
+          };
+          
+          // 슈퍼트렌드가 아닌 일반 지표는 부가 정보 표시 숨김
+          if (!isSupertrend) {
+            lineSeriesOptions.lastValueVisible = false; // 마지막 값 표시 숨김
+            lineSeriesOptions.priceLineVisible = false; // 프라이스 라인 표시 숨김
+          }
+          
+          const lineSeries = chart.addSeries(LineSeries, lineSeriesOptions);
+          
+          lineSeries.setData(seriesData);
+          
+          // 일반 지표 시리즈 참조 저장
+          seriesRefs.push({
+            series: lineSeries,
+            name: indicator.name,
+            color: color,
+            type: 'indicator'
+          });
+          console.log(`✅ 일반 지표 시리즈 생성 완료: ${indicator.name}`);
         }
-        
-        const lineSeries = chart.addSeries(LineSeries, {
-          color: lineColor,
-          lineWidth: 2,
-          lineStyle: lineStyle,
-          priceFormat: {
-            type: 'price',
-            precision: 2,
-            minMove: 0.01,
-          },
-          priceScaleId: priceScaleId,
-        });
-        
-        lineSeries.setData(seriesData);
       }
     });
     
@@ -1811,9 +2183,10 @@ const TechnicalIndicatorChart: React.FC<{
         chart.priceScale('left').applyOptions({
           borderColor: primaryAxisConfig.color,
           scaleMargins: {
-            top: data.candle_data && data.candle_data.length > 0 ? 0.6 : 0.1,
+            top: data.candle_data && data.candle_data.length > 0 ? 0.6 : 0.1, // 캔들이 있으면 지표들을 위한 공간
             bottom: 0.1,
           },
+          visible: primaryAxisConfig.display !== false, // display가 false면 축 숨김
         });
       }
       
@@ -1821,12 +2194,85 @@ const TechnicalIndicatorChart: React.FC<{
         chart.priceScale('right').applyOptions({
           borderColor: secondaryAxisConfig.color,
           scaleMargins: {
-            top: data.candle_data && data.candle_data.length > 0 ? 0.6 : 0.1,
-            bottom: 0.1,
+            top: 0.1, // 캔들을 위한 적절한 여백
+            bottom: data.candle_data && data.candle_data.length > 0 ? 0.4 : 0.1, // 다른 지표들을 위한 공간 확보
+          },
+          visible: secondaryAxisConfig.display !== false, // display가 false면 축 숨김
+        });
+      }
+
+      // 범용 hidden 축 설정
+      if (hiddenAxisConfig) {
+        chart.priceScale('hidden').applyOptions({
+          borderColor: hiddenAxisConfig.color || '#2196f3',
+          visible: false, // 항상 숨김
+          scaleMargins: {
+            top: 0.25,    // 상단 패딩 증가 (10% → 20%)
+            bottom: 0.25, // 하단 패딩 증가 (10% → 20%)
           },
         });
       }
     }
+    
+    // 마우스 이벤트를 위한 차트 컨테이너에 이벤트 리스너 추가
+    let currentMouseX = 0;
+    let currentMouseY = 0;
+    
+    const handleMouseMove = (event: MouseEvent) => {
+      const rect = chartContainerRef.current?.getBoundingClientRect();
+      if (rect) {
+        currentMouseX = event.clientX - rect.left;
+        currentMouseY = event.clientY - rect.top;
+      }
+    };
+    
+    chartContainerRef.current.addEventListener('mousemove', handleMouseMove);
+    
+    // 크로스헤어 이벤트 리스너 추가
+    chart.subscribeCrosshairMove((param: any) => {
+      if (!param.time) {
+        setCrosshairData(null);
+        return;
+      }
+      
+      const indicators: { name: string; value: number | string; color: string }[] = [];
+      let candleData: { open: number; high: number; low: number; close: number } | undefined;
+      
+      // 모든 시리즈에서 해당 시점의 데이터 수집
+      seriesRefs.forEach(({ series, name, color, type }) => {
+        const dataPoint = param.seriesData?.get(series);
+        if (dataPoint) {
+          if (type === 'candle') {
+            candleData = {
+              open: dataPoint.open,
+              high: dataPoint.high,
+              low: dataPoint.low,
+              close: dataPoint.close,
+            };
+          } else {
+            // 지표 데이터
+            const value = dataPoint.value !== undefined ? dataPoint.value : dataPoint;
+            indicators.push({
+              name,
+              value: typeof value === 'number' ? value.toFixed(2) : value,
+              color
+            });
+          }
+        }
+      });
+      
+      // 시간 포맷팅
+      const timeStr = typeof param.time === 'string' ? param.time : 
+                     new Date(param.time * 1000).toISOString().split('T')[0];
+      
+      setCrosshairData({
+        time: timeStr,
+        candle: candleData,
+        indicators,
+        mouseX: currentMouseX,
+        mouseY: currentMouseY
+      });
+    });
     
     // 리사이즈 핸들러
     const handleResize = () => {
@@ -1842,6 +2288,9 @@ const TechnicalIndicatorChart: React.FC<{
     // 정리
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (chartContainerRef.current) {
+        chartContainerRef.current.removeEventListener('mousemove', handleMouseMove);
+      }
       if (chartRef.current) {
         chartRef.current.remove();
       }
@@ -1883,18 +2332,48 @@ const TechnicalIndicatorChart: React.FC<{
         {/* 지표 범례 */}
         {data.indicators.map((indicator: any, index: number) => {
           const color = indicator.color || CHART_COLORS[index % CHART_COLORS.length];
+          
+          // 슈퍼트렌드 지표인지 확인
+          const isSupertrend = indicator.name && (
+            indicator.name.toLowerCase().includes('supertrend') || 
+            indicator.name.includes('슈퍼트렌드')
+          );
+          
           return (
             <div key={`legend-${index}`} style={{
               display: 'flex',
               alignItems: 'center',
               gap: '5px',
             }}>
-              <div style={{
-                width: '12px',
-                height: '2px',
-                backgroundColor: color,
-                borderRadius: '1px',
-              }} />
+              {isSupertrend ? (
+                // 슈퍼트렌드의 경우 녹색+빨간색 반반 표시
+                <div style={{
+                  width: '12px',
+                  height: '2px',
+                  borderRadius: '1px',
+                  display: 'flex',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    width: '50%',
+                    height: '100%',
+                    backgroundColor: '#34A853', // 상승 녹색
+                  }} />
+                  <div style={{
+                    width: '50%',
+                    height: '100%',
+                    backgroundColor: '#ef5350', // 하락 빨간색
+                  }} />
+                </div>
+              ) : (
+                // 일반 지표는 기존 방식
+                <div style={{
+                  width: '12px',
+                  height: '2px',
+                  backgroundColor: color,
+                  borderRadius: '1px',
+                }} />
+              )}
               <span style={{ color: '#333' }}>{indicator.name}</span>
             </div>
           );
@@ -1915,16 +2394,17 @@ const TechnicalIndicatorChart: React.FC<{
           fontWeight: 'bold',
           color: '#666',
         }}>
-          {data.y_axis_configs.primary?.title && (
+          {data.y_axis_configs.primary?.title && data.y_axis_configs.primary?.display !== false && (
             <span style={{ color: data.y_axis_configs.primary.color }}>
               {data.y_axis_configs.primary.title}
             </span>
           )}
-          {data.y_axis_configs.secondary?.title && (
+          {data.y_axis_configs.secondary?.title && data.y_axis_configs.secondary?.display !== false && (
             <span style={{ color: data.y_axis_configs.secondary.color }}>
               {data.y_axis_configs.secondary.title}
             </span>
           )}
+          {/* hidden 축은 라벨을 표시하지 않음 (visible: false이므로) */}
         </div>
       )}
       
@@ -1936,7 +2416,137 @@ const TechnicalIndicatorChart: React.FC<{
           height: `${height}px`,
           position: 'relative'
         }}
-      />
+      >
+        {/* 크로스헤어 데이터 표시 - 마우스 팝업 */}
+        {crosshairData && (() => {
+          // 팝업 위치 계산 (화면 경계를 벗어나지 않도록 조정)
+          const popupWidth = 300; // 예상 팝업 너비
+          const popupHeight = 80; // 예상 팝업 높이
+          
+          let left = crosshairData.mouseX + 15; // 마우스 오른쪽에 표시
+          let top = crosshairData.mouseY - 40; // 마우스 위쪽에 표시
+          
+          // 오른쪽 경계 체크
+          if (left + popupWidth > chartContainerRef.current?.clientWidth!) {
+            left = crosshairData.mouseX - popupWidth - 15; // 마우스 왼쪽에 표시
+          }
+          
+          // 위쪽 경계 체크
+          if (top < 0) {
+            top = crosshairData.mouseY + 15; // 마우스 아래쪽에 표시
+          }
+          
+          // 아래쪽 경계 체크
+          if (top + popupHeight > chartContainerRef.current?.clientHeight!) {
+            top = chartContainerRef.current?.clientHeight! - popupHeight - 10;
+          }
+          
+          return (
+            <div style={{
+              position: 'absolute',
+              left: `${left}px`,
+              top: `${top}px`,
+              zIndex: 1000,
+              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98))',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(226, 232, 240, 0.6)',
+              borderRadius: '10px',
+              padding: '10px 14px',
+              fontSize: '0.85em',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              minWidth: '200px',
+              maxWidth: '300px',
+              lineHeight: '1.3',
+              transition: 'all 0.15s ease',
+              pointerEvents: 'none', // 마우스 이벤트 무시
+            }}>
+              {/* 시간 표시 */}
+              <div style={{ 
+                fontSize: '0.9em',
+                fontWeight: '600',
+                color: '#1e293b',
+                marginBottom: '4px',
+                textAlign: 'center'
+              }}>
+                📅 {crosshairData.time}
+              </div>
+              
+              {/* 캔들 데이터 표시 */}
+              {crosshairData.candle && (
+                <div style={{ 
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: '8px',
+                  padding: '6px',
+                  backgroundColor: 'rgba(248, 113, 113, 0.08)',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(248, 113, 113, 0.2)'
+                }}>
+                  {[
+                    { label: '시가', value: crosshairData.candle.open, color: '#64748b' },
+                    { label: '고가', value: crosshairData.candle.high, color: '#dc2626' },
+                    { label: '저가', value: crosshairData.candle.low, color: '#2563eb' },
+                    { label: '종가', value: crosshairData.candle.close, color: '#1e293b' }
+                  ].map(({ label, value, color }, idx) => (
+                    <div key={idx} style={{ textAlign: 'center' }}>
+                      <div style={{ 
+                        fontSize: '0.75em', 
+                        color: '#64748b',
+                        fontWeight: '500',
+                        marginBottom: '2px'
+                      }}>{label}</div>
+                      <div style={{ 
+                        color: color,
+                        fontWeight: '600',
+                        fontSize: '0.85em'
+                      }}>{value.toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* 지표 데이터 표시 */}
+              {crosshairData.indicators.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {crosshairData.indicators.map((indicator, index) => (
+                    <div key={index} style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '3px 6px',
+                      backgroundColor: 'rgba(99, 102, 241, 0.06)',
+                      borderRadius: '4px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          backgroundColor: indicator.color,
+                        }} />
+                        <span style={{ 
+                          color: '#475569',
+                          fontSize: '0.8em',
+                          fontWeight: '500'
+                        }}>{indicator.name}</span>
+                      </div>
+                      <span style={{ 
+                        color: '#1e293b',
+                        fontWeight: '600',
+                        fontSize: '0.85em'
+                      }}>{indicator.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
       
       {/* 범례 */}
       {renderLegend()}
