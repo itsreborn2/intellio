@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Optional, Callable, AsyncGenerator
 import asyncio
 
 from langchain_core.messages import HumanMessage, AIMessage
-from common.utils.util import remove_json_block, safe_int, safe_float
+from common.utils.util import format_date_for_chart, remove_json_block, safe_int, safe_float
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
 from stockeasy.prompts.response_formatter_prompts import FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT, FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT2, format_response_formatter_prompt
 from langchain_core.output_parsers import StrOutputParser
@@ -60,62 +60,7 @@ class ResponseFormatterAgent(BaseAgent):
         self.trend_following_chart_placeholder = "[CHART_PLACEHOLDER:TREND_FOLLOWING_CHART]"
         self.momentum_chart_placeholder = "[CHART_PLACEHOLDER:MOMENTUM_CHART]"
 
-    def _format_date_for_chart(self, date_value: Any) -> str:
-        """
-        다양한 날짜 형식을 yyyy-mm-dd 형식으로 변환합니다.
-        
-        Args:
-            date_value: 날짜 값 (ISO 문자열, datetime 객체, 문자열 등)
-            
-        Returns:
-            yyyy-mm-dd 형식의 날짜 문자열
-        """
-        try:
-            if not date_value:
-                return ""
-            
-            # 이미 yyyy-mm-dd 형식인지 확인
-            if isinstance(date_value, str) and re.match(r'^\d{4}-\d{2}-\d{2}$', date_value):
-                return date_value
-            
-            # ISO 형식 문자열 처리 (2025-06-12T00:00:00+09:00)
-            if isinstance(date_value, str):
-                # ISO 형식에서 날짜 부분만 추출
-                if 'T' in date_value:
-                    date_part = date_value.split('T')[0]
-                    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_part):
-                        return date_part
-                
-                # 다른 형식의 날짜 문자열 파싱 시도
-                try:
-                    from datetime import datetime
-                    parsed_date = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
-                    return parsed_date.strftime('%Y-%m-%d')
-                except ValueError:
-                    # 일반적인 날짜 파싱 시도
-                    try:
-                        parsed_date = datetime.strptime(date_value, '%Y-%m-%d')
-                        return parsed_date.strftime('%Y-%m-%d')
-                    except ValueError:
-                        pass
-            
-            # datetime 객체 처리
-            if hasattr(date_value, 'strftime'):
-                return date_value.strftime('%Y-%m-%d')
-            
-            # 문자열로 변환 후 재시도
-            date_str = str(date_value)
-            if 'T' in date_str:
-                date_part = date_str.split('T')[0]
-                if re.match(r'^\d{4}-\d{2}-\d{2}$', date_part):
-                    return date_part
-            
-            logger.warning(f"날짜 형식 변환 실패: {date_value} (type: {type(date_value)})")
-            return str(date_value)  # 변환 실패 시 원본 반환
-            
-        except Exception as e:
-            logger.error(f"날짜 형식 변환 중 오류: {e}, 입력값: {date_value}")
-            return str(date_value) if date_value else ""
+    
     
     def _create_price_chart_component_directly(self, tech_agent_result: Dict[str, Any], stock_code: str, stock_name: str) -> Dict[str, Any]:
         """
@@ -139,7 +84,7 @@ class ResponseFormatterAgent(BaseAgent):
                     time_value = item.get("date") or item.get("timestamp", "")
                     
                     # ISO 날짜 형식을 yyyy-mm-dd 형식으로 변환
-                    formatted_time = self._format_date_for_chart(time_value)
+                    formatted_time = format_date_for_chart(time_value)
                     
                     candle_item = {
                         "time": formatted_time,
@@ -214,9 +159,6 @@ class ResponseFormatterAgent(BaseAgent):
         technical_indicators = actual_data.get("technical_indicators", {})
         chart_data = actual_data.get("chart_data", [])  # 캔들 데이터용
         
-        logger.info(f"[기술지표차트] 차트 지표 데이터 키: {list(chart_indicators_data.keys()) if chart_indicators_data else '없음'}")
-        logger.info(f"[기술지표차트] 차트 데이터 개수: {len(chart_data) if isinstance(chart_data, list) else '없음'}")
-        
         # 날짜 배열 가져오기
         dates = chart_indicators_data.get("dates", [])
         
@@ -254,7 +196,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "y_axis_id": "primary",
                 "line_style": "solid"
             })
-            logger.info(f"[기술지표차트] +DI 지표 추가 완료 - 데이터 포인트: {len(processed_plus_di)}개")
+            #logger.info(f"[기술지표차트] +DI 지표 추가 완료 - 데이터 포인트: {len(processed_plus_di)}개")
         
         # 3. -DI (Negative Directional Indicator)
         minus_di_data = chart_indicators_data.get("adx_minus_di", [])
@@ -268,25 +210,19 @@ class ResponseFormatterAgent(BaseAgent):
                 "y_axis_id": "primary",
                 "line_style": "solid"
             })
-            logger.info(f"[기술지표차트] -DI 지표 추가 완료 - 데이터 포인트: {len(processed_minus_di)}개")
+            #logger.info(f"[기술지표차트] -DI 지표 추가 완료 - 데이터 포인트: {len(processed_minus_di)}개")
         
         # 4. ADR (Advance Decline Ratio) - 차트에서는 제외하지만 description에는 포함
         adr_data = chart_indicators_data.get("adr", [])
         adr_current_value = None
         if adr_data and any(x is not None for x in adr_data):
             adr_current_value = adr_data[-1]  # 현재값 저장 (description용)
-            logger.info(f"[기술지표차트] ADR 지표는 차트에서 제외하지만 현재값 저장: {adr_current_value}")
+            #logger.info(f"[기술지표차트] ADR 지표는 차트에서 제외하지만 현재값 저장: {adr_current_value}")
             # indicators.append() 호출하지 않음 - 차트에서 제외
         
         # 5. 슈퍼트렌드 (SuperTrend)
         supertrend_data = chart_indicators_data.get("supertrend", [])
         supertrend_direction_data = chart_indicators_data.get("supertrend_direction", [])
-        
-        logger.info(f"[슈퍼트렌드] 데이터 확인:")
-        logger.info(f"  - supertrend_data 길이: {len(supertrend_data) if supertrend_data else 0}")
-        logger.info(f"  - supertrend_direction_data 길이: {len(supertrend_direction_data) if supertrend_direction_data else 0}")
-        logger.info(f"  - supertrend_direction_data 첫 10개: {supertrend_direction_data[:10] if supertrend_direction_data else '없음'}")
-        logger.info(f"  - chart_indicators_data 키 목록: {list(chart_indicators_data.keys())}")
         
         if supertrend_data and any(x is not None for x in supertrend_data) and len(indicators) < 5:
             # 슈퍼트렌드 실제 값 사용
@@ -413,7 +349,7 @@ class ResponseFormatterAgent(BaseAgent):
                     time_value = item.get("date") or item.get("timestamp", "")
                     
                     # ISO 날짜 형식을 yyyy-mm-dd 형식으로 변환
-                    formatted_time = self._format_date_for_chart(time_value)
+                    formatted_time = format_date_for_chart(time_value)
                     
                     candle_item = {
                         "time": formatted_time,
@@ -641,7 +577,7 @@ class ResponseFormatterAgent(BaseAgent):
                     time_value = item.get("date") or item.get("timestamp", "")
                     
                     # ISO 날짜 형식을 yyyy-mm-dd 형식으로 변환
-                    formatted_time = self._format_date_for_chart(time_value)
+                    formatted_time = format_date_for_chart(time_value)
                     
                     candle_item = {
                         "time": formatted_time,
@@ -2599,4 +2535,382 @@ def create_image(url: str, alt: str, caption: Optional[str] = None) -> Dict:
     return ImageComponent(url=url, alt=alt, caption=caption).dict()
 
 
+# 차트 생성 유틸리티 함수들 - 클래스 외부에서 사용 가능
+def create_price_chart_component_directly(tech_agent_result: Dict[str, Any], stock_code: str, stock_name: str) -> Dict[str, Any]:
+    """
+    tech agent 결과를 사용하여 PriceChartComponent를 직접 생성합니다.
+    """
+    # 실제 데이터는 data 키 안에 있음
+    actual_data = tech_agent_result.get("data", {})
+    
+    chart_data = actual_data.get("chart_data", [])
+    chart_patterns = actual_data.get("chart_patterns", {})
+    
+    # OHLCV 데이터 변환
+    candle_data = []
+    
+    if isinstance(chart_data, list) and chart_data:
+        for i, item in enumerate(chart_data):
+            if isinstance(item, dict):
+                # timestamp를 date로 변환하거나 date 필드 사용
+                time_value = item.get("date") or item.get("timestamp", "")
+                
+                # ISO 날짜 형식을 yyyy-mm-dd 형식으로 변환
+                formatted_time = format_date_for_chart(time_value)
+                
+                candle_item = {
+                    "time": formatted_time,
+                    "open": safe_int(item.get("open", 0)),
+                    "high": safe_int(item.get("high", 0)),
+                    "low": safe_int(item.get("low", 0)),
+                    "close": safe_int(item.get("close", 0)),
+                    "volume": safe_int(item.get("volume", 0))
+                }
+                candle_data.append(candle_item)
+    
+    # 지지선/저항선 데이터 변환
+    support_lines = []
+    resistance_lines = []
+    
+    if chart_patterns:
+        support_levels = chart_patterns.get("support_levels", [])
+        resistance_levels = chart_patterns.get("resistance_levels", [])
+        
+        for level in support_levels:
+            if level is not None:
+                support_lines.append({
+                    "price": safe_int(level),
+                    "label": f"지지선 {level:,.0f}원",
+                    "color": "#4ade80",  # 녹색
+                    "show_label": True,
+                    "label_position": "left",
+                    "line_style": "dashed",
+                    "line_width": 2
+                })
+        
+        for level in resistance_levels:
+            if level is not None:
+                resistance_lines.append({
+                    "price": safe_int(level),
+                    "label": f"저항선 {level:,.0f}원",
+                    "color": "#f87171",  # 빨간색
+                    "show_label": True,
+                    "label_position": "left", 
+                    "line_style": "dashed",
+                    "line_width": 2
+                })
+    
+    price_chart_component = create_price_chart(
+        symbol=stock_code,
+        name=stock_name,
+        title=f"주가차트 분석",#title=f"{stock_name}({stock_code}) 주가차트 분석",
+        candle_data=candle_data,
+        support_lines=support_lines if support_lines else None,
+        resistance_lines=resistance_lines if resistance_lines else None,
+        period="1년",
+        interval="1일",
+        metadata={
+            "source": "technical_analyzer_agent",
+            "timestamp": datetime.now().isoformat()
+        }
+    )
+    
+    return price_chart_component
 
+
+def create_trend_following_chart_component_directly(tech_agent_result: Dict[str, Any], stock_code: str, stock_name: str) -> Dict[str, Any]:
+    """
+    tech agent 결과를 사용하여 추세추종 지표 차트 컴포넌트를 생성합니다.
+    ADX, ADR, 슈퍼트렌드 등 추세추종 지표들을 시각화합니다.
+    """
+    logger.info(f"[기술지표차트] {stock_name}({stock_code}) 기술적 지표 차트 생성 시작")
+    
+    # 실제 데이터는 data 키 안에 있음
+    actual_data = tech_agent_result.get("data", {})
+    chart_indicators_data = actual_data.get("chart_indicators_data", {})
+    chart_data = actual_data.get("chart_data", [])  # 캔들 데이터용
+    
+    # 날짜 배열 가져오기
+    dates = chart_indicators_data.get("dates", [])
+    
+    if not dates:
+        logger.warning("[기술지표차트] 날짜 데이터가 없어 기술적 지표 차트를 생성할 수 없습니다")
+        return create_paragraph("기술적 지표 차트 데이터가 없습니다.")
+    
+    # 지표 데이터 목록 생성 (최대 5개)
+    indicators = []
+    
+    # 1. ADX (Average Directional Index) - 추세 강도
+    adx_data = chart_indicators_data.get("adx", [])
+    if adx_data and any(x is not None for x in adx_data):
+        processed_adx = [float(x) if x is not None else 0.0 for x in adx_data]
+        indicators.append({
+            "name": "ADX (추세강도)",
+            "data": processed_adx,
+            "color": "#3b82f6",  # 파란색
+            "chart_type": "line",
+            "y_axis_id": "primary",
+            "line_style": "solid"
+        })
+        logger.info(f"[기술지표차트] ADX 지표 추가 완료 - 데이터 포인트: {len(processed_adx)}개")
+    
+    # 2. +DI (Positive Directional Indicator)
+    plus_di_data = chart_indicators_data.get("adx_plus_di", [])
+    if plus_di_data and any(x is not None for x in plus_di_data) and len(indicators) < 5:
+        processed_plus_di = [float(x) if x is not None else 0.0 for x in plus_di_data]
+        indicators.append({
+            "name": "+DI (상승방향지수)",
+            "data": processed_plus_di,
+            "color": "#10b981",  # 녹색
+            "chart_type": "line",
+            "y_axis_id": "primary",
+            "line_style": "solid"
+        })
+    
+    # 3. -DI (Negative Directional Indicator)
+    minus_di_data = chart_indicators_data.get("adx_minus_di", [])
+    if minus_di_data and any(x is not None for x in minus_di_data) and len(indicators) < 5:
+        processed_minus_di = [float(x) if x is not None else 0.0 for x in minus_di_data]
+        indicators.append({
+            "name": "-DI (하락방향지수)",
+            "data": processed_minus_di,
+            "color": "#ef4444",  # 빨간색
+            "chart_type": "line",
+            "y_axis_id": "primary",
+            "line_style": "solid"
+        })
+    
+    # 4. 슈퍼트렌드 (SuperTrend)
+    supertrend_data = chart_indicators_data.get("supertrend", [])
+    supertrend_direction_data = chart_indicators_data.get("supertrend_direction", [])
+    
+    if supertrend_data and any(x is not None for x in supertrend_data) and len(indicators) < 5:
+        processed_supertrend_values = [float(x) if x is not None else 0.0 for x in supertrend_data]
+        
+        processed_supertrend_directions = []
+        for i, direction in enumerate(supertrend_direction_data):
+            if direction == 1:
+                processed_supertrend_directions.append(1.0)  # 상승추세
+            elif direction == -1:
+                processed_supertrend_directions.append(-1.0)  # 하락추세  
+            else:
+                processed_supertrend_directions.append(0.0)  # 중립
+        
+        supertrend_indicator = {
+            "name": "슈퍼트렌드",
+            "data": processed_supertrend_values,
+            "directions": processed_supertrend_directions,
+            "color": "#f59e0b",  # 주황색
+            "chart_type": "line",
+            "y_axis_id": "secondary",
+            "line_style": "solid"
+        }
+        
+        indicators.append(supertrend_indicator)
+        logger.info(f"[기술지표차트] 슈퍼트렌드 지표 추가 완료 - 데이터 포인트: {len(processed_supertrend_values)}개")
+    
+    # 지표가 없는 경우 처리
+    if not indicators:
+        logger.warning("[기술지표차트] 사용 가능한 기술적 지표 데이터가 없습니다")
+        return create_paragraph("기술적 지표 데이터가 충분하지 않습니다.")
+    
+    # Y축 설정
+    y_axis_configs = {
+        "primary": {
+            "title": "ADX / DI 값",
+            "position": "left",
+            "color": "#3b82f6"
+        },
+        "secondary": {
+            "title": "가격 (원)",
+            "position": "right", 
+            "color": "#f59e0b"
+        }
+    }
+    
+    # 캔들 데이터 변환
+    candle_data = []
+    if isinstance(chart_data, list) and chart_data:
+        for i, item in enumerate(chart_data):
+            if isinstance(item, dict):
+                time_value = item.get("date") or item.get("timestamp", "")
+                formatted_time = format_date_for_chart(time_value)
+                
+                candle_item = {
+                    "time": formatted_time,
+                    "open": safe_int(item.get("open", 0)),
+                    "high": safe_int(item.get("high", 0)),
+                    "low": safe_int(item.get("low", 0)),
+                    "close": safe_int(item.get("close", 0)),
+                    "volume": safe_int(item.get("volume", 0))
+                }
+                candle_data.append(candle_item)
+    
+    metadata = {
+        "description": "추세추종 지표 분석",
+        "source": "technical_analyzer_agent",
+        "timestamp": datetime.now().isoformat(),
+        "chart_type": "technical_indicators",
+        "indicators": [indicator["name"] for indicator in indicators],
+        "data_points": len(dates),
+        "candle_data_count": len(candle_data)
+    }
+    
+    # 추세추종 지표 차트 컴포넌트 생성
+    technical_indicator_chart = create_technical_indicator_chart(
+        symbol=stock_code,
+        name=stock_name,
+        dates=dates,
+        indicators=indicators,
+        title=f"추세추종 지표 분석",#title=f"{stock_name}({stock_code}) 추세추종 지표 분석",
+        candle_data=candle_data if candle_data else None,
+        y_axis_configs=y_axis_configs,
+        period=None,
+        metadata=metadata
+    )
+    
+    logger.info(f"[기술지표차트] 추세추종 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
+    return technical_indicator_chart
+
+
+def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], stock_code: str, stock_name: str) -> Dict[str, Any]:
+    """
+    tech agent 결과를 사용하여 모멘텀 지표 차트 컴포넌트를 생성합니다.
+    RSI, MACD 등 모멘텀 지표들을 시각화합니다.
+    """
+    logger.info(f"[모멘텀지표차트] {stock_name}({stock_code}) 모멘텀 지표 차트 생성 시작")
+    
+    # 실제 데이터는 data 키 안에 있음
+    actual_data = tech_agent_result.get("data", {})
+    chart_indicators_data = actual_data.get("chart_indicators_data", {})
+    chart_data = actual_data.get("chart_data", [])
+    
+    # 날짜 배열 가져오기
+    dates = chart_indicators_data.get("dates", [])
+    
+    if not dates:
+        logger.warning("[모멘텀지표차트] 날짜 데이터가 없어 모멘텀 지표 차트를 생성할 수 없습니다")
+        return create_paragraph("모멘텀 지표 차트 데이터가 없습니다.")
+    
+    # 지표 데이터 목록 생성
+    indicators = []
+    
+    # 1. RSI (Relative Strength Index)
+    rsi_data = chart_indicators_data.get("rsi", [])
+    if rsi_data and any(x is not None for x in rsi_data):
+        processed_rsi = [safe_float(x) for x in rsi_data]
+        indicators.append({
+            "name": "RSI (14일)",
+            "data": processed_rsi,
+            "color": "#e91e63",  # 핑크색
+            "chart_type": "line",
+            "y_axis_id": "primary",
+            "line_style": "solid"
+        })
+    
+    # 2. MACD Line
+    macd_line_data = chart_indicators_data.get("macd", [])
+    if macd_line_data and any(x is not None for x in macd_line_data) and len(indicators) < 5:
+        processed_macd_line = [float(x) if x is not None else 0.0 for x in macd_line_data]
+        indicators.append({
+            "name": "MACD Line",
+            "data": processed_macd_line,
+            "color": "#2196f3",  # 파란색
+            "chart_type": "line",
+            "y_axis_id": "hidden",
+            "line_style": "solid"
+        })
+    
+    # 3. MACD Signal Line
+    macd_signal_data = chart_indicators_data.get("macd_signal", [])
+    if macd_signal_data and any(x is not None for x in macd_signal_data) and len(indicators) < 5:
+        processed_macd_signal = [float(x) if x is not None else 0.0 for x in macd_signal_data]
+        indicators.append({
+            "name": "MACD Signal",
+            "data": processed_macd_signal,
+            "color": "#ff9800",  # 주황색
+            "chart_type": "line",
+            "y_axis_id": "hidden",
+            "line_style": "dashed"
+        })
+    
+    # 4. MACD Histogram
+    macd_histogram_data = chart_indicators_data.get("macd_histogram", [])
+    if macd_histogram_data and any(x is not None for x in macd_histogram_data) and len(indicators) < 5:
+        processed_macd_histogram = [float(x) if x is not None else 0.0 for x in macd_histogram_data]
+        indicators.append({
+            "name": "MACD Histogram",
+            "data": processed_macd_histogram,
+            "color": "#4caf5080",
+            "chart_type": "bar",
+            "y_axis_id": "hidden",
+            "line_style": "solid"
+        })
+    
+    # 지표가 없는 경우 처리
+    if not indicators:
+        logger.warning("[모멘텀지표차트] 사용 가능한 모멘텀 지표 데이터가 없습니다")
+        return create_paragraph("모멘텀 지표 데이터가 충분하지 않습니다.")
+    
+    # Y축 설정
+    y_axis_configs = {
+        "primary": {
+            "title": "RSI",
+            "position": "left",
+            "color": "#e91e63",
+            "min": 0,
+            "max": 100
+        },
+        "hidden": {
+            "title": "Hidden Axis",
+            "position": "right",
+            "color": "#2196f3",
+            "display": False,
+            "visible": False
+        }
+    }
+    
+    # 캔들 데이터 변환
+    candle_data = []
+    if isinstance(chart_data, list) and chart_data:
+        for i, item in enumerate(chart_data):
+            if isinstance(item, dict):
+                time_value = item.get("date") or item.get("timestamp", "")
+                formatted_time = format_date_for_chart(time_value)
+                
+                candle_item = {
+                    "time": formatted_time,
+                    "open": safe_int(item.get("open", 0)),
+                    "high": safe_int(item.get("high", 0)),
+                    "low": safe_int(item.get("low", 0)),
+                    "close": safe_int(item.get("close", 0)),
+                    "volume": safe_int(item.get("volume", 0))
+                }
+                candle_data.append(candle_item)
+    
+    # 메타데이터 생성
+    metadata = {
+        "description": "모멘텀 지표 분석",
+        "source": "technical_analyzer_agent",
+        "timestamp": datetime.now().isoformat(),
+        "chart_type": "momentum_indicators",
+        "indicators": [indicator["name"] for indicator in indicators],
+        "data_points": len(dates),
+        "candle_data_count": len(candle_data)
+    }
+    
+    # 모멘텀 지표 차트 컴포넌트 생성
+    momentum_chart = create_technical_indicator_chart(
+        symbol=stock_code,
+        name=stock_name,
+        dates=dates,
+        indicators=indicators,
+        title=f"모멘텀 지표 분석",#title=f"{stock_name}({stock_code}) 모멘텀 지표 분석",
+        candle_data=candle_data if candle_data else None,
+        y_axis_configs=y_axis_configs,
+        period=None,
+        metadata=metadata
+    )
+    
+    logger.info(f"[모멘텀지표차트] 모멘텀 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
+    return momentum_chart

@@ -260,12 +260,18 @@ class TechnicalAnalysisResult(TypedDict, total=False):
     stock_name: str                 # 종목명
     analysis_date: datetime         # 분석 일시
     current_price: float            # 현재가
+    stock_info: Optional[Dict[str, Any]] # 종목 기본 정보
     chart_patterns: ChartPatternAnalysis # 차트 패턴 분석
     technical_indicators: TechnicalIndicators # 기술적 지표
     trading_signals: TradingSignals # 매매 신호
     market_sentiment: MarketSentiment # 시장 정서
     summary: str                    # 종합 분석 요약
     recommendations: List[str]      # 투자 권고사항
+    chart_data: List[Dict[str, Any]] # 차트 데이터
+    chart_indicators_data: Dict[str, Any] # 차트용 지표 시계열 데이터
+    supply_demand_data: Optional[List[Dict[str, Any]]] # 수급 데이터
+    rs_data: Optional[Dict[str, Any]] # RS(상대강도) 데이터
+    market_indices: Optional[Dict[str, Any]] # 시장지수 데이터
 
 
 class RetrievedAllAgentData(TypedDict, total=False):

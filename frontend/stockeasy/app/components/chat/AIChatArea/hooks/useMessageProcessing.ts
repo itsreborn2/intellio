@@ -549,8 +549,9 @@ function useMessageProcessing(
               console.log('[MessageProcessing] 상태 메시지가 이미 제거됨');
             }
             
-            // 처리 완료 콜백 호출
+            // 처리 완료 콜백 호출 및 로딩 상태 종료
             onProcessingComplete();
+            setProcessing(false);
 
             // 디버깅 로그 정리 (components 변수 참조 오류 수정)
             console.log('[MessageProcessing] 처리 완료 및 응답 ID:', assistantMessageId.current);

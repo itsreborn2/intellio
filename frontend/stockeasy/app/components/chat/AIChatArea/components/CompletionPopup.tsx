@@ -39,7 +39,7 @@ export function CompletionPopup({ onViewFinalReport, onClose }: CompletionPopupP
   if (!isVisible) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 sm:top-4 sm:right-4 sm:left-auto sm:bottom-auto z-50 max-w-sm sm:w-auto mx-auto sm:mx-0">
+    <div className="fixed bottom-0 left-4 right-4 sm:top-8 sm:right-4 sm:left-auto sm:bottom-auto z-50 max-w-sm sm:w-auto mx-auto sm:mx-0">
       {/* 팝업 컨테이너 - 모바일에서는 하단에, 데스크톱에서는 우상단에 위치 */}
       <div 
         className={`completion-popup bg-white rounded-lg shadow-xl p-6 border border-gray-200 transform transition-all duration-300 ${
@@ -72,7 +72,6 @@ export function CompletionPopup({ onViewFinalReport, onClose }: CompletionPopupP
 
         {/* 설명 */}
         <p className="text-gray-600 text-center mb-6">
-          종합적인 주식 분석 보고서가 준비되었습니다. 
           상세한 분석 결과를 확인해보세요.
         </p>
 

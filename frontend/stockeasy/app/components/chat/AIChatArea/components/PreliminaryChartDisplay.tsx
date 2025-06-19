@@ -1,11 +1,12 @@
 /**
  * PreliminaryChartDisplay.tsx
- * 실시간 기술적 분석 차트를 표시하는 컴포넌트
+ * 실시간 기술적 분석 차트를 표시하는 팝업 컴포넌트
  */
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MessageComponentRenderer } from './MessageComponentRenderer';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface PreliminaryChartData {
   components: any[];
@@ -17,6 +18,9 @@ interface PreliminaryChartData {
 
 interface PreliminaryChartDisplayProps {
   chartData: PreliminaryChartData;
+  onClose?: () => void;
+  isCompleted?: boolean;
+  onViewFinalReport?: () => void;
 }
 
 /**
@@ -186,72 +190,157 @@ function validateChartData(chartData: PreliminaryChartData): {
   }
 }
 
-export function PreliminaryChartDisplay({ chartData }: PreliminaryChartDisplayProps) {
-  // 디버깅을 위한 데이터 로깅
-  
-  // 차트 데이터 유효성 검증
-  // const validation = validateChartData(chartData);
-  
-  // if (!validation.isValid) {
-  //   console.warn('[PreliminaryChartDisplay] 차트 데이터 검증 실패:', validation.errorMessage);
-  //   return (
-  //     <div className="preliminary-chart-container relative">
-  //       <div className="text-slate-600 text-sm p-4 bg-yellow-50 border border-yellow-200 rounded">
-  //         ⚠️ {validation.errorMessage || '차트 데이터가 유효하지 않습니다.'} 다시 시도해주세요.
-  //       </div>
-  //     </div>
-  //   );
-  // }
+export function PreliminaryChartDisplay({ chartData, onClose, isCompleted = true, onViewFinalReport }: PreliminaryChartDisplayProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const isMobile = useMediaQuery('mobile');
 
+  useEffect(() => {
+    // 컴포넌트 마운트 시 애니메이션 시작
+    setIsVisible(true);
+    setTimeout(() => setIsAnimating(true), 50);
+  }, []);
+
+  const handleClose = () => {
+    setIsAnimating(false);
+    setTimeout(() => {
+      setIsVisible(false);
+      onClose?.();
+    }, 300);
+  };
+
+  // ESC 키로 팝업 닫기
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  if (!isVisible) return null;
 
   // 컴포넌트 정규화 제거 - tech agent는 이미 표준 구조로 데이터를 생성함
-  // const normalizedComponents = chartData.components.map(normalizeChartComponent);
-  const normalizedComponents = chartData.components; // 직접 전달
+  const normalizedComponents = chartData.components;
 
   return (
-    <div className="preliminary-chart-container relative">
-      {/* 실시간 배지 */}
-      <div className="absolute top-4 right-4 flex items-center space-x-2">
-        <div className="realtime-badge">
-          실시간
-        </div>
-      </div>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isMobile ? 'p-4' : 'pl-[59px] pr-4 pt-4 pb-4'}`}>
+      {/* 배경 오버레이 - 모바일에서는 전체 화면, 데스크톱에서는 사이드바 제외 */}
+      <div 
+        className={`fixed inset-0 ${isMobile ? '' : 'left-[59px]'} bg-black transition-opacity duration-300 ${
+          isAnimating ? 'opacity-50' : 'opacity-0'
+        }`}
+        onClick={handleClose}
+      />
 
-      {/* 로딩 애니메이션 */}
-      <div className="flex items-center mb-4">
-        <div className="loading-dots mr-3">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <span className="text-slate-700 font-medium text-sm">차트가 준비되었습니다. 추가 분석을 진행하고 있습니다...</span>
-      </div>
-
-      {/* 메시지 표시 */}
-      <div className="mb-4">
-        <p className="text-slate-700 text-sm">{chartData.message}</p>
-      </div>
-
-      {/* 차트 컴포넌트 렌더링 */}
-      <div className="space-y-4">
-        {normalizedComponents.map((component, index) => (
-          <div key={index} className="chart-container">
-            <MessageComponentRenderer 
-              component={component}
-              isChartPair={true}
-            />
+      {/* 팝업 컨테이너 - 모바일에서는 전체 영역, 데스크톱에서는 사이드바 제외 */}
+      <div 
+        className={`relative bg-white rounded-xl shadow-2xl w-full max-h-[85vh] overflow-hidden transform transition-all duration-300 ${
+          isAnimating 
+            ? 'scale-100 opacity-100 translate-y-0' 
+            : 'scale-95 opacity-0 translate-y-8'
+        }`}
+        style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : 'calc(100vw - 59px - 2rem)' }}
+      >
+        {/* 헤더 */}
+        <div className="border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center justify-between p-6">
+            <div className="flex items-center space-x-3">
+              {/* 실시간 배지 */}
+              <div className={`px-3 py-1 text-white text-sm font-medium rounded-full flex items-center ${isCompleted ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}>
+                {!isCompleted && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                )}
+                {isCompleted ? '완료' : '분석중'}
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {chartData.stockName} ({chartData.stockCode}) 기술적 분석
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                {isCompleted ? '분석이 완료되었습니다. 최종 문서를 확인해보세요.' : chartData.message}
+                </p>
+              </div>
+            </div>
+            
+            {isCompleted ? (
+            <button
+              onClick={handleClose}
+              className="px-4 py-2 bg-white text-green-600 hover:bg-gray-50 rounded-lg transition-colors duration-200 font-medium text-sm shadow-sm"
+            >
+              최종 문서 보러가기
+            </button>
+            ) : (
+            <button
+              onClick={handleClose}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-200"
+              aria-label="닫기"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            )}
           </div>
-        ))}
-      </div>
-
-      {/* 추가 분석 진행 상태 표시 */}
-      <div className="status-message mt-4">
-        <div className="flex items-center text-sm">
-          <div className="animate-spin rounded-full h-3 w-3 border border-blue-500 border-t-transparent mr-2"></div>
-          <span>나머지 분석을 진행 중입니다. 잠시만 기다려주세요...</span>
         </div>
-      </div>
 
+        {/* 컨텐츠 영역 */}
+        <div className="p-6 overflow-y-auto max-h-[calc(85vh-200px)]">
+          {/* 차트 컴포넌트 렌더링 */}
+          <div className="space-y-6">
+            {normalizedComponents.map((component, index) => (
+              <div 
+                key={index} 
+                className={
+                  component.type?.includes('chart') 
+                    ? "chart-container bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden"
+                    : ""
+                }
+              >
+                <MessageComponentRenderer 
+                  component={component}
+                  isChartPair={false}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* 추가 분석 진행 상태 표시 */}
+          <div className={`mt-6 p-4 rounded-lg ${isCompleted ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
+            <div className="flex items-center justify-center text-sm">
+              {!isCompleted ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent mr-3"></div>
+                  <span className="text-blue-700 font-medium">나머지 분석을 진행 중입니다. 잠시만 기다려주세요...</span>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-center w-4 h-4 mr-3 bg-green-500 rounded-full">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span className="text-green-700 font-medium">모든 분석이 완료되었습니다!</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+          <div className="flex justify-end">
+            <button
+              onClick={handleClose}
+              className="px-4 py-2 text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 rounded-lg transition-colors duration-200 font-medium"
+            >
+              닫기
+            </button>
+          </div>
+        </div> */}
+      </div>
     </div>
   );
 } 

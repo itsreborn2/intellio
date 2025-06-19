@@ -398,3 +398,60 @@ def safe_series_to_list(series: Any, default_list: Optional[list] = None) -> lis
     except Exception:
         return default_list
 
+
+def format_date_for_chart(date_value: Any) -> str:
+    """
+    다양한 날짜 형식을 yyyy-mm-dd 형식으로 변환합니다.
+    
+    Args:
+        date_value: 날짜 값 (ISO 문자열, datetime 객체, 문자열 등)
+        
+    Returns:
+        yyyy-mm-dd 형식의 날짜 문자열
+    """
+    try:
+        if not date_value:
+            return ""
+        
+        # 이미 yyyy-mm-dd 형식인지 확인
+        if isinstance(date_value, str) and re.match(r'^\d{4}-\d{2}-\d{2}$', date_value):
+            return date_value
+        
+        # ISO 형식 문자열 처리 (2025-06-12T00:00:00+09:00)
+        if isinstance(date_value, str):
+            # ISO 형식에서 날짜 부분만 추출
+            if 'T' in date_value:
+                date_part = date_value.split('T')[0]
+                if re.match(r'^\d{4}-\d{2}-\d{2}$', date_part):
+                    return date_part
+            
+            # 다른 형식의 날짜 문자열 파싱 시도
+            try:
+                from datetime import datetime
+                parsed_date = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
+                return parsed_date.strftime('%Y-%m-%d')
+            except ValueError:
+                # 일반적인 날짜 파싱 시도
+                try:
+                    parsed_date = datetime.strptime(date_value, '%Y-%m-%d')
+                    return parsed_date.strftime('%Y-%m-%d')
+                except ValueError:
+                    pass
+        
+        # datetime 객체 처리
+        if hasattr(date_value, 'strftime'):
+            return date_value.strftime('%Y-%m-%d')
+        
+        # 문자열로 변환 후 재시도
+        date_str = str(date_value)
+        if 'T' in date_str:
+            date_part = date_str.split('T')[0]
+            if re.match(r'^\d{4}-\d{2}-\d{2}$', date_part):
+                return date_part
+        
+        logger.warning(f"날짜 형식 변환 실패: {date_value} (type: {type(date_value)})")
+        return str(date_value)  # 변환 실패 시 원본 반환
+        
+    except Exception as e:
+        logger.error(f"날짜 형식 변환 중 오류: {e}, 입력값: {date_value}")
+        return str(date_value) if date_value else ""

@@ -14,7 +14,7 @@ import {
   LatestUpdates
 } from './components';
 import { PreliminaryChartDisplay } from './components/PreliminaryChartDisplay';
-import { CompletionPopup } from './components/CompletionPopup';
+
 import { useMessageProcessing } from './hooks';
 import { useIsMobile } from './hooks';
 import { useChatStore } from '@/stores/chatStore';
@@ -105,7 +105,7 @@ function AIChatAreaContent() {
     stockCode: string;
     stockName: string;
   } | null>(null);
-  const [showCompletionPopup, setShowCompletionPopup] = useState(false);
+
   const [finalResponse, setFinalResponse] = useState<any>(null);
   const [currentStatus, setCurrentStatus] = useState<string>('');
 
@@ -200,12 +200,8 @@ function AIChatAreaContent() {
         // 토큰 사용량 업데이트 (Zustand 스토어)
         fetchSummary && fetchSummary();
         
-        // 완료 팝업 표시
-        setShowCompletionPopup(true);
         // 최종 응답 설정 (기존 메시지들을 최종 응답으로 설정)
         setFinalResponse(uiMessages);
-        // 임시 차트는 팝업에서 "메시지 보기"를 클릭할 때까지 유지
-        // setPreliminaryChart(null); <- 제거
       },
       onPreliminaryChart: (data) => {
         console.log('[AI채팅영역] 임시 차트 수신:', data);
@@ -565,26 +561,19 @@ function AIChatAreaContent() {
           />
         )}
 
-        {/* 임시 차트 표시 - 분석 중이거나 완료 팝업이 표시될 때 표시 */}
-        {preliminaryChart && (isLoading || showCompletionPopup) && (
+        {/* 임시 차트 팝업 - 분석 중이거나 완료된 상태에서 표시 */}
+        {preliminaryChart && (isLoading || !isLoading) && (
           <PreliminaryChartDisplay 
             chartData={preliminaryChart}
-          />
-        )}
-
-        {/* 완료 팝업 */}
-        {showCompletionPopup && (
-          <CompletionPopup 
+            onClose={() => setPreliminaryChart(null)}
+            isCompleted={!isLoading}
             onViewFinalReport={() => {
-              setShowCompletionPopup(false);
-              // 임시 차트를 숨기고 최종 응답 표시
+              // 임시 차트 팝업 닫기
               setPreliminaryChart(null);
-              // 메시지 리스트로 스크롤
-              messageListRef.current?.scrollToBottom();
-            }}
-            onClose={() => {
-              setShowCompletionPopup(false);
-              // 팝업만 닫고 임시 차트는 계속 표시
+              // 최종 메시지로 스크롤
+              if (messageListRef.current?.scrollToBottom) {
+                messageListRef.current.scrollToBottom();
+              }
             }}
           />
         )}

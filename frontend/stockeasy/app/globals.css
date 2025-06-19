@@ -1052,35 +1052,8 @@ html {
 
 /* 실시간 차트 스트리밍을 위한 공통 클래스 */
 
-/* 임시 차트 컨테이너 */
-.preliminary-chart-container {
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 24px;
-  margin: 16px 0;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
-  animation: slideInUp 0.6s ease-out;
-  position: relative;
-  overflow: hidden;
-}
-
-.preliminary-chart-container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.4),
-    transparent
-  );
-  animation: shimmer 2s infinite;
-}
-
+/* 임시 차트 팝업 스타일 (기존 컨테이너 스타일은 팝업에서 직접 정의) */
+/* 로딩 애니메이션 개선 */
 @keyframes shimmer {
   0% {
     left: -100%;
@@ -1090,16 +1063,10 @@ html {
   }
 }
 
-/* 차트 컨테이너 호버 효과 */
+/* 차트 컨테이너 스타일 */
 .chart-container {
-  transition: all 0.3s ease;
   border-radius: 8px;
   overflow: hidden;
-}
-
-.chart-container:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }
 
 /* 로딩 애니메이션 */
@@ -1211,16 +1178,7 @@ html {
 }
 
 @media (min-width: 1025px) {
-  .preliminary-chart-container {
-    padding: 28px;
-    margin: 20px 0;
-    border-radius: 16px;
-  }
-  
-  .chart-container:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
-  }
+  /* 차트 컨테이너 hover 효과 제거됨 */
 }
 
 /* 다크모드 지원을 위한 CSS 변수 */
@@ -1232,18 +1190,6 @@ html {
     --status-bg-color: #1e3a8a;
     --status-border-color: #3b82f6;
     --status-text-color: #dbeafe;
-  }
-  
-  .preliminary-chart-container {
-    background: linear-gradient(135deg, var(--chart-bg-color) 0%, #111827 100%);
-    border-color: var(--chart-border-color);
-    color: var(--chart-text-color);
-  }
-  
-  .status-message {
-    background: linear-gradient(135deg, var(--status-bg-color) 0%, #1e40af 100%);
-    border-color: var(--status-border-color);
-    color: var(--status-text-color);
   }
   
   .loading-dots span {

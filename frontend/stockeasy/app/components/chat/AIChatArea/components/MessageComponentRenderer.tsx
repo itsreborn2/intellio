@@ -250,7 +250,7 @@ export function MessageComponentRenderer({
         borderRadius: '12px',
         padding: '1em',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease'
+        transition: 'box-shadow 0.3s ease'
       };
       
       // 모바일 또는 2열 레이아웃에 따른 컨테이너 스타일 설정
@@ -425,7 +425,7 @@ export function MessageComponentRenderer({
         borderRadius: '12px',
         padding: '1em',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease'
+        transition: 'box-shadow 0.3s ease'
       };
       
       // 모바일 또는 2열 레이아웃에 따른 컨테이너 스타일 설정
@@ -603,7 +603,7 @@ export function MessageComponentRenderer({
         borderRadius: '12px',
         padding: '1em',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease'
+        transition: 'box-shadow 0.3s ease'
       };
       
       // 모바일 또는 2열 레이아웃에 따른 컨테이너 스타일 설정
@@ -754,8 +754,8 @@ export function MessageComponentRenderer({
                 tickLine={{ stroke: '#666' }}
                 axisLine={{ stroke: '#666' }}
                 tickFormatter={(value) => {
-                  // 오른쪽 Y축은 주로 퍼센트 값이므로 간결한 퍼센트 형식으로 표시
-                  return `${value}%`;
+                  // 오른쪽 Y축은 주로 퍼센트 값이므로 정수형 퍼센트로 표시
+                  return `${Math.round(value)}%`;
                 }}
                 label={data.y_axis_right_title ? { 
                   value: `${data.y_axis_right_title}`, 
@@ -1393,11 +1393,10 @@ const globalStyle = `
   }
   
   .chart-container {
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transition: box-shadow 0.3s ease;
   }
   
   .chart-container:hover {
-    transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
   }
   
