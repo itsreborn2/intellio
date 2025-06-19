@@ -18,7 +18,6 @@ interface MessageProcessingOptions {
   onQuestionLimitExceeded?: () => void;
   onProcessingStart?: () => void;
   onProcessingComplete?: () => void;
-  onPreliminaryChart?: (data: any) => void;
   maxQuestions?: number;
 }
 
@@ -63,7 +62,6 @@ function useMessageProcessing(
     onQuestionLimitExceeded = () => toast.error('오늘의 질문 할당량을 모두 소진하였습니다. 내일 다시 이용해주세요.'),
     onProcessingStart = () => {},
     onProcessingComplete = () => {},
-    onPreliminaryChart = () => {},
     maxQuestions = 10
   } = options;
 
@@ -370,71 +368,6 @@ function useMessageProcessing(
               content: updatedContent,
               created_at: new Date().toISOString()
             });
-          },
-          onPreliminaryChart: (data) => {
-            console.log('[MessageProcessing] 임시 차트 수신:', data);
-            
-            // 데이터 유효성 검증
-            try {
-              if (!data) {
-                console.warn('[MessageProcessing] 임시 차트 데이터가 null입니다.');
-                toast.warning('차트 데이터가 없습니다.');
-                return;
-              }
-              
-              if (!data.components || !Array.isArray(data.components)) {
-                console.warn('[MessageProcessing] 임시 차트 컴포넌트가 배열이 아닙니다:', data);
-                toast.warning('차트 컴포넌트 형식이 올바르지 않습니다.');
-                return;
-              }
-              
-              if (data.components.length === 0) {
-                console.warn('[MessageProcessing] 임시 차트 컴포넌트가 비어있습니다.');
-                toast.info('차트 데이터를 준비하고 있습니다...');
-                return;
-              }
-              
-              // 각 컴포넌트의 데이터 구조 검증
-              let validComponentCount = 0;
-              data.components.forEach((component: any, index: number) => {
-                if (component && component.type) {
-                  validComponentCount++;
-                  
-                  // 차트 컴포넌트인 경우 추가 검증
-                  if (component.type.includes('chart') && component.data && component.data.chart_data) {
-                    const chartData = component.data.chart_data;
-                    
-                    if (!chartData.dates || !Array.isArray(chartData.dates)) {
-                      console.warn(`[MessageProcessing] 컴포넌트 ${index}에 날짜 데이터가 없습니다:`, component.type);
-                    }
-                    
-                    const indicatorKeys = Object.keys(chartData).filter(key => 
-                      !['dates', 'close', 'high', 'low', 'volume'].includes(key)
-                    );
-                    
-                    console.log(`[MessageProcessing] 컴포넌트 ${index} (${component.type}) 지표 수: ${indicatorKeys.length}개`);
-                    console.log(`[MessageProcessing] 사용 가능한 지표:`, indicatorKeys);
-                  }
-                } else {
-                  console.warn(`[MessageProcessing] 컴포넌트 ${index}가 유효하지 않습니다:`, component);
-                }
-              });
-              
-              console.log(`[MessageProcessing] 총 ${data.components.length}개 컴포넌트 중 ${validComponentCount}개가 유효함`);
-              
-              if (validComponentCount === 0) {
-                console.warn('[MessageProcessing] 유효한 차트 컴포넌트가 없습니다.');
-                toast.warning('유효한 차트 데이터가 없습니다.');
-                return;
-              }
-              
-              // 콜백 호출
-              onPreliminaryChart(data);
-              
-            } catch (error) {
-              console.error('[MessageProcessing] 임시 차트 처리 중 오류:', error);
-              toast.error('차트 데이터 처리 중 오류가 발생했습니다.');
-            }
           },
           onComplete: (data) => {
             console.log('[MessageProcessing] 처리 완료:', data);

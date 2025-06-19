@@ -24,15 +24,6 @@ import {
 import { createChart, ColorType, LineStyle, CandlestickSeries, HistogramSeries, LineSeries, AreaSeries, Time } from 'lightweight-charts';
 import { useMediaQuery } from '../hooks';
 
-// PreliminaryChartData 인터페이스 정의
-interface PreliminaryChartData {
-  components: MessageComponent[];
-  message: string;
-  timestamp: number;
-  stockCode: string;
-  stockName: string;
-}
-
 // 차트 색상 테마 정의
 const CHART_COLORS = [
   '#4285F4', '#34A853', '#FBBC05', '#EA4335', 
@@ -907,170 +898,6 @@ export function MessageComponentRenderer({
     case 'technical_indicator_chart': {
       const { title, data } = component as ITechnicalIndicatorChartComponent;
       
-      
-      // 백엔드 데이터 구조 변환 처리
-      let processedData = data;
-      
-      // chart_data가 객체 형태인 경우 (백엔드에서 보내는 구조)
-      const dataWithChartData = data as any;
-      if (dataWithChartData?.chart_data && typeof dataWithChartData.chart_data === 'object' && !Array.isArray(dataWithChartData.chart_data)) {
-        console.log('[MessageComponentRenderer] chart_data 객체 구조 변환 시작');
-        console.log('[MessageComponentRenderer] chart_data 키:', Object.keys(dataWithChartData.chart_data));
-        
-        try {
-          const chartData = dataWithChartData.chart_data;
-          
-          // dates 배열 추출
-          const dates = chartData.dates || [];
-          console.log('[MessageComponentRenderer] dates 길이:', dates?.length || 0);
-          console.log('[MessageComponentRenderer] 첫 번째 날짜:', dates?.[0]);
-          
-          // 날짜 형식 최종 검증 및 정규화
-          const normalizedDates = dates.map((date: any) => {
-            if (typeof date === 'string') {
-              // ISO 형식인 경우 YYYY-MM-DD로 변환
-              if (date.includes('T')) {
-                const normalized = date.split('T')[0];
-                console.log(`[MessageComponentRenderer] 날짜 변환: ${date} → ${normalized}`);
-                return normalized;
-              }
-              // 이미 YYYY-MM-DD 형식인지 검증
-              if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                return date;
-              }
-            }
-            // Date 객체인 경우 문자열로 변환
-            if (date instanceof Date) {
-              return date.toISOString().split('T')[0];
-            }
-            return String(date);
-          });
-          
-          console.log('[MessageComponentRenderer] 정규화된 날짜 수:', normalizedDates.length);
-          if (normalizedDates.length > 0) {
-            console.log('[MessageComponentRenderer] 첫 번째 정규화된 날짜:', normalizedDates[0]);
-            console.log('[MessageComponentRenderer] 마지막 정규화된 날짜:', normalizedDates[normalizedDates.length - 1]);
-          }
-          
-          // OHLCV 데이터로 candle_data 구성
-          const candle_data: any[] = [];
-          if (normalizedDates && normalizedDates.length > 0) {
-            for (let i = 0; i < normalizedDates.length; i++) {
-              const candleItem = {
-                time: normalizedDates[i],
-                open: parseFloat(chartData.open?.[i] || chartData.close?.[i] || 0),
-                high: parseFloat(chartData.high?.[i] || 0),
-                low: parseFloat(chartData.low?.[i] || 0),
-                close: parseFloat(chartData.close?.[i] || 0),
-                volume: parseInt(chartData.volume?.[i] || 0)
-              };
-              
-              // NaN 값 체크
-              if (!isNaN(candleItem.close) && candleItem.close > 0) {
-                candle_data.push(candleItem);
-              }
-            }
-          }
-          
-          console.log('[MessageComponentRenderer] candle_data 길이:', candle_data.length);
-          console.log('[MessageComponentRenderer] 첫 번째 캔들:', candle_data[0]);
-          
-          // 지표 데이터 추출 (dates, close, high, low, volume 제외)
-          const indicators: any[] = [];
-          const indicatorKeys = Object.keys(chartData).filter(key => 
-            !['dates', 'close', 'high', 'low', 'volume', 'open'].includes(key)
-          );
-          
-          console.log('[MessageComponentRenderer] 지표 키:', indicatorKeys);
-          
-          indicatorKeys.forEach(key => {
-            const indicatorData = chartData[key];
-            if (Array.isArray(indicatorData) && indicatorData.length > 0) {
-              // 지표 데이터를 {time, value} 형태로 변환 (정규화된 날짜 사용)
-              const indicatorSeries = normalizedDates.map((date: string, index: number) => ({
-                time: date,
-                value: parseFloat(indicatorData[index]) || null
-              })).filter((item: any) => item.value !== null && !isNaN(item.value));
-              
-              if (indicatorSeries.length > 0) {
-                indicators.push({
-                  name: key,
-                  data: indicatorSeries,
-                  color: getIndicatorColor(key), // 지표별 색상 함수
-                  type: getIndicatorType(key) // 지표 타입 (line, histogram 등)
-                });
-              }
-            }
-          });
-          
-          console.log('[MessageComponentRenderer] 변환된 지표 수:', indicators.length);
-          
-          // 기존 indicators와 병합 (있는 경우)
-          const existingIndicators = data.indicators || [];
-          const allIndicators = [...existingIndicators, ...indicators];
-          
-          processedData = {
-            ...data,
-            dates: normalizedDates, // 정규화된 날짜 사용
-            candle_data,
-            indicators: allIndicators
-          };
-          
-          console.log('[MessageComponentRenderer] 최종 변환 결과:', {
-            datesCount: dates.length,
-            candleDataCount: candle_data.length,
-            indicatorsCount: allIndicators.length,
-            indicatorNames: allIndicators.map(ind => ind.name)
-          });
-          
-        } catch (error) {
-          console.error('[MessageComponentRenderer] 데이터 변환 오류:', error);
-          // 변환 실패 시 원본 데이터 유지
-          processedData = data;
-        }
-      }
-      // } else if (dataWithChartData?.chart_data && Array.isArray(dataWithChartData.chart_data)) {
-      //   // 기존 배열 형태 처리 로직 (하위 호환성)
-      //   console.log('[MessageComponentRenderer] chart_data 배열 구조 변환 (레거시)');
-        
-      //   try {
-      //     const dates = dataWithChartData.chart_data.map((item: any) => item.date || item.Date);
-      //     const candle_data = dataWithChartData.chart_data.map((item: any, index: number) => ({
-      //       time: item.date || item.Date || dates[index],
-      //       open: parseFloat(item.open || item.Open || 0),
-      //       high: parseFloat(item.high || item.High || 0),
-      //       low: parseFloat(item.low || item.Low || 0),
-      //       close: parseFloat(item.close || item.Close || 0),
-      //       volume: parseInt(item.volume || item.Volume || 0)
-      //     }));
-          
-      //     const indicators = data.indicators || [];
-          
-      //     processedData = {
-      //       ...data,
-      //       dates,
-      //       candle_data,
-      //       indicators
-      //     };
-          
-      //     console.log('[MessageComponentRenderer] 레거시 변환 완료:', {
-      //       datesCount: dates.length,
-      //       candleDataCount: candle_data.length,
-      //       indicatorsCount: indicators.length
-      //     });
-      //   } catch (error) {
-      //     console.error('[MessageComponentRenderer] 레거시 데이터 변환 오류:', error);
-      //   }
-      // }
-      // } else {
-      //   console.log('[MessageComponentRenderer] chart_data가 없거나 예상과 다른 형태입니다.');
-      //   console.log('[MessageComponentRenderer] 데이터 구조:', {
-      //     hasChartData: !!dataWithChartData?.chart_data,
-      //     chartDataType: typeof dataWithChartData?.chart_data,
-      //     isArray: Array.isArray(dataWithChartData?.chart_data)
-      //   });
-      // }
-      
       // 기술적 지표 차트 컨테이너 스타일
       const containerStyle: CSSProperties = {
         backgroundColor: 'rgba(255, 255, 255, 0.8)',
@@ -1095,7 +922,7 @@ export function MessageComponentRenderer({
           }}>{title}</div>}
           
           <TechnicalIndicatorChart 
-            data={processedData}
+            data={data}
             height={chartHeight}
             isMobile={isMobile}
           />
@@ -2018,36 +1845,9 @@ const TechnicalIndicatorChart: React.FC<{
   } | null>(null);
   
   React.useEffect(() => {
-    console.log('[TechnicalIndicatorChart] useEffect 시작, 데이터 검증:', {
-      hasContainer: !!chartContainerRef.current,
-      hasDates: !!data.dates,
-      datesLength: data.dates?.length || 0,
-      hasIndicators: !!data.indicators,
-      indicatorsLength: data.indicators?.length || 0,
-      hasCandleData: !!data.candle_data,
-      candleDataLength: data.candle_data?.length || 0,
-      fullData: data
-    });
-
-    if (!chartContainerRef.current) {
-      console.warn('[TechnicalIndicatorChart] 차트 컨테이너 ref가 없습니다.');
+    if (!chartContainerRef.current || !data.dates || data.dates.length === 0) {
       return;
     }
-
-    if (!data.dates || data.dates.length === 0) {
-      console.warn('[TechnicalIndicatorChart] dates 데이터가 없거나 비어있습니다.');
-      return;
-    }
-
-    // 캔들 데이터가 없으면 차트를 그릴 수 없음
-    if (!data.candle_data || data.candle_data.length === 0) {
-      console.warn('[TechnicalIndicatorChart] candle_data가 없거나 비어있습니다.');
-      return;
-    }
-    
-    // indicators는 선택사항으로 처리 (없어도 캔들차트는 표시)
-    const indicatorsList = data.indicators || [];
-    console.log('[TechnicalIndicatorChart] 렌더링 시작 - 캔들데이터:', data.candle_data.length, '지표:', indicatorsList.length);
     
     // 차트 생성
     const chart = createChart(chartContainerRef.current, {
@@ -2140,90 +1940,42 @@ const TechnicalIndicatorChart: React.FC<{
     
     // 캔들 데이터가 있는 경우 캔들스틱 시리즈 추가 - 한국 스타일
     if (data.candle_data && data.candle_data.length > 0) {
-      console.log('[TechnicalIndicatorChart] 캔들 데이터 생성 시작:', data.candle_data.length, '개');
+      const candlestickSeries = chart.addSeries(CandlestickSeries, {
+        upColor: '#ef5350',
+        downColor: '#2196f3', 
+        borderUpColor: '#ef5350',
+        borderDownColor: '#2196f3',
+        wickUpColor: '#ef5350',
+        wickDownColor: '#2196f3',
+        priceScaleId: 'right', // 오른쪽 스케일 사용
+      });
       
-      try {
-        const candlestickSeries = chart.addSeries(CandlestickSeries, {
-          upColor: '#ef5350',
-          downColor: '#26a69a', 
-          borderUpColor: '#ef5350',
-          borderDownColor: '#26a69a',
-          wickUpColor: '#ef5350',
-          wickDownColor: '#26a69a',
-          priceScaleId: 'right', // 오른쪽 스케일 사용
-        });
-        
-        // 캔들 데이터 변환 및 검증
-        const candleData = data.candle_data.map((item: any, index: number) => {
-          // 시간 데이터 정규화 (YYYY-MM-DD 형식)
-          let timeValue: string;
-          if (typeof item.time === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.time)) {
-            timeValue = item.time;
-          } else {
-            // 날짜 변환 시도
-            const date = new Date(item.time);
-            if (!isNaN(date.getTime())) {
-              const year = date.getFullYear();
-              const month = String(date.getMonth() + 1).padStart(2, '0');
-              const day = String(date.getDate()).padStart(2, '0');
-              timeValue = `${year}-${month}-${day}`;
-            } else {
-              console.warn(`[TechnicalIndicatorChart] 유효하지 않은 시간 데이터 (인덱스 ${index}):`, item.time);
-              timeValue = '2024-01-01'; // 기본값
-            }
-          }
-          
-          // OHLC 데이터 검증
-          const open = Number(item.open) || 0;
-          const high = Number(item.high) || 0;
-          const low = Number(item.low) || 0;
-          const close = Number(item.close) || 0;
-          
-          if (high < low || high < Math.max(open, close) || low > Math.min(open, close)) {
-            console.warn(`[TechnicalIndicatorChart] 비정상적인 OHLC 데이터 (인덱스 ${index}):`, {
-              time: timeValue, open, high, low, close
-            });
-          }
-          
-          return {
-            time: timeValue as Time,
-            open: open,
-            high: high,
-            low: low,
-            close: close,
-          };
-        });
-        
-        console.log('[TechnicalIndicatorChart] 변환된 캔들 데이터 샘플:', candleData.slice(0, 3));
-        
-        candlestickSeries.setData(candleData);
-        
-        // 캔들스틱 시리즈 참조 저장
-        seriesRefs.push({
-          series: candlestickSeries,
-          name: '캔들스틱',
-          color: '#ef5350',
-          type: 'candle'
-        });
-        
-        console.log('[TechnicalIndicatorChart] 캔들스틱 시리즈 생성 완료');
-        
-      } catch (error) {
-        console.error('[TechnicalIndicatorChart] 캔들스틱 시리즈 생성 중 오류:', error);
-      }
-    } else {
-      console.warn('[TechnicalIndicatorChart] 캔들 데이터가 없습니다:', {
-        hasCandleData: !!data.candle_data,
-        candleDataLength: data.candle_data?.length || 0
+      // 캔들 데이터 설정
+      const candleData = data.candle_data.map((item: any) => ({
+        time: item.time as Time,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+      }));
+      
+      candlestickSeries.setData(candleData);
+      
+      // 캔들스틱 시리즈 참조 저장
+      seriesRefs.push({
+        series: candlestickSeries,
+        name: '캔들스틱',
+        color: '#ef5350',
+        type: 'candle'
       });
     }
 
     // 지표별 시리즈 생성
     console.log('=== TechnicalIndicatorChart 분석 시작 ===');
     console.log('전체 데이터:', data);
-    console.log('지표 목록:', indicatorsList);
+    console.log('지표 목록:', data.indicators);
     
-    indicatorsList.forEach((indicator: any, index: number) => {
+    data.indicators.forEach((indicator: any, index: number) => {
       const color = indicator.color || CHART_COLORS[index % CHART_COLORS.length];
       const lineStyle = getLineStyle(indicator.line_style);
       
@@ -2578,7 +2330,7 @@ const TechnicalIndicatorChart: React.FC<{
         )}
         
         {/* 지표 범례 */}
-        {data.indicators && data.indicators.map((indicator: any, index: number) => {
+        {data.indicators.map((indicator: any, index: number) => {
           const color = indicator.color || CHART_COLORS[index % CHART_COLORS.length];
           
           // 슈퍼트렌드 지표인지 확인
@@ -2630,31 +2382,6 @@ const TechnicalIndicatorChart: React.FC<{
     );
   };
   
-  // 데이터가 유효하지 않은 경우 에러 메시지 표시 (indicators는 선택사항으로 변경)
-  if (!data || !data.dates || data.dates.length === 0 || !data.candle_data || data.candle_data.length === 0) {
-    return (
-      <div style={{ 
-        width: '100%', 
-        height: `${height}px`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#f8f9fa',
-        border: '2px dashed #dee2e6',
-        borderRadius: '8px',
-        color: '#6c757d'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2em', marginBottom: '0.5em' }}>📊</div>
-          <div>차트 데이터를 처리하는 중입니다...</div>
-          <div style={{ fontSize: '0.8em', marginTop: '0.5em', color: '#999' }}>
-            날짜: {data?.dates?.length || 0}개 | 캔들: {data?.candle_data?.length || 0}개 | 지표: {data?.indicators?.length || 0}개
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={{ width: '100%' }}>
       {/* Y축 라벨 */}
@@ -2851,39 +2578,3 @@ export default function EnhancedChartPairRenderer(props: { components: MessageCo
   
   return <ChartPairRenderer components={props.components} />;
 } 
-
-// 지표별 색상을 반환하는 함수
-function getIndicatorColor(indicatorName: string): string {
-  const colorMap: { [key: string]: string } = {
-    'rsi': '#ff6b6b',
-    'macd': '#4ecdc4',
-    'macd_signal': '#45b7d1',
-    'macd_histogram': '#f9ca24',
-    'sma_20': '#6c5ce7',
-    'sma_60': '#a29bfe',
-    'ema_12': '#fd79a8',
-    'ema_26': '#fdcb6e',
-    'bollinger_upper': '#00b894',
-    'bollinger_middle': '#00cec9',
-    'bollinger_lower': '#55a3ff',
-    'adx': '#e17055',
-    'adx_plus_di': '#00b894',
-    'adx_minus_di': '#d63031',
-    'supertrend': '#74b9ff',
-    'adr': '#fd79a8',
-    'stochastic_k': '#a29bfe',
-    'stochastic_d': '#6c5ce7'
-  };
-  
-  return colorMap[indicatorName] || '#74b9ff';
-}
-
-// 지표 타입을 반환하는 함수
-function getIndicatorType(indicatorName: string): string {
-  const typeMap: { [key: string]: string } = {
-    'macd_histogram': 'histogram',
-    'volume': 'histogram'
-  };
-  
-  return typeMap[indicatorName] || 'line';
-}

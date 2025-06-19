@@ -26,10 +26,6 @@ from stockeasy.models.agent_io import (
 from common.models.token_usage import ProjectType
 from common.services.agent_llm import get_agent_llm
 from common.core.config import settings
-from common.utils.util import (
-    safe_float, safe_int, safe_price_float, safe_series_to_list,
-    safe_float_or_none, safe_int_or_none
-)
 
 
 class TechnicalAnalyzerAgent(BaseAgent):
@@ -98,6 +94,12 @@ class TechnicalAnalyzerAgent(BaseAgent):
                 self._add_error(state, "종목코드가 필요합니다.")
                 return state
             
+            # 기술적 분석 데이터 요구사항 확인
+            data_requirements = state.get("question_analysis", {}).get("data_requirements", {})
+            if not data_requirements.get("technical_analysis_needed", False):
+                logger.info("기술적 분석이 필요하지 않습니다. 건너뜁니다.")
+                return state
+            
             # 사용자 컨텍스트 추출
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
@@ -110,37 +112,6 @@ class TechnicalAnalyzerAgent(BaseAgent):
                     stock_code, stock_name, query, user_id
                 )
             
-            # 차트 컴포넌트 생성 및 스트리밍 전송
-            preliminary_components = await self._create_preliminary_chart_components(
-                technical_analysis_result, stock_code, stock_name
-            )
-            
-            # preliminary_chart_callback으로 즉시 전송
-            send_preliminary_chart = state.get("send_preliminary_chart")
-            logger.info(f"preliminary_chart 전송 시작: send_preliminary_chart={send_preliminary_chart is not None}, preliminary_components={len(preliminary_components) if preliminary_components else 0}개")
-            
-            if send_preliminary_chart and preliminary_components:
-                try:
-                    message = f"📊 {stock_name}의 기술적 분석 차트가 준비되었습니다. 추가 분석을 진행하는 동안 차트를 먼저 확인해보세요."
-                    elapsed_time = (datetime.now() - start_time).total_seconds()
-                    
-                    # preliminary_chart_callback 호출 (event: preliminary_chart 형태로 전송)
-                    success = await send_preliminary_chart(preliminary_components, message, elapsed_time)
-                    
-                    if success:
-                        logger.info(f"preliminary_chart 이벤트 전송 완료: {stock_name}({stock_code})")
-                    else:
-                        logger.warning(f"preliminary_chart 이벤트 전송 실패: {stock_name}({stock_code})")
-                    
-                except Exception as stream_error:
-                    logger.error(f"preliminary_chart 이벤트 전송 중 오류: {str(stream_error)}", exc_info=True)
-                    # 전송 실패해도 계속 진행
-            else:
-                if not send_preliminary_chart:
-                    logger.warning("send_preliminary_chart 콜백 함수가 None입니다.")
-                if not preliminary_components:
-                    logger.warning("preliminary_components가 비어있습니다.")
-            
             # 결과를 상태에 저장
             state["agent_results"] = state.get("agent_results", {})
             state["agent_results"]["technical_analyzer"] = {
@@ -149,7 +120,6 @@ class TechnicalAnalyzerAgent(BaseAgent):
                 "data": technical_analysis_result,
                 "error": None,
                 "execution_time": (datetime.now() - start_time).total_seconds(),
-                "preliminary_sent": bool(send_preliminary_chart and preliminary_components),
                 "metadata": {
                     "stock_code": stock_code,
                     "stock_name": stock_name,
@@ -894,7 +864,24 @@ class TechnicalAnalyzerAgent(BaseAgent):
             if not chart_data:
                 return pd.DataFrame()
             
-            # 공통 유틸리티 함수 사용 (중복 제거)
+            # 안전한 값 변환 함수들
+            def safe_float(value, default=0.0):
+                """안전한 float 변환"""
+                if value is None or value == '':
+                    return default
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    return default
+            
+            def safe_int(value, default=0):
+                """안전한 int 변환"""
+                if value is None or value == '':
+                    return default
+                try:
+                    return int(value)
+                except (ValueError, TypeError):
+                    return default
             
             # 데이터 변환
             df_data = []
@@ -991,14 +978,21 @@ class TechnicalAnalyzerAgent(BaseAgent):
             # 슈퍼트렌드 계산
             supertrend_values = self._calculate_supertrend(high, low, close) if len(close) >= 14 else {}
             
-            # 공통 유틸리티 함수 사용
+            # 안전한 float 변환 함수
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None:
+                    return None
+                if pd.isna(value):  # pandas isna로 확인
+                    return None
+                return float(value)
             
             indicators = {
-                "sma_20": safe_float_or_none(sma_20),
-                "sma_60": safe_float_or_none(sma_60),
-                "ema_12": safe_float_or_none(ema_12),
-                "ema_26": safe_float_or_none(ema_26),
-                "rsi": safe_float_or_none(rsi),
+                "sma_20": safe_float(sma_20),
+                "sma_60": safe_float(sma_60),
+                "ema_12": safe_float(ema_12),
+                "ema_26": safe_float(ema_26),
+                "rsi": safe_float(rsi),
                 "macd": macd_values.get("macd"),
                 "macd_signal": macd_values.get("signal"),
                 "macd_histogram": macd_values.get("histogram"),
@@ -1044,6 +1038,12 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _calculate_macd(self, close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Dict[str, Optional[float]]:
         """MACD 지표를 계산합니다."""
         try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
             ema_fast = close.ewm(span=fast).mean()
             ema_slow = close.ewm(span=slow).mean()
             macd = ema_fast - ema_slow
@@ -1051,9 +1051,9 @@ class TechnicalAnalyzerAgent(BaseAgent):
             macd_histogram = macd - macd_signal
             
             return {
-                "macd": safe_float_or_none(macd.iloc[-1]),
-                "signal": safe_float_or_none(macd_signal.iloc[-1]),
-                "histogram": safe_float_or_none(macd_histogram.iloc[-1])
+                "macd": safe_float(macd.iloc[-1]),
+                "signal": safe_float(macd_signal.iloc[-1]),
+                "histogram": safe_float(macd_histogram.iloc[-1])
             }
         except:
             return {"macd": None, "signal": None, "histogram": None}
@@ -1061,6 +1061,12 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _calculate_bollinger_bands(self, close: pd.Series, period: int = 20, std_dev: int = 2) -> Dict[str, Optional[float]]:
         """볼린저 밴드를 계산합니다."""
         try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
             sma = close.rolling(window=period).mean()
             std = close.rolling(window=period).std()
             
@@ -1068,9 +1074,9 @@ class TechnicalAnalyzerAgent(BaseAgent):
             lower = sma - (std * std_dev)
             
             return {
-                "upper": safe_float_or_none(upper.iloc[-1]),
-                "middle": safe_float_or_none(sma.iloc[-1]),
-                "lower": safe_float_or_none(lower.iloc[-1])
+                "upper": safe_float(upper.iloc[-1]),
+                "middle": safe_float(sma.iloc[-1]),
+                "lower": safe_float(lower.iloc[-1])
             }
         except:
             return {"upper": None, "middle": None, "lower": None}
@@ -1078,6 +1084,12 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _calculate_stochastic(self, high: pd.Series, low: pd.Series, close: pd.Series, k_period: int = 14, d_period: int = 3) -> Dict[str, Optional[float]]:
         """스토캐스틱 지표를 계산합니다."""
         try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
             lowest_low = low.rolling(window=k_period).min()
             highest_high = high.rolling(window=k_period).max()
             
@@ -1085,8 +1097,8 @@ class TechnicalAnalyzerAgent(BaseAgent):
             d_percent = k_percent.rolling(window=d_period).mean()
             
             return {
-                "k": safe_float_or_none(k_percent.iloc[-1]),
-                "d": safe_float_or_none(d_percent.iloc[-1])
+                "k": safe_float(k_percent.iloc[-1]),
+                "d": safe_float(d_percent.iloc[-1])
             }
         except:
             return {"k": None, "d": None}
@@ -1094,13 +1106,19 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _calculate_adx(self, high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> Dict[str, Optional[float]]:
         """ADX 지표를 계산합니다."""
         try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
             # ADX 시계열 데이터 계산
             adx_series = self._calculate_adx_series(high, low, close, period)
             
             return {
-                "adx": safe_float_or_none(adx_series["adx"].iloc[-1]),
-                "plus_di": safe_float_or_none(adx_series["plus_di"].iloc[-1]),
-                "minus_di": safe_float_or_none(adx_series["minus_di"].iloc[-1])
+                "adx": safe_float(adx_series["adx"].iloc[-1]),
+                "plus_di": safe_float(adx_series["plus_di"].iloc[-1]),
+                "minus_di": safe_float(adx_series["minus_di"].iloc[-1])
             }
         except:
             return {"adx": None, "plus_di": None, "minus_di": None}
@@ -1108,12 +1126,18 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _calculate_adr(self, close: pd.Series, period: int = 20) -> Dict[str, Optional[float]]:
         """ADR 지표를 계산합니다."""
         try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
             # ADR 시계열 데이터 계산
             adr_series = self._calculate_adr_series(close, period)
             
             return {
-                "adr": safe_float_or_none(adr_series["adr"].iloc[-1]),
-                "adr_ma": safe_float_or_none(adr_series["adr_ma"].iloc[-1])
+                "adr": safe_float(adr_series["adr"].iloc[-1]),
+                "adr_ma": safe_float(adr_series["adr_ma"].iloc[-1])
             }
         except:
             return {"adr": None, "adr_ma": None}
@@ -1121,12 +1145,18 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _calculate_supertrend(self, high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14, multiplier: float = 3.0) -> Dict[str, Optional[float]]:
         """슈퍼트렌드 지표를 계산합니다."""
         try:
+            def safe_float(value):
+                """numpy 타입을 안전하게 Python float로 변환"""
+                if value is None or pd.isna(value):
+                    return None
+                return float(value)
+            
             # 슈퍼트렌드 시계열 데이터 계산
             supertrend_series = self._calculate_supertrend_series(high, low, close, period, multiplier)
             
             return {
-                "supertrend": safe_float_or_none(supertrend_series["supertrend"].iloc[-1]),
-                "direction": safe_float_or_none(supertrend_series["direction"].iloc[-1])
+                "supertrend": safe_float(supertrend_series["supertrend"].iloc[-1]),
+                "direction": safe_float(supertrend_series["direction"].iloc[-1])
             }
         except:
             return {"supertrend": None, "direction": None}
@@ -1171,92 +1201,79 @@ class TechnicalAnalyzerAgent(BaseAgent):
             chart_start_idx = max(0, len(df) - chart_length)
             
             # 날짜 인덱스를 문자열로 변환 (차트 표시 구간만)
-            # JSON 직렬화 시 ISO 형식 변환을 방지하기 위해 명시적으로 문자열 처리
-            dates = []
-            for date in df.index[chart_start_idx:]:
-                if hasattr(date, 'strftime'):
-                    dates.append(date.strftime('%Y-%m-%d'))
-                elif isinstance(date, str):
-                    # 이미 문자열인 경우 ISO 형식을 YYYY-MM-DD로 변환
-                    if 'T' in date:
-                        dates.append(date.split('T')[0])
-                    else:
-                        dates.append(date)
-                else:
-                    dates.append(str(date))
+            dates = [date.strftime('%Y-%m-%d') for date in df.index[chart_start_idx:]]
             
             # 안전한 변환 함수 (차트 표시 구간만 추출)
-            def safe_chart_series_to_list(series):
+            def safe_series_to_list(series):
                 """pandas Series를 안전하게 리스트로 변환 (차트 구간만)"""
                 if series is None or series.empty:
                     return []
                 chart_series = series.iloc[chart_start_idx:]
-                return [safe_float_or_none(x) for x in chart_series]
+                return [float(x) if not pd.isna(x) else None for x in chart_series]
             
             chart_data = {
                 "dates": dates,
-                "open": safe_chart_series_to_list(df['open']),  # open 데이터 추가
-                "close": safe_chart_series_to_list(close),
-                "high": safe_chart_series_to_list(high),
-                "low": safe_chart_series_to_list(low),
-                "volume": safe_chart_series_to_list(volume)
+                "close": safe_series_to_list(close),
+                "high": safe_series_to_list(high),
+                "low": safe_series_to_list(low),
+                "volume": safe_series_to_list(volume)
             }
             
             # 이동평균선
             if len(close) >= 20:
                 sma_20 = close.rolling(window=20).mean()
-                chart_data["sma_20"] = safe_chart_series_to_list(sma_20)
+                chart_data["sma_20"] = safe_series_to_list(sma_20)
             
             if len(close) >= 60:
                 sma_60 = close.rolling(window=60).mean()
-                chart_data["sma_60"] = safe_chart_series_to_list(sma_60)
+                chart_data["sma_60"] = safe_series_to_list(sma_60)
             
             # 지수이동평균
             if len(close) >= 12:
                 ema_12 = close.ewm(span=12).mean()
-                chart_data["ema_12"] = safe_chart_series_to_list(ema_12)
+                chart_data["ema_12"] = safe_series_to_list(ema_12)
             
             if len(close) >= 26:
                 ema_26 = close.ewm(span=26).mean()
-                chart_data["ema_26"] = safe_chart_series_to_list(ema_26)
+                chart_data["ema_26"] = safe_series_to_list(ema_26)
             
             # RSI
             if len(close) >= 14:
                 rsi_series = self._calculate_rsi_series(close)
-                chart_data["rsi"] = safe_chart_series_to_list(rsi_series)
+                chart_data["rsi"] = safe_series_to_list(rsi_series)
             
             # MACD
             if len(close) >= 26:
                 macd_series = self._calculate_macd_series(close)
-                chart_data["macd"] = safe_chart_series_to_list(macd_series["macd"])
-                chart_data["macd_signal"] = safe_chart_series_to_list(macd_series["signal"])
-                chart_data["macd_histogram"] = safe_chart_series_to_list(macd_series["histogram"])
+                chart_data["macd"] = safe_series_to_list(macd_series["macd"])
+                chart_data["macd_signal"] = safe_series_to_list(macd_series["signal"])
+                chart_data["macd_histogram"] = safe_series_to_list(macd_series["histogram"])
             
             # 볼린저 밴드
             if len(close) >= 20:
                 bollinger_series = self._calculate_bollinger_bands_series(close)
-                chart_data["bollinger_upper"] = safe_chart_series_to_list(bollinger_series["upper"])
-                chart_data["bollinger_middle"] = safe_chart_series_to_list(bollinger_series["middle"])
-                chart_data["bollinger_lower"] = safe_chart_series_to_list(bollinger_series["lower"])
+                chart_data["bollinger_upper"] = safe_series_to_list(bollinger_series["upper"])
+                chart_data["bollinger_middle"] = safe_series_to_list(bollinger_series["middle"])
+                chart_data["bollinger_lower"] = safe_series_to_list(bollinger_series["lower"])
             
             # ADX
             if len(close) >= 14:
                 adx_series = self._calculate_adx_series(high, low, close)
-                chart_data["adx"] = safe_chart_series_to_list(adx_series["adx"])
-                chart_data["adx_plus_di"] = safe_chart_series_to_list(adx_series["plus_di"])
-                chart_data["adx_minus_di"] = safe_chart_series_to_list(adx_series["minus_di"])
+                chart_data["adx"] = safe_series_to_list(adx_series["adx"])
+                chart_data["adx_plus_di"] = safe_series_to_list(adx_series["plus_di"])
+                chart_data["adx_minus_di"] = safe_series_to_list(adx_series["minus_di"])
             
             # ADR
             if len(close) >= 20:
                 adr_series = self._calculate_adr_series(close)
-                chart_data["adr"] = safe_chart_series_to_list(adr_series["adr"])
-                chart_data["adr_ma"] = safe_chart_series_to_list(adr_series["adr_ma"])
+                chart_data["adr"] = safe_series_to_list(adr_series["adr"])
+                chart_data["adr_ma"] = safe_series_to_list(adr_series["adr_ma"])
             
             # 슈퍼트렌드 (14일 기본값 사용)
             if len(close) >= 14:
                 supertrend_series = self._calculate_supertrend_series(high, low, close)
-                chart_data["supertrend"] = safe_chart_series_to_list(supertrend_series["supertrend"])
-                chart_data["supertrend_direction"] = safe_chart_series_to_list(supertrend_series["direction"])
+                chart_data["supertrend"] = safe_series_to_list(supertrend_series["supertrend"])
+                chart_data["supertrend_direction"] = safe_series_to_list(supertrend_series["direction"])
             
             logger.info(f"차트용 지표 데이터 생성 완료: 전체 {len(df)}일 중 최근 {len(dates)}일 표시")
             return chart_data
@@ -2755,327 +2772,3 @@ ADR (상승일/하락일 비율):
         except Exception as e:
             logger.error(f"투자 권고사항 생성 중 오류: {str(e)}")
             return [f"{stock_name}에 대한 기술적 분석을 참고하여 신중한 투자 결정을 내리시기 바랍니다."] 
-
-    async def _create_preliminary_chart_components(
-        self,
-        technical_analysis_result: TechnicalAnalysisResult,
-        stock_code: str,
-        stock_name: str
-    ) -> List[Dict[str, Any]]:
-        """
-        기술적 분석 결과를 기반으로 preliminary chart 컴포넌트를 생성합니다.
-        
-        Args:
-            technical_analysis_result: 기술적 분석 결과
-            stock_code: 종목 코드
-            stock_name: 종목명
-            
-        Returns:
-            차트 컴포넌트 리스트
-        """
-        try:
-            components = []
-            
-            # 1. 헤딩 컴포넌트
-            components.append({
-                "type": "heading",
-                "level": 2,
-                "content": f"📊 {stock_name}({stock_code}) 실시간 기술적 분석"
-            })
-            
-            # 2. 설명 paragraph 컴포넌트
-            components.append({
-                "type": "paragraph",
-                "content": "기술적 분석 차트가 준비되었습니다. 추가 분석이 진행되는 동안 먼저 확인해보세요."
-            })
-            
-            # 3. 차트 데이터 검증 및 준비
-            technical_indicators = technical_analysis_result.get("technical_indicators", {})
-            chart_indicators_data = technical_analysis_result.get("chart_indicators_data", {})
-            
-            # 데이터 유효성 검증
-            if not chart_indicators_data:
-                logger.warning(f"차트 지표 데이터가 없습니다: {stock_name}({stock_code})")
-                components.append({
-                    "type": "paragraph",
-                    "content": "⚠️ 차트 데이터를 불러오는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
-                })
-                return components
-            
-            # 날짜 데이터 검증 및 정리
-            dates = chart_indicators_data.get("dates", [])
-            if not dates:
-                logger.warning(f"날짜 데이터가 없습니다: {stock_name}({stock_code})")
-                return components
-            
-            # 날짜 형식 통일 (YYYY-MM-DD 보장)
-            normalized_dates = []
-            for date in dates:
-                if isinstance(date, str):
-                    if 'T' in date:
-                        # ISO 형식인 경우 YYYY-MM-DD로 변환
-                        normalized_dates.append(date.split('T')[0])
-                    else:
-                        normalized_dates.append(date)
-                else:
-                    normalized_dates.append(str(date))
-            
-            # 정규화된 날짜로 업데이트
-            chart_indicators_data_normalized = chart_indicators_data.copy()
-            chart_indicators_data_normalized["dates"] = normalized_dates
-            
-            logger.info(f"차트 데이터 검증 완료: {stock_name}({stock_code}) - 날짜 {len(normalized_dates)}개, 지표 {len([k for k in chart_indicators_data.keys() if k != 'dates'])}개")
-            
-            if chart_indicators_data_normalized:
-                # 캔들 데이터 준비 (가격 정보)
-                candle_data = []
-                if all(k in chart_indicators_data_normalized for k in ['close', 'high', 'low', 'volume']):
-                    # 공통 유틸리티 함수 사용
-                    
-                    for i, date in enumerate(normalized_dates):
-                        try:
-                            # 인덱스 범위 확인
-                            if (i >= len(chart_indicators_data_normalized['close']) or 
-                                i >= len(chart_indicators_data_normalized['high']) or 
-                                i >= len(chart_indicators_data_normalized['low']) or 
-                                i >= len(chart_indicators_data_normalized['volume'])):
-                                logger.warning(f"캔들 데이터 인덱스 초과 (인덱스 {i}): 날짜={date}")
-                                continue
-                            
-                            # open 데이터 처리 (이제 항상 존재함)
-                            open_data = chart_indicators_data_normalized['open']
-                            open_value = safe_price_float(open_data[i])
-                            
-                            candle_data.append({
-                                "time": date,
-                                "open": open_value,
-                                "high": safe_price_float(chart_indicators_data_normalized['high'][i]),
-                                "low": safe_price_float(chart_indicators_data_normalized['low'][i]),
-                                "close": safe_price_float(chart_indicators_data_normalized['close'][i]),
-                                "volume": safe_price_float(chart_indicators_data_normalized['volume'][i])
-                            })
-                        except (IndexError, KeyError) as e:
-                            logger.warning(f"캔들 데이터 생성 중 오류 (인덱스 {i}): {e}")
-                            continue
-                    
-                    logger.info(f"[preliminary_chart] 캔들 데이터 생성 완료: {len(candle_data)}개")
-                
-                # 실제 기술적 분석 섹션과 동일한 구조로 3개 차트 생성
-                from .response_formatter_agent import create_price_chart, create_technical_indicator_chart
-                
-                # 1. 주가차트 분석: 캔들데이터 + 거래량 + 지지/저항
-                price_chart_component = create_price_chart(
-                    symbol=stock_code,
-                    name=stock_name,
-                    title=f"{stock_name} 주가 및 거래량",
-                    candle_data=candle_data if candle_data else None,
-                    volume_data=[{"time": cd["time"], "value": cd["volume"], "color": "#94a3b8"} for cd in candle_data] if candle_data else None,
-                    period="1y",
-                    metadata={
-                        "current_price": technical_analysis_result.get("current_price"),
-                        "dates_count": len(normalized_dates)
-                    }
-                )
-                components.append(price_chart_component)
-                
-                # 2. 추세추종 지표 분석: ADX, +DI, -DI, 슈퍼트렌드
-                trend_indicators = []
-                
-                # ADX 지표들
-                adx_data = chart_indicators_data_normalized.get("adx", [])
-                if adx_data and any(x is not None for x in adx_data):
-                    processed_adx = [safe_float(x) for x in adx_data]
-                    trend_indicators.append({
-                        "name": "ADX",
-                        "data": processed_adx,
-                        "color": "#3b82f6",  # 파란색
-                        "chart_type": "line",
-                        "y_axis_id": "secondary",
-                        "line_style": "solid"
-                    })
-                
-                adx_plus_di_data = chart_indicators_data_normalized.get("adx_plus_di", [])
-                if adx_plus_di_data and any(x is not None for x in adx_plus_di_data):
-                    processed_plus_di = [safe_float(x) for x in adx_plus_di_data]
-                    trend_indicators.append({
-                        "name": "+DI",
-                        "data": processed_plus_di,
-                        "color": "#10b981",  # 녹색
-                        "chart_type": "line",
-                        "y_axis_id": "secondary",
-                        "line_style": "solid"
-                    })
-                
-                adx_minus_di_data = chart_indicators_data_normalized.get("adx_minus_di", [])
-                if adx_minus_di_data and any(x is not None for x in adx_minus_di_data):
-                    processed_minus_di = [safe_float(x) for x in adx_minus_di_data]
-                    trend_indicators.append({
-                        "name": "-DI",
-                        "data": processed_minus_di,
-                        "color": "#ef4444",  # 빨간색
-                        "chart_type": "line",
-                        "y_axis_id": "secondary",
-                        "line_style": "solid"
-                    })
-                
-                # 슈퍼트렌드
-                supertrend_data = chart_indicators_data_normalized.get("supertrend", [])
-                supertrend_direction_data = chart_indicators_data_normalized.get("supertrend_direction", [])
-                
-                if supertrend_data and any(x is not None for x in supertrend_data):
-                    processed_supertrend_values = [safe_float(x) for x in supertrend_data]
-                    
-                    # 방향 데이터 처리
-                    processed_supertrend_directions = []
-                    if supertrend_direction_data:
-                        for direction in supertrend_direction_data:
-                            if direction == 1:
-                                processed_supertrend_directions.append(1.0)
-                            elif direction == -1:
-                                processed_supertrend_directions.append(-1.0)
-                            else:
-                                processed_supertrend_directions.append(0.0)
-                    
-                    trend_indicators.append({
-                        "name": "슈퍼트렌드",
-                        "data": processed_supertrend_values,
-                        "values": processed_supertrend_values,
-                        "directions": processed_supertrend_directions,
-                        "color": "#8b5cf6",  # 보라색
-                        "chart_type": "line",
-                        "y_axis_id": "primary",
-                        "line_style": "solid"
-                    })
-                
-                if trend_indicators:
-                    trend_y_axis_configs = {
-                        "primary": {
-                            "title": "가격 (원)",
-                            "position": "left",
-                            "color": "#3b82f6"
-                        },
-                        "secondary": {
-                            "title": "ADX/DI 값",
-                            "position": "right",
-                            "color": "#8b5cf6"
-                        }
-                    }
-                    
-                    trend_chart_component = create_technical_indicator_chart(
-                        symbol=stock_code,
-                        name=stock_name,
-                        dates=normalized_dates,
-                        indicators=trend_indicators,
-                        title=f"{stock_name} 추세추종 지표",
-                        candle_data=candle_data if candle_data else None,
-                        y_axis_configs=trend_y_axis_configs,
-                        period="1y",
-                        metadata={
-                            "data_info": {
-                                "dates_count": len(normalized_dates),
-                                "indicators_count": len(trend_indicators),
-                                "price_data_available": bool(candle_data)
-                            }
-                        }
-                    )
-                    components.append(trend_chart_component)
-                
-                # 3. 모멘텀 지표 분석: RSI, MACD
-                momentum_indicators = []
-                
-                # RSI
-                rsi_data = chart_indicators_data_normalized.get("rsi", [])
-                if rsi_data and any(x is not None for x in rsi_data):
-                    processed_rsi = [safe_float(x) for x in rsi_data]
-                    momentum_indicators.append({
-                        "name": "RSI(14)",
-                        "data": processed_rsi,
-                        "color": "#ef4444",  # 빨간색
-                        "chart_type": "line",
-                        "y_axis_id": "secondary",
-                        "line_style": "solid"
-                    })
-                
-                # MACD
-                macd_data = chart_indicators_data_normalized.get("macd", [])
-                if macd_data and any(x is not None for x in macd_data):
-                    processed_macd = [safe_float(x) for x in macd_data]
-                    momentum_indicators.append({
-                        "name": "MACD",
-                        "data": processed_macd,
-                        "color": "#10b981",  # 녹색
-                        "chart_type": "line",
-                        "y_axis_id": "secondary",
-                        "line_style": "solid"
-                    })
-                
-                # MACD Signal
-                macd_signal_data = chart_indicators_data_normalized.get("macd_signal", [])
-                if macd_signal_data and any(x is not None for x in macd_signal_data):
-                    processed_macd_signal = [safe_float(x) for x in macd_signal_data]
-                    momentum_indicators.append({
-                        "name": "MACD Signal",
-                        "data": processed_macd_signal,
-                        "color": "#f59e0b",  # 주황색
-                        "chart_type": "line",
-                        "y_axis_id": "secondary",
-                        "line_style": "dashed"
-                    })
-                
-                if momentum_indicators:
-                    momentum_y_axis_configs = {
-                        "primary": {
-                            "title": "가격 (원)",
-                            "position": "left",
-                            "color": "#3b82f6"
-                        },
-                        "secondary": {
-                            "title": "모멘텀 지표값",
-                            "position": "right",
-                            "color": "#ef4444"
-                        }
-                    }
-                    
-                    momentum_chart_component = create_technical_indicator_chart(
-                        symbol=stock_code,
-                        name=stock_name,
-                        dates=normalized_dates,
-                        indicators=momentum_indicators,
-                        title=f"{stock_name} 모멘텀 지표",
-                        candle_data=candle_data if candle_data else None,
-                        y_axis_configs=momentum_y_axis_configs,
-                        period="1y",
-                        metadata={
-                            "data_info": {
-                                "dates_count": len(normalized_dates),
-                                "indicators_count": len(momentum_indicators),
-                                "price_data_available": bool(candle_data)
-                            }
-                        }
-                    )
-                    components.append(momentum_chart_component)
-                
-                logger.info(f"[preliminary_chart] 차트 생성 완료 - 주가차트: 1개, 추세지표: {len(trend_indicators)}개, 모멘텀지표: {len(momentum_indicators)}개")
-            
-            # # 6. 매매신호 요약 컴포넌트 (선택적)
-            # trading_signals = technical_analysis_result.get("trading_signals", {})
-            # if trading_signals:
-            #     overall_signal = trading_signals.get("overall_signal", "중립")
-            #     confidence = trading_signals.get("confidence", 0)
-            #     confidence_pct = int(confidence * 100) if isinstance(confidence, float) else confidence
-                
-            #     components.append({
-            #         "type": "paragraph",
-            #         "content": f"**매매신호**: {overall_signal} (신뢰도: {confidence_pct}%)"
-            #     })
-            
-            logger.info(f"preliminary_chart 컴포넌트 생성 완료: {stock_name}({stock_code}), {len(components)}개 컴포넌트")
-            return components
-            
-        except Exception as e:
-            logger.error(f"preliminary_chart 컴포넌트 생성 중 오류: {str(e)}")
-            # 에러 발생 시 기본 메시지 컴포넌트 반환
-            return [{
-                "type": "paragraph",
-                "content": f"⚠️ {stock_name}({stock_code}) 차트 생성 중 오류가 발생했습니다. 다시 시도해주세요."
-            }]

@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Optional, Callable, AsyncGenerator
 import asyncio
 
 from langchain_core.messages import HumanMessage, AIMessage
-from common.utils.util import remove_json_block
+from common.utils.util import remove_json_block, safe_int, safe_float
 from common.services.agent_llm import get_agent_llm, get_llm_for_agent
 from stockeasy.prompts.response_formatter_prompts import FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT, FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT2, format_response_formatter_prompt
 from langchain_core.output_parsers import StrOutputParser
@@ -130,19 +130,10 @@ class ResponseFormatterAgent(BaseAgent):
         # OHLCV 데이터 변환
         candle_data = []
         
-        # 안전한 int 변환 함수
-        def safe_int(value, default=0):
-            if value is None or value == '':
-                return default
-            try:
-                return int(float(value))  # float로 먼저 변환 후 int로
-            except (ValueError, TypeError):
-                return default
+        # 공통 유틸리티 함수 사용
         
         if isinstance(chart_data, list) and chart_data:
             for i, item in enumerate(chart_data):
-                if i < 3:  # 처음 3개만 로깅
-                    logger.info(f"[DEBUG] 데이터 항목 {i}: {item}")
                 if isinstance(item, dict):
                     # timestamp를 date로 변환하거나 date 필드 사용
                     time_value = item.get("date") or item.get("timestamp", "")
@@ -159,8 +150,6 @@ class ResponseFormatterAgent(BaseAgent):
                         "volume": safe_int(item.get("volume", 0))
                     }
                     candle_data.append(candle_item)
-        else:
-            logger.warning(f"[DEBUG] chart_data가 리스트가 아니거나 비어있음: {type(chart_data)}")
         
         # 지지선/저항선 데이터 변환
         support_lines = []
@@ -169,9 +158,6 @@ class ResponseFormatterAgent(BaseAgent):
         if chart_patterns:
             support_levels = chart_patterns.get("support_levels", [])
             resistance_levels = chart_patterns.get("resistance_levels", [])
-            
-            logger.info(f"[DEBUG] support_levels: {support_levels}")
-            logger.info(f"[DEBUG] resistance_levels: {resistance_levels}")
             
             for level in support_levels:
                 if level is not None:
@@ -213,7 +199,6 @@ class ResponseFormatterAgent(BaseAgent):
             }
         )
         
-        #logger.info(f"[DEBUG] 생성된 price_chart_component: {price_chart_component}")
         return price_chart_component
     
     def _create_trend_following_chart_component_directly(self, tech_agent_result: Dict[str, Any], stock_code: str, stock_name: str) -> Dict[str, Any]:
@@ -504,8 +489,8 @@ class ResponseFormatterAgent(BaseAgent):
         # 1. RSI (Relative Strength Index) - 과매수/과매도 구간
         rsi_data = chart_indicators_data.get("rsi", [])
         if rsi_data and any(x is not None for x in rsi_data):
-            # None 값을 0으로 치환
-            processed_rsi = [float(x) if x is not None else 0.0 for x in rsi_data]
+            # None 값을 0으로 치환 (공통 함수 사용)
+            processed_rsi = [safe_float(x) for x in rsi_data]
             indicators.append({
                 "name": "RSI (14일)",
                 "data": processed_rsi,
@@ -514,7 +499,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "y_axis_id": "primary",
                 "line_style": "solid"
             })
-            logger.info(f"[모멘텀지표차트] RSI 지표 추가 완료 - 데이터 포인트: {len(processed_rsi)}개")
+            #logger.info(f"[모멘텀지표차트] RSI 지표 추가 완료 - 데이터 포인트: {len(processed_rsi)}개")
         
         # 2. MACD Line
         macd_line_data = chart_indicators_data.get("macd_line", [])
@@ -528,7 +513,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "y_axis_id": "hidden",  # 범용 hidden 축 사용
                 "line_style": "solid"
             })
-            logger.info(f"[모멘텀지표차트] MACD Line 지표 추가 완료 - 데이터 포인트: {len(processed_macd_line)}개")
+            #logger.info(f"[모멘텀지표차트] MACD Line 지표 추가 완료 - 데이터 포인트: {len(processed_macd_line)}개")
         
         # 3. MACD Signal Line
         macd_signal_data = chart_indicators_data.get("macd_signal", [])
@@ -542,7 +527,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "y_axis_id": "hidden",  # 범용 hidden 축 사용
                 "line_style": "dashed"
             })
-            logger.info(f"[모멘텀지표차트] MACD Signal 지표 추가 완료 - 데이터 포인트: {len(processed_macd_signal)}개")
+            #logger.info(f"[모멘텀지표차트] MACD Signal 지표 추가 완료 - 데이터 포인트: {len(processed_macd_signal)}개")
         
         # 4. MACD Histogram
         macd_histogram_data = chart_indicators_data.get("macd_histogram", [])
@@ -556,7 +541,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "y_axis_id": "hidden",  # 범용 hidden 축 사용
                 "line_style": "solid"
             })
-            logger.info(f"[모멘텀지표차트] MACD Histogram 지표 추가 완료 - 데이터 포인트: {len(processed_macd_histogram)}개")
+            #logger.info(f"[모멘텀지표차트] MACD Histogram 지표 추가 완료 - 데이터 포인트: {len(processed_macd_histogram)}개")
         
         # 5. Stochastic %K
         stoch_k_data = chart_indicators_data.get("stoch_k", [])
@@ -570,7 +555,7 @@ class ResponseFormatterAgent(BaseAgent):
                 "y_axis_id": "primary",
                 "line_style": "solid"
             })
-            logger.info(f"[모멘텀지표차트] Stochastic %K 지표 추가 완료 - 데이터 포인트: {len(processed_stoch_k)}개")
+            #logger.info(f"[모멘텀지표차트] Stochastic %K 지표 추가 완료 - 데이터 포인트: {len(processed_stoch_k)}개")
         
         # 지표가 없는 경우 처리
         if not indicators:
@@ -635,7 +620,7 @@ class ResponseFormatterAgent(BaseAgent):
         
         # 캔들 데이터 변환 (price_chart_component_directly와 동일한 로직)
         candle_data = []
-        logger.info(f"[모멘텀지표차트] OHLCV 데이터 변환 시작")
+        #logger.info(f"[모멘텀지표차트] OHLCV 데이터 변환 시작")
         
         # 안전한 int 변환 함수
         def safe_int(value, default=0):
@@ -667,8 +652,7 @@ class ResponseFormatterAgent(BaseAgent):
                         "volume": safe_int(item.get("volume", 0))
                     }
                     candle_data.append(candle_item)
-                    if i < 3:  # 처음 3개만 로깅
-                        logger.info(f"[모멘텀지표차트] 캔들 데이터 추가: {candle_item}")
+                   
                 else:
                     if i < 3:  # 처음 3개만 로깅
                         logger.warning(f"[모멘텀지표차트] 유효하지 않은 데이터 항목 {i}: {item}")
@@ -686,7 +670,7 @@ class ResponseFormatterAgent(BaseAgent):
             "candle_data_count": len(candle_data)
         }
         
-        logger.info(f"[모멘텀지표차트] 캔들 데이터 개수: {len(candle_data)}")
+        #logger.info(f"[모멘텀지표차트] 캔들 데이터 개수: {len(candle_data)}")
         
         # 모멘텀 지표 차트 컴포넌트 생성
         momentum_chart = create_technical_indicator_chart(
@@ -710,7 +694,6 @@ class ResponseFormatterAgent(BaseAgent):
         반환값: 플레이스홀더가 있는 필드명 (없으면 None)
         """
         component_type = component.get("type")
-        logger.info(f"[DEBUG] _find_placeholder_in_component: type={component_type}")
         
         # 컴포넌트 타입별로 플레이스홀더 검색 필드 정의
         search_fields = {
@@ -722,32 +705,12 @@ class ResponseFormatterAgent(BaseAgent):
         }
         
         fields_to_search = search_fields.get(component_type, [])
-        logger.info(f"[DEBUG] 검색할 필드 목록: {fields_to_search}")
         
         for field in fields_to_search:
             field_value = component.get(field, "")
-            # 전체 내용을 로그로 출력하되, 너무 길면 앞뒤만 표시
-            if isinstance(field_value, str):
-                if len(field_value) > 200:
-                    truncated_value = f"{field_value[:100]}...{field_value[-100:]}"
-                    logger.info(f"[DEBUG] 필드 '{field}' 검사 중 (길이 {len(field_value)}): '{truncated_value}' (type: {type(field_value)})")
-                else:
-                    logger.info(f"[DEBUG] 필드 '{field}' 검사 중: '{field_value}' (type: {type(field_value)})")
-                
-                # 플레이스홀더 검색
-                if self.chart_placeholder in field_value:
-                    logger.info(f"[DEBUG] 플레이스홀더 발견! 필드: {field}, 전체 내용: '{field_value}'")
-                    return field
-                else:
-                    logger.info(f"[DEBUG] 필드 '{field}'에서 플레이스홀더 '{self.chart_placeholder}' 없음")
-            else:
-                logger.info(f"[DEBUG] 필드 '{field}' 검사 중: '{str(field_value)[:100]}...' (type: {type(field_value)})")
-                if isinstance(field_value, str):
-                    logger.info(f"[DEBUG] 필드 '{field}'에서 플레이스홀더 없음")
-                else:
-                    logger.info(f"[DEBUG] 필드 '{field}'는 문자열이 아님: {type(field_value)}")
+            if isinstance(field_value, str) and self.chart_placeholder in field_value:
+                return field
         
-        logger.info(f"[DEBUG] 컴포넌트에서 플레이스홀더를 찾지 못함")
         return None
     
     def _insert_price_chart_at_marker(self, components: List[Dict[str, Any]], price_chart_component: Dict[str, Any]) -> None:
@@ -755,59 +718,24 @@ class ResponseFormatterAgent(BaseAgent):
         컴포넌트 리스트에서 플레이스홀더를 찾아서 주가차트 컴포넌트로 교체합니다.
         다양한 컴포넌트 타입의 여러 필드에서 플레이스홀더를 검색합니다.
         """
-        logger.info(f"[DEBUG] _insert_price_chart_at_marker 시작")
-        logger.info(f"[DEBUG] 입력 컴포넌트 개수: {len(components)}")
-        logger.info(f"[DEBUG] 찾을 플레이스홀더: '{self.chart_placeholder}'")
-        
-        # 전체 컴포넌트에서 플레이스홀더 존재 여부 사전 확인
-        placeholder_exists = False
-        for idx, comp in enumerate(components):
-            comp_type = comp.get("type", "unknown")
-            if comp_type == "paragraph":
-                content = comp.get("content", "")
-                if self.chart_placeholder in content:
-                    placeholder_exists = True
-                    logger.info(f"[DEBUG] 컴포넌트 {idx} (paragraph)에서 플레이스홀더 발견: '{content[:100]}...'")
-            elif comp_type == "image":
-                url = comp.get("url", "")
-                if self.chart_placeholder in url:
-                    placeholder_exists = True
-                    logger.info(f"[DEBUG] 컴포넌트 {idx} (image)에서 플레이스홀더 발견: url='{url}'")
-        
-        if not placeholder_exists:
-            logger.warning(f"[DEBUG] 전체 컴포넌트에서 플레이스홀더 '{self.chart_placeholder}'를 찾을 수 없음")
-        
         marker_found = False
         for i, component in enumerate(components):
-            logger.info(f"[DEBUG] 컴포넌트 {i} 검사 중: type={component.get('type')}")
-            
             placeholder_field = self._find_placeholder_in_component(component)
-            logger.info(f"[DEBUG] 컴포넌트 {i} 플레이스홀더 필드 검색 결과: {placeholder_field}")
             
             if placeholder_field:
                 marker_found = True
                 component_type = component.get("type")
                 field_value = component.get(placeholder_field, "")
                 
-                logger.info(f"[DEBUG] 플레이스홀더 발견! 컴포넌트 {i}: type={component_type}, field={placeholder_field}")
-                logger.info(f"[DEBUG] 필드 값: '{field_value}'")
-                
                 if component_type == "paragraph" and placeholder_field == "content":
-                    logger.info(f"[DEBUG] paragraph 컴포넌트 텍스트 분리 처리 시작")
                     
                     # paragraph의 content는 텍스트 분리 후 재구성
                     parts = field_value.split(self.chart_placeholder)
                     before_text = parts[0].strip()
                     after_text = parts[1].strip() if len(parts) > 1 else ""
                     
-                    logger.info(f"[DEBUG] 텍스트 분리 결과:")
-                    logger.info(f"[DEBUG] - before_text: '{before_text}'")
-                    logger.info(f"[DEBUG] - after_text: '{after_text}'")
-                    logger.info(f"[DEBUG] - parts 개수: {len(parts)}")
-                    
                     # 원래 컴포넌트 제거
-                    removed_component = components.pop(i)
-                    logger.info(f"[DEBUG] 원본 컴포넌트 {i} 제거: {removed_component}")
+                    components.pop(i)
                     
                     insert_index = i
                     
@@ -815,66 +743,30 @@ class ResponseFormatterAgent(BaseAgent):
                     if before_text:
                         before_comp = create_paragraph({"content": before_text})
                         components.insert(insert_index, before_comp)
-                        logger.info(f"[DEBUG] before_text 컴포넌트 삽입 at {insert_index}: {before_comp}")
                         insert_index += 1
                     
                     # 주가차트 컴포넌트 삽입
                     components.insert(insert_index, price_chart_component)
-                    logger.info(f"[DEBUG] 주가차트 컴포넌트 삽입 at {insert_index}")
                     insert_index += 1
                     
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
                         after_comp = create_paragraph({"content": after_text})
                         components.insert(insert_index, after_comp)
-                        logger.info(f"[DEBUG] after_text 컴포넌트 삽입 at {insert_index}: {after_comp}")
-                    
-                    logger.info(f"[DEBUG] paragraph 처리 완료. 주가차트 컴포넌트를 {component_type}.{placeholder_field} 마커 위치에 삽입했습니다.")
                 
                 else:
-                    logger.info(f"[DEBUG] 비-paragraph 컴포넌트 전체 교체 처리")
-                    original_component = components[i]
                     components[i] = price_chart_component
-                    logger.info(f"[DEBUG] 컴포넌트 {i} 교체: {original_component} -> 주가차트")
-                    logger.info(f"[DEBUG] 주가차트 컴포넌트를 {component_type}.{placeholder_field} 마커 위치에 삽입했습니다.")
                 
                 break
         
         # 마커를 찾지 못한 경우 마지막에 추가
         if not marker_found:
             components.append(price_chart_component)
-            logger.warning("[DEBUG] 주가차트 플레이스홀더를 찾지 못해 섹션 마지막에 추가했습니다.")
-        
-        logger.info(f"[DEBUG] _insert_price_chart_at_marker 완료")
-        logger.info(f"[DEBUG] 최종 컴포넌트 개수: {len(components)}")
-        logger.info(f"[DEBUG] 마커 발견 여부: {marker_found}")
-        
-        # 최종 컴포넌트 리스트에서 플레이스홀더 잔존 여부 확인
-        remaining_placeholders = 0
-        for idx, comp in enumerate(components):
-            comp_type = comp.get("type", "unknown")
-            if comp_type == "paragraph":
-                content = comp.get("content", "")
-                if self.chart_placeholder in content:
-                    remaining_placeholders += 1
-                    logger.warning(f"[DEBUG] 처리 후에도 컴포넌트 {idx}에 플레이스홀더 잔존: '{content}'")
-            elif comp_type == "image":
-                url = comp.get("url", "")
-                if self.chart_placeholder in url:
-                    remaining_placeholders += 1
-                    logger.warning(f"[DEBUG] 처리 후에도 컴포넌트 {idx}에 플레이스홀더 잔존: url='{url}'")
-        
-        if remaining_placeholders > 0:
-            logger.error(f"[DEBUG] 경고: 처리 후에도 {remaining_placeholders}개의 플레이스홀더가 남아있습니다!")
-        else:
-            logger.info(f"[DEBUG] 확인: 모든 플레이스홀더가 정상적으로 처리되었습니다.")
     
     def _insert_technical_indicator_chart_at_marker(self, components: List[Dict[str, Any]], technical_indicator_chart_component: Dict[str, Any]) -> None:
         """
         컴포넌트 목록에서 기술적 지표 차트 플레이스홀더를 찾아 실제 차트 컴포넌트로 교체합니다.
         """
-        logger.info(f"[DEBUG] _insert_technical_indicator_chart_at_marker 시작, 컴포넌트 개수: {len(components)}")
-        
         marker_found = False
         for i, component in enumerate(components):
             # 컴포넌트에서 플레이스홀더 포함 필드 찾기
@@ -883,8 +775,6 @@ class ResponseFormatterAgent(BaseAgent):
                 marker_found = True
                 component_type = component.get("type")
                 field_value = component.get(field, "")
-                
-                logger.info(f"[DEBUG] 기술적 지표 차트 플레이스홀더 발견: 컴포넌트 {i}, 필드 '{field}'")
                 
                 if component_type == "paragraph" and field == "content":
                     # paragraph의 content는 텍스트 분리 후 재구성
@@ -912,26 +802,21 @@ class ResponseFormatterAgent(BaseAgent):
                         after_comp = create_paragraph(after_text)
                         components.insert(insert_index, after_comp)
                     
-                    logger.info(f"[DEBUG] 기술적 지표 차트 컴포넌트 삽입 완료: 위치 {i}")
                 
                 else:
                     # 비-paragraph 컴포넌트는 전체 교체
                     components[i] = technical_indicator_chart_component
-                    logger.info(f"[DEBUG] 기술적 지표 차트 컴포넌트 교체 완료: 위치 {i}")
                 
                 break
         
         # 마커를 찾지 못한 경우 마지막에 추가
         if not marker_found:
             components.append(technical_indicator_chart_component)
-            logger.warning("[DEBUG] 기술적 지표 차트 플레이스홀더를 찾을 수 없어 컴포넌트 목록 끝에 추가")
     
     def _insert_trend_following_chart_at_marker(self, components: List[Dict[str, Any]], trend_following_chart_component: Dict[str, Any]) -> None:
         """
         컴포넌트 목록에서 추세추종 지표 차트 플레이스홀더를 찾아 실제 차트 컴포넌트로 교체합니다.
         """
-        logger.info(f"[DEBUG] _insert_trend_following_chart_at_marker 시작, 컴포넌트 개수: {len(components)}")
-        
         marker_found = False
         for i, component in enumerate(components):
             # 컴포넌트에서 플레이스홀더 포함 필드 찾기
@@ -941,7 +826,7 @@ class ResponseFormatterAgent(BaseAgent):
                 component_type = component.get("type")
                 field_value = component.get(field, "")
                 
-                logger.info(f"[DEBUG] 추세추종 지표 차트 플레이스홀더 발견: 컴포넌트 {i}, 필드 '{field}'")
+
                 
                 if component_type == "paragraph" and field == "content":
                     # paragraph의 content는 텍스트 분리 후 재구성
@@ -969,26 +854,21 @@ class ResponseFormatterAgent(BaseAgent):
                         after_comp = create_paragraph(after_text)
                         components.insert(insert_index, after_comp)
                     
-                    logger.info(f"[DEBUG] 추세추종 지표 차트 컴포넌트 삽입 완료: 위치 {i}")
                 
                 else:
                     # 비-paragraph 컴포넌트는 전체 교체
                     components[i] = trend_following_chart_component
-                    logger.info(f"[DEBUG] 추세추종 지표 차트 컴포넌트 교체 완료: 위치 {i}")
                 
                 break
         
         # 마커를 찾지 못한 경우 마지막에 추가
         if not marker_found:
             components.append(trend_following_chart_component)
-            logger.warning("[DEBUG] 추세추종 지표 차트 플레이스홀더를 찾을 수 없어 컴포넌트 목록 끝에 추가")
     
     def _insert_momentum_chart_at_marker(self, components: List[Dict[str, Any]], momentum_chart_component: Dict[str, Any]) -> None:
         """
         컴포넌트 목록에서 모멘텀 지표 차트 플레이스홀더를 찾아 실제 차트 컴포넌트로 교체합니다.
         """
-        logger.info(f"[DEBUG] _insert_momentum_chart_at_marker 시작, 컴포넌트 개수: {len(components)}")
-        
         marker_found = False
         for i, component in enumerate(components):
             # 컴포넌트에서 플레이스홀더 포함 필드 찾기
@@ -997,8 +877,6 @@ class ResponseFormatterAgent(BaseAgent):
                 marker_found = True
                 component_type = component.get("type")
                 field_value = component.get(field, "")
-                
-                logger.info(f"[DEBUG] 모멘텀 지표 차트 플레이스홀더 발견: 컴포넌트 {i}, 필드 '{field}'")
                 
                 if component_type == "paragraph" and field == "content":
                     # paragraph의 content는 텍스트 분리 후 재구성
@@ -1026,19 +904,16 @@ class ResponseFormatterAgent(BaseAgent):
                         after_comp = create_paragraph(after_text)
                         components.insert(insert_index, after_comp)
                     
-                    logger.info(f"[DEBUG] 모멘텀 지표 차트 컴포넌트 삽입 완료: 위치 {i}")
                 
                 else:
                     # 비-paragraph 컴포넌트는 전체 교체
                     components[i] = momentum_chart_component
-                    logger.info(f"[DEBUG] 모멘텀 지표 차트 컴포넌트 교체 완료: 위치 {i}")
                 
                 break
         
         # 마커를 찾지 못한 경우 마지막에 추가
         if not marker_found:
             components.append(momentum_chart_component)
-            logger.warning("[DEBUG] 모멘텀 지표 차트 플레이스홀더를 찾을 수 없어 컴포넌트 목록 끝에 추가")
     
     def _find_technical_indicator_placeholder_in_component(self, component: Dict[str, Any]) -> str:
         """
@@ -1136,69 +1011,28 @@ class ResponseFormatterAgent(BaseAgent):
             trend_following_chart_component = None
             momentum_chart_component = None
             
-            logger.info(f"[DEBUG] 플레이스홀더 처리 확인 - 섹션: {section_title}")
-            logger.info(f"[DEBUG] chart_placeholder in section_content: {self.chart_placeholder in section_content}")
-            logger.info(f"[DEBUG] trend_following_chart_placeholder in section_content: {self.trend_following_chart_placeholder in section_content}")
-            logger.info(f"[DEBUG] momentum_chart_placeholder in section_content: {self.momentum_chart_placeholder in section_content}")
-            logger.info(f"[DEBUG] tech_agent_result 존재: {bool(tech_agent_result)}")
-            logger.info(f"[DEBUG] stock_code: {stock_code}")
-            logger.info(f"[DEBUG] stock_name: {stock_name}")
-            
             if self.chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 주가차트 컴포넌트를 미리 생성
                 price_chart_component = self._create_price_chart_component_directly(tech_agent_result, stock_code, stock_name)
-                logger.info(f"[DEBUG] 주가차트 플레이스홀더 발견. 컴포넌트 생성: {section_title}")
-                logger.info(f"[DEBUG] price_chart_component 생성됨: {bool(price_chart_component)}")
-            else:
-                logger.info(f"[DEBUG] 주가차트 컴포넌트 생성 조건 불만족: 섹션 {section_title}")
             
             if self.technical_indicator_chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 기존 기술적 지표 차트 컴포넌트를 미리 생성 (호환성 유지)
                 technical_indicator_chart_component = self._create_trend_following_chart_component_directly(tech_agent_result, stock_code, stock_name)
-                logger.info(f"[DEBUG] 기술적 지표 차트 플레이스홀더 발견. 컴포넌트 생성: {section_title}")
-                logger.info(f"[DEBUG] technical_indicator_chart_component 생성됨: {bool(technical_indicator_chart_component)}")
-            else:
-                logger.info(f"[DEBUG] 기술적 지표 차트 컴포넌트 생성 조건 불만족: 섹션 {section_title}")
             
             if self.trend_following_chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 추세추종 지표 차트 컴포넌트를 미리 생성
                 trend_following_chart_component = self._create_trend_following_chart_component_directly(tech_agent_result, stock_code, stock_name)
-                logger.info(f"[DEBUG] 추세추종 지표 차트 플레이스홀더 발견. 컴포넌트 생성: {section_title}")
-                logger.info(f"[DEBUG] trend_following_chart_component 생성됨: {bool(trend_following_chart_component)}")
-            else:
-                logger.info(f"[DEBUG] 추세추종 지표 차트 컴포넌트 생성 조건 불만족: 섹션 {section_title}")
             
             if self.momentum_chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 모멘텀 지표 차트 컴포넌트를 미리 생성
                 momentum_chart_component = self._create_momentum_chart_component_directly(tech_agent_result, stock_code, stock_name)
-                logger.info(f"[DEBUG] 모멘텀 지표 차트 플레이스홀더 발견. 컴포넌트 생성: {section_title}")
-                logger.info(f"[DEBUG] momentum_chart_component 생성됨: {bool(momentum_chart_component)}")
-            else:
-                logger.info(f"[DEBUG] 모멘텀 지표 차트 컴포넌트 생성 조건 불만족: 섹션 {section_title}")
             
             # 본문에 섹션 제목이 있으니, 여기서는 추가하지 않음.
             # 1. 섹션 제목 컴포넌트 추가 (항상 추가)  
             # section_heading_component = create_heading({"level": 2, "content": section_title})
             #section_components.append(section_heading_component)
             
-            # 2. 섹션 내용에 대한 구조화된 컴포넌트 생성 시도
-            # 플레이스홀더를 임시 마스크로 변경하여 LLM이 제거하지 않도록 처리
-            # placeholder_masks = {
-            #     self.chart_placeholder: "아래에서 주가차트 분석 결과를 확인할 수 있습니다.",
-            #     self.technical_indicator_chart_placeholder: "아래에서 기술적지표차트 분석 결과를 확인할 수 있습니다.", 
-            #     self.trend_following_chart_placeholder: "아래에서 추세추종지표차트 분석 결과를 확인할 수 있습니다.",
-            #     self.momentum_chart_placeholder: "아래에서 모멘텀지표차트 분석 결과를 확인할 수 있습니다."
-            # }
-            
-            # # 역방향 매핑 (복원용)
-            # mask_to_placeholder = {v: k for k, v in placeholder_masks.items()}
-            
-            # # 섹션 내용에서 플레이스홀더를 마스크로 변경
-            # masked_section_content = section_content
-            # for placeholder, mask in placeholder_masks.items():
-            #     if placeholder in masked_section_content:
-            #         logger.info(f"[DEBUG] 플레이스홀더 마스킹: {placeholder} -> {mask}")
-            #         masked_section_content = masked_section_content.replace(placeholder, mask)
+
             
             tool_calling_prompt = f"""
 다음 섹션의 내용을 구조화된 컴포넌트로 변환하세요:
@@ -1251,13 +1085,9 @@ class ResponseFormatterAgent(BaseAgent):
 **중요**: '[CHART_PLACEHOLDER:'로 시작하는 문자열은 create_paragraph 컴포넌트를 호출합니다.
 """
             try:
-                if "기술적 분석" in section_title:
-                    logger.info(f"[DEBUG] tool_calling_prompt: {tool_calling_prompt}")
                 section_response = await llm_with_tools.ainvoke(input=tool_calling_prompt)
                 
                 llm_generated_text_for_section = section_response.content if hasattr(section_response, 'content') else ""
-                if "기술적 분석" in section_title:
-                    logger.info(f"[DEBUG] after llm call: {section_response}")
 
                 if hasattr(section_response, 'tool_calls') and section_response.tool_calls:
                     first_heading_found = False
@@ -1271,7 +1101,7 @@ class ResponseFormatterAgent(BaseAgent):
                             tool_args['level'] = int(tool_args['level'])
                         
                         tool_func = next((t for t in tools if t.name == tool_name), None)
-                        logger.info(f"Tool name : {tool_name}, args : {tool_args}, tool_func: {tool_func}")
+                        #logger.info(f"Tool name : {tool_name}, args : {tool_args}, tool_func: {tool_func}")
                         if tool_func:
                             component_dict = tool_func.invoke(tool_args)
 
@@ -1335,40 +1165,20 @@ class ResponseFormatterAgent(BaseAgent):
                     section_components.extend(processed_components)
                     
                     # 주가차트 컴포넌트가 있으면 마커를 찾아서 교체
-                    logger.info(f"[DEBUG] 주가차트 교체 실행 전 - price_chart_component: {bool(price_chart_component)}")
                     if price_chart_component:
-                        logger.info(f"[DEBUG] 주가차트 플레이스홀더 교체 시작 - 섹션: {section_title}")
                         self._insert_price_chart_at_marker(section_components, price_chart_component)
-                        logger.info(f"[DEBUG] 주가차트 플레이스홀더 교체 완료 - 섹션: {section_title}")
-                    else:
-                        logger.warning(f"[DEBUG] 주가차트 컴포넌트가 없어 교체하지 않음 - 섹션: {section_title}")
                     
                     # 기술적 지표 차트 플레이스홀더 처리 (호환성 유지)
-                    logger.info(f"[DEBUG] 기술적 지표 차트 교체 실행 전 - technical_indicator_chart_component: {bool(technical_indicator_chart_component)}")
                     if technical_indicator_chart_component:
-                        logger.info(f"[DEBUG] 기술적 지표 차트 플레이스홀더 교체 시작 - 섹션: {section_title}")
                         self._insert_technical_indicator_chart_at_marker(section_components, technical_indicator_chart_component)
-                        logger.info(f"[DEBUG] 기술적 지표 차트 플레이스홀더 교체 완료 - 섹션: {section_title}")
-                    else:
-                        logger.warning(f"[DEBUG] 기술적 지표 차트 컴포넌트가 없어 교체하지 않음 - 섹션: {section_title}")
                     
                     # 추세추종 지표 차트 플레이스홀더 처리
-                    logger.info(f"[DEBUG] 추세추종 지표 차트 교체 실행 전 - trend_following_chart_component: {bool(trend_following_chart_component)}")
                     if trend_following_chart_component:
-                        logger.info(f"[DEBUG] 추세추종 지표 차트 플레이스홀더 교체 시작 - 섹션: {section_title}")
                         self._insert_trend_following_chart_at_marker(section_components, trend_following_chart_component)
-                        logger.info(f"[DEBUG] 추세추종 지표 차트 플레이스홀더 교체 완료 - 섹션: {section_title}")
-                    else:
-                        logger.warning(f"[DEBUG] 추세추종 지표 차트 컴포넌트가 없어 교체하지 않음 - 섹션: {section_title}")
                     
                     # 모멘텀 지표 차트 플레이스홀더 처리
-                    logger.info(f"[DEBUG] 모멘텀 지표 차트 교체 실행 전 - momentum_chart_component: {bool(momentum_chart_component)}")
                     if momentum_chart_component:
-                        logger.info(f"[DEBUG] 모멘텀 지표 차트 플레이스홀더 교체 시작 - 섹션: {section_title}")
                         self._insert_momentum_chart_at_marker(section_components, momentum_chart_component)
-                        logger.info(f"[DEBUG] 모멘텀 지표 차트 플레이스홀더 교체 완료 - 섹션: {section_title}")
-                    else:
-                        logger.warning(f"[DEBUG] 모멘텀 지표 차트 컴포넌트가 없어 교체하지 않음 - 섹션: {section_title}")
                 
                 elif llm_generated_text_for_section.strip(): # 툴 콜 없이 텍스트만 반환된 경우
                     logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에 대해 Tool calling 없이 일반 텍스트 응답을 받았습니다.")
@@ -1379,11 +1189,7 @@ class ResponseFormatterAgent(BaseAgent):
                     
                     # 텍스트에서 마스크를 플레이스홀더로 복원
                     restored_text = cleaned_text
-                    for mask, placeholder in mask_to_placeholder.items():
-                        if mask in restored_text:
-                            logger.info(f"[DEBUG] 텍스트 마스크 복원: {mask} -> {placeholder}")
-                            restored_text = restored_text.replace(mask, placeholder)
-                    
+                   
                     if restored_text.strip():
                          section_components.append(create_paragraph(restored_text))
                 
@@ -1397,10 +1203,6 @@ class ResponseFormatterAgent(BaseAgent):
                 
                 # 오류 복구 시에도 마스크를 플레이스홀더로 복원
                 restored_fallback = section_content_fallback
-                for mask, placeholder in mask_to_placeholder.items():
-                    if mask in restored_fallback:
-                        logger.info(f"[DEBUG] 오류 복구 시 마스크 복원: {mask} -> {placeholder}")
-                        restored_fallback = restored_fallback.replace(mask, placeholder)
                 
                 section_components.append(create_paragraph(restored_fallback))
                 # 오류 시 LLM 생성 텍스트는 없고, 원본 내용을 텍스트로 반환 (오류 복구용)
@@ -2185,7 +1987,6 @@ plt.show()
                 # 모든 마스크를 플레이스홀더로 복원
                 for mask, placeholder in mask_to_placeholder.items():
                     if mask in restored_text:
-                        logger.info(f"[DEBUG] 마스크 복원: {mask} -> {placeholder} in {field}")
                         restored_text = restored_text.replace(mask, placeholder)
                 
                 restored_component[field] = restored_text
@@ -2201,7 +2002,6 @@ plt.show()
                     
                     for mask, placeholder in mask_to_placeholder.items():
                         if mask in restored_content:
-                            logger.info(f"[DEBUG] 리스트 항목 마스크 복원: {mask} -> {placeholder}")
                             restored_content = restored_content.replace(mask, placeholder)
                     
                     restored_item['content'] = restored_content

@@ -334,6 +334,7 @@ class StockRAGService:
         chat_session_id: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         streaming_callback: Optional[Callable] = None,
+        preliminary_chart_callback: Optional[Callable] = None,
         is_follow_up: bool = False,
         agent_results: Optional[Dict[str, Any]] = {}
     ) -> Dict[str, Any]:
@@ -387,6 +388,7 @@ class StockRAGService:
                 chat_session_id=chat_session_id,
                 conversation_history=conversation_history,
                 streaming_callback=streaming_callback,  # 스트리밍 콜백 함수 전달
+                preliminary_chart_callback=preliminary_chart_callback,  # preliminary_chart 콜백 함수 전달
                 is_follow_up=is_follow_up,  # 후속질문 여부 전달
                 agent_results=agent_results  # 후속질문에 사용할 이전 에이전트 결과물 전달
             )

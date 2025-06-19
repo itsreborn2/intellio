@@ -446,9 +446,9 @@ async def get_chat_messages(
         )
         
         logger.info(f"{session_data['title']} :총  {len(messages)} 메세지")
-        for m in messages:
-            if m['role'] == "assistant" and m.get('components'):
-                logger.info(f"어시스턴트 메시지 컴포넌트 : {m.get('components', [])}")
+        # for m in messages:
+        #     if m['role'] == "assistant" and m.get('components'):
+        #         logger.info(f"어시스턴트 메시지 컴포넌트 : {m.get('components', [])}")
         
         return ChatMessageListResponse(
             messages=[ChatMessageResponse(**message) for message in messages],
@@ -558,6 +558,39 @@ async def stream_chat_message(
                     return obj.isoformat()
                 return super().default(obj)
             
+            def encode(self, obj):
+                """
+                문자열 날짜가 ISO 형식으로 재변환되는 것을 방지
+                """
+                if isinstance(obj, dict):
+                    # preliminary_chart 데이터의 날짜 형식 보장
+                    if 'event' in obj and obj['event'] == 'preliminary_chart':
+                        data = obj.get('data', {})
+                        if 'components' in data:
+                            for component in data['components']:
+                                if (component and isinstance(component, dict) and 
+                                    'data' in component and component['data'] and
+                                    'chart_data' in component['data'] and 
+                                    component['data']['chart_data'] and
+                                    'dates' in component['data']['chart_data']):
+                                    
+                                    dates = component['data']['chart_data']['dates']
+                                    if isinstance(dates, list):
+                                        # 날짜 문자열이 YYYY-MM-DD 형식인지 확인하고 보장
+                                        normalized_dates = []
+                                        for date in dates:
+                                            if isinstance(date, str):
+                                                if 'T' in date:
+                                                    # ISO 형식을 YYYY-MM-DD로 변환
+                                                    normalized_dates.append(date.split('T')[0])
+                                                else:
+                                                    normalized_dates.append(date)
+                                            else:
+                                                normalized_dates.append(str(date))
+                                        component['data']['chart_data']['dates'] = normalized_dates
+                
+                return super().encode(obj)
+            
         # 스트리밍 콜백 함수
         async def streaming_callback(chunk: str):
             nonlocal full_response
@@ -579,6 +612,52 @@ async def stream_chat_message(
         # 스트리밍 콜백 함수에 이름 부여 (디버깅 용이)
         streaming_callback.__name__ = "streaming_callback_chat"
         logger.info(f"[STREAM_CHAT] 스트리밍 콜백 함수 생성 완료: {streaming_callback.__name__}, id={id(streaming_callback)}")
+        
+        # preliminary_chart 전용 콜백 함수
+        async def preliminary_chart_callback(components: List[Dict[str, Any]], message: str, elapsed_time: float = 0.0):
+            """preliminary_chart를 스트리밍으로 전송하는 콜백 함수"""
+            try:
+                logger.info(f"[STREAM_CHAT] preliminary_chart 콜백 호출: 컴포넌트 {len(components)}개")
+                
+                # 데이터 구조 상세 로깅
+                for i, component in enumerate(components):
+                    if component and component.get('type') == 'technical_indicator_chart':
+                        data = component.get('data', {})
+                        chart_data = data.get('chart_data', {})
+                        
+                        # 기본 OHLCV 데이터 확인
+                        ohlcv_keys = ['close', 'high', 'low', 'volume']
+                        available_ohlcv = [k for k in ohlcv_keys if k in chart_data and chart_data[k]]
+                        logger.info(f"  - OHLCV 데이터: {available_ohlcv}")
+                
+                # 이벤트 데이터 구성
+                event_data = {
+                    "event": "preliminary_chart",
+                    "data": {
+                        "components": components,
+                        "message": message,
+                        "stock_code": request.stock_code,
+                        "stock_name": request.stock_name,
+                        "timestamp": time.time(),
+                        "elapsed": elapsed_time
+                    }
+                }
+                
+                # JSON 직렬화 전 최종 검증
+                logger.info(f"[STREAM_CHAT] preliminary_chart 이벤트 전송 시작")
+                
+                await streaming_queue.put(json.dumps(event_data, cls=DateTimeEncoder))
+                
+                logger.info(f"[STREAM_CHAT] preliminary_chart 이벤트 전송 완료")
+                return True
+                
+            except Exception as e:
+                logger.error(f"[STREAM_CHAT] preliminary_chart 콜백 오류: {str(e)}", exc_info=True)
+                return False
+        
+        # preliminary_chart 콜백 함수에 이름 부여
+        preliminary_chart_callback.__name__ = "preliminary_chart_callback_chat"
+        logger.info(f"[STREAM_CHAT] preliminary_chart 콜백 함수 생성 완료: {preliminary_chart_callback.__name__}")
         
         # 비동기 생성기 함수 정의
         async def event_generator():
@@ -622,7 +701,9 @@ async def stream_chat_message(
                         user_id=current_session.user_id,
                         chat_session_id=str(chat_session_id),
                         is_follow_up=request.is_follow_up,
-                        agent_results=agent_results
+                        agent_results=agent_results,
+                        streaming_callback=streaming_callback,  # LLM 토큰 스트리밍용
+                        preliminary_chart_callback=preliminary_chart_callback  # preliminary_chart 전송용
                     )
                 )
                 # async def cleanup_callback(_):
@@ -865,8 +946,8 @@ async def stream_chat_message(
                         
                         # 완료 이벤트 전송
                         #logger.info("[STREAM_CHAT] 완료 이벤트 전송")
-                        # if settings.ENV != "prod":
-                        #     logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
+                        if settings.ENV != "prod":
+                            logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
 
                         # 구조화된 채팅 응답 구성
                         structured_response = StructuredChatResponse(

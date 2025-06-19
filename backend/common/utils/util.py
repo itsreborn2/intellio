@@ -3,8 +3,9 @@ import re
 import time
 import logging
 from functools import wraps
-from typing import Callable, Any, TypeVar
+from typing import Callable, Any, TypeVar, Union, Optional
 import asyncio
+import pandas as pd
 
 # 로거 설정
 logger = logging.getLogger(__name__)
@@ -174,4 +175,226 @@ def dict_to_formatted_str(data: dict, sort_keys: bool = False) -> str:
     """
     json_string = json.dumps(data, indent=4, ensure_ascii=False, sort_keys=sort_keys)
     return json_string
+
+
+# ========================================
+# 안전한 타입 변환 유틸리티 함수들
+# ========================================
+
+def safe_float(value: Any, default: float = 0.0) -> float:
+    """
+    값을 안전하게 float로 변환합니다.
+    
+    Args:
+        value: 변환할 값
+        default: 변환 실패 시 기본값
+        
+    Returns:
+        변환된 float 값 또는 기본값
+    """
+    if value is None or value == '' or value == 'null':
+        return default
+    
+    # pandas의 NaN 체크
+    if pd.isna(value):
+        return default
+    
+    # 문자열에서 nan 체크
+    if isinstance(value, str) and value.lower() in ['nan', 'none', 'null']:
+        return default
+    
+    try:
+        return float(value)
+    except (ValueError, TypeError, OverflowError):
+        return default
+
+
+def safe_int(value: Any, default: int = 0) -> int:
+    """
+    값을 안전하게 int로 변환합니다.
+    
+    Args:
+        value: 변환할 값
+        default: 변환 실패 시 기본값
+        
+    Returns:
+        변환된 int 값 또는 기본값
+    """
+    if value is None or value == '' or value == 'null':
+        return default
+    
+    # pandas의 NaN 체크
+    if pd.isna(value):
+        return default
+    
+    # 문자열에서 nan 체크
+    if isinstance(value, str) and value.lower() in ['nan', 'none', 'null']:
+        return default
+    
+    try:
+        # float로 먼저 변환 후 int로 (소수점이 있는 문자열 처리)
+        return int(float(value))
+    except (ValueError, TypeError, OverflowError):
+        return default
+
+
+def safe_price_float(value: Any, default: float = 0.0) -> float:
+    """
+    가격 데이터를 안전하게 float로 변환합니다. (safe_float의 별칭)
+    
+    Args:
+        value: 변환할 값
+        default: 변환 실패 시 기본값
+        
+    Returns:
+        변환된 float 값 또는 기본값
+    """
+    return safe_float(value, default)
+
+
+def safe_str(value: Any, default: str = "") -> str:
+    """
+    값을 안전하게 str로 변환합니다.
+    
+    Args:
+        value: 변환할 값
+        default: 변환 실패 시 기본값
+        
+    Returns:
+        변환된 str 값 또는 기본값
+    """
+    if value is None:
+        return default
+    
+    # pandas의 NaN 체크
+    if pd.isna(value):
+        return default
+    
+    try:
+        return str(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def safe_bool(value: Any, default: bool = False) -> bool:
+    """
+    값을 안전하게 bool로 변환합니다.
+    
+    Args:
+        value: 변환할 값
+        default: 변환 실패 시 기본값
+        
+    Returns:
+        변환된 bool 값 또는 기본값
+    """
+    if value is None:
+        return default
+    
+    # pandas의 NaN 체크
+    if pd.isna(value):
+        return default
+    
+    if isinstance(value, bool):
+        return value
+    
+    if isinstance(value, (int, float)):
+        return bool(value)
+    
+    if isinstance(value, str):
+        return value.lower() in ['true', '1', 'yes', 'on', 'y']
+    
+    try:
+        return bool(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def safe_float_or_none(value: Any) -> Optional[float]:
+    """
+    값을 안전하게 float로 변환하거나 None을 반환합니다.
+    
+    Args:
+        value: 변환할 값
+        
+    Returns:
+        변환된 float 값 또는 None
+    """
+    if value is None or value == '' or value == 'null':
+        return None
+    
+    # pandas의 NaN 체크
+    if pd.isna(value):
+        return None
+    
+    # 문자열에서 nan 체크
+    if isinstance(value, str) and value.lower() in ['nan', 'none', 'null']:
+        return None
+    
+    try:
+        return float(value)
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def safe_int_or_none(value: Any) -> Optional[int]:
+    """
+    값을 안전하게 int로 변환하거나 None을 반환합니다.
+    
+    Args:
+        value: 변환할 값
+        
+    Returns:
+        변환된 int 값 또는 None
+    """
+    if value is None or value == '' or value == 'null':
+        return None
+    
+    # pandas의 NaN 체크
+    if pd.isna(value):
+        return None
+    
+    # 문자열에서 nan 체크
+    if isinstance(value, str) and value.lower() in ['nan', 'none', 'null']:
+        return None
+    
+    try:
+        # float로 먼저 변환 후 int로 (소수점이 있는 문자열 처리)
+        return int(float(value))
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def safe_series_to_list(series: Any, default_list: Optional[list] = None) -> list:
+    """
+    pandas Series를 안전하게 리스트로 변환합니다.
+    
+    Args:
+        series: 변환할 Series 또는 기타 iterable
+        default_list: 변환 실패 시 기본값
+        
+    Returns:
+        변환된 리스트 또는 기본값
+    """
+    if default_list is None:
+        default_list = []
+    
+    if series is None:
+        return default_list
+    
+    try:
+        if hasattr(series, 'empty') and series.empty:
+            return default_list
+        
+        # pandas Series인 경우
+        if hasattr(series, 'tolist'):
+            return [safe_float(x) if not pd.isna(x) else None for x in series.tolist()]
+        
+        # 일반 iterable인 경우
+        if hasattr(series, '__iter__'):
+            return [safe_float(x) if x is not None and not pd.isna(x) else None for x in series]
+        
+        return default_list
+        
+    except Exception:
+        return default_list
 

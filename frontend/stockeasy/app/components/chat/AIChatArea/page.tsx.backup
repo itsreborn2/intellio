@@ -13,8 +13,6 @@ import {
   RecommendedQuestions, 
   LatestUpdates
 } from './components';
-import { PreliminaryChartDisplay } from './components/PreliminaryChartDisplay';
-import { CompletionPopup } from './components/CompletionPopup';
 import { useMessageProcessing } from './hooks';
 import { useIsMobile } from './hooks';
 import { useChatStore } from '@/stores/chatStore';
@@ -96,18 +94,6 @@ function AIChatAreaContent() {
   const [popularStocksDaily, setPopularStocksDaily] = useState<PopularStock[]>([]);
   const [popularStocksWeekly, setPopularStocksWeekly] = useState<PopularStock[]>([]); // CSV 데이터를 저장할 상태
   const [windowWidth, setWindowWidth] = useState<number>(1024); // 기본값 설정
-
-  // 실시간 차트 스트리밍 관련 상태
-  const [preliminaryChart, setPreliminaryChart] = useState<{
-    components: any[];
-    message: string;
-    timestamp: number;
-    stockCode: string;
-    stockName: string;
-  } | null>(null);
-  const [showCompletionPopup, setShowCompletionPopup] = useState(false);
-  const [finalResponse, setFinalResponse] = useState<any>(null);
-  const [currentStatus, setCurrentStatus] = useState<string>('');
 
   // API에서 인기 검색 종목 데이터를 가져오기 위한 함수 (useCallback으로 메모이제이션)
   const fetchPopularStocks = useCallback(async () => {
@@ -199,26 +185,6 @@ function AIChatAreaContent() {
         
         // 토큰 사용량 업데이트 (Zustand 스토어)
         fetchSummary && fetchSummary();
-        
-        // 완료 팝업 표시
-        setShowCompletionPopup(true);
-        // 최종 응답 설정 (기존 메시지들을 최종 응답으로 설정)
-        setFinalResponse(uiMessages);
-        // 임시 차트는 팝업에서 "메시지 보기"를 클릭할 때까지 유지
-        // setPreliminaryChart(null); <- 제거
-      },
-      onPreliminaryChart: (data) => {
-        console.log('[AI채팅영역] 임시 차트 수신:', data);
-        // 임시 차트 데이터 설정
-        setPreliminaryChart({
-          components: data.components,
-          message: data.message,
-          timestamp: data.timestamp,
-          stockCode: data.stock_code,
-          stockName: data.stock_name
-        });
-        // 현재 상태 업데이트
-        setCurrentStatus("📊 차트가 준비되었습니다. 추가 분석을 진행하고 있습니다...");
       },
     }
   );
@@ -562,30 +528,6 @@ function AIChatAreaContent() {
             isUserSending={isUserSending}
             onCopy={(id) => setCopyState(id, true)}
             onToggleExpertMode={(id) => toggleExpertMode(id)}
-          />
-        )}
-
-        {/* 임시 차트 표시 - 분석 중이거나 완료 팝업이 표시될 때 표시 */}
-        {preliminaryChart && (isLoading || showCompletionPopup) && (
-          <PreliminaryChartDisplay 
-            chartData={preliminaryChart}
-          />
-        )}
-
-        {/* 완료 팝업 */}
-        {showCompletionPopup && (
-          <CompletionPopup 
-            onViewFinalReport={() => {
-              setShowCompletionPopup(false);
-              // 임시 차트를 숨기고 최종 응답 표시
-              setPreliminaryChart(null);
-              // 메시지 리스트로 스크롤
-              messageListRef.current?.scrollToBottom();
-            }}
-            onClose={() => {
-              setShowCompletionPopup(false);
-              // 팝업만 닫고 임시 차트는 계속 표시
-            }}
           />
         )}
 

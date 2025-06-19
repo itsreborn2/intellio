@@ -32,6 +32,9 @@ from stockeasy.collector.schemas.timescale_schemas import (
     IntervalType
 )
 
+# 공통 유틸리티 함수 import
+from common.utils.util import safe_float, safe_int, safe_price_float, safe_float_or_none, safe_int_or_none
+
 
 class DataCollectorService(LoggerMixin):
     """데이터 수집 서비스"""
@@ -580,27 +583,6 @@ class DataCollectorService(LoggerMixin):
                     market_data = await self.kiwoom_client.get_market_indices(market['code'])
                     
                     if market_data:
-                        # 안전한 숫자 변환 함수
-                        def safe_float(value, default=0.0):
-                            try:
-                                if value is None or value == '':
-                                    return default
-                                # +/- 기호와 쉼표 제거
-                                clean_value = str(value).replace(',', '').replace('+', '').replace('-', '')
-                                return float(clean_value) if clean_value else default
-                            except (ValueError, TypeError):
-                                return default
-                        
-                        def safe_int(value, default=0):
-                            try:
-                                if value is None or value == '':
-                                    return default
-                                # 쉼표 제거
-                                clean_value = str(value).replace(',', '')
-                                return int(clean_value) if clean_value else default
-                            except (ValueError, TypeError):
-                                return default
-                        
                         # 전일대비 변동금액 (부호 유지)
                         change_amount_value = 0.0
                         if market_data.pred_pre:
@@ -1222,18 +1204,7 @@ class DataCollectorService(LoggerMixin):
                                 for symbol, chart_data in chart_data_dict.items():
                                     for chart_item in chart_data:
                                         try:
-                                            # 안전한 변환 함수들
-                                            def safe_float(value):
-                                                try:
-                                                    return float(value) if value and str(value).strip() else None
-                                                except (ValueError, TypeError):
-                                                    return None
-                                            
-                                            def safe_int(value):
-                                                try:
-                                                    return int(value) if value and str(value).strip() else None
-                                                except (ValueError, TypeError):
-                                                    return None
+                                            # 안전한 변환 함수들 (공통 함수 사용)
                                             
                                             # 키움 API에서 제공하는 계산값들 추출
                                             api_change_amount = safe_float(chart_item.change_amount) if hasattr(chart_item, 'change_amount') else None
@@ -1795,27 +1766,7 @@ class DataCollectorService(LoggerMixin):
             else:
                 self.logger.info(f"[스케줄러] 당일 차트 데이터 업데이트 시작: {total_stocks}개 종목")
 
-            def safe_float(value):
-                """안전한 float 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return 0.0
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return float(clean_value)
-                except (ValueError, TypeError):
-                    return 0.0
-            
-            def safe_int(value):
-                """안전한 int 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return 0
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return int(clean_value)
-                except (ValueError, TypeError):
-                    return 0
+            # 안전한 변환 함수들 (공통 함수 사용)
             
             def clean_price_data(value):
                 """주가 데이터에서 +/- 기호 제거 및 절댓값 반환"""
@@ -2047,27 +1998,8 @@ class DataCollectorService(LoggerMixin):
             else:
                 self.logger.info(f"[스케줄러] 당일 수급 데이터 업데이트 시작: {total_stocks}개 종목")
             
-            def safe_float(value):
-                """안전한 float 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return None
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return float(clean_value)
-                except (ValueError, TypeError):
-                    return None
-            
-            def safe_int(value):
-                """안전한 int 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return None
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return int(clean_value)
-                except (ValueError, TypeError):
-                    return None
+            # 안전한 변환 함수들 (공통 함수 사용)
+            # (safe_float_or_none, safe_int_or_none 사용)
             
             # 종목 코드만 추출
             all_symbols = [stock["code"] for stock in stock_list]
@@ -2106,25 +2038,25 @@ class DataCollectorService(LoggerMixin):
                                         supply_demand = SupplyDemandCreate(
                                             date=today,
                                             symbol=symbol,
-                                            current_price=safe_float(supply_item.get('current_price')),
+                                            current_price=safe_float_or_none(supply_item.get('current_price')),
                                             price_change_sign=supply_item.get('price_change_sign'),
-                                            price_change=safe_float(supply_item.get('price_change')),
-                                            price_change_percent=safe_float(supply_item.get('price_change_percent')),
-                                            accumulated_volume=safe_int(supply_item.get('accumulated_volume')),
-                                            accumulated_value=safe_int(supply_item.get('accumulated_value')),
-                                            individual_investor=safe_int(supply_item.get('individual_investor')),
-                                            foreign_investor=safe_int(supply_item.get('foreign_investor')),
-                                            institution_total=safe_int(supply_item.get('institution_total')),
-                                            financial_investment=safe_int(supply_item.get('financial_investment')),
-                                            insurance=safe_int(supply_item.get('insurance')),
-                                            investment_trust=safe_int(supply_item.get('investment_trust')),
-                                            other_financial=safe_int(supply_item.get('other_financial')),
-                                            bank=safe_int(supply_item.get('bank')),
-                                            pension_fund=safe_int(supply_item.get('pension_fund')),
-                                            private_fund=safe_int(supply_item.get('private_fund')),
-                                            government=safe_int(supply_item.get('government')),
-                                            other_corporation=safe_int(supply_item.get('other_corporation')),
-                                            domestic_foreign=safe_int(supply_item.get('domestic_foreign'))
+                                            price_change=safe_float_or_none(supply_item.get('price_change')),
+                                            price_change_percent=safe_float_or_none(supply_item.get('price_change_percent')),
+                                            accumulated_volume=safe_int_or_none(supply_item.get('accumulated_volume')),
+                                            accumulated_value=safe_int_or_none(supply_item.get('accumulated_value')),
+                                            individual_investor=safe_int_or_none(supply_item.get('individual_investor')),
+                                            foreign_investor=safe_int_or_none(supply_item.get('foreign_investor')),
+                                            institution_total=safe_int_or_none(supply_item.get('institution_total')),
+                                            financial_investment=safe_int_or_none(supply_item.get('financial_investment')),
+                                            insurance=safe_int_or_none(supply_item.get('insurance')),
+                                            investment_trust=safe_int_or_none(supply_item.get('investment_trust')),
+                                            other_financial=safe_int_or_none(supply_item.get('other_financial')),
+                                            bank=safe_int_or_none(supply_item.get('bank')),
+                                            pension_fund=safe_int_or_none(supply_item.get('pension_fund')),
+                                            private_fund=safe_int_or_none(supply_item.get('private_fund')),
+                                            government=safe_int_or_none(supply_item.get('government')),
+                                            other_corporation=safe_int_or_none(supply_item.get('other_corporation')),
+                                            domestic_foreign=safe_int_or_none(supply_item.get('domestic_foreign'))
                                         )
                                         supply_demand_data.append(supply_demand)
                                         symbol_has_data = True  # 데이터가 있음을 표시
@@ -2441,19 +2373,7 @@ class DataCollectorService(LoggerMixin):
             # TimescaleDB에 저장할 데이터 변환
             from stockeasy.collector.schemas.timescale_schemas import StockPriceCreate, IntervalType
             
-            def safe_float(value):
-                """안전한 float 변환"""
-                try:
-                    return float(value) if value and str(value).strip() else 0.0
-                except (ValueError, TypeError):
-                    return 0.0
-            
-            def safe_int(value):
-                """안전한 int 변환"""
-                try:
-                    return int(value) if value and str(value).strip() else 0
-                except (ValueError, TypeError):
-                    return 0
+            # 안전한 변환 함수들 (공통 함수 사용)
             
             def convert_sector_price(value):
                 """

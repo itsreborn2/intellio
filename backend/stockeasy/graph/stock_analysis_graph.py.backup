@@ -421,9 +421,8 @@ class StockAnalysisGraph:
         wrapped_parallel_search = self._create_wrapped_process("parallel_search", parallel_search_agent.process)
         workflow.add_node("parallel_search", wrapped_parallel_search)
         
-        # 새로운 흐름 정의: session_manager -> technical_analyzer -> question_analyzer -> orchestrator -> parallel_search -> knowledge_integrator
-        workflow.add_edge("session_manager", "technical_analyzer")
-        workflow.add_edge("technical_analyzer", "question_analyzer")
+        # 새로운 흐름 정의: 질문분류기 -> 오케스트레이터 -> 병렬 검색 -> 지식 통합
+        workflow.add_edge("session_manager", "question_analyzer")
         
         # 질문 분석기 이후 라우팅 결정: 후속 질문 여부에 따라 라우팅
         def question_analyzer_router(state: AgentState) -> str:
@@ -1070,15 +1069,7 @@ class StockAnalysisGraph:
                     self.current_state[session_id] = serializable_state.copy()
             
             # 전역 스트리밍 콜백이 있는지 확인하고 상태에 추가
-            logger.info(f"[wrapped_process] {agent_name} 콜백 상태 확인: hasattr(self, '_streaming_callback')={hasattr(self, '_streaming_callback')}, self._streaming_callback={getattr(self, '_streaming_callback', None) is not None}, 'streaming_callback' in state={'streaming_callback' in state}")
-            
-            # technical_analyzer 에이전트에는 preliminary_chart_callback 직접 전달
-            if agent_name == "technical_analyzer" and hasattr(self, '_preliminary_chart_callback') and self._preliminary_chart_callback:
-                state['send_preliminary_chart'] = self._preliminary_chart_callback
-                logger.info(f"[wrapped_process] {agent_name} 에이전트에 preliminary_chart_callback 직접 전달 완료: {self._preliminary_chart_callback.__name__ if hasattr(self._preliminary_chart_callback, '__name__') else '이름 없는 함수'}")
-            elif agent_name == "technical_analyzer":
-                logger.warning(f"[wrapped_process] {agent_name} 에이전트용 preliminary_chart_callback이 설정되지 않았습니다.")
-            elif hasattr(self, '_streaming_callback') and self._streaming_callback and 'streaming_callback' not in state:
+            if hasattr(self, '_streaming_callback') and self._streaming_callback and 'streaming_callback' not in state:
                 state['streaming_callback'] = self._streaming_callback  # 클래스 멤버로 저장
                 logger.info(f"[wrapped_process] {agent_name} 에이전트에 스트리밍 콜백 함수 추가: {self._streaming_callback.__name__ if hasattr(self._streaming_callback, '__name__') else '이름 없는 함수'}")
             elif 'streaming_callback' in state and state['streaming_callback'] is None and hasattr(self, '_streaming_callback') and self._streaming_callback:
@@ -1087,8 +1078,6 @@ class StockAnalysisGraph:
                 logger.info(f"[wrapped_process] {agent_name} 에이전트의 None 콜백을 전역 콜백으로 대체: {self._streaming_callback.__name__ if hasattr(self._streaming_callback, '__name__') else '이름 없는 함수'}")
             elif 'streaming_callback' in state:
                 logger.info(f"[wrapped_process] {agent_name} 에이전트에 이미 콜백 함수가 있음: {state['streaming_callback'].__name__ if hasattr(state['streaming_callback'], '__name__') else '이름 없는 함수' if state['streaming_callback'] else 'None'}")
-            else:
-                logger.warning(f"[wrapped_process] {agent_name} 에이전트에 스트리밍 콜백을 설정할 수 없음")
             
             # 특정 에이전트에만 analyze_objects 시작 시 실행 (메모리 많이 사용하는 에이전트)
             # if ENABLE_MEMORY_TRACKING and agent_name in ["parallel_search", "knowledge_integrator", "summarizer", "response_formatter"]:
@@ -1320,14 +1309,8 @@ class StockAnalysisGraph:
                 logger.info(f"[process_query] 스트리밍 콜백 함수가 전달되었습니다: {streaming_callback.__name__ if hasattr(streaming_callback, '__name__') else '이름 없는 함수'}")
                 self._streaming_callback = streaming_callback  # 클래스 멤버로 저장
             
-            # preliminary_chart 콜백 함수 추출 및 클래스 멤버로 저장
-            preliminary_chart_callback = kwargs.get("preliminary_chart_callback")
-            if preliminary_chart_callback and callable(preliminary_chart_callback):
-                logger.info(f"[process_query] preliminary_chart 콜백 함수가 전달되었습니다: {preliminary_chart_callback.__name__ if hasattr(preliminary_chart_callback, '__name__') else '이름 없는 함수'}")
-                self._preliminary_chart_callback = preliminary_chart_callback  # 클래스 멤버로 저장
-            
-            # 초기 상태 설정 (콜백 함수들을 제외한 다른 모든 키워드 인자 사용)
-            kwargs_copy = {k: v for k, v in kwargs.items() if k not in ["streaming_callback", "preliminary_chart_callback"]}
+            # 초기 상태 설정 (streaming_callback을 제외한 다른 모든 키워드 인자 사용)
+            kwargs_copy = {k: v for k, v in kwargs.items() if k != "streaming_callback"}
             
             initial_state: AgentState = {
                 "query": query,

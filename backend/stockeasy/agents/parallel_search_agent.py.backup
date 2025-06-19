@@ -189,11 +189,6 @@ class ParallelSearchAgent(BaseAgent):
         # 실행할 검색 에이전트 목록 생성
         search_agents = []
         for agent_name in self.search_agent_names:
-            # technical_analyzer는 이미 실행되었으므로 건너뜀
-            if agent_name == "technical_analyzer":
-                logger.info(f"기술적 분석은 이미 완료되어 건너뜁니다: {agent_name}")
-                continue
-            
             # 이미 실행 완료된 에이전트는 건너뜀
             if state.get("processing_status", {}).get(agent_name) in ["completed", "completed_with_default_plan", "completed_no_data"]:
                 logger.info(f"에이전트 {agent_name}은 이미 실행 완료되었습니다. 건너뜁니다.")
