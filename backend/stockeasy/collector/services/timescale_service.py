@@ -166,9 +166,11 @@ class TimescaleService:
                 # 대용량 데이터의 경우 중복보다는 속도를 우선
                 insert_query = text("""
                     INSERT INTO stock_prices (time, symbol, interval_type, open, high, low, close, volume, trading_value, 
+                                            change_amount, price_change_percent, volume_change, volume_change_percent, previous_close_price,
                                             adjusted_price_type, adjustment_ratio, adjusted_price_event,
                                             major_industry_type, minor_industry_type, stock_info, created_at)
                     VALUES (:time, :symbol, :interval_type, :open, :high, :low, :close, :volume, :trading_value,
+                           :change_amount, :price_change_percent, :volume_change, :volume_change_percent, :previous_close_price,
                            :adjusted_price_type, :adjustment_ratio, :adjusted_price_event,
                            :major_industry_type, :minor_industry_type, :stock_info, :created_at)
                     ON CONFLICT (time, symbol, interval_type) DO NOTHING
@@ -179,7 +181,8 @@ class TimescaleService:
                 for price_dict in price_dicts:
                     price_dict['created_at'] = current_time
                     # 새로운 필드들에 대한 기본값 설정
-                    for field in ['adjusted_price_type', 'adjustment_ratio', 'adjusted_price_event',
+                    for field in ['change_amount', 'price_change_percent', 'volume_change', 'volume_change_percent', 'previous_close_price',
+                                'adjusted_price_type', 'adjustment_ratio', 'adjusted_price_event',
                                 'major_industry_type', 'minor_industry_type', 'stock_info']:
                         if field not in price_dict:
                             price_dict[field] = None
@@ -211,9 +214,11 @@ class TimescaleService:
                 # ON CONFLICT를 사용한 upsert - 새로운 필드 구조 반영 (updated_at 포함)
                 upsert_query = text("""
                     INSERT INTO stock_prices (time, symbol, interval_type, open, high, low, close, volume, trading_value, 
+                                            change_amount, price_change_percent, volume_change, volume_change_percent, previous_close_price,
                                             adjusted_price_type, adjustment_ratio, adjusted_price_event,
                                             major_industry_type, minor_industry_type, stock_info, created_at, updated_at)
                     VALUES (:time, :symbol, :interval_type, :open, :high, :low, :close, :volume, :trading_value,
+                           :change_amount, :price_change_percent, :volume_change, :volume_change_percent, :previous_close_price,
                            :adjusted_price_type, :adjustment_ratio, :adjusted_price_event,
                            :major_industry_type, :minor_industry_type, :stock_info, :created_at, :updated_at)
                     ON CONFLICT (time, symbol, interval_type) 
@@ -224,6 +229,11 @@ class TimescaleService:
                         close = EXCLUDED.close,
                         volume = EXCLUDED.volume,
                         trading_value = EXCLUDED.trading_value,
+                        change_amount = EXCLUDED.change_amount,
+                        price_change_percent = EXCLUDED.price_change_percent,
+                        volume_change = EXCLUDED.volume_change,
+                        volume_change_percent = EXCLUDED.volume_change_percent,
+                        previous_close_price = EXCLUDED.previous_close_price,
                         adjusted_price_type = EXCLUDED.adjusted_price_type,
                         adjustment_ratio = EXCLUDED.adjustment_ratio,
                         adjusted_price_event = EXCLUDED.adjusted_price_event,
@@ -244,7 +254,8 @@ class TimescaleService:
                     price_dict['updated_at'] = current_time
                     
                     # 새로운 필드들에 대한 기본값 설정
-                    for field in ['adjusted_price_type', 'adjustment_ratio', 'adjusted_price_event',
+                    for field in ['change_amount', 'price_change_percent', 'volume_change', 'volume_change_percent', 'previous_close_price',
+                                'adjusted_price_type', 'adjustment_ratio', 'adjusted_price_event',
                                 'major_industry_type', 'minor_industry_type', 'stock_info']:
                         if field not in price_dict:
                             price_dict[field] = None
@@ -271,9 +282,11 @@ class TimescaleService:
             async with get_timescale_session_context() as session:
                 upsert_query = text("""
                     INSERT INTO stock_prices (time, symbol, interval_type, open, high, low, close, volume, trading_value, 
+                                            change_amount, price_change_percent, volume_change, volume_change_percent, previous_close_price,
                                             adjusted_price_type, adjustment_ratio, adjusted_price_event,
                                             major_industry_type, minor_industry_type, stock_info, created_at, updated_at)
                     VALUES (:time, :symbol, :interval_type, :open, :high, :low, :close, :volume, :trading_value,
+                           :change_amount, :price_change_percent, :volume_change, :volume_change_percent, :previous_close_price,
                            :adjusted_price_type, :adjustment_ratio, :adjusted_price_event,
                            :major_industry_type, :minor_industry_type, :stock_info, :created_at, :updated_at)
                     ON CONFLICT (time, symbol, interval_type) 
@@ -284,6 +297,11 @@ class TimescaleService:
                         close = EXCLUDED.close,
                         volume = EXCLUDED.volume,
                         trading_value = EXCLUDED.trading_value,
+                        change_amount = EXCLUDED.change_amount,
+                        price_change_percent = EXCLUDED.price_change_percent,
+                        volume_change = EXCLUDED.volume_change,
+                        volume_change_percent = EXCLUDED.volume_change_percent,
+                        previous_close_price = EXCLUDED.previous_close_price,
                         adjusted_price_type = EXCLUDED.adjusted_price_type,
                         adjustment_ratio = EXCLUDED.adjustment_ratio,
                         adjusted_price_event = EXCLUDED.adjusted_price_event,
@@ -1448,6 +1466,11 @@ class TimescaleService:
                         price_dict.get('close', None),
                         price_dict.get('volume', None),
                         price_dict.get('trading_value', None),
+                        price_dict.get('change_amount', None),
+                        price_dict.get('price_change_percent', None),
+                        price_dict.get('volume_change', None),
+                        price_dict.get('volume_change_percent', None),
+                        price_dict.get('previous_close_price', None),
                         price_dict.get('adjusted_price_type', None),
                         price_dict.get('adjustment_ratio', None),
                         price_dict.get('adjusted_price_event', None),
@@ -1465,6 +1488,7 @@ class TimescaleService:
                 # COPY 명령으로 고속 삽입
                 copy_query = """
                 COPY stock_prices (time, symbol, interval_type, open, high, low, close, volume, trading_value,
+                                 change_amount, price_change_percent, volume_change, volume_change_percent, previous_close_price,
                                  adjusted_price_type, adjustment_ratio, adjusted_price_event,
                                  major_industry_type, minor_industry_type, stock_info, created_at)
                 FROM STDIN WITH CSV
@@ -1903,6 +1927,33 @@ class TimescaleService:
                 
         except Exception as e:
             self.logger.error(f"당일 수급 데이터 UPSERT 실패: {e}")
+            raise
+
+    async def delete_all_stock_prices(self) -> Dict[str, Any]:
+        """
+        전체 주가 데이터 테이블 삭제 (force_update 용)
+        
+        Returns:
+            Dict: 삭제 결과
+        """
+        await self.initialize()
+        
+        try:
+            async with get_timescale_session_context() as session:
+                # TRUNCATE 사용 (DELETE보다 빠르고 tuple limit 에러 방지)
+                truncate_query = text("TRUNCATE TABLE stock_prices")
+                
+                await session.execute(truncate_query)
+                
+                self.logger.info(f"전체 주가 데이터 테이블 TRUNCATE 완료")
+                
+                return {
+                    "success": True,
+                    "message": "전체 주가 데이터 테이블 TRUNCATE 완료"
+                }
+                
+        except Exception as e:
+            self.logger.error(f"전체 주가 데이터 TRUNCATE 실패: {e}")
             raise
 
 

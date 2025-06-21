@@ -310,7 +310,8 @@ class DataCollectorService(LoggerMixin):
                 high=candle.high,
                 low=candle.low,
                 close=candle.close,
-                volume=candle.volume
+                volume=candle.volume,
+                price_change_percent=candle.price_change_percent
             ))
         
         return ChartDataResponse(
@@ -337,8 +338,8 @@ class DataCollectorService(LoggerMixin):
         
         # 스키마 정의
         schema = {
-            "fields": ["timestamp", "open", "high", "low", "close", "volume"],
-            "types": ["datetime", "decimal", "decimal", "decimal", "decimal", "integer"]
+            "fields": ["timestamp", "open", "high", "low", "close", "volume", "price_change_percent"],
+            "types": ["datetime", "decimal", "decimal", "decimal", "decimal", "integer", "decimal"]
         }
         
         # 압축된 데이터 배열 생성
@@ -353,7 +354,8 @@ class DataCollectorService(LoggerMixin):
                 float(candle.high) if candle.high else None,
                 float(candle.low) if candle.low else None,
                 float(candle.close) if candle.close else None,
-                int(candle.volume) if candle.volume else None
+                int(candle.volume) if candle.volume else None,
+                float(candle.price_change_percent) if candle.price_change_percent is not None else None
             ])
         
         return CompressedChartDataResponse(
@@ -1136,6 +1138,7 @@ class DataCollectorService(LoggerMixin):
         self,
         months_back: int = 24,
         batch_size: int = 50,
+        force_update: bool = False,
         progress_callback=None
     ) -> Dict[str, Any]:
         """
@@ -1144,13 +1147,23 @@ class DataCollectorService(LoggerMixin):
         Args:
             months_back: 수집할 개월 수 (기본 24개월)
             batch_size: 배치 크기 (동시 처리할 종목 수)
+            force_update: 기존 데이터 강제 덮어쓰기 여부 (전체 테이블 삭제 후 재생성)
             progress_callback: 진행상황 콜백 함수
             
         Returns:
             Dict: 수집 결과
         """
-        with LogContext(self.logger, f"전종목 일봉 차트 데이터 수집 ({months_back}개월) - 큐 기반") as ctx:
+        with LogContext(self.logger, f"전종목 일봉 차트 데이터 수집 ({months_back}개월) - 큐 기반" + (" [강제 업데이트]" if force_update else "")) as ctx:
             try:
+                # timescale_service import (스코프 문제 해결)
+                from stockeasy.collector.services.timescale_service import timescale_service
+                
+                # force_update=True일 때 전체 테이블 삭제
+                if force_update:
+                    ctx.log_progress("강제 업데이트 모드: 전체 주가 데이터 테이블 TRUNCATE 시작")
+                    delete_result = await timescale_service.delete_all_stock_prices()
+                    ctx.log_progress(f"전체 주가 데이터 테이블 TRUNCATE 완료")
+                
                 # 전종목 리스트 조회
                 all_stocks = await self.get_all_stock_list_for_stockai()
                 
@@ -1292,23 +1305,45 @@ class DataCollectorService(LoggerMixin):
                                 symbols = batch_info["symbols"]
                                 batch_num = batch_info["batch_num"]
                                 
-                                # TimescaleDB에 저장
-                                await timescale_service.bulk_create_stock_prices_with_progress(
-                                    stock_price_data,
-                                    batch_size=2000,
-                                    progress_callback=None
-                                )
-                                stats["total_records"] += len(stock_price_data)
+                                # 대량 데이터를 작은 배치로 나누어 처리 (스키마 제한 10,000개 준수)
+                                max_batch_size = 5000  # 안전한 배치 크기
+                                total_processed = 0
                                 
-                                # 변동률 등 배치 계산
-                                batch_symbols = list(set([price.symbol for price in stock_price_data]))
-                                try:
-                                    calc_result = await timescale_service.batch_calculate_for_new_data(
-                                        symbols=batch_symbols
-                                    )
-                                    ctx.logger.info(f"DB Consumer: 배치 {batch_num} 저장 완료 ({len(stock_price_data)}건), 계산 완료: {calc_result.get('total_updated', 0)}건")
-                                except Exception as e:
-                                    ctx.logger.warning(f"배치 계산 실패 (데이터는 정상 저장됨): {e}")
+                                for i in range(0, len(stock_price_data), max_batch_size):
+                                    sub_batch = stock_price_data[i:i + max_batch_size]
+                                    
+                                    # TimescaleDB에 저장 (force_update 모드에 따라 다른 방식 사용)
+                                    if force_update:
+                                        # 강제 업데이트 모드: 단순 INSERT (충돌 시 NOTHING)
+                                        from stockeasy.collector.schemas.timescale_schemas import BulkStockPriceCreate
+                                        await timescale_service.bulk_create_stock_prices(
+                                            BulkStockPriceCreate(prices=sub_batch)
+                                        )
+                                        ctx.logger.info(f"DB Consumer [강제모드]: 배치 {batch_num}-{i//max_batch_size + 1} 단순 INSERT 완료 ({len(sub_batch)}건)")
+                                    else:
+                                        # 일반 모드: 기존 방식 (ON CONFLICT DO NOTHING)
+                                        await timescale_service.bulk_create_stock_prices_with_progress(
+                                            sub_batch,
+                                            batch_size=2000,
+                                            progress_callback=None
+                                        )
+                                        ctx.logger.info(f"DB Consumer: 배치 {batch_num}-{i//max_batch_size + 1} 저장 완료 ({len(sub_batch)}건)")
+                                    
+                                    total_processed += len(sub_batch)
+                                
+                                stats["total_records"] += total_processed
+                                ctx.logger.info(f"DB Consumer: 배치 {batch_num} 전체 처리 완료 ({total_processed}건, {len(stock_price_data) // max_batch_size + 1}개 서브배치)")
+                                
+                                # 변동률 등 배치 계산 (force_update 모드에서는 스킵)
+                                if not force_update:
+                                    batch_symbols = list(set([price.symbol for price in stock_price_data]))
+                                    try:
+                                        calc_result = await timescale_service.batch_calculate_for_new_data(
+                                            symbols=batch_symbols
+                                        )
+                                        ctx.logger.info(f"DB Consumer: 배치 {batch_num} 계산 완료: {calc_result.get('total_updated', 0)}건")
+                                    except Exception as e:
+                                        ctx.logger.warning(f"배치 계산 실패 (데이터는 정상 저장됨): {e}")
                                 
                             except Exception as e:
                                 ctx.logger.error(f"DB Consumer 배치 처리 실패: {e}")
@@ -1336,44 +1371,47 @@ class DataCollectorService(LoggerMixin):
                 # 두 태스크 완료 대기
                 await asyncio.gather(producer_task, consumer_task)
                 
-                # 전체 배치 수집 완료 후 최종 배치 계산 실행
-                ctx.log_progress("전체 수집 완료 후 최종 배치 계산 시작")
-                try:
-                    # 성공적으로 수집된 종목들에 대해 최종 배치 계산
-                    successful_symbols = []
-                    if stats["success_stocks"] > 0:
-                        # 실제 DB에서 데이터가 있는 종목들을 조회
-                        from stockeasy.collector.services.timescale_service import timescale_service
-                        from sqlalchemy import text
-                        from stockeasy.collector.core.timescale_database import get_timescale_session_context
+                # 전체 배치 수집 완료 후 최종 배치 계산 실행 (force_update 모드에서는 스킵)
+                if not force_update:
+                    ctx.log_progress("전체 수집 완료 후 최종 배치 계산 시작")
+                    try:
+                        # 성공적으로 수집된 종목들에 대해 최종 배치 계산
+                        successful_symbols = []
+                        if stats["success_stocks"] > 0:
+                            # 실제 DB에서 데이터가 있는 종목들을 조회
+                            from stockeasy.collector.services.timescale_service import timescale_service
+                            from sqlalchemy import text
+                            from stockeasy.collector.core.timescale_database import get_timescale_session_context
+                            
+                            async with get_timescale_session_context() as session:
+                                symbols_query = text("""
+                                    SELECT DISTINCT symbol 
+                                    FROM stock_prices 
+                                    WHERE time >= :start_date::date 
+                                    AND time <= :end_date::date
+                                    ORDER BY symbol
+                                """)
+                                result_symbols = await session.execute(symbols_query, {
+                                    'start_date': start_date_str[:4] + '-' + start_date_str[4:6] + '-' + start_date_str[6:8],
+                                    'end_date': end_date_str[:4] + '-' + end_date_str[4:6] + '-' + end_date_str[6:8]
+                                })
+                                successful_symbols = [row[0] for row in result_symbols.fetchall()]
                         
-                        async with get_timescale_session_context() as session:
-                            symbols_query = text("""
-                                SELECT DISTINCT symbol 
-                                FROM stock_prices 
-                                WHERE time >= :start_date::date 
-                                AND time <= :end_date::date
-                                ORDER BY symbol
-                            """)
-                            result_symbols = await session.execute(symbols_query, {
-                                'start_date': start_date_str[:4] + '-' + start_date_str[4:6] + '-' + start_date_str[6:8],
-                                'end_date': end_date_str[:4] + '-' + end_date_str[4:6] + '-' + end_date_str[6:8]
-                            })
-                            successful_symbols = [row[0] for row in result_symbols.fetchall()]
-                    
-                    if successful_symbols:
-                        ctx.log_progress(f"최종 배치 계산 대상: {len(successful_symbols)}개 종목")
-                        final_calc_result = await timescale_service.batch_calculate_stock_price_changes(
-                            symbols=successful_symbols,
-                            days_back=(datetime.strptime(end_date_str, '%Y%m%d') - datetime.strptime(start_date_str, '%Y%m%d')).days + 1,
-                            batch_size=50
-                        )
-                        ctx.log_progress(f"최종 배치 계산 완료: {final_calc_result.get('total_updated', 0)}건 업데이트")
-                    else:
-                        ctx.log_progress("최종 배치 계산 대상 없음")
-                        
-                except Exception as e:
-                    ctx.logger.warning(f"최종 배치 계산 실패 (데이터 수집은 정상 완료): {e}")
+                        if successful_symbols:
+                            ctx.log_progress(f"최종 배치 계산 대상: {len(successful_symbols)}개 종목")
+                            final_calc_result = await timescale_service.batch_calculate_stock_price_changes(
+                                symbols=successful_symbols,
+                                days_back=(datetime.strptime(end_date_str, '%Y%m%d') - datetime.strptime(start_date_str, '%Y%m%d')).days + 1,
+                                batch_size=50
+                            )
+                            ctx.log_progress(f"최종 배치 계산 완료: {final_calc_result.get('total_updated', 0)}건 업데이트")
+                        else:
+                            ctx.log_progress("최종 배치 계산 대상 없음")
+                            
+                    except Exception as e:
+                        ctx.logger.warning(f"최종 배치 계산 실패 (데이터 수집은 정상 완료): {e}")
+                else:
+                    ctx.log_progress("강제 업데이트 모드: 후처리 배치 계산 스킵")
                 
                 result = {
                     "success": True,
@@ -1383,11 +1421,12 @@ class DataCollectorService(LoggerMixin):
                     "total_records": stats["total_records"],
                     "start_date": start_date_str,
                     "end_date": end_date_str,
-                    "final_calculation_symbols": len(successful_symbols) if 'successful_symbols' in locals() else 0,
-                    "message": f"전종목 차트 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건"
+                    "force_update": force_update,
+                    "final_calculation_symbols": len(successful_symbols) if not force_update and 'successful_symbols' in locals() else 0,
+                    "message": f"전종목 차트 데이터 수집 완료 (큐 기반{'[강제 업데이트]' if force_update else ''}): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건"
                 }
                 
-                ctx.log_progress(f"전종목 차트 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건")
+                ctx.log_progress(f"전종목 차트 데이터 수집 완료 (큐 기반{'[강제 업데이트]' if force_update else ''}): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건")
                 return result
                 
             except Exception as e:

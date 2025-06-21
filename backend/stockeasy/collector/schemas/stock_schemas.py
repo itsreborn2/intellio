@@ -183,6 +183,7 @@ class ChartDataPoint(BaseModel):
     low: Optional[Decimal] = Field(None, description="저가")
     close: Optional[Decimal] = Field(None, description="종가")
     volume: Optional[int] = Field(None, description="거래량")
+    price_change_percent: Optional[Decimal] = Field(None, description="전일대비 등락율(%)")
 
 
 class ChartDataResponse(BaseModel):
@@ -211,7 +212,7 @@ class CompressedChartDataResponse(BaseModel):
     
     @validator('schema')
     def validate_schema(cls, v):
-        required_fields = ["timestamp", "open", "high", "low", "close", "volume"]
+        required_fields = ["timestamp", "open", "high", "low", "close", "volume", "price_change_percent"]
         if "fields" not in v or not all(field in v["fields"] for field in required_fields):
             raise ValueError('스키마에 필수 필드가 누락되었습니다')
         return v

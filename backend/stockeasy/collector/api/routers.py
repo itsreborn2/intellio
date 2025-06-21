@@ -885,6 +885,7 @@ async def start_batch_collection(
 async def collect_chart_data_only(
     months_back: int = Query(24, description="수집할 개월 수", ge=1, le=60),
     batch_size: int = Query(50, description="배치 크기", ge=10, le=100),
+    force_update: bool = Query(False, description="기존 데이터 강제 덮어쓰기 (전체 테이블 삭제 후 재생성)"),
     data_collector: DataCollectorService = Depends(get_data_collector)
 ):
     """
@@ -893,13 +894,15 @@ async def collect_chart_data_only(
     Args:
         months_back: 수집할 개월 수 (기본 24개월)
         batch_size: 배치 크기 (기본 50)
+        force_update: 기존 데이터 강제 덮어쓰기 여부 (전체 테이블 삭제 후 재생성)
     """
     try:
-        logger.info(f"차트 데이터 수집 시작: {months_back}개월, 배치크기={batch_size}")
+        logger.info(f"차트 데이터 수집 시작: {months_back}개월, 배치크기={batch_size}, 강제업데이트={force_update}")
         
         result = await data_collector.collect_all_stock_chart_data(
             months_back=months_back,
-            batch_size=batch_size
+            batch_size=batch_size,
+            force_update=force_update
         )
         
         return {
@@ -1031,7 +1034,7 @@ async def collect_single_stock_chart_data(
                 api_previous_close = safe_float(chart_item.previous_close) if hasattr(chart_item, 'previous_close') and chart_item.previous_close else None
                 api_volume_change_percent = safe_float(chart_item.volume_change_percent) if hasattr(chart_item, 'volume_change_percent') and chart_item.volume_change_percent else None
                 
-                logger.debug(f"종목 {symbol} API 계산값: 변동금액={api_change_amount}, 변동률={api_change_rate}%, 전일종가={api_previous_close}, 거래량변동률={api_volume_change_percent}%")
+                #logger.info(f"종목 {symbol} API 계산값: 변동금액={api_change_amount}, 변동률={api_change_rate}%, 전일종가={api_previous_close}, 거래량변동률={api_volume_change_percent}%")
                 
                 stock_price = StockPriceCreate(
                     time=chart_date,
@@ -1070,34 +1073,34 @@ async def collect_single_stock_chart_data(
             # 시간순으로 정렬하여 저장 (과거 → 현재)
             stock_price_data.sort(key=lambda x: x.time)
             
-            # 거래량 변화량 계산 (전일 거래량과 비교)
-            for i in range(1, len(stock_price_data)):
-                current = stock_price_data[i]
-                previous = stock_price_data[i-1]
+            # # 거래량 변화량 계산 (전일 거래량과 비교)
+            # for i in range(1, len(stock_price_data)):
+            #     current = stock_price_data[i]
+            #     previous = stock_price_data[i-1]
                 
-                # 거래량 변화량 계산
-                if previous.volume and previous.volume > 0:
-                    volume_change = current.volume - previous.volume
-                    current.volume_change = volume_change
+            #     # 거래량 변화량 계산
+            #     if previous.volume and previous.volume > 0:
+            #         volume_change = current.volume - previous.volume
+            #         current.volume_change = volume_change
                     
-                    # 거래량 변화율이 API에서 제공되지 않는 경우 계산
-                    if not current.volume_change_percent:
-                        current.volume_change_percent = round((volume_change / previous.volume) * 100, 4) if previous.volume > 0 else 0
+            #         # 거래량 변화율이 API에서 제공되지 않는 경우 계산
+            #         if not current.volume_change_percent:
+            #             current.volume_change_percent = round((volume_change / previous.volume) * 100, 4) if previous.volume > 0 else 0
             
             await timescale_service.bulk_create_stock_prices_with_progress(
                 stock_price_data,
                 batch_size=1000
             )
             
-            # 누락된 변동률 등 재계산 (개별 종목용)
-            logger.info(f"종목 {symbol} 변동률 재계산 시작")
-            await timescale_service.batch_calculate_for_new_data(
-                symbols=[symbol],
-                start_date=start_date
-            )
-            logger.info(f"종목 {symbol} 변동률 재계산 완료")
+            # # 누락된 변동률 등 재계산 (개별 종목용)
+            # logger.info(f"종목 {symbol} 변동률 재계산 시작")
+            # await timescale_service.batch_calculate_for_new_data(
+            #     symbols=[symbol],
+            #     start_date=start_date
+            # )
+            # logger.info(f"종목 {symbol} 변동률 재계산 완료")
         
-        # 키움 API 계산값 통계
+        # # 키움 API 계산값 통계
         api_calculated_count = len([p for p in stock_price_data if p.change_amount is not None])
         
         return {
