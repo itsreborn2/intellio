@@ -32,6 +32,9 @@ from stockeasy.collector.schemas.timescale_schemas import (
     IntervalType
 )
 
+# 공통 유틸리티 함수 import
+from common.utils.util import safe_float, safe_int, safe_price_float, safe_float_or_none, safe_int_or_none
+
 
 class DataCollectorService(LoggerMixin):
     """데이터 수집 서비스"""
@@ -307,7 +310,8 @@ class DataCollectorService(LoggerMixin):
                 high=candle.high,
                 low=candle.low,
                 close=candle.close,
-                volume=candle.volume
+                volume=candle.volume,
+                price_change_percent=candle.price_change_percent
             ))
         
         return ChartDataResponse(
@@ -334,8 +338,8 @@ class DataCollectorService(LoggerMixin):
         
         # 스키마 정의
         schema = {
-            "fields": ["timestamp", "open", "high", "low", "close", "volume"],
-            "types": ["datetime", "decimal", "decimal", "decimal", "decimal", "integer"]
+            "fields": ["timestamp", "open", "high", "low", "close", "volume", "price_change_percent"],
+            "types": ["datetime", "decimal", "decimal", "decimal", "decimal", "integer", "decimal"]
         }
         
         # 압축된 데이터 배열 생성
@@ -350,7 +354,8 @@ class DataCollectorService(LoggerMixin):
                 float(candle.high) if candle.high else None,
                 float(candle.low) if candle.low else None,
                 float(candle.close) if candle.close else None,
-                int(candle.volume) if candle.volume else None
+                int(candle.volume) if candle.volume else None,
+                float(candle.price_change_percent) if candle.price_change_percent is not None else None
             ])
         
         return CompressedChartDataResponse(
@@ -570,8 +575,8 @@ class DataCollectorService(LoggerMixin):
             
             # 코스피(001)와 코스닥(101) 지수 조회
             market_codes = [
-                {'code': '001', 'name': '코스피'},
-                {'code': '101', 'name': '코스닥'}
+                {'code': '001', 'name': 'KOSPI'},
+                {'code': '101', 'name': 'KOSDAQ'}
             ]
             
             for market in market_codes:
@@ -580,27 +585,6 @@ class DataCollectorService(LoggerMixin):
                     market_data = await self.kiwoom_client.get_market_indices(market['code'])
                     
                     if market_data:
-                        # 안전한 숫자 변환 함수
-                        def safe_float(value, default=0.0):
-                            try:
-                                if value is None or value == '':
-                                    return default
-                                # +/- 기호와 쉼표 제거
-                                clean_value = str(value).replace(',', '').replace('+', '').replace('-', '')
-                                return float(clean_value) if clean_value else default
-                            except (ValueError, TypeError):
-                                return default
-                        
-                        def safe_int(value, default=0):
-                            try:
-                                if value is None or value == '':
-                                    return default
-                                # 쉼표 제거
-                                clean_value = str(value).replace(',', '')
-                                return int(clean_value) if clean_value else default
-                            except (ValueError, TypeError):
-                                return default
-                        
                         # 전일대비 변동금액 (부호 유지)
                         change_amount_value = 0.0
                         if market_data.pred_pre:
@@ -769,11 +753,18 @@ class DataCollectorService(LoggerMixin):
         """
         try:
             # 캐시에서 먼저 조회
-            cached_list = await self.cache_manager.get_cache("all_stock_list_for_stockai")
-            if cached_list:
+            cached_data = await self.cache_manager.get_cache("all_stock_list_for_stockai")
+            if cached_data:
+                # 메타데이터 구조인지 확인
+                if isinstance(cached_data, dict) and "data" in cached_data:
+                    stock_dict = cached_data["data"]
+                else:
+                    # 기존 형태의 캐시 데이터 (하위 호환성)
+                    stock_dict = cached_data
+                
                 # 전체 종목 정보를 반환
                 result = []
-                for stock_info in cached_list.values():
+                for stock_info in stock_dict.values():
                     result.append(stock_info)
                 
                 self.logger.info(f"캐시에서 종목 리스트 반환: {len(result)}개")
@@ -783,12 +774,22 @@ class DataCollectorService(LoggerMixin):
             self.logger.info("캐시에 종목 리스트가 없어 키움 API에서 조회")
             stock_dict = await self.kiwoom_client.get_all_stock_list_for_stockai()
             
-            # 키움 API에서 조회한 결과를 캐시에 저장 (Dict 형태 그대로)
+            # 키움 API에서 조회한 결과를 캐시에 저장 (메타데이터 포함)
             if stock_dict:
+                # 메타데이터와 함께 저장
+                cache_data = {
+                    "data": stock_dict,
+                    "metadata": {
+                        "updated_at": datetime.now().isoformat(),
+                        "total_count": len(stock_dict),
+                        "source": "kiwoom_api"
+                    }
+                }
+                
                 # 캐시에 저장 (24시간 TTL)
                 await self.cache_manager.set_cache(
                     "all_stock_list_for_stockai",
-                    stock_dict,
+                    cache_data,
                     ttl=86400  # 24시간
                 )
                 
@@ -813,11 +814,18 @@ class DataCollectorService(LoggerMixin):
         """
         try:
             # 캐시에서 먼저 조회
-            cached_list = await self.cache_manager.get_cache("all_stock_list")
-            if cached_list:
+            cached_data = await self.cache_manager.get_cache("all_stock_list")
+            if cached_data:
+                # 메타데이터 구조인지 확인
+                if isinstance(cached_data, dict) and "data" in cached_data:
+                    stock_dict = cached_data["data"]
+                else:
+                    # 기존 형태의 캐시 데이터 (하위 호환성)
+                    stock_dict = cached_data
+                
                 # 전체 종목 정보를 반환
                 result = []
-                for stock_info in cached_list.values():
+                for stock_info in stock_dict.values():
                     result.append(stock_info)
                 
                 self.logger.info(f"캐시에서 종목 리스트 반환: {len(result)}개")
@@ -827,12 +835,22 @@ class DataCollectorService(LoggerMixin):
             self.logger.info("캐시에 종목 리스트가 없어 키움 API에서 조회")
             stock_dict = await self.kiwoom_client.get_all_stock_list()
             
-            # 키움 API에서 조회한 결과를 캐시에 저장 (Dict 형태 그대로)
+            # 키움 API에서 조회한 결과를 캐시에 저장 (메타데이터 포함)
             if stock_dict:
+                # 메타데이터와 함께 저장
+                cache_data = {
+                    "data": stock_dict,
+                    "metadata": {
+                        "updated_at": datetime.now().isoformat(),
+                        "total_count": len(stock_dict),
+                        "source": "kiwoom_api"
+                    }
+                }
+                
                 # 캐시에 저장 (24시간 TTL)
                 await self.cache_manager.set_cache(
                     "all_stock_list",
-                    stock_dict,
+                    cache_data,
                     ttl=86400  # 24시간
                 )
                 
@@ -872,6 +890,16 @@ class DataCollectorService(LoggerMixin):
             stock_info = await self.kiwoom_client.get_stock_info(code)
             
             if stock_info:
+                cached_data = await self.cache_manager.get_cache("all_stock_list_for_stockai")
+                
+                # 캐시 데이터에서 해당 종목의 market 정보 찾기
+                market = 'KOSPI'  # 기본값
+                if cached_data and 'data' in cached_data:
+                    # data는 [code, name, market] 형태의 배열들
+                    data_list = cached_data['data']
+                    market = data_list[code]['market']
+                
+                stock_info['market'] = market
                 # 캐시에 저장 (1시간 TTL)
                 await self.cache_manager.set_cache(
                     cache_key,
@@ -900,8 +928,15 @@ class DataCollectorService(LoggerMixin):
         """
         try:
             # 전체 종목 리스트에서 검색
-            cached_list = await self.cache_manager.get_cache("all_stock_list")
-            if not cached_list:
+            cached_data = await self.cache_manager.get_cache("all_stock_list")
+            if cached_data:
+                # 메타데이터 구조인지 확인
+                if isinstance(cached_data, dict) and "data" in cached_data:
+                    cached_list = cached_data["data"]
+                else:
+                    # 기존 형태의 캐시 데이터 (하위 호환성)
+                    cached_list = cached_data
+            else:
                 # 캐시에 없으면 키움 API에서 조회
                 all_stocks = await self.kiwoom_client.get_all_stock_list()
                 cached_list = all_stocks
@@ -937,18 +972,34 @@ class DataCollectorService(LoggerMixin):
             # 키움 API에서 강제 새로고침
             stock_list = await self.kiwoom_client.get_all_stock_list(force_refresh=True)
             
-            # 캐시에 저장
+            # 캐시에 저장 (메타데이터 포함)
+            cache_data = {
+                "data": stock_list,
+                "metadata": {
+                    "updated_at": datetime.now().isoformat(),
+                    "total_count": len(stock_list),
+                    "source": "kiwoom_api_force_refresh"
+                }
+            }
             await self.cache_manager.set_cache(
                 "all_stock_list", 
-                stock_list, 
+                cache_data, 
                 ttl=86400  # 24시간
             )
             
             stock_list_for_stockai = await self.kiwoom_client.get_all_stock_list_for_stockai(force_refresh=True)
-            # 캐시에 저장(stock ai)
+            # 캐시에 저장(stock ai) - 메타데이터 포함
+            cache_data_stockai = {
+                "data": stock_list_for_stockai,
+                "metadata": {
+                    "updated_at": datetime.now().isoformat(),
+                    "total_count": len(stock_list_for_stockai),
+                    "source": "kiwoom_api_force_refresh"
+                }
+            }
             await self.cache_manager.set_cache(
                 "all_stock_list_for_stockai", 
-                stock_list_for_stockai, 
+                cache_data_stockai, 
                 ttl=86400  # 24시간
             )
             
@@ -1022,7 +1073,7 @@ class DataCollectorService(LoggerMixin):
     
     async def get_last_update_time(self, update_type: str) -> Optional[datetime]:
         """
-        키움 API의 마지막 업데이트 시간 조회
+        마지막 업데이트 시간 조회 (캐시 메타데이터 우선, 키움 API 보조)
         
         Args:
             update_type (str): 업데이트 유형 ("stockai" 또는 "stock")
@@ -1031,10 +1082,29 @@ class DataCollectorService(LoggerMixin):
             Optional[datetime]: 마지막 업데이트 시간 또는 None
         """
         try:
+            # 1. 먼저 캐시에서 메타데이터 조회
             if update_type == "stockai":
+                cache_key = "all_stock_list_for_stockai"
+                cache_data = await self.cache_manager.get_cache(cache_key)
+                if cache_data and isinstance(cache_data, dict) and 'metadata' in cache_data:
+                    updated_at = cache_data['metadata'].get('updated_at')
+                    if updated_at:
+                        return datetime.fromisoformat(updated_at) if isinstance(updated_at, str) else updated_at
+                
+                # 캐시에 메타데이터가 없으면 키움 클라이언트에서 조회
                 return getattr(self.kiwoom_client, '_last_stockai_update', None)
+                
             elif update_type == "stock":
+                cache_key = "all_stock_list"
+                cache_data = await self.cache_manager.get_cache(cache_key)
+                if cache_data and isinstance(cache_data, dict) and 'metadata' in cache_data:
+                    updated_at = cache_data['metadata'].get('updated_at')
+                    if updated_at:
+                        return datetime.fromisoformat(updated_at) if isinstance(updated_at, str) else updated_at
+                
+                # 캐시에 메타데이터가 없으면 키움 클라이언트에서 조회
                 return getattr(self.kiwoom_client, '_last_stock_update', None)
+                
             else:
                 self.logger.warning(f"잘못된 update_type: {update_type}")
                 return None
@@ -1068,6 +1138,7 @@ class DataCollectorService(LoggerMixin):
         self,
         months_back: int = 24,
         batch_size: int = 50,
+        force_update: bool = False,
         progress_callback=None
     ) -> Dict[str, Any]:
         """
@@ -1076,13 +1147,23 @@ class DataCollectorService(LoggerMixin):
         Args:
             months_back: 수집할 개월 수 (기본 24개월)
             batch_size: 배치 크기 (동시 처리할 종목 수)
+            force_update: 기존 데이터 강제 덮어쓰기 여부 (전체 테이블 삭제 후 재생성)
             progress_callback: 진행상황 콜백 함수
             
         Returns:
             Dict: 수집 결과
         """
-        with LogContext(self.logger, f"전종목 일봉 차트 데이터 수집 ({months_back}개월) - 큐 기반") as ctx:
+        with LogContext(self.logger, f"전종목 일봉 차트 데이터 수집 ({months_back}개월) - 큐 기반" + (" [강제 업데이트]" if force_update else "")) as ctx:
             try:
+                # timescale_service import (스코프 문제 해결)
+                from stockeasy.collector.services.timescale_service import timescale_service
+                
+                # force_update=True일 때 전체 테이블 삭제
+                if force_update:
+                    ctx.log_progress("강제 업데이트 모드: 전체 주가 데이터 테이블 TRUNCATE 시작")
+                    delete_result = await timescale_service.delete_all_stock_prices()
+                    ctx.log_progress(f"전체 주가 데이터 테이블 TRUNCATE 완료")
+                
                 # 전종목 리스트 조회
                 all_stocks = await self.get_all_stock_list_for_stockai()
                 
@@ -1136,18 +1217,7 @@ class DataCollectorService(LoggerMixin):
                                 for symbol, chart_data in chart_data_dict.items():
                                     for chart_item in chart_data:
                                         try:
-                                            # 안전한 변환 함수들
-                                            def safe_float(value):
-                                                try:
-                                                    return float(value) if value and str(value).strip() else None
-                                                except (ValueError, TypeError):
-                                                    return None
-                                            
-                                            def safe_int(value):
-                                                try:
-                                                    return int(value) if value and str(value).strip() else None
-                                                except (ValueError, TypeError):
-                                                    return None
+                                            # 안전한 변환 함수들 (공통 함수 사용)
                                             
                                             # 키움 API에서 제공하는 계산값들 추출
                                             api_change_amount = safe_float(chart_item.change_amount) if hasattr(chart_item, 'change_amount') else None
@@ -1235,23 +1305,45 @@ class DataCollectorService(LoggerMixin):
                                 symbols = batch_info["symbols"]
                                 batch_num = batch_info["batch_num"]
                                 
-                                # TimescaleDB에 저장
-                                await timescale_service.bulk_create_stock_prices_with_progress(
-                                    stock_price_data,
-                                    batch_size=2000,
-                                    progress_callback=None
-                                )
-                                stats["total_records"] += len(stock_price_data)
+                                # 대량 데이터를 작은 배치로 나누어 처리 (스키마 제한 10,000개 준수)
+                                max_batch_size = 5000  # 안전한 배치 크기
+                                total_processed = 0
                                 
-                                # 변동률 등 배치 계산
-                                batch_symbols = list(set([price.symbol for price in stock_price_data]))
-                                try:
-                                    calc_result = await timescale_service.batch_calculate_for_new_data(
-                                        symbols=batch_symbols
-                                    )
-                                    ctx.logger.info(f"DB Consumer: 배치 {batch_num} 저장 완료 ({len(stock_price_data)}건), 계산 완료: {calc_result.get('total_updated', 0)}건")
-                                except Exception as e:
-                                    ctx.logger.warning(f"배치 계산 실패 (데이터는 정상 저장됨): {e}")
+                                for i in range(0, len(stock_price_data), max_batch_size):
+                                    sub_batch = stock_price_data[i:i + max_batch_size]
+                                    
+                                    # TimescaleDB에 저장 (force_update 모드에 따라 다른 방식 사용)
+                                    if force_update:
+                                        # 강제 업데이트 모드: 단순 INSERT (충돌 시 NOTHING)
+                                        from stockeasy.collector.schemas.timescale_schemas import BulkStockPriceCreate
+                                        await timescale_service.bulk_create_stock_prices(
+                                            BulkStockPriceCreate(prices=sub_batch)
+                                        )
+                                        ctx.logger.info(f"DB Consumer [강제모드]: 배치 {batch_num}-{i//max_batch_size + 1} 단순 INSERT 완료 ({len(sub_batch)}건)")
+                                    else:
+                                        # 일반 모드: 기존 방식 (ON CONFLICT DO NOTHING)
+                                        await timescale_service.bulk_create_stock_prices_with_progress(
+                                            sub_batch,
+                                            batch_size=2000,
+                                            progress_callback=None
+                                        )
+                                        ctx.logger.info(f"DB Consumer: 배치 {batch_num}-{i//max_batch_size + 1} 저장 완료 ({len(sub_batch)}건)")
+                                    
+                                    total_processed += len(sub_batch)
+                                
+                                stats["total_records"] += total_processed
+                                ctx.logger.info(f"DB Consumer: 배치 {batch_num} 전체 처리 완료 ({total_processed}건, {len(stock_price_data) // max_batch_size + 1}개 서브배치)")
+                                
+                                # 변동률 등 배치 계산 (force_update 모드에서는 스킵)
+                                if not force_update:
+                                    batch_symbols = list(set([price.symbol for price in stock_price_data]))
+                                    try:
+                                        calc_result = await timescale_service.batch_calculate_for_new_data(
+                                            symbols=batch_symbols
+                                        )
+                                        ctx.logger.info(f"DB Consumer: 배치 {batch_num} 계산 완료: {calc_result.get('total_updated', 0)}건")
+                                    except Exception as e:
+                                        ctx.logger.warning(f"배치 계산 실패 (데이터는 정상 저장됨): {e}")
                                 
                             except Exception as e:
                                 ctx.logger.error(f"DB Consumer 배치 처리 실패: {e}")
@@ -1279,44 +1371,47 @@ class DataCollectorService(LoggerMixin):
                 # 두 태스크 완료 대기
                 await asyncio.gather(producer_task, consumer_task)
                 
-                # 전체 배치 수집 완료 후 최종 배치 계산 실행
-                ctx.log_progress("전체 수집 완료 후 최종 배치 계산 시작")
-                try:
-                    # 성공적으로 수집된 종목들에 대해 최종 배치 계산
-                    successful_symbols = []
-                    if stats["success_stocks"] > 0:
-                        # 실제 DB에서 데이터가 있는 종목들을 조회
-                        from stockeasy.collector.services.timescale_service import timescale_service
-                        from sqlalchemy import text
-                        from stockeasy.collector.core.timescale_database import get_timescale_session_context
+                # 전체 배치 수집 완료 후 최종 배치 계산 실행 (force_update 모드에서는 스킵)
+                if not force_update:
+                    ctx.log_progress("전체 수집 완료 후 최종 배치 계산 시작")
+                    try:
+                        # 성공적으로 수집된 종목들에 대해 최종 배치 계산
+                        successful_symbols = []
+                        if stats["success_stocks"] > 0:
+                            # 실제 DB에서 데이터가 있는 종목들을 조회
+                            from stockeasy.collector.services.timescale_service import timescale_service
+                            from sqlalchemy import text
+                            from stockeasy.collector.core.timescale_database import get_timescale_session_context
+                            
+                            async with get_timescale_session_context() as session:
+                                symbols_query = text("""
+                                    SELECT DISTINCT symbol 
+                                    FROM stock_prices 
+                                    WHERE time >= :start_date::date 
+                                    AND time <= :end_date::date
+                                    ORDER BY symbol
+                                """)
+                                result_symbols = await session.execute(symbols_query, {
+                                    'start_date': start_date_str[:4] + '-' + start_date_str[4:6] + '-' + start_date_str[6:8],
+                                    'end_date': end_date_str[:4] + '-' + end_date_str[4:6] + '-' + end_date_str[6:8]
+                                })
+                                successful_symbols = [row[0] for row in result_symbols.fetchall()]
                         
-                        async with get_timescale_session_context() as session:
-                            symbols_query = text("""
-                                SELECT DISTINCT symbol 
-                                FROM stock_prices 
-                                WHERE time >= :start_date::date 
-                                AND time <= :end_date::date
-                                ORDER BY symbol
-                            """)
-                            result_symbols = await session.execute(symbols_query, {
-                                'start_date': start_date_str[:4] + '-' + start_date_str[4:6] + '-' + start_date_str[6:8],
-                                'end_date': end_date_str[:4] + '-' + end_date_str[4:6] + '-' + end_date_str[6:8]
-                            })
-                            successful_symbols = [row[0] for row in result_symbols.fetchall()]
-                    
-                    if successful_symbols:
-                        ctx.log_progress(f"최종 배치 계산 대상: {len(successful_symbols)}개 종목")
-                        final_calc_result = await timescale_service.batch_calculate_stock_price_changes(
-                            symbols=successful_symbols,
-                            days_back=(datetime.strptime(end_date_str, '%Y%m%d') - datetime.strptime(start_date_str, '%Y%m%d')).days + 1,
-                            batch_size=50
-                        )
-                        ctx.log_progress(f"최종 배치 계산 완료: {final_calc_result.get('total_updated', 0)}건 업데이트")
-                    else:
-                        ctx.log_progress("최종 배치 계산 대상 없음")
-                        
-                except Exception as e:
-                    ctx.logger.warning(f"최종 배치 계산 실패 (데이터 수집은 정상 완료): {e}")
+                        if successful_symbols:
+                            ctx.log_progress(f"최종 배치 계산 대상: {len(successful_symbols)}개 종목")
+                            final_calc_result = await timescale_service.batch_calculate_stock_price_changes(
+                                symbols=successful_symbols,
+                                days_back=(datetime.strptime(end_date_str, '%Y%m%d') - datetime.strptime(start_date_str, '%Y%m%d')).days + 1,
+                                batch_size=50
+                            )
+                            ctx.log_progress(f"최종 배치 계산 완료: {final_calc_result.get('total_updated', 0)}건 업데이트")
+                        else:
+                            ctx.log_progress("최종 배치 계산 대상 없음")
+                            
+                    except Exception as e:
+                        ctx.logger.warning(f"최종 배치 계산 실패 (데이터 수집은 정상 완료): {e}")
+                else:
+                    ctx.log_progress("강제 업데이트 모드: 후처리 배치 계산 스킵")
                 
                 result = {
                     "success": True,
@@ -1326,11 +1421,12 @@ class DataCollectorService(LoggerMixin):
                     "total_records": stats["total_records"],
                     "start_date": start_date_str,
                     "end_date": end_date_str,
-                    "final_calculation_symbols": len(successful_symbols) if 'successful_symbols' in locals() else 0,
-                    "message": f"전종목 차트 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건"
+                    "force_update": force_update,
+                    "final_calculation_symbols": len(successful_symbols) if not force_update and 'successful_symbols' in locals() else 0,
+                    "message": f"전종목 차트 데이터 수집 완료 (큐 기반{'[강제 업데이트]' if force_update else ''}): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건"
                 }
                 
-                ctx.log_progress(f"전종목 차트 데이터 수집 완료 (큐 기반): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건")
+                ctx.log_progress(f"전종목 차트 데이터 수집 완료 (큐 기반{'[강제 업데이트]' if force_update else ''}): {stats['success_stocks']}/{total_stocks} 종목, {stats['total_records']}건")
                 return result
                 
             except Exception as e:
@@ -1557,28 +1653,33 @@ class DataCollectorService(LoggerMixin):
             # UTC 시간을 한국 시간으로 변환
             korea_time = data_point.date.replace(tzinfo=timezone.utc).astimezone(korea_tz) if hasattr(data_point.date, 'replace') else data_point.date
             
-            supply_demand_points.append({
-                "date": korea_time.strftime('%Y-%m-%d') if hasattr(korea_time, 'strftime') else str(data_point.date),
-                "current_price": float(data_point.current_price) if data_point.current_price else None,
-                "price_change_sign": data_point.price_change_sign,
-                "price_change": float(data_point.price_change) if data_point.price_change else None,
-                "price_change_percent": float(data_point.price_change_percent) if data_point.price_change_percent else None,
-                "accumulated_volume": int(data_point.accumulated_volume) if data_point.accumulated_volume else None,
-                "accumulated_value": int(data_point.accumulated_value) if data_point.accumulated_value else None,
-                "individual_investor": int(data_point.individual_investor) if data_point.individual_investor else None,
-                "foreign_investor": int(data_point.foreign_investor) if data_point.foreign_investor else None,
-                "institution_total": int(data_point.institution_total) if data_point.institution_total else None,
-                "financial_investment": int(data_point.financial_investment) if data_point.financial_investment else None,
-                "insurance": int(data_point.insurance) if data_point.insurance else None,
-                "investment_trust": int(data_point.investment_trust) if data_point.investment_trust else None,
-                "other_financial": int(data_point.other_financial) if data_point.other_financial else None,
-                "bank": int(data_point.bank) if data_point.bank else None,
-                "pension_fund": int(data_point.pension_fund) if data_point.pension_fund else None,
-                "private_fund": int(data_point.private_fund) if data_point.private_fund else None,
-                "government": int(data_point.government) if data_point.government else None,
-                "other_corporation": int(data_point.other_corporation) if data_point.other_corporation else None,
-                "domestic_foreign": int(data_point.domestic_foreign) if data_point.domestic_foreign else None
-            })
+            # SupplyDemandDataPoint 객체 생성 (timestamp 필드 사용)
+            from stockeasy.collector.schemas.stock_schemas import SupplyDemandDataPoint
+            
+            supply_demand_point = SupplyDemandDataPoint(
+                timestamp=korea_time,  # timestamp 필드 사용
+                current_price=float(data_point.current_price) if data_point.current_price else None,
+                price_change_sign=data_point.price_change_sign,
+                price_change=float(data_point.price_change) if data_point.price_change else None,
+                price_change_percent=float(data_point.price_change_percent) if data_point.price_change_percent else None,
+                accumulated_volume=int(data_point.accumulated_volume) if data_point.accumulated_volume else None,
+                accumulated_value=int(data_point.accumulated_value) if data_point.accumulated_value else None,
+                individual_investor=int(data_point.individual_investor) if data_point.individual_investor else None,
+                foreign_investor=int(data_point.foreign_investor) if data_point.foreign_investor else None,
+                institution_total=int(data_point.institution_total) if data_point.institution_total else None,
+                financial_investment=int(data_point.financial_investment) if data_point.financial_investment else None,
+                insurance=int(data_point.insurance) if data_point.insurance else None,
+                investment_trust=int(data_point.investment_trust) if data_point.investment_trust else None,
+                other_financial=int(data_point.other_financial) if data_point.other_financial else None,
+                bank=int(data_point.bank) if data_point.bank else None,
+                pension_fund=int(data_point.pension_fund) if data_point.pension_fund else None,
+                private_fund=int(data_point.private_fund) if data_point.private_fund else None,
+                government=int(data_point.government) if data_point.government else None,
+                other_corporation=int(data_point.other_corporation) if data_point.other_corporation else None,
+                domestic_foreign=int(data_point.domestic_foreign) if data_point.domestic_foreign else None
+            )
+            
+            supply_demand_points.append(supply_demand_point)
         
         return SupplyDemandResponse(
             symbol=symbol,
@@ -1673,6 +1774,13 @@ class DataCollectorService(LoggerMixin):
         today = datetime.now()
         today_str = today.strftime('%Y%m%d')
         
+        # 스케줄러 모드에서도 중요한 정보는 로깅
+        start_log_msg = f"당일 차트 데이터 업데이트 시작 - 오늘: {today_str} ({today.strftime('%A')})"
+        if scheduler_mode:
+            self.logger.info(f"[스케줄러] {start_log_msg}")
+        else:
+            self.logger.info(start_log_msg)
+        
         try:
             # 전체 종목 리스트 조회
             stock_list = await self.get_all_stock_list_for_stockai()
@@ -1683,6 +1791,7 @@ class DataCollectorService(LoggerMixin):
                     "updated_stocks": 0,
                     "with_adjustment": 0,
                     "errors": 0,
+                    "date": today_str,
                     "status": "completed"
                 }
             
@@ -1695,28 +1804,8 @@ class DataCollectorService(LoggerMixin):
                 self.logger.info(f"당일 차트 데이터 업데이트 시작 (ka10095): 총 {total_stocks}개 종목, 배치크기: {batch_size}")
             else:
                 self.logger.info(f"[스케줄러] 당일 차트 데이터 업데이트 시작: {total_stocks}개 종목")
-            
-            def safe_float(value):
-                """안전한 float 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return 0.0
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return float(clean_value)
-                except (ValueError, TypeError):
-                    return 0.0
-            
-            def safe_int(value):
-                """안전한 int 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return 0
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return int(clean_value)
-                except (ValueError, TypeError):
-                    return 0
+
+            # 안전한 변환 함수들 (공통 함수 사용)
             
             def clean_price_data(value):
                 """주가 데이터에서 +/- 기호 제거 및 절댓값 반환"""
@@ -1765,13 +1854,24 @@ class DataCollectorService(LoggerMixin):
                                 
                                 chart_item = batch_data[symbol]
                                 
-                                # 날짜 검증 및 파싱
+                                # 날짜 검증 및 파싱 강화
                                 if not chart_item.date or not str(chart_item.date).strip():
+                                    if not scheduler_mode:
+                                        self.logger.debug(f"종목 {symbol}: 날짜 데이터 없음")
                                     continue
                                 
                                 try:
                                     chart_date = datetime.strptime(str(chart_item.date).strip(), '%Y%m%d')
-                                except ValueError:
+                                except ValueError as e:
+                                    if not scheduler_mode:
+                                        self.logger.warning(f"종목 {symbol}: 날짜 파싱 실패 ({chart_item.date}): {e}")
+                                    continue
+                                
+                                # 오늘 날짜 확인 강화
+                                chart_date_str = chart_date.strftime('%Y%m%d')
+                                if chart_date_str != today_str:
+                                    if not scheduler_mode:
+                                        self.logger.debug(f"종목 {symbol}: 오늘 날짜가 아님 ({chart_date_str} != {today_str})")
                                     continue
                                 
                                 # 가격 데이터 검증 (종가 우선, 없으면 현재가, +/- 기호 제거)
@@ -1875,6 +1975,7 @@ class DataCollectorService(LoggerMixin):
                 "updated_stocks": updated_stocks,
                 "with_adjustment": with_adjustment,
                 "errors": errors,
+                "date": today_str,
                 "status": "completed"
             }
             
@@ -1890,6 +1991,7 @@ class DataCollectorService(LoggerMixin):
                 "updated_stocks": 0,
                 "with_adjustment": 0,
                 "errors": 1,
+                "date": today_str,
                 "status": "failed"
             }
         finally:
@@ -1935,27 +2037,8 @@ class DataCollectorService(LoggerMixin):
             else:
                 self.logger.info(f"[스케줄러] 당일 수급 데이터 업데이트 시작: {total_stocks}개 종목")
             
-            def safe_float(value):
-                """안전한 float 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return None
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return float(clean_value)
-                except (ValueError, TypeError):
-                    return None
-            
-            def safe_int(value):
-                """안전한 int 변환"""
-                try:
-                    if not value or str(value).strip() == '':
-                        return None
-                    # 콤마 제거 후 변환
-                    clean_value = str(value).replace(',', '')
-                    return int(clean_value)
-                except (ValueError, TypeError):
-                    return None
+            # 안전한 변환 함수들 (공통 함수 사용)
+            # (safe_float_or_none, safe_int_or_none 사용)
             
             # 종목 코드만 추출
             all_symbols = [stock["code"] for stock in stock_list]
@@ -1994,25 +2077,25 @@ class DataCollectorService(LoggerMixin):
                                         supply_demand = SupplyDemandCreate(
                                             date=today,
                                             symbol=symbol,
-                                            current_price=safe_float(supply_item.get('current_price')),
+                                            current_price=safe_float_or_none(supply_item.get('current_price')),
                                             price_change_sign=supply_item.get('price_change_sign'),
-                                            price_change=safe_float(supply_item.get('price_change')),
-                                            price_change_percent=safe_float(supply_item.get('price_change_percent')),
-                                            accumulated_volume=safe_int(supply_item.get('accumulated_volume')),
-                                            accumulated_value=safe_int(supply_item.get('accumulated_value')),
-                                            individual_investor=safe_int(supply_item.get('individual_investor')),
-                                            foreign_investor=safe_int(supply_item.get('foreign_investor')),
-                                            institution_total=safe_int(supply_item.get('institution_total')),
-                                            financial_investment=safe_int(supply_item.get('financial_investment')),
-                                            insurance=safe_int(supply_item.get('insurance')),
-                                            investment_trust=safe_int(supply_item.get('investment_trust')),
-                                            other_financial=safe_int(supply_item.get('other_financial')),
-                                            bank=safe_int(supply_item.get('bank')),
-                                            pension_fund=safe_int(supply_item.get('pension_fund')),
-                                            private_fund=safe_int(supply_item.get('private_fund')),
-                                            government=safe_int(supply_item.get('government')),
-                                            other_corporation=safe_int(supply_item.get('other_corporation')),
-                                            domestic_foreign=safe_int(supply_item.get('domestic_foreign'))
+                                            price_change=safe_float_or_none(supply_item.get('price_change')),
+                                            price_change_percent=safe_float_or_none(supply_item.get('price_change_percent')),
+                                            accumulated_volume=safe_int_or_none(supply_item.get('accumulated_volume')),
+                                            accumulated_value=safe_int_or_none(supply_item.get('accumulated_value')),
+                                            individual_investor=safe_int_or_none(supply_item.get('individual_investor')),
+                                            foreign_investor=safe_int_or_none(supply_item.get('foreign_investor')),
+                                            institution_total=safe_int_or_none(supply_item.get('institution_total')),
+                                            financial_investment=safe_int_or_none(supply_item.get('financial_investment')),
+                                            insurance=safe_int_or_none(supply_item.get('insurance')),
+                                            investment_trust=safe_int_or_none(supply_item.get('investment_trust')),
+                                            other_financial=safe_int_or_none(supply_item.get('other_financial')),
+                                            bank=safe_int_or_none(supply_item.get('bank')),
+                                            pension_fund=safe_int_or_none(supply_item.get('pension_fund')),
+                                            private_fund=safe_int_or_none(supply_item.get('private_fund')),
+                                            government=safe_int_or_none(supply_item.get('government')),
+                                            other_corporation=safe_int_or_none(supply_item.get('other_corporation')),
+                                            domestic_foreign=safe_int_or_none(supply_item.get('domestic_foreign'))
                                         )
                                         supply_demand_data.append(supply_demand)
                                         symbol_has_data = True  # 데이터가 있음을 표시
@@ -2329,19 +2412,7 @@ class DataCollectorService(LoggerMixin):
             # TimescaleDB에 저장할 데이터 변환
             from stockeasy.collector.schemas.timescale_schemas import StockPriceCreate, IntervalType
             
-            def safe_float(value):
-                """안전한 float 변환"""
-                try:
-                    return float(value) if value and str(value).strip() else 0.0
-                except (ValueError, TypeError):
-                    return 0.0
-            
-            def safe_int(value):
-                """안전한 int 변환"""
-                try:
-                    return int(value) if value and str(value).strip() else 0
-                except (ValueError, TypeError):
-                    return 0
+            # 안전한 변환 함수들 (공통 함수 사용)
             
             def convert_sector_price(value):
                 """
