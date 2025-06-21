@@ -604,15 +604,15 @@ class KiwoomAPIClient:
         
         # 시장 구분별로 조회, ETF list는 따로 조회 처리.
         market_types = {
-            "0": "코스피",
-            "10": "코스닥", 
+            "0": "KOSPI",
+            "10": "KOSDAQ", 
         }
 
         exclude_list = [ 'msci', 'kodex', 'kindex', 'tiger', 'arirang', 'focus', 'hanaro', 
                         'koact', 'rise', 'kiwoom', '1q', 'ace', 'sol ', 'WON ','PLUS ', 'TIMEFOLIO', '에셋플러스 ',
                         'HK ', 'BNK ', '파워 ', 'TRUSTON ', '마이티', '마이다스 ', 'VITA ', 'TRUSTON ', 'UNICORN ',
                         'KCGI ', 'DAISHIN343', 'ITF ', 'TREX ', 
-                        'kbstar', 'kosef', '레버리지', '인버스', '코스피', '코스닥', '스팩',
+                        'kbstar', 'kosef', '레버리지', '인버스', '코스피', '코스닥', '스팩', 'KOSPI', 'KOSDAQ',
                          'etn', 'etf', '원유', '일본' ]
         
         for mrkt_tp, market_name in market_types.items():
@@ -1001,12 +1001,13 @@ class KiwoomAPIClient:
             
             # SOR 타입 종목코드로 변환 (키움 일봉차트 조회용)
             sor_symbol = f"{symbol}_AL"
-            logger.info(f"일봉차트 데이터 조회: {symbol} -> {sor_symbol} (기준일자: {base_date})")
+            logger.info(f"일봉차트 데이터 조회1: {symbol} -> {sor_symbol} (기준일자: {base_date})")
             
             all_chart_data = []
             cont_yn = 'N'
             next_key = ''
             
+            find_end_date = False
             while True:
                 # 키움 API ka10081 요청 형식에 맞게 수정 - SOR 타입 종목코드 사용
                 data = {
@@ -1018,29 +1019,31 @@ class KiwoomAPIClient:
                 result = await self._make_kiwoom_api_request('ka10081', '/api/dostk/chart', data, cont_yn, next_key)
                 
                 if result.get('return_code') == 0:
+                    
                     # 차트 데이터 추출 - ka10081 응답 구조에 맞게 수정
                     chart_data = None
                     if 'stk_dt_pole_chart_qry' in result and isinstance(result['stk_dt_pole_chart_qry'], list):
                         chart_data = result['stk_dt_pole_chart_qry']
-                    elif 'output' in result and isinstance(result['output'], list):
-                        chart_data = result['output']
-                    elif 'list' in result and isinstance(result['list'], list):
-                        chart_data = result['list']
-                    elif isinstance(result, list):
-                        chart_data = result
+                        logger.info(f"stk_dt_pole_chart_qry에서 차트 데이터 추출: {len(chart_data)}개")
+                    else:
+                        logger.warning(f"차트 데이터를 찾을 수 없음. 응답 구조 확인 필요")
                     
                     if not chart_data:
+                        logger.info(f"차트 데이터 없음 - 루프 종료")
                         break
                     
                     # 데이터 변환 및 기간 필터링 - ka10081 실제 필드명 사용
+                    logger.info(f"차트 데이터 처리 시작: {len(chart_data)}개 항목")
+                    processed_count = 0
                     for item in chart_data:
                         try:
                             item_date = item.get('dt', '')  # 실제 필드명: dt
                             
                             # start_date 이전 데이터는 제외 (기간 필터링)
                             if item_date and item_date < start_date:
-                                logger.debug(f"기간 필터링: {item_date} < {start_date}, 수집 종료")
-                                return all_chart_data  # 더 이상 진행하지 않고 종료
+                                find_end_date = True
+                                #return all_chart_data  # 더 이상 진행하지 않고 종료
+                                break
                             
                             # 전일대비, 등락률, 전일거래량대비 추출 (전일대비는 부호 유지)
                             pred_pre = item.get('pred_pre', '0')
@@ -1066,7 +1069,7 @@ class KiwoomAPIClient:
                                 except (ValueError, TypeError):
                                     base_pric = self._clean_price_data(cur_prc)
                             
-                            # KiwoomChartData 객체 생성 (ka10081 계산값 포함)
+                            # KiwoomChartData 객체 생성 (계산값은 후처리에서 설정)
                             chart_item = KiwoomChartData(
                                 date=item_date,
                                 open=item.get('open_pric', '0'),      # 시가
@@ -1075,22 +1078,24 @@ class KiwoomAPIClient:
                                 close=item.get('cur_prc', '0'),         # 종가 (현재가)
                                 volume=item.get('trde_qty', '0'),     # 거래량
                                 trading_value=item.get('trde_prica', '0'),  # 거래대금
-                                change_amount=pred_pre,               # 전일대비 (부호 유지)
-                                change_rate=flu_rt,                     # 등락률 (부호 유지)
-                                previous_close=str(base_pric) if base_pric else None,
-                                volume_change_percent=pred_trde_qty_pre,  # 전일거래량대비 (부호 유지)
+                                change_amount=None,                   # 후처리에서 계산
+                                change_rate=None,                     # 후처리에서 계산
+                                previous_close=None,                  # 후처리에서 계산
+                                volume_change_percent=None,           # 후처리에서 계산
                                 change_sign=pred_pre_sig
                             )
                             all_chart_data.append(chart_item)
+                            processed_count += 1
                         except Exception as e:
                             logger.warning(f"차트 데이터 변환 실패: {item}, 오류: {e}")
                             continue
                     
-                    logger.debug(f"차트 데이터 배치 조회: {len(chart_data)}개 (총 {len(all_chart_data)}개)")
-                    
+                    if find_end_date:
+                        break
                     # 연속조회 확인
                     response_headers = result.get('response_headers', {})
                     if response_headers.get('cont-yn') != 'Y':
+                        logger.info(f"연속조회 종료 - cont-yn이 Y가 아님")
                         break
                     
                     # 다음 조회 준비
@@ -1098,19 +1103,103 @@ class KiwoomAPIClient:
                     next_key = response_headers.get('next-key', '')
                     
                     if not next_key:
+                        logger.info(f"연속조회 종료 - next_key 없음")
                         break
                     
                     # API 호출 간격은 _rate_limit()에서 자동 관리됨 (0.208초 간격)
                 else:
                     logger.warning(f"차트 데이터 조회 실패 - return_code: {result.get('return_code')}, return_msg: {result.get('return_msg')}")
                     break
+            # 차트 데이터 후처리: change_amount, change_rate, volume_change_percent 계산
+            processed_chart_data = self._calculate_chart_indicators(all_chart_data)
             
-            logger.info(f"일봉차트 데이터 조회 완료: {symbol} -> {sor_symbol} ({start_date} ~ {base_date}) - {len(all_chart_data)}개")
-            return all_chart_data
+            logger.info(f"일봉차트 데이터 조회 완료: {symbol} -> {sor_symbol} ({start_date} ~ {base_date}) - {len(processed_chart_data)}개")
+            return processed_chart_data
             
         except Exception as e:
             logger.error(f"일봉차트 데이터 조회 실패 ({symbol} -> {sor_symbol}): {e}")
+            import traceback
+            logger.error(f"일봉차트 데이터 조회 예외 스택트레이스: {traceback.format_exc()}")
             return []
+    
+    def _calculate_chart_indicators(self, chart_data: List[KiwoomChartData]) -> List[KiwoomChartData]:
+        """
+        차트 데이터의 지표 계산 (change_amount, change_rate, volume_change_percent)
+        
+        Args:
+            chart_data: 원본 차트 데이터 리스트 (최신순 정렬)
+            
+        Returns:
+            계산된 지표가 포함된 차트 데이터 리스트
+        """
+        if not chart_data or len(chart_data) < 2:
+            return chart_data
+        
+        try:
+            # 차트 데이터를 시간순(과거->현재)으로 정렬
+            sorted_data = sorted(chart_data, key=lambda x: x.date)
+            
+            for i in range(len(sorted_data)):
+                current = sorted_data[i]
+                
+                # 현재 데이터의 가격과 거래량을 안전하게 변환
+                try:
+                    current_close = float(str(current.close).replace(',', '')) if current.close else 0.0
+                    current_volume = int(str(current.volume).replace(',', '')) if current.volume else 0
+                except (ValueError, TypeError):
+                    current_close = 0.0
+                    current_volume = 0
+                
+                if i == 0:
+                    # 첫 번째 데이터는 비교할 전일 데이터가 없음
+                    current.change_amount = None
+                    current.change_rate = None  
+                    current.volume_change_percent = None
+                    current.previous_close = None
+                else:
+                    # 전일 데이터
+                    previous = sorted_data[i-1]
+                    
+                    try:
+                        previous_close = float(str(previous.close).replace(',', '')) if previous.close else 0.0
+                        previous_volume = int(str(previous.volume).replace(',', '')) if previous.volume else 0
+                    except (ValueError, TypeError):
+                        previous_close = 0.0
+                        previous_volume = 0
+                    
+                    # 1. change_amount 계산: 오늘 종가 - 전일 종가
+                    if current_close > 0 and previous_close > 0:
+                        change_amount = current_close - previous_close
+                        current.change_amount = str(int(change_amount)) if change_amount == int(change_amount) else str(change_amount)
+                    else:
+                        current.change_amount = None
+                    
+                    # 2. change_rate 계산: (오늘 종가 - 전일 종가) / 전일종가 * 100
+                    if current_close > 0 and previous_close > 0:
+                        change_rate = ((current_close - previous_close) / previous_close) * 100
+                        current.change_rate = str(round(change_rate, 2))  # 소수점 2자리까지
+                    else:
+                        current.change_rate = None
+                    
+                    # 3. volume_change_percent 계산: (오늘 거래량 - 전일 거래량) / 전일 거래량 * 100
+                    if current_volume > 0 and previous_volume > 0:
+                        volume_change_percent = ((current_volume - previous_volume) / previous_volume) * 100
+                        current.volume_change_percent = str(round(volume_change_percent, 2))  # 소수점 2자리까지
+                    else:
+                        current.volume_change_percent = None
+                    
+                    # 4. previous_close 설정
+                    current.previous_close = str(int(previous_close)) if previous_close == int(previous_close) else str(previous_close)
+            
+            # 원래 순서(최신순)로 되돌리기
+            result = sorted(sorted_data, key=lambda x: x.date, reverse=True)
+            
+            #logger.debug(f"차트 지표 계산 완료: {len(result)}개 데이터")
+            return result
+            
+        except Exception as e:
+            logger.error(f"차트 지표 계산 실패: {e}")
+            return chart_data  # 실패시 원본 데이터 반환
 
     async def get_supply_demand_detailed(
         self,
@@ -1587,7 +1676,7 @@ class KiwoomAPIClient:
                             bic_inds_tp=clean_empty_string(item.get("bic_inds_tp")),
                             sm_inds_tp=clean_empty_string(item.get("sm_inds_tp")),
                             stk_infr=clean_empty_string(item.get("stk_infr")),
-                            pred_close_pric=self._clean_price_data_as_string(item.get("pred_close_pric"))
+                            pred_close_pric=self._clean_price_data_as_string(item.get("pred_close_pric")) # 전일종가
                         )
                         batch_data.append(sector_data)
                         
