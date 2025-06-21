@@ -1184,6 +1184,10 @@ class KiwoomAPIClient:
                     # 3. volume_change_percent 계산: (오늘 거래량 - 전일 거래량) / 전일 거래량 * 100
                     if current_volume > 0 and previous_volume > 0:
                         volume_change_percent = ((current_volume - previous_volume) / previous_volume) * 100
+                        # NUMERIC(10,4) 오버플로우 방지
+                        if abs(volume_change_percent) > 999999.9999:
+                            logger.warning(f"거래량 변화율이 너무 큼 ({volume_change_percent}), 999999.9999로 제한")
+                            volume_change_percent = 999999.9999 if volume_change_percent > 0 else -999999.9999
                         current.volume_change_percent = str(round(volume_change_percent, 2))  # 소수점 2자리까지
                     else:
                         current.volume_change_percent = None
