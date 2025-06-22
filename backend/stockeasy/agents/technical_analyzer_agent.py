@@ -1514,10 +1514,10 @@ class TechnicalAnalyzerAgent(BaseAgent):
             current_price = None
             if hasattr(self, '_current_df') and self._current_df is not None and 'close' in self._current_df.columns:
                 current_price = float(self._current_df['close'].iloc[-1])
-                logger.info(f"현재가(종가): {current_price:.0f}원")
+                #logger.info(f"현재가(종가): {current_price:.0f}원")
             elif len(low) > 0:
                 current_price = float(low.iloc[-1])
-                logger.info(f"현재가(저가 기준): {current_price:.0f}원")
+                #logger.info(f"현재가(저가 기준): {current_price:.0f}원")
             
             if current_price is None:
                 logger.warning("현재가 정보를 가져올 수 없어 빈 리스트 반환")
@@ -1686,7 +1686,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
             압축된 레벨 리스트 (강도 순으로 정렬됨)
         """
         try:
-            logger.info(f"가격 레벨 압축 시작: {'지지선' if is_support else '저항선'} {len(levels)}개, 임계값={threshold_pct}%")
+            #logger.info(f"가격 레벨 압축 시작: {'지지선' if is_support else '저항선'} {len(levels)}개, 임계값={threshold_pct}%")
             
             if not levels or len(levels) <= 1:
                 logger.info("압축할 레벨이 1개 이하이므로 그대로 반환")
@@ -1694,7 +1694,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
             
             # 정렬된 레벨 (지지선: 낮은순, 저항선: 높은순)
             sorted_levels = sorted(levels) if is_support else sorted(levels, reverse=True)
-            logger.info(f"정렬된 레벨들: {[f'{l:.0f}원' for l in sorted_levels]}")
+            #logger.info(f"정렬된 레벨들: {[f'{l:.0f}원' for l in sorted_levels]}")
             
             compressed_groups = []
             i = 0
@@ -1712,7 +1712,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
                     reference_price = max(current_level, next_level)
                     diff_pct = abs(current_level - next_level) / reference_price * 100
                     
-                    logger.info(f"레벨 비교: {current_level:.0f}원 vs {next_level:.0f}원, 차이={diff_pct:.1f}%")
+                    #logger.info(f"레벨 비교: {current_level:.0f}원 vs {next_level:.0f}원, 차이={diff_pct:.1f}%")
                     
                     if diff_pct <= threshold_pct:
                         group_levels.append(next_level)
@@ -1742,10 +1742,10 @@ class TechnicalAnalyzerAgent(BaseAgent):
             
             result_levels = [group['avg_price'] for group in compressed_groups]
             
-            logger.info(f"압축 완료: {len(levels)}개 → {len(result_levels)}개")
-            logger.info(f"강도별 압축 결과:")
-            for i, group in enumerate(compressed_groups):
-                logger.info(f"  {i+1}. {group['avg_price']:.0f}원 (강도: {group['strength']}, 개수: {group['count']})")
+            # logger.info(f"압축 완료: {len(levels)}개 → {len(result_levels)}개")
+            # logger.info(f"강도별 압축 결과:")
+            # for i, group in enumerate(compressed_groups):
+            #     logger.info(f"  {i+1}. {group['avg_price']:.0f}원 (강도: {group['strength']}, 개수: {group['count']})")
             
             return result_levels
             
@@ -1783,9 +1783,9 @@ class TechnicalAnalyzerAgent(BaseAgent):
             # 강도 순으로 정렬
             clusters.sort(key=lambda x: x['strength'], reverse=True)
             
-            logger.info(f"상위 클러스터들:")
-            for i, cluster in enumerate(clusters[:5]):
-                logger.info(f"  {i+1}. {cluster['avg_price']:.0f}원 (빈도: {cluster['count']}, 강도: {cluster['strength']:.2f})")
+            #logger.info(f"상위 클러스터들:")
+            # for i, cluster in enumerate(clusters[:5]):
+            #     logger.info(f"  {i+1}. {cluster['avg_price']:.0f}원 (빈도: {cluster['count']}, 강도: {cluster['strength']:.2f})")
             
             return clusters
             
@@ -1848,7 +1848,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
             
             # 정렬된 레벨 로그
             sorted_levels = sorted(levels) if is_support else sorted(levels, reverse=True)
-            logger.info(f"정렬된 레벨들: {[f'{l:.0f}원' for l in sorted_levels]}")
+            #logger.info(f"정렬된 레벨들: {[f'{l:.0f}원' for l in sorted_levels]}")
             
             merged_levels = []
             i = 0
@@ -1872,11 +1872,11 @@ class TechnicalAnalyzerAgent(BaseAgent):
                         reference_price = max(current_level, next_level)
                         diff_pct = abs(current_level - next_level) / reference_price * 100
                     
-                    logger.info(f"레벨 비교: {current_level:.0f}원 vs {next_level:.0f}원, 차이={diff_pct:.1f}%")
+                    #logger.info(f"레벨 비교: {current_level:.0f}원 vs {next_level:.0f}원, 차이={diff_pct:.1f}%")
                     
                     if diff_pct <= threshold_pct:
                         levels_to_merge.append(next_level)
-                        logger.info(f"통합 대상에 추가: {next_level:.0f}원")
+                        #logger.info(f"통합 대상에 추가: {next_level:.0f}원")
                         j += 1
                     else:
                         break
@@ -1885,8 +1885,8 @@ class TechnicalAnalyzerAgent(BaseAgent):
                 merged_level = sum(levels_to_merge) / len(levels_to_merge)
                 merged_levels.append(merged_level)
                 
-                if len(levels_to_merge) > 1:
-                    logger.info(f"레벨 통합: {[f'{l:.0f}원' for l in levels_to_merge]} → {merged_level:.0f}원")
+                # if len(levels_to_merge) > 1:
+                #     logger.info(f"레벨 통합: {[f'{l:.0f}원' for l in levels_to_merge]} → {merged_level:.0f}원")
                 
                 # 다음 인덱스로 이동
                 i = j
@@ -1897,7 +1897,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
             else:
                 merged_levels.sort(reverse=True)
             
-            logger.info(f"레벨 통합 완료: {len(levels)}개 → {len(merged_levels)}개")
+            #logger.info(f"레벨 통합 완료: {len(levels)}개 → {len(merged_levels)}개")
             logger.info(f"최종 통합 레벨: {[f'{l:.0f}원' for l in merged_levels]}")
             
             return merged_levels
@@ -1930,7 +1930,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
             # 2. 강도 점수 계산
             candidates = self._calculate_level_strength(candidates, recent_lows, is_support=True)
             
-            logger.info(f"지지선 후보 강도 계산 완료: {len(candidates)}개")
+            #logger.info(f"지지선 후보 강도 계산 완료: {len(candidates)}개")
             for candidate in candidates:
                 logger.debug(f"지지선 후보: {candidate['price']:.0f}원, 강도: {candidate['strength']:.2f}")
             
@@ -2813,13 +2813,13 @@ class TechnicalAnalyzerAgent(BaseAgent):
             recent_high = float(recent_prices.max())
             recent_low = float(recent_prices.min())
             
-            logger.info(f"현재가: {current_price:.0f}원, 최근5일 고점: {recent_high:.0f}원, 저점: {recent_low:.0f}원")
-            logger.info(f"거래량: 현재={recent_volume:,.0f}, 평균={avg_volume:,.0f}, 배율={recent_volume/avg_volume:.1f}배")
+            # logger.info(f"현재가: {current_price:.0f}원, 최근5일 고점: {recent_high:.0f}원, 저점: {recent_low:.0f}원")
+            # logger.info(f"거래량: 현재={recent_volume:,.0f}, 평균={avg_volume:,.0f}, 배율={recent_volume/avg_volume:.1f}배")
             
             # 저항선 돌파 또는 접근 확인
-            logger.info(f"저항선 {len(resistance_levels)}개 분석 시작: {[f'{r:.0f}원' for r in resistance_levels]}")
+            #logger.info(f"저항선 {len(resistance_levels)}개 분석 시작: {[f'{r:.0f}원' for r in resistance_levels]}")
             for i, resistance in enumerate(resistance_levels):
-                logger.debug(f"저항선 {i+1}/{len(resistance_levels)}: {resistance:.0f}원 분석")
+                #logger.debug(f"저항선 {i+1}/{len(resistance_levels)}: {resistance:.0f}원 분석")
                 
                 # 현재가가 저항선을 돌파한 경우 (0.5% 돌파)
                 if current_price > resistance * 1.005:
@@ -2830,7 +2830,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
                         "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
                     }
                     signals.append(signal)
-                    logger.info(f"저항선 돌파 신호 발견: {resistance:.0f}원 → {current_price:.0f}원 (돌파율: {((current_price/resistance-1)*100):.1f}%)")
+                    #logger.info(f"저항선 돌파 신호 발견: {resistance:.0f}원 → {current_price:.0f}원 (돌파율: {((current_price/resistance-1)*100):.1f}%)")
                 
                 # 최근 고점이 저항선을 돌파했지만 현재는 아래 있는 경우
                 elif recent_high > resistance * 1.005 and current_price <= resistance:
@@ -2842,7 +2842,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
                         "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
                     }
                     signals.append(signal)
-                    logger.info(f"저항선 테스트 후 반락 신호: {resistance:.0f}원 테스트 고점 {recent_high:.0f}원, 현재가 {current_price:.0f}원")
+                    #logger.info(f"저항선 테스트 후 반락 신호: {resistance:.0f}원 테스트 고점 {recent_high:.0f}원, 현재가 {current_price:.0f}원")
                 
                 # 저항선에 근접한 경우 (10% 이내)
                 elif abs(current_price - resistance) / resistance <= 0.10:
@@ -2855,16 +2855,16 @@ class TechnicalAnalyzerAgent(BaseAgent):
                         "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
                     }
                     signals.append(signal)
-                    logger.info(f"저항선 근접 신호: {resistance:.0f}원에 {distance_pct:.1f}% 거리로 근접")
+                    #logger.info(f"저항선 근접 신호: {resistance:.0f}원에 {distance_pct:.1f}% 거리로 근접")
                 else:
                     # 조건에 맞지 않는 경우도 로그
                     distance_pct = abs(current_price - resistance) / resistance * 100
-                    logger.debug(f"저항선 {resistance:.0f}원: 조건 미충족 (거리: {distance_pct:.1f}%)")
+                    #logger.debug(f"저항선 {resistance:.0f}원: 조건 미충족 (거리: {distance_pct:.1f}%)")
             
             # 지지선 이탈 또는 접근 확인
-            logger.info(f"지지선 {len(support_levels)}개 분석 시작: {[f'{s:.0f}원' for s in support_levels]}")
+            #logger.info(f"지지선 {len(support_levels)}개 분석 시작: {[f'{s:.0f}원' for s in support_levels]}")
             for i, support in enumerate(support_levels):
-                logger.debug(f"지지선 {i+1}/{len(support_levels)}: {support:.0f}원 분석")
+                #logger.debug(f"지지선 {i+1}/{len(support_levels)}: {support:.0f}원 분석")
                 
                 # 현재가가 지지선을 이탈한 경우 (0.5% 이탈)
                 if current_price < support * 0.995:
@@ -2900,13 +2900,13 @@ class TechnicalAnalyzerAgent(BaseAgent):
                         "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
                     }
                     signals.append(signal)
-                    logger.info(f"지지선 근접 신호: {support:.0f}원에 {distance_pct:.1f}% 거리로 근접")
+                    #logger.info(f"지지선 근접 신호: {support:.0f}원에 {distance_pct:.1f}% 거리로 근접")
                 else:
                     # 조건에 맞지 않는 경우도 로그
                     distance_pct = abs(current_price - support) / support * 100
-                    logger.debug(f"지지선 {support:.0f}원: 조건 미충족 (거리: {distance_pct:.1f}%)")
+                    #logger.debug(f"지지선 {support:.0f}원: 조건 미충족 (거리: {distance_pct:.1f}%)")
             
-            logger.info(f"돌파 신호 분석 완료: 총 {len(signals)}개 신호 발견")
+            #logger.info(f"돌파 신호 분석 완료: 총 {len(signals)}개 신호 발견")
             for i, signal in enumerate(signals):
                 logger.info(f"  신호 {i+1}: {signal['type']} - {signal['level']:.0f}원")
             

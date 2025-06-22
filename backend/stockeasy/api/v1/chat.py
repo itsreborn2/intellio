@@ -628,7 +628,6 @@ async def stream_chat_message(
                         # 기본 OHLCV 데이터 확인
                         ohlcv_keys = ['close', 'high', 'low', 'volume']
                         available_ohlcv = [k for k in ohlcv_keys if k in chart_data and chart_data[k]]
-                        logger.info(f"  - OHLCV 데이터: {available_ohlcv}")
                 
                 # 이벤트 데이터 구성
                 event_data = {

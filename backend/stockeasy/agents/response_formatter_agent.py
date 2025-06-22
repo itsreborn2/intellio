@@ -2056,7 +2056,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
     tech agent 결과를 사용하여 추세추종 지표 차트 컴포넌트를 생성합니다.
     ADX, ADR, 슈퍼트렌드 등 추세추종 지표들을 시각화합니다.
     """
-    logger.info(f"[기술지표차트] {stock_name}({stock_code}) 기술적 지표 차트 생성 시작")
+    #logger.info(f"[기술지표차트] {stock_name}({stock_code}) 기술적 지표 차트 생성 시작")
     
     # 실제 데이터는 data 키 안에 있음
     actual_data = tech_agent_result.get("data", {})
@@ -2085,7 +2085,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
             "y_axis_id": "primary",
             "line_style": "solid"
         })
-        logger.info(f"[기술지표차트] ADX 지표 추가 완료 - 데이터 포인트: {len(processed_adx)}개")
+        #logger.info(f"[기술지표차트] ADX 지표 추가 완료 - 데이터 포인트: {len(processed_adx)}개")
     
     # 2. +DI (Positive Directional Indicator)
     plus_di_data = chart_indicators_data.get("adx_plus_di", [])
@@ -2140,7 +2140,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
         }
         
         indicators.append(supertrend_indicator)
-        logger.info(f"[기술지표차트] 슈퍼트렌드 지표 추가 완료 - 데이터 포인트: {len(processed_supertrend_values)}개")
+        #logger.info(f"[기술지표차트] 슈퍼트렌드 지표 추가 완료 - 데이터 포인트: {len(processed_supertrend_values)}개")
     
     # 지표가 없는 경우 처리
     if not indicators:
@@ -2203,7 +2203,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
         metadata=metadata
     )
     
-    logger.info(f"[기술지표차트] 추세추종 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
+    #logger.info(f"[기술지표차트] 추세추종 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
     return technical_indicator_chart
 
 
@@ -2212,7 +2212,7 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
     tech agent 결과를 사용하여 모멘텀 지표 차트 컴포넌트를 생성합니다.
     RSI, MACD 등 모멘텀 지표들을 시각화합니다.
     """
-    logger.info(f"[모멘텀지표차트] {stock_name}({stock_code}) 모멘텀 지표 차트 생성 시작")
+    #logger.info(f"[모멘텀지표차트] {stock_name}({stock_code}) 모멘텀 지표 차트 생성 시작")
     
     # 실제 데이터는 data 키 안에 있음
     actual_data = tech_agent_result.get("data", {})
@@ -2347,5 +2347,5 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
         metadata=metadata
     )
     
-    logger.info(f"[모멘텀지표차트] 모멘텀 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
+    #logger.info(f"[모멘텀지표차트] 모멘텀 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
     return momentum_chart
