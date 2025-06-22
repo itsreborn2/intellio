@@ -39,6 +39,7 @@ export default function ApiTestPage() {
   const [searchKeyword, setSearchKeyword] = useState('삼성')
   const [chartPeriod, setChartPeriod] = useState('1y')
   const [chartInterval, setChartInterval] = useState('1d')
+  const [multipleStockCodes, setMultipleStockCodes] = useState('005930,000660,035420')
 
   // 날짜 계산 함수
   const getDateRange = () => {
@@ -119,10 +120,11 @@ export default function ApiTestPage() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="stock" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="stock">주식 API</TabsTrigger>
           <TabsTrigger value="etf">ETF API</TabsTrigger>
           <TabsTrigger value="market">시장 API</TabsTrigger>
+          <TabsTrigger value="rs">RS API</TabsTrigger>
           <TabsTrigger value="admin">관리 API</TabsTrigger>
         </TabsList>
 
@@ -222,6 +224,18 @@ export default function ApiTestPage() {
                 >
                   <Send className="w-4 h-4 mr-2" />
                   기본정보
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: `/api/v1/stock/chart/${stockCode}?period=${chartPeriod}&interval=${chartInterval}&compressed=true&gzip_enabled=false`,
+                    method: 'GET',
+                    description: '차트 데이터 조회 (표준)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  차트 데이터 (표준)
                 </Button>
                 
                 <Button
@@ -382,6 +396,171 @@ export default function ApiTestPage() {
                 >
                   <Send className="w-4 h-4 mr-2" />
                   주요 지수
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* RS API 테스트 */}
+        <TabsContent value="rs" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>RS(상대강도) 데이터 API 테스트</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <Label htmlFor="rsStockCode">종목 코드 (RS 조회용)</Label>
+                  <Input
+                    id="rsStockCode"
+                    value={stockCode}
+                    onChange={(e) => setStockCode(e.target.value)}
+                    placeholder="예: 005930"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="multipleStockCodes">여러 종목 코드 (쉼표로 구분)</Label>
+                  <Input
+                    id="multipleStockCodes"
+                    value={multipleStockCodes}
+                    onChange={(e) => setMultipleStockCodes(e.target.value)}
+                    placeholder="예: 005930,000660,035420"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() => callApi({
+                    url: '/api/v1/rs/list?compressed=false&gzip_enabled=false&force_update=false',
+                    method: 'GET',
+                    description: '전체 RS 데이터 조회 (표준)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  전체 RS 데이터 (표준)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: '/api/v1/rs/list?compressed=true&gzip_enabled=false&force_update=false',
+                    method: 'GET',
+                    description: '전체 RS 데이터 조회 (압축)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  전체 RS 데이터 (압축)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: '/api/v1/rs/list?compressed=true&gzip_enabled=true&force_update=false',
+                    method: 'GET',
+                    description: '전체 RS 데이터 조회 (gzip 압축)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  전체 RS 데이터 (gzip)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: '/api/v1/rs/list?compressed=false&gzip_enabled=false&force_update=true',
+                    method: 'GET',
+                    description: '전체 RS 데이터 조회 (강제 업데이트)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  전체 RS 데이터 (강제 업데이트)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: `/api/v1/rs/${stockCode}`,
+                    method: 'GET',
+                    description: '개별 종목 RS 데이터 조회'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  개별 종목 RS 조회
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: `/api/v1/rs/multiple?codes=${encodeURIComponent(multipleStockCodes)}&compressed=false&gzip_enabled=false`,
+                    method: 'GET',
+                    description: '여러 종목 RS 데이터 조회 (표준)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  여러 종목 RS 조회 (표준)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: `/api/v1/rs/multiple?codes=${encodeURIComponent(multipleStockCodes)}&compressed=true&gzip_enabled=false`,
+                    method: 'GET',
+                    description: '여러 종목 RS 데이터 조회 (압축)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  여러 종목 RS 조회 (압축)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: `/api/v1/rs/multiple?codes=${encodeURIComponent(multipleStockCodes)}&compressed=true&gzip_enabled=true`,
+                    method: 'GET',
+                    description: '여러 종목 RS 데이터 조회 (gzip 압축)'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  여러 종목 RS 조회 (gzip)
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: '/api/v1/rs/stats/summary',
+                    method: 'GET',
+                    description: 'RS 데이터 통계 조회'
+                  })}
+                  disabled={isLoading}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  RS 통계 조회
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: '/api/v1/rs/update?force_update=true',
+                    method: 'POST',
+                    description: 'RS 데이터 수동 업데이트'
+                  })}
+                  disabled={isLoading}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  RS 데이터 업데이트
+                </Button>
+                
+                <Button
+                  onClick={() => callApi({
+                    url: '/api/v1/admin/scheduler/trigger/rs-update',
+                    method: 'POST',
+                    description: 'RS 스케줄러 수동 실행'
+                  })}
+                  disabled={isLoading}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  RS 스케줄러 실행
                 </Button>
               </div>
             </CardContent>

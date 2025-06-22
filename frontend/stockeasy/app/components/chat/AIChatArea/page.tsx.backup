@@ -13,8 +13,6 @@ import {
   RecommendedQuestions, 
   LatestUpdates
 } from './components';
-import { PreliminaryChartDisplay } from './components/PreliminaryChartDisplay';
-
 import { useMessageProcessing } from './hooks';
 import { useIsMobile } from './hooks';
 import { useChatStore } from '@/stores/chatStore';
@@ -96,19 +94,6 @@ function AIChatAreaContent() {
   const [popularStocksDaily, setPopularStocksDaily] = useState<PopularStock[]>([]);
   const [popularStocksWeekly, setPopularStocksWeekly] = useState<PopularStock[]>([]); // CSV 데이터를 저장할 상태
   const [windowWidth, setWindowWidth] = useState<number>(1024); // 기본값 설정
-
-  // 실시간 차트 스트리밍 관련 상태
-  const [preliminaryChart, setPreliminaryChart] = useState<{
-    components: any[];
-    message: string;
-    timestamp: number;
-    stockCode: string;
-    stockName: string;
-    stockInfo?: any;  // stockInfo 필드 추가
-  } | null>(null);
-
-  const [finalResponse, setFinalResponse] = useState<any>(null);
-  const [currentStatus, setCurrentStatus] = useState<string>('');
 
   // API에서 인기 검색 종목 데이터를 가져오기 위한 함수 (useCallback으로 메모이제이션)
   const fetchPopularStocks = useCallback(async () => {
@@ -200,24 +185,6 @@ function AIChatAreaContent() {
         
         // 토큰 사용량 업데이트 (Zustand 스토어)
         fetchSummary && fetchSummary();
-        
-        // 최종 응답 설정 (기존 메시지들을 최종 응답으로 설정)
-        setFinalResponse(uiMessages);
-      },
-      onPreliminaryChart: (data) => {
-        console.log('[AI채팅영역] 임시 차트 수신:', data);
-        console.log('[AI채팅영역] data.stockInfo:', data.stockInfo);
-        // 임시 차트 데이터 설정 (stockInfo 포함)
-        setPreliminaryChart({
-          components: data.components,
-          message: data.message,
-          timestamp: data.timestamp,
-          stockCode: data.stock_code,
-          stockName: data.stock_name,
-          stockInfo: data.stockInfo  // stockInfo 추가
-        });
-        // 현재 상태 업데이트
-        setCurrentStatus("📊 차트가 준비되었습니다. 추가 분석을 진행하고 있습니다...");
       },
     }
   );
@@ -561,23 +528,6 @@ function AIChatAreaContent() {
             isUserSending={isUserSending}
             onCopy={(id) => setCopyState(id, true)}
             onToggleExpertMode={(id) => toggleExpertMode(id)}
-          />
-        )}
-
-        {/* 임시 차트 팝업 - 분석 중이거나 완료된 상태에서 표시 */}
-        {preliminaryChart && (isLoading || !isLoading) && (
-          <PreliminaryChartDisplay 
-            chartData={preliminaryChart}
-            onClose={() => setPreliminaryChart(null)}
-            isCompleted={!isLoading}
-            onViewFinalReport={() => {
-              // 임시 차트 팝업 닫기
-              setPreliminaryChart(null);
-              // 최종 메시지로 스크롤
-              if (messageListRef.current?.scrollToBottom) {
-                messageListRef.current.scrollToBottom();
-              }
-            }}
           />
         )}
 

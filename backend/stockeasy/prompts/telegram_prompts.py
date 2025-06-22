@@ -55,11 +55,11 @@ TELEGRAM_SUMMARY_PROMPT_2 = """
 ```json
 {{
   "섹션제목_1": [
-    {{"type": "text", "content": "...", "source": "내부DB, 메세지일자"}},
-    {{"type": "table", "content": "...", "source": "내부DB, 메세지일자"}}
+    {{"type": "text", "content": "...", "date": "메세지일자"}},
+    {{"type": "table", "content": "...", "date": "메세지일자"}}
   ],
   "섹션제목_2": [
-    {{"type": "text", "content": "...", "source": "내부DB, 메세지일자"}}
+    {{"type": "text", "content": "...", "date": "메세지일자"}}
   ]
 }}
 ```

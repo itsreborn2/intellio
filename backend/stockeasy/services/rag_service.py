@@ -334,6 +334,7 @@ class StockRAGService:
         chat_session_id: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         streaming_callback: Optional[Callable] = None,
+        preliminary_chart_callback: Optional[Callable] = None,
         is_follow_up: bool = False,
         agent_results: Optional[Dict[str, Any]] = {}
     ) -> Dict[str, Any]:
@@ -387,6 +388,7 @@ class StockRAGService:
                 chat_session_id=chat_session_id,
                 conversation_history=conversation_history,
                 streaming_callback=streaming_callback,  # 스트리밍 콜백 함수 전달
+                preliminary_chart_callback=preliminary_chart_callback,  # preliminary_chart 콜백 함수 전달
                 is_follow_up=is_follow_up,  # 후속질문 여부 전달
                 agent_results=agent_results  # 후속질문에 사용할 이전 에이전트 결과물 전달
             )
@@ -478,9 +480,7 @@ class StockRAGService:
             # 응답 관련 객체들 - 최종 응답은 보존
             "summary_by_section",          # 섹션별 요약
             "summary",                   # 요약 - 최종 응답이므로 보존
-            "formatted_response",        # 형식화된 응답 - 최종 응답이므로 보존
             "answer",                    # 답변 - 최종 응답이므로 보존
-            "answer_expert",               # 전문가형 답변
             "components",                # 구조화된 응답 컴포넌트 - 최종 응답이므로 보존
             
             # 히스토리 관련 객체

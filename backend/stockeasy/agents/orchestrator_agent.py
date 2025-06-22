@@ -96,6 +96,7 @@ class OrchestratorAgent(BaseAgent):
             "revenue_breakdown": "매출 및 수주 현황 분석 에이전트",
             "industry_analyzer": "산업 동향 분석 에이전트",
             "confidential_analyzer": "비공개 자료 검색 및 분석 에이전트",
+            "technical_analyzer": "기술적 분석 에이전트",
             "knowledge_integrator": "정보 통합 에이전트",
             "summarizer": "요약 에이전트",
             "response_formatter": "응답 형식화 에이전트",
@@ -142,6 +143,7 @@ class OrchestratorAgent(BaseAgent):
             entities = question_analysis.get("entities", {})
             classification = question_analysis.get("classification", {})
             data_requirements =question_analysis.get("data_requirements", {})
+            technical_analysis_needed = data_requirements.get("technical_analysis_needed", False)
             keywords = question_analysis.get("keywords", [])
             detail_level = question_analysis.get("detail_level", "보통")
             
@@ -150,12 +152,6 @@ class OrchestratorAgent(BaseAgent):
             logger.info(f"Classification: {classification}")
             logger.info(f"Data requirements: {data_requirements}")
             
-            # 프롬프트 준비 (새로운 프롬프트 포맷 필요)
-            # prompt = format_orchestrator_prompt(
-            #     query=query,
-            #     question_analysis=question_analysis,
-            #     available_agents=self.available_agents
-            # )
             
             # user_id 추출
             user_context = state.get("user_context", {})
@@ -200,11 +196,11 @@ class OrchestratorAgent(BaseAgent):
             logger.info(f"[오케스트레이터] Report count: {report_cnt}")
             # 기본 실행 계획 생성 및 상태 업데이트
             if report_cnt >= self.web_search_threshold:
-                final_plan = self._create_default_plan(report_cnt)
+                final_plan = self._create_default_plan(report_cnt, technical_analysis_needed)
                 state["question_analysis"]["data_requirements"]["web_search_needed"] = False
             else:
                 logger.info("[오케스트레이터] 웹 검색 에이전트를 활성화합니다.")
-                final_plan = self._create_default_plan(report_cnt) # 웹검색 모드 On
+                final_plan = self._create_default_plan(report_cnt, technical_analysis_needed) # 웹검색 모드 On
                 state["question_analysis"]["data_requirements"]["web_search_needed"] = True
             state["execution_plan"] = final_plan
             
@@ -252,7 +248,7 @@ class OrchestratorAgent(BaseAgent):
             
             return state
     
-    def _create_default_plan(self,report_cnt: int) -> Dict[str, Any]:
+    def _create_default_plan(self,report_cnt: int, technical_analysis_needed: bool = False) -> Dict[str, Any]:
         """
         기본 실행 계획을 생성합니다 (오류 발생 시 fallback).
         
@@ -268,6 +264,7 @@ class OrchestratorAgent(BaseAgent):
 
         # 모든 에이전트를 포함하는 기본 계획 생성
         agents_list = []
+
 
         # 에이전트별 우선순위 설정        
         if web_search_mode:
@@ -299,6 +296,10 @@ class OrchestratorAgent(BaseAgent):
             }
             if report_cnt < 7: # 리포트가 6개 이하이면, 비공개 자료도 검색
                 priority_map["confidential_analyzer"] = 5
+                priority_map["technical_analyzer"] = 4.5
+
+        if technical_analysis_needed:
+            priority_map["technical_analyzer"] = 5.5
         
         # 실행 순서 조정 (일반적인 흐름에 맞게)
         if web_search_mode:
@@ -331,7 +332,27 @@ class OrchestratorAgent(BaseAgent):
             ]
             if report_cnt < 7: # 리포트가 6개 이하이면, 비공개 자료도 검색
                 execution_order.insert(execution_order.index("industry_analyzer") + 1, "confidential_analyzer")
+                
+        if technical_analysis_needed:
+            execution_order.insert(execution_order.index("knowledge_integrator") - 1, "technical_analyzer")
 
+        # 기능 테스트 모드용. 기술적 분석 에이전트만 실행
+        test_mode = settings.TEST_TECH_AGENT
+        if test_mode:
+            priority_map = {
+                "technical_analyzer": 6,
+                "knowledge_integrator": 4,
+                "summarizer": 3,
+                "response_formatter": 2,
+                "fallback_manager": 1
+            }
+            execution_order = [
+                "technical_analyzer",
+                "knowledge_integrator",
+                "summarizer",
+                "response_formatter",
+                "fallback_manager"
+            ]
         
          # execution_order에 있는 것만 포함.
         for agent_name in self.available_agents.keys():

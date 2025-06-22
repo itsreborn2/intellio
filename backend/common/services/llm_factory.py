@@ -31,6 +31,7 @@ class LLMFactory:
         streaming: bool = False,
         callback_handler: Optional[BaseCallbackHandler] = None,
         api_key_env: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
         **kwargs
     ) -> BaseChatModel:
         """
@@ -45,6 +46,7 @@ class LLMFactory:
             streaming: 스트리밍 활성화 여부
             callback_handler: 스트리밍 콜백 핸들러
             api_key_env: API 키 환경 변수 이름
+            thinking_budget: Gemini 2.5+ 모델의 thinking budget (선택적)
             **kwargs: 추가 설정
             
         Returns:
@@ -104,17 +106,25 @@ class LLMFactory:
                 
             if not api_key:
                 raise ValueError("Google API 키가 설정되지 않았습니다.")
-                
-            return ChatGoogleGenerativeAI(
-                model=model_name,
-                google_api_key=api_key,
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-                top_p=top_p,
-                streaming=streaming,
-                callbacks=callbacks,
+            
+            # Gemini LLM 생성 파라미터 설정
+            gemini_params = {
+                "model": model_name,
+                "google_api_key": api_key,
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+                "top_p": top_p,
+                "callbacks": callbacks,
+                "model_kwargs": {"streaming": streaming},  # streaming은 model_kwargs로 이동
                 **kwargs
-            )
+            }
+            
+            # thinking_budget이 설정된 경우에만 추가 (Gemini 2.5+ 모델 지원)
+            if thinking_budget is not None:
+                gemini_params["thinking_budget"] = thinking_budget
+                logger.info(f"Gemini LLM에 thinking_budget 설정: {thinking_budget}")
+                
+            return ChatGoogleGenerativeAI(**gemini_params)
             
         # Anthropic Claude 모델 생성
         elif provider == "anthropic":
@@ -224,7 +234,8 @@ class LLMFactory:
             top_p=config.get("top_p", 0.7),
             streaming=streaming,
             callback_handler=callback_handler,
-            api_key_env=config.get("api_key_env", None)
+            api_key_env=config.get("api_key_env", None),
+            thinking_budget=config.get("thinking_budget", None)
         )
 
 # 편의 함수

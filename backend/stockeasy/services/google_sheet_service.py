@@ -5,8 +5,6 @@ from google.oauth2 import service_account
 import gspread
 from typing import List, Dict, Any, Optional
 
-from common.core.config import settings
-
 logger = logging.getLogger(__name__)
 
 class GoogleSheetService:
@@ -170,24 +168,22 @@ class GoogleSheetService:
         except Exception as e:
             raise RuntimeError(f"스프레드시트 범위 업데이트 실패: {str(e)}")
         
-    def get_sector_dict(self, url: str = None, worksheet_name: str = "섹터") -> Dict[str, Any]:
+    def get_sector_dict(self, url: str, worksheet_name: str = "섹터") -> Dict[str, Any]:
         """
         구글 스프레드시트에서 종목코드:섹터 딕셔너리를 가져옵니다.
         
         Args:
-            url: 구글 스프레드시트 URL (기본값은 설정의 STOCKEASY_SECTOR_SHEET_URL)
+            url: 구글 스프레드시트 URL (필수)
             worksheet_name: 워크시트 이름 (기본값은 "섹터")
             
         Returns:
             Dict[str, Any]: 종목코드를 키로 하고 섹터 정보를 값으로 하는 딕셔너리
         """
         try:
-            # 기본 URL 사용 (settings에 정의되어 있지 않은 경우 예외 처리)
+            # URL이 제공되지 않은 경우 빈 딕셔너리 반환
             if not url:
-                url = getattr(settings, "STOCKEASY_SECTOR_SHEET_URL", None)
-                if not url:
-                    logger.error("구글 스프레드시트 URL이 설정되지 않았습니다.")
-                    return {}
+                logger.error("구글 스프레드시트 URL이 제공되지 않았습니다.")
+                return {}
             
             # 워크시트 열기
             try:

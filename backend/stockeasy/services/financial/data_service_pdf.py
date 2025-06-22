@@ -619,7 +619,7 @@ class FinancialDataServicePDF:
             try:
                 # 목차 정보 가져오기
                 toc = await asyncio.to_thread(doc.get_toc)
-                logger.info(f"Found TOC with {len(toc)} items")
+                #logger.info(f"Found TOC with {len(toc)} items")
                 
                 # 목차에서 재무제표 관련 페이지 찾기
                 for item in toc:

@@ -109,10 +109,35 @@ export default function StockChatHistory({
       
       const lastFetchTime = parseInt(lastFetch, 10);
       
+      // localStorage 값 검증 및 디버깅 정보 추가
+      if (isNaN(lastFetchTime)) {
+        console.warn('[히스토리 패널] localStorage 값이 유효하지 않음:', lastFetch);
+        localStorage.removeItem(CHAT_SESSIONS_LAST_FETCH_KEY);
+        return true;
+      }
+      
+      const timeSinceLastFetch = currentTime - lastFetchTime;
+      
+      // 디버깅을 위한 상세 로그
+      console.log('[히스토리 패널] 시간 디버깅 정보:', {
+        currentTime: new Date(currentTime).toLocaleString(),
+        lastFetchTime: new Date(lastFetchTime).toLocaleString(), 
+        timeSinceLastFetchMs: timeSinceLastFetch,
+        timeSinceLastFetchMinutes: Math.round(timeSinceLastFetch / 1000 / 60),
+        chatSessionsLength: chatSessions.length,
+        localStorage_raw: lastFetch
+      });
+      
+      // 시간이 거꾸로 흐르는 경우 감지 (시스템 시간 변경 등)
+      if (timeSinceLastFetch < 0) {
+        console.warn('[히스토리 패널] 마지막 갱신 시간이 현재 시간보다 늦음 (시스템 시간 변경?), localStorage 초기화');
+        localStorage.removeItem(CHAT_SESSIONS_LAST_FETCH_KEY);
+        return true;
+      }
+      
       // 채팅 세션이 없는 경우 (이전에 오류가 있었을 수 있음), 30초 후 다시 시도
       if (chatSessions.length === 0) {
         const thirtySecondsInMs = 30 * 1000;
-        const timeSinceLastFetch = currentTime - lastFetchTime;
         const needsFetch = timeSinceLastFetch > thirtySecondsInMs;
         
         console.log(`[히스토리 패널] 채팅 세션이 없음. 마지막 갱신 이후 경과 시간: ${Math.round(timeSinceLastFetch / 1000)}초`);
@@ -123,7 +148,6 @@ export default function StockChatHistory({
       
       // 일반적인 경우: 1시간 후 갱신
       const oneHourInMs = 60 * 60 * 1000; // 1시간을 밀리초로 변환
-      const timeSinceLastFetch = currentTime - lastFetchTime;
       const needsFetch = timeSinceLastFetch > oneHourInMs;
       
       console.log(`[히스토리 패널] 마지막 갱신 이후 경과 시간: ${Math.round(timeSinceLastFetch / 1000 / 60)}분`);
@@ -137,10 +161,11 @@ export default function StockChatHistory({
   };
 
   // 마지막 갱신 시간 저장
-  const updateLastFetchTime = () => {
+  const updateLastFetchTime = (reason: string = '일반') => {
     try {
-      localStorage.setItem(CHAT_SESSIONS_LAST_FETCH_KEY, Date.now().toString());
-      console.log('[히스토리 패널] 마지막 갱신 시간 업데이트');
+      const timestamp = Date.now();
+      localStorage.setItem(CHAT_SESSIONS_LAST_FETCH_KEY, timestamp.toString());
+      console.log(`[히스토리 패널] 마지막 갱신 시간 업데이트 (${reason}):`, new Date(timestamp).toLocaleString());
     } catch (error) {
       console.error('[히스토리 패널] 마지막 갱신 시간 저장 오류:', error);
     }
@@ -181,7 +206,7 @@ export default function StockChatHistory({
         console.log(`[히스토리 패널] 페이징 상태: offset=${newOffset}, total=${response.data.total}, hasMore=${newOffset < response.data.total}`);
         
         // 마지막 갱신 시간 업데이트
-        updateLastFetchTime();
+        updateLastFetchTime('채팅세션조회성공');
       }
     } catch (error) {
       console.error('[히스토리 패널] 채팅 세션 가져오기 오류:', error);
@@ -458,6 +483,7 @@ export default function StockChatHistory({
   useEffect(() => {
     const handleChatMessageSent = () => {
       console.log('[히스토리 패널] 새 채팅 메시지 입력 감지, 세션 목록 갱신');
+      console.log('[히스토리 패널] 다중 탭 환경에서 다른 탭의 메시지일 가능성 있음');
       // 새 메시지 시 처음부터 다시 로드
       setOffset(0);
       setHasMore(true);

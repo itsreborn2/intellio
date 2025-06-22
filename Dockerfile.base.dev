@@ -24,7 +24,7 @@ RUN pip install uv
 COPY backend/requirements.txt .
 RUN uv pip install --upgrade pip && \
     uv pip install wheel setuptools && \
-    uv pip install -r requirements.txt
+    uv pip install --prerelease=allow -r requirements.txt
 
 # 최종 스테이지
 FROM python:3.11.9-slim

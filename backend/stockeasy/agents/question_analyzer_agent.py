@@ -16,7 +16,7 @@ import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.output_parsers import JsonOutputParser
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional as PydanticOptional
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from common.models.token_usage import ProjectType
@@ -40,11 +40,31 @@ class Entities(BaseModel):
     stock_name: PydanticOptional[str] = Field(None, description="종목명 또는 null")
     stock_code: PydanticOptional[str] = Field(None, description="종목코드 또는 null")
     sector: PydanticOptional[str] = Field(None, description="종목이 속한 산업/섹터 또는 null")
-    subgroup: PydanticOptional[list] = Field(None, description="종목이 속한 subgroup 또는 null")
+    subgroup: PydanticOptional[List[str]] = Field(None, description="종목이 속한 subgroup 또는 null")
     time_range: PydanticOptional[str] = Field(None, description="시간범위 또는 null")
     financial_metric: PydanticOptional[str] = Field(None, description="재무지표 또는 null")
     competitor: PydanticOptional[str] = Field(None, description="경쟁사 또는 null")
     product: PydanticOptional[str] = Field(None, description="제품/서비스 또는 null")
+
+    @validator('subgroup', pre=True)
+    def validate_subgroup(cls, v):
+        """subgroup 필드의 안전한 처리를 위한 validator"""
+        if v is None or v == "null" or v == "":
+            return None
+        if isinstance(v, str):
+            # 문자열인 경우 JSON 파싱 시도
+            try:
+                import json
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, ValueError):
+                pass
+            # JSON 파싱 실패 시 빈 리스트 반환
+            return None
+        if isinstance(v, list):
+            return v
+        return None
 
 
 
@@ -97,6 +117,7 @@ class DataRequirements(BaseModel):
     confidential_data_needed: bool = Field(..., description="비공개 자료 필요 여부")
     revenue_data_needed: bool = Field(False, description="매출 및 수주 현황 데이터 필요 여부")
     web_search_needed: bool = Field(False, description="웹 검색 데이터 필요 여부,기본False")
+    technical_analysis_needed: bool = Field(False, description="기술적 분석 데이터 필요 여부")
 
 class QuestionAnalysis(BaseModel):
     """질문 분석 결과"""
@@ -197,6 +218,40 @@ class QuestionAnalyzerAgent(BaseAgent):
         #self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
         self.tavily_service = TavilyService()
         self.redis_client = AsyncRedisClient()
+        
+        # 기술적 분석 관련 키워드 정의
+        self.technical_analysis_keywords = {
+            # 차트 패턴 키워드
+            "chart_patterns": [
+                "차트", "패턴", "지지선", "저항선", "추세선", "삼각형패턴", "머리어깨",
+                "쌍바닥", "쌍천정", "역삼각형", "깃발패턴", "페넌트", "웨지", "채널",
+                "돌파", "이탈", "반전", "지지", "저항", "추세", "상승추세", "하락추세", "횡보"
+            ],
+            # 기술적 지표 키워드
+            "technical_indicators": [
+                "RS", "상대강도", "MACD", "볼린저밴드", "이동평균선", "스토캐스틱",
+                "이동평균", "단순이동평균", "지수이동평균", "SMA", "EMA", "가격이동평균",
+                "거래량", "거래량지표", "OBV", "출래량균형지표", "모멘텀", "CCI",
+                "윌리엄스R", "피보나치", "일목균형표", "엔벨로프", "ADX", "방향성지수"
+            ],
+            # 매매 신호 키워드
+            "trading_signals": [
+                "매수신호", "매도신호", "골든크로스", "데드크로스", "과매수", "과매도",
+                "매수타이밍", "매도타이밍", "진입신호", "청산신호", "신호", "크로스",
+                "상향돌파", "하향돌파", "신호강도", "매매포지션"
+            ],
+            # 가격 움직임 키워드
+            "price_movements": [
+                "가격움직임", "주가흐름", "상승세", "하락세", "횡보장세", "급등", "급락",
+                "조정", "반등", "반락", "변동성", "고점", "저점", "신고가", "신저가",
+                "갭상승", "갭하락", "가격대", "구간", "레벨"
+            ],
+            # 시장 분석 키워드
+            "market_analysis": [
+                "기술적분석", "차트분석", "테크니컬분석", "기술분석", "차트해석",
+                "기술적관점", "차트상", "기술적요인", "차트패턴분석", "기술적신호"
+            ]
+        }
     
         
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -257,7 +312,6 @@ class QuestionAnalyzerAgent(BaseAgent):
                     # 상태 업데이트
                     state["agent_results"]["question_analysis"] = context_analysis_result
                     state["summary"] = context_analysis.closing_response
-                    state["formatted_response"] = state["summary"]
                     state["answer"] = state["summary"]
 
                     # 메트릭 기록 및 처리 상태 업데이트
@@ -286,7 +340,6 @@ class QuestionAnalyzerAgent(BaseAgent):
                     # 상태 업데이트
                     state["agent_results"]["question_analysis"] = context_analysis_result
                     state["summary"] = "현재 종목과 관련이 없는 질문입니다.\n다른 종목에 관한 질문은 새 채팅에서 해주세요"
-                    state["formatted_response"] = state["summary"]
                     state["answer"] = state["summary"]
                     # 메트릭 기록 및 처리 상태 업데이트
                     end_time = datetime.now()
@@ -386,7 +439,9 @@ class QuestionAnalyzerAgent(BaseAgent):
                 
                 try:
                     # LLM 호출로 분석 수행
-                    raw_response = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
+                    agent_temp = get_agent_llm("gemini-2.0-flash")
+                    #raw_response = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
+                    raw_response = await agent_temp.with_structured_output(QuestionAnalysis).ainvoke(
                         prompt,
                         user_id=user_id,
                         project_type=ProjectType.STOCKEASY,
@@ -444,6 +499,11 @@ class QuestionAnalyzerAgent(BaseAgent):
                     response.data_requirements.confidential_data_needed = True
                     response.data_requirements.revenue_data_needed = True
                     
+                    # 기술적 분석은 무조건 필요로 설정 (키워드 감지와 관계없이)
+                    ta_needed = True  # self._detect_technical_analysis_need(query) 대신 무조건 True
+                    response.data_requirements.technical_analysis_needed = ta_needed
+                    logger.info(f"[데이터요구사항] technical_analysis_needed 설정: {ta_needed} (무조건 활성화)")
+                    
                     # 분석 결과 로깅
                     logger.info(f"Analysis result: {response}")
 
@@ -481,10 +541,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                     
                     # AIMessage에서 JSON 파싱 시도
                     try:
-                        import re
-                        import json
-                        
-                        # JSON 패턴 찾기 (중괄호로 감싸진 부분)
+                        # JSON 패턴 찾기 (중괄호로 감싸진 부분) - re 모듈은 이미 최상단에 import됨
                         json_str = extract_json_from_text(ai_response.content)
                         
                         if json_str:
@@ -516,7 +573,8 @@ class QuestionAnalyzerAgent(BaseAgent):
                                     "industry_data_needed": True,
                                     "confidential_data_needed": True,
                                     "revenue_data_needed": True,
-                                    "web_search_needed": parsed_data.get("data_requirements", {}).get("web_search_needed", False)
+                                    "web_search_needed": parsed_data.get("data_requirements", {}).get("web_search_needed", False),
+                                    "technical_analysis_needed": True  # 무조건 활성화
                                 },
                                 "keywords": parsed_data.get("keywords", []),
                                 "detail_level": parsed_data.get("detail_level", "보통")
@@ -550,6 +608,10 @@ class QuestionAnalyzerAgent(BaseAgent):
                 except Exception:
                     subgroup_list = []
                 
+                # 기술적 분석은 무조건 필요로 설정 (기본 구조에서도)
+                ta_needed_default = True  # self._detect_technical_analysis_need(query) 대신 무조건 True
+                logger.info(f"[기본분석구조] 기술적분석 필요성 설정: {ta_needed_default} (무조건 활성화)")
+                
                 return {
                     "entities": {
                         "stock_name": stock_name,
@@ -573,7 +635,8 @@ class QuestionAnalyzerAgent(BaseAgent):
                         "industry_data_needed": True,
                         "confidential_data_needed": True,
                         "revenue_data_needed": True,
-                        "web_search_needed": False
+                        "web_search_needed": False,
+                        "technical_analysis_needed": ta_needed_default
                     },
                     "keywords": [stock_name, "정보"],
                     "detail_level": "보통"
@@ -1116,4 +1179,114 @@ class QuestionAnalyzerAgent(BaseAgent):
         except Exception as e:
             print(f"검색 중 오류가 발생했습니다: {str(e)}")
             return f"검색 중 오류가 발생했습니다: {str(e)}"
+
+    def _detect_technical_analysis_need(self, query: str) -> bool:
+        """
+        질문에서 기술적 분석 관련 키워드를 감지하여 기술적 분석 필요성을 판단합니다.
+        
+        Args:
+            query: 사용자 질문
+            
+        Returns:
+            기술적 분석이 필요한지 여부
+        """
+        try:
+            logger.info(f"[기술적분석감지] 분석 시작 - 쿼리: '{query}'")
+            
+            # 질문을 소문자로 변환하여 대소문자 무관하게 검색
+            query_lower = query.lower()
+            logger.debug(f"[기술적분석감지] 소문자 변환: '{query_lower}'")
+            
+            # 각 카테고리별 키워드 매칭 점수 계산
+            keyword_scores = {}
+            total_matches = 0
+            
+            for category, keywords in self.technical_analysis_keywords.items():
+                matches = 0
+                matched_keywords = []
+                
+                for keyword in keywords:
+                    keyword_lower = keyword.lower()
+                    if keyword_lower in query_lower:
+                        matches += 1
+                        matched_keywords.append(keyword)
+                        total_matches += 1
+                        logger.debug(f"[기술적분석감지] 키워드 매칭: '{keyword}' in '{query_lower}' (카테고리: {category})")
+                
+                keyword_scores[category] = {
+                    "matches": matches,
+                    "matched_keywords": matched_keywords,
+                    "score": matches / len(keywords) if keywords else 0
+                }
+                
+                if matches > 0:
+                    logger.info(f"[기술적분석감지] {category} 카테고리 매칭: {matches}개 - {matched_keywords}")
+            
+            logger.info(f"[기술적분석감지] 전체 키워드 매칭 결과: 총 {total_matches}개 매칭")
+            logger.info(f"[기술적분석감지] 카테고리별 점수: {keyword_scores}")
+            
+            # 기술적 분석 필요성 판단 로직
+            needs_technical_analysis = False
+            reasoning = []
+            
+            # 1. 직접적인 기술분석 키워드 확인
+            logger.info(f"[기술적분석감지] 규칙1 확인 - market_analysis 매칭: {keyword_scores['market_analysis']['matches']}개")
+            if keyword_scores["market_analysis"]["matches"] > 0:
+                needs_technical_analysis = True
+                reasoning.append(f"기술분석 직접 키워드 감지: {keyword_scores['market_analysis']['matched_keywords']}")
+                logger.info(f"[기술적분석감지] ✅ 규칙1 통과 - 기술분석 직접 키워드 감지")
+            
+            # 2. 기술적 지표 키워드 확인 (2개 이상이면 높은 확률)
+            logger.info(f"[기술적분석감지] 규칙2 확인 - technical_indicators 매칭: {keyword_scores['technical_indicators']['matches']}개")
+            if keyword_scores["technical_indicators"]["matches"] >= 2:
+                needs_technical_analysis = True
+                reasoning.append(f"기술적 지표 키워드 다중 감지: {keyword_scores['technical_indicators']['matched_keywords']}")
+                logger.info(f"[기술적분석감지] ✅ 규칙2a 통과 - 기술적 지표 키워드 다중 감지")
+            elif keyword_scores["technical_indicators"]["matches"] >= 1:
+                # 1개라도 있으면 일단 후보로 고려
+                reasoning.append(f"기술적 지표 키워드 감지: {keyword_scores['technical_indicators']['matched_keywords']}")
+                logger.info(f"[기술적분석감지] 📝 규칙2b - 기술적 지표 키워드 1개 감지 (후보)")
+            
+            # 3. 매매 신호 키워드 확인
+            logger.info(f"[기술적분석감지] 규칙3 확인 - trading_signals 매칭: {keyword_scores['trading_signals']['matches']}개")
+            if keyword_scores["trading_signals"]["matches"] >= 1:
+                needs_technical_analysis = True
+                reasoning.append(f"매매 신호 키워드 감지: {keyword_scores['trading_signals']['matched_keywords']}")
+                logger.info(f"[기술적분석감지] ✅ 규칙3 통과 - 매매 신호 키워드 감지")
+            
+            # 4. 차트 패턴 기반 판단 (패턴 키워드 1개만 있어도 기술적 분석으로 분류)
+            chart_pattern_matches = keyword_scores["chart_patterns"]["matches"]
+            technical_indicator_matches = keyword_scores["technical_indicators"]["matches"]
+            price_movement_matches = keyword_scores["price_movements"]["matches"]
+            logger.info(f"[기술적분석감지] 규칙4 확인 - chart_patterns: {chart_pattern_matches}개, technical_indicators: {technical_indicator_matches}개, price_movements: {price_movement_matches}개")
+            
+            if chart_pattern_matches >= 1:
+                needs_technical_analysis = True
+                reasoning.append(f"차트패턴 키워드 감지: {keyword_scores['chart_patterns']['matched_keywords']}")
+                logger.info(f"[기술적분석감지] ✅ 규칙4a 통과 - 차트패턴 키워드 감지 (1개 이상)")
+            elif price_movement_matches >= 2:
+                # 가격 움직임만으로는 약하지만 2개 이상이면 고려
+                reasoning.append(f"가격 움직임 키워드 다중 감지: {keyword_scores['price_movements']['matched_keywords']}")
+                logger.info(f"[기술적분석감지] 📝 규칙4b - 가격 움직임 키워드 다중 감지 (후보)")
+            
+            # 5. 전체 매칭 키워드 수가 많으면 기술적 분석 가능성 높음
+            logger.info(f"[기술적분석감지] 규칙5 확인 - 총 매칭 키워드: {total_matches}개, 현재 결과: {needs_technical_analysis}")
+            if total_matches >= 2 and not needs_technical_analysis:
+                needs_technical_analysis = True
+                reasoning.append(f"기술적 분석 관련 키워드 다수 감지 (총 {total_matches}개)")
+                logger.info(f"[기술적분석감지] ✅ 규칙5 통과 - 키워드 다수 감지 (2개 이상)")
+            
+            # 최종 판단 로깅
+            if needs_technical_analysis:
+                logger.info(f"[기술적분석감지] 🎯 최종 결과: TRUE - 이유: {', '.join(reasoning)}")
+            else:
+                logger.info(f"[기술적분석감지] ❌ 최종 결과: FALSE - 매칭된 키워드 총 {total_matches}개")
+            
+            return needs_technical_analysis
+            
+        except Exception as e:
+            logger.error(f"[기술적분석감지] ❌ 오류 발생: {str(e)}")
+            logger.info(f"[기술적분석감지] 🛡️ 안전하게 False 반환")
+            # 오류 발생 시 안전하게 False 반환
+            return False
         

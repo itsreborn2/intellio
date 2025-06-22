@@ -9,7 +9,9 @@ import {
   MessageComponent, 
   IBarChartComponent, 
   ILineChartComponent,
-  IMixedChartComponent
+  IMixedChartComponent,
+  IPriceChartComponent,
+  ITechnicalIndicatorChartComponent
 } from '../types/chat';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -20,6 +22,8 @@ import {
   Cell, Sector, PieChart, Pie, RadialBarChart, RadialBar, ReferenceArea
 } from 'recharts';
 import { useMediaQuery } from '../hooks';
+import PriceChart from './PriceChart';
+import TechnicalIndicatorChart from './TechnicalIndicatorChart';
 
 // 차트 색상 테마 정의
 const CHART_COLORS = [
@@ -70,7 +74,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({
         borderRadius: '8px',
         boxShadow: '0 2px 10px rgba(0, 0, 0, 0.15)'
       }}>
-        <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>{label}</p>
+        <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>{String(label || '')}</p>
         {payload.map((entry, index) => (
           <p key={`tooltip-${index}`} style={{ 
             margin: '0', 
@@ -78,9 +82,9 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({
             display: 'flex',
             justifyContent: 'space-between' 
           }}>
-            <span style={{ marginRight: '10px', fontWeight: 500 }}>{entry.name}: </span>
+            <span style={{ marginRight: '10px', fontWeight: 500 }}>{String(entry.name || '')}: </span>
             <span style={{ fontWeight: 'bold' }}>
-              {valuePrefix}{typeof entry.value === 'number' ? entry.value.toLocaleString() : entry.value}{valueSuffix}
+              {String(valuePrefix || '')}{typeof entry.value === 'number' ? entry.value.toLocaleString() : String(entry.value || '')}{String(valueSuffix || '')}
             </span>
           </p>
         ))}
@@ -104,7 +108,7 @@ const CustomXAxisTick = (props: any) => {
         fontSize={fontSize || (isMobile ? '0.75em' : (isChartPair ? '0.75em' : '0.75em'))}
         fontWeight={500}
       >
-        {payload.value}
+        {String(payload.value || '')}
       </text>
     </g>
   );
@@ -133,7 +137,7 @@ export function MessageComponentRenderer({
   switch (component.type as string) {
     case 'heading': {
       const { level, content } = component as any;
-      console.log(`lv ${level} - ${content}`);
+      //console.log(`lv ${level} - ${content}`);
       // 헤딩 레벨에 따라 적절한 스타일 적용
       const styles: React.CSSProperties = {
         fontWeight: 'bold',
@@ -238,7 +242,7 @@ export function MessageComponentRenderer({
         borderRadius: '12px',
         padding: '1em',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease'
+        transition: 'box-shadow 0.3s ease'
       };
       
       // 모바일 또는 2열 레이아웃에 따른 컨테이너 스타일 설정
@@ -281,7 +285,7 @@ export function MessageComponentRenderer({
             fontSize: '1.2em',
             textAlign: 'center',
             color: '#333'
-          }}>{title}</div>}
+          }}>{String(title)}</div>}
           <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart 
               data={formattedData}
@@ -413,7 +417,7 @@ export function MessageComponentRenderer({
         borderRadius: '12px',
         padding: '1em',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease'
+        transition: 'box-shadow 0.3s ease'
       };
       
       // 모바일 또는 2열 레이아웃에 따른 컨테이너 스타일 설정
@@ -456,7 +460,7 @@ export function MessageComponentRenderer({
             fontSize: '1.2em',
             textAlign: 'center',
             color: '#333'
-          }}>{title}</div>}
+          }}>{String(title)}</div>}
           <ResponsiveContainer width="100%" height={chartHeight}>
             <LineChart 
               data={formattedData}
@@ -591,7 +595,7 @@ export function MessageComponentRenderer({
         borderRadius: '12px',
         padding: '1em',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease'
+        transition: 'box-shadow 0.3s ease'
       };
       
       // 모바일 또는 2열 레이아웃에 따른 컨테이너 스타일 설정
@@ -649,7 +653,7 @@ export function MessageComponentRenderer({
             fontSize: '1.2em',
             textAlign: 'center',
             color: '#333'
-          }}>{title}</div>}
+          }}>{String(title)}</div>}
           <ResponsiveContainer width="100%" height={chartHeight}>
             <ComposedChart 
               data={formattedData}
@@ -742,8 +746,8 @@ export function MessageComponentRenderer({
                 tickLine={{ stroke: '#666' }}
                 axisLine={{ stroke: '#666' }}
                 tickFormatter={(value) => {
-                  // 오른쪽 Y축은 주로 퍼센트 값이므로 간결한 퍼센트 형식으로 표시
-                  return `${value}%`;
+                  // 오른쪽 Y축은 주로 퍼센트 값이므로 정수형 퍼센트로 표시
+                  return `${Math.round(value)}%`;
                 }}
                 label={data.y_axis_right_title ? { 
                   value: `${data.y_axis_right_title}`, 
@@ -857,12 +861,219 @@ export function MessageComponentRenderer({
       );
     }
     
+    case 'price_chart': {
+      const { title, data } = component as IPriceChartComponent;
+      
+      // 주가차트 컨테이너 스타일
+      const containerStyle: CSSProperties = {
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        borderRadius: '12px',
+        padding: '1em',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+        margin: '1em 0',
+        width: '100%'
+      };
+      
+      // 차트 높이 설정
+      const chartHeight = isMobile ? 400 : 500;
+      
+      return (
+        <div style={containerStyle}>
+          {title && <div style={{ 
+            fontWeight: 'bold', 
+            marginBottom: '0.5em',
+            fontSize: '1.2em',
+            textAlign: 'center',
+            color: '#333'
+          }}>{String(title)}</div>}
+          
+          <PriceChart 
+            data={data}
+            height={chartHeight}
+            isMobile={isMobile}
+          />
+        </div>
+      );
+    }
+    
+    case 'technical_indicator_chart': {
+      const { title, data } = component as ITechnicalIndicatorChartComponent;
+      
+      
+      // 백엔드 데이터 구조 변환 처리
+      let processedData = data;
+      
+      // chart_data가 객체 형태인 경우 (백엔드에서 보내는 구조)
+      const dataWithChartData = data as any;
+      if (dataWithChartData?.chart_data && typeof dataWithChartData.chart_data === 'object' && !Array.isArray(dataWithChartData.chart_data)) {
+        console.log('[MessageComponentRenderer] chart_data 객체 구조 변환 시작');
+        console.log('[MessageComponentRenderer] chart_data 키:', Object.keys(dataWithChartData.chart_data));
+        
+        try {
+          const chartData = dataWithChartData.chart_data;
+          
+          // dates 배열 추출 (이미 정규화된 값)
+          const dates = chartData.dates || [];
+          console.log('[MessageComponentRenderer] dates 길이:', dates?.length || 0);
+          console.log('[MessageComponentRenderer] 첫 번째 날짜:', dates?.[0]);
+          
+          // OHLCV 데이터로 candle_data 구성
+          const candle_data: any[] = [];
+          if (dates && dates.length > 0) {
+            for (let i = 0; i < dates.length; i++) {
+              const candleItem = {
+                time: dates[i],
+                open: parseFloat(chartData.open?.[i] || chartData.close?.[i] || 0),
+                high: parseFloat(chartData.high?.[i] || 0),
+                low: parseFloat(chartData.low?.[i] || 0),
+                close: parseFloat(chartData.close?.[i] || 0),
+                volume: parseInt(chartData.volume?.[i] || 0),
+                price_change_percent: parseFloat(chartData.price_change_percent?.[i] || 0)
+              };
+              
+              // NaN 값 체크
+              if (!isNaN(candleItem.close) && candleItem.close > 0) {
+                candle_data.push(candleItem);
+              }
+            }
+          }
+          
+          console.log('[MessageComponentRenderer] candle_data 길이:', candle_data.length);
+          console.log('[MessageComponentRenderer] 첫 번째 캔들:', candle_data[0]);
+          
+          // 지표 데이터 추출 (dates, close, high, low, volume 제외)
+          const indicators: any[] = [];
+          const indicatorKeys = Object.keys(chartData).filter(key => 
+            !['dates', 'close', 'high', 'low', 'volume', 'open'].includes(key)
+          );
+          
+          console.log('[MessageComponentRenderer] 지표 키:', indicatorKeys);
+          
+          indicatorKeys.forEach(key => {
+            const indicatorData = chartData[key];
+            if (Array.isArray(indicatorData) && indicatorData.length > 0) {
+              // 지표 데이터를 {time, value} 형태로 변환 (이미 정규화된 날짜 사용)
+              const indicatorSeries = dates.map((date: string, index: number) => ({
+                time: date,
+                value: parseFloat(indicatorData[index]) || null
+              })).filter((item: any) => item.value !== null && !isNaN(item.value));
+              
+              if (indicatorSeries.length > 0) {
+                indicators.push({
+                  name: key,
+                  data: indicatorSeries
+                  // 색상과 타입은 TechnicalIndicatorChart에서 결정
+                });
+              }
+            }
+          });
+          
+          console.log('[MessageComponentRenderer] 변환된 지표 수:', indicators.length);
+          
+          // 기존 indicators와 병합 (있는 경우)
+          const existingIndicators = data.indicators || [];
+          const allIndicators = [...existingIndicators, ...indicators];
+          
+          processedData = {
+            ...data,
+            dates: dates, // 이미 정규화된 날짜 사용
+            candle_data,
+            indicators: allIndicators
+          };
+          
+          console.log('[MessageComponentRenderer] 최종 변환 결과:', {
+            datesCount: dates.length,
+            candleDataCount: candle_data.length,
+            indicatorsCount: allIndicators.length,
+            indicatorNames: allIndicators.map(ind => ind.name)
+          });
+          
+        } catch (error) {
+          console.error('[MessageComponentRenderer] 데이터 변환 오류:', error);
+          // 변환 실패 시 원본 데이터 유지
+          processedData = data;
+        }
+      }
+      // } else if (dataWithChartData?.chart_data && Array.isArray(dataWithChartData.chart_data)) {
+      //   // 기존 배열 형태 처리 로직 (하위 호환성)
+      //   console.log('[MessageComponentRenderer] chart_data 배열 구조 변환 (레거시)');
+        
+      //   try {
+      //     const dates = dataWithChartData.chart_data.map((item: any) => item.date || item.Date);
+      //     const candle_data = dataWithChartData.chart_data.map((item: any, index: number) => ({
+      //       time: item.date || item.Date || dates[index],
+      //       open: parseFloat(item.open || item.Open || 0),
+      //       high: parseFloat(item.high || item.High || 0),
+      //       low: parseFloat(item.low || item.Low || 0),
+      //       close: parseFloat(item.close || item.Close || 0),
+      //       volume: parseInt(item.volume || item.Volume || 0)
+      //     }));
+          
+      //     const indicators = data.indicators || [];
+          
+      //     processedData = {
+      //       ...data,
+      //       dates,
+      //       candle_data,
+      //       indicators
+      //     };
+          
+      //     console.log('[MessageComponentRenderer] 레거시 변환 완료:', {
+      //       datesCount: dates.length,
+      //       candleDataCount: candle_data.length,
+      //       indicatorsCount: indicators.length
+      //     });
+      //   } catch (error) {
+      //     console.error('[MessageComponentRenderer] 레거시 데이터 변환 오류:', error);
+      //   }
+      // }
+      // } else {
+      //   console.log('[MessageComponentRenderer] chart_data가 없거나 예상과 다른 형태입니다.');
+      //   console.log('[MessageComponentRenderer] 데이터 구조:', {
+      //     hasChartData: !!dataWithChartData?.chart_data,
+      //     chartDataType: typeof dataWithChartData?.chart_data,
+      //     isArray: Array.isArray(dataWithChartData?.chart_data)
+      //   });
+      // }
+      
+      // 기술적 지표 차트 컨테이너 스타일
+      const containerStyle: CSSProperties = {
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        borderRadius: '12px',
+        padding: '1em',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+        margin: '1em 0',
+        width: '100%'
+      };
+      
+      // 차트 높이 설정
+      const chartHeight = isMobile ? 350 : 420;
+      
+      return (
+        <div style={containerStyle}>
+          {title && <div style={{ 
+            fontWeight: 'bold', 
+            marginBottom: '0.5em',
+            fontSize: '1.2em',
+            textAlign: 'center',
+            color: '#333'
+          }}>{String(title)}</div>}
+          
+          <TechnicalIndicatorChart 
+            data={processedData}
+            height={chartHeight}
+            isMobile={isMobile}
+          />
+        </div>
+      );
+    }
+    
     case 'table': {
       const { title, data } = component as any;
       
       return (
         <div style={{ margin: '1em 0', width: '100%', overflowX: 'auto' }}>
-          {title && <div style={{ fontWeight: 'bold', marginBottom: '0.5em', paddingLeft: '0.3em' }}>{title}</div>}
+          {title && <div style={{ fontWeight: 'bold', marginBottom: '0.5em', paddingLeft: '0.3em' }}>{String(title)}</div>}
           <table style={{ 
             width: '100%', 
             borderCollapse: 'collapse',
@@ -897,7 +1108,7 @@ export function MessageComponentRenderer({
                       }}
                     >
                       <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-                        {row[header.key]}
+                        {String(row[header.key] ?? '')}
                       </ReactMarkdown>
                     </td>
                   ))}
@@ -1147,11 +1358,10 @@ const globalStyle = `
   }
   
   .chart-container {
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transition: box-shadow 0.3s ease;
   }
   
   .chart-container:hover {
-    transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
   }
   
@@ -1194,4 +1404,4 @@ export default function EnhancedChartPairRenderer(props: { components: MessageCo
   }, []);
   
   return <ChartPairRenderer components={props.components} />;
-} 
+}

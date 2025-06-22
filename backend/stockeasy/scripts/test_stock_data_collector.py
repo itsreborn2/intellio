@@ -67,7 +67,7 @@ class StockDataCollectorTester:
     async def check_health(self) -> bool:
         """서비스 헬스체크"""
         try:
-            logger.info("📋 서비스 헬스체크 수행 중...")
+            logger.info(f"📋 서비스 헬스체크 수행 중... {self.base_url}")
             
             response = await self.client.get(f"{self.base_url}/health")
             

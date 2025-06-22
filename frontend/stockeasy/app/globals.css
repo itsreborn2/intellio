@@ -953,6 +953,76 @@ html {
   100% { transform: rotate(360deg); }
 }
 
+/* 실시간 차트 스트리밍을 위한 애니메이션 키프레임 */
+@keyframes slideInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* 기본 스크롤바 스타일 */
 ::-webkit-scrollbar {
   width: 6px;
@@ -978,4 +1048,151 @@ html {
 * {
   scrollbar-width: thin; /* 스크롤바 두께 */
   scrollbar-color: var(--ui-scrollbar-color, var(--ui-scrollbar-color-fallback)) transparent; /* 스크롤바 색상 및 트랙 배경 */
+}
+
+/* 실시간 차트 스트리밍을 위한 공통 클래스 */
+
+/* 임시 차트 팝업 스타일 (기존 컨테이너 스타일은 팝업에서 직접 정의) */
+/* 로딩 애니메이션 개선 */
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* 차트 컨테이너 스타일 */
+.chart-container {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 로딩 애니메이션 */
+.loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.loading-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #3b82f6;
+  animation: loadingBounce 1.4s infinite both;
+}
+
+.loading-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.loading-dots span:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes loadingBounce {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 실시간 배지 */
+.realtime-badge {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  animation: pulse 2s infinite;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.realtime-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #dcfdf7;
+  animation: pulse 1s infinite;
+}
+
+/* 완료 팝업 애니메이션 */
+.completion-popup {
+  animation: bounceIn 0.6s ease-out;
+}
+
+.completion-popup-backdrop {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* 상태 메시지 */
+.status-message {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 8px 0;
+  animation: slideInRight 0.4s ease-out;
+  color: #1e40af;
+  font-weight: 500;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 640px) {
+  .preliminary-chart-container {
+    padding: 16px;
+    margin: 12px 0;
+    border-radius: 8px;
+  }
+  
+  .chart-container:hover {
+    transform: none; /* 모바일에서는 호버 효과 제거 */
+  }
+  
+  .realtime-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .preliminary-chart-container {
+    padding: 20px;
+    margin: 14px 0;
+  }
+}
+
+@media (min-width: 1025px) {
+  /* 차트 컨테이너 hover 효과 제거됨 */
+}
+
+/* 다크모드 지원을 위한 CSS 변수 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chart-bg-color: #1f2937;
+    --chart-border-color: #374151;
+    --chart-text-color: #f9fafb;
+    --status-bg-color: #1e3a8a;
+    --status-border-color: #3b82f6;
+    --status-text-color: #dbeafe;
+  }
+  
+  .loading-dots span {
+    background-color: #60a5fa;
+  }
 }

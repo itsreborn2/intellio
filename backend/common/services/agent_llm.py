@@ -469,11 +469,9 @@ class AgentLLM:
                         
                         # 비동기 LLM 호출
                         current_llm = self.get_llm()
-                        #logger.info(f"[토큰 추적][비동기] agens: {current_llm.name}")
-                        result = await current_llm.ainvoke(*args, **kwargs)
                         
-                        result_dict = result.model_dump() if hasattr(result, 'dict') else vars(result)
-                        logger.info(f"[토큰 추적][비동기] agent result[{self.agent_name}] keys: {result_dict.keys()}")
+                        result = await current_llm.ainvoke(*args, **kwargs)
+                        #result_dict = result.model_dump() if hasattr(result, 'dict') else vars(result)
                         
                         # API 응답에서 토큰 사용량 추출 시도
                         usage_info = None

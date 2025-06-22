@@ -543,23 +543,7 @@ class ChatService:
             
         except Exception as e:
             logger.error(f"채팅 메시지 조회 중 오류 발생: {str(e)}")
-            return [
-                {
-                    "ok": False,
-                    "status_message": "채팅 메시지 조회에 실패하였습니다.",
-                    "id": None,
-                    "session_id": None,
-                    "role": None,
-                    "content": None,
-                    "components": None,
-                    "stock_code": None,
-                    "stock_name": None,
-                    "metadata": None,
-                    "agent_results": None,
-                    "created_at": None,
-                    "updated_at": None
-                }
-            ]
+            return []
     
     @staticmethod
     async def get_chat_session_agent_results(
