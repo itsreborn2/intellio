@@ -100,3 +100,16 @@ export interface MaListData {
   '대표종목(RS)'?: string;
   // 필요에 따라 다른 필드 추가 가능
 }
+
+// 사용자 정보 인터페이스 (관리자 대시보드용)
+export interface IUser {
+  id: string; // UUID
+  email: string;
+  name: string;
+  is_active: boolean;
+  is_superuser: boolean;
+  oauth_provider?: string | null;
+  profile_image?: string | null;
+  created_at?: string;
+}
+

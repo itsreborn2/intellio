@@ -11,6 +11,21 @@ const nextConfig = {
   images: {
     domains: ['lh3.googleusercontent.com'],
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:8000/api/:path*',
+      },
+    ];
+  },
 }
 
-module.exports = nextConfig
+const path = require('path');
+
+nextConfig.webpack = (config) => {
+  config.resolve.alias['intellio-common'] = path.join(__dirname, '../common');
+  return config;
+};
+
+module.exports = nextConfig;

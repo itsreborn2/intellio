@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from common.api.v1 import  session, auth,  admin, token_usage
+from common.api.v1 import admin, dashboard, session, auth, token_usage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ api_router_common.include_router(token_usage.router)
 logger.info("인증 라우터 등록 완료")
 
 api_router_common.include_router(admin.router) # prefix="/admin", tags=["admin"]
+api_router_common.include_router(dashboard.router) # prefix="/dashboard", tags=["dashboard"]
 logger.info("관리자 라우터 등록 완료")
 
 
