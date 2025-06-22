@@ -428,8 +428,14 @@ function useMessageProcessing(
                 return;
               }
               
-              // 콜백 호출
-              onPreliminaryChart(data);
+              // 콜백 호출 (필드명 매칭: stock_info -> stockInfo)
+              console.log('[MessageProcessing] 원본 data.stock_info:', data.stock_info);
+              const chartData = {
+                ...data,
+                stockInfo: data.stock_info // 백엔드의 stock_info를 stockInfo로 매핑
+              };
+              console.log('[MessageProcessing] 매핑된 chartData.stockInfo:', chartData.stockInfo);
+              onPreliminaryChart(chartData);
               
             } catch (error) {
               console.error('[MessageProcessing] 임시 차트 처리 중 오류:', error);

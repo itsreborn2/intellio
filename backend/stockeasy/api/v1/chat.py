@@ -614,10 +614,10 @@ async def stream_chat_message(
         logger.info(f"[STREAM_CHAT] 스트리밍 콜백 함수 생성 완료: {streaming_callback.__name__}, id={id(streaming_callback)}")
         
         # preliminary_chart 전용 콜백 함수
-        async def preliminary_chart_callback(components: List[Dict[str, Any]], message: str, elapsed_time: float = 0.0):
+        async def preliminary_chart_callback(components: List[Dict[str, Any]], message: str, elapsed_time: float = 0.0, stock_info: Optional[Dict[str, Any]] = None):
             """preliminary_chart를 스트리밍으로 전송하는 콜백 함수"""
             try:
-                logger.info(f"[STREAM_CHAT] preliminary_chart 콜백 호출: 컴포넌트 {len(components)}개")
+                logger.info(f"[STREAM_CHAT] preliminary_chart 콜백 호출: 컴포넌트 {len(components)}개, stock_info 포함: {stock_info is not None}")
                 
                 # 데이터 구조 상세 로깅
                 for i, component in enumerate(components):
@@ -638,6 +638,7 @@ async def stream_chat_message(
                         "message": message,
                         "stock_code": request.stock_code,
                         "stock_name": request.stock_name,
+                        "stock_info": stock_info,
                         "timestamp": time.time(),
                         "elapsed": elapsed_time
                     }
@@ -853,7 +854,7 @@ async def stream_chat_message(
                     # answer가 None이거나 기본 메시지인 경우 대안 사용
                     if not answer or answer == "처리가 완료되었으나 응답을 찾을 수 없습니다.":
                         # summary나 formatted_response를 대안으로 사용
-                        answer = result.get("summary") or result.get("formatted_response") or "처리가 완료되었으나 응답을 찾을 수 없습니다."
+                        answer = result.get("summary") or "처리가 완료되었으나 응답을 찾을 수 없습니다."
                         logger.info(f"[STREAM_CHAT] answer 키가 없어서 대안 사용: summary={bool(result.get('summary'))}, formatted_response={bool(result.get('formatted_response'))}")
                     
                     # answer가 None이 아닌지 확인
@@ -946,8 +947,8 @@ async def stream_chat_message(
                         
                         # 완료 이벤트 전송
                         #logger.info("[STREAM_CHAT] 완료 이벤트 전송")
-                        if settings.ENV != "prod":
-                            logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
+                        # if settings.ENV != "prod":
+                        #     logger.info(f"[STREAM_CHAT] 구조화된 컴포넌트: {result.get('components', [])}")
 
                         # 구조화된 채팅 응답 구성
                         structured_response = StructuredChatResponse(

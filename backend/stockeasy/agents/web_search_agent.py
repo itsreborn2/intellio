@@ -571,48 +571,16 @@ class WebSearchAgent(BaseAgent):
                 
                 #formatted_results.append(f"[결과 {i}]\\n제목: {title}\\n내용: {content}\\nURL: {url}\\n점수: {score}\\n")
                 if url and url not in seen_urls: # URL이 있고, 아직 처리되지 않은 경우
-                    formatted_results.append(f"[결과 {i}]\\n제목: {title}\\n내용: {content}\\nURL: {url}\\n\\n")
+                    formatted_results.append(f"[결과 {i}]")
+                    formatted_results.append(f"제목: {title}")
+                    formatted_results.append(f"URL: {url}")                    
+                    formatted_results.append(f"내용: {content}")
+                    formatted_results.append(f"------")
                     seen_urls.add(url) # 처리된 URL로 추가
             
             # 검색 결과 텍스트
             results_text = "\\n".join(formatted_results)
             return results_text
-#             # 프롬프트 구성
-#             prompt = f"""
-# 당신은 주식 및 금융 정보 전문가입니다. 웹 검색 결과를 분석하여 사용자 질문에 관련된 정보를 요약해주세요.
-
-# 사용자 질문: {query}
-
-# 관련 주식 정보:
-# - 종목 코드: {stock_code if stock_code else '없음'}
-# - 종목명: {stock_name if stock_name else '없음'}
-
-# 검색 결과:
-# {results_text}
-
-# 요약 시 다음 사항을 고려하세요:
-# 1. 사용자 질문과 직접적으로 관련된 정보에 중점을 두세요.
-# 2. 최신 정보와 신뢰할 수 있는 출처의 정보를 우선시하세요.
-# 3. 주식명과 코드가 있는 경우, 해당 종목에 관련된 정보만 포함하세요.
-# 4. 중복 정보는 제거하고 핵심만 간결하게 요약하세요.
-# 5. 사실 정보만 포함하고, 추측이나 의견은 배제하세요.
-# 6. 정보의 출처나 날짜를 가능한 포함하세요.
-# 7. 주요 수치나 통계가 있다면 명확히 포함하세요.
-
-# 요약은 한국어로 작성하며, 최대 500자 이내로 작성해주세요.
-# """
-            
-#             # LLM 호출
-#             response = await self.agent_llm.ainvoke_with_fallback(
-#                 input=prompt,
-#                 project_type=ProjectType.STOCKEASY,
-#                 db=self.db
-#             )
-            
-#             if not response or not response.content:
-#                 raise Exception("LLM이 빈 응답을 반환했습니다.")
-            
-#             return response.content
             
         except Exception as e:
             error_msg = f"검색 결과 요약 중 오류 발생: {str(e)}"

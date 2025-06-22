@@ -337,7 +337,7 @@ class OrchestratorAgent(BaseAgent):
             execution_order.insert(execution_order.index("knowledge_integrator") - 1, "technical_analyzer")
 
         # 기능 테스트 모드용. 기술적 분석 에이전트만 실행
-        test_mode = True
+        test_mode = settings.TEST_TECH_AGENT
         if test_mode:
             priority_map = {
                 "technical_analyzer": 6,

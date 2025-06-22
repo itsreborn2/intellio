@@ -223,6 +223,7 @@ class CommonSettings(BaseSettings):
 
     # 임시 파일 경로
     TEMP_DIR: str = "tmp_download"
+    TEST_TECH_AGENT:bool = os.getenv("TEST_TECH_AGENT", False) # 기본 false
     
 
 @lru_cache()

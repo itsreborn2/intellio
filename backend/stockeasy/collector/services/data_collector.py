@@ -1225,6 +1225,12 @@ class DataCollectorService(LoggerMixin):
                                             api_previous_close = safe_float(chart_item.previous_close) if hasattr(chart_item, 'previous_close') else None
                                             api_volume_change_percent = safe_float(chart_item.volume_change_percent) if hasattr(chart_item, 'volume_change_percent') else None
                                             
+                                            # volume_change_percent 값 제한 (NUMERIC(10,4) 오버플로우 방지)
+                                            if api_volume_change_percent is not None:
+                                                if abs(api_volume_change_percent) > 999999.9999:
+                                                    self.logger.warning(f"종목 {symbol} 날짜 {chart_item.date}: volume_change_percent 값이 너무 큼 ({api_volume_change_percent}), 999999.9999로 제한")
+                                                    api_volume_change_percent = 999999.9999 if api_volume_change_percent > 0 else -999999.9999
+                                            
                                             # 수정주가 관련 필드 추출
                                             api_adjustment_type = getattr(chart_item, 'adjustment_type', None)
                                             api_adjustment_ratio = safe_float(getattr(chart_item, 'adjustment_ratio', None))
@@ -1825,7 +1831,14 @@ class DataCollectorService(LoggerMixin):
                 try:
                     # 콤마만 제거하고 +/- 기호는 유지
                     clean_str = str(value).replace(',', '')
-                    return float(clean_str) if clean_str else 0.0
+                    result = float(clean_str) if clean_str else 0.0
+                    
+                    # NUMERIC(10,4) 오버플로우 방지 - 거래량 변화율 제한
+                    if abs(result) > 999999.9999:
+                        self.logger.warning(f"변화율 값이 너무 큼 ({result}), 999999.9999로 제한")
+                        result = 999999.9999 if result > 0 else -999999.9999
+                    
+                    return result
                 except (ValueError, TypeError):
                     return 0.0
             

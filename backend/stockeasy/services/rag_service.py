@@ -480,9 +480,7 @@ class StockRAGService:
             # 응답 관련 객체들 - 최종 응답은 보존
             "summary_by_section",          # 섹션별 요약
             "summary",                   # 요약 - 최종 응답이므로 보존
-            "formatted_response",        # 형식화된 응답 - 최종 응답이므로 보존
             "answer",                    # 답변 - 최종 응답이므로 보존
-            "answer_expert",               # 전문가형 답변
             "components",                # 구조화된 응답 컴포넌트 - 최종 응답이므로 보존
             
             # 히스토리 관련 객체

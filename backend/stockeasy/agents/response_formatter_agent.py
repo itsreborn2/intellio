@@ -62,567 +62,7 @@ class ResponseFormatterAgent(BaseAgent):
 
     
     
-    def _create_price_chart_component_directly(self, tech_agent_result: Dict[str, Any], stock_code: str, stock_name: str) -> Dict[str, Any]:
-        """
-        tech agent 결과를 사용하여 PriceChartComponent를 직접 생성합니다.
-        """
-        # 실제 데이터는 data 키 안에 있음
-        actual_data = tech_agent_result.get("data", {})
-        
-        chart_data = actual_data.get("chart_data", [])
-        chart_patterns = actual_data.get("chart_patterns", {})
-        
-        # OHLCV 데이터 변환
-        candle_data = []
-        
-        # 공통 유틸리티 함수 사용
-        
-        if isinstance(chart_data, list) and chart_data:
-            for i, item in enumerate(chart_data):
-                if isinstance(item, dict):
-                    # timestamp를 date로 변환하거나 date 필드 사용
-                    time_value = item.get("date") or item.get("timestamp", "")
-                    
-                    # ISO 날짜 형식을 yyyy-mm-dd 형식으로 변환
-                    formatted_time = format_date_for_chart(time_value)
-                    
-                    candle_item = {
-                        "time": formatted_time,
-                        "open": safe_int(item.get("open", 0)),
-                        "high": safe_int(item.get("high", 0)),
-                        "low": safe_int(item.get("low", 0)),
-                        "close": safe_int(item.get("close", 0)),
-                        "volume": safe_int(item.get("volume", 0))
-                    }
-                    candle_data.append(candle_item)
-        
-        # 지지선/저항선 데이터 변환
-        support_lines = []
-        resistance_lines = []
-        
-        if chart_patterns:
-            support_levels = chart_patterns.get("support_levels", [])
-            resistance_levels = chart_patterns.get("resistance_levels", [])
-            
-            for level in support_levels:
-                if level is not None:
-                    support_lines.append({
-                        "price": safe_int(level),
-                        "label": f"지지선 {level:,.0f}원",
-                        "color": "#4ade80",  # 녹색
-                        "show_label": True,
-                        "label_position": "left",
-                        "line_style": "dashed",
-                        "line_width": 2
-                    })
-            
-            for level in resistance_levels:
-                if level is not None:
-                    resistance_lines.append({
-                        "price": safe_int(level),
-                        "label": f"저항선 {level:,.0f}원",
-                        "color": "#f87171",  # 빨간색
-                        "show_label": True,
-                        "label_position": "left", 
-                        "line_style": "dashed",
-                        "line_width": 2
-                    })
-        
-       
-        price_chart_component = create_price_chart(
-            symbol=stock_code,
-            name=stock_name,
-            title=f"{stock_name}({stock_code}) 주가차트 분석",
-            candle_data=candle_data,
-            support_lines=support_lines if support_lines else None,
-            resistance_lines=resistance_lines if resistance_lines else None,
-            period="1년",
-            interval="1일",
-            metadata={
-                "source": "technical_analyzer_agent",
-                "timestamp": datetime.now().isoformat()
-            }
-        )
-        
-        return price_chart_component
-    
-    def _create_trend_following_chart_component_directly(self, tech_agent_result: Dict[str, Any], stock_code: str, stock_name: str) -> Dict[str, Any]:
-        """
-        tech agent 결과를 사용하여 추세추종 지표 차트 컴포넌트를 생성합니다.
-        ADX, ADR, 슈퍼트렌드 등 추세추종 지표들을 시각화합니다.
-        """
-        logger.info(f"[기술지표차트] {stock_name}({stock_code}) 기술적 지표 차트 생성 시작")
-        
-        # 실제 데이터는 data 키 안에 있음
-        actual_data = tech_agent_result.get("data", {})
-        chart_indicators_data = actual_data.get("chart_indicators_data", {})
-        technical_indicators = actual_data.get("technical_indicators", {})
-        chart_data = actual_data.get("chart_data", [])  # 캔들 데이터용
-        
-        # 날짜 배열 가져오기
-        dates = chart_indicators_data.get("dates", [])
-        
-        if not dates:
-            logger.warning("[기술지표차트] 날짜 데이터가 없어 기술적 지표 차트를 생성할 수 없습니다")
-            return create_paragraph("기술적 지표 차트 데이터가 없습니다.")
-        
-        # 지표 데이터 목록 생성 (최대 5개)
-        indicators = []
-        
-        # 1. ADX (Average Directional Index) - 추세 강도
-        adx_data = chart_indicators_data.get("adx", [])
-        if adx_data and any(x is not None for x in adx_data):
-            # None 값을 0으로 치환
-            processed_adx = [float(x) if x is not None else 0.0 for x in adx_data]
-            indicators.append({
-                "name": "ADX (추세강도)",
-                "data": processed_adx,
-                "color": "#3b82f6",  # 파란색
-                "chart_type": "line",
-                "y_axis_id": "primary",
-                "line_style": "solid"
-            })
-            logger.info(f"[기술지표차트] ADX 지표 추가 완료 - 데이터 포인트: {len(processed_adx)}개")
-        
-        # 2. +DI (Positive Directional Indicator)
-        plus_di_data = chart_indicators_data.get("adx_plus_di", [])
-        if plus_di_data and any(x is not None for x in plus_di_data) and len(indicators) < 5:
-            processed_plus_di = [float(x) if x is not None else 0.0 for x in plus_di_data]
-            indicators.append({
-                "name": "+DI (상승방향지수)",
-                "data": processed_plus_di,
-                "color": "#10b981",  # 녹색
-                "chart_type": "line",
-                "y_axis_id": "primary",
-                "line_style": "solid"
-            })
-            #logger.info(f"[기술지표차트] +DI 지표 추가 완료 - 데이터 포인트: {len(processed_plus_di)}개")
-        
-        # 3. -DI (Negative Directional Indicator)
-        minus_di_data = chart_indicators_data.get("adx_minus_di", [])
-        if minus_di_data and any(x is not None for x in minus_di_data) and len(indicators) < 5:
-            processed_minus_di = [float(x) if x is not None else 0.0 for x in minus_di_data]
-            indicators.append({
-                "name": "-DI (하락방향지수)",
-                "data": processed_minus_di,
-                "color": "#ef4444",  # 빨간색
-                "chart_type": "line",
-                "y_axis_id": "primary",
-                "line_style": "solid"
-            })
-            #logger.info(f"[기술지표차트] -DI 지표 추가 완료 - 데이터 포인트: {len(processed_minus_di)}개")
-        
-        # 4. ADR (Advance Decline Ratio) - 차트에서는 제외하지만 description에는 포함
-        adr_data = chart_indicators_data.get("adr", [])
-        adr_current_value = None
-        if adr_data and any(x is not None for x in adr_data):
-            adr_current_value = adr_data[-1]  # 현재값 저장 (description용)
-            #logger.info(f"[기술지표차트] ADR 지표는 차트에서 제외하지만 현재값 저장: {adr_current_value}")
-            # indicators.append() 호출하지 않음 - 차트에서 제외
-        
-        # 5. 슈퍼트렌드 (SuperTrend)
-        supertrend_data = chart_indicators_data.get("supertrend", [])
-        supertrend_direction_data = chart_indicators_data.get("supertrend_direction", [])
-        
-        if supertrend_data and any(x is not None for x in supertrend_data) and len(indicators) < 5:
-            # 슈퍼트렌드 실제 값 사용
-            processed_supertrend_values = [float(x) if x is not None else 0.0 for x in supertrend_data]
-            
-            # 방향 데이터도 함께 전달 (프론트에서 색상 변경 등에 활용 가능)
-            processed_supertrend_directions = []
-            logger.info(f"[슈퍼트렌드] 방향 데이터 처리 시작: {len(supertrend_direction_data)}개")
-            
-            for i, direction in enumerate(supertrend_direction_data):
-                if i < 5:  # 처음 5개만 로깅
-                    logger.info(f"  방향 데이터 {i}: {direction} (타입: {type(direction)})")
-                    
-                if direction == 1:
-                    processed_supertrend_directions.append(1.0)  # 상승추세
-                elif direction == -1:
-                    processed_supertrend_directions.append(-1.0)  # 하락추세  
-                else:
-                    processed_supertrend_directions.append(0.0)  # 중립
-            
-            logger.info(f"[슈퍼트렌드] 처리된 방향 데이터: {len(processed_supertrend_directions)}개")
-            logger.info(f"  처리된 첫 10개: {processed_supertrend_directions[:10]}")
-            
-            supertrend_indicator = {
-                "name": "슈퍼트렌드",
-                "data": processed_supertrend_values,  # 실제 가격 값 사용
-                "values": processed_supertrend_values,  # 프론트에서 참조할 수 있도록 추가
-                "directions": processed_supertrend_directions,  # 방향 정보도 추가
-                "color": "#f59e0b",  # 주황색
-                "chart_type": "line",  # 라인 차트로 변경
-                "y_axis_id": "secondary",  # 가격 캔들 차트와 동일한 Y축 사용 (오른쪽)
-                "line_style": "solid"
-            }
-            
-            logger.info(f"[슈퍼트렌드] 최종 지표 객체 생성:")
-            logger.info(f"  - name: {supertrend_indicator['name']}")
-            logger.info(f"  - data 길이: {len(supertrend_indicator['data'])}")
-            logger.info(f"  - directions 길이: {len(supertrend_indicator['directions'])}")
-            logger.info(f"  - directions 포함 여부: {'directions' in supertrend_indicator}")
-            
-            indicators.append(supertrend_indicator)
-            logger.info(f"[기술지표차트] 슈퍼트렌드 지표 추가 완료 - 데이터 포인트: {len(processed_supertrend_values)}개")
-        
-        # 지표가 없는 경우 처리
-        if not indicators:
-            logger.warning("[기술지표차트] 사용 가능한 기술적 지표 데이터가 없습니다")
-            return create_paragraph("기술적 지표 데이터가 충분하지 않습니다.")
-        
-        # Y축 설정 - 오른쪽은 캔들 데이터(주가) 기준, 왼쪽은 지표 값 기준
-        y_axis_configs = {
-            "primary": {
-                "title": "ADX / DI 값",
-                "position": "left",
-                "color": "#3b82f6"
-            },
-            "secondary": {
-                "title": "가격 (원)",
-                "position": "right", 
-                "color": "#f59e0b"
-            }
-        }
-        
-        # 현재 지표 값들을 포함한 설명 생성
-        description_parts = []
-        
-        # ADX 현재값
-        if adx_data and len(adx_data) > 0:
-            adx_current = adx_data[-1]  # 마지막 값
-            if adx_current is not None:
-                if adx_current >= 25:
-                    trend_strength = "강한 추세"
-                elif adx_current <= 20:
-                    trend_strength = "약한 추세"
-                else:
-                    trend_strength = "보통 추세"
-                description_parts.append(f"ADX: {adx_current:.1f} ({trend_strength})")
-        
-        # ADR 현재값 (차트에는 없지만 description에는 포함)
-        if adr_current_value is not None:
-            if adr_current_value > 1.2:
-                adr_status = "상승 우세"
-            elif adr_current_value < 0.8:
-                adr_status = "하락 우세"
-            else:
-                adr_status = "균형"
-            description_parts.append(f"ADR: {adr_current_value:.2f} ({adr_status})")
-        
-        # 슈퍼트렌드 현재값
-        if supertrend_data and len(supertrend_data) > 0:
-            supertrend_value = supertrend_data[-1]  # 마지막 값
-            supertrend_direction = supertrend_direction_data[-1] if supertrend_direction_data and len(supertrend_direction_data) > 0 else None
-            if supertrend_value is not None:
-                if supertrend_direction == 1:
-                    trend_signal = "상승추세"
-                elif supertrend_direction == -1:
-                    trend_signal = "하락추세"
-                else:
-                    trend_signal = "중립"
-                description_parts.append(f"슈퍼트렌드: {supertrend_value:,.0f}원 ({trend_signal})")
-        
-        description = " | ".join(description_parts) if description_parts else "추세추종 지표 분석"
-        
-        # 메타데이터 생성
-        # 캔들 데이터 변환 (price_chart_component_directly와 동일한 로직)
-        candle_data = []
-        logger.info(f"[기술지표차트] OHLCV 데이터 변환 시작")
-        
-        # 안전한 int 변환 함수
-        def safe_int(value, default=0):
-            if value is None or value == '':
-                return default
-            try:
-                return int(float(value))  # float로 먼저 변환 후 int로
-            except (ValueError, TypeError):
-                return default
-        
-        if isinstance(chart_data, list) and chart_data:
-            logger.info(f"[기술지표차트] chart_data는 리스트이고 {len(chart_data)}개 항목 존재")
-            for i, item in enumerate(chart_data):
-                if i < 3:  # 처음 3개만 로깅
-                    logger.info(f"[기술지표차트] 데이터 항목 {i}: {item}")
-                if isinstance(item, dict):
-                    # timestamp를 date로 변환하거나 date 필드 사용
-                    time_value = item.get("date") or item.get("timestamp", "")
-                    
-                    # ISO 날짜 형식을 yyyy-mm-dd 형식으로 변환
-                    formatted_time = format_date_for_chart(time_value)
-                    
-                    candle_item = {
-                        "time": formatted_time,
-                        "open": safe_int(item.get("open", 0)),
-                        "high": safe_int(item.get("high", 0)),
-                        "low": safe_int(item.get("low", 0)),
-                        "close": safe_int(item.get("close", 0)),
-                        "volume": safe_int(item.get("volume", 0))
-                    }
-                    candle_data.append(candle_item)
-                    if i < 3:  # 처음 3개만 로깅
-                        logger.info(f"[기술지표차트] 캔들 데이터 추가: {candle_item}")
-                else:
-                    if i < 3:  # 처음 3개만 로깅
-                        logger.warning(f"[기술지표차트] 유효하지 않은 데이터 항목 {i}: {item}")
-        else:
-            logger.warning(f"[기술지표차트] chart_data가 리스트가 아니거나 비어있음: {type(chart_data)}")
-        
-        metadata = {
-            "description": description,
-            "source": "technical_analyzer_agent",
-            "timestamp": datetime.now().isoformat(),
-            "chart_type": "technical_indicators",
-            "indicators": [indicator["name"] for indicator in indicators],
-            "data_points": len(dates),
-            "candle_data_count": len(candle_data)
-        }
-        
-        logger.info(f"[기술지표차트] 캔들 데이터 개수: {len(candle_data)}")
-        
-        # 추세추종 지표 차트 컴포넌트 생성
-        technical_indicator_chart = create_technical_indicator_chart(
-            symbol=stock_code,
-            name=stock_name,
-            dates=dates,
-            indicators=indicators,
-            title=f"{stock_name}({stock_code}) 추세추종 지표 분석",
-            candle_data=candle_data if candle_data else None,  # 캔들 데이터 포함
-            y_axis_configs=y_axis_configs,
-            period=None,
-            metadata=metadata
-        )
-        
-        logger.info(f"[기술지표차트] 추세추종 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
-        return technical_indicator_chart
-    
-    def _create_momentum_chart_component_directly(self, tech_agent_result: Dict[str, Any], stock_code: str, stock_name: str) -> Dict[str, Any]:
-        """
-        tech agent 결과를 사용하여 모멘텀 지표 차트 컴포넌트를 생성합니다.
-        RSI, MACD 등 모멘텀 지표들을 시각화합니다.
-        """
-        logger.info(f"[모멘텀지표차트] {stock_name}({stock_code}) 모멘텀 지표 차트 생성 시작")
-        
-        # 실제 데이터는 data 키 안에 있음
-        actual_data = tech_agent_result.get("data", {})
-        chart_indicators_data = actual_data.get("chart_indicators_data", {})
-        technical_indicators = actual_data.get("technical_indicators", {})
-        chart_data = actual_data.get("chart_data", [])  # 캔들 데이터용
-        
-        logger.info(f"[모멘텀지표차트] 차트 지표 데이터 키: {list(chart_indicators_data.keys()) if chart_indicators_data else '없음'}")
-        logger.info(f"[모멘텀지표차트] 차트 데이터 개수: {len(chart_data) if isinstance(chart_data, list) else '없음'}")
-        
-        # 날짜 배열 가져오기
-        dates = chart_indicators_data.get("dates", [])
-        
-        if not dates:
-            logger.warning("[모멘텀지표차트] 날짜 데이터가 없어 모멘텀 지표 차트를 생성할 수 없습니다")
-            return create_paragraph("모멘텀 지표 차트 데이터가 없습니다.")
-        
-        # 지표 데이터 목록 생성 (최대 5개)
-        indicators = []
-        
-        # 1. RSI (Relative Strength Index) - 과매수/과매도 구간
-        rsi_data = chart_indicators_data.get("rsi", [])
-        if rsi_data and any(x is not None for x in rsi_data):
-            # None 값을 0으로 치환 (공통 함수 사용)
-            processed_rsi = [safe_float(x) for x in rsi_data]
-            indicators.append({
-                "name": "RSI (14일)",
-                "data": processed_rsi,
-                "color": "#e91e63",  # 핑크색
-                "chart_type": "line",
-                "y_axis_id": "primary",
-                "line_style": "solid"
-            })
-            #logger.info(f"[모멘텀지표차트] RSI 지표 추가 완료 - 데이터 포인트: {len(processed_rsi)}개")
-        
-        # 2. MACD Line
-        macd_line_data = chart_indicators_data.get("macd_line", [])
-        if macd_line_data and any(x is not None for x in macd_line_data) and len(indicators) < 5:
-            processed_macd_line = [float(x) if x is not None else 0.0 for x in macd_line_data]
-            indicators.append({
-                "name": "MACD Line",
-                "data": processed_macd_line,
-                "color": "#2196f3",  # 파란색
-                "chart_type": "line",
-                "y_axis_id": "hidden",  # 범용 hidden 축 사용
-                "line_style": "solid"
-            })
-            #logger.info(f"[모멘텀지표차트] MACD Line 지표 추가 완료 - 데이터 포인트: {len(processed_macd_line)}개")
-        
-        # 3. MACD Signal Line
-        macd_signal_data = chart_indicators_data.get("macd_signal", [])
-        if macd_signal_data and any(x is not None for x in macd_signal_data) and len(indicators) < 5:
-            processed_macd_signal = [float(x) if x is not None else 0.0 for x in macd_signal_data]
-            indicators.append({
-                "name": "MACD Signal",
-                "data": processed_macd_signal,
-                "color": "#ff9800",  # 주황색
-                "chart_type": "line",
-                "y_axis_id": "hidden",  # 범용 hidden 축 사용
-                "line_style": "dashed"
-            })
-            #logger.info(f"[모멘텀지표차트] MACD Signal 지표 추가 완료 - 데이터 포인트: {len(processed_macd_signal)}개")
-        
-        # 4. MACD Histogram
-        macd_histogram_data = chart_indicators_data.get("macd_histogram", [])
-        if macd_histogram_data and any(x is not None for x in macd_histogram_data) and len(indicators) < 5:
-            processed_macd_histogram = [float(x) if x is not None else 0.0 for x in macd_histogram_data]
-            indicators.append({
-                "name": "MACD Histogram",
-                "data": processed_macd_histogram,
-                "color": "#4caf5080",  # 불투명한 녹색 (50% 투명도)
-                "chart_type": "bar",
-                "y_axis_id": "hidden",  # 범용 hidden 축 사용
-                "line_style": "solid"
-            })
-            #logger.info(f"[모멘텀지표차트] MACD Histogram 지표 추가 완료 - 데이터 포인트: {len(processed_macd_histogram)}개")
-        
-        # 5. Stochastic %K
-        stoch_k_data = chart_indicators_data.get("stoch_k", [])
-        if stoch_k_data and any(x is not None for x in stoch_k_data) and len(indicators) < 5:
-            processed_stoch_k = [float(x) if x is not None else 0.0 for x in stoch_k_data]
-            indicators.append({
-                "name": "Stochastic %K",
-                "data": processed_stoch_k,
-                "color": "#9c27b0",  # 보라색
-                "chart_type": "line",
-                "y_axis_id": "primary",
-                "line_style": "solid"
-            })
-            #logger.info(f"[모멘텀지표차트] Stochastic %K 지표 추가 완료 - 데이터 포인트: {len(processed_stoch_k)}개")
-        
-        # 지표가 없는 경우 처리
-        if not indicators:
-            logger.warning("[모멘텀지표차트] 사용 가능한 모멘텀 지표 데이터가 없습니다")
-            return create_paragraph("모멘텀 지표 데이터가 충분하지 않습니다.")
-        
-        # Y축 설정
-        y_axis_configs = {
-            "primary": {
-                "title": "RSI / Stochastic",
-                "position": "left",
-                "color": "#e91e63",
-                "min": 0,
-                "max": 100
-            },
-            "secondary": {
-                "title": "기타지표",
-                "position": "right", 
-                "color": "#2196f3"
-            },
-            "hidden": {
-                "title": "Hidden Axis",
-                "position": "right",
-                "color": "#2196f3",
-                "display": False,  # hidden 축으로 설정
-                "visible": False   # 축 자체를 숨김
-            }
-        }
-        
-        # 현재 지표 값들을 포함한 설명 생성
-        description_parts = []
-        
-        # RSI 현재값
-        if rsi_data and len(rsi_data) > 0:
-            rsi_current = rsi_data[-1]  # 마지막 값
-            if rsi_current is not None:
-                if rsi_current >= 70:
-                    rsi_status = "과매수 구간"
-                elif rsi_current <= 30:
-                    rsi_status = "과매도 구간"
-                else:
-                    rsi_status = "중립 구간"
-                description_parts.append(f"RSI: {rsi_current:.1f} ({rsi_status})")
-        
-        # MACD 현재값
-        if macd_line_data and len(macd_line_data) > 0:
-            macd_current = macd_line_data[-1]  # 마지막 값
-            macd_signal_current = macd_signal_data[-1] if macd_signal_data and len(macd_signal_data) > 0 else None
-            if macd_current is not None:
-                if macd_signal_current is not None:
-                    if macd_current > macd_signal_current:
-                        macd_status = "상승 신호"
-                    elif macd_current < macd_signal_current:
-                        macd_status = "하락 신호"
-                    else:
-                        macd_status = "중립"
-                    description_parts.append(f"MACD: {macd_current:.2f} ({macd_status})")
-                else:
-                    description_parts.append(f"MACD: {macd_current:.2f}")
-        
-        description = " | ".join(description_parts) if description_parts else "모멘텀 지표 분석"
-        
-        # 캔들 데이터 변환 (price_chart_component_directly와 동일한 로직)
-        candle_data = []
-        #logger.info(f"[모멘텀지표차트] OHLCV 데이터 변환 시작")
-        
-        # 안전한 int 변환 함수
-        def safe_int(value, default=0):
-            if value is None or value == '':
-                return default
-            try:
-                return int(float(value))  # float로 먼저 변환 후 int로
-            except (ValueError, TypeError):
-                return default
-        
-        if isinstance(chart_data, list) and chart_data:
-            logger.info(f"[모멘텀지표차트] chart_data는 리스트이고 {len(chart_data)}개 항목 존재")
-            for i, item in enumerate(chart_data):
-                if i < 3:  # 처음 3개만 로깅
-                    logger.info(f"[모멘텀지표차트] 데이터 항목 {i}: {item}")
-                if isinstance(item, dict):
-                    # timestamp를 date로 변환하거나 date 필드 사용
-                    time_value = item.get("date") or item.get("timestamp", "")
-                    
-                    # ISO 날짜 형식을 yyyy-mm-dd 형식으로 변환
-                    formatted_time = format_date_for_chart(time_value)
-                    
-                    candle_item = {
-                        "time": formatted_time,
-                        "open": safe_int(item.get("open", 0)),
-                        "high": safe_int(item.get("high", 0)),
-                        "low": safe_int(item.get("low", 0)),
-                        "close": safe_int(item.get("close", 0)),
-                        "volume": safe_int(item.get("volume", 0))
-                    }
-                    candle_data.append(candle_item)
-                   
-                else:
-                    if i < 3:  # 처음 3개만 로깅
-                        logger.warning(f"[모멘텀지표차트] 유효하지 않은 데이터 항목 {i}: {item}")
-        else:
-            logger.warning(f"[모멘텀지표차트] chart_data가 리스트가 아니거나 비어있음: {type(chart_data)}")
-        
-        # 메타데이터 생성
-        metadata = {
-            "description": description,
-            "source": "technical_analyzer_agent",
-            "timestamp": datetime.now().isoformat(),
-            "chart_type": "momentum_indicators",
-            "indicators": [indicator["name"] for indicator in indicators],
-            "data_points": len(dates),
-            "candle_data_count": len(candle_data)
-        }
-        
-        #logger.info(f"[모멘텀지표차트] 캔들 데이터 개수: {len(candle_data)}")
-        
-        # 모멘텀 지표 차트 컴포넌트 생성
-        momentum_chart = create_technical_indicator_chart(
-            symbol=stock_code,
-            name=stock_name,
-            dates=dates,
-            indicators=indicators,
-            title=f"{stock_name}({stock_code}) 모멘텀 지표 분석",
-            candle_data=candle_data if candle_data else None,  # 캔들 데이터 포함
-            y_axis_configs=y_axis_configs,
-            period=None,
-            metadata=metadata
-        )
-        
-        logger.info(f"[모멘텀지표차트] 모멘텀 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
-        return momentum_chart
+
      
     def _find_placeholder_in_component(self, component: Dict[str, Any]) -> str:
         """
@@ -949,19 +389,19 @@ class ResponseFormatterAgent(BaseAgent):
             
             if self.chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 주가차트 컴포넌트를 미리 생성
-                price_chart_component = self._create_price_chart_component_directly(tech_agent_result, stock_code, stock_name)
+                price_chart_component = create_price_chart_component_directly(tech_agent_result, stock_code, stock_name)
             
             if self.technical_indicator_chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 기존 기술적 지표 차트 컴포넌트를 미리 생성 (호환성 유지)
-                technical_indicator_chart_component = self._create_trend_following_chart_component_directly(tech_agent_result, stock_code, stock_name)
+                technical_indicator_chart_component = create_trend_following_chart_component_directly(tech_agent_result, stock_code, stock_name)
             
             if self.trend_following_chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 추세추종 지표 차트 컴포넌트를 미리 생성
-                trend_following_chart_component = self._create_trend_following_chart_component_directly(tech_agent_result, stock_code, stock_name)
+                trend_following_chart_component = create_trend_following_chart_component_directly(tech_agent_result, stock_code, stock_name)
             
             if self.momentum_chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 모멘텀 지표 차트 컴포넌트를 미리 생성
-                momentum_chart_component = self._create_momentum_chart_component_directly(tech_agent_result, stock_code, stock_name)
+                momentum_chart_component = create_momentum_chart_component_directly(tech_agent_result, stock_code, stock_name)
             
             # 본문에 섹션 제목이 있으니, 여기서는 추가하지 않음.
             # 1. 섹션 제목 컴포넌트 추가 (항상 추가)  
@@ -1190,7 +630,6 @@ class ResponseFormatterAgent(BaseAgent):
                 logger.warning(f"No summary response available.")
                 logger.warning(f"processing_status: {processing_status}")
                 logger.warning(f"Summarizer status: {summarizer_status}")
-                state["formatted_response"] = "죄송합니다. 현재 요청에 대한 정보를 찾을 수 없습니다. 다른 질문을 해 주시거나 나중에 다시 시도해 주세요."
                 state["answer"] = "죄송합니다. 현재 요청에 대한 정보를 찾을 수 없습니다. 다른 질문을 해 주시거나 나중에 다시 시도해 주세요."
                 state["components"] = []
                 return state
@@ -1215,13 +654,11 @@ class ResponseFormatterAgent(BaseAgent):
             if not final_report_toc or not final_report_toc.get("sections"):
                 logger.warning("ResponseFormatterAgent: 동적 목차 정보(final_report_toc)가 없거나 섹션이 비어있습니다. 기본 처리를 시도합니다.")
                 if summary:
-                    state["formatted_response"] = summary # make_full_components는 state의 formatted_response를 사용
                     all_components_fallback = await self.make_full_components(state)
                     all_components = [comp.dict() for comp in all_components_fallback if hasattr(comp, 'dict')]
                     formatted_response_parts.append(summary)
                 else:
-                    state["formatted_response"] = "죄송합니다. 보고서 목차 정보를 찾을 수 없어 내용을 생성할 수 없습니다."
-                    state["answer"] = state["formatted_response"]
+                    state["answer"] = "죄송합니다. 보고서 목차 정보를 찾을 수 없어 내용을 생성할 수 없습니다."
                     state["components"] = []
                     return state
             else: # 동적 목차가 있는 경우
@@ -1315,7 +752,7 @@ class ResponseFormatterAgent(BaseAgent):
             if len(all_components) <= 1: # 보고서 전체 제목 컴포넌트만 있는 경우
                 logger.warning("ResponseFormatterAgent: 동적 목차 기반 컴포넌트 생성 결과가 거의 비어있습니다. 기존 요약(summary)으로 대체 처리를 시도합니다.")
                 if summary: 
-                    state["formatted_response"] = summary.replace(self.chart_placeholder, "")
+                    state["answer"] = summary.replace(self.chart_placeholder, "")
                     all_components_fallback = await self.make_full_components(state)
                     all_components = [comp.dict() for comp in all_components_fallback if hasattr(comp, 'dict')]
                     formatted_response = summary.replace(self.chart_placeholder, "")
@@ -1328,8 +765,7 @@ class ResponseFormatterAgent(BaseAgent):
                          formatted_response = "보고서 내용을 생성하지 못했습니다."
 
             # 결과 저장 (플레이스홀더 제거된 텍스트 사용)
-            state["formatted_response"] = formatted_response
-            state["answer"] = formatted_response
+            state["answer"] = summary
             state["components"] = all_components
             
             # answer 키 설정 확인 로그 추가
@@ -1345,8 +781,7 @@ class ResponseFormatterAgent(BaseAgent):
         except Exception as e:
             logger.exception(f"Error in ResponseFormatterAgent: {str(e)}")
             state["error"] = f"응답 포맷터 에이전트 오류: {str(e)}"
-            state["formatted_response"] = "죄송합니다. 응답을 포맷팅하는 중 오류가 발생했습니다."
-            state["answer"] = state["formatted_response"]
+            state["answer"] = "죄송합니다. 응답을 포맷팅하는 중 오류가 발생했습니다."
             state["components"] = [] # 오류 시 컴포넌트 초기화
             return state 
         
@@ -1690,7 +1125,7 @@ class ResponseFormatterAgent(BaseAgent):
         # 상태에서 정보 추출
         stock_name = state.get("stock_name", "삼성전자")
         stock_code = state.get("stock_code", "005930")
-        formatted_response = state.get("formatted_response", "")
+        formatted_response = state.get("answer", "")
         
         # 헤더 컴포넌트 추가
         components.append(HeadingComponent(
@@ -1718,7 +1153,6 @@ class ResponseFormatterAgent(BaseAgent):
         # 상태에서 정보 추출
         stock_name = state.get("stock_name", "삼성전자")
         stock_code = state.get("stock_code", "005930")
-        formatted_response = state.get("formatted_response", "")
         
         # 1. 헤딩 컴포넌트 (여러 레벨)
         components.append(HeadingComponent(
@@ -2119,7 +1553,6 @@ def create_line_chart(title: str, labels: List[str], datasets: List[Dict[str, An
                                 rate_type = rate_key
                                 break
                         
-                        #logger.info(f"기타 패턴 매칭: '{label}' -> 항목: '{item_name}', 증감률: '{rate_type}'")
                         break
             
             assigned_color = None
@@ -2337,7 +1770,6 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                             rate_type = rate_key
                             break
                     
-                    logger.info(f"기타 패턴 매칭: '{label}' -> 항목: '{item_name}', 증감률: '{rate_type}'")
                     break
         
         assigned_color = None
@@ -2564,7 +1996,8 @@ def create_price_chart_component_directly(tech_agent_result: Dict[str, Any], sto
                     "high": safe_int(item.get("high", 0)),
                     "low": safe_int(item.get("low", 0)),
                     "close": safe_int(item.get("close", 0)),
-                    "volume": safe_int(item.get("volume", 0))
+                    "volume": safe_int(item.get("volume", 0)),
+                    "price_change_percent": safe_float(item.get("price_change_percent", 0))
                 }
                 candle_data.append(candle_item)
     
@@ -2603,7 +2036,7 @@ def create_price_chart_component_directly(tech_agent_result: Dict[str, Any], sto
     price_chart_component = create_price_chart(
         symbol=stock_code,
         name=stock_name,
-        title=f"주가차트 분석",#title=f"{stock_name}({stock_code}) 주가차트 분석",
+        title=f"주가, 지지/저항 분석",#title=f"{stock_name}({stock_code}) 주가차트 분석",
         candle_data=candle_data,
         support_lines=support_lines if support_lines else None,
         resistance_lines=resistance_lines if resistance_lines else None,
@@ -2722,7 +2155,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
             "color": "#3b82f6"
         },
         "secondary": {
-            "title": "가격 (원)",
+            "title": "가격(원)",
             "position": "right", 
             "color": "#f59e0b"
         }
@@ -2742,7 +2175,8 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
                     "high": safe_int(item.get("high", 0)),
                     "low": safe_int(item.get("low", 0)),
                     "close": safe_int(item.get("close", 0)),
-                    "volume": safe_int(item.get("volume", 0))
+                    "volume": safe_int(item.get("volume", 0)),
+                    "price_change_percent": safe_float(item.get("price_change_percent", 0))
                 }
                 candle_data.append(candle_item)
     
@@ -2884,7 +2318,8 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
                     "high": safe_int(item.get("high", 0)),
                     "low": safe_int(item.get("low", 0)),
                     "close": safe_int(item.get("close", 0)),
-                    "volume": safe_int(item.get("volume", 0))
+                    "volume": safe_int(item.get("volume", 0)),
+                    "price_change_percent": safe_float(item.get("price_change_percent", 0))
                 }
                 candle_data.append(candle_item)
     

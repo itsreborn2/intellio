@@ -129,8 +129,10 @@ class TechnicalAnalyzerAgent(BaseAgent):
                     message = f"📊 {stock_name}의 기술적 분석 차트가 준비되었습니다. 추가 분석을 진행하는 동안 차트를 먼저 확인해보세요."
                     elapsed_time = (datetime.now() - start_time).total_seconds()
                     
+                    # 종목 기본 정보도 함께 전송 (이미 수집한 데이터 재사용)
+                    stock_info = technical_analysis_result.get("stock_info", {})
                     # preliminary_chart_callback 호출 (event: preliminary_chart 형태로 전송)
-                    success = await send_preliminary_chart(preliminary_components, message, elapsed_time)
+                    success = await send_preliminary_chart(preliminary_components, message, elapsed_time, stock_info)
                     
                     if success:
                         logger.info(f"preliminary_chart 이벤트 전송 완료: {stock_name}({stock_code})")
@@ -269,10 +271,10 @@ class TechnicalAnalyzerAgent(BaseAgent):
         summary = "임시 메시지"
         
         # 12. 투자 권고사항 생성
-        logger.info("투자 권고사항 생성 중...")
-        recommendations = await self._generate_recommendations(
-            stock_name, technical_indicators, trading_signals, rs_data, user_id
-        )
+        # logger.info("투자 권고사항 생성 중...")
+        # recommendations = await self._generate_recommendations(
+        #     stock_name, technical_indicators, trading_signals, rs_data, user_id
+        # )
         
         # 결과 구성 (numpy 타입을 Python 타입으로 안전하게 변환)
         current_price = float(df['close'].iloc[-1]) if not df.empty else 0.0
@@ -293,7 +295,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
             "trading_signals": trading_signals,
             "market_sentiment": market_sentiment,
             "summary": summary,
-            "recommendations": recommendations
+            #"recommendations": recommendations
         }
     
     def _add_error(self, state: AgentState, error_message: str) -> None:
@@ -991,8 +993,8 @@ class TechnicalAnalyzerAgent(BaseAgent):
             # ADX 계산
             adx_values = self._calculate_adx(high, low, close) if len(close) >= 14 else {}
             
-            # ADR 계산 (개별 종목용)
-            adr_values = self._calculate_adr(close) if len(close) >= 20 else {}
+            # ADR 계산 (Average Daily Range)
+            adr_values = self._calculate_adr(high, low) if len(close) >= 20 else {}
             
             # 슈퍼트렌드 계산
             supertrend_values = self._calculate_supertrend(high, low, close) if len(close) >= 14 else {}
@@ -1111,11 +1113,11 @@ class TechnicalAnalyzerAgent(BaseAgent):
         except:
             return {"adx": None, "plus_di": None, "minus_di": None}
     
-    def _calculate_adr(self, close: pd.Series, period: int = 20) -> Dict[str, Optional[float]]:
+    def _calculate_adr(self, high: pd.Series, low: pd.Series, period: int = 20) -> Dict[str, Optional[float]]:
         """ADR 지표를 계산합니다."""
         try:
             # ADR 시계열 데이터 계산
-            adr_series = self._calculate_adr_series(close, period)
+            adr_series = self._calculate_adr_series(high, low, period)
             
             return {
                 "adr": safe_float_or_none(adr_series["adr"].iloc[-1]),
@@ -1252,9 +1254,9 @@ class TechnicalAnalyzerAgent(BaseAgent):
                 chart_data["adx_plus_di"] = safe_chart_series_to_list(adx_series["plus_di"])
                 chart_data["adx_minus_di"] = safe_chart_series_to_list(adx_series["minus_di"])
             
-            # ADR
+            # ADR (Average Daily Range)
             if len(close) >= 20:
-                adr_series = self._calculate_adr_series(close)
+                adr_series = self._calculate_adr_series(high, low)
                 chart_data["adr"] = safe_chart_series_to_list(adr_series["adr"])
                 chart_data["adr_ma"] = safe_chart_series_to_list(adr_series["adr_ma"])
             
@@ -1366,20 +1368,16 @@ class TechnicalAnalyzerAgent(BaseAgent):
         alpha = 1.0 / period
         return series.ewm(alpha=alpha, adjust=False).mean()
     
-    def _calculate_adr_series(self, close: pd.Series, period: int = 20) -> Dict[str, pd.Series]:
-        """ADR 시계열 데이터를 계산합니다 (개별 종목용 - 상승일/하락일 비율)."""
+    def _calculate_adr_series(self, high: pd.Series, low: pd.Series, period: int = 20) -> Dict[str, pd.Series]:
+        """ADR 시계열 데이터를 계산합니다 (Average Daily Range - 일중 평균 변동폭)."""
         try:
-            # 전일 대비 상승/하락 계산
-            price_change = close.diff()
+            # 일일 변동폭 계산 (High - Low)
+            daily_range = high - low
             
-            # 상승일과 하락일 카운트 (rolling window)
-            up_days = (price_change > 0).rolling(window=period).sum()
-            down_days = (price_change < 0).rolling(window=period).sum()
+            # ADR 계산 (일일 변동폭의 이동평균)
+            adr = daily_range.rolling(window=period).mean()
             
-            # ADR 계산 (상승일/하락일 비율)
-            adr = up_days / (down_days + 1)  # 0으로 나누기 방지
-            
-            # ADR 이동평균
+            # ADR의 이동평균 (추가적인 스무딩)
             adr_ma = adr.rolling(window=period).mean()
             
             return {
@@ -1474,13 +1472,16 @@ class TechnicalAnalyzerAgent(BaseAgent):
             if df.empty:
                 return {}
             
+            # DataFrame을 인스턴스 변수로 저장 (현재가 참조용)
+            self._current_df = df
+            
             close = df['close']
             high = df['high']
             low = df['low']
             
             # 지지선/저항선 계산
-            support_levels = self._find_support_levels(low, 60)
-            resistance_levels = self._find_resistance_levels(high, 60)
+            support_levels = self._find_support_levels(low, 60, 10)
+            resistance_levels = self._find_resistance_levels(high, 60, 10)
             
             # 추세 방향 분석
             trend_direction, trend_strength = self._analyze_trend(close)
@@ -1504,101 +1505,327 @@ class TechnicalAnalyzerAgent(BaseAgent):
             logger.error(f"차트 패턴 분석 중 오류: {str(e)}")
             return {}
     
-    def _find_support_levels(self, low: pd.Series, window: int = 60) -> List[float]:
-        """거래량을 고려한 지지선을 찾습니다."""
+    def _find_support_levels(self, low: pd.Series, window: int = 60, compress_pct:float=5.0) -> List[float]:
+        """가격 집중도 기반 지지선을 찾습니다 (시고저종 가격이 뭉치는 구간)."""
         try:
-            # DataFrame에서 거래량 정보 추출
-            df_tail = self._get_recent_dataframe(window)
-            if df_tail.empty:
-                return self._find_support_levels_simple(low, window)
+            logger.info(f"가격 집중도 기반 지지선 계산 시작: window={window}, low 데이터 길이={len(low)}")
             
-            supports = []
+            # 현재가 정보 확인 (DataFrame의 종가 사용, 없으면 저가의 마지막 값)
+            current_price = None
+            if hasattr(self, '_current_df') and self._current_df is not None and 'close' in self._current_df.columns:
+                current_price = float(self._current_df['close'].iloc[-1])
+                logger.info(f"현재가(종가): {current_price:.0f}원")
+            elif len(low) > 0:
+                current_price = float(low.iloc[-1])
+                logger.info(f"현재가(저가 기준): {current_price:.0f}원")
             
-            # 1. 기본적인 지지선 후보 찾기
-            recent_lows = low.tail(window)
-            basic_supports = []
+            if current_price is None:
+                logger.warning("현재가 정보를 가져올 수 없어 빈 리스트 반환")
+                return []
             
-            for i in range(2, len(recent_lows) - 2):
-                if (recent_lows.iloc[i] < recent_lows.iloc[i-1] and 
-                    recent_lows.iloc[i] < recent_lows.iloc[i+1] and
-                    recent_lows.iloc[i] < recent_lows.iloc[i-2] and 
-                    recent_lows.iloc[i] < recent_lows.iloc[i+2]):
-                    basic_supports.append({
-                        'price': float(recent_lows.iloc[i]),
-                        'index': len(recent_lows) - len(recent_lows) + i,
-                        'strength': 1.0
-                    })
+            # DataFrame에서 시고저종 가격 데이터 수집
+            if hasattr(self, '_current_df') and self._current_df is not None:
+                df_recent = self._current_df.tail(window)
+                logger.info(f"가격 집중도 분석용 데이터: 최근 {len(df_recent)}일")
+                
+                # 지지선용 가격 수집: 시가, 저가, 종가 (고가 제외)
+                support_prices = []
+                for _, row in df_recent.iterrows():
+                    support_prices.extend([
+                        float(row['open']),
+                        float(row['low']),
+                        float(row['close'])
+                    ])
+                
+                # 현재가보다 낮은 가격들만 필터링 (지지선 후보)
+                support_candidates = [p for p in support_prices if p < current_price * 0.995]  # 0.5% 이상 낮은 가격
+                logger.info(f"지지선 분석용 가격(시/저/종): {len(support_prices)}개 → 현재가({current_price:.0f}원)보다 낮은 후보: {len(support_candidates)}개")
+                
+                if support_candidates:
+                    # 가격대별 집중도 계산 (100원 단위로 그룹화)
+                    initial_clusters = self._find_price_clusters(support_candidates, cluster_size=100)
+                    logger.info(f"초기 클러스터 분석 완료: {len(initial_clusters)}개 클러스터")
+                    
+                    # 모든 클러스터를 대상으로 5% 범위로 재압축
+                    if initial_clusters:
+                        compressed_levels = self._compress_similar_levels(
+                            [cluster['avg_price'] for cluster in initial_clusters], 
+                            is_support=True, 
+                            threshold_pct=compress_pct
+                        )
+                        logger.info(f"{compress_pct}% 범위 압축 완료: {len(initial_clusters)}개 → {len(compressed_levels)}개")
+                        
+                        # 압축된 결과에서 상위 2개만 선택
+                        final_support_levels = compressed_levels[:2]
+                        
+                        if final_support_levels:
+                            # 지지선은 낮은 순으로 정렬
+                            final_support_levels.sort()
+                            logger.info(f"최종 지지선 {len(final_support_levels)}개: {[f'{s:.0f}원' for s in final_support_levels]}")
+                            return final_support_levels
             
-            # 2. 거래량 기반 지지선 추가
-            volume_supports = self._find_volume_based_supports(df_tail)
-            
-            # 3. 거래량 터진 양봉/음봉의 저점 추가
-            spike_supports = self._find_volume_spike_supports(df_tail)
-            
-            # 4. 모든 지지선 후보 통합
-            all_supports = basic_supports + volume_supports + spike_supports
-            
-            # 5. 거래량 기반 가중치 적용 및 정렬
-            weighted_supports = self._apply_volume_weights(all_supports, df_tail, is_support=True)
-            
-            # 6. 상위 지지선들만 선택
-            supports = [s['price'] for s in weighted_supports]
-            
-            # 7. 인접한 지지선들을 통합하고 2개로 제한
-            supports = self._merge_adjacent_levels(supports, is_support=True)
-            return supports[:2]  # 최대 2개만
+            # Fallback: 기존 방식으로 지지선 찾기
+            logger.info("가격 집중도 방식 실패, 기존 방식으로 fallback")
+            return self._find_support_levels_fallback(low, window, current_price)
             
         except Exception as e:
-            logger.warning(f"거래량 기반 지지선 계산 중 오류: {str(e)}")
+            logger.warning(f"가격 집중도 기반 지지선 계산 중 오류: {str(e)}")
             return self._find_support_levels_simple(low, window)
     
-    def _find_resistance_levels(self, high: pd.Series, window: int = 120) -> List[float]:
-        """거래량을 고려한 저항선을 찾습니다 (기본 6개월)."""
+    def _find_support_levels_fallback(self, low: pd.Series, window: int, current_price: float) -> List[float]:
+        """기존 방식의 지지선 찾기 (fallback)"""
         try:
-            # DataFrame에서 거래량 정보 추출
-            df_tail = self._get_recent_dataframe(window)
-            if df_tail.empty:
-                return self._find_resistance_levels_simple(high, window)
+            logger.info("Fallback 지지선 계산 시작")
             
-            resistances = []
+            # 현재가 대비 합리적한 범위 설정 (현재가의 70% ~ 99% 범위)
+            min_support = current_price * 0.70
+            max_support = current_price * 0.99
+            logger.info(f"Fallback 지지선 범위: {min_support:.0f}원 ~ {max_support:.0f}원")
             
-            # 1. 기본적인 저항선 후보 찾기
-            recent_highs = high.tail(window)
-            basic_resistances = []
+            # 최근 저점들 중에서 현재가보다 낮은 것들을 찾기
+            recent_low_values = low.tail(window)
+            low_points = []
             
-            for i in range(2, len(recent_highs) - 2):
-                if (recent_highs.iloc[i] > recent_highs.iloc[i-1] and 
-                    recent_highs.iloc[i] > recent_highs.iloc[i+1] and
-                    recent_highs.iloc[i] > recent_highs.iloc[i-2] and 
-                    recent_highs.iloc[i] > recent_highs.iloc[i+2]):
-                    basic_resistances.append({
-                        'price': float(recent_highs.iloc[i]),
-                        'index': len(recent_highs) - len(recent_highs) + i,
-                        'strength': 1.0
-                    })
+            for i in range(2, len(recent_low_values) - 2):
+                if (recent_low_values.iloc[i] < recent_low_values.iloc[i-1] and 
+                    recent_low_values.iloc[i] < recent_low_values.iloc[i+1] and
+                    min_support <= recent_low_values.iloc[i] <= max_support):
+                    low_points.append(float(recent_low_values.iloc[i]))
             
-            # 2. 거래량 기반 저항선 추가
-            volume_resistances = self._find_volume_based_resistances(df_tail)
+            if low_points:
+                # 중복 제거 및 상위 3개 선택 (높은 순)
+                unique_points = list(set(low_points))
+                sorted_points = sorted(unique_points, reverse=True)[:3]
+                logger.info(f"Fallback 지지선 {len(sorted_points)}개: {[f'{p:.0f}원' for p in sorted_points]}")
+                return sorted_points
             
-            # 3. 거래량 터진 양봉/음봉의 고점 추가
-            spike_resistances = self._find_volume_spike_resistances(df_tail)
-            
-            # 4. 모든 저항선 후보 통합
-            all_resistances = basic_resistances + volume_resistances + spike_resistances
-            
-            # 5. 거래량 기반 가중치 적용 및 정렬
-            weighted_resistances = self._apply_volume_weights(all_resistances, df_tail, is_support=False)
-            
-            # 6. 상위 저항선들만 선택
-            resistances = [r['price'] for r in weighted_resistances]
-            
-            # 7. 인접한 저항선들을 통합하고 2개로 제한
-            resistances = self._merge_adjacent_levels(resistances, is_support=False)
-            return resistances[:2]  # 최대 2개만
+            logger.info("Fallback에서도 지지선을 찾지 못함")
+            return []
             
         except Exception as e:
-            logger.warning(f"거래량 기반 저항선 계산 중 오류: {str(e)}")
+            logger.warning(f"Fallback 지지선 계산 중 오류: {str(e)}")
+            return []
+    
+    def _find_resistance_levels(self, high: pd.Series, window: int = 120, compress_pct:float=5.0) -> List[float]:
+        """가격 집중도 기반 저항선을 찾습니다 (시고저종 가격이 뭉치는 구간)."""
+        try:
+            logger.info(f"가격 집중도 기반 저항선 계산 시작: window={window}, high 데이터 길이={len(high)}")
+            
+            # 현재가 정보 확인 (DataFrame의 종가 사용, 없으면 고가의 마지막 값)
+            current_price = None
+            if hasattr(self, '_current_df') and self._current_df is not None and 'close' in self._current_df.columns:
+                current_price = float(self._current_df['close'].iloc[-1])
+                logger.info(f"현재가(종가): {current_price:.0f}원")
+            elif len(high) > 0:
+                current_price = float(high.iloc[-1])
+                logger.info(f"현재가(고가 기준): {current_price:.0f}원")
+            
+            if current_price is None:
+                logger.warning("현재가 정보를 가져올 수 없어 빈 리스트 반환")
+                return []
+            
+            # DataFrame에서 시고저종 가격 데이터 수집
+            if hasattr(self, '_current_df') and self._current_df is not None:
+                df_recent = self._current_df.tail(window)
+                logger.info(f"가격 집중도 분석용 데이터: 최근 {len(df_recent)}일")
+                
+                # 저항선용 가격 수집: 시가, 고가, 종가 (저가 제외)
+                resistance_prices = []
+                for _, row in df_recent.iterrows():
+                    resistance_prices.extend([
+                        float(row['open']),
+                        float(row['high']),
+                        float(row['close'])
+                    ])
+                
+                # 현재가보다 높은 가격들만 필터링 (저항선 후보)
+                resistance_candidates = [p for p in resistance_prices if p > current_price * 1.005]  # 0.5% 이상 높은 가격
+                logger.info(f"저항선 분석용 가격(시/고/종): {len(resistance_prices)}개 → 현재가({current_price:.0f}원)보다 높은 후보: {len(resistance_candidates)}개")
+                
+                if resistance_candidates:
+                    # 가격대별 집중도 계산 (100원 단위로 그룹화)
+                    initial_clusters = self._find_price_clusters(resistance_candidates, cluster_size=100)
+                    logger.info(f"초기 클러스터 분석 완료: {len(initial_clusters)}개 클러스터")
+                    
+                    # 모든 클러스터를 대상으로 5% 범위로 재압축
+                    if initial_clusters:
+                        compressed_levels = self._compress_similar_levels(
+                            [cluster['avg_price'] for cluster in initial_clusters], 
+                            is_support=False, 
+                            threshold_pct=compress_pct
+                        )
+                        logger.info(f"{compress_pct}% 범위 압축 완료: {len(initial_clusters)}개 → {len(compressed_levels)}개")
+                        
+                        # 압축된 결과에서 상위 2개만 선택
+                        final_resistance_levels = compressed_levels[:2]
+                        
+                        if final_resistance_levels:
+                            # 저항선은 높은 순으로 정렬
+                            final_resistance_levels.sort(reverse=True)
+                            logger.info(f"최종 저항선 {len(final_resistance_levels)}개: {[f'{r:.0f}원' for r in final_resistance_levels]}")
+                            return final_resistance_levels
+            
+            # Fallback: 기존 방식으로 저항선 찾기
+            logger.info("가격 집중도 방식 실패, 기존 방식으로 fallback")
+            return self._find_resistance_levels_fallback(high, window, current_price)
+            
+        except Exception as e:
+            logger.warning(f"가격 집중도 기반 저항선 계산 중 오류: {str(e)}")
             return self._find_resistance_levels_simple(high, window)
+    
+    def _compress_similar_levels(self, levels: List[float], is_support: bool = True, threshold_pct: float = 5.0) -> List[float]:
+        """
+        비슷한 가격대의 레벨들을 5% 범위로 압축합니다.
+        
+        Args:
+            levels: 압축할 가격 레벨 리스트
+            is_support: True면 지지선, False면 저항선
+            threshold_pct: 압축 기준 비율 (기본 5%)
+            
+        Returns:
+            압축된 레벨 리스트 (강도 순으로 정렬됨)
+        """
+        try:
+            logger.info(f"가격 레벨 압축 시작: {'지지선' if is_support else '저항선'} {len(levels)}개, 임계값={threshold_pct}%")
+            
+            if not levels or len(levels) <= 1:
+                logger.info("압축할 레벨이 1개 이하이므로 그대로 반환")
+                return levels
+            
+            # 정렬된 레벨 (지지선: 낮은순, 저항선: 높은순)
+            sorted_levels = sorted(levels) if is_support else sorted(levels, reverse=True)
+            logger.info(f"정렬된 레벨들: {[f'{l:.0f}원' for l in sorted_levels]}")
+            
+            compressed_groups = []
+            i = 0
+            
+            while i < len(sorted_levels):
+                current_level = sorted_levels[i]
+                group_levels = [current_level]
+                
+                # 현재 레벨과 비슷한 레벨들을 찾아서 그룹화
+                j = i + 1
+                while j < len(sorted_levels):
+                    next_level = sorted_levels[j]
+                    
+                    # 두 레벨 사이의 차이를 백분율로 계산
+                    reference_price = max(current_level, next_level)
+                    diff_pct = abs(current_level - next_level) / reference_price * 100
+                    
+                    logger.info(f"레벨 비교: {current_level:.0f}원 vs {next_level:.0f}원, 차이={diff_pct:.1f}%")
+                    
+                    if diff_pct <= threshold_pct:
+                        group_levels.append(next_level)
+                        logger.info(f"그룹에 추가: {next_level:.0f}원")
+                        j += 1
+                    else:
+                        break
+                
+                # 그룹의 평균값과 강도 계산
+                avg_price = sum(group_levels) / len(group_levels)
+                strength = len(group_levels)  # 그룹 크기가 강도
+                
+                compressed_groups.append({
+                    'avg_price': avg_price,
+                    'strength': strength,
+                    'count': len(group_levels)
+                })
+                
+                if len(group_levels) > 1:
+                    logger.info(f"레벨 그룹 압축: {[f'{l:.0f}원' for l in group_levels]} → {avg_price:.0f}원 (강도: {strength})")
+                
+                # 다음 인덱스로 이동
+                i = j
+            
+            # 강도 순으로 정렬하여 상위 레벨들을 반환
+            compressed_groups.sort(key=lambda x: x['strength'], reverse=True)
+            
+            result_levels = [group['avg_price'] for group in compressed_groups]
+            
+            logger.info(f"압축 완료: {len(levels)}개 → {len(result_levels)}개")
+            logger.info(f"강도별 압축 결과:")
+            for i, group in enumerate(compressed_groups):
+                logger.info(f"  {i+1}. {group['avg_price']:.0f}원 (강도: {group['strength']}, 개수: {group['count']})")
+            
+            return result_levels
+            
+        except Exception as e:
+            logger.warning(f"가격 레벨 압축 중 오류: {str(e)}")
+            return levels
+    
+    def _find_price_clusters(self, prices: List[float], cluster_size: int = 100) -> List[Dict[str, Any]]:
+        """가격들을 클러스터별로 그룹화하고 빈도수를 계산합니다."""
+        try:
+            if not prices:
+                return []
+            
+            # 가격대별 빈도수 계산
+            price_counts = {}
+            for price in prices:
+                # cluster_size 단위로 반올림 (예: 100원 단위)
+                cluster_key = round(price / cluster_size) * cluster_size
+                price_counts[cluster_key] = price_counts.get(cluster_key, 0) + 1
+            
+            # 클러스터 정보 구성
+            clusters = []
+            for cluster_price, count in price_counts.items():
+                # 해당 클러스터에 속하는 실제 가격들의 평균 계산
+                cluster_prices = [p for p in prices if abs(p - cluster_price) <= cluster_size / 2]
+                avg_price = sum(cluster_prices) / len(cluster_prices) if cluster_prices else cluster_price
+                
+                clusters.append({
+                    'cluster_key': cluster_price,
+                    'avg_price': avg_price,
+                    'count': count,
+                    'strength': count * (1.0 + len(cluster_prices) / len(prices))  # 강도 점수
+                })
+            
+            # 강도 순으로 정렬
+            clusters.sort(key=lambda x: x['strength'], reverse=True)
+            
+            logger.info(f"상위 클러스터들:")
+            for i, cluster in enumerate(clusters[:5]):
+                logger.info(f"  {i+1}. {cluster['avg_price']:.0f}원 (빈도: {cluster['count']}, 강도: {cluster['strength']:.2f})")
+            
+            return clusters
+            
+        except Exception as e:
+            logger.warning(f"가격 클러스터 계산 중 오류: {str(e)}")
+            return []
+    
+    def _find_resistance_levels_fallback(self, high: pd.Series, window: int, current_price: float) -> List[float]:
+        """기존 방식의 저항선 찾기 (fallback)"""
+        try:
+            logger.info("Fallback 저항선 계산 시작")
+            
+            # 현재가 대비 합리적한 범위 설정 (현재가의 101% ~ 150% 범위)
+            min_resistance = current_price * 1.01
+            max_resistance = current_price * 1.50
+            logger.info(f"Fallback 저항선 범위: {min_resistance:.0f}원 ~ {max_resistance:.0f}원")
+            
+            # 최근 고점들 중에서 현재가보다 높은 것들을 찾기
+            recent_high_values = high.tail(window)
+            high_peaks = []
+            
+            for i in range(2, len(recent_high_values) - 2):
+                if (recent_high_values.iloc[i] > recent_high_values.iloc[i-1] and 
+                    recent_high_values.iloc[i] > recent_high_values.iloc[i+1] and
+                    min_resistance <= recent_high_values.iloc[i] <= max_resistance):
+                    high_peaks.append(float(recent_high_values.iloc[i]))
+            
+            if high_peaks:
+                # 중복 제거 및 상위 3개 선택
+                unique_peaks = list(set(high_peaks))
+                sorted_peaks = sorted(unique_peaks, reverse=True)[:3]
+                logger.info(f"Fallback 저항선 {len(sorted_peaks)}개: {[f'{p:.0f}원' for p in sorted_peaks]}")
+                return sorted_peaks
+            
+            logger.info("Fallback에서도 저항선을 찾지 못함")
+            return []
+            
+        except Exception as e:
+            logger.warning(f"Fallback 저항선 계산 중 오류: {str(e)}")
+            return []
     
     def _merge_adjacent_levels(self, levels: List[float], is_support: bool = True, threshold_pct: float = 2.5) -> List[float]:
         """
@@ -1613,20 +1840,27 @@ class TechnicalAnalyzerAgent(BaseAgent):
             통합된 레벨 리스트
         """
         try:
+            logger.info(f"레벨 통합 시작: {'지지선' if is_support else '저항선'} {len(levels)}개, 임계값={threshold_pct}%")
+            
             if not levels or len(levels) <= 1:
+                logger.info("통합할 레벨이 1개 이하이므로 그대로 반환")
                 return levels
+            
+            # 정렬된 레벨 로그
+            sorted_levels = sorted(levels) if is_support else sorted(levels, reverse=True)
+            logger.info(f"정렬된 레벨들: {[f'{l:.0f}원' for l in sorted_levels]}")
             
             merged_levels = []
             i = 0
             
-            while i < len(levels):
-                current_level = levels[i]
+            while i < len(sorted_levels):
+                current_level = sorted_levels[i]
                 levels_to_merge = [current_level]
                 
                 # 다음 레벨들과 비교하여 인접한 것들을 찾음
                 j = i + 1
-                while j < len(levels):
-                    next_level = levels[j]
+                while j < len(sorted_levels):
+                    next_level = sorted_levels[j]
                     
                     # 두 레벨 사이의 차이를 백분율로 계산
                     if is_support:
@@ -1638,8 +1872,11 @@ class TechnicalAnalyzerAgent(BaseAgent):
                         reference_price = max(current_level, next_level)
                         diff_pct = abs(current_level - next_level) / reference_price * 100
                     
+                    logger.info(f"레벨 비교: {current_level:.0f}원 vs {next_level:.0f}원, 차이={diff_pct:.1f}%")
+                    
                     if diff_pct <= threshold_pct:
                         levels_to_merge.append(next_level)
+                        logger.info(f"통합 대상에 추가: {next_level:.0f}원")
                         j += 1
                     else:
                         break
@@ -1647,6 +1884,9 @@ class TechnicalAnalyzerAgent(BaseAgent):
                 # 통합된 레벨 계산 (평균값 사용)
                 merged_level = sum(levels_to_merge) / len(levels_to_merge)
                 merged_levels.append(merged_level)
+                
+                if len(levels_to_merge) > 1:
+                    logger.info(f"레벨 통합: {[f'{l:.0f}원' for l in levels_to_merge]} → {merged_level:.0f}원")
                 
                 # 다음 인덱스로 이동
                 i = j
@@ -1657,11 +1897,173 @@ class TechnicalAnalyzerAgent(BaseAgent):
             else:
                 merged_levels.sort(reverse=True)
             
+            logger.info(f"레벨 통합 완료: {len(levels)}개 → {len(merged_levels)}개")
+            logger.info(f"최종 통합 레벨: {[f'{l:.0f}원' for l in merged_levels]}")
+            
             return merged_levels
             
         except Exception as e:
             logger.warning(f"레벨 통합 중 오류: {str(e)}")
             return levels
+    
+    def _find_support_candidates_with_strength(self, low: pd.Series, window: int, min_price: float, max_price: float) -> List[Dict[str, Any]]:
+        """강도 점수와 함께 지지선 후보를 찾습니다."""
+        try:
+            recent_lows = low.tail(window)
+            candidates = []
+            
+            # 1. 기본 지지선 후보 찾기
+            for i in range(2, len(recent_lows) - 2):
+                if (recent_lows.iloc[i] < recent_lows.iloc[i-1] and 
+                    recent_lows.iloc[i] < recent_lows.iloc[i+1] and
+                    recent_lows.iloc[i] < recent_lows.iloc[i-2] and 
+                    recent_lows.iloc[i] < recent_lows.iloc[i+2]):
+                    
+                    support_price = float(recent_lows.iloc[i])
+                    if min_price <= support_price <= max_price:
+                        candidates.append({
+                            'price': support_price,
+                            'index': i,
+                            'strength': 1.0  # 기본 강도
+                        })
+            
+            # 2. 강도 점수 계산
+            candidates = self._calculate_level_strength(candidates, recent_lows, is_support=True)
+            
+            logger.info(f"지지선 후보 강도 계산 완료: {len(candidates)}개")
+            for candidate in candidates:
+                logger.debug(f"지지선 후보: {candidate['price']:.0f}원, 강도: {candidate['strength']:.2f}")
+            
+            return candidates
+            
+        except Exception as e:
+            logger.warning(f"지지선 후보 강도 계산 중 오류: {str(e)}")
+            return []
+    
+    def _find_resistance_candidates_with_strength(self, high: pd.Series, window: int, min_price: float, max_price: float) -> List[Dict[str, Any]]:
+        """강도 점수와 함께 저항선 후보를 찾습니다."""
+        try:
+            recent_highs = high.tail(window)
+            candidates = []
+            
+            # 1. 기본 저항선 후보 찾기
+            for i in range(2, len(recent_highs) - 2):
+                if (recent_highs.iloc[i] > recent_highs.iloc[i-1] and 
+                    recent_highs.iloc[i] > recent_highs.iloc[i+1] and
+                    recent_highs.iloc[i] > recent_highs.iloc[i-2] and 
+                    recent_highs.iloc[i] > recent_highs.iloc[i+2]):
+                    
+                    resistance_price = float(recent_highs.iloc[i])
+                    if min_price <= resistance_price <= max_price:
+                        candidates.append({
+                            'price': resistance_price,
+                            'index': i,
+                            'strength': 1.0  # 기본 강도
+                        })
+            
+            # 2. 강도 점수 계산
+            candidates = self._calculate_level_strength(candidates, recent_highs, is_support=False)
+            
+            logger.info(f"저항선 후보 강도 계산 완료: {len(candidates)}개")
+            for candidate in candidates:
+                logger.debug(f"저항선 후보: {candidate['price']:.0f}원, 강도: {candidate['strength']:.2f}")
+            
+            return candidates
+            
+        except Exception as e:
+            logger.warning(f"저항선 후보 강도 계산 중 오류: {str(e)}")
+            return []
+    
+    def _calculate_level_strength(self, candidates: List[Dict[str, Any]], price_series: pd.Series, is_support: bool = True) -> List[Dict[str, Any]]:
+        """레벨들의 강도를 계산합니다."""
+        try:
+            if not candidates:
+                return candidates
+            
+            # 강도 계산을 위한 임계값 (3% 이내의 가격을 비슷한 가격대로 간주)
+            similarity_threshold = 0.03
+            
+            for i, candidate in enumerate(candidates):
+                base_price = candidate['price']
+                strength = 1.0  # 기본 강도
+                
+                # 1. 비슷한 가격대의 다른 후보들과의 근접도로 강도 증가
+                nearby_count = 0
+                for j, other_candidate in enumerate(candidates):
+                    if i != j:
+                        other_price = other_candidate['price']
+                        price_diff_pct = abs(base_price - other_price) / max(base_price, other_price)
+                        
+                        if price_diff_pct <= similarity_threshold:
+                            nearby_count += 1
+                            strength += 0.5  # 비슷한 가격대마다 강도 +0.5
+                
+                # 2. 가격 시리즈에서 해당 가격대 근처의 터치 횟수 계산
+                touch_count = 0
+                for price in price_series:
+                    price_diff_pct = abs(base_price - float(price)) / max(base_price, float(price))
+                    if price_diff_pct <= similarity_threshold:
+                        touch_count += 1
+                
+                # 터치 횟수에 따른 강도 증가 (많이 터치될수록 강한 레벨)
+                strength += (touch_count - 1) * 0.2  # 첫 터치 제외하고 추가 터치마다 +0.2
+                
+                # 3. 최근성 가중치 (최근 레벨일수록 더 중요)
+                recency_weight = 1.0 + (candidate['index'] / len(price_series)) * 0.3
+                strength *= recency_weight
+                
+                candidates[i]['strength'] = strength
+                candidates[i]['nearby_count'] = nearby_count
+                candidates[i]['touch_count'] = touch_count
+                
+                logger.debug(f"{'지지선' if is_support else '저항선'} {base_price:.0f}원: "
+                           f"강도={strength:.2f}, 근접={nearby_count}개, 터치={touch_count}회")
+            
+            return candidates
+            
+        except Exception as e:
+            logger.warning(f"레벨 강도 계산 중 오류: {str(e)}")
+            return candidates
+    
+    def _select_top_levels_by_strength(self, candidates: List[Dict[str, Any]], is_support: bool = True, top_n: int = 3) -> List[float]:
+        """강도 순으로 상위 레벨들을 선택합니다."""
+        try:
+            if not candidates:
+                return []
+            
+            # 강도 순으로 정렬 (높은 강도 먼저)
+            sorted_candidates = sorted(candidates, key=lambda x: x['strength'], reverse=True)
+            
+            # 중복 가격 제거 (비슷한 가격대는 하나만 선택)
+            selected_levels = []
+            similarity_threshold = 0.025  # 2.5% 이내는 같은 레벨로 간주
+            
+            for candidate in sorted_candidates:
+                candidate_price = candidate['price']
+                is_duplicate = False
+                
+                for selected_price in selected_levels:
+                    price_diff_pct = abs(candidate_price - selected_price) / max(candidate_price, selected_price)
+                    if price_diff_pct <= similarity_threshold:
+                        is_duplicate = True
+                        break
+                
+                if not is_duplicate:
+                    selected_levels.append(candidate_price)
+                    logger.info(f"선택된 {'지지선' if is_support else '저항선'}: "
+                              f"{candidate_price:.0f}원 (강도: {candidate['strength']:.2f}, "
+                              f"근접: {candidate.get('nearby_count', 0)}개, "
+                              f"터치: {candidate.get('touch_count', 0)}회)")
+                    
+                    if len(selected_levels) >= top_n:
+                        break
+            
+            # 지지선은 높은 순, 저항선은 높은 순으로 정렬 (강도 기준으로 이미 정렬됨)
+            return selected_levels
+            
+        except Exception as e:
+            logger.warning(f"상위 레벨 선택 중 오류: {str(e)}")
+            return [candidate['price'] for candidate in candidates[:top_n]]
     
     def _get_recent_dataframe(self, window: int) -> pd.DataFrame:
         """최근 window 기간의 DataFrame을 반환합니다."""
@@ -1674,13 +2076,24 @@ class TechnicalAnalyzerAgent(BaseAgent):
             return pd.DataFrame()
     
     def _find_support_levels_simple(self, low: pd.Series, window: int = 60) -> List[float]:
-        """기본적인 지지선 찾기 (거래량 고려 없음)"""
+        """기본적인 지지선 찾기 (현재가 대비 합리적 범위 적용)"""
         try:
-            if hasattr(self, '_current_df') and not self._current_df.empty:
-                df_tail = self._current_df.tail(window)
-                return self._find_meaningful_supports(df_tail)
+            logger.info(f"단순 지지선 계산 시작: window={window}")
             
-            # 백업: DataFrame이 없으면 기존 방식
+            # 현재가 정보 확인
+            current_price = float(low.iloc[-1]) if len(low) > 0 else None
+            if current_price is None:
+                logger.warning("현재가 정보를 가져올 수 없어 빈 리스트 반환")
+                return []
+            
+            logger.info(f"현재가: {current_price:.0f}원")
+            
+            # 현재가 대비 합리적인 범위 설정 (현재가의 50% ~ 95% 범위)
+            min_support = current_price * 0.50
+            max_support = current_price * 0.95
+            logger.info(f"지지선 유효 범위: {min_support:.0f}원 ~ {max_support:.0f}원")
+            
+            # 기존 방식으로 지지선 계산
             supports = []
             recent_lows = low.tail(window)
             
@@ -1689,22 +2102,45 @@ class TechnicalAnalyzerAgent(BaseAgent):
                     recent_lows.iloc[i] < recent_lows.iloc[i+1] and
                     recent_lows.iloc[i] < recent_lows.iloc[i-2] and 
                     recent_lows.iloc[i] < recent_lows.iloc[i+2]):
-                    supports.append(float(recent_lows.iloc[i]))
+                    support_price = float(recent_lows.iloc[i])
+                    
+                    # 현재가 대비 합리적인 범위 내의 지지선만 선택
+                    if min_support <= support_price <= max_support:
+                        supports.append(support_price)
+                        logger.debug(f"유효한 단순 지지선 후보: {support_price:.0f}원")
+                    else:
+                        logger.debug(f"범위 외 단순 지지선 후보 제외: {support_price:.0f}원")
             
-            supports = sorted(list(set(supports)))
+            logger.info(f"유효 범위 내 단순 지지선 후보 {len(supports)}개 발견")
+            supports = sorted(list(set(supports)), reverse=True)  # 높은 순서대로 정렬
             supports = self._merge_adjacent_levels(supports, is_support=True)
-            return supports[:2]
-        except:
+            final_supports = supports[:3]  # 3개로 증가
+            logger.info(f"최종 단순 지지선 {len(final_supports)}개: {[f'{s:.0f}원' for s in final_supports]}")
+            return final_supports
+            
+        except Exception as e:
+            logger.warning(f"단순 지지선 계산 중 오류: {str(e)}")
             return []
     
     def _find_resistance_levels_simple(self, high: pd.Series, window: int = 120) -> List[float]:
-        """기본적인 저항선 찾기 (거래량 고려 없음)"""
+        """기본적인 저항선 찾기 (현재가 대비 합리적 범위 적용)"""
         try:
-            if hasattr(self, '_current_df') and not self._current_df.empty:
-                df_tail = self._current_df.tail(window)
-                return self._find_meaningful_resistances(df_tail)
+            logger.info(f"단순 저항선 계산 시작: window={window}")
             
-            # 백업: DataFrame이 없으면 기존 방식
+            # 현재가 정보 확인
+            current_price = float(high.iloc[-1]) if len(high) > 0 else None
+            if current_price is None:
+                logger.warning("현재가 정보를 가져올 수 없어 빈 리스트 반환")
+                return []
+            
+            logger.info(f"현재가 기준: {current_price:.0f}원")
+            
+            # 현재가 대비 합리적인 범위 설정 (현재가의 105% ~ 200% 범위)
+            min_resistance = current_price * 1.05
+            max_resistance = current_price * 2.00
+            logger.info(f"저항선 유효 범위: {min_resistance:.0f}원 ~ {max_resistance:.0f}원")
+            
+            # 기존 방식으로 저항선 계산
             resistances = []
             recent_highs = high.tail(window)
             
@@ -1713,41 +2149,80 @@ class TechnicalAnalyzerAgent(BaseAgent):
                     recent_highs.iloc[i] > recent_highs.iloc[i+1] and
                     recent_highs.iloc[i] > recent_highs.iloc[i-2] and 
                     recent_highs.iloc[i] > recent_highs.iloc[i+2]):
-                    resistances.append(float(recent_highs.iloc[i]))
+                    resistance_price = float(recent_highs.iloc[i])
+                    
+                    # 현재가 대비 합리적인 범위 내의 저항선만 선택
+                    if min_resistance <= resistance_price <= max_resistance:
+                        resistances.append(resistance_price)
+                        logger.debug(f"유효한 단순 저항선 후보: {resistance_price:.0f}원")
+                    else:
+                        logger.debug(f"범위 외 단순 저항선 후보 제외: {resistance_price:.0f}원")
             
+            logger.info(f"유효 범위 내 단순 저항선 후보 {len(resistances)}개 발견")
             resistances = sorted(list(set(resistances)), reverse=True)
             resistances = self._merge_adjacent_levels(resistances, is_support=False)
-            return resistances[:2]
-        except:
+            final_resistances = resistances[:3]  # 3개로 증가
+            logger.info(f"최종 단순 저항선 {len(final_resistances)}개: {[f'{r:.0f}원' for r in final_resistances]}")
+            return final_resistances
+            
+        except Exception as e:
+            logger.warning(f"단순 저항선 계산 중 오류: {str(e)}")
             return []
     
     def _find_volume_based_supports(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         """거래량 집중 구간에서 지지선을 찾습니다 (Volume Profile 개념)."""
         try:
+            logger.info(f"거래량 기반 지지선 계산 시작: 데이터 개수={len(df)}")
+            
             if df.empty or len(df) < 10:
+                logger.warning(f"데이터 부족으로 거래량 기반 지지선 계산 불가: 데이터 개수={len(df)}")
                 return []
             
             supports = []
             
             # 가격대별 거래량 집계 (Price-Volume Distribution)
             price_volume_dist = self._calculate_price_volume_distribution(df)
+            logger.info(f"가격-거래량 분포 계산 완료: 구간 개수={len(price_volume_dist)}")
+            
+            if price_volume_dist.empty:
+                logger.warning("가격-거래량 분포가 비어있음")
+                return []
             
             # 거래량이 많이 몰린 가격대 중 현재가보다 낮은 구간을 지지선으로 간주
             current_price = float(df['close'].iloc[-1])
             volume_threshold = price_volume_dist['volume'].quantile(0.8)  # 상위 20% 거래량
+            max_volume = price_volume_dist['volume'].max()
             
-            high_volume_prices = price_volume_dist[
-                (price_volume_dist['volume'] >= volume_threshold) & 
-                (price_volume_dist['price'] < current_price)
-            ]
+            logger.info(f"현재가: {current_price:.0f}원, 거래량 임계값: {volume_threshold:.0f}, 최대 거래량: {max_volume:.0f}")
+            
+            # 현재가보다 낮은 가격대 필터링
+            lower_prices = price_volume_dist[price_volume_dist['price'] < current_price]
+            logger.info(f"현재가보다 낮은 가격대: {len(lower_prices)}개")
+            
+            # 거래량 임계값 이상 필터링
+            high_volume_prices = lower_prices[lower_prices['volume'] >= volume_threshold]
+            logger.info(f"거래량 임계값 이상인 가격대: {len(high_volume_prices)}개")
+            
+            if len(high_volume_prices) == 0:
+                logger.info("거래량 기준을 만족하는 지지선 후보가 없음 - 임계값을 낮춰서 재시도")
+                # 임계값을 낮춰서 재시도 (상위 50%)
+                volume_threshold = price_volume_dist['volume'].quantile(0.5)
+                high_volume_prices = lower_prices[lower_prices['volume'] >= volume_threshold]
+                logger.info(f"임계값 완화 후 후보: {len(high_volume_prices)}개 (임계값: {volume_threshold:.0f})")
             
             for _, row in high_volume_prices.iterrows():
+                support_price = float(row['price'])
+                volume = float(row['volume'])
+                strength = volume / max_volume if max_volume > 0 else 0.5
+                
                 supports.append({
-                    'price': float(row['price']),
+                    'price': support_price,
                     'index': -1,  # Volume-based는 특정 인덱스가 없음
-                    'strength': float(row['volume'] / price_volume_dist['volume'].max())  # 정규화된 강도
+                    'strength': strength  # 정규화된 강도
                 })
+                logger.debug(f"거래량 기반 지지선 후보: {support_price:.0f}원, 거래량={volume:.0f}, 강도={strength:.2f}")
             
+            logger.info(f"거래량 기반 지지선 후보 {len(supports)}개 발견")
             return supports
             
         except Exception as e:
@@ -1757,30 +2232,57 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _find_volume_based_resistances(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         """거래량 집중 구간에서 저항선을 찾습니다 (Volume Profile 개념)."""
         try:
+            logger.info(f"거래량 기반 저항선 계산 시작: 데이터 개수={len(df)}")
+            
             if df.empty or len(df) < 10:
+                logger.warning(f"데이터 부족으로 거래량 기반 저항선 계산 불가: 데이터 개수={len(df)}")
                 return []
             
             resistances = []
             
             # 가격대별 거래량 집계
             price_volume_dist = self._calculate_price_volume_distribution(df)
+            logger.info(f"가격-거래량 분포 계산 완료: 구간 개수={len(price_volume_dist)}")
+            
+            if price_volume_dist.empty:
+                logger.warning("가격-거래량 분포가 비어있음")
+                return []
             
             # 거래량이 많이 몰린 가격대 중 현재가보다 높은 구간을 저항선으로 간주
             current_price = float(df['close'].iloc[-1])
             volume_threshold = price_volume_dist['volume'].quantile(0.8)  # 상위 20% 거래량
+            max_volume = price_volume_dist['volume'].max()
             
-            high_volume_prices = price_volume_dist[
-                (price_volume_dist['volume'] >= volume_threshold) & 
-                (price_volume_dist['price'] > current_price)
-            ]
+            logger.info(f"현재가: {current_price:.0f}원, 거래량 임계값: {volume_threshold:.0f}, 최대 거래량: {max_volume:.0f}")
+            
+            # 현재가보다 높은 가격대 필터링
+            higher_prices = price_volume_dist[price_volume_dist['price'] > current_price]
+            logger.info(f"현재가보다 높은 가격대: {len(higher_prices)}개")
+            
+            # 거래량 임계값 이상 필터링
+            high_volume_prices = higher_prices[higher_prices['volume'] >= volume_threshold]
+            logger.info(f"거래량 임계값 이상인 가격대: {len(high_volume_prices)}개")
+            
+            if len(high_volume_prices) == 0:
+                logger.info("거래량 기준을 만족하는 저항선 후보가 없음 - 임계값을 낮춰서 재시도")
+                # 임계값을 낮춰서 재시도 (상위 50%)
+                volume_threshold = price_volume_dist['volume'].quantile(0.5)
+                high_volume_prices = higher_prices[higher_prices['volume'] >= volume_threshold]
+                logger.info(f"임계값 완화 후 후보: {len(high_volume_prices)}개 (임계값: {volume_threshold:.0f})")
             
             for _, row in high_volume_prices.iterrows():
+                resistance_price = float(row['price'])
+                volume = float(row['volume'])
+                strength = volume / max_volume if max_volume > 0 else 0.5
+                
                 resistances.append({
-                    'price': float(row['price']),
+                    'price': resistance_price,
                     'index': -1,  # Volume-based는 특정 인덱스가 없음
-                    'strength': float(row['volume'] / price_volume_dist['volume'].max())  # 정규화된 강도
+                    'strength': strength  # 정규화된 강도
                 })
+                logger.debug(f"거래량 기반 저항선 후보: {resistance_price:.0f}원, 거래량={volume:.0f}, 강도={strength:.2f}")
             
+            logger.info(f"거래량 기반 저항선 후보 {len(resistances)}개 발견")
             return resistances
             
         except Exception as e:
@@ -1791,16 +2293,23 @@ class TechnicalAnalyzerAgent(BaseAgent):
         """가격대별 거래량 분포를 계산합니다 (Volume Profile)."""
         try:
             if df.empty:
+                logger.warning("가격-거래량 분포 계산: 빈 데이터프레임")
                 return pd.DataFrame()
             
             # 가격 범위를 여러 구간으로 나누어 거래량 집계
             min_price = df['low'].min()
             max_price = df['high'].max()
+            price_range = max_price - min_price
+            
+            logger.info(f"가격 범위: {min_price:.0f}원 ~ {max_price:.0f}원 (범위: {price_range:.0f}원)")
             
             # 50개 구간으로 나누어 분석
             price_bins = np.linspace(min_price, max_price, 51)
+            logger.info(f"가격 구간: 50개 구간으로 분할 (구간당 약 {price_range/50:.0f}원)")
             
             volume_distribution = []
+            total_volume = 0
+            non_zero_bins = 0
             
             for i in range(len(price_bins) - 1):
                 bin_low = price_bins[i]
@@ -1816,8 +2325,19 @@ class TechnicalAnalyzerAgent(BaseAgent):
                     'price': bin_center,
                     'volume': volume_in_bin
                 })
+                
+                total_volume += volume_in_bin
+                if volume_in_bin > 0:
+                    non_zero_bins += 1
+                    logger.debug(f"구간 {i}: {bin_low:.0f}~{bin_high:.0f}원, 거래량={volume_in_bin:.0f}")
             
-            return pd.DataFrame(volume_distribution)
+            result_df = pd.DataFrame(volume_distribution)
+            logger.info(f"가격-거래량 분포 완료: 총 거래량={total_volume:.0f}, 거래량 있는 구간={non_zero_bins}개")
+            
+            if total_volume == 0:
+                logger.warning("모든 가격 구간의 거래량이 0임 - 데이터 문제 가능성")
+            
+            return result_df
             
         except Exception as e:
             logger.warning(f"가격-거래량 분포 계산 중 오류: {str(e)}")
@@ -1863,33 +2383,52 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _find_volume_spike_resistances(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         """거래량 터진 캔들의 고점에서 저항선을 찾습니다."""
         try:
+            logger.info(f"거래량 급증 저항선 계산 시작: 데이터 개수={len(df)}")
+            
             if df.empty or len(df) < 20:
+                logger.warning(f"데이터 부족으로 거래량 급증 저항선 계산 불가: 데이터 개수={len(df)}")
                 return []
             
             resistances = []
             
             # 평균 거래량 계산
             avg_volume = df['volume'].rolling(window=20).mean()
+            recent_avg_volume = avg_volume.dropna().iloc[-10:].mean()  # 최근 10일 평균
+            logger.info(f"최근 평균 거래량: {recent_avg_volume:.0f}")
             
             # 거래량이 평균의 2배 이상 터진 캔들들 찾기
             volume_spikes = df[df['volume'] >= avg_volume * 2.0]
+            logger.info(f"거래량 급증 캔들 발견: {len(volume_spikes)}개 (기준: 평균의 2배 이상)")
             
             current_price = float(df['close'].iloc[-1])
+            higher_spikes = 0
             
             for idx, row in volume_spikes.iterrows():
                 high_price = float(row['high'])
+                volume = float(row['volume'])
                 volume_ratio = float(row['volume'] / avg_volume.loc[idx]) if not pd.isna(avg_volume.loc[idx]) else 1.0
                 
                 # 현재가보다 높은 고점만 저항선으로 간주
                 if high_price > current_price:
+                    higher_spikes += 1
                     # 음봉인지 양봉인지도 고려 (음봉의 고점이 더 강한 저항선)
-                    candle_strength = 1.2 if row['close'] < row['open'] else 1.0
+                    is_bearish = row['close'] < row['open']
+                    candle_strength = 1.2 if is_bearish else 1.0
+                    final_strength = min(volume_ratio * candle_strength, 3.0)
                     
                     resistances.append({
                         'price': high_price,
                         'index': df.index.get_loc(idx),
-                        'strength': min(volume_ratio * candle_strength, 3.0)  # 최대 3.0으로 제한
+                        'strength': final_strength  # 최대 3.0으로 제한
                     })
+                    
+                    logger.debug(f"거래량 급증 저항선 후보: {high_price:.0f}원, 거래량={volume:.0f} (비율:{volume_ratio:.1f}x), "
+                               f"{'음봉' if is_bearish else '양봉'}, 강도={final_strength:.2f}")
+                else:
+                    logger.debug(f"현재가보다 낮은 급증 캔들 제외: {high_price:.0f}원 (현재가: {current_price:.0f}원)")
+            
+            logger.info(f"거래량 급증 저항선 후보: 전체 {len(volume_spikes)}개 중 현재가보다 높은 것 {higher_spikes}개, "
+                       f"최종 후보 {len(resistances)}개")
             
             return resistances
             
@@ -1901,26 +2440,34 @@ class TechnicalAnalyzerAgent(BaseAgent):
         """거래량 기반 가중치를 적용하여 지지/저항선을 정렬합니다."""
         try:
             if not levels:
+                logger.info("가중치 적용: 입력 레벨이 비어있음")
                 return []
             
             # 현재가 기준으로 거리에 따른 가중치도 적용
             current_price = float(df['close'].iloc[-1])
+            logger.info(f"가중치 적용: 현재가={current_price:.0f}원, {'지지선' if is_support else '저항선'} 처리")
             
             # 거리 제한 적용
             if is_support:
                 min_price = current_price * 0.75  # 지지선: 25% 하락까지
                 max_price = current_price
+                logger.info(f"지지선 범위: {min_price:.0f}원 ~ {max_price:.0f}원")
             else:
                 min_price = current_price
                 max_price = current_price * 1.5   # 저항선: 50% 상승까지
+                logger.info(f"저항선 범위: {min_price:.0f}원 ~ {max_price:.0f}원")
             
             weighted_levels = []
+            excluded_count = 0
+            
             for level in levels:
                 price = level['price']
                 base_strength = level['strength']
                 
                 # 거리 제한 체크
                 if not (min_price <= price <= max_price):
+                    excluded_count += 1
+                    logger.debug(f"범위 초과로 제외: {price:.0f}원 (범위: {min_price:.0f}~{max_price:.0f})")
                     continue  # 범위를 벗어나면 제외
                 
                 # 거리에 따른 가중치 (현재가에서 가까울수록 높은 가중치)
@@ -1936,9 +2483,16 @@ class TechnicalAnalyzerAgent(BaseAgent):
                     'strength': final_strength,
                     'distance_pct': distance_pct
                 })
+                logger.debug(f"가중치 적용: {price:.0f}원, 거리={distance_pct:.1f}%, 기본강도={base_strength:.2f}, 최종강도={final_strength:.2f}")
+            
+            logger.info(f"가중치 적용 결과: {len(weighted_levels)}개 유효, {excluded_count}개 범위초과로 제외")
             
             # 강도순으로 정렬
             weighted_levels.sort(key=lambda x: x['strength'], reverse=True)
+            
+            if weighted_levels:
+                logger.info(f"상위 3개 {'지지선' if is_support else '저항선'}: " + 
+                          ", ".join([f"{level['price']:.0f}원(강도:{level['strength']:.2f})" for level in weighted_levels[:3]]))
             
             return weighted_levels
             
@@ -2241,9 +2795,11 @@ class TechnicalAnalyzerAgent(BaseAgent):
     def _analyze_breakout_signals(self, df: pd.DataFrame, support_levels: List[float], resistance_levels: List[float]) -> List[Dict[str, Any]]:
         """돌파 신호를 분석합니다."""
         try:
+            logger.info(f"돌파 신호 분석 시작: 지지선 {len(support_levels)}개, 저항선 {len(resistance_levels)}개")
             signals = []
             
             if df.empty or len(df) < 5:
+                logger.warning("데이터가 부족하여 돌파 신호 분석 불가")
                 return signals
             
             close = df['close']
@@ -2252,25 +2808,107 @@ class TechnicalAnalyzerAgent(BaseAgent):
             avg_volume = float(volume.tail(20).mean())
             recent_volume = float(volume.iloc[-1])
             
-            # 저항선 돌파 확인
-            for resistance in resistance_levels:
-                if current_price > resistance * 1.01:  # 1% 이상 돌파
-                    signals.append({
+            # 최근 5일간의 가격 범위 확인 (돌파 확인용)
+            recent_prices = close.tail(5)
+            recent_high = float(recent_prices.max())
+            recent_low = float(recent_prices.min())
+            
+            logger.info(f"현재가: {current_price:.0f}원, 최근5일 고점: {recent_high:.0f}원, 저점: {recent_low:.0f}원")
+            logger.info(f"거래량: 현재={recent_volume:,.0f}, 평균={avg_volume:,.0f}, 배율={recent_volume/avg_volume:.1f}배")
+            
+            # 저항선 돌파 또는 접근 확인
+            logger.info(f"저항선 {len(resistance_levels)}개 분석 시작: {[f'{r:.0f}원' for r in resistance_levels]}")
+            for i, resistance in enumerate(resistance_levels):
+                logger.debug(f"저항선 {i+1}/{len(resistance_levels)}: {resistance:.0f}원 분석")
+                
+                # 현재가가 저항선을 돌파한 경우 (0.5% 돌파)
+                if current_price > resistance * 1.005:
+                    signal = {
                         "type": "저항선_돌파",
                         "level": float(resistance),
                         "current_price": float(current_price),
                         "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
-                    })
+                    }
+                    signals.append(signal)
+                    logger.info(f"저항선 돌파 신호 발견: {resistance:.0f}원 → {current_price:.0f}원 (돌파율: {((current_price/resistance-1)*100):.1f}%)")
+                
+                # 최근 고점이 저항선을 돌파했지만 현재는 아래 있는 경우
+                elif recent_high > resistance * 1.005 and current_price <= resistance:
+                    signal = {
+                        "type": "저항선_테스트_후_반락",
+                        "level": float(resistance),
+                        "current_price": float(current_price),
+                        "test_high": float(recent_high),
+                        "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
+                    }
+                    signals.append(signal)
+                    logger.info(f"저항선 테스트 후 반락 신호: {resistance:.0f}원 테스트 고점 {recent_high:.0f}원, 현재가 {current_price:.0f}원")
+                
+                # 저항선에 근접한 경우 (10% 이내)
+                elif abs(current_price - resistance) / resistance <= 0.10:
+                    distance_pct = abs(current_price - resistance) / resistance * 100
+                    signal = {
+                        "type": "저항선_근접",
+                        "level": float(resistance),
+                        "current_price": float(current_price),
+                        "distance_pct": float(distance_pct),
+                        "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
+                    }
+                    signals.append(signal)
+                    logger.info(f"저항선 근접 신호: {resistance:.0f}원에 {distance_pct:.1f}% 거리로 근접")
+                else:
+                    # 조건에 맞지 않는 경우도 로그
+                    distance_pct = abs(current_price - resistance) / resistance * 100
+                    logger.debug(f"저항선 {resistance:.0f}원: 조건 미충족 (거리: {distance_pct:.1f}%)")
             
-            # 지지선 이탈 확인
-            for support in support_levels:
-                if current_price < support * 0.99:  # 1% 이상 이탈
-                    signals.append({
+            # 지지선 이탈 또는 접근 확인
+            logger.info(f"지지선 {len(support_levels)}개 분석 시작: {[f'{s:.0f}원' for s in support_levels]}")
+            for i, support in enumerate(support_levels):
+                logger.debug(f"지지선 {i+1}/{len(support_levels)}: {support:.0f}원 분석")
+                
+                # 현재가가 지지선을 이탈한 경우 (0.5% 이탈)
+                if current_price < support * 0.995:
+                    signal = {
                         "type": "지지선_이탈",
                         "level": float(support),
                         "current_price": float(current_price),
                         "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
-                    })
+                    }
+                    signals.append(signal)
+                    logger.info(f"지지선 이탈 신호 발견: {support:.0f}원 → {current_price:.0f}원 (이탈율: {((1-current_price/support)*100):.1f}%)")
+                
+                # 최근 저점이 지지선을 이탈했지만 현재는 위에 있는 경우
+                elif recent_low < support * 0.995 and current_price >= support:
+                    signal = {
+                        "type": "지지선_테스트_후_반등",
+                        "level": float(support),
+                        "current_price": float(current_price),
+                        "test_low": float(recent_low),
+                        "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
+                    }
+                    signals.append(signal)
+                    logger.info(f"지지선 테스트 후 반등 신호: {support:.0f}원 테스트 저점 {recent_low:.0f}원, 현재가 {current_price:.0f}원")
+                
+                # 지지선에 근접한 경우 (15% 이내)
+                elif abs(current_price - support) / support <= 0.15:
+                    distance_pct = abs(current_price - support) / support * 100
+                    signal = {
+                        "type": "지지선_근접",
+                        "level": float(support),
+                        "current_price": float(current_price),
+                        "distance_pct": float(distance_pct),
+                        "volume_confirmation": bool(recent_volume > avg_volume * 1.5)
+                    }
+                    signals.append(signal)
+                    logger.info(f"지지선 근접 신호: {support:.0f}원에 {distance_pct:.1f}% 거리로 근접")
+                else:
+                    # 조건에 맞지 않는 경우도 로그
+                    distance_pct = abs(current_price - support) / support * 100
+                    logger.debug(f"지지선 {support:.0f}원: 조건 미충족 (거리: {distance_pct:.1f}%)")
+            
+            logger.info(f"돌파 신호 분석 완료: 총 {len(signals)}개 신호 발견")
+            for i, signal in enumerate(signals):
+                logger.info(f"  신호 {i+1}: {signal['type']} - {signal['level']:.0f}원")
             
             return signals
             
@@ -2375,15 +3013,40 @@ class TechnicalAnalyzerAgent(BaseAgent):
                     else:
                         signals.append({"indicator": "RSI", "signal": "중립", "strength": 0.3, "value": rsi, "reason": "중립"})
             
-            # ADX 추세강도 신호
+            # ADX 추세강도 신호 (80 이상은 극도로 강한 추세로 반전 위험 고려)
             if adx is not None:
-                if adx >= 25:
+                if adx >= 80:
+                    # 극도로 강한 추세 - 과도한 추세로 반전 가능성 높음, 매우 보수적 접근
                     if trend_direction == "상승":
-                        signals.append({"indicator": "ADX", "signal": "매수", "strength": 0.7, "value": adx, "reason": f"강한 상승추세 (ADX: {adx:.1f})"})
+                        signals.append({"indicator": "ADX", "signal": "매수", "strength": 0.1, "value": adx, "reason": f"극도 상승추세, 반전 위험 (ADX: {adx:.1f})"})
                     elif trend_direction == "하락":
-                        signals.append({"indicator": "ADX", "signal": "매도", "strength": 0.7, "value": adx, "reason": f"강한 하락추세 (ADX: {adx:.1f})"})
+                        signals.append({"indicator": "ADX", "signal": "매도", "strength": 0.1, "value": adx, "reason": f"극도 하락추세, 반전 위험 (ADX: {adx:.1f})"})
+                    else:
+                        signals.append({"indicator": "ADX", "signal": "중립", "strength": 0.6, "value": adx, "reason": f"극도 강한 추세, 방향 불명확 (ADX: {adx:.1f})"})
+                elif adx >= 60:
+                    # 매우 강한 추세 - 보수적 접근
+                    if trend_direction == "상승":
+                        signals.append({"indicator": "ADX", "signal": "매수", "strength": 0.4, "value": adx, "reason": f"매우 강한 상승추세, 조심스러운 진입 (ADX: {adx:.1f})"})
+                    elif trend_direction == "하락":
+                        signals.append({"indicator": "ADX", "signal": "매도", "strength": 0.4, "value": adx, "reason": f"매우 강한 하락추세, 조심스러운 진입 (ADX: {adx:.1f})"})
+                    else:
+                        signals.append({"indicator": "ADX", "signal": "중립", "strength": 0.4, "value": adx, "reason": f"매우 강한 추세이나 방향 불명확 (ADX: {adx:.1f})"})
+                elif adx >= 40:
+                    # 강한 추세 - 일반적인 접근
+                    if trend_direction == "상승":
+                        signals.append({"indicator": "ADX", "signal": "매수", "strength": 0.6, "value": adx, "reason": f"강한 상승추세 (ADX: {adx:.1f})"})
+                    elif trend_direction == "하락":
+                        signals.append({"indicator": "ADX", "signal": "매도", "strength": 0.6, "value": adx, "reason": f"강한 하락추세 (ADX: {adx:.1f})"})
                     else:
                         signals.append({"indicator": "ADX", "signal": "중립", "strength": 0.4, "value": adx, "reason": f"강한 추세이나 방향 불명확 (ADX: {adx:.1f})"})
+                elif adx >= 25:
+                    # 추세 확인 - 적극적 접근 가능
+                    if trend_direction == "상승":
+                        signals.append({"indicator": "ADX", "signal": "매수", "strength": 0.7, "value": adx, "reason": f"상승추세 확인 (ADX: {adx:.1f})"})
+                    elif trend_direction == "하락":
+                        signals.append({"indicator": "ADX", "signal": "매도", "strength": 0.7, "value": adx, "reason": f"하락추세 확인 (ADX: {adx:.1f})"})
+                    else:
+                        signals.append({"indicator": "ADX", "signal": "중립", "strength": 0.4, "value": adx, "reason": f"추세 확인되나 방향 불명확 (ADX: {adx:.1f})"})
                 elif adx >= 20:
                     if trend_direction == "상승":
                         signals.append({"indicator": "ADX", "signal": "매수", "strength": 0.5, "value": adx, "reason": f"보통 상승추세 (ADX: {adx:.1f})"})
@@ -2441,13 +3104,13 @@ class TechnicalAnalyzerAgent(BaseAgent):
             stop_loss = None
             target_price = None
             
-            if overall_signal in ["매수", "강력매수"]:
-                stop_loss = current_price * 0.95
-                target_price = current_price * (1.1 if overall_signal == "매수" else 1.15)
-                entry_points.append(current_price)
-            elif overall_signal in ["매도", "강력매도"]:
-                target_price = current_price * (0.95 if overall_signal == "매도" else 0.9)
-                exit_points.append(current_price)
+            # if overall_signal in ["매수", "강력매수"]:
+            #     stop_loss = current_price * 0.95
+            #     target_price = current_price * (1.1 if overall_signal == "매수" else 1.15)
+            #     entry_points.append(current_price)
+            # elif overall_signal in ["매도", "강력매도"]:
+            #     target_price = current_price * (0.95 if overall_signal == "매도" else 0.9)
+            #     exit_points.append(current_price)
             
             return {
                 "overall_signal": overall_signal,
@@ -2604,12 +3267,13 @@ ADX (추세강도 지표):
             adr = technical_indicators.get('adr')
             adr_ma = technical_indicators.get('adr_ma')
             if adr is not None:
-                adr_signal = "상승 우세" if adr > 1.2 else "하락 우세" if adr < 0.8 else "균형"
                 adr_ma_str = f"{adr_ma:.2f}" if adr_ma is not None else 'N/A'
+                # ADR은 변동성 지표이므로 높을수록 변동성이 크다
+                volatility_level = "높은 변동성" if adr > adr_ma * 1.2 else "낮은 변동성" if adr < adr_ma * 0.8 else "보통 변동성"
                 trend_indicators_info += f"""
-ADR (상승일/하락일 비율):
-- ADR: {adr:.2f} ({adr_signal})
-- ADR 이동평균: {adr_ma_str}
+ADR (Average Daily Range - 일중 평균 변동폭):
+- ADR: {adr:.0f}원 ({volatility_level})
+- ADR 이동평균: {adr_ma_str}원
 """
             
             # 슈퍼트렌드 정보
@@ -2642,7 +3306,7 @@ ADR (상승일/하락일 비율):
 다음 지표들의 의미:
 - RS(상대강도): 시장 대비 주식의 상대적 강도를 나타내며, 높을수록 시장을 아웃퍼폼
 - ADX: 25 이상이면 강한 추세, 20 이하면 약한 추세
-- ADR: 1.2 이상이면 상승 우세, 0.8 이하면 하락 우세
+- ADR: 일중 평균 변동폭을 나타내며, 높을수록 변동성이 크고, 낮을수록 변동성이 작음
 - 슈퍼트렌드: 추세 변화를 감지하는 지표
 
 분석 시 고려사항:
@@ -2703,13 +3367,13 @@ ADR (상승일/하락일 비율):
                     try:
                         rs_float = float(rs_value)
                         if rs_float >= 80:
-                            recommendations.append("RS(상대강도)가 매우 높아 시장 대비 강세를 보이고 있습니다.")
+                            recommendations.append(f"RS(상대강도)가 {rs_float}로 매우 높아 시장 대비 강세를 보이고 있습니다.")
                         elif rs_float >= 60:
-                            recommendations.append("RS(상대강도)가 양호하여 시장 대비 우수한 성과를 보이고 있습니다.")
+                            recommendations.append(f"RS(상대강도)가 {rs_float}로 양호하여 시장 대비 우수한 성과를 보이고 있습니다.")
                         elif rs_float <= 20:
-                            recommendations.append("RS(상대강도)가 낮아 시장 대비 약세를 보이고 있으므로 주의가 필요합니다.")
+                            recommendations.append(f"RS(상대강도)가 {rs_float}로 낮아 시장 대비 약세를 보이고 있으므로 주의가 필요합니다.")
                         elif rs_float <= 40:
-                            recommendations.append("RS(상대강도)가 평균 이하로 시장 대비 부진한 모습입니다.")
+                            recommendations.append(f"RS(상대강도)가 {rs_float}로 평균 이하이며 시장 대비 부진한 모습입니다.")
                     except (ValueError, TypeError):
                         pass
                 
@@ -2721,24 +3385,26 @@ ADR (상승일/하락일 비율):
                         market_name = vs_market.get('market_name', '시장')
                         outperforming = vs_market.get('outperforming', False)
                         strength_level = vs_market.get('strength_level', '')
+                        market_rs = vs_market.get('market_rs')
                         
                         if outperforming:
-                            recommendations.append(f"{market_name} 대비 상대적 우위를 보이고 있습니다. ({strength_level})")
+                            recommendations.append(f"{market_name}({market_rs}) 대비 상대적 우위를 보이고 있습니다. ({strength_level})")
                         else:
-                            recommendations.append(f"{market_name} 대비 상대적으로 부진한 모습입니다. ({strength_level})")
+                            recommendations.append(f"{market_name}({market_rs}) 대비 상대적으로 부진한 모습입니다. ({strength_level})")
                         
                         # 트렌드 분석
                         overall_trend = vs_market.get('overall_trend')
                         trends = vs_market.get('trends', {})
-                        
-                        if overall_trend == 'improving':
-                            improving_periods = [period for period, trend in trends.items() if trend == 'improving']
-                            if improving_periods:
-                                recommendations.append(f"{market_name} 대비 상대강도가 {', '.join(improving_periods)} 기간에서 개선되는 추세입니다.")
-                        elif overall_trend == 'weakening':
-                            weakening_periods = [period for period, trend in trends.items() if trend == 'weakening']
-                            if weakening_periods:
-                                recommendations.append(f"{market_name} 대비 상대강도가 {', '.join(weakening_periods)} 기간에서 약화되는 추세입니다.")
+
+                        # RS 트렌드 제거                        
+                        # if overall_trend == 'improving':
+                        #     improving_periods = [period for period, trend in trends.items() if trend == 'improving']
+                        #     if improving_periods:
+                        #         recommendations.append(f"{market_name} 대비 상대강도가 {', '.join(improving_periods)} 기간에서 개선되는 추세입니다.")
+                        # elif overall_trend == 'weakening':
+                        #     weakening_periods = [period for period, trend in trends.items() if trend == 'weakening']
+                        #     if weakening_periods:
+                        #         recommendations.append(f"{market_name} 대비 상대강도가 {', '.join(weakening_periods)} 기간에서 약화되는 추세입니다.")
                     
                     # 시장별 특화 분석 기반 권고
                     market_analysis = relative_analysis.get('market_specific_analysis')
@@ -2753,8 +3419,8 @@ ADR (상승일/하락일 비율):
                     recommendations.append(f"{sector} 섹터의 동향도 함께 고려하시기 바랍니다.")
             
             # 공통 권고사항
-            recommendations.append("분할 매수/매도를 통해 리스크를 관리하세요.")
-            recommendations.append("손절선을 미리 설정하고 감정적 거래를 피하세요.")
+            #recommendations.append("분할 매수/매도를 통해 리스크를 관리하세요.")
+            recommendations.append("손절선을 미리 설정하고 계획적인 매수/매도를 하세요.")
             
             return recommendations
             

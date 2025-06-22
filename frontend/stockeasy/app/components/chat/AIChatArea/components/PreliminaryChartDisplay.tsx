@@ -14,6 +14,7 @@ interface PreliminaryChartData {
   timestamp: number;
   stockCode: string;
   stockName: string;
+  stockInfo?: any; // 종목 기본 정보
 }
 
 interface PreliminaryChartDisplayProps {
@@ -21,6 +22,167 @@ interface PreliminaryChartDisplayProps {
   onClose?: () => void;
   isCompleted?: boolean;
   onViewFinalReport?: () => void;
+}
+
+/**
+ * 숫자를 한국 화폐 형식으로 포맷하는 함수
+ */
+function formatKoreanCurrency(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '' || value === '-' || value === '0') {
+    return '-';
+  }
+  
+  // 문자열에서 숫자가 아닌 문자 제거 후 파싱
+  const cleanValue = typeof value === 'string' ? value.replace(/[^0-9.-]/g, '') : value;
+  const numValue = typeof cleanValue === 'string' ? parseFloat(cleanValue) : cleanValue;
+  
+  if (isNaN(numValue) || numValue === 0) {
+    return '-';
+  }
+  
+  // API에서 제공하는 값이 이미 억원 단위인 것으로 보임 (시가총액 "673" = 673억원)
+  if (numValue >= 10000) {
+    return `${(numValue / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}조원`;
+  } else {
+    return `${numValue.toLocaleString('ko-KR')}억원`;
+  }
+}
+
+/**
+ * 퍼센트 값을 포맷하는 함수
+ */
+function formatPercent(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '' || value === '-' || value === '0') {
+    return '-';
+  }
+  
+  const cleanValue = typeof value === 'string' ? value.replace(/[^0-9.-]/g, '') : value;
+  const numValue = typeof cleanValue === 'string' ? parseFloat(cleanValue) : cleanValue;
+  
+  if (isNaN(numValue)) {
+    return '-';
+  }
+  
+  return `${numValue.toFixed(2)}%`;
+}
+
+/**
+ * 일반 숫자를 포맷하는 함수
+ */
+function formatNumber(value: string | number | null | undefined, suffix: string = '', useAbsoluteValue: boolean = false): string {
+  if (value === null || value === undefined || value === '' || value === '-' || value === '0') {
+    return '-';
+  }
+  
+  const cleanValue = typeof value === 'string' ? value.replace(/[^0-9.-]/g, '') : value;
+  let numValue = typeof cleanValue === 'string' ? parseFloat(cleanValue) : cleanValue;
+  
+  if (isNaN(numValue)) {
+    return '-';
+  }
+  
+  // 절대값 사용 옵션
+  if (useAbsoluteValue) {
+    numValue = Math.abs(numValue);
+  }
+  
+  return numValue.toLocaleString('ko-KR') + suffix;
+}
+
+/**
+ * 기업 정보를 표시하는 컴포넌트
+ */
+function StockInfoDisplay({ stockInfo }: { stockInfo: any }) {
+  
+  if (!stockInfo) {
+    console.log('[StockInfoDisplay] stockInfo가 null 또는 undefined입니다.');
+    return null;
+  }
+
+
+  return (
+    <div className="mb-6 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* 헤더 */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+        <h3 className="text-lg font-bold text-gray-800 flex items-center">
+          <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+          기업 정보
+          <span className="text-xs text-gray-500 ml-2 font-normal">(최근 결산 기준)</span>
+        </h3>
+      </div>
+
+      <div className="p-6 space-y-6">
+        {/* 기본 정보 */}
+        <div>
+          <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">기본 정보</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs text-gray-500 mb-1">시장</div>
+              <div className="font-semibold text-gray-900">{stockInfo.market || '-'}</div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs text-gray-500 mb-1">시가총액</div>
+              <div className="font-semibold text-green-600">{formatKoreanCurrency(stockInfo.mac)}</div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs text-gray-500 mb-1">250일 최고</div>
+              <div className="font-semibold text-red-600">{formatNumber(stockInfo['250hgst'], '원')}</div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs text-gray-500 mb-1">250일 최저</div>
+              <div className="font-semibold text-blue-600">{formatNumber(stockInfo['250lwst'], '원', true)}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 재무 지표 */}
+        <div>
+          <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">재무 지표</h4>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 border border-purple-200">
+              <div className="text-xs text-purple-600 mb-1 font-medium">PER</div>
+              <div className="font-bold text-purple-800">{formatNumber(stockInfo.per, '배')}</div>
+            </div>
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-3 border border-indigo-200">
+              <div className="text-xs text-indigo-600 mb-1 font-medium">PBR</div>
+              <div className="font-bold text-indigo-800">{formatNumber(stockInfo.pbr, '배')}</div>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-3 border border-emerald-200">
+              <div className="text-xs text-emerald-600 mb-1 font-medium">ROE</div>
+              <div className="font-bold text-emerald-800">{formatPercent(stockInfo.roe)}</div>
+            </div>
+            <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-3 border border-amber-200">
+              <div className="text-xs text-amber-600 mb-1 font-medium">EPS</div>
+              <div className="font-bold text-amber-800">{formatNumber(stockInfo.eps, '원')}</div>
+            </div>
+            <div className="bg-gradient-to-br from-rose-50 to-rose-100 rounded-lg p-3 border border-rose-200">
+              <div className="text-xs text-rose-600 mb-1 font-medium">BPS</div>
+              <div className="font-bold text-rose-800">{formatNumber(stockInfo.bps, '원')}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 실적 정보 */}
+        <div>
+          <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">실적 정보</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
+              <div className="text-xs opacity-90 mb-1">매출액</div>
+              <div className="font-bold text-lg">{formatKoreanCurrency(stockInfo.sale_amt)}</div>
+            </div>
+            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white">
+              <div className="text-xs opacity-90 mb-1">영업이익</div>
+              <div className="font-bold text-lg">{formatKoreanCurrency(stockInfo.bus_pro)}</div>
+            </div>
+            <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
+              <div className="text-xs opacity-90 mb-1">당기순이익</div>
+              <div className="font-bold text-lg">{formatKoreanCurrency(stockInfo.cup_nga)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -236,14 +398,13 @@ export function PreliminaryChartDisplay({ chartData, onClose, isCompleted = true
         onClick={handleClose}
       />
 
-      {/* 팝업 컨테이너 - 모바일에서는 전체 영역, 데스크톱에서는 사이드바 제외 */}
+      {/* 팝업 컨테이너 - 채팅영역보다 조금 큰 너비로 제한 */}
       <div 
-        className={`relative bg-white rounded-xl shadow-2xl w-full max-h-[85vh] overflow-hidden transform transition-all duration-300 ${
+        className={`relative bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden transform transition-all duration-300 ${
           isAnimating 
             ? 'scale-100 opacity-100 translate-y-0' 
             : 'scale-95 opacity-0 translate-y-8'
         }`}
-        style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : 'calc(100vw - 59px - 2rem)' }}
       >
         {/* 헤더 */}
         <div className="border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
@@ -289,23 +450,78 @@ export function PreliminaryChartDisplay({ chartData, onClose, isCompleted = true
 
         {/* 컨텐츠 영역 */}
         <div className="p-6 overflow-y-auto max-h-[calc(85vh-200px)]">
+          {/* 기업 정보 표시 */}
+          <StockInfoDisplay stockInfo={chartData.stockInfo} />
+          
+          {/* 구분선 */}
+          <div className="flex items-center my-8">
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+            <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-full border border-blue-200">
+              <span className="text-sm font-semibold text-blue-700 flex items-center">
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                기술적 분석 차트
+              </span>
+            </div>
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+          </div>
+          
           {/* 차트 컴포넌트 렌더링 */}
-          <div className="space-y-6">
-            {normalizedComponents.map((component, index) => (
-              <div 
-                key={index} 
-                className={
-                  component.type?.includes('chart') 
-                    ? "chart-container bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden"
-                    : ""
-                }
-              >
-                <MessageComponentRenderer 
-                  component={component}
-                  isChartPair={false}
-                />
-              </div>
-            ))}
+          <div className="space-y-8">
+            {normalizedComponents.map((component, index) => {
+              const isChart = component.type?.includes('chart');
+              const chartTypeMap: Record<string, string> = {
+                'price_chart': '주가 차트',
+                'technical_indicator_chart': '기술적 지표 차트',
+                'volume_chart': '거래량 차트'
+              };
+              
+              const chartTitle = isChart ? chartTypeMap[component.type] || '차트' : '';
+              
+              return (
+                <div 
+                  key={index} 
+                  className={`relative ${
+                    isChart 
+                      ? "bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow duration-200"
+                      : "bg-gray-50 rounded-lg border border-gray-100 p-4"
+                  }`}
+                >
+                  {/* 차트 타입별 헤더 */}
+                  {isChart && (
+                    <div className="bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-3 border-b border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-lg font-semibold text-gray-800 flex items-center">
+                          <div className={`w-3 h-3 rounded-full mr-3 ${
+                            component.type === 'price_chart' ? 'bg-blue-500' :
+                            component.type === 'technical_indicator_chart' ? 'bg-purple-500' :
+                            'bg-green-500'
+                          }`}></div>
+                          {chartTitle}
+                        </h4>
+                        <div className="text-xs text-gray-500 bg-white px-2 py-1 rounded-full border">
+                          {index + 1} / {normalizedComponents.length}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                                     {/* 차트 내용 */}
+                   <div className={isChart ? "" : "p-4"}>
+                     <MessageComponentRenderer 
+                       component={component}
+                       isChartPair={false}
+                     />
+                   </div>
+                  
+                  {/* 차트 간 구분선 (마지막 차트 제외) */}
+                  {isChart && index < normalizedComponents.length - 1 && (
+                    <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 w-20 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* 추가 분석 진행 상태 표시 */}

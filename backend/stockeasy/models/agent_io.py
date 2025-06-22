@@ -351,7 +351,6 @@ class AgentState(TypedDict, total=False):
     integrated_knowledge: Optional[IntegratedKnowledge]  # 통합된 지식 베이스
     summary: Optional[str]          # 생성된 요약
     summary_by_section: Optional[Dict[str, str]]  # 섹션별 요약
-    formatted_response: Optional[str]  # 최종 응답
     answer: Optional[str]           # 최종 답변
     answer_expert: Optional[str]    # 전문가형 답변
     components: Optional[List[Dict[str, Any]]]  # 구조화된 응답 컴포넌트

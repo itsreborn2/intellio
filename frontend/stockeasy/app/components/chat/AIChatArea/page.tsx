@@ -104,6 +104,7 @@ function AIChatAreaContent() {
     timestamp: number;
     stockCode: string;
     stockName: string;
+    stockInfo?: any;  // stockInfo 필드 추가
   } | null>(null);
 
   const [finalResponse, setFinalResponse] = useState<any>(null);
@@ -205,13 +206,15 @@ function AIChatAreaContent() {
       },
       onPreliminaryChart: (data) => {
         console.log('[AI채팅영역] 임시 차트 수신:', data);
-        // 임시 차트 데이터 설정
+        console.log('[AI채팅영역] data.stockInfo:', data.stockInfo);
+        // 임시 차트 데이터 설정 (stockInfo 포함)
         setPreliminaryChart({
           components: data.components,
           message: data.message,
           timestamp: data.timestamp,
           stockCode: data.stock_code,
-          stockName: data.stock_name
+          stockName: data.stock_name,
+          stockInfo: data.stockInfo  // stockInfo 추가
         });
         // 현재 상태 업데이트
         setCurrentStatus("📊 차트가 준비되었습니다. 추가 분석을 진행하고 있습니다...");

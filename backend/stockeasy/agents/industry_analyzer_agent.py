@@ -143,11 +143,14 @@ class IndustryAnalyzerAgent(BaseAgent):
                 threshold = self._calculate_dynamic_threshold(classification)
 
                 # 제거하고 싶은 특정 문자열 목록
-                exclude_keywords = ["실적", "주가", "전망", "투자", "기업", "회사", "산업", "설명"]
+                exclude_keywords = ["실적", "주가", "전망", "투자", "기업", "회사", "산업", "설명", "분석", "재무"]
                 
                 # keywords에서 제외할 키워드 필터링
-                filtered_keywords = [kw for kw in keywords if kw not in exclude_keywords]
-                keywords_list = keywords
+                filtered_keywords = [
+                    kw for kw in keywords
+                    if not any(exclude_kw in kw for exclude_kw in exclude_keywords)
+                ]
+                keywords_list = filtered_keywords #keywords
                 sector_list = []  # 기본값으로 빈 리스트 초기화
                 if sector:
                     sector_splits = sector.split("/")
@@ -219,18 +222,9 @@ class IndustryAnalyzerAgent(BaseAgent):
                         query, 
                         stock_code, 
                         stock_name,
-                        state
+                        state,
+                        sector_list, keywords_list
                     )
-                # # 산업 데이터 분석
-                # analysis_results = await self._analyze_industry_data(
-                #     searched_industry_data, 
-                #     query,
-                #     sector,
-                #     stock_code,
-                #     stock_name,
-                #     classification,
-                #     detail_level
-                # )
                 
                 # 실행 시간 계산
                 end_time = datetime.now()
@@ -369,7 +363,10 @@ class IndustryAnalyzerAgent(BaseAgent):
     async def _generate_report_analysis(self, reports: List[IndustryReportData], query: str, 
                                        stock_code: Optional[str] = None, 
                                        stock_name: Optional[str] = None,
-                                       state: Dict[str, Any] = {}) -> List[IndustryReportData]:
+                                       state: Dict[str, Any] = {},
+                                       sector_list: List[str] = [],
+                                       keywords_list: List[str] = []
+                                       ) -> List[IndustryReportData]:
         """
         파인콘 DB에서 검색된 산업 리포트를 분석합니다.
         
@@ -394,12 +391,16 @@ class IndustryAnalyzerAgent(BaseAgent):
                 classification = state["question_analysis"]["classification"]
             
             # 섹터 정보 가져오기
-            sector = ""
-            if state and "question_analysis" in state and "entities" in state["question_analysis"]:
-                sector = state["question_analysis"]["entities"].get("sector", "")
-            # 없으면 첫 번째 리포트에서 가져오기
-            if not sector and reports and "sector_name" in reports[0]:
-                sector = reports[0]["sector_name"]
+            # 실제 정보는 sector list와 keyword list에서 가져왔으니 그 정보를 넣는다.
+            
+            sectors = ",".join(sector_list)
+            keywords = ",".join(keywords_list)
+            sector_info = f"섹터: {sectors}, 키워드: {keywords}"
+            # if state and "question_analysis" in state and "entities" in state["question_analysis"]:
+            #     sector = state["question_analysis"]["entities"].get("sector", "")
+            # # 없으면 첫 번째 리포트에서 가져오기
+            # if not sector and reports and "sector_name" in reports[0]:
+            #     sector = reports[0]["sector_name"]
             
             # 산업 리포트 데이터 포맷팅
             from stockeasy.prompts.industry_prompts import format_industry_data
@@ -439,7 +440,7 @@ class IndustryAnalyzerAgent(BaseAgent):
                 query=query,
                 stock_code=stock_code or "",
                 stock_name=stock_name or "",
-                sector=sector,
+                sector=sector_info,
                 classification=classification,
                 industry_data=formatted_industry_data
             )

@@ -308,6 +308,7 @@ class TelegramRetrieverAgent(BaseAgent):
             # title과 section_id 매핑 생성
             title_to_section_id = {}
             section_id_to_title = {}
+            excluded_sections = []  # 제외된 섹션 추적
             
             if final_report_toc and isinstance(final_report_toc, dict) and "sections" in final_report_toc:
                 sections = final_report_toc.get("sections", [])
@@ -317,11 +318,18 @@ class TelegramRetrieverAgent(BaseAgent):
                         if isinstance(section, dict):
                             title = section.get("title")
                             section_id = section.get("section_id")
+                            
+                            # '기술적 분석'이 포함된 섹션 제외
+                            if title and "기술적 분석" in title:
+                                excluded_sections.append(title)
+                                logger.info(f"기술적 분석 섹션 제외: '{title}' (section_id: {section_id})")
+                                continue
+                            
                             if title and section_id:
                                 title_to_section_id[title] = section_id
                                 section_id_to_title[section_id] = title
                             
-                            # 하위 섹션 매핑
+                            # 하위 섹션 매핑 (최상위 섹션이 기술적 분석이 아닌 경우에만)
                             subsections = section.get("subsections", [])
                             if isinstance(subsections, list):
                                 for subsection in subsections:
@@ -333,6 +341,8 @@ class TelegramRetrieverAgent(BaseAgent):
                                             section_id_to_title[sub_id] = sub_title
                 
                 logger.info(f"TOC title -> section_id 매핑 생성 완료: {len(title_to_section_id)}개 항목")
+                if excluded_sections:
+                    logger.info(f"기술적 분석으로 제외된 섹션: {excluded_sections}")
                 if title_to_section_id:
                     logger.info(f"매핑 예시: {list(title_to_section_id.items())[:2]}")
                 
@@ -350,8 +360,8 @@ class TelegramRetrieverAgent(BaseAgent):
 
             # 매핑이 없는 경우에 대한 폴백 처리
             if not title_to_section_id and found_messages:
-                logger.warning("TOC 매핑이 없어 기본 목차 구조 생성")
-                # 간단한 기본 목차 생성
+                logger.warning("TOC 매핑이 없어 기본 목차 구조 생성 (기술적 분석 제외)")
+                # 간단한 기본 목차 생성 (기술적 분석 제외)
                 title_to_section_id = {
                     "종목 관련 주요 소식": "s1",
                     "실적 및 전망": "s2",
@@ -488,7 +498,7 @@ class TelegramRetrieverAgent(BaseAgent):
         
         fallback_toc_results: Dict[str, List[RetrievedTelegramMessage]] = {}
         
-        # 섹션 ID가 없으면 기본 섹션 생성
+        # 섹션 ID가 없으면 기본 섹션 생성 (기술적 분석 제외)
         if not section_id_to_title:
             section_id_to_title = {
                 "s1": "종목 관련 주요 소식",
@@ -555,7 +565,29 @@ class TelegramRetrieverAgent(BaseAgent):
         """
         제공된 TELEGRAM_SUMMARY_PROMPT_2를 사용하여 최종 프롬프트를 구성합니다.
         """
-        toc_string = json.dumps(final_report_toc, indent=2, ensure_ascii=False) if final_report_toc else "제공된 목차 없음"
+        # final_report_toc을 복사하고 '기술적 분석' 섹션 제거
+        filtered_toc = None
+        if final_report_toc:
+            import copy
+            filtered_toc = copy.deepcopy(final_report_toc)
+            
+            # sections 배열에서 '기술적 분석'이 포함된 섹션 제거
+            if isinstance(filtered_toc, dict) and "sections" in filtered_toc:
+                sections = filtered_toc.get("sections", [])
+                if isinstance(sections, list):
+                    # '기술적 분석'이 포함된 섹션들을 필터링
+                    filtered_sections = []
+                    for section in sections:
+                        if isinstance(section, dict):
+                            title = section.get("title", "")
+                            if "기술적 분석" not in title:
+                                filtered_sections.append(section)
+                            else:
+                                logger.info(f"MakeSummaryPrompt2에서 기술적 분석 섹션 제외: '{title}'")
+                    
+                    filtered_toc["sections"] = filtered_sections
+        
+        toc_string = json.dumps(filtered_toc, indent=2, ensure_ascii=False) if filtered_toc else "제공된 목차 없음"
         
         # TELEGRAM_SUMMARY_PROMPT_2는 사용자가 제공한 내용을 그대로 사용합니다.
         # 이 프롬프트는 LLM이 JSON을 반환하도록 하는 상세 지침을 포함해야 합니다.

@@ -891,20 +891,21 @@ class TimescaleService:
                                         # ✅ 거래량 변화율 계산 및 추적
                                         if prev_volume is not None:
                                             volume_change = row.volume - prev_volume
+                                            volume_change_percent = round((volume_change / prev_volume) * 100, 4) if prev_volume > 0 else 0
                                             
-                                            if prev_volume > 0:
-                                                volume_change_percent = round((volume_change / prev_volume) * 100, 4)
-                                                
-                                                # 🔍 거래량 변화율 0인 케이스 추적
-                                                if volume_change_percent == 0:
-                                                    if volume_change == 0:
-                                                        self.logger.info(f"[거래량추적] {symbol} {row.time}: 거래량 동일 - 현재:{row.volume}, 이전:{prev_volume}")
-                                                    else:
-                                                        self.logger.info(f"[거래량추적] {symbol} {row.time}: 변화율 반올림으로 0 - 변화량:{volume_change}, 이전:{prev_volume}, 변화율:{(volume_change / prev_volume) * 100:.6f}%")
-                                            else:
-                                                volume_change_percent = 0
-                                                #self.logger.info(f"[거래량추적] {symbol} {row.time}: 이전 거래량 0 - 현재:{row.volume}, 이전:{prev_volume}")
+                                            # NUMERIC(10,4) 오버플로우 방지
+                                            if abs(volume_change_percent) > 999999.9999:
+                                                self.logger.warning(f"종목 {symbol} 거래량 변화율이 너무 큼 ({volume_change_percent}), 999999.9999로 제한")
+                                                volume_change_percent = 999999.9999 if volume_change_percent > 0 else -999999.9999
+                                            
+                                            # 🔍 거래량 변화율 0인 케이스 추적
+                                            if volume_change_percent == 0:
+                                                if volume_change == 0:
+                                                    self.logger.info(f"[거래량추적] {symbol} {row.time}: 거래량 동일 - 현재:{row.volume}, 이전:{prev_volume}")
+                                                else:
+                                                    self.logger.info(f"[거래량추적] {symbol} {row.time}: 변화율 반올림으로 0 - 변화량:{volume_change}, 이전:{prev_volume}, 변화율:{(volume_change / prev_volume) * 100:.6f}%")
                                         else:
+                                            volume_change_percent = 0
                                             self.logger.info(f"[거래량추적] {symbol} {row.time}: 이전 거래량 None - 현재:{row.volume}")
                                         
                                         # 🔍 NULL 값이 업데이트되는 케이스 추적
@@ -1164,6 +1165,11 @@ class TimescaleService:
                                         if prev_volume is not None:
                                             volume_change = row.volume - prev_volume
                                             volume_change_percent = round((volume_change / prev_volume) * 100, 4) if prev_volume > 0 else 0
+                                            
+                                            # NUMERIC(10,4) 오버플로우 방지
+                                            if abs(volume_change_percent) > 999999.9999:
+                                                self.logger.warning(f"종목 {symbol} 거래량 변화율이 너무 큼 ({volume_change_percent}), 999999.9999로 제한")
+                                                volume_change_percent = 999999.9999 if volume_change_percent > 0 else -999999.9999
                                         
                                         # 개별 업데이트 (강제 업데이트 모드)
                                         update_query = text("""

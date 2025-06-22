@@ -116,7 +116,7 @@ export interface IMixedChartComponent extends IMessageComponentBase {
 export interface IPriceChartData {
     symbol: string;
     name: string;
-    candle_data: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number; [key: string]: any }>;
+    candle_data: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number; price_change_percent: number; [key: string]: any }>;
     volume_data?: Array<{ time: string; value: number; color?: string; [key: string]: any }>;
     moving_averages?: Array<{ time: string; value: number; label: string; color?: string; [key: string]: any }>;
     support_lines?: Array<{ price: number; label?: string; color?: string; [key: string]: any }>;
@@ -145,7 +145,7 @@ export interface ITechnicalIndicatorChartData {
     symbol: string;
     name: string;
     dates: string[];
-    candle_data?: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number; [key: string]: any }>;
+    candle_data?: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number; price_change_percent: number;[key: string]: any }>;
     indicators: ITechnicalIndicatorData[];
     y_axis_configs?: Record<string, Record<string, any>>;
     period?: string;

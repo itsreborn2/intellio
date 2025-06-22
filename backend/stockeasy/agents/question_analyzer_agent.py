@@ -312,7 +312,6 @@ class QuestionAnalyzerAgent(BaseAgent):
                     # 상태 업데이트
                     state["agent_results"]["question_analysis"] = context_analysis_result
                     state["summary"] = context_analysis.closing_response
-                    state["formatted_response"] = state["summary"]
                     state["answer"] = state["summary"]
 
                     # 메트릭 기록 및 처리 상태 업데이트
@@ -341,7 +340,6 @@ class QuestionAnalyzerAgent(BaseAgent):
                     # 상태 업데이트
                     state["agent_results"]["question_analysis"] = context_analysis_result
                     state["summary"] = "현재 종목과 관련이 없는 질문입니다.\n다른 종목에 관한 질문은 새 채팅에서 해주세요"
-                    state["formatted_response"] = state["summary"]
                     state["answer"] = state["summary"]
                     # 메트릭 기록 및 처리 상태 업데이트
                     end_time = datetime.now()

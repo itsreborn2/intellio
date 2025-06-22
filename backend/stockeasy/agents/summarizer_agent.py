@@ -11,9 +11,11 @@ from loguru import logger
 import asyncio
 import json
 import hashlib
+import re
 
 from langchain_core.output_parsers import StrOutputParser
 
+from common.utils.util import format_date_for_chart
 from stockeasy.models.agent_io import CompanyReportData, RetrievedTelegramMessage
 from stockeasy.services.financial.stock_info_service import StockInfoService
 from stockeasy.prompts.summarizer_section_prompt import create_all_section_content, format_other_agent_data, PROMPT_GENERATE_SECTION_CONTENT, PROMPT_GENERATE_EXECUTIVE_SUMMARY, PROMPT_GENERATE_TECHNICAL_ANALYSIS_SECTION
@@ -34,9 +36,35 @@ class SummarizerAgent(BaseAgent):
         """에이전트 초기화"""
         super().__init__(name, db)
         self.agent_llm = get_agent_llm("summarizer_agent")
-        logger.info(f"SummarizerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
+        self.agent_llm_high = get_agent_llm("summarizer_agent_high")
+        logger.info(f"SummarizerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}, model2: {self.agent_llm_high.get_model_name()}")
         # self.parser = StrOutputParser() # 직접 사용 안 함
         # self.prompt_template = DEEP_RESEARCH_SYSTEM_PROMPT # 직접 사용 안 함
+
+
+    def _remove_internal_db_references(self, text: str) -> str:
+        """
+        텍스트에서 내부DB 출처 인용을 제거합니다.
+        Args:
+            text: 처리할 텍스트
+            
+        Returns:
+            내부DB 출처 인용이 제거된 텍스트
+        """
+        if not text:
+            return text
+        
+        # 기본 내부DB 패턴 제거
+        text = text.replace("<내부DB>", "").replace("(내부DB)", "")
+        
+        # 날짜가 포함된 내부DB 패턴 제거: (내부DB, yyyy-mm-dd) 및 (내부DB,yyyy-mm-dd)
+        text = re.sub(r'\(내부DB,\s*\d{4}-\d{2}-\d{2}\)', '', text)
+
+        # 비공개자료 패턴 제거
+        text = text.replace("<비공개자료>", "").replace("(비공개자료)", "")
+        text = re.sub(r'\(비공개자료,\s*\d{4}-\d{2}-\d{2}\)', '', text)
+        
+        return text
 
     
 
@@ -122,7 +150,8 @@ class SummarizerAgent(BaseAgent):
             technical_analysis_data = state.get("agent_results", {}).get("technical_analyzer", {}).get("data", {})
             
             # 테스트 모드 설정 (기술적 분석 섹션만 생성)
-            technical_analysis_only = True
+            
+            technical_analysis_only_test = settings.TEST_TECH_AGENT
             
             summary, summary_by_section = await self.generate_sectioned_summary_v2(
                 query=query, 
@@ -135,7 +164,7 @@ class SummarizerAgent(BaseAgent):
                 technical_analysis_data=technical_analysis_data,
                 stock_name=stock_name,
                 stock_code=stock_code,
-                technical_analysis_only=technical_analysis_only
+                technical_analysis_only=technical_analysis_only_test
             )
             
             state["summary"] = summary
@@ -272,17 +301,11 @@ class SummarizerAgent(BaseAgent):
                 # 기술적 분석 섹션은 기술적 분석 데이터만 사용 (토큰 절약)
                 logger.info(f"[SummarizerAgent] 기술적 분석 섹션 '{current_section_title}' - 기술적 분석 데이터만 사용 및 차트 플레이스홀더 활성화")
                 
-                # 섹션 제목에 따라 다른 차트 플레이스홀더 사용
-                if "추세추종" in current_section_title or "추세" in current_section_title:
-                    formatted_technical_data = self._format_technical_analysis_data_for_trend(technical_analysis_data)
-                    logger.info(f"[SummarizerAgent] 추세추종 지표 섹션 '{current_section_title}' - 추세추종 차트 플레이스홀더 사용")
-                elif "모멘텀" in current_section_title:
-                    formatted_technical_data = self._format_technical_analysis_data_for_momentum(technical_analysis_data)
-                    logger.info(f"[SummarizerAgent] 모멘텀 지표 섹션 '{current_section_title}' - 모멘텀 차트 플레이스홀더 사용")
-                else:
-                    # 기존 기술적 분석 데이터 포맷 사용 (호환성 유지)
-                    formatted_technical_data = self._format_technical_analysis_data(technical_analysis_data)
-                    logger.info(f"[SummarizerAgent] 일반 기술적 분석 섹션 '{current_section_title}' - 기존 차트 플레이스홀더 사용")
+                formatted_technical_data = self._format_technical_analysis_data(technical_analysis_data)
+                price_chart_data_str = self._format_price_chart(technical_analysis_data)
+
+                logger.info(f"[SummarizerAgent] 일반 기술적 분석 섹션 '{current_section_title}' - 기존 차트 플레이스홀더 사용")
+
                 
                 combined_context_for_current_section = f"{formatted_technical_data}"
             else:
@@ -305,7 +328,8 @@ class SummarizerAgent(BaseAgent):
                     section_title=current_section_title,
                     section_description=current_section_description,
                     subsections_info=subsections_text_current,
-                    all_analyses=combined_context_for_current_section
+                    all_analyses=combined_context_for_current_section,
+                    price_chart=price_chart_data_str
                 )
             else:
                 prompt_str_current = PROMPT_GENERATE_SECTION_CONTENT.format(
@@ -316,7 +340,10 @@ class SummarizerAgent(BaseAgent):
                     all_analyses=combined_context_for_current_section
                 )
             messages_current = [HumanMessage(content=prompt_str_current)]
-            task_current = asyncio.create_task(self.agent_llm.ainvoke_with_fallback(
+            
+            # 기술적 분석 섹션은 agent_llm25 사용, 나머지는 기존 agent_llm 사용
+            llm_to_use = self.agent_llm_high if is_technical_analysis_section else self.agent_llm
+            task_current = asyncio.create_task(llm_to_use.ainvoke_with_fallback(
                 messages_current, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db
             ))
             other_section_tasks.append(task_current)
@@ -414,6 +441,9 @@ class SummarizerAgent(BaseAgent):
         # "핵심 요약" 섹션 추가 (목차상 1번)
         numbered_summary_title_for_report = f"{first_section_data_for_summary.get('original_toc_index', 0) + 1}. {summary_section_title}"
         
+        # 핵심 요약에서도 내부DB 관련 텍스트 제거
+        summary_section_content_str = self._remove_internal_db_references(summary_section_content_str)
+        
         section_contents_map[summary_section_title] = summary_section_content_str
         #final_report_parts.append(f"## {numbered_summary_title_for_report}\n{summary_section_content_str}")
         final_report_parts.append(summary_section_content_str)
@@ -424,7 +454,8 @@ class SummarizerAgent(BaseAgent):
             text_content = item["text"]
             section_title_from_details = details["title"]
             
-            numbered_section_title_for_report = f"{details['original_toc_index'] + 1}. {section_title_from_details}"
+            # 내부DB 관련 텍스트 제거 (기존 패턴 + 날짜 포함 패턴)
+            text_content = self._remove_internal_db_references(text_content)
             
             section_contents_map[section_title_from_details] = text_content
             #final_report_parts.append(f"## {numbered_section_title_for_report}\n{text_content}")
@@ -472,9 +503,9 @@ class SummarizerAgent(BaseAgent):
             return "해당 섹션에 대한 내부DB 참고 자료가 없습니다."
         
         formatted_texts = []
-        text = "<내부DB>"
+        text = "<내부DB>\n"
         for i, message in enumerate(messages):
-            text += f"\n<자료 {i+1}>\n"
+            text += f"------\n"
             
             # ISO 형식의 날짜를 년-월-일 형식으로 변환
             created_at = message.get('message_created_at', '')
@@ -491,7 +522,7 @@ class SummarizerAgent(BaseAgent):
             text += f"날짜: {formatted_date}\n"
             #text += f"채널: {message.get('channel_name', '채널 정보 없음')}\n"
             text += f"내용: {message.get('content', '내용 없음')}\n"
-            text += f"</자료 {i+1}>\n"
+            text += f"------\n"
         text += "</내부DB>"
         return text
         
@@ -553,262 +584,7 @@ class SummarizerAgent(BaseAgent):
             
         return formatted_data
         
-    def _format_technical_analysis_data_for_trend(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
-        """
-        추세추종 지표 섹션용 기술적 분석 데이터 포맷팅 (ADX, ADR, SuperTrend 포함)
-        """
-        if not technical_analysis_data:
-            return "추세추종 지표 분석을 위한 기술적 분석 데이터가 없습니다."
-
-        formatted_text = ""
-        current_price = technical_analysis_data.get("current_price", 0)
         
-        if current_price:
-            formatted_text += f"현재가: {current_price:,}원\n"
-        
-        # 추세추종 지표들을 위한 차트 플레이스홀더 추가
-        formatted_text += "추세추종 지표 차트 분석:\n"
-        formatted_text += "[CHART_PLACEHOLDER:TREND_FOLLOWING_CHART]\n\n"
-        
-        # 추세추종 지표만 포함 (ADX, ADR, SuperTrend)
-        indicators = technical_analysis_data.get("technical_indicators", {})
-        if indicators:
-            formatted_text += "추세추종 지표 분석:\n"
-            
-            # ADX (추세 강도 지표)
-            adx = indicators.get("adx")
-            adx_plus_di = indicators.get("adx_plus_di")
-            adx_minus_di = indicators.get("adx_minus_di")
-            if adx is not None:
-                if adx >= 25:
-                    trend_strength = "강한 추세 (추세 매매 적합)"
-                elif adx <= 20:
-                    trend_strength = "약한 추세 (횡보 구간)"
-                else:
-                    trend_strength = "보통 추세"
-                
-                formatted_text += f"  ADX (Average Directional Index): {adx:.2f} - {trend_strength}\n"
-                
-                if adx_plus_di and adx_minus_di:
-                    if adx_plus_di > adx_minus_di:
-                        direction_signal = "상승 추세 우세"
-                    elif adx_minus_di > adx_plus_di:
-                        direction_signal = "하락 추세 우세"
-                    else:
-                        direction_signal = "방향성 불분명"
-                    
-                    formatted_text += f"    - +DI: {adx_plus_di:.2f}, -DI: {adx_minus_di:.2f} ({direction_signal})\n"
-                    formatted_text += f"    - ADX 25 이상시 강한 추세, 20 이하시 횡보 구간으로 판단됩니다.\n"
-            
-            # ADR (Advance Decline Ratio - 상승일/하락일 비율)
-            adr = indicators.get("adr")
-            adr_ma = indicators.get("adr_ma")
-            if adr is not None:
-                if adr > 1.2:
-                    adr_status = "상승 우세 (강세장 신호)"
-                elif adr < 0.8:
-                    adr_status = "하락 우세 (약세장 신호)"
-                else:
-                    adr_status = "균형 상태"
-                
-                formatted_text += f"  ADR (상승일/하락일 비율): {adr:.2f} - {adr_status}\n"
-                
-                if adr_ma:
-                    if adr > adr_ma:
-                        adr_trend = "상승 추세"
-                    elif adr < adr_ma:
-                        adr_trend = "하락 추세"
-                    else:
-                        adr_trend = "횡보 추세"
-                    formatted_text += f"    - ADR 이동평균: {adr_ma:.2f} (현재 {adr_trend})\n"
-                
-                formatted_text += f"    - ADR 1.2 이상시 상승 우세, 0.8 이하시 하락 우세로 판단됩니다.\n"
-            
-            # 슈퍼트렌드 (SuperTrend)
-            supertrend = indicators.get("supertrend")
-            supertrend_direction = indicators.get("supertrend_direction")
-            if supertrend is not None:
-                if supertrend_direction == 1:
-                    trend_signal = "상승추세 (매수 신호)"
-                    signal_description = "주가가 슈퍼트렌드 라인 위에 위치하여 상승 추세를 나타냅니다."
-                elif supertrend_direction == -1:
-                    trend_signal = "하락추세 (매도 신호)"
-                    signal_description = "주가가 슈퍼트렌드 라인 아래에 위치하여 하락 추세를 나타냅니다."
-                else:
-                    trend_signal = "중립 (추세 전환 구간)"
-                    signal_description = "추세 전환 구간으로 매매 신호가 불분명합니다."
-                
-                price_vs_supertrend = current_price - supertrend
-                price_difference_pct = (price_vs_supertrend / supertrend) * 100
-                
-                formatted_text += f"  슈퍼트렌드: {supertrend:,.0f}원 - {trend_signal}\n"
-                formatted_text += f"    - 현재가와 차이: {price_vs_supertrend:+,.0f}원 ({price_difference_pct:+.1f}%)\n"
-                formatted_text += f"    - {signal_description}\n"
-            
-            # RS (상대강도) 분석 - technical_analysis_data에서 rs_data 추출
-            rs_data = technical_analysis_data.get("rs_data")
-            if rs_data:
-                formatted_text += f"  RS (상대강도) 분석:\n"
-                
-                # 기본 RS 정보
-                rs_value = rs_data.get("rs")
-                rs_1m = rs_data.get("rs_1m")
-                rs_3m = rs_data.get("rs_3m")
-                rs_6m = rs_data.get("rs_6m")
-                sector = rs_data.get("sector")
-                
-                if rs_value is not None:
-                    if rs_value >= 80:
-                        rs_status = "매우 강한 상대강도"
-                    elif rs_value >= 60:
-                        rs_status = "강한 상대강도"
-                    elif rs_value >= 40:
-                        rs_status = "보통 상대강도"
-                    elif rs_value >= 20:
-                        rs_status = "약한 상대강도"
-                    else:
-                        rs_status = "매우 약한 상대강도"
-                    
-                    formatted_text += f"    - 현재 RS: {rs_value:.1f} - {rs_status}\n"
-                
-                # 시간별 RS 추이
-                if rs_1m is not None or rs_3m is not None or rs_6m is not None:
-                    formatted_text += f"    - RS 추이: "
-                    if rs_1m is not None:
-                        formatted_text += f"1개월 {rs_1m:.1f}"
-                    if rs_3m is not None:
-                        formatted_text += f", 3개월 {rs_3m:.1f}"
-                    if rs_6m is not None:
-                        formatted_text += f", 6개월 {rs_6m:.1f}"
-                    formatted_text += "\n"
-                
-                # 시장 비교 분석
-                market_comparison = rs_data.get("market_comparison")
-                if market_comparison:
-                    market_code = market_comparison.get("market_code")
-                    market_rs = market_comparison.get("market_rs")
-                    if market_code and market_rs is not None:
-                        rs_diff = rs_value - market_rs if rs_value is not None else 0
-                        if rs_diff > 10:
-                            market_status = f"{market_code} 대비 강세"
-                        elif rs_diff > 0:
-                            market_status = f"{market_code} 대비 우위"
-                        elif rs_diff > -10:
-                            market_status = f"{market_code}와 비슷한 수준"
-                        else:
-                            market_status = f"{market_code} 대비 약세"
-                        
-                        formatted_text += f"    - {market_code} 비교: RS {market_rs:.1f} vs 종목 RS {rs_value:.1f} ({market_status})\n"
-                
-                # 상대적 강도 분석
-                relative_analysis = rs_data.get("relative_strength_analysis")
-                if relative_analysis:
-                    vs_market = relative_analysis.get("vs_market")
-                    if vs_market:
-                        outperforming = vs_market.get("outperforming", False)
-                        strength_level = vs_market.get("strength_level", "")
-                        if outperforming:
-                            formatted_text += f"    - 시장 아웃퍼폼: {strength_level}\n"
-                        else:
-                            formatted_text += f"    - 시장 언더퍼폼: {strength_level}\n"
-                    
-                    # 시장별 특화 분석
-                    market_specific = relative_analysis.get("market_specific_analysis")
-                    if market_specific:
-                        market_position = market_specific.get("market_position")
-                        if market_position:
-                            formatted_text += f"    - 시장 내 위치: {market_position}\n"
-                
-                if sector:
-                    formatted_text += f"    - 업종: {sector}\n"
-                
-                formatted_text += f"    - RS 70 이상시 강세, 50 이하시 약세로 판단됩니다.\n"
-                formatted_text += f"    - 상대강도가 높은 종목은 추세추종 전략에 유리합니다.\n"
-        
-        return formatted_text
-
-    def _format_technical_analysis_data_for_momentum(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
-        """
-        모멘텀 지표 섹션용 기술적 분석 데이터 포맷팅 (RSI, MACD, 스토캐스틱 포함)
-        """
-        if not technical_analysis_data:
-            return "모멘텀 지표 분석을 위한 기술적 분석 데이터가 없습니다."
-
-        formatted_text = ""
-        current_price = technical_analysis_data.get("current_price", 0)
-        
-        if current_price:
-            formatted_text += f"현재가: {current_price:,}원\n"
-        
-        # 모멘텀 지표들을 위한 차트 플레이스홀더 추가
-        formatted_text += "모멘텀 지표 차트 분석:\n"
-        formatted_text += "[CHART_PLACEHOLDER:MOMENTUM_CHART]\n\n"
-        
-        # 모멘텀 지표만 포함 (RSI, MACD, 스토캐스틱)
-        indicators = technical_analysis_data.get("technical_indicators", {})
-        if indicators:
-            formatted_text += "모멘텀 지표 분석:\n"
-            
-            # RSI (기본 지표)
-            rsi = indicators.get("rsi")
-            if rsi is not None:
-                if rsi < 30:
-                    rsi_status = "과매도 상태 (매수 신호)"
-                elif rsi > 70:
-                    rsi_status = "과매수 상태 (매도 신호)"
-                else:
-                    rsi_status = "중립 상태"
-                
-                formatted_text += f"  RSI (14일): {rsi:.2f} - {rsi_status}\n"
-                formatted_text += f"    - RSI가 30 이하면 과매도, 70 이상이면 과매수로 판단됩니다.\n"
-            
-            # MACD (모멘텀 지표)
-            macd = indicators.get("macd")
-            macd_signal = indicators.get("macd_signal")
-            macd_histogram = indicators.get("macd_histogram")
-            if macd is not None and macd_signal is not None:
-                # MACD 신호 판단
-                if macd > macd_signal:
-                    if macd_histogram and macd_histogram > 0:
-                        macd_status = "상승 모멘텀 (매수 신호)"
-                    else:
-                        macd_status = "상승 전환 시도"
-                elif macd < macd_signal:
-                    if macd_histogram and macd_histogram < 0:
-                        macd_status = "하락 모멘텀 (매도 신호)"
-                    else:
-                        macd_status = "하락 전환 시도"
-                else:
-                    macd_status = "중립 상태"
-                
-                formatted_text += f"  MACD: {macd:.3f} - {macd_status}\n"
-                formatted_text += f"    - MACD 라인: {macd:.3f}, 시그널 라인: {macd_signal:.3f}\n"
-                if macd_histogram is not None:
-                    formatted_text += f"    - MACD 히스토그램: {macd_histogram:.3f}\n"
-                formatted_text += f"    - MACD가 시그널 라인을 상향 돌파하면 매수신호, 하향 돌파하면 매도신호로 판단됩니다.\n"
-            
-            # 스토캐스틱 (모멘텀 지표)
-            stochastic_k = indicators.get("stochastic_k")
-            stochastic_d = indicators.get("stochastic_d")
-            if stochastic_k is not None and stochastic_d is not None:
-                # 스토캐스틱 신호 판단
-                if stochastic_k < 20 and stochastic_d < 20:
-                    stoch_status = "과매도 상태 (매수 신호)"
-                elif stochastic_k > 80 and stochastic_d > 80:
-                    stoch_status = "과매수 상태 (매도 신호)"
-                elif stochastic_k > stochastic_d:
-                    stoch_status = "상승 모멘텀"
-                elif stochastic_k < stochastic_d:
-                    stoch_status = "하락 모멘텀"
-                else:
-                    stoch_status = "중립 상태"
-                
-                formatted_text += f"  스토캐스틱: %K {stochastic_k:.1f}, %D {stochastic_d:.1f} - {stoch_status}\n"
-                formatted_text += f"    - %K가 20 이하면 과매도, 80 이상이면 과매수로 판단됩니다.\n"
-                formatted_text += f"    - %K가 %D를 상향 돌파하면 매수신호, 하향 돌파하면 매도신호로 판단됩니다.\n"
-        
-        return formatted_text
-    
     def _format_technical_analysis_data(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
         """
         기술적 분석 데이터를 LLM 프롬프트에 적합한 문자열로 변환합니다.
@@ -845,8 +621,6 @@ class SummarizerAgent(BaseAgent):
             
             # 기술적 지표 요약 테이블
             formatted_text += "\n기술적 지표 요약:\n"
-            formatted_text += "|지표|현재값|신호|설명|\n"
-            formatted_text += "|---|---|---|---|\n"
             
             # 테이블용 데이터 수집
             table_data = []
@@ -931,7 +705,11 @@ class SummarizerAgent(BaseAgent):
             adx_plus_di = indicators.get("adx_plus_di")
             adx_minus_di = indicators.get("adx_minus_di")
             if adx is not None:
-                if adx >= 25:
+                if adx >= 85:
+                    trend_strength = "극도의 강한 추세 (신규 진입 절대 금지, 현 구간부터의 신규 진입은 대부분 손실)"
+                elif adx >= 70:
+                    trend_strength = "매우 강한 추세 (반전 위험, 주의 필요)"
+                elif adx >= 25:
                     trend_strength = "강한 추세 (추세 매매 적합)"
                 elif adx <= 20:
                     trend_strength = "약한 추세 (횡보 구간)"
@@ -939,7 +717,9 @@ class SummarizerAgent(BaseAgent):
                     trend_strength = "보통 추세"
                 
                 # ADX 신호 결정
-                if adx >= 25:
+                if adx >= 70:
+                    adx_signal = "극도추세 (주의)"
+                elif adx >= 25:
                     if adx_plus_di and adx_minus_di:
                         if adx_plus_di > adx_minus_di:
                             adx_signal = "강한 상승추세"
@@ -964,40 +744,15 @@ class SummarizerAgent(BaseAgent):
                         direction_signal = "방향성 불분명"
                     
                     formatted_text += f"    - +DI: {adx_plus_di:.2f}, -DI: {adx_minus_di:.2f} ({direction_signal})\n"
+                
+                if adx >= 85:
+                    formatted_text += f"    - ADX 85 이상시 극도의 강한 추세로 신규 진입 절대 금지, 현구간부터의 신규 진입은 대부분 손실일 가능성이 매우 높습니다.\n"
+                elif adx >= 70:
+                    formatted_text += f"    - ADX 70 이상시 매우의 강한 추세로 반전 위험이 높아 주의가 필요합니다. 기존 보유자의 영역입니다.\n"
+                else:
                     formatted_text += f"    - ADX 25 이상시 강한 추세, 20 이하시 횡보 구간으로 판단됩니다.\n"
             
-            # ADR (Advance Decline Ratio - 상승일/하락일 비율)
-            adr = indicators.get("adr")
-            adr_ma = indicators.get("adr_ma")
-            if adr is not None:
-                if adr > 1.2:
-                    adr_status = "상승 우세 (강세장 신호)"
-                elif adr < 0.8:
-                    adr_status = "하락 우세 (약세장 신호)"
-                else:
-                    adr_status = "균형 상태"
-                
-                # ADR 신호 결정
-                if adr > 1.2:
-                    adr_signal = "상승 우세"
-                elif adr < 0.8:
-                    adr_signal = "하락 우세"
-                else:
-                    adr_signal = "균형"
-                
-                table_data.append(f"|ADR|{adr:.2f}|{adr_signal}|{adr_status}|")
-                formatted_text += f"  ADR (상승일/하락일 비율): {adr:.2f} - {adr_status}\n"
-                
-                if adr_ma:
-                    if adr > adr_ma:
-                        adr_trend = "상승 추세"
-                    elif adr < adr_ma:
-                        adr_trend = "하락 추세"
-                    else:
-                        adr_trend = "횡보 추세"
-                    formatted_text += f"    - ADR 이동평균: {adr_ma:.2f} (현재 {adr_trend})\n"
-                
-                formatted_text += f"    - ADR 1.2 이상시 상승 우세, 0.8 이하시 하락 우세로 판단됩니다.\n"
+            
             
             # 슈퍼트렌드 (SuperTrend)
             supertrend = indicators.get("supertrend")
@@ -1028,6 +783,113 @@ class SummarizerAgent(BaseAgent):
                 formatted_text += f"  슈퍼트렌드: {supertrend:,.0f}원 - {trend_signal}\n"
                 formatted_text += f"    - 현재가와 차이: {price_vs_supertrend:+,.0f}원 ({price_difference_pct:+.1f}%)\n"
                 formatted_text += f"    - {signal_description}\n"
+            
+            # RS (상대강도) 분석 - technical_analysis_data에서 rs_data 추출
+            rs_data = technical_analysis_data.get("rs_data")
+            if rs_data:
+                rs_value = rs_data.get("rs")
+                rs_1m = rs_data.get("rs_1m")
+                rs_3m = rs_data.get("rs_3m")
+                rs_6m = rs_data.get("rs_6m")
+                sector = rs_data.get("sector")
+                
+                if rs_value is not None:
+                    # market_rs를 기준으로 상대적 강도 판단
+                    market_comparison = rs_data.get("market_comparison")
+                    market_rs = None
+                    if market_comparison:
+                        market_rs = market_comparison.get("market_rs")
+                    
+                    if market_rs is not None:
+                        rs_diff = rs_value - market_rs
+                        if rs_diff >= 18:
+                            rs_status = "매우 강한 상대강도"
+                            rs_signal = "강세"
+                        elif rs_diff >= 10:
+                            rs_status = "강한 상대강도"
+                            rs_signal = "긍정"
+                        elif rs_diff >= -5:
+                            rs_status = "보통 상대강도"
+                            rs_signal = "중립"
+                        elif rs_diff >= -15:
+                            rs_status = "약한 상대강도"
+                            rs_signal = "부정"
+                        else:
+                            rs_status = "매우 약한 상대강도"
+                            rs_signal = "약세"
+                    else:
+                        # market_rs가 없을 경우 기본값 62.5를 사용
+                        default_market_rs = 62.5
+                        rs_diff = rs_value - default_market_rs
+                        if rs_diff >= 15:
+                            rs_status = "매우 강한 상대강도"
+                            rs_signal = "강세"
+                        elif rs_diff >= 5:
+                            rs_status = "강한 상대강도"
+                            rs_signal = "긍정"
+                        elif rs_diff >= -5:
+                            rs_status = "보통 상대강도"
+                            rs_signal = "중립"
+                        elif rs_diff >= -15:
+                            rs_status = "약한 상대강도"
+                            rs_signal = "부정"
+                        else:
+                            rs_status = "매우 약한 상대강도"
+                            rs_signal = "약세"
+                    
+                    table_data.append(f"|RS (상대강도)|{rs_value:.1f}|{rs_signal}|{rs_status}|")
+                    formatted_text += f"  RS (상대강도): {rs_value:.1f} - {rs_status}\n"
+                    
+                    # 시간별 RS 추이
+                    if rs_1m is not None or rs_3m is not None or rs_6m is not None:
+                        formatted_text += f"    - 1개월 단위 RS : {rs_1m:.1f}, 3개월 단위 RS : {rs_3m:.1f}, 6개월 단위 RS : {rs_6m:.1f}\n"
+                        formatted_text += "\n"
+                    
+                    # 시장 비교 분석
+                    market_comparison = rs_data.get("market_comparison")
+                    if market_comparison:
+                        market_code = market_comparison.get("market_code")
+                        market_rs = market_comparison.get("market_rs")
+                        if market_code and market_rs is not None:
+                            rs_diff = rs_value - market_rs
+                            if rs_diff > 10:
+                                market_status = f"{market_code} 대비 강세"
+                            elif rs_diff > 0:
+                                market_status = f"{market_code} 대비 우위"
+                            elif rs_diff > -10:
+                                market_status = f"{market_code}와 비슷한 수준"
+                            else:
+                                market_status = f"{market_code} 대비 약세"
+                            
+                            formatted_text += f"    - {market_code} 비교: RS {market_rs:.1f} vs 종목 RS {rs_value:.1f} ({market_status})\n"
+                    
+                    # 상대적 강도 분석
+                    relative_analysis = rs_data.get("relative_strength_analysis")
+                    if relative_analysis:
+                        vs_market = relative_analysis.get("vs_market")
+                        if vs_market:
+                            outperforming = vs_market.get("outperforming", False)
+                            strength_level = vs_market.get("strength_level", "")
+                            if outperforming:
+                                formatted_text += f"    - 시장 아웃퍼폼: {strength_level}\n"
+                            else:
+                                formatted_text += f"    - 시장 언더퍼폼: {strength_level}\n"
+                        
+                        # 시장별 특화 분석
+                        market_specific = relative_analysis.get("market_specific_analysis")
+                        if market_specific:
+                            market_position = market_specific.get("market_position")
+                            if market_position:
+                                formatted_text += f"    - 시장 내 위치: {market_position}\n"
+                    
+                    if sector:
+                        formatted_text += f"    - 업종: {sector}\n"
+                    
+                    if market_rs is not None:
+                        formatted_text += f"    - 시장RS({market_rs:.1f}) 대비 +5 이상시 강세, -5 이하시 약세로 판단됩니다.\n"
+                    else:
+                        formatted_text += f"    - 시장RS(평균 62.5) 대비 +5 이상시 강세, -5 이하시 약세로 판단됩니다.\n"
+                    formatted_text += f"    - 상대강도가 시장보다 높은 종목은 추세추종 전략에 유리합니다.\n"
             
             # 테이블 출력
             if table_data:
@@ -1076,7 +938,10 @@ class SummarizerAgent(BaseAgent):
             
             # ADX 신호
             if adx is not None and adx_plus_di and adx_minus_di:
-                if adx >= 25:
+                if adx >= 70:
+                    # ADX가 70 이상이면 과도한 추세 상태로 반전 위험이 있어 중립
+                    signals.append("중립")
+                elif adx >= 25:
                     if adx_plus_di > adx_minus_di:
                         signals.append("매수")
                     else:
@@ -1084,14 +949,14 @@ class SummarizerAgent(BaseAgent):
                 else:
                     signals.append("중립")
             
-            # ADR 신호
-            if adr is not None:
-                if adr > 1.2:
-                    signals.append("매수")
-                elif adr < 0.8:
-                    signals.append("매도")
-                else:
-                    signals.append("중립")
+            # # ADR 신호
+            # if adr is not None:
+            #     if adr > 1.2:
+            #         signals.append("매수")
+            #     elif adr < 0.8:
+            #         signals.append("매도")
+            #     else:
+            #         signals.append("중립")
             
             # SuperTrend 신호
             if supertrend_direction is not None:
@@ -1101,6 +966,36 @@ class SummarizerAgent(BaseAgent):
                     signals.append("매도")
                 else:
                     signals.append("중립")
+            
+            # RS 신호
+            rs_data = technical_analysis_data.get("rs_data")
+            if rs_data:
+                rs_value = rs_data.get("rs")
+                if rs_value is not None:
+                    # market_rs를 기준으로 신호 판단
+                    market_comparison = rs_data.get("market_comparison")
+                    market_rs = None
+                    if market_comparison:
+                        market_rs = market_comparison.get("market_rs")
+                    
+                    if market_rs is not None:
+                        rs_diff = rs_value - market_rs
+                        if rs_diff >= 5:
+                            signals.append("매수")
+                        elif rs_diff >= -5:
+                            signals.append("중립")
+                        else:
+                            signals.append("매도")
+                    else:
+                        # market_rs가 없을 경우 기본값 62.5를 사용
+                        default_market_rs = 62.5
+                        rs_diff = rs_value - default_market_rs
+                        if rs_diff >= 5:
+                            signals.append("매수")
+                        elif rs_diff >= -5:
+                            signals.append("중립")
+                        else:
+                            signals.append("매도")
             
             # 신호 종합
             if signals:
@@ -1149,32 +1044,33 @@ class SummarizerAgent(BaseAgent):
             
             formatted_text += "\n"
         
+        # 매매신호는 사용자에게 매수하라는 오해를 제공할수 있으니, 일단 제거
         # 매매 신호
-        trading_signals = technical_analysis_data.get("trading_signals", {})
-        if trading_signals:
-            formatted_text += "매매 신호:\n"
+        # trading_signals = technical_analysis_data.get("trading_signals", {})
+        # if trading_signals:
+        #     formatted_text += "매매 신호:\n"
             
-            overall_signal = trading_signals.get("overall_signal")
-            confidence = trading_signals.get("confidence", 0)
-            if overall_signal:
-                formatted_text += f"  종합 신호: {overall_signal} (신뢰도: {confidence:.2f})\n"
+        #     overall_signal = trading_signals.get("overall_signal")
+        #     confidence = trading_signals.get("confidence", 0)
+        #     if overall_signal:
+        #         formatted_text += f"  종합 신호: {overall_signal} (신뢰도: {confidence:.2f})\n"
             
-            stop_loss = trading_signals.get("stop_loss")
-            target_price = trading_signals.get("target_price")
-            if stop_loss:
-                formatted_text += f"  손절가: {stop_loss:.0f}원\n"
-            if target_price:
-                formatted_text += f"  목표가: {target_price:.0f}원\n"
+        #     # stop_loss = trading_signals.get("stop_loss")
+        #     # target_price = trading_signals.get("target_price")
+        #     # if stop_loss:
+        #     #     formatted_text += f"  손절가: {stop_loss:.0f}원\n"
+        #     # if target_price:
+        #     #     formatted_text += f"  목표가: {target_price:.0f}원\n"
             
-            signals = trading_signals.get("signals", [])
-            if signals:
-                formatted_text += "  개별 신호:\n"
-                for signal in signals:
-                    indicator = signal.get("indicator", "")
-                    signal_type = signal.get("signal", "")
-                    reason = signal.get("reason", "")
-                    strength = signal.get("strength", 0)
-                    formatted_text += f"    {indicator}: {signal_type} ({reason}, 강도: {strength:.2f})\n"
+        #     signals = trading_signals.get("signals", [])
+        #     if signals:
+        #         formatted_text += "  개별 신호:\n"
+        #         for signal in signals:
+        #             indicator = signal.get("indicator", "")
+        #             signal_type = signal.get("signal", "")
+        #             reason = signal.get("reason", "")
+        #             strength = signal.get("strength", 0)
+        #             formatted_text += f"    {indicator}: {signal_type} ({reason}, 강도: {strength:.2f})\n"
             
             formatted_text += "\n"
         
@@ -1224,9 +1120,10 @@ class SummarizerAgent(BaseAgent):
                 formatted_text += "  최근 한달 상세:\n"
                 for data in recent_1month:
                     date = data.get("date", "")
+                    normalized_date = format_date_for_chart(date)
                     close = data.get("close", 0)
                     volume = data.get("volume", 0)
-                    formatted_text += f"    {date}: 종가 {close:,.0f}원, 거래량 {volume:,}주\n"
+                    formatted_text += f"    {normalized_date}: 종가 {close:,.0f}원, 거래량 {volume:,}주\n"
             
             formatted_text += "\n"
         
@@ -1236,7 +1133,7 @@ class SummarizerAgent(BaseAgent):
             formatted_text += "투자주체별 거래현황:\n"
             
             # 최근 5개 데이터만 표시
-            recent_supply_data = supply_demand_data[-5:] if len(supply_demand_data) > 5 else supply_demand_data
+            recent_supply_data = supply_demand_data[-10:] if len(supply_demand_data) > 10 else supply_demand_data
             formatted_text += f"  데이터 기간: 최근 {len(recent_supply_data)}일\n"
             #formatted_text += f"  데이터 단위: {unit}\n"
             if recent_supply_data:
@@ -1248,6 +1145,7 @@ class SummarizerAgent(BaseAgent):
                 formatted_text += "  일별 수급 현황:\n"
                 for data in recent_supply_data:
                     date = data.get("date", "")
+                    normalized_date = format_date_for_chart(date)
                     individual = data.get("individual_investor", 0) or 0
                     foreign = data.get("foreign_investor", 0) or 0
                     institution = data.get("institution_total", 0) or 0
@@ -1257,7 +1155,7 @@ class SummarizerAgent(BaseAgent):
                     total_institution += institution
                     
                     # 수급 데이터를 억원 단위로 표시 (원본 데이터는 백만원 단위)
-                    formatted_text += f"    {date}: 개인 {individual/100:+,.1f}억원, 외국인 {foreign/100:+,.1f}억원, 기관 {institution/100:+,.1f}억원\n"
+                    formatted_text += f"    {normalized_date}: 개인 {individual/100:+,.1f}억원, 외국인 {foreign/100:+,.1f}억원, 기관 {institution/100:+,.1f}억원\n"
                 
                 # 기간별 누적 요약
                 formatted_text += "  기간별 누적 매매대금:\n"
@@ -1281,7 +1179,7 @@ class SummarizerAgent(BaseAgent):
                     main_player = "기관투자자"
                     trend = "순매수" if total_institution > 0 else "순매도"
                 
-                formatted_text += f"  주도세력: {main_player} ({trend})\n"
+                #formatted_text += f"  주도세력: {main_player} ({trend})\n"
             
             formatted_text += "\n"
         
@@ -1290,14 +1188,58 @@ class SummarizerAgent(BaseAgent):
         if summary:
             formatted_text += f"분석 요약:\n{summary}\n\n"
         
-        recommendations = technical_analysis_data.get("recommendations", [])
-        if recommendations:
-            formatted_text += "투자 권고사항:\n"
-            for i, rec in enumerate(recommendations, 1):
-                formatted_text += f"  {i}. {rec}\n"
-            formatted_text += "\n"
+        # recommendations = technical_analysis_data.get("recommendations", [])
+        # if recommendations:
+        #     formatted_text += "투자 권고사항:\n"
+        #     for i, rec in enumerate(recommendations, 1):
+        #         formatted_text += f"  {i}. {rec}\n"
+        #     formatted_text += "\n"
         
         formatted_text += "</기술적분석>"
+        
+        return formatted_text
+        
+    def _format_price_chart(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
+        """
+        차트 데이터를 간단한 배열 형태의 문자열로 변환합니다.
+        
+        Args:
+            technical_analysis_data: 기술적 분석 결과 데이터
+            
+        Returns:
+            포맷팅된 차트 데이터 문자열
+        """
+        if not technical_analysis_data:
+            return "차트 데이터가 없습니다."
+        
+        chart_data = technical_analysis_data.get("chart_data", [])
+        if not chart_data:
+            return "차트 데이터가 없습니다."
+        
+        formatted_text = "<차트데이터>\n"
+        formatted_text += "데이터 형식: 날짜, 시가, 고가, 저가, 종가, 거래량, 등락률\n\n"
+        
+        # 최근 5개월 차트
+        recent_data = chart_data[-66:] if len(chart_data) > 66 else chart_data
+        
+        for data in recent_data:
+            if isinstance(data, list) and len(data) >= 7:
+                # [날짜, Open, High, Low, Close, Volume, 등락률] 형태로 표시
+                formatted_text += f"{data}\n"
+            elif isinstance(data, dict):
+                # dict 형태인 경우 배열로 변환
+                date = data.get("date", "")
+                normalized_date = format_date_for_chart(date)
+                open_price = data.get("open", 0)
+                high_price = data.get("high", 0)
+                low_price = data.get("low", 0)
+                close_price = data.get("close", 0)
+                volume = data.get("volume", 0)
+                price_change_percent = data.get("price_change_percent", 0)
+                
+                formatted_text += f"{normalized_date},{open_price:.0f},{high_price:.0f},{low_price:.0f},{close_price:.0f},{volume:.0f},{price_change_percent:.1f}%\n"
+        
+        formatted_text += "</차트데이터>"
         
         return formatted_text
         
