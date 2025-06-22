@@ -95,12 +95,13 @@ async def add_charset_middleware(request, call_next):
 
 
 # 라우터 등록 (import를 여기서 해서 순환 import 방지)
-from stockeasy.collector.api.routers import stock_router, etf_router, market_router, admin_router
+from stockeasy.collector.api.routers import stock_router, etf_router, market_router, admin_router, rs_router
 
 app.include_router(stock_router, prefix="/api/v1/stock", tags=["주식"])
 app.include_router(etf_router, prefix="/api/v1/etf", tags=["ETF"])
 app.include_router(market_router, prefix="/api/v1/market", tags=["시장"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["관리"])
+app.include_router(rs_router, prefix="/api/v1/rs", tags=["RS(상대강도)"])
 
 
 @app.get("/")

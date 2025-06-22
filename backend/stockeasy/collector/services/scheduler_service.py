@@ -209,6 +209,17 @@ class SchedulerService(LoggerMixin):
             misfire_grace_time=1800  # 30분 늦어도 실행
         )
         
+        # 7. RS(상대강도) 데이터 업데이트 - 평일 16시 (시장 마감 후)
+        self.scheduler.add_job(
+            func=self._update_rs_data_job,
+            trigger=CronTrigger(hour=16, minute=0, day_of_week='mon-fri'),
+            id="daily_rs_data_update",
+            name="일일 RS 데이터 업데이트",
+            replace_existing=True,
+            max_instances=1,
+            misfire_grace_time=3600  # 1시간 늦어도 실행
+        )
+        
         logger.info("스케줄 작업 등록 완료")
     
     @log_scheduler_job("일일 종목 리스트 업데이트")
@@ -229,18 +240,37 @@ class SchedulerService(LoggerMixin):
             stock_list = await kiwoom_client.get_all_stock_list(force_refresh=True)
             stock_list_for_stockai = await kiwoom_client.get_all_stock_list_for_stockai(force_refresh=True)
 
-            # 캐시에 저장
+            # 캐시에 저장 (메타데이터 포함)
             if self.cache_manager:
+                from datetime import datetime
+                
+                # 일반 종목 리스트 캐시 저장
+                cache_data = {
+                    "data": stock_list,
+                    "metadata": {
+                        "updated_at": datetime.now().isoformat(),
+                        "total_count": len(stock_list),
+                        "source": "scheduler_update"
+                    }
+                }
                 await self.cache_manager.set_cache(
                     "all_stock_list", 
-                    stock_list, 
+                    cache_data, 
                     ttl=86400  # 24시간
                 )
                 
-                # 캐시에 저장(stock ai)
+                # stockai용 종목 리스트 캐시 저장
+                cache_data_stockai = {
+                    "data": stock_list_for_stockai,
+                    "metadata": {
+                        "updated_at": datetime.now().isoformat(),
+                        "total_count": len(stock_list_for_stockai),
+                        "source": "scheduler_update"
+                    }
+                }
                 await self.cache_manager.set_cache(
                     "all_stock_list_for_stockai", 
-                    stock_list_for_stockai, 
+                    cache_data_stockai, 
                     ttl=86400  # 24시간
                 )
 
@@ -440,6 +470,30 @@ class SchedulerService(LoggerMixin):
             logger.error(f"수정주가 체크 실패: {e}")
             raise
     
+    @log_scheduler_job("일일 RS 데이터 업데이트")
+    async def _update_rs_data_job(self) -> None:
+        """RS(상대강도) 데이터 업데이트 작업"""
+        # 주말/공휴일 확인
+        if self._is_holiday_or_weekend():
+            logger.info("주말 또는 공휴일이므로 RS 데이터 업데이트를 건너뜁니다")
+            return
+        
+        try:
+            # RS 서비스 임포트 및 업데이트
+            from stockeasy.collector.services.rs_service import rs_service
+            
+            logger.info("스케줄러에서 RS 데이터 업데이트 시작")
+            
+            # RS 데이터 강제 업데이트
+            result = await rs_service.update_rs_data(force_update=True)
+            
+            logger.success(f"RS 데이터 업데이트 완료: {result.get('message', '정보 없음')}")
+            logger.info(f"업데이트된 종목 수: {result.get('updated_count', 0)}")
+            
+        except Exception as e:
+            logger.error(f"RS 데이터 업데이트 실패: {e}")
+            raise
+    
     async def trigger_stock_update_now(self) -> None:
         """즉시 종목 리스트 업데이트 실행"""
         logger.info("수동 종목 리스트 업데이트 실행")
@@ -464,6 +518,11 @@ class SchedulerService(LoggerMixin):
         """즉시 수정주가 체크 실행"""
         logger.info("수동 수정주가 체크 실행")
         await self._check_adjustment_prices_job()
+    
+    async def trigger_rs_update_now(self) -> None:
+        """즉시 RS 데이터 업데이트 실행"""
+        logger.info("수동 RS 데이터 업데이트 실행")
+        await self._update_rs_data_job()
     
     async def force_trigger_today_chart_update(self) -> Dict[str, Any]:
         """강제로 당일 차트 데이터 업데이트 실행 (주말/공휴일 체크 무시)"""

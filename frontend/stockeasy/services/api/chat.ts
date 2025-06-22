@@ -210,6 +210,7 @@ export const streamChatMessage = async (
     onAgentStart?: (data: any) => void,
     onAgentComplete?: (data: any) => void,
     onToken?: (data: { token: string, timestamp: number, message_id: string }) => void,
+    onPreliminaryChart?: (data: any) => void,
     onComplete?: (data: any) => void,
     onError?: (error: any) => void,
   },
@@ -334,6 +335,11 @@ export const streamChatMessage = async (
                     message_id: data.data?.message_id
                   }
                   callbacks.onToken?.(tokenData)
+                  break
+                  
+                case 'preliminary_chart':
+                  console.log('[STREAM_CHAT] 임시 차트 수신:', data.data)
+                  callbacks.onPreliminaryChart?.(data.data)
                   break
                   
                 case 'complete':
