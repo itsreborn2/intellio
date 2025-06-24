@@ -1,46 +1,60 @@
 """
 응답 포맷터 에이전트 모듈
 
-이 모듈은 통합된 지식 정보를 사용자에게 이해하기 쉬운 
+이 모듈은 통합된 지식 정보를 사용자에게 이해하기 쉬운
 형태로 포맷팅하는 응답 포맷터 에이전트 클래스를 구현합니다.
 """
 
-from datetime import datetime
-import json
-import re
-from loguru import logger
-from typing import Dict, Any, List, Optional, Callable, AsyncGenerator
 import asyncio
+import re
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
 
-from langchain_core.messages import HumanMessage, AIMessage
-from common.utils.util import format_date_for_chart, remove_json_block, safe_int, safe_float
-from common.services.agent_llm import get_agent_llm, get_llm_for_agent
-from stockeasy.prompts.response_formatter_prompts import FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT, FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT2, format_response_formatter_prompt
 from langchain_core.output_parsers import StrOutputParser
-from common.models.token_usage import ProjectType
-from stockeasy.agents.base import BaseAgent
-from sqlalchemy.ext.asyncio import AsyncSession
-from common.schemas.chat_components import (
-    HeadingComponent, ParagraphComponent, ListComponent, ListItemComponent,
-    CodeBlockComponent, BarChartComponent, LineChartComponent, ImageComponent,
-    TableComponent, TableHeader, TableData, BarChartData, LineChartData,
-    MixedChartComponent, MixedChartData, PriceChartComponent, PriceChartData,
-    TechnicalIndicatorChartComponent, TechnicalIndicatorChartData, TechnicalIndicatorData
-)
 from langchain_core.tools import tool
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from common.schemas.chat_components import (
+    BarChartComponent,
+    BarChartData,
+    CodeBlockComponent,
+    HeadingComponent,
+    ImageComponent,
+    LineChartComponent,
+    LineChartData,
+    ListComponent,
+    ListItemComponent,
+    MixedChartComponent,
+    MixedChartData,
+    ParagraphComponent,
+    PriceChartComponent,
+    PriceChartData,
+    TableComponent,
+    TableData,
+    TableHeader,
+    TechnicalIndicatorChartComponent,
+    TechnicalIndicatorChartData,
+    TechnicalIndicatorData,
+)
+from common.services.agent_llm import get_agent_llm
+from common.utils.util import format_date_for_chart, remove_json_block, safe_float, safe_int
+from stockeasy.agents.base import BaseAgent
+from stockeasy.prompts.response_formatter_prompts import FRIENDLY_RESPONSE_FORMATTER_SYSTEM_PROMPT
+
 
 class ResponseFormatterAgent(BaseAgent):
     """
     최종 응답을 형식화하는 에이전트
-    
+
     이 에이전트는 knowledge_integrator 또는 summarizer의 결과를 받아
     사용자 친화적인 형태로 가공합니다.
     """
-    
+
     def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
         응답 형식화 에이전트 초기화
-        
+
         Args:
             name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
             db: 데이터베이스 세션 객체 (선택적)
@@ -55,22 +69,22 @@ class ResponseFormatterAgent(BaseAgent):
 
         self.chart_placeholder = "[CHART_PLACEHOLDER:PRICE_CHART]"
         self.technical_indicator_chart_placeholder = "[CHART_PLACEHOLDER:TECHNICAL_INDICATOR_CHART]"
-        
+
         # 새로운 플레이스홀더 추가
         self.trend_following_chart_placeholder = "[CHART_PLACEHOLDER:TREND_FOLLOWING_CHART]"
         self.momentum_chart_placeholder = "[CHART_PLACEHOLDER:MOMENTUM_CHART]"
 
-    
-    
 
-     
+
+
+
     def _find_placeholder_in_component(self, component: Dict[str, Any]) -> str:
         """
         컴포넌트에서 플레이스홀더가 포함된 필드를 찾아 반환합니다.
         반환값: 플레이스홀더가 있는 필드명 (없으면 None)
         """
         component_type = component.get("type")
-        
+
         # 컴포넌트 타입별로 플레이스홀더 검색 필드 정의
         search_fields = {
             "paragraph": ["content"],
@@ -79,16 +93,16 @@ class ResponseFormatterAgent(BaseAgent):
             "code_block": ["content"],
             "table": ["title"]  # 필요에 따라 더 추가 가능
         }
-        
+
         fields_to_search = search_fields.get(component_type, [])
-        
+
         for field in fields_to_search:
             field_value = component.get(field, "")
             if isinstance(field_value, str) and self.chart_placeholder in field_value:
                 return field
-        
+
         return None
-    
+
     def _insert_price_chart_at_marker(self, components: List[Dict[str, Any]], price_chart_component: Dict[str, Any]) -> None:
         """
         컴포넌트 리스트에서 플레이스홀더를 찾아서 주가차트 컴포넌트로 교체합니다.
@@ -97,48 +111,48 @@ class ResponseFormatterAgent(BaseAgent):
         marker_found = False
         for i, component in enumerate(components):
             placeholder_field = self._find_placeholder_in_component(component)
-            
+
             if placeholder_field:
                 marker_found = True
                 component_type = component.get("type")
                 field_value = component.get(placeholder_field, "")
-                
+
                 if component_type == "paragraph" and placeholder_field == "content":
-                    
+
                     # paragraph의 content는 텍스트 분리 후 재구성
                     parts = field_value.split(self.chart_placeholder)
                     before_text = parts[0].strip()
                     after_text = parts[1].strip() if len(parts) > 1 else ""
-                    
+
                     # 원래 컴포넌트 제거
                     components.pop(i)
-                    
+
                     insert_index = i
-                    
+
                     # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
                     if before_text:
                         before_comp = create_paragraph({"content": before_text})
                         components.insert(insert_index, before_comp)
                         insert_index += 1
-                    
+
                     # 주가차트 컴포넌트 삽입
                     components.insert(insert_index, price_chart_component)
                     insert_index += 1
-                    
+
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
                         after_comp = create_paragraph({"content": after_text})
                         components.insert(insert_index, after_comp)
-                
+
                 else:
                     components[i] = price_chart_component
-                
+
                 break
-        
+
         # 마커를 찾지 못한 경우 마지막에 추가
         if not marker_found:
             components.append(price_chart_component)
-    
+
     def _insert_technical_indicator_chart_at_marker(self, components: List[Dict[str, Any]], technical_indicator_chart_component: Dict[str, Any]) -> None:
         """
         컴포넌트 목록에서 기술적 지표 차트 플레이스홀더를 찾아 실제 차트 컴포넌트로 교체합니다.
@@ -151,44 +165,44 @@ class ResponseFormatterAgent(BaseAgent):
                 marker_found = True
                 component_type = component.get("type")
                 field_value = component.get(field, "")
-                
+
                 if component_type == "paragraph" and field == "content":
                     # paragraph의 content는 텍스트 분리 후 재구성
                     parts = field_value.split(self.technical_indicator_chart_placeholder)
                     before_text = parts[0].strip()
                     after_text = parts[1].strip() if len(parts) > 1 else ""
-                    
+
                     # 원래 컴포넌트 제거
                     components.pop(i)
-                    
+
                     insert_index = i
-                    
+
                     # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
                     if before_text:
                         before_comp = create_paragraph(before_text)
                         components.insert(insert_index, before_comp)
                         insert_index += 1
-                    
+
                     # 기술적 지표 차트 컴포넌트 삽입
                     components.insert(insert_index, technical_indicator_chart_component)
                     insert_index += 1
-                    
+
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
                         after_comp = create_paragraph(after_text)
                         components.insert(insert_index, after_comp)
-                    
-                
+
+
                 else:
                     # 비-paragraph 컴포넌트는 전체 교체
                     components[i] = technical_indicator_chart_component
-                
+
                 break
-        
+
         # 마커를 찾지 못한 경우 마지막에 추가
         if not marker_found:
             components.append(technical_indicator_chart_component)
-    
+
     def _insert_trend_following_chart_at_marker(self, components: List[Dict[str, Any]], trend_following_chart_component: Dict[str, Any]) -> None:
         """
         컴포넌트 목록에서 추세추종 지표 차트 플레이스홀더를 찾아 실제 차트 컴포넌트로 교체합니다.
@@ -201,46 +215,46 @@ class ResponseFormatterAgent(BaseAgent):
                 marker_found = True
                 component_type = component.get("type")
                 field_value = component.get(field, "")
-                
 
-                
+
+
                 if component_type == "paragraph" and field == "content":
                     # paragraph의 content는 텍스트 분리 후 재구성
                     parts = field_value.split(self.trend_following_chart_placeholder)
                     before_text = parts[0].strip()
                     after_text = parts[1].strip() if len(parts) > 1 else ""
-                    
+
                     # 원래 컴포넌트 제거
                     components.pop(i)
-                    
+
                     insert_index = i
-                    
+
                     # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
                     if before_text:
                         before_comp = create_paragraph(before_text)
                         components.insert(insert_index, before_comp)
                         insert_index += 1
-                    
+
                     # 추세추종 지표 차트 컴포넌트 삽입
                     components.insert(insert_index, trend_following_chart_component)
                     insert_index += 1
-                    
+
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
                         after_comp = create_paragraph(after_text)
                         components.insert(insert_index, after_comp)
-                    
-                
+
+
                 else:
                     # 비-paragraph 컴포넌트는 전체 교체
                     components[i] = trend_following_chart_component
-                
+
                 break
-        
+
         # 마커를 찾지 못한 경우 마지막에 추가
         if not marker_found:
             components.append(trend_following_chart_component)
-    
+
     def _insert_momentum_chart_at_marker(self, components: List[Dict[str, Any]], momentum_chart_component: Dict[str, Any]) -> None:
         """
         컴포넌트 목록에서 모멘텀 지표 차트 플레이스홀더를 찾아 실제 차트 컴포넌트로 교체합니다.
@@ -253,50 +267,50 @@ class ResponseFormatterAgent(BaseAgent):
                 marker_found = True
                 component_type = component.get("type")
                 field_value = component.get(field, "")
-                
+
                 if component_type == "paragraph" and field == "content":
                     # paragraph의 content는 텍스트 분리 후 재구성
                     parts = field_value.split(self.momentum_chart_placeholder)
                     before_text = parts[0].strip()
                     after_text = parts[1].strip() if len(parts) > 1 else ""
-                    
+
                     # 원래 컴포넌트 제거
                     components.pop(i)
-                    
+
                     insert_index = i
-                    
+
                     # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
                     if before_text:
                         before_comp = create_paragraph(before_text)
                         components.insert(insert_index, before_comp)
                         insert_index += 1
-                    
+
                     # 모멘텀 지표 차트 컴포넌트 삽입
                     components.insert(insert_index, momentum_chart_component)
                     insert_index += 1
-                    
+
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
                         after_comp = create_paragraph(after_text)
                         components.insert(insert_index, after_comp)
-                    
-                
+
+
                 else:
                     # 비-paragraph 컴포넌트는 전체 교체
                     components[i] = momentum_chart_component
-                
+
                 break
-        
+
         # 마커를 찾지 못한 경우 마지막에 추가
         if not marker_found:
             components.append(momentum_chart_component)
-    
+
     def _find_technical_indicator_placeholder_in_component(self, component: Dict[str, Any]) -> str:
         """
         컴포넌트에서 기술적 지표 차트 플레이스홀더가 포함된 필드를 찾아 반환합니다.
         """
         component_type = component.get("type")
-        
+
         # 컴포넌트 타입별로 플레이스홀더 검색 필드 정의
         search_fields = {
             "paragraph": ["content"],
@@ -305,22 +319,22 @@ class ResponseFormatterAgent(BaseAgent):
             "code_block": ["content"],
             "table": ["title"]
         }
-        
+
         fields_to_search = search_fields.get(component_type, [])
-        
+
         for field in fields_to_search:
             field_value = component.get(field, "")
             if isinstance(field_value, str) and self.technical_indicator_chart_placeholder in field_value:
                 return field
-        
+
         return None
-    
+
     def _find_trend_following_placeholder_in_component(self, component: Dict[str, Any]) -> str:
         """
         컴포넌트에서 추세추종 지표 차트 플레이스홀더가 포함된 필드를 찾아 반환합니다.
         """
         component_type = component.get("type")
-        
+
         # 컴포넌트 타입별로 플레이스홀더 검색 필드 정의
         search_fields = {
             "paragraph": ["content"],
@@ -329,22 +343,22 @@ class ResponseFormatterAgent(BaseAgent):
             "code_block": ["content"],
             "table": ["title"]
         }
-        
+
         fields_to_search = search_fields.get(component_type, [])
-        
+
         for field in fields_to_search:
             field_value = component.get(field, "")
             if isinstance(field_value, str) and self.trend_following_chart_placeholder in field_value:
                 return field
-        
+
         return None
-    
+
     def _find_momentum_placeholder_in_component(self, component: Dict[str, Any]) -> str:
         """
         컴포넌트에서 모멘텀 지표 차트 플레이스홀더가 포함된 필드를 찾아 반환합니다.
         """
         component_type = component.get("type")
-        
+
         # 컴포넌트 타입별로 플레이스홀더 검색 필드 정의
         search_fields = {
             "paragraph": ["content"],
@@ -353,16 +367,16 @@ class ResponseFormatterAgent(BaseAgent):
             "code_block": ["content"],
             "table": ["title"]
         }
-        
+
         fields_to_search = search_fields.get(component_type, [])
-        
+
         for field in fields_to_search:
             field_value = component.get(field, "")
             if isinstance(field_value, str) and self.momentum_chart_placeholder in field_value:
                 return field
-        
+
         return None
-     
+
     async def _process_section_async(self, section_data: Dict[str, Any], summary_by_section: Dict[str, str], llm_with_tools: Any, tools: List[Callable], section_content_fallback: str, tech_agent_result: Dict[str, Any] = None, stock_code: str = "", stock_name: str = "") -> tuple[List[Dict[str, Any]], str, str]:
         """
         개별 섹션을 비동기적으로 처리하여 컴포넌트와 포맷된 텍스트를 생성합니다.
@@ -380,36 +394,36 @@ class ResponseFormatterAgent(BaseAgent):
 
         if section_title in summary_by_section and summary_by_section[section_title]:
             section_content = summary_by_section[section_title]
-            
+
             # 플레이스홀더 처리 - 직접 컴포넌트 생성 방식
             price_chart_component = None
             technical_indicator_chart_component = None
             trend_following_chart_component = None
             momentum_chart_component = None
-            
+
             if self.chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 주가차트 컴포넌트를 미리 생성
                 price_chart_component = create_price_chart_component_directly(tech_agent_result, stock_code, stock_name)
-            
+
             if self.technical_indicator_chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 기존 기술적 지표 차트 컴포넌트를 미리 생성 (호환성 유지)
                 technical_indicator_chart_component = create_trend_following_chart_component_directly(tech_agent_result, stock_code, stock_name)
-            
+
             if self.trend_following_chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 추세추종 지표 차트 컴포넌트를 미리 생성
                 trend_following_chart_component = create_trend_following_chart_component_directly(tech_agent_result, stock_code, stock_name)
-            
+
             if self.momentum_chart_placeholder in section_content and tech_agent_result and stock_code and stock_name:
                 # 모멘텀 지표 차트 컴포넌트를 미리 생성
                 momentum_chart_component = create_momentum_chart_component_directly(tech_agent_result, stock_code, stock_name)
-            
+
             # 본문에 섹션 제목이 있으니, 여기서는 추가하지 않음.
-            # 1. 섹션 제목 컴포넌트 추가 (항상 추가)  
+            # 1. 섹션 제목 컴포넌트 추가 (항상 추가)
             # section_heading_component = create_heading({"level": 2, "content": section_title})
             #section_components.append(section_heading_component)
-            
 
-            
+
+
             tool_calling_prompt = f"""
 다음 섹션의 내용을 구조화된 컴포넌트로 변환하세요:
 
@@ -462,35 +476,33 @@ class ResponseFormatterAgent(BaseAgent):
 """
             try:
                 section_response = await llm_with_tools.ainvoke(input=tool_calling_prompt)
-                
+
                 llm_generated_text_for_section = section_response.content if hasattr(section_response, 'content') else ""
 
                 if hasattr(section_response, 'tool_calls') and section_response.tool_calls:
-                    first_heading_found = False
                     processed_components = []
 
                     for tool_call in section_response.tool_calls:
                         tool_name = tool_call["name"]
                         tool_args = tool_call["args"]
-                        
+
                         if 'level' in tool_args and isinstance(tool_args['level'], float):
                             tool_args['level'] = int(tool_args['level'])
-                        
+
                         tool_func = next((t for t in tools if t.name == tool_name), None)
                         #logger.info(f"Tool name : {tool_name}, args : {tool_args}, tool_func: {tool_func}")
                         if tool_func:
                             component_dict = tool_func.invoke(tool_args)
 
                             if component_dict.get("type") == "heading":
-                                first_heading_found = True
                                 heading_content_candidate = component_dict.get("content", "").strip()
                                 # 볼드체(bold)로 시작하거나 불릿 포인트(*, •, -)로 시작하는 텍스트는 heading이 아닌 paragraph나 list로 처리
-                                if (heading_content_candidate.startswith('**') or 
+                                if (heading_content_candidate.startswith('**') or
                                     heading_content_candidate.startswith('*') or
                                     heading_content_candidate.startswith('•') or
                                     heading_content_candidate.startswith('-')):
                                     logger.info(f"Heading candidate '{heading_content_candidate}' starts with bold or bullet. Converting to appropriate component.")
-                                    
+
                                     # 불릿 포인트로 시작하면 list 컴포넌트로 변환
                                     if (heading_content_candidate.startswith('*') and not heading_content_candidate.startswith('**')) or heading_content_candidate.startswith('•') or heading_content_candidate.startswith('-'):
                                         list_tool_func = next((t for t in tools if t.name == "create_list"), None)
@@ -527,48 +539,48 @@ class ResponseFormatterAgent(BaseAgent):
                                         heading_content_candidate = heading_content_candidate[4:]
 
                             processed_components.append(component_dict)
-                    
+
                     # 첫 번째 컴포넌트가 없거나 헤딩이 아니거나 내용이 섹션 제목과 다른 경우 강제로 헤딩 추가
-                    if (not processed_components or 
+                    if (not processed_components or
                         processed_components[0].get("type") != "heading" or
                         processed_components[0].get("content", "").strip() != section_title.strip()):
-                        
+
                         logger.info(f"섹션 '{section_title}'에 대한 첫 번째 컴포넌트가 헤딩이 아니거나 섹션 제목과 일치하지 않습니다. 강제로 헤딩 추가")
                         heading_component = create_heading({"level": 2, "content": section_title})
                         section_components.append(heading_component)
-                    
+
                     # 처리된 컴포넌트들 추가
                     section_components.extend(processed_components)
-                    
+
                     # 주가차트 컴포넌트가 있으면 마커를 찾아서 교체
                     if price_chart_component:
                         self._insert_price_chart_at_marker(section_components, price_chart_component)
-                    
+
                     # 기술적 지표 차트 플레이스홀더 처리 (호환성 유지)
                     if technical_indicator_chart_component:
                         self._insert_technical_indicator_chart_at_marker(section_components, technical_indicator_chart_component)
-                    
+
                     # 추세추종 지표 차트 플레이스홀더 처리
                     if trend_following_chart_component:
                         self._insert_trend_following_chart_at_marker(section_components, trend_following_chart_component)
-                    
+
                     # 모멘텀 지표 차트 플레이스홀더 처리
                     if momentum_chart_component:
                         self._insert_momentum_chart_at_marker(section_components, momentum_chart_component)
-                
+
                 elif llm_generated_text_for_section.strip(): # 툴 콜 없이 텍스트만 반환된 경우
                     logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에 대해 Tool calling 없이 일반 텍스트 응답을 받았습니다.")
                     # 섹션 제목 강제 추가
                     section_components.append(create_heading({"level": 2, "content": section_title}))
-                    
+
                     cleaned_text = remove_json_block(llm_generated_text_for_section)
-                    
+
                     # 텍스트에서 마스크를 플레이스홀더로 복원
                     restored_text = cleaned_text
-                   
+
                     if restored_text.strip():
                          section_components.append(create_paragraph(restored_text))
-                
+
                 # 성공적으로 처리되면 (툴콜이 있든 없든) 컴포넌트들과 LLM 텍스트, 제목 반환
                 logger.info(f"섹션 '{section_title}' 처리 완료: 소요시간 {datetime.now() - start_time_process_section}")
                 return section_components, llm_generated_text_for_section, section_title
@@ -576,10 +588,10 @@ class ResponseFormatterAgent(BaseAgent):
             except Exception as e:
                 logger.error(f"비동기 섹션 '{section_title}' 컴포넌트 생성 중 오류: {str(e)}")
                 # 오류 발생 시, 이미 추가된 섹션 제목 컴포넌트 외에 원본 내용을 단락으로 추가
-                
+
                 # 오류 복구 시에도 마스크를 플레이스홀더로 복원
                 restored_fallback = section_content_fallback
-                
+
                 section_components.append(create_paragraph(restored_fallback))
                 # 오류 시 LLM 생성 텍스트는 없고, 원본 내용을 텍스트로 반환 (오류 복구용)
                 return section_components, restored_fallback, section_title
@@ -591,10 +603,10 @@ class ResponseFormatterAgent(BaseAgent):
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         통합된 정보를 기반으로 사용자에게 이해하기 쉬운 응답을 생성합니다.
-        
+
         Args:
             state: 현재 상태 정보를 포함하는 딕셔너리
-            
+
         Returns:
             업데이트된 상태 딕셔너리
         """
@@ -604,18 +616,18 @@ class ResponseFormatterAgent(BaseAgent):
             query = state.get("query", "")
             stock_code = state.get("stock_code")
             stock_name = state.get("stock_name")
-            
+
             logger.info(f"ResponseFormatterAgent formatting response for query: {query}")
-            
+
             # 요약 및 섹션별 요약 가져오기
             summary = state.get("summary", "")
             summary_by_section = state.get("summary_by_section", {})
             final_report_toc = state.get("final_report_toc") # 동적 목차 정보 가져오기
-            
+
             # 플레이스홀더 처리를 위해 agent_results에서 technical_analyzer 결과 가져오기
             agent_results = state.get("agent_results", {})
             tech_agent_result = agent_results.get("technical_analyzer", {})
-            
+
             processing_status = state.get("processing_status", {})
             summarizer_status = processing_status.get("summarizer", "not_started")
 
@@ -624,16 +636,16 @@ class ResponseFormatterAgent(BaseAgent):
             if context_response_agent:
                 context_based_answer = context_response_agent.get("answer", "")
                 summary = context_based_answer # summary를 context_based_answer로 덮어쓰기
-            
+
             # 통합된 응답이 없는 경우 처리
             if not context_based_answer and (not summary or summarizer_status != "completed"):
-                logger.warning(f"No summary response available.")
+                logger.warning("No summary response available.")
                 logger.warning(f"processing_status: {processing_status}")
                 logger.warning(f"Summarizer status: {summarizer_status}")
                 state["answer"] = "죄송합니다. 현재 요청에 대한 정보를 찾을 수 없습니다. 다른 질문을 해 주시거나 나중에 다시 시도해 주세요."
                 state["components"] = []
                 return state
-            
+
             # Tool Calling 설정
             tools = [
                 create_heading,
@@ -645,7 +657,7 @@ class ResponseFormatterAgent(BaseAgent):
                 create_mixed_chart,
                 #create_image
             ]
-            
+
             llm_with_tools = self.agent_llm_for_tools.get_llm().bind_tools(tools)
 
             all_components = []
@@ -670,32 +682,32 @@ class ResponseFormatterAgent(BaseAgent):
                 title_component = create_heading({"level": 1, "content": report_title})
                 all_components.append(title_component)
                 formatted_response_parts.append(f"# {report_title}\n\n")
-                
+
                 toc_sections = final_report_toc.get("sections", [])
-                
+
                 # 면책조항 내용을 summary_by_section에서 가져오기 (LLM 요청 없이)
                 disclaimer_content = summary_by_section.get("면책조항", "")
                 # fallback으로 기본 면책조항 사용
                 if not disclaimer_content.strip():
                     logger.info("ResponseFormatterAgent: summary_by_section에 면책조항이 없어 기본 면책조항을 사용합니다.")
                     disclaimer_content = """본 보고서는 투자 참고 자료로만 활용하시기 바라며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 보고서의 내용이 사실과 다른 내용이 일부 존재할 수 있으니 참고해 주시기 바랍니다. 투자 결정은 투자자 본인의 책임하에 이루어져야 하며, 본 보고서에 기반한 투자로 인한 손실에 대해 작성자와 당사는 어떠한 법적 책임도 지지 않습니다. 모든 투자에는 위험이 수반되므로 투자 전 투자자 본인의 판단과 책임하에 충분한 검토가 필요합니다."""
-                
+
                 tasks = []
                 for section_data_item in toc_sections: # 변수명 변경 (section_data -> section_data_item)
                     section_title_for_task = section_data_item.get("title")
                     # fallback content는 해당 섹션의 원본 요약 내용
                     section_content_fallback_for_task = summary_by_section.get(section_title_for_task, "")
                     tasks.append(self._process_section_async(
-                        section_data_item, 
-                        summary_by_section, 
-                        llm_with_tools, 
+                        section_data_item,
+                        summary_by_section,
+                        llm_with_tools,
                         tools,
                         section_content_fallback_for_task,
                         tech_agent_result,
                         stock_code,
                         stock_name
                     ))
-                
+
                 # section_results_with_exceptions: List[Union[Tuple[List[Dict], str, str], Exception]]]
                 section_results_with_exceptions = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -707,23 +719,23 @@ class ResponseFormatterAgent(BaseAgent):
                         # 병렬 작업에서 예외 발생 시
                         current_section_title = original_section_data.get("title", f"제목 없는 섹션 {i+1}")
                         logger.error(f"섹션 '{current_section_title}' 처리 중 병렬 작업 오류: {res_or_exc}")
-                        
+
                         # 오류난 섹션의 제목 컴포넌트와 텍스트 추가
                         all_components.append(create_heading({"level": 2, "content": current_section_title}))
                         formatted_response_parts.append(f"## {current_section_title}\n\n")
-                        
+
                         # 오류 시 대체 컨텐츠 (원본 요약)
                         error_fallback_content = summary_by_section.get(current_section_title, "이 섹션의 내용을 불러오는 데 실패했습니다.")
                         all_components.append(create_paragraph({"content": error_fallback_content}))
                         formatted_response_parts.append(error_fallback_content + "\n\n")
-                        
-                    elif res_or_exc: 
+
+                    elif res_or_exc:
                         # 정상 결과: (components_from_section, llm_text_for_section, processed_section_title)
                         components_from_section, llm_text_for_section, processed_section_title_from_res = res_or_exc
-                        
+
                         # _process_section_async는 항상 섹션 제목을 포함한 컴포넌트를 반환
-                        all_components.extend(components_from_section) 
-                        
+                        all_components.extend(components_from_section)
+
                         if processed_section_title_from_res: # 제목이 있는 섹션만 텍스트 추가
                             # formatted_response_parts 에는 섹션 제목 텍스트를 여기서 추가
                             # (단, components_from_section 에 이미 제목 컴포넌트가 있으므로 중복 추가되지 않도록 주의)
@@ -736,27 +748,27 @@ class ResponseFormatterAgent(BaseAgent):
                                 formatted_response_parts.append(llm_text_for_section + "\n\n")
                             # 만약 llm_text_for_section이 비어있고 components_from_section에 내용이 있다면,
                             # (즉, 툴콜링으로만 컴포넌트가 만들어진 경우) 해당 텍스트는 이미 컴포넌트로 변환되었으므로 추가 텍스트 불필요.
-                
+
                 # 면책조항 컴포넌트 추가 (고정된 내용)
                 all_components.append(create_heading({"level": 3, "content": "면책조항"}))
                 all_components.append(create_paragraph({"content": disclaimer_content}))
                 formatted_response_parts.append(f"**면책조항**\n\n{disclaimer_content}\n\n")
-           
+
             # 최종 formatted_response 조합
             formatted_response = "".join(formatted_response_parts).strip()
-            
+
             # 플레이스홀더 제거 (컴포넌트에서는 이미 대체되었지만 텍스트에서는 남아있을 수 있음)
             formatted_response = formatted_response.replace(self.chart_placeholder, "")
-            
+
             # 컴포넌트가 제목 외에 없는 경우 (모든 섹션 내용이 없거나 파싱 실패)
             if len(all_components) <= 1: # 보고서 전체 제목 컴포넌트만 있는 경우
                 logger.warning("ResponseFormatterAgent: 동적 목차 기반 컴포넌트 생성 결과가 거의 비어있습니다. 기존 요약(summary)으로 대체 처리를 시도합니다.")
-                if summary: 
+                if summary:
                     state["answer"] = summary.replace(self.chart_placeholder, "")
                     all_components_fallback = await self.make_full_components(state)
                     all_components = [comp.dict() for comp in all_components_fallback if hasattr(comp, 'dict')]
                     formatted_response = summary.replace(self.chart_placeholder, "")
-                else: 
+                else:
                     logger.warning("ResponseFormatterAgent: 대체할 summary 내용도 없습니다.")
                     # 이미 title 컴포넌트는 추가되어 있을 수 있음
                     if not any(comp.get("type") == "paragraph" for comp in all_components): # 내용이 전혀 없는 경우
@@ -767,39 +779,39 @@ class ResponseFormatterAgent(BaseAgent):
             # 결과 저장 (플레이스홀더 제거된 텍스트 사용)
             state["answer"] = summary
             state["components"] = all_components
-            
+
             # answer 키 설정 확인 로그 추가
             logger.info(f"[ResponseFormatterAgent] answer 키 설정 완료: {bool(state.get('answer'))}, 길이: {len(state.get('answer', ''))}")
             logger.info(f"[ResponseFormatterAgent] state 키들: {list(state.keys())}")
-            
+
             # 처리 상태 업데이트
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["response_formatter"] = "completed"
             logger.info(f"[ResponseFormatterAgent] process 완료: 소요시간 {datetime.now() - start_time_process_query}")
             return state
-            
+
         except Exception as e:
             logger.exception(f"Error in ResponseFormatterAgent: {str(e)}")
             state["error"] = f"응답 포맷터 에이전트 오류: {str(e)}"
             state["answer"] = "죄송합니다. 응답을 포맷팅하는 중 오류가 발생했습니다."
             state["components"] = [] # 오류 시 컴포넌트 초기화
-            return state 
-        
+            return state
+
     async def make_components(self, markdown_context:str):
 
         components = []
         # 마크다운을 줄 단위로 분리
         lines = markdown_context.split('\n')
-        
+
         i = 0
         while i < len(lines):
             line = lines[i].strip()
-            
+
             # 빈 줄 건너뛰기
             if not line:
                 i += 1
                 continue
-            
+
             # 1. 헤딩 처리 (# 헤딩)
             heading_match = re.match(r'^(#{1,6})\s+(.+)$', line)
             if heading_match:
@@ -811,13 +823,13 @@ class ResponseFormatterAgent(BaseAgent):
                 ))
                 i += 1
                 continue
-            
+
             # 2. 테이블 처리 (| 구분 | 컬럼1 | 컬럼2 | ... |)
             if line.startswith('|') and '|' in line[1:]:
                 # 테이블 시작 감지
                 table_lines = []
                 table_title = ""
-                
+
                 # 테이블 제목이 있는지 확인 (이전 줄이 단락이고 테이블에 관한 내용인 경우)
                 if i > 0 and components and components[-1].type == 'paragraph':
                     paragraph_content = components[-1].content
@@ -825,12 +837,12 @@ class ResponseFormatterAgent(BaseAgent):
                         table_title = paragraph_content
                         # 이미 추가된 제목 단락을 제거 (테이블 컴포넌트에 제목으로 포함될 예정)
                         components.pop()
-                
+
                 # 테이블 줄 수집
                 while i < len(lines) and lines[i].strip().startswith('|'):
                     table_lines.append(lines[i].strip())
                     i += 1
-                
+
                 # 테이블 파싱 시도
                 try:
                     # 최소 2줄 이상 있어야 테이블로 인식 (헤더, 구분선)
@@ -838,7 +850,7 @@ class ResponseFormatterAgent(BaseAgent):
                         # 헤더 파싱
                         header_line = table_lines[0]
                         header_cells = [cell.strip() for cell in header_line.split('|')[1:-1]]
-                        
+
                         # 구분선 확인 (두 번째 줄이 구분선인지 확인)
                         separator_line = table_lines[1]
                         # 구분선이 있으면 테이블로 처리
@@ -871,13 +883,13 @@ class ResponseFormatterAgent(BaseAgent):
                                         # 열 이름도 저장 (차트 변환 시 사용)
                                         row_data[f"header{idx}"] = header
                                     data_rows.append(row_data)
-                            
+
                             # 테이블을 차트로 변환 가능한지 확인
                             # 분기/연도 열이 있고 수치 데이터가 있는지 확인
                             period_col_idx = -1
                             metric_col_idx = -1
                             item_col_idx = -1
-                            
+
                             for idx, header in enumerate(header_cells):
                                 header_lower = header.lower()
                                 # 날짜/분기/연도 열 감지
@@ -887,23 +899,23 @@ class ResponseFormatterAgent(BaseAgent):
                                 elif '항목' in header_lower or '매출처' in header_lower or '회사' in header_lower or '거래처' in header_lower:
                                     item_col_idx = idx
                                 # 수치 데이터 열 감지
-                                elif ('액' in header_lower or '이익' in header_lower or '매출' in header_lower or 
+                                elif ('액' in header_lower or '이익' in header_lower or '매출' in header_lower or
                                       '값' in header_lower or '수치' in header_lower or '비중' in header_lower):
                                     metric_col_idx = idx
-                            
+
                             # 증감률 열 감지 (QoQ, YoY 등)
                             growth_rate_col_idx = -1
                             for idx, header in enumerate(header_cells):
                                 header_lower = header.lower()
-                                if ('증감률' in header_lower or 'yoy' in header_lower or 'qoq' in header_lower or 
+                                if ('증감률' in header_lower or 'yoy' in header_lower or 'qoq' in header_lower or
                                     '성장률' in header_lower or '전년비' in header_lower or '전분기비' in header_lower or
                                     '%' in header_lower):
                                     growth_rate_col_idx = idx
                                     break
-                            
+
                             # 차트 변환 플래그
                             chart_created = False
-                            
+
                             # 혼합 차트 가능성 확인 - 분기별 매출액과 증감률이 함께 있는 경우
                             if len(data_rows) > 1 and period_col_idx >= 0 and metric_col_idx >= 0 and growth_rate_col_idx >= 0:
                                 try:
@@ -911,7 +923,7 @@ class ResponseFormatterAgent(BaseAgent):
                                     periods = []
                                     metric_values = {}  # 매출액 등 막대 차트 데이터
                                     growth_values = {}  # 증감률 등 선 차트 데이터
-                                    
+
                                     # 항목이 있으면 항목별로 구분
                                     if item_col_idx >= 0:
                                         # 항목별 매트릭과 증감률 추적
@@ -920,19 +932,19 @@ class ResponseFormatterAgent(BaseAgent):
                                             item = str(row[f"col{item_col_idx}"])
                                             metric_value = row[f"col{metric_col_idx}"] if isinstance(row[f"col{metric_col_idx}"], (int, float)) else 0
                                             growth_value = row[f"col{growth_rate_col_idx}"] if isinstance(row[f"col{growth_rate_col_idx}"], (int, float)) else 0
-                                            
+
                                             if period not in periods:
                                                 periods.append(period)
-                                            
+
                                             metric_key = f"{item} {header_cells[metric_col_idx]}"
                                             growth_key = f"{item} {header_cells[growth_rate_col_idx]}"
-                                            
+
                                             if metric_key not in metric_values:
                                                 metric_values[metric_key] = {}
-                                            
+
                                             if growth_key not in growth_values:
                                                 growth_values[growth_key] = {}
-                                            
+
                                             metric_values[metric_key][period] = metric_value
                                             growth_values[growth_key][period] = growth_value
                                     else:
@@ -941,53 +953,53 @@ class ResponseFormatterAgent(BaseAgent):
                                             period = str(row[f"col{period_col_idx}"])
                                             metric_value = row[f"col{metric_col_idx}"] if isinstance(row[f"col{metric_col_idx}"], (int, float)) else 0
                                             growth_value = row[f"col{growth_rate_col_idx}"] if isinstance(row[f"col{growth_rate_col_idx}"], (int, float)) else 0
-                                            
+
                                             if period not in periods:
                                                 periods.append(period)
-                                            
+
                                             if header_cells[metric_col_idx] not in metric_values:
                                                 metric_values[header_cells[metric_col_idx]] = {}
-                                            
+
                                             if header_cells[growth_rate_col_idx] not in growth_values:
                                                 growth_values[header_cells[growth_rate_col_idx]] = {}
-                                            
+
                                             metric_values[header_cells[metric_col_idx]][period] = metric_value
                                             growth_values[header_cells[growth_rate_col_idx]][period] = growth_value
-                                    
+
                                     # 혼합 차트 생성을 위한 데이터셋 구성
                                     if len(periods) > 1 and len(metric_values) > 0 and len(growth_values) > 0:
                                         bar_datasets = []
                                         line_datasets = []
-                                        
+
                                         # 막대 차트 데이터셋 구성
                                         for metric_label, period_values in metric_values.items():
                                             bar_datasets.append({
                                                 "label": metric_label,
                                                 "data": [period_values.get(period, 0) for period in periods]
                                             })
-                                        
+
                                         # 선 차트 데이터셋 구성
                                         for growth_label, period_values in growth_values.items():
                                             line_datasets.append({
                                                 "label": growth_label,
                                                 "data": [period_values.get(period, 0) for period in periods]
                                             })
-                                        
+
                                         # Y축 제목 설정
                                         y_axis_left_title = None
                                         y_axis_right_title = None
-                                        
+
                                         if "매출액" in header_cells[metric_col_idx]:
                                             y_axis_left_title = "매출액 (억원)"
                                         elif "이익" in header_cells[metric_col_idx]:
                                             y_axis_left_title = "이익 (억원)"
-                                            
+
                                         if "증감률" in header_cells[growth_rate_col_idx] or "yoy" in header_cells[growth_rate_col_idx].lower() or "qoq" in header_cells[growth_rate_col_idx].lower():
                                             y_axis_right_title = "증감률 (%)"
-                                        
+
                                         # 혼합 차트 컴포넌트 생성
                                         title = table_title if table_title else f"{header_cells[metric_col_idx]} 및 {header_cells[growth_rate_col_idx]} 추이"
-                                        
+
                                         components.append(MixedChartComponent(
                                             title=title,
                                             data=MixedChartData(
@@ -1001,7 +1013,7 @@ class ResponseFormatterAgent(BaseAgent):
                                         chart_created = True
                                 except Exception as mixed_chart_error:
                                     logger.error(f"혼합 차트 변환 오류: {mixed_chart_error}")
-                            
+
                             # 차트가 생성되지 않은 경우에만 테이블 컴포넌트 생성
                             if not chart_created:
                                 table_component = TableComponent(
@@ -1021,7 +1033,7 @@ class ResponseFormatterAgent(BaseAgent):
                         if len(table_lines) >= 2:
                             header_line = table_lines[0]
                             header_cells = [cell.strip() for cell in header_line.split('|')[1:-1]]
-                            
+
                             # 기본 빈 데이터라도 테이블 컴포넌트 생성
                             table_component = TableComponent(
                                 title=table_title,
@@ -1035,66 +1047,66 @@ class ResponseFormatterAgent(BaseAgent):
                     except Exception as e2:
                         logger.error(f"테이블 컴포넌트 생성 오류: {e2}")
                         # 정말 실패한 경우만 텍스트로 처리
-                        table_text = '\n'.join(table_lines)
+                        '\n'.join(table_lines)
                         components.append(ParagraphComponent(
                             content="[테이블 형식] " + table_title
                         ))
                 continue
-            
+
             # 3. 코드 블록 처리 (```언어 ... ```)
             if line.startswith('```'):
                 code_content = []
                 language = line[3:].strip()
                 i += 1
-                
+
                 while i < len(lines) and not lines[i].strip().startswith('```'):
                     code_content.append(lines[i])
                     i += 1
-                
+
                 if i < len(lines):  # 코드 블록 종료 확인
                     i += 1  # '```' 다음 줄로 이동
-                
+
                 components.append(CodeBlockComponent(
                     language=language if language else None,
                     content='\n'.join(code_content)
                 ))
                 continue
-            
+
             # 4. 순서 있는 목록 처리 (1. 항목)
             if re.match(r'^\d+\.\s+', line):
                 list_items = []
                 ordered = True
-                
+
                 while i < len(lines) and re.match(r'^\d+\.\s+', lines[i].strip()):
                     content = re.sub(r'^\d+\.\s+', '', lines[i].strip())
                     list_items.append(ListItemComponent(content=content))
                     i += 1
-                
+
                 components.append(ListComponent(
                     ordered=ordered,
                     items=list_items
                 ))
                 continue
-            
+
             # 5. 순서 없는 목록 처리 (-, *, •)
             if re.match(r'^[\-\*\•]\s+', line):
                 list_items = []
                 ordered = False
-                
+
                 while i < len(lines) and re.match(r'^[\-\*\•]\s+', lines[i].strip()):
                     content = re.sub(r'^[\-\*\•]\s+', '', lines[i].strip())
                     list_items.append(ListItemComponent(content=content))
                     i += 1
-                
+
                 components.append(ListComponent(
                     ordered=ordered,
                     items=list_items
                 ))
                 continue
-            
+
             # 6. 단락 처리
             paragraph_lines = []
-            
+
             while i < len(lines) and lines[i].strip() and not (
                     re.match(r'^(#{1,6})\s+', lines[i]) or  # 헤딩이 아님
                     re.match(r'^\d+\.\s+', lines[i]) or  # 순서 있는 목록이 아님
@@ -1104,73 +1116,73 @@ class ResponseFormatterAgent(BaseAgent):
             ):
                 paragraph_lines.append(lines[i])
                 i += 1
-            
+
             if paragraph_lines:
                 components.append(ParagraphComponent(
                     content=' '.join([line.strip() for line in paragraph_lines])
                 ))
                 continue
-            
+
             # 그 외의 경우 다음 줄로 이동
             i += 1
         return components
-        
+
     async def make_full_components(self, state: Dict[str, Any]):
         """
         포맷팅된 응답을 구조화된 컴포넌트로 변환합니다.
         마크다운 형식의 텍스트를 구조화된 컴포넌트(헤딩, 단락, 목록 등)로 파싱합니다.
         """
         components = []
-        
+
         # 상태에서 정보 추출
         stock_name = state.get("stock_name", "삼성전자")
         stock_code = state.get("stock_code", "005930")
         formatted_response = state.get("answer", "")
-        
+
         # 헤더 컴포넌트 추가
         components.append(HeadingComponent(
             level=1,
             content=f"{stock_name}({stock_code}) 분석 결과"
         ))
-        
+
         # 빈 응답이면 기본 컴포넌트만 반환
         if not formatted_response.strip():
             components.append(ParagraphComponent(
                 content="분석 결과를 찾을 수 없습니다."
             ))
             return components
-        
+
         components = await self.make_components(formatted_response)
-        
+
         return components
-    
+
     async def make_components_sample(self, state: Dict[str, Any]):
         """
         포맷팅된 응답을 구조화된 컴포넌트로 변환합니다.
         """
         components = []
-        
+
         # 상태에서 정보 추출
         stock_name = state.get("stock_name", "삼성전자")
         stock_code = state.get("stock_code", "005930")
-        
+
         # 1. 헤딩 컴포넌트 (여러 레벨)
         components.append(HeadingComponent(
             level=1,
             content=f"{stock_name}({stock_code}) 분석 결과"
         ))
-        
+
         # 2. 단락 컴포넌트
         components.append(ParagraphComponent(
             content=f"{stock_name}의 최근 실적과 시장 동향을 분석한 결과입니다. 아래 데이터를 참고하여 투자 결정에 활용하시기 바랍니다."
         ))
-        
+
         # 3. 부제목 (2단계 헤딩)
         components.append(HeadingComponent(
             level=2,
             content="주요 재무 지표"
         ))
-        
+
         # 4. 목록 컴포넌트 (순서 없는 목록)
         components.append(ListComponent(
             ordered=False,
@@ -1181,13 +1193,13 @@ class ResponseFormatterAgent(BaseAgent):
                 ListItemComponent(content="부채비율: 45.2% (안정적인 재무구조 유지)")
             ]
         ))
-        
+
         # 5. 두 번째 부제목
         components.append(HeadingComponent(
             level=2,
             content="실적 추이"
         ))
-        
+
         # 6. 바차트 컴포넌트
         components.append(BarChartComponent(
             title="분기별 매출 및 영업이익 추이",
@@ -1207,18 +1219,18 @@ class ResponseFormatterAgent(BaseAgent):
                 ]
             )
         ))
-        
+
         # 7. 차트 설명 단락
         components.append(ParagraphComponent(
             content=f"위 차트는 {stock_name}의 최근 5개 분기 매출액과 영업이익 추이를 보여줍니다. 지속적인 성장세를 유지하고 있습니다."
         ))
-        
+
         # 8. 세 번째 부제목
         components.append(HeadingComponent(
             level=2,
             content="주가 동향"
         ))
-        
+
         # 9. 라인차트 컴포넌트
         components.append(LineChartComponent(
             title="최근 6개월 주가 추이",
@@ -1241,13 +1253,13 @@ class ResponseFormatterAgent(BaseAgent):
                 ]
             )
         ))
-        
+
         # 10. 네 번째 부제목
         components.append(HeadingComponent(
             level=2,
             content="주요 재무제표"
         ))
-        
+
         # 11. 테이블 컴포넌트
         components.append(TableComponent(
             title="요약 재무제표",
@@ -1268,13 +1280,13 @@ class ResponseFormatterAgent(BaseAgent):
                 ]
             )
         ))
-        
+
         # 12. 다섯 번째 부제목
         components.append(HeadingComponent(
             level=2,
             content="산업 비교 분석"
         ))
-        
+
         # 13. 순서 있는 목록
         components.append(ListComponent(
             ordered=True,
@@ -1285,13 +1297,13 @@ class ResponseFormatterAgent(BaseAgent):
                 ListItemComponent(content="성장성: 2024년 예상 성장률 8.5%로 업계 평균(5.2%) 상회")
             ]
         ))
-        
+
         # 14. 여섯 번째 부제목
         components.append(HeadingComponent(
             level=2,
             content="코드 예시"
         ))
-        
+
         # 15. 코드 블록 컴포넌트
         components.append(CodeBlockComponent(
             language="python",
@@ -1310,30 +1322,30 @@ plt.grid(True)
 plt.show()
             """
         ))
-        
+
         # 16. 일곱 번째 부제목
         components.append(HeadingComponent(
             level=2,
             content="투자 의견"
         ))
-        
+
         # 17. 마지막 단락
         components.append(ParagraphComponent(
             content=f"{stock_name}는 안정적인 재무구조와 지속적인 성장세를 보이고 있으며, 업계 내 경쟁우위를 유지하고 있습니다. 단기적인 시장 변동성에도 불구하고 중장기 성장 잠재력이 높다고 판단됩니다. 다만, 글로벌 경제 불확실성과 산업 내 경쟁 심화는 리스크 요인으로 작용할 수 있습니다."
         ))
-        
+
         # 18. 이미지 컴포넌트 (샘플)
         components.append(ImageComponent(
             url="https://example.com/chart_image.png",
             alt="삼성전자 사업부문별 매출 비중",
             caption="2023년 사업부문별 매출 비중"
         ))
-        
+
         # 19. 면책조항
         components.append(ParagraphComponent(
             content="※ 위 정보는 투자 참고 목적으로 제공되며, 투자 결정은 개인의 판단에 따라 신중하게 이루어져야 합니다."
         ))
-        
+
         return components
 
     def _restore_placeholders_in_component(self, component_dict: Dict[str, Any], mask_to_placeholder: Dict[str, str]) -> Dict[str, Any]:
@@ -1342,25 +1354,25 @@ plt.show()
         """
         if not component_dict or not mask_to_placeholder:
             return component_dict
-        
+
         # 복사본 생성
         restored_component = component_dict.copy()
-        
+
         # 텍스트 필드들을 검사하여 마스크 복원
         text_fields = ['content', 'title', 'alt', 'caption']
-        
+
         for field in text_fields:
             if field in restored_component and isinstance(restored_component[field], str):
                 original_text = restored_component[field]
                 restored_text = original_text
-                
+
                 # 모든 마스크를 플레이스홀더로 복원
                 for mask, placeholder in mask_to_placeholder.items():
                     if mask in restored_text:
                         restored_text = restored_text.replace(mask, placeholder)
-                
+
                 restored_component[field] = restored_text
-        
+
         # 리스트 항목들도 처리 (list 컴포넌트의 경우)
         if 'items' in restored_component and isinstance(restored_component['items'], list):
             restored_items = []
@@ -1369,24 +1381,24 @@ plt.show()
                     restored_item = item.copy()
                     original_content = restored_item['content']
                     restored_content = original_content
-                    
+
                     for mask, placeholder in mask_to_placeholder.items():
                         if mask in restored_content:
                             restored_content = restored_content.replace(mask, placeholder)
-                    
+
                     restored_item['content'] = restored_content
                     restored_items.append(restored_item)
                 else:
                     restored_items.append(item)
-            
+
             restored_component['items'] = restored_items
-        
+
         return restored_component
 
 # 각 컴포넌트에 대한 도구 함수 정의
 @tool
 def create_heading(level: int, content: str) -> Dict:
-    """제목 컴포넌트를 생성합니다. 
+    """제목 컴포넌트를 생성합니다.
     level은 1-6 사이의 정수이며, content는 제목 내용입니다.
     - level=1: 문서 전체 제목 (자동 생성)
     - level=2: 주요 섹션 제목 (예: 1., 2., 3.)
@@ -1399,7 +1411,7 @@ def create_heading(level: int, content: str) -> Dict:
         content = content[3:]
     elif content.startswith("### "):
         content = content[4:]
-    
+
     return HeadingComponent(level=level, content=content).dict()
 
 @tool
@@ -1415,13 +1427,13 @@ def create_list(ordered: bool, items: List[str]) -> Dict:
 
 @tool
 def create_table(title: str, headers: List[Dict[str, str]], rows: List[Dict[str, Any]]) -> Dict:
-    """테이블 컴포넌트를 생성합니다. 
-    title은 테이블 제목, 
-    headers는 [{"key": "col0", "label": "항목명"}] 형식의 헤더 목록, 
+    """테이블 컴포넌트를 생성합니다.
+    title은 테이블 제목,
+    headers는 [{"key": "col0", "label": "항목명"}] 형식의 헤더 목록,
     rows는 테이블 데이터입니다."""
     table_headers = [TableHeader(**header) for header in headers]
     return TableComponent(
-        title=title, 
+        title=title,
         data=TableData(headers=table_headers, rows=rows)
     ).dict()
 
@@ -1453,18 +1465,18 @@ def create_bar_chart(title: str, labels: List[str], datasets: List[Dict[str, Any
         "#3F51B5",  # 인디고
         "#FFC107"   # 노란색
     ]
-    
+
     # 이미 사용된 색상 추적
     used_colors = set()
-    
+
     # 데이터셋이 1개인 경우 랜덤하게 색상 선택
     import random
     random_start = random.randint(0, len(color_palette) - 1) if len(datasets) == 1 else 0
-    
+
     for i, dataset in enumerate(datasets):
         if "backgroundColor" not in dataset:
             assigned_color = None
-            
+
             # 사용되지 않은 색상 중에서 순차적으로 선택
             for j in range(len(color_palette)):
                 color_idx = (random_start + i + j) % len(color_palette)
@@ -1473,14 +1485,14 @@ def create_bar_chart(title: str, labels: List[str], datasets: List[Dict[str, Any
                     assigned_color = candidate_color
                     used_colors.add(assigned_color)
                     break
-            
+
             # 모든 색상이 사용된 경우 순환하여 할당
             if not assigned_color:
                 color_idx = (random_start + i) % len(color_palette)
                 assigned_color = color_palette[color_idx]
-            
+
             dataset["backgroundColor"] = assigned_color
-    
+
     return BarChartComponent(
         title=title,
         data=BarChartData(labels=labels, datasets=datasets)
@@ -1494,17 +1506,17 @@ def create_line_chart(title: str, labels: List[str], datasets: List[Dict[str, An
     datasets는 [{"label": "주가(원)", "data": [67000, 70200], "borderColor": "#36B37E"}] 형식의 데이터셋 목록입니다."""
     # 데이터셋에 색상이 없는 경우 기본 색상 할당
     color_palette = ["#36B37E", "#4C9AFF", "#FF5630", "#FFAB00", "#6554C0", "#00B8D9", "#8993A4"]
-    
+
     # 데이터셋이 1개인 경우 랜덤하게 색상 선택
     import random
     random_start = random.randint(0, len(color_palette) - 1) if len(datasets) == 1 else 0
-    
+
     # 이미 할당된 색상 추적
     used_colors = set()
-    
+
     # 항목별 색상 매핑을 위한 사전
     item_colors = {}
-    
+
     # 증감률 유형별 변형 색상을 위한 오프셋
     rate_type_variations = {
         "yoy": 0,     # YoY는 기본 색상
@@ -1514,25 +1526,25 @@ def create_line_chart(title: str, labels: List[str], datasets: List[Dict[str, An
         "mom": 2,     # MoM은 기본 색상에서 2번 오프셋
         "전월": 2
     }
-    
+
     # 주요 항목 키워드 (우선 매칭할 키워드)
     major_items = ["매출액", "매출", "영업이익", "순이익", "당기순이익", "자산", "부채", "자본"]
-    
+
     for i, dataset in enumerate(datasets):
         if "borderColor" not in dataset:
             label = dataset.get("label", "")
             label_lower = label.lower()
-            
+
             # 라벨에서 항목명과 증감률 유형 추출 시도
             item_name = None
             rate_type = None
-            
+
             # 패턴 1: "항목명(증감률유형)" - 예: "매출액(YoY)", "영업이익(QoQ)"
             pattern1_match = re.search(r'^(.*?)\s*\(\s*(yoy|qoq|mom|전년|전분기|전월)\s*\)', label_lower, re.IGNORECASE)
-            
+
             # 패턴 2: "항목명 증감률유형" - 예: "매출액 YoY", "영업이익 QoQ"
             pattern2_match = re.search(r'^(.*?)\s+(yoy|qoq|mom|전년|전분기|전월)$', label_lower, re.IGNORECASE)
-            
+
             if pattern1_match:
                 item_name = pattern1_match.group(1).strip()
                 rate_type = pattern1_match.group(2).lower()
@@ -1546,17 +1558,17 @@ def create_line_chart(title: str, labels: List[str], datasets: List[Dict[str, An
                 for item in major_items:
                     if item.lower() in label_lower:
                         item_name = item.lower()
-                        
+
                         # 증감률 유형 확인
                         for rate_key in rate_type_variations.keys():
                             if rate_key in label_lower:
                                 rate_type = rate_key
                                 break
-                        
+
                         break
-            
+
             assigned_color = None
-            
+
             # 항목명과 증감률 유형이 모두 식별된 경우
             if item_name and rate_type:
                 # 해당 항목의 기본 색상이 아직 없으면 할당
@@ -1570,7 +1582,7 @@ def create_line_chart(title: str, labels: List[str], datasets: List[Dict[str, An
                         # 사용 가능한 색상이 없으면 팔레트에서 순환하여 선택
                         palette_index = len(item_colors) % len(color_palette)
                         item_colors[item_name] = color_palette[palette_index]
-                
+
                 # 증감률 유형에 따라 색상 변형
                 base_color = item_colors.get(item_name)
                 if base_color:
@@ -1583,9 +1595,9 @@ def create_line_chart(title: str, labels: List[str], datasets: List[Dict[str, An
                         base_index = color_palette.index(base_color) if base_color in color_palette else 0
                         variant_index = (base_index + offset) % len(color_palette)
                         assigned_color = color_palette[variant_index]
-                        
+
                     #logger.info(f"라인 데이터셋 '{label}': 항목 '{item_name}', 증감률 '{rate_type}'에 색상 {assigned_color} 할당")
-            
+
             # 항목별 할당 실패 시 일반 로직으로 색상 할당
             if not assigned_color:
                 # 키워드 기반으로 증감률 유형만 식별된 경우
@@ -1597,7 +1609,7 @@ def create_line_chart(title: str, labels: List[str], datasets: List[Dict[str, An
                             assigned_color = color_palette[color_index]
                             #logger.info(f"라인 데이터셋 '{label}': 증감률 '{rate_type}'에 색상 {assigned_color} 할당")
                             break
-                            
+
                 # 여전히 할당 실패 시 사용 가능한 색상 중 하나 선택
                 if not assigned_color:
                     available_colors = [c for c in color_palette if c not in used_colors]
@@ -1608,24 +1620,24 @@ def create_line_chart(title: str, labels: List[str], datasets: List[Dict[str, An
                         # 모든 색상이 사용된 경우 인덱스 기반으로 할당 (데이터셋이 1개인 경우 랜덤 시작점 사용)
                         color_idx = (random_start + i) % len(color_palette)
                         assigned_color = color_palette[color_idx]
-                    
+
                     #logger.info(f"라인 데이터셋 '{label}': 자동 색상 {assigned_color} 할당")
-            
+
             # 색상 할당 및 사용된 색상 추적
             dataset["borderColor"] = assigned_color
             used_colors.add(assigned_color)
         else:
             used_colors.add(dataset["borderColor"])
             #logger.info(f"라인 데이터셋 '{dataset.get('label')}': 기존 색상 {dataset['borderColor']} 유지")
-        
+
         # 선 굵기 설정
         if "borderWidth" not in dataset:
             dataset["borderWidth"] = 2
-        
+
         # 곡선 부드러움 설정
         if "tension" not in dataset:
             dataset["tension"] = 0.1
-    
+
     return LineChartComponent(
         title=title,
         data=LineChartData(labels=labels, datasets=datasets)
@@ -1637,12 +1649,12 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
     title은 차트 제목,
     labels은 x축 라벨,
     bar_datasets는 왼쪽 Y축에 표시될 막대 차트 데이터셋 목록 (예: [{"label": "매출액 (억원)", "data": [100, 200]}]),
-    line_datasets는 오른쪽 Y축에 표시될 선 차트 데이터셋 목록입니다. 
-    
+    line_datasets는 오른쪽 Y축에 표시될 선 차트 데이터셋 목록입니다.
+
     중요: line_datasets의 각 항목은 구체적인 라벨을 가져야 합니다:
     - 올바른 예: [{"label": "매출액 YoY (%)", "data": [5.2, 7.3]}, {"label": "영업이익 YoY (%)", "data": [8.1, 9.2]}]
     - 잘못된 예: [{"label": "YoY (%)", "data": [5.2, 7.3]}, {"label": "YoY (%)", "data": [8.1, 9.2]}]
-    
+
     bar_datasets와 line_datasets의 개수가 같은 경우, 각각은 동일한 항목에 대한 값과 증감률을 나타냅니다.
     y_axis_left_title은 왼쪽 Y축 제목 (선택, 예: "억원"),
     y_axis_right_title은 오른쪽 Y축 제목 (선택, 예: "%")
@@ -1654,15 +1666,15 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
         for i, line_dataset in enumerate(line_datasets):
             line_label = line_dataset.get("label", "")
             # 동일한 라벨이 반복되거나 너무 일반적인 경우
-            if (line_label in unique_line_labels or 
+            if (line_label in unique_line_labels or
                 line_label in ["YoY (%)", "QoQ (%)", "증감률 (%)", "%", "증감률"]):
-                
+
                 # 대응하는 bar_dataset의 라벨에서 항목명 추출
                 if i < len(bar_datasets):
                     bar_label = bar_datasets[i].get("label", "")
                     # bar_label에서 항목명 추출 (예: "매출액 (억원)" -> "매출액")
                     item_name = bar_label.split(" (")[0].split("(")[0].strip()
-                    
+
                     # 원래 line_label에서 증감률 타입 추출
                     if "yoy" in line_label.lower() or "전년" in line_label:
                         rate_type = "YoY"
@@ -1672,7 +1684,7 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                         rate_type = "MoM"
                     else:
                         rate_type = "YoY"  # 기본값
-                    
+
                     # 새로운 구체적인 라벨 생성
                     new_label = f"{item_name} {rate_type} (%)"
                     line_dataset["label"] = new_label
@@ -1681,14 +1693,14 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                     unique_line_labels.add(line_label)
             else:
                 unique_line_labels.add(line_label)
-    
+
                     # 막대 차트 데이터셋에 색상 할당
     bar_color_palette = ["#4C9AFF", "#36B37E", "#FF5630", "#FFAB00", "#6554C0", "#00B8D9"]
-    
+
     # 데이터셋이 1개인 경우 랜덤하게 색상 선택
     import random
     random_start = random.randint(0, len(bar_color_palette) - 1) if len(bar_datasets) == 1 else 0
-    
+
     for i, dataset in enumerate(bar_datasets):
         if "backgroundColor" not in dataset:
             # 특정 키워드에 따라 색상 할당
@@ -1703,25 +1715,25 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                 # 기본 색상 순환 (데이터셋이 1개인 경우 랜덤 시작점 사용)
                 color_idx = (random_start + i) % len(bar_color_palette)
                 dataset["backgroundColor"] = bar_color_palette[color_idx]
-    
+
     # 선 차트 데이터셋에 색상 할당
     # 기본 색상 팔레트 확장 (중복 방지를 위해 다양한 색상 추가)
     line_color_palette = [
-        "#FF5630", "#FFAB00", "#6554C0", "#00B8D9", "#8993A4", 
+        "#FF5630", "#FFAB00", "#6554C0", "#00B8D9", "#8993A4",
         "#36B37E", "#998DD9", "#E95D0F", "#0747A6", "#5243AA",
         "#00875A", "#D13438", "#0052CC", "#42526E", "#E37933"
     ]
-    
+
     # 데이터셋이 1개인 경우 랜덤하게 색상 선택
     import random
     random_start = random.randint(0, len(line_color_palette) - 1) if len(line_datasets) == 1 else 0
-    
+
     # 이미 할당된 색상 추적
     used_colors = set()
-    
+
     # 항목별 색상 매핑을 위한 사전
     item_colors = {}
-    
+
     # 증감률 유형별 변형 색상을 위한 오프셋
     rate_type_variations = {
         "yoy": 0,     # YoY는 기본 색상
@@ -1731,25 +1743,25 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
         "mom": 2,     # MoM은 기본 색상에서 2번 오프셋
         "전월": 2
     }
-    
+
     # 주요 항목 키워드 (우선 매칭할 키워드)
     major_items = ["매출액", "매출", "영업이익", "순이익", "당기순이익", "자산", "부채", "자본"]
-    
+
     for i, dataset in enumerate(line_datasets):
         #if "borderColor" not in dataset:
         label = dataset.get("label", "")
         label_lower = label.lower()
-        
+
         # 라벨에서 항목명과 증감률 유형 추출 시도
         item_name = None
         rate_type = None
-        
+
         # 패턴 1: "항목명(증감률유형)" - 예: "매출액(YoY)", "영업이익(QoQ)"
         pattern1_match = re.search(r'^(.*?)\s*\(\s*(yoy|qoq|mom|전년|전분기|전월)\s*\)', label_lower, re.IGNORECASE)
-        
+
         # 패턴 2: "항목명 증감률유형" - 예: "매출액 YoY", "영업이익 QoQ"
         pattern2_match = re.search(r'^(.*?)\s+(yoy|qoq|mom|전년|전분기|전월)$', label_lower, re.IGNORECASE)
-        
+
         if pattern1_match:
             item_name = pattern1_match.group(1).strip()
             rate_type = pattern1_match.group(2).lower()
@@ -1763,17 +1775,17 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
             for item in major_items:
                 if item.lower() in label_lower:
                     item_name = item.lower()
-                    
+
                     # 증감률 유형 확인
                     for rate_key in rate_type_variations.keys():
                         if rate_key in label_lower:
                             rate_type = rate_key
                             break
-                    
+
                     break
-        
+
         assigned_color = None
-        
+
         # 항목명과 증감률 유형이 모두 식별된 경우
         if item_name and rate_type:
             # 해당 항목의 기본 색상이 아직 없으면 할당
@@ -1787,7 +1799,7 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                                             # 사용 가능한 색상이 없으면 팔레트에서 순환하여 선택 (데이터셋이 1개인 경우 랜덤 시작점 사용)
                         palette_index = (random_start + len(item_colors)) % len(line_color_palette)
                         item_colors[item_name] = line_color_palette[palette_index]
-            
+
             # 증감률 유형에 따라 색상 변형
             base_color = item_colors.get(item_name)
             if base_color:
@@ -1800,9 +1812,9 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                     base_index = line_color_palette.index(base_color) if base_color in line_color_palette else 0
                     variant_index = (base_index + offset) % len(line_color_palette)
                     assigned_color = line_color_palette[variant_index]
-                    
+
                 #logger.info(f"라인 데이터셋 '{label}': 항목 '{item_name}', 증감률 '{rate_type}'에 색상 {assigned_color} 할당")
-        
+
         # 항목별 할당 실패 시 일반 로직으로 색상 할당
         if not assigned_color:
             # 키워드 기반으로 증감률 유형만 식별된 경우
@@ -1814,7 +1826,7 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                         assigned_color = line_color_palette[color_index]
                         #logger.info(f"라인 데이터셋 '{label}': 증감률 '{rate_type}'에 색상 {assigned_color} 할당")
                         break
-                        
+
             # 여전히 할당 실패 시 사용 가능한 색상 중 하나 선택
             if not assigned_color:
                 available_colors = [c for c in line_color_palette if c not in used_colors]
@@ -1825,28 +1837,28 @@ def create_mixed_chart(title: str, labels: List[str], bar_datasets: List[Dict[st
                     # 모든 색상이 사용된 경우 인덱스 기반으로 할당 (데이터셋이 1개인 경우 랜덤 시작점 사용)
                     color_idx = (random_start + i) % len(line_color_palette)
                     assigned_color = line_color_palette[color_idx]
-                
+
                 #logger.info(f"라인 데이터셋 '{label}': 자동 색상 {assigned_color} 할당")
-        
+
         # 색상 할당 및 사용된 색상 추적
         dataset["borderColor"] = assigned_color
         used_colors.add(assigned_color)
         # else:
         #     used_colors.add(dataset["borderColor"])
         #     logger.info(f"라인 데이터셋 '{dataset.get('label')}': 기존 색상 {dataset['borderColor']} 유지")
-        
+
         # 선 굵기 설정
         if "borderWidth" not in dataset:
             dataset["borderWidth"] = 2
-        
+
         # 곡선 부드러움 설정
         if "tension" not in dataset:
             dataset["tension"] = 0.1
-            
+
         # 점선 효과 추가 (점선 패턴)
         if "borderDash" not in dataset:
             dataset["borderDash"] = [5, 5]
-    
+
     return MixedChartComponent(
         title=title,
         data=MixedChartData(
@@ -1864,8 +1876,8 @@ def create_code_block(language: Optional[str], content: str) -> Dict:
     return CodeBlockComponent(language=language, content=content).dict()
 
 def create_price_chart(
-    symbol: str, 
-    name: str, 
+    symbol: str,
+    name: str,
     title: Optional[str] = None,
     candle_data: Optional[List[Dict[str, Any]]] = None,
     volume_data: Optional[List[Dict[str, Any]]] = None,
@@ -1881,15 +1893,15 @@ def create_price_chart(
     candle_data는 OHLCV 캔들 데이터, volume_data는 거래량 데이터,
     moving_averages는 이동평균선 데이터, support_lines는 지지선 데이터,
     resistance_lines는 저항선 데이터입니다."""
-    
+
     # 기본 캔들 데이터가 없는 경우 빈 리스트로 초기화
     if candle_data is None:
         candle_data = []
-    
+
     # 기본 제목 설정
     if title is None:
         title = f"{name}({symbol}) 주가차트"
-    
+
     return PriceChartComponent(
         title=title,
         data=PriceChartData(
@@ -1921,11 +1933,11 @@ def create_technical_indicator_chart(
     symbol은 종목코드, name은 종목명, dates는 날짜 배열,
     indicators는 지표 데이터 목록(최대 5개), title은 차트 제목,
     candle_data는 선택적 주가 캔들 데이터입니다."""
-    
+
     # 기본 제목 설정
     if title is None:
         title = f"{name}({symbol}) 기술적 지표 분석"
-    
+
     # 지표 데이터 변환 및 검증
     processed_indicators = []
     #for i, indicator in enumerate(indicators[:5]):  # 최대 5개만 허용
@@ -1939,13 +1951,13 @@ def create_technical_indicator_chart(
             y_axis_id=indicator.get('y_axis_id', 'primary'),
             line_style=indicator.get('line_style', 'solid')
         )
-        
+
         # directions 필드가 있으면 추가 (슈퍼트렌드용)
         if 'directions' in indicator:
             indicator_data.directions = indicator.get('directions', [])
-        
+
         processed_indicators.append(indicator_data)
-    
+
     return TechnicalIndicatorChartComponent(
         title=title,
         data=TechnicalIndicatorChartData(
@@ -1974,22 +1986,22 @@ def create_price_chart_component_directly(tech_agent_result: Dict[str, Any], sto
     """
     # 실제 데이터는 data 키 안에 있음
     actual_data = tech_agent_result.get("data", {})
-    
+
     chart_data = actual_data.get("chart_data", [])
     chart_patterns = actual_data.get("chart_patterns", {})
-    
+
     # OHLCV 데이터 변환
     candle_data = []
-    
+
     if isinstance(chart_data, list) and chart_data:
         for i, item in enumerate(chart_data):
             if isinstance(item, dict):
                 # timestamp를 date로 변환하거나 date 필드 사용
                 time_value = item.get("date") or item.get("timestamp", "")
-                
+
                 # ISO 날짜 형식을 yyyy-mm-dd 형식으로 변환
                 formatted_time = format_date_for_chart(time_value)
-                
+
                 candle_item = {
                     "time": formatted_time,
                     "open": safe_int(item.get("open", 0)),
@@ -2000,15 +2012,15 @@ def create_price_chart_component_directly(tech_agent_result: Dict[str, Any], sto
                     "price_change_percent": safe_float(item.get("price_change_percent", 0))
                 }
                 candle_data.append(candle_item)
-    
+
     # 지지선/저항선 데이터 변환
     support_lines = []
     resistance_lines = []
-    
+
     if chart_patterns:
         support_levels = chart_patterns.get("support_levels", [])
         resistance_levels = chart_patterns.get("resistance_levels", [])
-        
+
         for level in support_levels:
             if level is not None:
                 support_lines.append({
@@ -2020,7 +2032,7 @@ def create_price_chart_component_directly(tech_agent_result: Dict[str, Any], sto
                     "line_style": "dashed",
                     "line_width": 2
                 })
-        
+
         for level in resistance_levels:
             if level is not None:
                 resistance_lines.append({
@@ -2028,15 +2040,15 @@ def create_price_chart_component_directly(tech_agent_result: Dict[str, Any], sto
                     "label": f"저항선 {level:,.0f}원",
                     "color": "#f87171",  # 빨간색
                     "show_label": True,
-                    "label_position": "left", 
+                    "label_position": "left",
                     "line_style": "dashed",
                     "line_width": 2
                 })
-    
+
     price_chart_component = create_price_chart(
         symbol=stock_code,
         name=stock_name,
-        title=f"주가, 지지/저항 분석",#title=f"{stock_name}({stock_code}) 주가차트 분석",
+        title="주가, 지지/저항 분석",#title=f"{stock_name}({stock_code}) 주가차트 분석",
         candle_data=candle_data,
         support_lines=support_lines if support_lines else None,
         resistance_lines=resistance_lines if resistance_lines else None,
@@ -2047,7 +2059,7 @@ def create_price_chart_component_directly(tech_agent_result: Dict[str, Any], sto
             "timestamp": datetime.now().isoformat()
         }
     )
-    
+
     return price_chart_component
 
 
@@ -2057,22 +2069,22 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
     ADX, ADR, 슈퍼트렌드 등 추세추종 지표들을 시각화합니다.
     """
     logger.info(f"[기술지표차트] {stock_name}({stock_code}) 기술적 지표 차트 생성 시작")
-    
+
     # 실제 데이터는 data 키 안에 있음
     actual_data = tech_agent_result.get("data", {})
     chart_indicators_data = actual_data.get("chart_indicators_data", {})
     chart_data = actual_data.get("chart_data", [])  # 캔들 데이터용
-    
+
     # 날짜 배열 가져오기
     dates = chart_indicators_data.get("dates", [])
-    
+
     if not dates:
         logger.warning("[기술지표차트] 날짜 데이터가 없어 기술적 지표 차트를 생성할 수 없습니다")
         return create_paragraph("기술적 지표 차트 데이터가 없습니다.")
-    
+
     # 지표 데이터 목록 생성 (최대 5개)
     indicators = []
-    
+
     # 1. ADX (Average Directional Index) - 추세 강도
     adx_data = chart_indicators_data.get("adx", [])
     if adx_data and any(x is not None for x in adx_data):
@@ -2086,7 +2098,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
             "line_style": "solid"
         })
         logger.info(f"[기술지표차트] ADX 지표 추가 완료 - 데이터 포인트: {len(processed_adx)}개")
-    
+
     # 2. +DI (Positive Directional Indicator)
     plus_di_data = chart_indicators_data.get("adx_plus_di", [])
     if plus_di_data and any(x is not None for x in plus_di_data) and len(indicators) < 5:
@@ -2099,7 +2111,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
             "y_axis_id": "primary",
             "line_style": "solid"
         })
-    
+
     # 3. -DI (Negative Directional Indicator)
     minus_di_data = chart_indicators_data.get("adx_minus_di", [])
     if minus_di_data and any(x is not None for x in minus_di_data) and len(indicators) < 5:
@@ -2112,23 +2124,23 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
             "y_axis_id": "primary",
             "line_style": "solid"
         })
-    
+
     # 4. 슈퍼트렌드 (SuperTrend)
     supertrend_data = chart_indicators_data.get("supertrend", [])
     supertrend_direction_data = chart_indicators_data.get("supertrend_direction", [])
-    
+
     if supertrend_data and any(x is not None for x in supertrend_data) and len(indicators) < 5:
         processed_supertrend_values = [float(x) if x is not None else 0.0 for x in supertrend_data]
-        
+
         processed_supertrend_directions = []
         for i, direction in enumerate(supertrend_direction_data):
             if direction == 1:
                 processed_supertrend_directions.append(1.0)  # 상승추세
             elif direction == -1:
-                processed_supertrend_directions.append(-1.0)  # 하락추세  
+                processed_supertrend_directions.append(-1.0)  # 하락추세
             else:
                 processed_supertrend_directions.append(0.0)  # 중립
-        
+
         supertrend_indicator = {
             "name": "슈퍼트렌드",
             "data": processed_supertrend_values,
@@ -2138,15 +2150,15 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
             "y_axis_id": "secondary",
             "line_style": "solid"
         }
-        
+
         indicators.append(supertrend_indicator)
         logger.info(f"[기술지표차트] 슈퍼트렌드 지표 추가 완료 - 데이터 포인트: {len(processed_supertrend_values)}개")
-    
+
     # 지표가 없는 경우 처리
     if not indicators:
         logger.warning("[기술지표차트] 사용 가능한 기술적 지표 데이터가 없습니다")
         return create_paragraph("기술적 지표 데이터가 충분하지 않습니다.")
-    
+
     # Y축 설정
     y_axis_configs = {
         "primary": {
@@ -2156,11 +2168,11 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
         },
         "secondary": {
             "title": "가격(원)",
-            "position": "right", 
+            "position": "right",
             "color": "#f59e0b"
         }
     }
-    
+
     # 캔들 데이터 변환
     candle_data = []
     if isinstance(chart_data, list) and chart_data:
@@ -2168,7 +2180,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
             if isinstance(item, dict):
                 time_value = item.get("date") or item.get("timestamp", "")
                 formatted_time = format_date_for_chart(time_value)
-                
+
                 candle_item = {
                     "time": formatted_time,
                     "open": safe_int(item.get("open", 0)),
@@ -2179,7 +2191,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
                     "price_change_percent": safe_float(item.get("price_change_percent", 0))
                 }
                 candle_data.append(candle_item)
-    
+
     metadata = {
         "description": "추세추종 지표 분석",
         "source": "technical_analyzer_agent",
@@ -2189,20 +2201,20 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
         "data_points": len(dates),
         "candle_data_count": len(candle_data)
     }
-    
+
     # 추세추종 지표 차트 컴포넌트 생성
     technical_indicator_chart = create_technical_indicator_chart(
         symbol=stock_code,
         name=stock_name,
         dates=dates,
         indicators=indicators,
-        title=f"추세추종 지표 분석",#title=f"{stock_name}({stock_code}) 추세추종 지표 분석",
+        title="추세추종 지표 분석",#title=f"{stock_name}({stock_code}) 추세추종 지표 분석",
         candle_data=candle_data if candle_data else None,
         y_axis_configs=y_axis_configs,
         period=None,
         metadata=metadata
     )
-    
+
     logger.info(f"[기술지표차트] 추세추종 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
     return technical_indicator_chart
 
@@ -2213,22 +2225,22 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
     RSI, MACD 등 모멘텀 지표들을 시각화합니다.
     """
     logger.info(f"[모멘텀지표차트] {stock_name}({stock_code}) 모멘텀 지표 차트 생성 시작")
-    
+
     # 실제 데이터는 data 키 안에 있음
     actual_data = tech_agent_result.get("data", {})
     chart_indicators_data = actual_data.get("chart_indicators_data", {})
     chart_data = actual_data.get("chart_data", [])
-    
+
     # 날짜 배열 가져오기
     dates = chart_indicators_data.get("dates", [])
-    
+
     if not dates:
         logger.warning("[모멘텀지표차트] 날짜 데이터가 없어 모멘텀 지표 차트를 생성할 수 없습니다")
         return create_paragraph("모멘텀 지표 차트 데이터가 없습니다.")
-    
+
     # 지표 데이터 목록 생성
     indicators = []
-    
+
     # 1. RSI (Relative Strength Index)
     rsi_data = chart_indicators_data.get("rsi", [])
     if rsi_data and any(x is not None for x in rsi_data):
@@ -2241,7 +2253,7 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
             "y_axis_id": "primary",
             "line_style": "solid"
         })
-    
+
     # 2. MACD Line
     macd_line_data = chart_indicators_data.get("macd", [])
     if macd_line_data and any(x is not None for x in macd_line_data) and len(indicators) < 5:
@@ -2254,7 +2266,7 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
             "y_axis_id": "hidden",
             "line_style": "solid"
         })
-    
+
     # 3. MACD Signal Line
     macd_signal_data = chart_indicators_data.get("macd_signal", [])
     if macd_signal_data and any(x is not None for x in macd_signal_data) and len(indicators) < 5:
@@ -2267,7 +2279,7 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
             "y_axis_id": "hidden",
             "line_style": "dashed"
         })
-    
+
     # 4. MACD Histogram
     macd_histogram_data = chart_indicators_data.get("macd_histogram", [])
     if macd_histogram_data and any(x is not None for x in macd_histogram_data) and len(indicators) < 5:
@@ -2280,12 +2292,12 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
             "y_axis_id": "hidden",
             "line_style": "solid"
         })
-    
+
     # 지표가 없는 경우 처리
     if not indicators:
         logger.warning("[모멘텀지표차트] 사용 가능한 모멘텀 지표 데이터가 없습니다")
         return create_paragraph("모멘텀 지표 데이터가 충분하지 않습니다.")
-    
+
     # Y축 설정
     y_axis_configs = {
         "primary": {
@@ -2303,7 +2315,7 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
             "visible": False
         }
     }
-    
+
     # 캔들 데이터 변환
     candle_data = []
     if isinstance(chart_data, list) and chart_data:
@@ -2311,7 +2323,7 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
             if isinstance(item, dict):
                 time_value = item.get("date") or item.get("timestamp", "")
                 formatted_time = format_date_for_chart(time_value)
-                
+
                 candle_item = {
                     "time": formatted_time,
                     "open": safe_int(item.get("open", 0)),
@@ -2322,7 +2334,7 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
                     "price_change_percent": safe_float(item.get("price_change_percent", 0))
                 }
                 candle_data.append(candle_item)
-    
+
     # 메타데이터 생성
     metadata = {
         "description": "모멘텀 지표 분석",
@@ -2333,19 +2345,19 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
         "data_points": len(dates),
         "candle_data_count": len(candle_data)
     }
-    
+
     # 모멘텀 지표 차트 컴포넌트 생성
     momentum_chart = create_technical_indicator_chart(
         symbol=stock_code,
         name=stock_name,
         dates=dates,
         indicators=indicators,
-        title=f"모멘텀 지표 분석",#title=f"{stock_name}({stock_code}) 모멘텀 지표 분석",
+        title="모멘텀 지표 분석",#title=f"{stock_name}({stock_code}) 모멘텀 지표 분석",
         candle_data=candle_data if candle_data else None,
         y_axis_configs=y_axis_configs,
         period=None,
         metadata=metadata
     )
-    
+
     logger.info(f"[모멘텀지표차트] 모멘텀 지표 차트 생성 완료 - 지표 개수: {len(indicators)}개")
     return momentum_chart

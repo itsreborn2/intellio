@@ -1,39 +1,37 @@
 """
 질문 분석기 에이전트 모듈
 
-이 모듈은 사용자 질문을 분석하여 의도, 엔티티, 키워드 등의 
+이 모듈은 사용자 질문을 분석하여 의도, 엔티티, 키워드 등의
 중요한 정보를 추출하는 QuestionAnalyzerAgent 클래스를 구현합니다.
 """
 
-import json
-from loguru import logger
-from typing import Dict, List, Any, Optional, Literal, cast, Union
-from datetime import datetime
-import os
 import asyncio
+import json
+import os
 import re
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
+from typing import Optional as PydanticOptional
 
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
+from loguru import logger
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional as PydanticOptional
-from stockeasy.services.financial.stock_info_service import StockInfoService
-from common.models.token_usage import ProjectType
-from common.services.agent_llm import get_llm_for_agent, get_agent_llm
-from stockeasy.prompts.question_analyzer_prompts import PROMPT_DYNAMIC_TOC, SYSTEM_PROMPT, format_question_analyzer_prompt
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from common.core.config import settings
 from common.core.redis import AsyncRedisClient
-from stockeasy.models.agent_io import (
-    QuestionAnalysisResult, ExtractedEntity, QuestionClassification, 
-    DataRequirement, pydantic_to_typeddict
-)
-from langchain_core.prompts import ChatPromptTemplate
-from stockeasy.agents.base import BaseAgent
-from sqlalchemy.ext.asyncio import AsyncSession
+from common.models.token_usage import ProjectType
+from common.services.agent_llm import get_agent_llm
+
 #from langchain_tavily import TavilySearch
 from common.services.tavily import TavilyService
 from common.utils.util import extract_json_from_text
+from stockeasy.agents.base import BaseAgent
+from stockeasy.models.agent_io import QuestionAnalysisResult
+from stockeasy.prompts.question_analyzer_prompts import PROMPT_DYNAMIC_TOC, SYSTEM_PROMPT, format_question_analyzer_prompt
+from stockeasy.services.financial.stock_info_service import StockInfoService
+
 
 class Entities(BaseModel):
     """추출된 엔티티 정보"""
@@ -71,7 +69,7 @@ class Entities(BaseModel):
 class Classification(BaseModel):
     """질문 분류 정보"""
     primary_intent: Literal["종목기본정보", "성과전망", "재무분석", "산업동향", "기타"] = Field(
-        ..., 
+        ...,
         description=(
             "사용자 질문의 핵심 의도입니다. 반드시 다음 중 하나를 선택해야 합니다: "
             "'종목기본정보'(회사 개요, 현재 주가 등 단순 정보), "
@@ -83,7 +81,7 @@ class Classification(BaseModel):
         )
     )
     complexity: Literal["단순", "중간", "복합", "전문가급"] = Field(
-        ..., 
+        ...,
         description=(
             "질문의 복잡도 수준입니다. 반드시 다음 중 하나를 선택해야 합니다: "
             "'단순'(단일 정보 요청, 예: '현재 주가 얼마야?'), "
@@ -94,7 +92,7 @@ class Classification(BaseModel):
         )
     )
     expected_answer_type: Literal["사실형", "추론형", "비교형", "예측형", "설명형", "종합형"] = Field(
-        ..., 
+        ...,
         description=(
             "사용자가 기대하는 답변의 유형입니다. 반드시 다음 중 하나를 선택해야 합니다: "
             "'사실형'(객관적인 데이터나 정보 전달, 예: '작년 매출액은?'), "
@@ -193,18 +191,18 @@ class DynamicTocOutput(BaseModel):
 class QuestionAnalyzerAgent(BaseAgent):
     """
     사용자 질문을 분석하는 에이전트
-    
+
     이 에이전트는 사용자의 질문을 분석하여 다음을 수행합니다:
     1. 종목코드/종목명 등 엔티티 추출
     2. 질문의 의도 분류
     3. 필요한 데이터 유형 식별
     4. 키워드 추출
     """
-    
+
     def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
         """
         질문 분석 에이전트 초기화
-        
+
         Args:
             name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
             db: 데이터베이스 세션 객체 (선택적)
@@ -218,7 +216,7 @@ class QuestionAnalyzerAgent(BaseAgent):
         #self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
         self.tavily_service = TavilyService()
         self.redis_client = AsyncRedisClient()
-        
+
         # 기술적 분석 관련 키워드 정의
         self.technical_analysis_keywords = {
             # 차트 패턴 키워드
@@ -252,23 +250,23 @@ class QuestionAnalyzerAgent(BaseAgent):
                 "기술적관점", "차트상", "기술적요인", "차트패턴분석", "기술적신호"
             ]
         }
-    
-        
+
+
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         사용자 질문을 분석하여 중요 정보를 추출하고 상태를 업데이트합니다.
-        
+
         Args:
             state: 현재 상태 정보를 포함하는 딕셔너리
-            
+
         Returns:
             업데이트된 상태 딕셔너리
         """
         try:
             # 성능 측정 시작
             start_time = datetime.now()
-            logger.info(f"QuestionAnalyzerAgent starting processing")
-            
+            logger.info("QuestionAnalyzerAgent starting processing")
+
             # 현재 사용자 쿼리 추출
             query = state.get("query", "")
             stock_code = state.get("stock_code", "")
@@ -291,24 +289,24 @@ class QuestionAnalyzerAgent(BaseAgent):
             # 수정된 조건: 대화 기록이 2개 이상 있는지 확인
             # 상용 서비스에 맞게 type 속성이 있는 경우도 처리
             # has_valid_history = (
-            #     conversation_history and 
-            #     isinstance(conversation_history, list) and 
+            #     conversation_history and
+            #     isinstance(conversation_history, list) and
             #     len(conversation_history) >= 1
             # )
             has_valid_history = False #강제 비활성화
-            
+
             if has_valid_history:
                 logger.info(f"대화 기록 있음: {len(conversation_history)}개 메시지")
                 context_analysis = await self.analyze_conversation_context(query, conversation_history, stock_name, stock_code, user_id)
                 context_analysis_result = context_analysis.model_dump() # dict
-                
+
                 # 분석 결과 상태에 저장
                 state["context_analysis"] = context_analysis_result
-                
+
                 # 대화 마무리 인사인지 확인
                 if context_analysis.is_conversation_closing:
                     logger.info(f"대화 마무리 인사로 감지: 유형={context_analysis.closing_type}")
-                    
+
                     # 상태 업데이트
                     state["agent_results"]["question_analysis"] = context_analysis_result
                     state["summary"] = context_analysis.closing_response
@@ -317,7 +315,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                     # 메트릭 기록 및 처리 상태 업데이트
                     end_time = datetime.now()
                     duration = (end_time - start_time).total_seconds()
-                    
+
                     state["metrics"] = state.get("metrics", {})
                     state["metrics"]["question_analyzer"] = {
                         "start_time": start_time,
@@ -327,16 +325,16 @@ class QuestionAnalyzerAgent(BaseAgent):
                         "error": None,
                         "model_name": self.agent_llm.get_model_name()
                     }
-                    
+
                     state["processing_status"] = state.get("processing_status", {})
                     state["processing_status"]["question_analyzer"] = "completed"
-                    
+
                     logger.info(f"대화 마무리 감지, QuestionAnalyzerAgent 빠른 처리 완료: {duration:.2f}초 소요")
                     logger.info(f"마무리 유형: {context_analysis.closing_type}, 응답: {context_analysis.closing_response}")
                     return state
-                
+
                 if context_analysis.is_different_stock and context_analysis.stock_relation == "다른종목":
-                    logger.info(f"완전히 다른종목 질문")
+                    logger.info("완전히 다른종목 질문")
                     # 상태 업데이트
                     state["agent_results"]["question_analysis"] = context_analysis_result
                     state["summary"] = "현재 종목과 관련이 없는 질문입니다.\n다른 종목에 관한 질문은 새 채팅에서 해주세요"
@@ -344,7 +342,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                     # 메트릭 기록 및 처리 상태 업데이트
                     end_time = datetime.now()
                     duration = (end_time - start_time).total_seconds()
-                    
+
                     state["metrics"] = state.get("metrics", {})
                     state["metrics"]["question_analyzer"] = {
                         "start_time": start_time,
@@ -354,25 +352,25 @@ class QuestionAnalyzerAgent(BaseAgent):
                         "error": None,
                         "model_name": self.agent_llm.get_model_name()
                     }
-                    
+
                     state["processing_status"] = state.get("processing_status", {})
                     state["processing_status"]["question_analyzer"] = "completed"
-                    
+
                     logger.info(f"대화 마무리 감지, QuestionAnalyzerAgent 빠른 처리 완료: {duration:.2f}초 소요")
                     logger.info(f"마무리 유형: {context_analysis.closing_type}, 응답: {context_analysis.closing_response}")
                     return state
-                
+
                 # 후속 질문인 경우 빠르게 처리하고 리턴
                 if context_analysis.requires_context:
                     logger.info("후속 질문으로 감지되어 상세 분석 생략하고 빠르게 리턴합니다.")
 
-                    
+
                     state["agent_results"]["question_analysis"] = context_analysis_result
-                    
+
                     # 메트릭 기록 및 처리 상태 업데이트
                     end_time = datetime.now()
                     duration = (end_time - start_time).total_seconds()
-                    
+
                     state["metrics"] = state.get("metrics", {})
                     state["metrics"]["question_analyzer"] = {
                         "start_time": start_time,
@@ -382,13 +380,13 @@ class QuestionAnalyzerAgent(BaseAgent):
                         "error": None,
                         "model_name": self.agent_llm.get_model_name()
                     }
-                    
+
                     state["processing_status"] = state.get("processing_status", {})
                     state["processing_status"]["question_analyzer"] = "completed"
-                    
+
                     logger.info(f"QuestionAnalyzerAgent 빠른 처리 완료: {duration:.2f}초 소요")
                     return state
-                
+
                 # 후속 처리에 필요한 정보 기록
                 if context_analysis.requires_context:
                     logger.info(f"이전 대화 컨텍스트 참조 필요: {context_analysis.relation_to_previous}")
@@ -409,15 +407,15 @@ class QuestionAnalyzerAgent(BaseAgent):
                     "stock_relation": "알수없음",
                     "reasoning": "대화 기록이 없습니다."
                 }
-            
+
             logger.info(f"QuestionAnalyzerAgent analyzing query: {query}")
-            
+
             # 커스텀 프롬프트 템플릿 확인
             # 1. 상태에서 커스텀 프롬프트 템플릿 확인
             custom_prompt_from_state = state.get("custom_prompt_template")
-            # 2. 속성에서 커스텀 프롬프트 템플릿 확인 
+            # 2. 속성에서 커스텀 프롬프트 템플릿 확인
             custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
-            
+
             # 커스텀 프롬프트 사용 우선순위: 상태 > 속성 > 기본값
             system_prompt = None
             if custom_prompt_from_state:
@@ -425,18 +423,18 @@ class QuestionAnalyzerAgent(BaseAgent):
                 logger.info(f"QuestionAnalyzerAgent using custom prompt from state : {custom_prompt_from_state}")
             elif custom_prompt_from_attr:
                 system_prompt = custom_prompt_from_attr
-                logger.info(f"QuestionAnalyzerAgent using custom prompt from attribute")
-            
+                logger.info("QuestionAnalyzerAgent using custom prompt from attribute")
+
             import asyncio
-            
+
             # 1. 사용자 질문 의도 분석 및 2. 최근 이슈 검색/목차 생성을 병렬로 실행
             logger.info("사용자 질문 분석과 최근 이슈 검색을 병렬로 실행")
-            
+
             # 1. 사용자 질문 의도 분석 비동기 함수
             async def analyze_question_intent():
                 # 프롬프트 준비
                 prompt = format_question_analyzer_prompt(query=query, stock_name=stock_name, stock_code=stock_code, system_prompt=system_prompt)
-                
+
                 try:
                     # LLM 호출로 분석 수행
                     agent_temp = get_agent_llm("gemini-2.0-flash")
@@ -447,13 +445,13 @@ class QuestionAnalyzerAgent(BaseAgent):
                         project_type=ProjectType.STOCKEASY,
                         db=self.db
                     )
-                    
+
                     response: QuestionAnalysis
-                    
+
                     if isinstance(raw_response, AIMessage):
                         logger.info("AIMessage 형태로 응답 받음, JSON 파싱 시도")
                         content = raw_response.content
-                        
+
                         # ```json ``` 제거
                         if isinstance(content, str):
                             # 정규 표현식을 사용하여 ```json ... ``` 또는 ``` ... ``` 패턴을 찾고 내부 JSON만 추출
@@ -470,7 +468,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                                 if json_str.endswith("```"):
                                     json_str = json_str[:-3]
                                 json_str = json_str.strip()
-                                
+
                             try:
                                 parsed_data = json.loads(json_str)
                                 response = QuestionAnalysis(**parsed_data)
@@ -498,12 +496,12 @@ class QuestionAnalyzerAgent(BaseAgent):
                     response.data_requirements.industry_data_needed = True
                     response.data_requirements.confidential_data_needed = True
                     response.data_requirements.revenue_data_needed = True
-                    
+
                     # 기술적 분석은 무조건 필요로 설정 (키워드 감지와 관계없이)
                     ta_needed = True  # self._detect_technical_analysis_need(query) 대신 무조건 True
                     response.data_requirements.technical_analysis_needed = ta_needed
                     logger.info(f"[데이터요구사항] technical_analysis_needed 설정: {ta_needed} (무조건 활성화)")
-                    
+
                     # 분석 결과 로깅
                     logger.info(f"Analysis result: {response}")
 
@@ -514,7 +512,7 @@ class QuestionAnalyzerAgent(BaseAgent):
 
                     if subgroup_list and len(subgroup_list) > 0:
                         response.entities.subgroup = subgroup_list
-                    
+
                     # QuestionAnalysisResult 객체 생성 - 유틸리티 함수 사용
                     question_analysis: QuestionAnalysisResult = {
                         "entities": response.entities.dict(),
@@ -523,11 +521,11 @@ class QuestionAnalyzerAgent(BaseAgent):
                         "keywords": response.keywords,
                         "detail_level": response.detail_level
                     }
-                    
+
                 except Exception as e:
                     # 구조화된 출력 파싱에 실패한 경우 fallback 처리
                     logger.error(f"구조화된 출력 파싱 중 오류 발생: {str(e)}")
-                    
+
                     # LLM 호출 다시 시도 (일반 응답으로)
                     logger.info("일반 응답 형식으로 다시 시도합니다.")
                     ai_response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
@@ -536,19 +534,19 @@ class QuestionAnalyzerAgent(BaseAgent):
                         project_type=ProjectType.STOCKEASY,
                         db=self.db
                     )
-                    
+
                     logger.info(f"일반 응답 받음: {type(ai_response)}")
-                    
+
                     # AIMessage에서 JSON 파싱 시도
                     try:
                         # JSON 패턴 찾기 (중괄호로 감싸진 부분) - re 모듈은 이미 최상단에 import됨
                         json_str = extract_json_from_text(ai_response.content)
-                        
+
                         if json_str:
                             # JSON 문자열 파싱
                             parsed_data = json.loads(json_str)
                             logger.info(f"\n✅ JSON 파싱 성공: title={parsed_data.get('title')}, sections={len(parsed_data.get('sections', []))}개")
-                            
+
                             # 기본 데이터 구조 생성
                             question_analysis = {
                                 "entities": {
@@ -579,26 +577,26 @@ class QuestionAnalyzerAgent(BaseAgent):
                                 "keywords": parsed_data.get("keywords", []),
                                 "detail_level": parsed_data.get("detail_level", "보통")
                             }
-                            
+
                             # 서브그룹 가져오기
                             stock_info_service = StockInfoService()
                             subgroup_list = await stock_info_service.get_sector_by_code(stock_code)
                             logger.info(f"subgroup_info: {subgroup_list}")
-                            
+
                             if subgroup_list and len(subgroup_list) > 0:
                                 question_analysis["entities"]["subgroup"] = subgroup_list
                         else:
                             logger.warning("JSON 패턴을 찾을 수 없음, 기본 응답 구조 사용")
                             # 기본 응답 구조 생성
                             question_analysis = await create_default_question_analysis(stock_name, stock_code)
-                            
+
                     except Exception as json_error:
                         logger.error(f"JSON 파싱 중 오류 발생: {str(json_error)}")
                         # 기본 응답 구조 생성
                         question_analysis = await create_default_question_analysis(stock_name, stock_code)
-                
+
                 return question_analysis
-            
+
             # 기본 질문 분석 구조 생성 함수
             async def create_default_question_analysis(stock_name, stock_code):
                 # 서브그룹 가져오기
@@ -607,11 +605,11 @@ class QuestionAnalyzerAgent(BaseAgent):
                     subgroup_list = await stock_info_service.get_sector_by_code(stock_code)
                 except Exception:
                     subgroup_list = []
-                
+
                 # 기술적 분석은 무조건 필요로 설정 (기본 구조에서도)
                 ta_needed_default = True  # self._detect_technical_analysis_need(query) 대신 무조건 True
                 logger.info(f"[기본분석구조] 기술적분석 필요성 설정: {ta_needed_default} (무조건 활성화)")
-                
+
                 return {
                     "entities": {
                         "stock_name": stock_name,
@@ -641,7 +639,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                     "keywords": [stock_name, "정보"],
                     "detail_level": "보통"
                 }
-            
+
             # 2. 최근 이슈 검색 및 목차 생성 비동기 함수
             async def search_issues_and_generate_toc():
                 redis_client = self.redis_client
@@ -654,7 +652,7 @@ class QuestionAnalyzerAgent(BaseAgent):
 
                 if cached_summary:
                     logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시된 최근 이슈 요약 사용: {cache_key}")
-                    recent_issues_summary = cached_summary 
+                    recent_issues_summary = cached_summary
                 else:
                     logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시 없음, 최근 이슈 요약 생성: {cache_key}")
                     recent_issues_summary = await self.summarize_recent_issues(stock_name, stock_code, user_id)
@@ -670,17 +668,17 @@ class QuestionAnalyzerAgent(BaseAgent):
                     "recent_issues_summary": recent_issues_summary,
                     "final_report_toc": final_report_toc.model_dump()
                 }
-            
+
             # 두 작업 병렬 실행
             question_analysis_task = analyze_question_intent()
             issues_and_toc_task = search_issues_and_generate_toc()
-            
+
             # 병렬 작업 실행 및 결과 수집
             question_analysis_result, issues_and_toc_result = await asyncio.gather(
                 question_analysis_task,
                 issues_and_toc_task
             )
-            
+
             # 병렬 처리 결과 저장
             state["question_analysis"] = question_analysis_result
             state["agent_results"]["question_analysis"] = question_analysis_result
@@ -690,7 +688,7 @@ class QuestionAnalyzerAgent(BaseAgent):
             # 성능 지표 업데이트
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            
+
             # 메트릭 기록
             state["metrics"] = state.get("metrics", {})
             state["metrics"]["question_analyzer"] = {
@@ -701,32 +699,32 @@ class QuestionAnalyzerAgent(BaseAgent):
                 "error": None,
                 "model_name": self.agent_llm.get_model_name()
             }
-            
+
             # 처리 상태 업데이트
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["question_analyzer"] = "completed"
-            
+
             logger.info(f"QuestionAnalyzerAgent completed in {duration:.2f} seconds")
             return state
-            
+
         except Exception as e:
             logger.exception(f"Error in QuestionAnalyzerAgent: {str(e)}")
             self._add_error(state, f"질문 분석기 에이전트 오류: {str(e)}")
-            return state 
+            return state
 
     async def analyze_conversation_context(self, query: str, conversation_history: List[Any], stock_name: str, stock_code: str, user_id: Optional[str] = None) -> ConversationContextAnalysis:
         """
         현재 질문이 이전 대화 컨텍스트에 의존하는지 분석합니다.
-        
+
         Args:
             query: 현재 사용자 질문
             conversation_history: 이전 대화 기록 (LangChain 메시지 객체 목록)
-            
+
         Returns:
             대화 컨텍스트 분석 결과
         """
         #logger.info(f"Analyzing conversation context dependency for query: {query}")
-        
+
         if not conversation_history or len(conversation_history) < 2:
             #logger.info("대화 기록이 충분하지 않음, 컨텍스트 분석 건너뜀")
             return ConversationContextAnalysis(
@@ -742,15 +740,15 @@ class QuestionAnalyzerAgent(BaseAgent):
                 stock_relation="알수없음",
                 reasoning="대화 기록이 충분하지 않습니다."
             )
-        
+
         # 대화 기록 포맷팅 (최근 3번의 대화만 사용)
         formatted_history = ""
         recent_history = conversation_history[-6:] if len(conversation_history) >= 6 else conversation_history
-        
+
         for i, msg in enumerate(recent_history):
             role = "사용자" if msg.type == "human" else "AI"
             formatted_history += f"{role}: {msg.content}\n\n"
-        
+
         # 대화 컨텍스트 분석 프롬프트
         system_prompt = """
 당신은 대화 흐름 분석 전문가입니다. 현재 질문이 이전 대화 컨텍스트에 의존하는지, 독립적인 새 질문인지, 또는 대화 마무리를 뜻하는 인사말인지 판단해야 합니다.
@@ -794,7 +792,7 @@ class QuestionAnalyzerAgent(BaseAgent):
 - stock_relation: 이전 종목과의 관계("동일종목", "종목비교", "다른종목", "알수없음" 중 하나)
 - reasoning: 판단 이유 설명(3-4문장으로 간결하게)
 """
-        
+
         user_prompt = f"""
 대화 기록:
 {formatted_history}
@@ -808,7 +806,7 @@ class QuestionAnalyzerAgent(BaseAgent):
 """
 
         try:
-            prompt = [
+            [
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=user_prompt)
             ]
@@ -820,10 +818,10 @@ class QuestionAnalyzerAgent(BaseAgent):
                 user_id=user_id,
                 db=self.db
             )
-            
+
             logger.info(f"대화 컨텍스트 분석 결과: {response}")
             return response
-            
+
         except Exception as e:
             logger.error(f"대화 컨텍스트 분석 중 오류 발생: {str(e)}")
             # 오류 발생 시 기본값 반환
@@ -840,11 +838,11 @@ class QuestionAnalyzerAgent(BaseAgent):
                 stock_relation="알수없음",
                 reasoning=f"분석 중 오류 발생: {str(e)}"
             )
-        
+
     def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
         """
         상태 객체에 오류 정보를 추가합니다.
-        
+
         Args:
             state: 상태 객체
             error_message: 오류 메시지
@@ -857,17 +855,17 @@ class QuestionAnalyzerAgent(BaseAgent):
             "timestamp": datetime.now(),
             "context": {"query": state.get("query", "")}
         })
-        
+
         # 처리 상태 업데이트
         state["processing_status"] = state.get("processing_status", {})
-        state["processing_status"]["question_analyzer"] = "failed" 
-    
-        
+        state["processing_status"]["question_analyzer"] = "failed"
+
+
     # 동적 목차 생성 함수 추가
     async def generate_dynamic_toc(self, query: str, recent_issues_summary: str, user_id: str) -> DynamicTocOutput:
         """
         사용자의 질문과 최근 이슈 요약을 바탕으로 동적인 목차를 생성하는 함수
-        
+
         Args:
             query (str): 사용자의 초기 질문
             recent_issues_summary (str): 최근 이슈 요약
@@ -876,14 +874,14 @@ class QuestionAnalyzerAgent(BaseAgent):
             DynamicTocOutput: 생성된 목차 구조
         """
         logger.info("\n📋 동적 목차 생성 중...")
-        
+
         prompt_template = ChatPromptTemplate.from_template(PROMPT_DYNAMIC_TOC).partial(
             query=query,
             recent_issues_summary=recent_issues_summary,
             today_date=datetime.now().strftime("%Y-%m-%d")
         )
         formatted_prompt = prompt_template.format_prompt()
-        
+
         # 1. 먼저 구조화된 출력을 시도
         try:
             logger.info("구조화된 출력(DynamicTocOutput)을 사용하여 목차 생성 시도")
@@ -893,21 +891,21 @@ class QuestionAnalyzerAgent(BaseAgent):
                 user_id=user_id,
                 db=self.db
             )
-            
+
             # 구조화된 출력이 성공적으로 파싱된 경우
             logger.info(f"\n✅ 구조화된 출력 성공: title={structured_response.title}, sections={len(structured_response.sections)}개")
-            
+
             # 섹션이 비어있는 경우 확인
             if len(structured_response.sections) == 0:
                 logger.warning("구조화된 출력에 섹션이 없습니다. 기본 응답 구조로 fallback합니다.")
                 raise ValueError("구조화된 출력에 섹션이 없습니다.")
-                
+
             return structured_response
-            
+
         except Exception as e:
             # 구조화된 출력 파싱 실패 시 fallback으로 일반 텍스트 응답 시도
             logger.warning(f"\n⚠️ 구조화된 출력 실패: {str(e)}, 일반 텍스트 응답으로 fallback")
-            
+
             # 2. 일반 텍스트 응답 시도
             response:AIMessage = await self.agent_llm.ainvoke_with_fallback(
                 formatted_prompt,
@@ -915,11 +913,11 @@ class QuestionAnalyzerAgent(BaseAgent):
                 user_id=user_id,
                 db=self.db
             )
-            
+
             response_text = response.content
-            logger.info(f"\n📄 LLM 원본 응답:")
+            logger.info("\n📄 LLM 원본 응답:")
             logger.info(f"\n{response_text[:200]}") # 응답 일부 출력 (디버깅용)
-            
+
             # 3. JSON 문자열 파싱 시도
             try:
                 # JSON 부분 추출 (LLM이 JSON 외에 다른 텍스트를 포함할 수 있음)
@@ -928,12 +926,12 @@ class QuestionAnalyzerAgent(BaseAgent):
                     # JSON 문자열 파싱
                     toc_data = json.loads(json_str)
                     logger.info(f"\n✅ JSON 파싱 성공: title={toc_data.get('title')}, sections={len(toc_data.get('sections', []))}개")
-                    
+
                     # 섹션이 비어있는 경우 확인
                     if len(toc_data.get('sections', [])) == 0:
-                        logger.warning(f"JSON 파싱 성공했으나 섹션이 없습니다. 기본 목차 구조를 사용합니다.")
+                        logger.warning("JSON 파싱 성공했으나 섹션이 없습니다. 기본 목차 구조를 사용합니다.")
                         raise ValueError("JSON 파싱 성공했으나 섹션이 없습니다.")
-                        
+
                     # JSON 데이터를 DynamicTocOutput 모델 형식으로 변환
                     converted_sections = []
                     for section in toc_data.get('sections', []):
@@ -947,7 +945,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                                     description=subsection.get('description')
                                 )
                             )
-                        
+
                         # 섹션 변환
                         converted_sections.append(
                             SectionModel(
@@ -957,25 +955,25 @@ class QuestionAnalyzerAgent(BaseAgent):
                                 subsections=converted_subsections
                             )
                         )
-                        
+
                     # DynamicTocOutput 객체 생성
                     result = DynamicTocOutput(
                         title=toc_data.get('title', f"투자 리서치 보고서: {query}"),
                         sections=converted_sections
                     )
-                    
+
                     return result
-                    
+
                 else:
                     # JSON 패턴을 찾지 못한 경우
                     logger.warning("JSON 문자열을 추출할 수 없음, 기본 응답 구조 사용")
                     raise ValueError("JSON 문자열을 추출할 수 없습니다.")
-                    
+
             except Exception as json_error:
                 # 4. JSON 파싱 실패 시 기본 목차 구조 사용
                 logger.warning(f"\n⚠️ JSON 파싱 오류: {str(json_error)}, 기본 목차 구조 사용")
                 logger.warning(f"LLM 원본 응답:\n{response_text}")
-                
+
                 # 기본 목차 구조 생성
                 default_sections = [
                     SectionModel(
@@ -997,28 +995,28 @@ class QuestionAnalyzerAgent(BaseAgent):
                         subsections=[]
                     )
                 ]
-                
+
                 # 기본 DynamicTocOutput 객체 생성
                 result = DynamicTocOutput(
                     title=f"투자 리서치 보고서: {query}",
                     sections=default_sections
                 )
-                
+
                 print(f"\n✅ 동적 목차 생성 완료. 총 {len(result.sections)}개 섹션 포함")
                 print(f"📚 보고서 제목: {result.title}")
-                
+
                 # 섹션 정보 상세 출력
-                print(f"📑 목차 구조:")
+                print("📑 목차 구조:")
                 for section in result.sections:
                     print(f"  {section.title}")
                     if section.description:
                         print(f"     - {section.description}")
-                        
+
                     # 하위 섹션이 있으면 출력
                     if section.subsections:
                         for subsection in section.subsections:
                             print(f"     {subsection.title}")
-                
+
                 return result
 
     async def summarize_recent_issues(self, stock_name: str, stock_code: str, user_id: str) -> str:
@@ -1057,28 +1055,28 @@ class QuestionAnalyzerAgent(BaseAgent):
         query = f"{stock_name} 최근 주요 뉴스 및 핵심 이슈"
         try:
             # search_with_tavily 함수를 재사용하거나 직접 Tavily 호출 로직 구현
-            search_results = await self.search_with_tavily(query) 
+            search_results = await self.search_with_tavily(query)
             print(f"  📊 {stock_name} 최근 이슈 검색 완료.\n[{search_results[:200]}]")
-            
+
             # 검색 결과를 JSON 파일로 저장
             await self._save_recent_issues_to_json(stock_name, stock_code, query, search_results)
-            
+
             return search_results
         except Exception as e:
             print(f"  ⚠️ {stock_name} 최근 이슈 검색 중 오류: {str(e)}")
             return f"{stock_name} 최근 이슈 검색 중 오류 발생: {str(e)}"
-            
-    async def _save_recent_issues_to_json(self, stock_name: str, stock_code: str, 
+
+    async def _save_recent_issues_to_json(self, stock_name: str, stock_code: str,
                                          query: str, search_results: Any) -> None:
         """
         최근 이슈 검색 결과를 일자별 JSON 파일로 저장합니다. 비동기 방식으로 동작합니다.
-        
+
         Args:
             stock_name: 종목 이름
             stock_code: 종목 코드
             query: 검색 쿼리
             search_results: Tavily API 검색 결과
-            
+
         Returns:
             None
         """
@@ -1088,13 +1086,13 @@ class QuestionAnalyzerAgent(BaseAgent):
                 # JSON 파일 경로 설정
                 json_dir = os.path.join('stockeasy', 'local_cache', 'web_search')
                 os.makedirs(json_dir, exist_ok=True)
-                
+
                 date_str = datetime.now().strftime('%Y%m%d')
                 json_path = os.path.join(json_dir, f'recent_issues_{date_str}.json')
-                
+
                 # 현재 날짜와 시간
                 current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                
+
                 # 저장할 데이터 구성
                 entry = {
                     "timestamp": current_datetime,
@@ -1103,7 +1101,7 @@ class QuestionAnalyzerAgent(BaseAgent):
                     "query": query,
                     "search_results": search_results
                 }
-                
+
                 # 파일 존재 여부 확인
                 data = []
                 if os.path.exists(json_path) and os.path.getsize(json_path) > 0:
@@ -1113,30 +1111,30 @@ class QuestionAnalyzerAgent(BaseAgent):
                     except json.JSONDecodeError:
                         # 파일이 손상된 경우 새로 시작
                         data = []
-                
+
                 # 데이터 추가
                 data.append(entry)
-                
+
                 # 파일에 저장
                 with open(json_path, 'w', encoding='utf-8-sig') as json_file:
                     json.dump(data, json_file, ensure_ascii=False, indent=2)
-                
+
                 return json_path
-            
+
             # 파일 I/O 작업을 별도 스레드에서 비동기적으로 실행
             json_path = await asyncio.to_thread(write_to_json)
-            
+
             print(f"  💾 {stock_name} 최근 이슈 검색결과가 JSON 파일에 저장되었습니다: {json_path}")
-            
+
         except Exception as e:
             print(f"  ⚠️ JSON 파일 저장 중 오류 발생: {str(e)}")
 
     async def search_with_tavily(self, query: str) -> str:
         """Tavily API를 사용하여 웹 검색을 수행합니다."""
         try:
-            # search_results = await self.tavily_search.ainvoke({"query": query, 
+            # search_results = await self.tavily_search.ainvoke({"query": query,
             #                                                    "search_depth":"basic",# "advanced",
-            #                                                 "max_results": 10, 
+            #                                                 "max_results": 10,
             #                                                 "topic": "general",
             #                                                 #"topic":"finance",
             #                                                 "time_range" : "6m",
@@ -1144,23 +1142,23 @@ class QuestionAnalyzerAgent(BaseAgent):
             #                                                 "include_raw_content": True,
             #                                                 "include_answer":True
             #                                                 })
-            # search_results = await self.tavily_search.ainvoke({"query": query, 
+            # search_results = await self.tavily_search.ainvoke({"query": query,
             #                                     "search_depth": "advanced", # "basic",
             #                                     #"search_depth": "basic", # "basic",
-            #                                     "max_results": 14, 
+            #                                     "max_results": 14,
             #                                     "topic": "general",
             #                                     #"topic":"finance",
             #                                     "time_range" : "year",
             #                                     })
-            search_results = await self.tavily_service.search_async(query=query, 
+            search_results = await self.tavily_service.search_async(query=query,
                                                 search_depth="advanced", # "basic",
                                                 #"search_depth": "basic", # "basic",
-                                                max_results=14, 
+                                                max_results=14,
                                                 topic="general",
                                                 #"topic":"finance",
                                                 time_range="year",
                                                 )
-            
+
             # print(f"검색결과 : {search_results}")
             # print(f"검색결과 시간 : {search_results.get('response_time', '0')}")
             # print(f"검색결과 응답 : {search_results.get('answer', 'None')}")
@@ -1183,28 +1181,28 @@ class QuestionAnalyzerAgent(BaseAgent):
     def _detect_technical_analysis_need(self, query: str) -> bool:
         """
         질문에서 기술적 분석 관련 키워드를 감지하여 기술적 분석 필요성을 판단합니다.
-        
+
         Args:
             query: 사용자 질문
-            
+
         Returns:
             기술적 분석이 필요한지 여부
         """
         try:
             logger.info(f"[기술적분석감지] 분석 시작 - 쿼리: '{query}'")
-            
+
             # 질문을 소문자로 변환하여 대소문자 무관하게 검색
             query_lower = query.lower()
             logger.debug(f"[기술적분석감지] 소문자 변환: '{query_lower}'")
-            
+
             # 각 카테고리별 키워드 매칭 점수 계산
             keyword_scores = {}
             total_matches = 0
-            
+
             for category, keywords in self.technical_analysis_keywords.items():
                 matches = 0
                 matched_keywords = []
-                
+
                 for keyword in keywords:
                     keyword_lower = keyword.lower()
                     if keyword_lower in query_lower:
@@ -1212,81 +1210,80 @@ class QuestionAnalyzerAgent(BaseAgent):
                         matched_keywords.append(keyword)
                         total_matches += 1
                         logger.debug(f"[기술적분석감지] 키워드 매칭: '{keyword}' in '{query_lower}' (카테고리: {category})")
-                
+
                 keyword_scores[category] = {
                     "matches": matches,
                     "matched_keywords": matched_keywords,
                     "score": matches / len(keywords) if keywords else 0
                 }
-                
+
                 if matches > 0:
                     logger.info(f"[기술적분석감지] {category} 카테고리 매칭: {matches}개 - {matched_keywords}")
-            
+
             logger.info(f"[기술적분석감지] 전체 키워드 매칭 결과: 총 {total_matches}개 매칭")
             logger.info(f"[기술적분석감지] 카테고리별 점수: {keyword_scores}")
-            
+
             # 기술적 분석 필요성 판단 로직
             needs_technical_analysis = False
             reasoning = []
-            
+
             # 1. 직접적인 기술분석 키워드 확인
             logger.info(f"[기술적분석감지] 규칙1 확인 - market_analysis 매칭: {keyword_scores['market_analysis']['matches']}개")
             if keyword_scores["market_analysis"]["matches"] > 0:
                 needs_technical_analysis = True
                 reasoning.append(f"기술분석 직접 키워드 감지: {keyword_scores['market_analysis']['matched_keywords']}")
-                logger.info(f"[기술적분석감지] ✅ 규칙1 통과 - 기술분석 직접 키워드 감지")
-            
+                logger.info("[기술적분석감지] ✅ 규칙1 통과 - 기술분석 직접 키워드 감지")
+
             # 2. 기술적 지표 키워드 확인 (2개 이상이면 높은 확률)
             logger.info(f"[기술적분석감지] 규칙2 확인 - technical_indicators 매칭: {keyword_scores['technical_indicators']['matches']}개")
             if keyword_scores["technical_indicators"]["matches"] >= 2:
                 needs_technical_analysis = True
                 reasoning.append(f"기술적 지표 키워드 다중 감지: {keyword_scores['technical_indicators']['matched_keywords']}")
-                logger.info(f"[기술적분석감지] ✅ 규칙2a 통과 - 기술적 지표 키워드 다중 감지")
+                logger.info("[기술적분석감지] ✅ 규칙2a 통과 - 기술적 지표 키워드 다중 감지")
             elif keyword_scores["technical_indicators"]["matches"] >= 1:
                 # 1개라도 있으면 일단 후보로 고려
                 reasoning.append(f"기술적 지표 키워드 감지: {keyword_scores['technical_indicators']['matched_keywords']}")
-                logger.info(f"[기술적분석감지] 📝 규칙2b - 기술적 지표 키워드 1개 감지 (후보)")
-            
+                logger.info("[기술적분석감지] 📝 규칙2b - 기술적 지표 키워드 1개 감지 (후보)")
+
             # 3. 매매 신호 키워드 확인
             logger.info(f"[기술적분석감지] 규칙3 확인 - trading_signals 매칭: {keyword_scores['trading_signals']['matches']}개")
             if keyword_scores["trading_signals"]["matches"] >= 1:
                 needs_technical_analysis = True
                 reasoning.append(f"매매 신호 키워드 감지: {keyword_scores['trading_signals']['matched_keywords']}")
-                logger.info(f"[기술적분석감지] ✅ 규칙3 통과 - 매매 신호 키워드 감지")
-            
+                logger.info("[기술적분석감지] ✅ 규칙3 통과 - 매매 신호 키워드 감지")
+
             # 4. 차트 패턴 기반 판단 (패턴 키워드 1개만 있어도 기술적 분석으로 분류)
             chart_pattern_matches = keyword_scores["chart_patterns"]["matches"]
             technical_indicator_matches = keyword_scores["technical_indicators"]["matches"]
             price_movement_matches = keyword_scores["price_movements"]["matches"]
             logger.info(f"[기술적분석감지] 규칙4 확인 - chart_patterns: {chart_pattern_matches}개, technical_indicators: {technical_indicator_matches}개, price_movements: {price_movement_matches}개")
-            
+
             if chart_pattern_matches >= 1:
                 needs_technical_analysis = True
                 reasoning.append(f"차트패턴 키워드 감지: {keyword_scores['chart_patterns']['matched_keywords']}")
-                logger.info(f"[기술적분석감지] ✅ 규칙4a 통과 - 차트패턴 키워드 감지 (1개 이상)")
+                logger.info("[기술적분석감지] ✅ 규칙4a 통과 - 차트패턴 키워드 감지 (1개 이상)")
             elif price_movement_matches >= 2:
                 # 가격 움직임만으로는 약하지만 2개 이상이면 고려
                 reasoning.append(f"가격 움직임 키워드 다중 감지: {keyword_scores['price_movements']['matched_keywords']}")
-                logger.info(f"[기술적분석감지] 📝 규칙4b - 가격 움직임 키워드 다중 감지 (후보)")
-            
+                logger.info("[기술적분석감지] 📝 규칙4b - 가격 움직임 키워드 다중 감지 (후보)")
+
             # 5. 전체 매칭 키워드 수가 많으면 기술적 분석 가능성 높음
             logger.info(f"[기술적분석감지] 규칙5 확인 - 총 매칭 키워드: {total_matches}개, 현재 결과: {needs_technical_analysis}")
             if total_matches >= 2 and not needs_technical_analysis:
                 needs_technical_analysis = True
                 reasoning.append(f"기술적 분석 관련 키워드 다수 감지 (총 {total_matches}개)")
-                logger.info(f"[기술적분석감지] ✅ 규칙5 통과 - 키워드 다수 감지 (2개 이상)")
-            
+                logger.info("[기술적분석감지] ✅ 규칙5 통과 - 키워드 다수 감지 (2개 이상)")
+
             # 최종 판단 로깅
             if needs_technical_analysis:
                 logger.info(f"[기술적분석감지] 🎯 최종 결과: TRUE - 이유: {', '.join(reasoning)}")
             else:
                 logger.info(f"[기술적분석감지] ❌ 최종 결과: FALSE - 매칭된 키워드 총 {total_matches}개")
-            
+
             return needs_technical_analysis
-            
+
         except Exception as e:
             logger.error(f"[기술적분석감지] ❌ 오류 발생: {str(e)}")
-            logger.info(f"[기술적분석감지] 🛡️ 안전하게 False 반환")
+            logger.info("[기술적분석감지] 🛡️ 안전하게 False 반환")
             # 오류 발생 시 안전하게 False 반환
             return False
-        
