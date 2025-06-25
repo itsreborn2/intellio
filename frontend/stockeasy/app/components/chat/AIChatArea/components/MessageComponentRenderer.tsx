@@ -166,6 +166,9 @@ export function MessageComponentRenderer({
                    }}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBreaks]}
+            components={{
+              del: ({ children }) => <span>~{children}~</span>  // 취소선 태그를 물결표로 변환
+            }}
           >
             {content}
           </ReactMarkdown>
@@ -181,7 +184,11 @@ export function MessageComponentRenderer({
           <ol style={{ paddingLeft: '1.5em', margin: '0.5em 0',fontSize: '1.1em' }}>
             {items.map((item: any, index: number) => (
               <li key={index} style={{ margin: '0.25em 0' }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    del: ({ children }) => <span>~{children}~</span>  // 취소선 태그를 물결표로 변환
+                  }}
+                >
                   {item.content}
                 </ReactMarkdown>
               </li>
@@ -190,27 +197,31 @@ export function MessageComponentRenderer({
         );
       }
       
-      return (
-        <ul style={{ listStyleType: 'none', paddingLeft: '1.5em', margin: '0.25em 0',fontSize: '1.1em' }}>
-          {items.map((item: any, index: number) => (
-            <li key={index} style={{ 
-              margin: '0.15em 0',
-              position: 'relative',
-              paddingLeft: '1.2em'
-            }}>
-              <span style={{
-                position: 'absolute',
-                left: '0',
-                top: '0',
-                fontWeight: 'bold',
-              }}>•</span>
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-                {item.content}
-              </ReactMarkdown>
-            </li>
-          ))}
-        </ul>
-      );
+              return (
+          <ul style={{ listStyleType: 'none', paddingLeft: '1.5em', margin: '0.25em 0',fontSize: '1.1em' }}>
+            {items.map((item: any, index: number) => (
+              <li key={index} style={{ 
+                margin: '0.15em 0',
+                position: 'relative',
+                paddingLeft: '1.2em'
+              }}>
+                <span style={{
+                  position: 'absolute',
+                  left: '0',
+                  top: '0',
+                  fontWeight: 'bold',
+                }}>•</span>
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    del: ({ children }) => <span>~{children}~</span>  // 취소선 태그를 물결표로 변환
+                  }}
+                >
+                  {item.content}
+                </ReactMarkdown>
+              </li>
+            ))}
+          </ul>
+        );
     }
     
     case 'code_block': {
@@ -1107,7 +1118,11 @@ export function MessageComponentRenderer({
                         borderBottom: '1px solid #ddd'
                       }}
                     >
-                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}
+                        components={{
+                          del: ({ children }) => <span>~{children}~</span>  // 취소선 태그를 물결표로 변환
+                        }}
+                      >
                         {String(row[header.key] ?? '')}
                       </ReactMarkdown>
                     </td>
