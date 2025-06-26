@@ -36,10 +36,11 @@ class SummarizerAgent(BaseAgent):
         super().__init__(name, db)
         self.agent_llm = get_agent_llm("summarizer_agent")
         self.agent_llm_high = get_agent_llm("summarizer_agent_high")
-        logger.info(f"SummarizerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}, model2: {self.agent_llm_high.get_model_name()}")
+        logger.info(
+            f"SummarizerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}, model2: {self.agent_llm_high.get_model_name()}"
+        )
         # self.parser = StrOutputParser() # 직접 사용 안 함
         # self.prompt_template = DEEP_RESEARCH_SYSTEM_PROMPT # 직접 사용 안 함
-
 
     def _remove_internal_db_references(self, text: str) -> str:
         """
@@ -57,15 +58,13 @@ class SummarizerAgent(BaseAgent):
         text = text.replace("<내부DB>", "").replace("(내부DB)", "")
 
         # 날짜가 포함된 내부DB 패턴 제거: (내부DB, yyyy-mm-dd) 및 (내부DB,yyyy-mm-dd)
-        text = re.sub(r'\(내부DB,\s*\d{4}-\d{2}-\d{2}\)', '', text)
+        text = re.sub(r"\(내부DB,\s*\d{4}-\d{2}-\d{2}\)", "", text)
 
         # 비공개자료 패턴 제거
         text = text.replace("<비공개자료>", "").replace("(비공개자료)", "")
-        text = re.sub(r'\(비공개자료,\s*\d{4}-\d{2}-\d{2}\)', '', text)
+        text = re.sub(r"\(비공개자료,\s*\d{4}-\d{2}-\d{2}\)", "", text)
 
         return text
-
-
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -89,37 +88,27 @@ class SummarizerAgent(BaseAgent):
             main_query_reports: List[CompanyReportData] = report_analyzer_data.get("main_query_reports", [])
             toc_data_report_agent: Dict[str, List[CompanyReportData]] = report_analyzer_data.get("toc_reports", {})
 
-            #텔레그램은 toc_results, main_query_results. 기업리포트와는 키 이름이 다르다(toc_reports)
+            # 텔레그램은 toc_results, main_query_results. 기업리포트와는 키 이름이 다르다(toc_reports)
             telegram_data = agent_results.get("telegram_retriever", {}).get("data", {})
-            toc_data_telegram_agent: Dict[str, List[RetrievedTelegramMessage]] = telegram_data.get("toc_results", {}) #텔레그램은 toc_results, main_query_results
+            toc_data_telegram_agent: Dict[str, List[RetrievedTelegramMessage]] = telegram_data.get("toc_results", {})  # 텔레그램은 toc_results, main_query_results
 
             # 다른 에이전트 결과 데이터 포맷팅 (stock_code, stock_name 전달)
-            other_agents_context_str = format_other_agent_data(
-                agent_results,
-                stock_code=stock_code,
-                stock_name=stock_name
-            )
+            other_agents_context_str = format_other_agent_data(agent_results, stock_code=stock_code, stock_name=stock_name)
 
             final_report_toc = state.get("final_report_toc")
 
             if not query:
-                state["errors"] = state.get("errors", []) + [{
-                    "agent": self.get_name(),
-                    "error": "질문이 제공되지 않았습니다.",
-                    "type": "InvalidInputError",
-                    "timestamp": datetime.now()
-                }]
+                state["errors"] = state.get("errors", []) + [
+                    {"agent": self.get_name(), "error": "질문이 제공되지 않았습니다.", "type": "InvalidInputError", "timestamp": datetime.now()}
+                ]
                 state["processing_status"] = state.get("processing_status", {})
                 state["processing_status"]["summarizer"] = "error"
                 return state
 
             if not final_report_toc:
-                state["errors"] = state.get("errors", []) + [{
-                    "agent": self.get_name(),
-                    "error": "동적 목차 정보(final_report_toc)가 없습니다.",
-                    "type": "MissingDataError",
-                    "timestamp": datetime.now()
-                }]
+                state["errors"] = state.get("errors", []) + [
+                    {"agent": self.get_name(), "error": "동적 목차 정보(final_report_toc)가 없습니다.", "type": "MissingDataError", "timestamp": datetime.now()}
+                ]
                 state["processing_status"] = state.get("processing_status", {})
                 state["processing_status"]["summarizer"] = "error"
                 return state
@@ -127,14 +116,9 @@ class SummarizerAgent(BaseAgent):
             if not main_query_reports and not toc_data_report_agent:
                 logger.warning("[SummarizerAgent] 요약할 기업 리포트 정보가 없습니다 (메인 쿼리 및 TOC 결과 모두 부족). 다른 컨텍스트만으로 진행될 수 있습니다.")
 
-        except Exception as e: # 데이터 준비 과정에서의 예외
+        except Exception as e:  # 데이터 준비 과정에서의 예외
             logger.exception(f"SummarizerAgent 정보 준비 중 오류 발생: {e}")
-            state["errors"] = state.get("errors", []) + [{
-                "agent": self.get_name(),
-                "error": f"정보 준비 오류: {str(e)}",
-                "type": type(e).__name__,
-                "timestamp": datetime.now()
-            }]
+            state["errors"] = state.get("errors", []) + [{"agent": self.get_name(), "error": f"정보 준비 오류: {str(e)}", "type": type(e).__name__, "timestamp": datetime.now()}]
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["summarizer"] = "error"
             return state
@@ -142,7 +126,7 @@ class SummarizerAgent(BaseAgent):
         try:
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
-            #state["agent_results"]["financial_analyzer"]["competitor_info"] = competitor_info
+            # state["agent_results"]["financial_analyzer"]["competitor_info"] = competitor_info
             competitors_infos = state.get("agent_results", {}).get("financial_analyzer", {}).get("competitor_infos", [])
 
             # 기술적 분석 데이터 추출
@@ -163,7 +147,7 @@ class SummarizerAgent(BaseAgent):
                 technical_analysis_data=technical_analysis_data,
                 stock_name=stock_name,
                 stock_code=stock_code,
-                technical_analysis_only=technical_analysis_only_test
+                technical_analysis_only=technical_analysis_only_test,
             )
 
             state["summary"] = summary
@@ -174,29 +158,25 @@ class SummarizerAgent(BaseAgent):
             return state
         except Exception as e:
             logger.exception(f"SummarizerAgent 요약 생성 중 오류 발생: {e}")
-            state["errors"] = state.get("errors", []) + [{
-                "agent": self.get_name(),
-                "error": f"요약 생성 오류: {str(e)}",
-                "type": type(e).__name__,
-                "timestamp": datetime.now()
-            }]
+            state["errors"] = state.get("errors", []) + [{"agent": self.get_name(), "error": f"요약 생성 오류: {str(e)}", "type": type(e).__name__, "timestamp": datetime.now()}]
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["summarizer"] = "error"
             return state
 
-    async def generate_sectioned_summary_v2(self,
-                                         query: str,
-                                         user_id: str,
-                                         final_report_toc: Dict[str, Any],
-                                         toc_data_company_report: Dict[str, List[CompanyReportData]],
-                                         toc_data_telegram_agent: Dict[str, List[RetrievedTelegramMessage]],
-                                         other_agents_context_str: str,
-                                         competitors_infos: List[Dict[str, Any]],
-                                         technical_analysis_data: Optional[Dict[str, Any]] = None,
-                                         stock_name: Optional[str] = None,
-                                         stock_code: Optional[str] = None,
-                                         technical_analysis_only: bool = False
-                                         ):
+    async def generate_sectioned_summary_v2(
+        self,
+        query: str,
+        user_id: str,
+        final_report_toc: Dict[str, Any],
+        toc_data_company_report: Dict[str, List[CompanyReportData]],
+        toc_data_telegram_agent: Dict[str, List[RetrievedTelegramMessage]],
+        other_agents_context_str: str,
+        competitors_infos: List[Dict[str, Any]],
+        technical_analysis_data: Optional[Dict[str, Any]] = None,
+        stock_name: Optional[str] = None,
+        stock_code: Optional[str] = None,
+        technical_analysis_only: bool = False,
+    ):
         """
         동적 목차에 따라 섹션별로 요약을 생성하고 통합하는 함수 (v2: 핵심요약 후생성).
         1. "핵심 요약"을 제외한 나머지 섹션들을 병렬로 생성.
@@ -240,10 +220,10 @@ class SummarizerAgent(BaseAgent):
         start_time_other_sections = datetime.now()
 
         for i, section_data in enumerate(toc_sections_from_generator):
-            if i == 0: # "핵심 요약" 섹션은 나중에 처리
+            if i == 0:  # "핵심 요약" 섹션은 나중에 처리
                 continue
 
-            current_section_title = section_data.get("title", f"섹션 {i+1}")
+            current_section_title = section_data.get("title", f"섹션 {i + 1}")
             current_section_description = section_data.get("description", "")
             current_section_id = section_data.get("section_id")
 
@@ -262,7 +242,7 @@ class SummarizerAgent(BaseAgent):
             subsections = section_data.get("subsections", [])
             subsections_text_current = ""
             if isinstance(subsections, list) and subsections:
-                subsections_text_current = "\n".join([f" - {s.get('title', '')}\n   섹션설명:({s.get('description','')})" for s in subsections])
+                subsections_text_current = "\n".join([f" - {s.get('title', '')}\n   섹션설명:({s.get('description', '')})" for s in subsections])
                 for sub_section_item in subsections:
                     if isinstance(sub_section_item, dict):
                         subsection_id = sub_section_item.get("subsection_id")
@@ -273,7 +253,7 @@ class SummarizerAgent(BaseAgent):
             seen_contents = set()
             deduplicated_list_reports = []
             for report in current_section_company_report:
-                content_key = hashlib.sha256(report.get("content", "")[:100].encode('utf-8')).hexdigest()
+                content_key = hashlib.sha256(report.get("content", "")[:100].encode("utf-8")).hexdigest()
                 if content_key not in seen_contents:
                     seen_contents.add(content_key)
                     deduplicated_list_reports.append(report)
@@ -282,13 +262,15 @@ class SummarizerAgent(BaseAgent):
             seen_telegram_msgs = set()
             deduplicated_list_tele_msgs = []
             for msg in current_section_telegram_msgs:
-                msg_key = hashlib.sha256(msg.get("content", "")[:100].encode('utf-8')).hexdigest()
+                msg_key = hashlib.sha256(msg.get("content", "")[:100].encode("utf-8")).hexdigest()
                 if msg_key not in seen_telegram_msgs:
                     seen_telegram_msgs.add(msg_key)
                     deduplicated_list_tele_msgs.append(msg)
             current_section_telegram_msgs = deduplicated_list_tele_msgs
 
-            logger.info(f"[SummarizerAgent] 섹션 '{current_section_title}' (ID: {current_section_id}, 목차인덱스 {i}) 최종 집계 - 고유 리포트: {len(current_section_company_report)}개, 고유 텔레그램: {len(current_section_telegram_msgs)}개")
+            logger.info(
+                f"[SummarizerAgent] 섹션 '{current_section_title}' (ID: {current_section_id}, 목차인덱스 {i}) 최종 집계 - 고유 리포트: {len(current_section_company_report)}개, 고유 텔레그램: {len(current_section_telegram_msgs)}개"
+            )
 
             formatted_report_docs = self._format_documents_for_section(current_section_company_report)
             formatted_telegram_msgs = self._format_telegram_messages_for_section(current_section_telegram_msgs)
@@ -304,7 +286,6 @@ class SummarizerAgent(BaseAgent):
                 price_chart_data_str = self._format_price_chart(technical_analysis_data)
 
                 logger.info(f"[SummarizerAgent] 일반 기술적 분석 섹션 '{current_section_title}' - 기존 차트 플레이스홀더 사용")
-
 
                 combined_context_for_current_section = f"{formatted_technical_data}"
             else:
@@ -328,7 +309,7 @@ class SummarizerAgent(BaseAgent):
                     section_description=current_section_description,
                     subsections_info=subsections_text_current,
                     all_analyses=combined_context_for_current_section,
-                    price_chart=price_chart_data_str
+                    price_chart=price_chart_data_str,
                 )
             else:
                 prompt_str_current = PROMPT_GENERATE_SECTION_CONTENT.format(
@@ -336,20 +317,20 @@ class SummarizerAgent(BaseAgent):
                     section_title=current_section_title,
                     section_description=current_section_description,
                     subsections_info=subsections_text_current,
-                    all_analyses=combined_context_for_current_section
+                    all_analyses=combined_context_for_current_section,
                 )
             messages_current = [HumanMessage(content=prompt_str_current)]
 
             # 기술적 분석 섹션은 agent_llm25 사용, 나머지는 기존 agent_llm 사용
             llm_to_use = self.agent_llm_high if is_technical_analysis_section else self.agent_llm
-            task_current = asyncio.create_task(llm_to_use.ainvoke_with_fallback(
-                messages_current, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db
-            ))
+            task_current = asyncio.create_task(llm_to_use.ainvoke_with_fallback(messages_current, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db))
             other_section_tasks.append(task_current)
-            other_section_details_for_llm_call.append({
-                "title": current_section_title,
-                "original_toc_index": i,
-            })
+            other_section_details_for_llm_call.append(
+                {
+                    "title": current_section_title,
+                    "original_toc_index": i,
+                }
+            )
 
         # 3. 나머지 섹션들 내용 병렬 생성
         other_sections_results_raw = await asyncio.gather(*other_section_tasks, return_exceptions=True)
@@ -365,22 +346,22 @@ class SummarizerAgent(BaseAgent):
 
             if isinstance(raw_result, Exception):
                 logger.error(f"[SummarizerAgent] '{original_section_title}' (목차인덱스 {section_detail['original_toc_index']}) 생성 실패: {str(raw_result)}")
-                processed_other_sections_data.append({
-                    "details": section_detail,
-                    "text": f"*오류: '{original_section_title}' 섹션 내용을 생성하는 중 문제가 발생했습니다: {str(raw_result)}*"
-                })
+                processed_other_sections_data.append(
+                    {"details": section_detail, "text": f"*오류: '{original_section_title}' 섹션 내용을 생성하는 중 문제가 발생했습니다: {str(raw_result)}*"}
+                )
                 continue
 
-            section_text_content = raw_result.content if hasattr(raw_result, 'content') else str(raw_result)
+            section_text_content = raw_result.content if hasattr(raw_result, "content") else str(raw_result)
             logger.info(f"[SummarizerAgent] '{original_section_title}' (목차인덱스 {section_detail['original_toc_index']}) 생성 완료 (길이: {len(section_text_content)})")
 
             # 차트 플레이스홀더 확인 및 로깅
             import re
-            chart_placeholders = re.findall(r'\[CHART_PLACEHOLDER:[A-Z_]+\]', section_text_content)
+
+            chart_placeholders = re.findall(r"\[CHART_PLACEHOLDER:[A-Z_]+\]", section_text_content)
             if chart_placeholders:
                 logger.info(f"[SummarizerAgent] '{original_section_title}'에서 차트 플레이스홀더 발견: {chart_placeholders}")
 
-            #generated_texts_for_summary_input.append(f"## {original_section_title}\n{section_text_content}")
+            # generated_texts_for_summary_input.append(f"## {original_section_title}\n{section_text_content}")
             generated_texts_for_summary_input.append(section_text_content)
             processed_other_sections_data.append({"details": section_detail, "text": section_text_content})
 
@@ -398,28 +379,28 @@ class SummarizerAgent(BaseAgent):
             first_section_data_for_summary.get("description", "보고서 전체의 주요 내용을 요약합니다.")
             summary_section_subsections = first_section_data_for_summary.get("subsections", [])
             if isinstance(summary_section_subsections, list) and summary_section_subsections:
-                 "\n이 핵심 요약 섹션이 다룰 수 있는 하위 주제 목록:\n" + "\n".join([f" - {s.get('title', '')} ({s.get('description','')})" for s in summary_section_subsections])
+                "\n이 핵심 요약 섹션이 다룰 수 있는 하위 주제 목록:\n" + "\n".join([f" - {s.get('title', '')} ({s.get('description', '')})" for s in summary_section_subsections])
 
             # 핵심 요약 프롬프트 사용
             prompt_str_summary = PROMPT_GENERATE_EXECUTIVE_SUMMARY.format(
-                original_query=query, # 원본 사용자 질문
-                report_title=toc_title, # 보고서 전체 제목
-                section_title=summary_section_title, # 현재 섹션 제목 ("핵심 요약")
+                original_query=query,  # 원본 사용자 질문
+                report_title=toc_title,  # 보고서 전체 제목
+                section_title=summary_section_title,  # 현재 섹션 제목 ("핵심 요약")
                 # section_description은 EXECUTIVE_SUMMARY 프롬프트에 없음
                 # subsections_info도 EXECUTIVE_SUMMARY 프롬프트에 없음
-                sections_summary=context_for_summary_llm, # 다른 섹션들의 생성된 내용 + 기타 참고자료
+                sections_summary=context_for_summary_llm,  # 다른 섹션들의 생성된 내용 + 기타 참고자료
             )
             messages_summary = [HumanMessage(content=prompt_str_summary)]
 
-            logger.info(f"[SummarizerAgent] '{summary_section_title}' 생성 작업 시작 (PROMPT_GENERATE_EXECUTIVE_SUMMARY 사용). 컨텍스트 길이(근사치): {len(context_for_summary_llm)}")
+            logger.info(
+                f"[SummarizerAgent] '{summary_section_title}' 생성 작업 시작 (PROMPT_GENERATE_EXECUTIVE_SUMMARY 사용). 컨텍스트 길이(근사치): {len(context_for_summary_llm)}"
+            )
             try:
-                result_summary_section_raw = await self.agent_llm.ainvoke_with_fallback(
-                    messages_summary, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db
-                )
+                result_summary_section_raw = await self.agent_llm.ainvoke_with_fallback(messages_summary, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db)
                 if isinstance(result_summary_section_raw, Exception):
                     logger.error(f"[SummarizerAgent] '{summary_section_title}' 생성 실패 (LLM 호출 결과가 예외 객체): {str(result_summary_section_raw)}")
                     summary_section_content_str = "*핵심 요약 생성 중 오류가 발생했습니다.*"
-                elif hasattr(result_summary_section_raw, 'content'):
+                elif hasattr(result_summary_section_raw, "content"):
                     summary_section_content_str = result_summary_section_raw.content
                     logger.info(f"[SummarizerAgent] '{summary_section_title}' 생성 완료 (길이: {len(summary_section_content_str)})")
                 else:
@@ -443,7 +424,7 @@ class SummarizerAgent(BaseAgent):
         summary_section_content_str = self._remove_internal_db_references(summary_section_content_str)
 
         section_contents_map[summary_section_title] = summary_section_content_str
-        #final_report_parts.append(f"## {numbered_summary_title_for_report}\n{summary_section_content_str}")
+        # final_report_parts.append(f"## {numbered_summary_title_for_report}\n{summary_section_content_str}")
         final_report_parts.append(summary_section_content_str)
 
         # 나머지 섹션들 추가 (목차 순서대로)
@@ -456,14 +437,16 @@ class SummarizerAgent(BaseAgent):
             text_content = self._remove_internal_db_references(text_content)
 
             section_contents_map[section_title_from_details] = text_content
-            #final_report_parts.append(f"## {numbered_section_title_for_report}\n{text_content}")
+            # final_report_parts.append(f"## {numbered_section_title_for_report}\n{text_content}")
             final_report_parts.append(text_content)
-        section_contents_map['면책조항'] = "본 보고서는 투자 참고 자료로만 활용하시기 바라며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 보고서의 내용이 사실과 다른 내용이 일부 존재할 수 있으니 참고해 주시기 바랍니다. 투자 결정은 투자자 본인의 책임하에 이루어져야 하며, 본 보고서에 기반한 투자로 인한 손실에 대해 작성자와 당사는 어떠한 법적 책임도 지지 않습니다. 모든 투자에는 위험이 수반되므로 투자 전 투자자 본인의 판단과 책임하에 충분한 검토가 필요합니다."
-        final_report_parts.append(section_contents_map['면책조항'])
+        section_contents_map["면책조항"] = (
+            "본 보고서는 투자 참고 자료로만 활용하시기 바라며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 보고서의 내용이 사실과 다른 내용이 일부 존재할 수 있으니 참고해 주시기 바랍니다. 투자 결정은 투자자 본인의 책임하에 이루어져야 하며, 본 보고서에 기반한 투자로 인한 손실에 대해 작성자와 당사는 어떠한 법적 책임도 지지 않습니다. 모든 투자에는 위험이 수반되므로 투자 전 투자자 본인의 판단과 책임하에 충분한 검토가 필요합니다."
+        )
+        final_report_parts.append(section_contents_map["면책조항"])
 
         final_summary_md = f"# {toc_title}\n\n"
         final_summary_md += "\n\n".join(final_report_parts)
-        #final_summary_md += "\n\n**면책조항**\n\n본 보고서는 투자 참고 자료로만 활용하시기 바라며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 보고서의 내용이 사실과 다른 내용이 일부 존재할 수 있으니 참고해 주시기 바랍니다. 투자 결정은 투자자 본인의 책임하에 이루어져야 하며, 본 보고서에 기반한 투자로 인한 손실에 대해 작성자와 당사는 어떠한 법적 책임도 지지 않습니다. 모든 투자에는 위험이 수반되므로 투자 전 투자자 본인의 판단과 책임하에 충분한 검토가 필요합니다."
+        # final_summary_md += "\n\n**면책조항**\n\n본 보고서는 투자 참고 자료로만 활용하시기 바라며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 보고서의 내용이 사실과 다른 내용이 일부 존재할 수 있으니 참고해 주시기 바랍니다. 투자 결정은 투자자 본인의 책임하에 이루어져야 하며, 본 보고서에 기반한 투자로 인한 손실에 대해 작성자와 당사는 어떠한 법적 책임도 지지 않습니다. 모든 투자에는 위험이 수반되므로 투자 전 투자자 본인의 판단과 책임하에 충분한 검토가 필요합니다."
 
         logger.info(f"[SummarizerAgent] 동적 목차 기반 섹션별 요약 통합 완료 (v2), 소요시간 {datetime.now() - start_time_other_sections}")
         return final_summary_md, section_contents_map
@@ -480,16 +463,16 @@ class SummarizerAgent(BaseAgent):
         formatted_texts = []
         text = "<기업리포트>\n"
         for i, report in enumerate(reports):
-            text += f" <자료 {i+1}>\n"
+            text += f" <자료 {i + 1}>\n"
             text += f"출처: {report.get('source', '미상')}\n"
             text += f"날짜: {report.get('publish_date', '날짜 정보 없음')}\n"
             # if report.get('title') and report.get('title') != '제목 없음': # title이 유효하면 추가
             #     text += f"제목: {report.get('title')}\n"
-            sContent = report.get('content', '내용 없음')
+            sContent = report.get("content", "내용 없음")
             sContent = sContent.replace("\n\n", "\n")
             text += f"내용:\n{sContent}\n"
             formatted_texts.append(text)
-            text += f" </자료 {i+1}>\n"
+            text += f" </자료 {i + 1}>\n"
         text += "</기업리포트>"
         return text
 
@@ -505,19 +488,19 @@ class SummarizerAgent(BaseAgent):
             text += "------\n"
 
             # ISO 형식의 날짜를 년-월-일 형식으로 변환
-            created_at = message.get('message_created_at', '')
-            formatted_date = '날짜 정보 없음'
+            created_at = message.get("message_created_at", "")
+            formatted_date = "날짜 정보 없음"
 
             if created_at:
                 try:
                     dt_obj = datetime.fromisoformat(created_at)
-                    formatted_date = dt_obj.strftime('%Y-%m-%d')
+                    formatted_date = dt_obj.strftime("%Y-%m-%d")
                 except (ValueError, TypeError):
                     # 날짜 변환 실패 시 원본 값 사용
                     formatted_date = created_at
 
             text += f"날짜: {formatted_date}\n"
-            #text += f"채널: {message.get('channel_name', '채널 정보 없음')}\n"
+            # text += f"채널: {message.get('channel_name', '채널 정보 없음')}\n"
             text += f"내용: {message.get('content', '내용 없음')}\n"
             text += "------\n"
         text += "</내부DB>"
@@ -581,7 +564,6 @@ class SummarizerAgent(BaseAgent):
 
         return formatted_data
 
-
     def _format_technical_analysis_data(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
         """
         기술적 분석 데이터를 LLM 프롬프트에 적합한 문자열로 변환합니다.
@@ -611,7 +593,7 @@ class SummarizerAgent(BaseAgent):
         formatted_text += "차트 분석:\n"
         formatted_text += "[CHART_PLACEHOLDER:TECHNICAL_INDICATOR_CHART]\n\n"
 
-                    # 기술적 지표
+        # 기술적 지표
         indicators = technical_analysis_data.get("technical_indicators", {})
         if indicators:
             formatted_text += "기술적 지표 분석:\n"
@@ -748,8 +730,6 @@ class SummarizerAgent(BaseAgent):
                     formatted_text += "    - ADX 70 이상시 매우의 강한 추세로 반전 위험이 높아 주의가 필요합니다. 기존 보유자의 영역입니다.\n"
                 else:
                     formatted_text += "    - ADX 25 이상시 강한 추세, 20 이하시 횡보 구간으로 판단됩니다.\n"
-
-
 
             # 슈퍼트렌드 (SuperTrend)
             supertrend = indicators.get("supertrend")
@@ -1041,33 +1021,33 @@ class SummarizerAgent(BaseAgent):
 
             formatted_text += "\n"
 
-        # 매매신호는 사용자에게 매수하라는 오해를 제공할수 있으니, 일단 제거
-        # 매매 신호
-        # trading_signals = technical_analysis_data.get("trading_signals", {})
-        # if trading_signals:
-        #     formatted_text += "매매 신호:\n"
+            # 매매신호는 사용자에게 매수하라는 오해를 제공할수 있으니, 일단 제거
+            # 매매 신호
+            # trading_signals = technical_analysis_data.get("trading_signals", {})
+            # if trading_signals:
+            #     formatted_text += "매매 신호:\n"
 
-        #     overall_signal = trading_signals.get("overall_signal")
-        #     confidence = trading_signals.get("confidence", 0)
-        #     if overall_signal:
-        #         formatted_text += f"  종합 신호: {overall_signal} (신뢰도: {confidence:.2f})\n"
+            #     overall_signal = trading_signals.get("overall_signal")
+            #     confidence = trading_signals.get("confidence", 0)
+            #     if overall_signal:
+            #         formatted_text += f"  종합 신호: {overall_signal} (신뢰도: {confidence:.2f})\n"
 
-        #     # stop_loss = trading_signals.get("stop_loss")
-        #     # target_price = trading_signals.get("target_price")
-        #     # if stop_loss:
-        #     #     formatted_text += f"  손절가: {stop_loss:.0f}원\n"
-        #     # if target_price:
-        #     #     formatted_text += f"  목표가: {target_price:.0f}원\n"
+            #     # stop_loss = trading_signals.get("stop_loss")
+            #     # target_price = trading_signals.get("target_price")
+            #     # if stop_loss:
+            #     #     formatted_text += f"  손절가: {stop_loss:.0f}원\n"
+            #     # if target_price:
+            #     #     formatted_text += f"  목표가: {target_price:.0f}원\n"
 
-        #     signals = trading_signals.get("signals", [])
-        #     if signals:
-        #         formatted_text += "  개별 신호:\n"
-        #         for signal in signals:
-        #             indicator = signal.get("indicator", "")
-        #             signal_type = signal.get("signal", "")
-        #             reason = signal.get("reason", "")
-        #             strength = signal.get("strength", 0)
-        #             formatted_text += f"    {indicator}: {signal_type} ({reason}, 강도: {strength:.2f})\n"
+            #     signals = trading_signals.get("signals", [])
+            #     if signals:
+            #         formatted_text += "  개별 신호:\n"
+            #         for signal in signals:
+            #             indicator = signal.get("indicator", "")
+            #             signal_type = signal.get("signal", "")
+            #             reason = signal.get("reason", "")
+            #             strength = signal.get("strength", 0)
+            #             formatted_text += f"    {indicator}: {signal_type} ({reason}, 강도: {strength:.2f})\n"
 
             formatted_text += "\n"
 
@@ -1132,7 +1112,7 @@ class SummarizerAgent(BaseAgent):
             # 최근 5개 데이터만 표시
             recent_supply_data = supply_demand_data[-10:] if len(supply_demand_data) > 10 else supply_demand_data
             formatted_text += f"  데이터 기간: 최근 {len(recent_supply_data)}일\n"
-            #formatted_text += f"  데이터 단위: {unit}\n"
+            # formatted_text += f"  데이터 단위: {unit}\n"
             if recent_supply_data:
                 # 기간별 누적 매매대금 계산
                 total_individual = 0
@@ -1152,13 +1132,13 @@ class SummarizerAgent(BaseAgent):
                     total_institution += institution
 
                     # 수급 데이터를 억원 단위로 표시 (원본 데이터는 백만원 단위)
-                    formatted_text += f"    {normalized_date}: 개인 {individual/100:+,.1f}억원, 외국인 {foreign/100:+,.1f}억원, 기관 {institution/100:+,.1f}억원\n"
+                    formatted_text += f"    {normalized_date}: 개인 {individual / 100:+,.1f}억원, 외국인 {foreign / 100:+,.1f}억원, 기관 {institution / 100:+,.1f}억원\n"
 
                 # 기간별 누적 요약
                 formatted_text += "  기간별 누적 매매대금:\n"
-                formatted_text += f"    개인투자자: {total_individual/100:+,.1f}억원\n"
-                formatted_text += f"    외국인투자자: {total_foreign/100:+,.1f}억원\n"
-                formatted_text += f"    기관투자자: {total_institution/100:+,.1f}억원\n"
+                formatted_text += f"    개인투자자: {total_individual / 100:+,.1f}억원\n"
+                formatted_text += f"    외국인투자자: {total_foreign / 100:+,.1f}억원\n"
+                formatted_text += f"    기관투자자: {total_institution / 100:+,.1f}억원\n"
 
                 # 주도 세력 분석
                 abs_individual = abs(total_individual)
@@ -1173,7 +1153,7 @@ class SummarizerAgent(BaseAgent):
                 else:
                     pass
 
-                #formatted_text += f"  주도세력: {main_player} ({trend})\n"
+                # formatted_text += f"  주도세력: {main_player} ({trend})\n"
 
             formatted_text += "\n"
 
@@ -1216,25 +1196,26 @@ class SummarizerAgent(BaseAgent):
         # 최근 5개월 차트
         recent_data = chart_data[-66:] if len(chart_data) > 66 else chart_data
 
-        for data in recent_data:
-            if isinstance(data, list) and len(data) >= 7:
-                # [날짜, Open, High, Low, Close, Volume, 등락률] 형태로 표시
-                formatted_text += f"{data}\n"
-            elif isinstance(data, dict):
-                # dict 형태인 경우 배열로 변환
-                date = data.get("date", "")
-                normalized_date = format_date_for_chart(date)
-                open_price = data.get("open", 0)
-                high_price = data.get("high", 0)
-                low_price = data.get("low", 0)
-                close_price = data.get("close", 0)
-                volume = data.get("volume", 0)
-                price_change_percent = data.get("price_change_percent", 0)
+        try:
+            for data in recent_data:
+                if isinstance(data, list) and len(data) >= 7:
+                    # [날짜, Open, High, Low, Close, Volume, 등락률] 형태로 표시
+                    formatted_text += f"{data}\n"
+                elif isinstance(data, dict):
+                    # dict 형태인 경우 배열로 변환
+                    date = data.get("date", "")
+                    normalized_date = format_date_for_chart(date)
+                    open_price = data.get("open") or 0
+                    high_price = data.get("high") or 0
+                    low_price = data.get("low") or 0
+                    close_price = data.get("close") or 0
+                    volume = data.get("volume") or 0
+                    price_change_percent = data.get("price_change_percent") or 0
+                    formatted_text += f"{normalized_date},{open_price:.0f},{high_price:.0f},{low_price:.0f},{close_price:.0f},{volume:.0f},{price_change_percent:.1f}%\n"
 
-                formatted_text += f"{normalized_date},{open_price:.0f},{high_price:.0f},{low_price:.0f},{close_price:.0f},{volume:.0f},{price_change_percent:.1f}%\n"
+        except Exception as e:
+            logger.error(f"차트오류:{date} : {e}", exc_info=True)
 
         formatted_text += "</차트데이터>"
 
         return formatted_text
-
-
