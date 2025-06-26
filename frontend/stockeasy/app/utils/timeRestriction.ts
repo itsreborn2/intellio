@@ -11,7 +11,7 @@ interface ITimeRestriction {
 
 // 제한 시간대 정의
 const RESTRICTED_TIME_PERIODS: ITimeRestriction[] = [
-  { startHour: 3, startMinute: 38, endHour: 4, endMinute: 5 },
+  { startHour: 3, startMinute: 58, endHour: 4, endMinute: 5 },
   { startHour: 11, startMinute: 58, endHour: 12, endMinute: 5 },
   { startHour: 17, startMinute: 58, endHour: 18, endMinute: 5 },
 ];
