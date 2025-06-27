@@ -395,7 +395,6 @@ export function PreliminaryChartDisplay({ chartData, onClose, isCompleted = true
         className={`fixed inset-0 ${isMobile ? '' : 'left-[59px]'} bg-black transition-opacity duration-300 ${
           isAnimating ? 'opacity-50' : 'opacity-0'
         }`}
-        onClick={handleClose}
       />
 
       {/* 팝업 컨테이너 - 채팅영역보다 조금 큰 너비로 제한 */}
