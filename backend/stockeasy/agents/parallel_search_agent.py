@@ -23,6 +23,7 @@ from stockeasy.models.agent_io import AgentState
 # 메모리 추적 On/Off 설정 변수
 ENABLE_MEMORY_TRACKING = os.getenv("ENABLE_MEMORY_TRACKING", "true").lower() == "true"
 
+
 class ParallelSearchAgent(BaseAgent):
     """
     여러 검색 에이전트를 병렬로 실행하는 에이전트
@@ -83,9 +84,7 @@ class ParallelSearchAgent(BaseAgent):
             async def write_memory_csv():
                 # CSV 파일에 데이터 추가 (이벤트 루프 차단 방지)
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, lambda: self._write_memory_to_csv(
-                    csv_path, file_exists, timestamp, session_id, agent_name, phase, memory_data
-                ))
+                await loop.run_in_executor(None, lambda: self._write_memory_to_csv(csv_path, file_exists, timestamp, session_id, agent_name, phase, memory_data))
 
             # 비동기 CSV 작성 실행
             await write_memory_csv()
@@ -96,8 +95,8 @@ class ParallelSearchAgent(BaseAgent):
     def _write_memory_to_csv(self, path, exists, timestamp, session_id, agent_name, phase, memory_data):
         """실제 CSV 파일 작성 함수 (이벤트 루프 외부에서 실행)"""
         try:
-            with open(path, 'a', newline='') as csvfile:
-                fieldnames = ['timestamp', 'pid', 'worker_id', 'thread_info', 'session_id', 'agent', 'phase', 'rss_mb', 'vms_mb', 'gc_objects', 'state_size']
+            with open(path, "a", newline="") as csvfile:
+                fieldnames = ["timestamp", "pid", "worker_id", "thread_info", "session_id", "agent", "phase", "rss_mb", "vms_mb", "gc_objects", "state_size"]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
                 # 파일이 없으면 헤더 추가
@@ -112,19 +111,21 @@ class ParallelSearchAgent(BaseAgent):
                 worker_id = f"{process.name}-{process.pid}"
                 thread_info = f"{threading.current_thread().name}-{threading.get_ident()}"
 
-                writer.writerow({
-                    'timestamp': timestamp,
-                    'pid': os.getpid(),
-                    'worker_id': worker_id,
-                    'thread_info': thread_info,
-                    'session_id': session_id,
-                    'agent': agent_name,
-                    'phase': phase,
-                    'rss_mb': round(memory_data["rss"], 2),
-                    'vms_mb': round(memory_data["vms"], 2),
-                    'gc_objects': memory_data["gc_objects"],
-                    'state_size': memory_data["state_size"]
-                })
+                writer.writerow(
+                    {
+                        "timestamp": timestamp,
+                        "pid": os.getpid(),
+                        "worker_id": worker_id,
+                        "thread_info": thread_info,
+                        "session_id": session_id,
+                        "agent": agent_name,
+                        "phase": phase,
+                        "rss_mb": round(memory_data["rss"], 2),
+                        "vms_mb": round(memory_data["vms"], 2),
+                        "gc_objects": memory_data["gc_objects"],
+                        "state_size": memory_data["state_size"],
+                    }
+                )
         except Exception as e:
             logger.error(f"CSV 파일 작성 중 오류: {str(e)}")
 
@@ -143,7 +144,7 @@ class ParallelSearchAgent(BaseAgent):
 
         # 그래프에 병렬 검색 에이전트 자체의 처리 상태 업데이트
         session_id = state.get("session_id")
-        if self.graph and session_id and hasattr(self.graph, 'current_state'):
+        if self.graph and session_id and hasattr(self.graph, "current_state"):
             try:
                 async with self.graph.state_lock:
                     if session_id not in self.graph.current_state:
@@ -154,7 +155,7 @@ class ParallelSearchAgent(BaseAgent):
 
                     # 병렬 검색 에이전트 자체의 상태 업데이트
                     self.graph.current_state[session_id]["processing_status"]["parallel_search"] = "processing"
-                    #logger.debug(f"ParallelSearchAgent: 처리 시작 상태를 그래프에 업데이트")
+                    # logger.debug(f"ParallelSearchAgent: 처리 시작 상태를 그래프에 업데이트")
             except Exception as e:
                 logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
 
@@ -217,18 +218,18 @@ class ParallelSearchAgent(BaseAgent):
                 elif agent_name == "industry_analyzer" and data_requirements.get("industry_data_needed", False):
                     should_execute = True
                 elif agent_name == "confidential_analyzer" and data_requirements.get("confidential_data_needed", False):
-                    #logger.info(f"비공개 자료 필요: {agent_name}, {data_requirements}")
+                    # logger.info(f"비공개 자료 필요: {agent_name}, {data_requirements}")
                     should_execute = True
                 elif agent_name == "revenue_breakdown" and data_requirements.get("revenue_data_needed", False):
-                    #logger.info(f"매출 및 수주 현황 데이터 필요: {agent_name}, {data_requirements}")
+                    # logger.info(f"매출 및 수주 현황 데이터 필요: {agent_name}, {data_requirements}")
                     should_execute = True
                 elif agent_name == "web_search" and data_requirements.get("web_search_needed", False):
-                    #logger.info(f"웹 검색 데이터 필요: {agent_name}, {data_requirements}")
+                    # logger.info(f"웹 검색 데이터 필요: {agent_name}, {data_requirements}")
                     should_execute = True
                 elif agent_name == "technical_analyzer" and data_requirements.get("technical_analysis_needed", False):
                     logger.info(f"기술적 분석 데이터 필요: {agent_name}, {data_requirements}")
                     should_execute = True
-            logger.info(f"데이터 요구사항: {should_execute} {agent_name}, {data_requirements}")
+            # logger.info(f"데이터 요구사항: {should_execute} {agent_name}, {data_requirements}")
             # 에이전트가 존재하고 실행이 필요한 경우 목록에 추가
             if should_execute and agent_name in self.agents and self.agents[agent_name]:
                 search_agents.append((agent_name, self.agents[agent_name]))
@@ -312,17 +313,12 @@ class ParallelSearchAgent(BaseAgent):
                 logger.error(f"에이전트 {name} 실행 중 오류 발생: {str(result)}")
                 if "errors" not in state:
                     state["errors"] = []
-                state["errors"].append({
-                    "agent": name,
-                    "error": str(result),
-                    "type": type(result).__name__,
-                    "timestamp": datetime.now()
-                })
+                state["errors"].append({"agent": name, "error": str(result), "type": type(result).__name__, "timestamp": datetime.now()})
                 state["processing_status"][name] = "failed"
             else:
                 # 성공적인 결과 병합
                 success_count += 1
-                #logger.info(f"에이전트 {name} 실행 완료")
+                # logger.info(f"에이전트 {name} 실행 완료")
 
                 # 처리 상태 업데이트
                 if "processing_status" in result:
@@ -347,7 +343,7 @@ class ParallelSearchAgent(BaseAgent):
                     # agent_results 딕셔너리 병합
                     for agent_name, agent_result in result["agent_results"].items():
                         state["agent_results"][agent_name] = agent_result
-                        #logger.info(f"에이전트 {agent_name}의 agent_results 병합 완료")
+                        # logger.info(f"에이전트 {agent_name}의 agent_results 병합 완료")
 
         # agent_results가 없으면 빈 딕셔너리 초기화
         if "agent_results" not in state:
@@ -366,7 +362,7 @@ class ParallelSearchAgent(BaseAgent):
         for key, value in state["retrieved_data"].items():
             if key in ["telegram_messages", "report_data", "financial_data", "industry_data", "confidential_data", "web_search_results", "technical_analysis_data"] and value:
                 has_data = True
-                #logger.info(f"검색 결과 있음: {key}에 {len(value)}개 항목")
+                # logger.info(f"검색 결과 있음: {key}에 {len(value)}개 항목")
                 break
 
         if not has_data:
@@ -398,12 +394,9 @@ class ParallelSearchAgent(BaseAgent):
                 "success_count": success_count,
                 "failure_count": failure_count,
                 "execution_time": execution_time,
-                "has_data": has_data
+                "has_data": has_data,
             },
-            "metadata": {
-                "timestamp": datetime.now().isoformat(),
-                "version": "1.0"
-            }
+            "metadata": {"timestamp": datetime.now().isoformat(), "version": "1.0"},
         }
 
         # 병렬 검색 에이전트 상태를 '완료'로 설정
@@ -411,7 +404,7 @@ class ParallelSearchAgent(BaseAgent):
 
         # 그래프 상태 업데이트 - 병렬 검색 완료
         session_id = state.get("session_id")
-        if self.graph and session_id and hasattr(self.graph, 'current_state'):
+        if self.graph and session_id and hasattr(self.graph, "current_state"):
             try:
                 async with self.graph.state_lock:
                     if session_id not in self.graph.current_state:
@@ -422,46 +415,41 @@ class ParallelSearchAgent(BaseAgent):
 
                     # 병렬 검색 에이전트 자체의 상태 업데이트
                     self.graph.current_state[session_id]["processing_status"]["parallel_search"] = "completed"
-                    #logger.debug(f"ParallelSearchAgent: 처리 완료 상태를 그래프에 업데이트")
+                    # logger.debug(f"ParallelSearchAgent: 처리 완료 상태를 그래프에 업데이트")
             except Exception as e:
                 logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
 
         logger.info(f"ParallelSearchAgent 병렬 처리 완료. 실행 시간: {execution_time:.2f}초, 성공: {success_count}, 실패: {failure_count}")
 
         return state
+
     def write_to_csv_full_graph_time(self, event_type: str, agent_name: str, note: Optional[str] = None, session_id: Optional[str] = None) -> None:
         # CSV 파일 경로 설정
-        log_dir = os.path.join('stockeasy', 'local_cache')
+        log_dir = os.path.join("stockeasy", "local_cache")
         os.makedirs(log_dir, exist_ok=True)
 
-        date_str = datetime.now().strftime('%Y%m%d')
-        csv_path = os.path.join(log_dir, f'log_agent_time_{date_str}.csv')
+        date_str = datetime.now().strftime("%Y%m%d")
+        csv_path = os.path.join(log_dir, f"log_agent_time_{date_str}.csv")
 
         # 파일 존재 여부 확인 (헤더 추가 여부 결정)
         file_exists = os.path.isfile(csv_path)
 
         # 현재 날짜와 시간
-        current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # PID 정보 가져오기
         current_pid = os.getpid()
 
         # CSV 파일에 데이터 추가
-        with open(csv_path, 'a', newline='', encoding='utf-8-sig') as csvfile:
-            fieldnames = ['일자', 'pid', 'session_id', 'event_type', 'agent_name', 'note']
+        with open(csv_path, "a", newline="", encoding="utf-8-sig") as csvfile:
+            fieldnames = ["일자", "pid", "session_id", "event_type", "agent_name", "note"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
             # 파일이 새로 생성된 경우 헤더 작성
             if not file_exists:
                 writer.writeheader()
-            writer.writerow({
-                '일자': current_datetime,
-                'pid': current_pid,
-                'session_id': session_id or 'unknown',
-                'event_type': event_type,
-                'agent_name': agent_name,
-                'note': note
-            })
+            writer.writerow({"일자": current_datetime, "pid": current_pid, "session_id": session_id or "unknown", "event_type": event_type, "agent_name": agent_name, "note": note})
+
     async def _run_agent(self, name: str, agent: BaseAgent, state: AgentState) -> AgentState:
         """
         단일 에이전트를 비동기적으로 실행합니다.
@@ -489,7 +477,7 @@ class ParallelSearchAgent(BaseAgent):
         try:
             if self.graph:
                 # 그래프에 처리 상태 업데이트 (에이전트 시작)
-                if session_id and hasattr(self.graph, 'current_state'):
+                if session_id and hasattr(self.graph, "current_state"):
                     try:
                         async with self.graph.state_lock:
                             if session_id not in self.graph.current_state:
@@ -507,10 +495,10 @@ class ParallelSearchAgent(BaseAgent):
             if "update_processing_status" in state and "agent_name" in state:
                 state["update_processing_status"](state["agent_name"], "started")
 
-            #logger.info(f"에이전트 {name} 실행 시작")
+            # logger.info(f"에이전트 {name} 실행 시작")
             await asyncio.to_thread(self.write_to_csv_full_graph_time, "agent_start", name, None, session_id)
             result = await agent.process(state)
-            #logger.info(f"에이전트 {name} 실행 완료")
+            # logger.info(f"에이전트 {name} 실행 완료")
             await asyncio.to_thread(self.write_to_csv_full_graph_time, "agent_end", name, None, session_id)
 
             # 에이전트 실행 시간 계산
@@ -534,7 +522,7 @@ class ParallelSearchAgent(BaseAgent):
 
             if self.graph:
                 # 그래프에 처리 상태 업데이트 (에이전트 완료)
-                if session_id and hasattr(self.graph, 'current_state'):
+                if session_id and hasattr(self.graph, "current_state"):
                     try:
                         async with self.graph.state_lock:
                             if session_id not in self.graph.current_state:
@@ -560,7 +548,7 @@ class ParallelSearchAgent(BaseAgent):
                             "rss": post_memory["rss"] - pre_memory["rss"],
                             "vms": post_memory["vms"] - pre_memory["vms"],
                             "gc_objects": 0,  # 무거운 작업 제거
-                            "state_size": 0
+                            "state_size": 0,
                         }
 
                         logger.info(f"[메모리체크-종료-백그라운드] {name} - 실행시간: {execution_time:.2f}s, RSS: {post_memory['rss']:.2f}MB, VMS: {post_memory['vms']:.2f}MB")
@@ -608,7 +596,7 @@ class ParallelSearchAgent(BaseAgent):
 
             if self.graph:
                 # 그래프에 처리 상태 업데이트 (에이전트 실패)
-                if session_id and hasattr(self.graph, 'current_state'):
+                if session_id and hasattr(self.graph, "current_state"):
                     try:
                         async with self.graph.state_lock:
                             if session_id not in self.graph.current_state:

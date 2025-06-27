@@ -55,7 +55,7 @@ class SummarizerAgent(BaseAgent):
             return text
 
         # 기본 내부DB 패턴 제거
-        text = text.replace("<내부DB>", "").replace("(내부DB)", "")
+        text = text.replace("<내부DB>", "").replace("(내부DB)", "").replace("내부DB;", "").replace(", 내부DB)", "").replace("; 내부DB)", "")
 
         # 날짜가 포함된 내부DB 패턴 제거: (내부DB, yyyy-mm-dd) 및 (내부DB,yyyy-mm-dd)
         text = re.sub(r"\(내부DB,\s*\d{4}-\d{2}-\d{2}\)", "", text)
@@ -63,6 +63,9 @@ class SummarizerAgent(BaseAgent):
         # 비공개자료 패턴 제거
         text = text.replace("<비공개자료>", "").replace("(비공개자료)", "")
         text = re.sub(r"\(비공개자료,\s*\d{4}-\d{2}-\d{2}\)", "", text)
+
+        # 웹검색결과 패턴 제거
+        text = text.replace("(웹검색결과)", "").replace("웹검색결과;", "").replace("웹검색결과,", "").replace("; 웹검색결과", "").replace(", 웹검색결과", "")
 
         return text
 
@@ -460,20 +463,18 @@ class SummarizerAgent(BaseAgent):
         if not reports:
             return "해당 섹션에 대한 기업리포트 참고 자료가 없습니다."
 
-        formatted_texts = []
-        text = "<기업리포트>\n"
+        text = "--- 데이터소스: 기업리포트 ---\n\n"
         for i, report in enumerate(reports):
-            text += f" <자료 {i + 1}>\n"
-            text += f"출처: {report.get('source', '미상')}\n"
-            text += f"날짜: {report.get('publish_date', '날짜 정보 없음')}\n"
-            # if report.get('title') and report.get('title') != '제목 없음': # title이 유효하면 추가
-            #     text += f"제목: {report.get('title')}\n"
+            if i > 0:  # 첫 번째 항목이 아닌 경우만 구분선 추가
+                text += "____\n\n"
+
+            text += f"- **출처**: {report.get('source', '미상')}\n"
+            text += f"- **날짜**: {report.get('publish_date', '날짜 정보 없음')}\n"
+
             sContent = report.get("content", "내용 없음")
             sContent = sContent.replace("\n\n", "\n")
-            text += f"내용:\n{sContent}\n"
-            formatted_texts.append(text)
-            text += f" </자료 {i + 1}>\n"
-        text += "</기업리포트>"
+            text += f"- **내용**:\n{sContent}\n\n"
+
         return text
 
     def _format_telegram_messages_for_section(self, messages: List[RetrievedTelegramMessage]) -> str:
@@ -483,10 +484,8 @@ class SummarizerAgent(BaseAgent):
         if not messages:
             return "해당 섹션에 대한 내부DB 참고 자료가 없습니다."
 
-        text = "<내부DB>\n"
+        text = "--- 데이터소스: 내부DB ---\n\n"
         for i, message in enumerate(messages):
-            text += "------\n"
-
             # ISO 형식의 날짜를 년-월-일 형식으로 변환
             created_at = message.get("message_created_at", "")
             formatted_date = "날짜 정보 없음"
@@ -499,11 +498,12 @@ class SummarizerAgent(BaseAgent):
                     # 날짜 변환 실패 시 원본 값 사용
                     formatted_date = created_at
 
-            text += f"날짜: {formatted_date}\n"
-            # text += f"채널: {message.get('channel_name', '채널 정보 없음')}\n"
-            text += f"내용: {message.get('content', '내용 없음')}\n"
-            text += "------\n"
-        text += "</내부DB>"
+            if i > 0:  # 첫 번째 항목이 아닌 경우만 구분선 추가
+                text += "____\n\n"
+
+            text += f"- **날짜**: {formatted_date}\n"
+            text += f"- **내용**: {message.get('content', '내용 없음')}\n\n"
+
         return text
 
     def _format_competitor_financial_data(self, competitors_infos: List[Dict[str, Any]]) -> str:
@@ -522,7 +522,7 @@ class SummarizerAgent(BaseAgent):
                 stock_name = competitor_info.get("stock_name", "경쟁사")
                 stock_code = competitor_info.get("stock_code", "")
                 logger.info(f" 경쟁사 재무 데이터 포맷팅 시작: {stock_name} ({stock_code})")
-                formatted_data += f"## {stock_name} ({stock_code}) 분기별 재무 데이터\n\n"
+                formatted_data += f"--- 데이터소스: {stock_name} ({stock_code}) 분기별 재무 데이터 ---\n\n"
 
                 if "db_search_data" in competitor_info:
                     db_data = competitor_info["db_search_data"]
@@ -577,7 +577,7 @@ class SummarizerAgent(BaseAgent):
         if not technical_analysis_data:
             return "기술적 분석 데이터가 없습니다."
 
-        formatted_text = "<기술적분석>\n"
+        formatted_text = "--- 데이터소스: 기술적분석 ---\n\n"
 
         # 기본 정보
         stock_name = technical_analysis_data.get("stock_name", "")
@@ -1169,8 +1169,6 @@ class SummarizerAgent(BaseAgent):
         #         formatted_text += f"  {i}. {rec}\n"
         #     formatted_text += "\n"
 
-        formatted_text += "</기술적분석>"
-
         return formatted_text
 
     def _format_price_chart(self, technical_analysis_data: Optional[Dict[str, Any]]) -> str:
@@ -1190,8 +1188,9 @@ class SummarizerAgent(BaseAgent):
         if not chart_data:
             return "차트 데이터가 없습니다."
 
-        formatted_text = "<차트데이터>\n"
-        formatted_text += "데이터 형식: 날짜, 시가, 고가, 저가, 종가, 거래량, 등락률\n\n"
+        formatted_text = "--- 데이터소스: 차트데이터 ---\n\n"
+        formatted_text += "**데이터 형식**: 날짜, 시가, 고가, 저가, 종가, 거래량, 등락률\n\n"
+        formatted_text += "**가격 데이터**:\n"
 
         # 최근 5개월 차트
         recent_data = chart_data[-66:] if len(chart_data) > 66 else chart_data
@@ -1215,7 +1214,5 @@ class SummarizerAgent(BaseAgent):
 
         except Exception as e:
             logger.error(f"차트오류:{date} : {e}", exc_info=True)
-
-        formatted_text += "</차트데이터>"
 
         return formatted_text
