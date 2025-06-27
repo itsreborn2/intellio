@@ -1,13 +1,48 @@
-from datetime import datetime
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from typing import Any, Dict, List, Optional
-from stockeasy.models.agent_io import RetrievedTelegramMessage
+
+from langchain_core.prompts import ChatPromptTemplate
+
 from stockeasy.prompts.telegram_prompts import format_telegram_messages
 
 # --- START: 섹션별 종합 분석 프롬프트 정의 ---
 
-
 PROMPT_GENERATE_SECTION_CONTENT = """
+당신은 투자 리서치 보고서 전문 작성가입니다. 주어진 정보와 아래 원칙에 따라 요청된 섹션의 내용을 작성해야 합니다.
+
+# 입력 정보
+- 원래 질문: {query}
+- 섹션 제목: {section_title}
+- 섹션 설명: {section_description}
+- 하위섹션 목록: {subsections_info}
+- 분석 데이터: <수행한 검색 및 분석 결과 요약>{all_analyses}</수행한 검색 및 분석 결과 요약>
+
+# 보고서 작성 7대 원칙
+
+1.  **목적 집중:** 섹션의 목표와 설명에 부합하는 내용만 엄선하여 작성합니다.
+2.  **데이터 기반:** 제공된 '분석 데이터' 내의 정보만을 근거로 서술하며, 없는 내용은 추측하지 않습니다.
+3.  **전문가 톤앤매너:** 금융 투자 분야의 전문 용어를 활용해 신뢰도 높은 분석을 제공하며, 항상 존대말을 사용합니다.
+4.  **논리적 인과관계:** 모든 분석은 '원인 → 현상 → 결과 → 시사점'의 흐름으로 명확하게 전개합니다.
+5.  **시각적 강조:** 독자의 이해를 돕기 위해 **핵심 키워드나 수치는 굵게** 처리하고, 필요시 글머리 기호를 활용합니다.
+6.  **재무 데이터 테이블화:** 모든 재무 지표는 아래 '테이블 출력 지침'에 따라 표로 만들어, 증감률(+/-)과 함께 제시합니다.
+7.  **섹션 요약:** 각 섹션의 말미에는 핵심 내용을 3~5개로 요약한 **[섹션 요약]** 박스를 추가합니다.
+
+# 테이블 출력 지침
+- 테이블은 반드시 다음 형식에 맞춰 파이프(|) 사이에 공백 없이 작성합니다.
+|항목|값1|값2|비고(선택적)|
+|---|---|---|---|
+|데이터1|내용1|내용2|설명1|
+
+# 출처 표기 절대 원칙: A를 B로 변환
+- **목표:** `<자료>` 태그를 실제 출처명으로 **반드시 변환**해야 합니다. 이 규칙을 어기면 작업은 실패입니다.
+- **변환 예시:**
+    - **입력 데이터:** `<자료 4>`의 출처가 `한국투자증권`일 경우
+    - **절대 금지 (오답):** `...서술 내용. (자료 4, 2025-06-17)`
+    - **필수 형식 (정답):** `...서술 내용. (한국투자증권, 2025-06-17)`
+- **예외:** `<내부DB>`, `<비공개자료>` 정보는 **절대 출처를 표기하지 않고**, 본문에 자연스럽게 녹여 서술합니다.
+
+이제 위의 모든 지침에 따라 "{section_title}" 섹션의 내용을 작성해주십시오.
+"""
+PROMPT_GENERATE_SECTION_CONTENT_OLD = """
 당신은 투자 리서치 보고서 전문 작성가입니다. 주어진 섹션 정보와 분석 데이터를 바탕으로 해당 섹션의 내용을 작성해야 합니다.
 
 # 작업 목표
@@ -272,8 +307,8 @@ PROMPT_GENERATE_TECHNICAL_ANALYSIS_SECTION = """
    - **각 지표 유형이 제공하는 신호의 의미와 한계**
    - **두 지표 유형이 상충할 때의 해석 방법**
    - **본 분석에서 추세추종 지표를 주축으로 사용하는 이유**
-4. **핵심 기술적 지표 해석**: 다음 지표들을 중점적으로 분석하고 해석하세요.
    
+4. **핵심 기술적 지표 해석**: 다음 지표들을 중점적으로 분석하고 해석하세요.
    **추세추종 지표 (Main 지표)**:
    - 과열권을 판단할 수 있는 지표의 점수는 분석하여 결과를 제시할 것
    - **ADX (Average Directional Index)**: 추세 강도 측정 및 +DI/-DI를 통한 방향성 분석
@@ -313,195 +348,194 @@ PROMPT_GENERATE_TECHNICAL_ANALYSIS_SECTION = """
 """
 
 
-def create_all_section_content(stock_code: Optional[str], stock_name: Optional[str],
-                telegram_data: Dict[str, Any],
-                report_data: List[Dict[str, Any]], confidential_data: List[Dict[str, Any]],
-                financial_data: Dict[str, Any],
-                revenue_breakdown_data: str,
-                industry_data: List[Dict[str, Any]], integrated_knowledge: Optional[Any],
-                web_search_data: List[Dict[str, Any]],
-                ) -> ChatPromptTemplate:
-        """요약을 위한 프롬프트 생성"""
-        
-        # 소스 정보 형식화
-        sources_info = ""
-        
-        # 재무 정보
- 
-        if financial_data:
-            sources_info += "------\n<사업보고서, 재무 분석 정보>\n"
-            llm_response = financial_data.get("llm_response", "")
-            if llm_response:
-                sources_info += f"{llm_response}\n\n"
-            else:
-                sources_info += "재무 분석 결과가 없습니다.\n\n"
-            
-            sources_info += "</사업보고서, 재무 분석 정보>\n"
+def create_all_section_content(
+    stock_code: Optional[str],
+    stock_name: Optional[str],
+    telegram_data: Dict[str, Any],
+    report_data: List[Dict[str, Any]],
+    confidential_data: List[Dict[str, Any]],
+    financial_data: Dict[str, Any],
+    revenue_breakdown_data: str,
+    industry_data: List[Dict[str, Any]],
+    integrated_knowledge: Optional[Any],
+    web_search_data: List[Dict[str, Any]],
+) -> ChatPromptTemplate:
+    """요약을 위한 프롬프트 생성"""
+
+    # 소스 정보 형식화
+    sources_info = ""
+
+    # 재무 정보
+
+    if financial_data:
+        sources_info += "------\n<사업보고서, 재무 분석 정보>\n"
+        llm_response = financial_data.get("llm_response", "")
+        if llm_response:
+            sources_info += f"{llm_response}\n\n"
+        else:
+            sources_info += "재무 분석 결과가 없습니다.\n\n"
+
+        sources_info += "</사업보고서, 재무 분석 정보>\n"
+
+    if revenue_breakdown_data and len(revenue_breakdown_data) > 0:
+        sources_info += "------\n<매출 및 수주 현황>\n"
+        sources_info += f"{revenue_breakdown_data}\n\n"
+        sources_info += "</매출 및 수주 현황>\n"
+
+    # 기업 리포트
+    if report_data:
+        analysis = report_data.get("analysis", {})
+        sources_info += "------\n<기업리포트>\n"
+        if analysis:
+            # 전체 소스를 다 줄게 아니라, 기업리포트 에이전트가 출력한 결과만 전달.
+            # 아.. 인용처리가 애매해지네.
+            # 일단은 기업리포트 결과만 남겨보자.
+            sources_info += f" - 투자의견:\n{analysis.get('investment_opinions', '')}\n\n"
+            sources_info += f" - 종합의견:\n{analysis.get('opinion_summary', '')}\n\n"
+            sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
+        else:
+            searched_reports = report_data.get("searched_reports", [])
+            for report in searched_reports[:5]:
+                report_info = report.get("content", "")
+                report_source = report.get("source", "미상")
+                report_date = report.get("publish_date", "날짜 미상")
+                report_page = f"{report.get('page', '페이지 미상')} p"
+                sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
+        sources_info += "</기업리포트>\n"
+
+    # 산업 동향(일단 미구현. 산업리포트 에이전트 추가 후에 풀것)
+    if industry_data:
+        analysis = industry_data.get("analysis", {})
+        sources_info += "------\n<산업,섹터 분석>\n"
+        if analysis:
+            sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
+        else:
+            searched_reports = industry_data.get("searched_reports", [])
+            for report in searched_reports[:5]:
+                report_info = report.get("content", "")
+                report_source = report.get("source", "미상")
+                report_date = report.get("publish_date", "날짜 미상")
+                report_page = f"{report.get('page', '페이지 미상')} p"
+                sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
+        sources_info += "</산업,섹터 분석>\n"
+
+    # 비공개 리포트
+    if confidential_data:
+        analysis = confidential_data.get("analysis", {})
+        sources_info += "------\n<비공개자료>\n"
+        if analysis:
+            # 전체 소스를 다 줄게 아니라, 기업리포트 에이전트가 출력한 결과만 전달.
+            # 아.. 인용처리가 애매해지네.
+            # 일단은 기업리포트 결과만 남겨보자.
+            sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
+        else:
+            searched_reports = confidential_data.get("searched_reports", [])
+            for report in searched_reports[:5]:
+                report_info = report.get("content", "")
+                report_source = report.get("source", "미상")
+                report_page = f"{report.get('page', '페이지 미상')} p"
+                # sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
+                sources_info += f"[출처: {report_source}, {report_page}]\n{report_info}\n\n"
+        sources_info += "</비공개자료>\n"
+
+    # 텔레그램 메시지
+    if telegram_data:
+        formatted_msgs = format_telegram_messages(telegram_data, stock_code, stock_name)
+        sources_info += "------\n<내부DB>\n"
+        sources_info += f"{formatted_msgs}\n\n"
+        sources_info += "</내부DB>\n"
+
+    if web_search_data:
+        web_search_summary = web_search_data.get("summary", "")
+        sources_info += "------\n<웹 검색 결과>\n"
+        sources_info += f"{web_search_summary}\n\n"
+        sources_info += "</웹 검색 결과>\n"
+
+    # 통합된 지식
+    if integrated_knowledge:
+        sources_info += "------\n<통합된 지식>\n"
+        sources_info += f"{integrated_knowledge}\n\n"
+        sources_info += "</통합된 지식>\n"
+
+    # 정보가 없는 경우
+    if not sources_info:
+        sources_info = "검색된 정보가 없습니다. 질문에 관련된 정보를 찾을 수 없습니다."
+
+    return sources_info
 
 
-        if revenue_breakdown_data and len(revenue_breakdown_data) > 0:
-            sources_info += "------\n<매출 및 수주 현황>\n"
-            sources_info += f"{revenue_breakdown_data}\n\n"
-            sources_info += "</매출 및 수주 현황>\n"
-        
-        
-        # 기업 리포트
-        if report_data:
-            analysis = report_data.get("analysis", {})
-            sources_info += "------\n<기업리포트>\n"
-            if analysis:
-                # 전체 소스를 다 줄게 아니라, 기업리포트 에이전트가 출력한 결과만 전달.
-                # 아.. 인용처리가 애매해지네.
-                # 일단은 기업리포트 결과만 남겨보자.
-                sources_info += f" - 투자의견:\n{analysis.get('investment_opinions', '')}\n\n"
-                sources_info += f" - 종합의견:\n{analysis.get('opinion_summary', '')}\n\n"
-                sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
-            else:
-                searched_reports = report_data.get("searched_reports", [])
-                for report in searched_reports[:5]:
-                    report_info = report.get("content", "")
-                    report_source = report.get("source", "미상")
-                    report_date = report.get("publish_date", "날짜 미상")
-                    report_page = f"{report.get('page', '페이지 미상')} p"
-                    sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
-            sources_info += "</기업리포트>\n"                    
+def format_other_agent_data(agent_results: Dict[str, Any], stock_code: Optional[str] = None, stock_name: Optional[str] = None) -> str:
+    """
+    다른 에이전트들의 결과 데이터를 create_all_section_content 함수와 유사한 형태로 포맷합니다.
+    report_analyzer 데이터는 제외합니다.
+    """
+    sources_info_parts = []
 
-        # 산업 동향(일단 미구현. 산업리포트 에이전트 추가 후에 풀것)
-        if industry_data:
-            analysis = industry_data.get("analysis", {})
-            sources_info += "------\n<산업,섹터 분석>\n"
-            if analysis:
-                sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
-            else:
-                searched_reports = industry_data.get("searched_reports", [])
-                for report in searched_reports[:5]:
-                    report_info = report.get("content", "")
-                    report_source = report.get("source", "미상")
-                    report_date = report.get("publish_date", "날짜 미상")
-                    report_page = f"{report.get('page', '페이지 미상')} p"
-                    sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
-            sources_info += "</산업,섹터 분석>\n"
+    # Financial Analyzer 데이터
+    financial_data = agent_results.get("financial_analyzer", {}).get("data", {})
+    if financial_data:
+        part = "------\n<사업보고서, 재무 분석 정보>\n"
+        llm_response = financial_data.get("llm_response", "")
+        if llm_response:
+            part += f"{llm_response}\n\n"
+        else:
+            part += "재무 분석 결과가 없습니다.\n\n"
+        part += "</사업보고서, 재무 분석 정보>\n"
+        sources_info_parts.append(part)
 
-         # 비공개 리포트
-        if confidential_data:
-            analysis = confidential_data.get("analysis", {})
-            sources_info += "------\n<비공개자료>\n"
-            if analysis:
-                # 전체 소스를 다 줄게 아니라, 기업리포트 에이전트가 출력한 결과만 전달.
-                # 아.. 인용처리가 애매해지네.
-                # 일단은 기업리포트 결과만 남겨보자.
-                sources_info += f" - 최종결과:\n{analysis.get('llm_response', '')}\n\n"
-            else:
-                searched_reports = confidential_data.get("searched_reports", [])
-                for report in searched_reports[:5]:
-                    report_info = report.get("content", "")
-                    report_source = report.get("source", "미상")
-                    report_page = f"{report.get('page', '페이지 미상')} p"
-                    #sources_info += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"         
-                    sources_info += f"[출처: {report_source}, {report_page}]\n{report_info}\n\n"         
-            sources_info += "</비공개자료>\n"
+    # Revenue Breakdown 데이터
+    revenue_breakdown_data_str = agent_results.get("revenue_breakdown", {}).get("data", "")
+    # create_all_section_content는 문자열로 기대하므로, 문자열인지 확인
+    if revenue_breakdown_data_str and isinstance(revenue_breakdown_data_str, str) and len(revenue_breakdown_data_str.strip()) > 0:
+        part = "------\n<매출 및 수주 현황>\n"
+        part += f"{revenue_breakdown_data_str}\n\n"
+        part += "</매출 및 수주 현황>\n"
+        sources_info_parts.append(part)
 
-        # 텔레그램 메시지
-        if telegram_data:
-            formatted_msgs = format_telegram_messages(telegram_data, stock_code, stock_name)
-            sources_info += f"------\n<내부DB>\n"
-            sources_info += f"{formatted_msgs}\n\n"
-            sources_info += "</내부DB>\n"
+    # Industry Analyzer 데이터
+    industry_data_container = agent_results.get("industry_analyzer", {}).get("data", {})
+    if industry_data_container and isinstance(industry_data_container, dict):
+        part = "------\n<산업,섹터 분석>\n"
+        analysis = industry_data_container.get("analysis", {})
+        llm_response = analysis.get("llm_response", "")
+        if llm_response:
+            part += f"{llm_response}\n\n"
+        else:
+            searched_reports = industry_data_container.get("searched_reports", [])
+            if searched_reports and isinstance(searched_reports, list) and searched_reports:
+                for report_item in searched_reports[:5]:
+                    report_info = report_item.get("content", "")
+                    report_source = report_item.get("source", "미상")
+                    report_date = report_item.get("publish_date", "날짜 미상")
+                    report_page = f"{report_item.get('page', '페이지 미상')} p"
+                    part += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
+            else:  # llm_response도 없고 searched_reports도 없을 경우
+                part += "산업 동향 분석 결과가 없습니다.\n\n"  # create_all_section_content에는 이 부분이 명시적이지 않으나, 추가
+        part += "</산업,섹터 분석>\n"
+        sources_info_parts.append(part)
 
-        if web_search_data:
-            web_search_summary = web_search_data.get("summary", "")
-            sources_info += "------\n<웹 검색 결과>\n"
-            sources_info += f"{web_search_summary}\n\n"
-            sources_info += "</웹 검색 결과>\n"
-        
-        # 통합된 지식
-        if integrated_knowledge:
-            sources_info += "------\n<통합된 지식>\n"
-            sources_info += f"{integrated_knowledge}\n\n"
-            sources_info += "</통합된 지식>\n"
+    # Confidential Analyzer 데이터
+    confidential_data_container = agent_results.get("confidential_analyzer", {}).get("data", {})
+    if confidential_data_container and isinstance(confidential_data_container, dict):
+        part = "------\n<비공개자료>\n"
+        analysis = confidential_data_container.get("analysis", {})
+        llm_response = analysis.get("llm_response", "")
+        if llm_response:
+            part += f"{llm_response}\n\n"
+        else:
+            searched_reports = confidential_data_container.get("searched_reports", [])
+            if searched_reports and isinstance(searched_reports, list) and searched_reports:
+                for report_item in searched_reports[:5]:
+                    report_info = report_item.get("content", "")
+                    report_source = report_item.get("source", "미상")
+                    report_page = f"{report_item.get('page', '페이지 미상')} p"  # 날짜 없음, create_all_section_content와 동일
+                    part += f"[출처: {report_source}, {report_page}]\n{report_info}\n\n"
+            else:  # llm_response도 없고 searched_reports도 없을 경우
+                part += "비공개 자료 분석 결과가 없습니다.\n\n"  # create_all_section_content에는 이 부분이 명시적이지 않으나, 추가
+        part += "</비공개자료>\n"
+        sources_info_parts.append(part)
 
-        
-        # 정보가 없는 경우
-        if not sources_info:
-            sources_info = "검색된 정보가 없습니다. 질문에 관련된 정보를 찾을 수 없습니다."
-        
-        
-        return sources_info
-
-def format_other_agent_data(agent_results: Dict[str, Any], 
-                            stock_code: Optional[str] = None, 
-                            stock_name: Optional[str] = None) -> str:
-      """
-      다른 에이전트들의 결과 데이터를 create_all_section_content 함수와 유사한 형태로 포맷합니다.
-      report_analyzer 데이터는 제외합니다.
-      """
-      sources_info_parts = []
-
-      # Financial Analyzer 데이터
-      financial_data = agent_results.get("financial_analyzer", {}).get("data", {})
-      if financial_data:
-          part = "------\n<사업보고서, 재무 분석 정보>\n"
-          llm_response = financial_data.get("llm_response", "")
-          if llm_response:
-              part += f"{llm_response}\n\n"
-          else:
-              part += "재무 분석 결과가 없습니다.\n\n"
-          part += "</사업보고서, 재무 분석 정보>\n"
-          sources_info_parts.append(part)
-
-      # Revenue Breakdown 데이터
-      revenue_breakdown_data_str = agent_results.get("revenue_breakdown", {}).get("data", "")
-      # create_all_section_content는 문자열로 기대하므로, 문자열인지 확인
-      if revenue_breakdown_data_str and isinstance(revenue_breakdown_data_str, str) and len(revenue_breakdown_data_str.strip()) > 0:
-          part = "------\n<매출 및 수주 현황>\n"
-          part += f"{revenue_breakdown_data_str}\n\n"
-          part += "</매출 및 수주 현황>\n"
-          sources_info_parts.append(part)
-
-      # Industry Analyzer 데이터
-      industry_data_container = agent_results.get("industry_analyzer", {}).get("data", {})
-      if industry_data_container and isinstance(industry_data_container, dict):
-          part = "------\n<산업,섹터 분석>\n"
-          analysis = industry_data_container.get("analysis", {})
-          llm_response = analysis.get("llm_response", "")
-          if llm_response:
-              part += f"{llm_response}\n\n"
-          else:
-              searched_reports = industry_data_container.get("searched_reports", [])
-              if searched_reports and isinstance(searched_reports, list) and searched_reports:
-                  for report_item in searched_reports[:5]:
-                      report_info = report_item.get("content", "")
-                      report_source = report_item.get("source", "미상")
-                      report_date = report_item.get("publish_date", "날짜 미상")
-                      report_page = f"{report_item.get('page', '페이지 미상')} p"
-                      part += f"[출처: {report_source}, {report_date}, {report_page}]\n{report_info}\n\n"
-              else: # llm_response도 없고 searched_reports도 없을 경우
-                  part += "산업 동향 분석 결과가 없습니다.\n\n" # create_all_section_content에는 이 부분이 명시적이지 않으나, 추가
-          part += "</산업,섹터 분석>\n"
-          sources_info_parts.append(part)
-
-      # Confidential Analyzer 데이터
-      confidential_data_container = agent_results.get("confidential_analyzer", {}).get("data", {})
-      if confidential_data_container and isinstance(confidential_data_container, dict):
-          part = "------\n<비공개자료>\n"
-          analysis = confidential_data_container.get("analysis", {})
-          llm_response = analysis.get("llm_response", "")
-          if llm_response:
-              part += f"{llm_response}\n\n"
-          else:
-              searched_reports = confidential_data_container.get("searched_reports", [])
-              if searched_reports and isinstance(searched_reports, list) and searched_reports:
-                  for report_item in searched_reports[:5]:
-                      report_info = report_item.get("content", "")
-                      report_source = report_item.get("source", "미상")
-                      report_page = f"{report_item.get('page', '페이지 미상')} p" # 날짜 없음, create_all_section_content와 동일
-                      part += f"[출처: {report_source}, {report_page}]\n{report_info}\n\n"
-              else: # llm_response도 없고 searched_reports도 없을 경우
-                  part += "비공개 자료 분석 결과가 없습니다.\n\n" # create_all_section_content에는 이 부분이 명시적이지 않으나, 추가
-          part += "</비공개자료>\n"
-          sources_info_parts.append(part)
-
-      # Telegram Retriever 데이터
+    # Telegram Retriever 데이터
     #   telegram_data_list = agent_results.get("telegram_retriever", {}).get("data", [])
     #   if telegram_data_list and isinstance(telegram_data_list, dict):
     #       formatted_msgs = format_telegram_messages(telegram_data_list, stock_code, stock_name)
@@ -511,28 +545,27 @@ def format_other_agent_data(agent_results: Dict[str, Any],
     #           part += "</내부DB>\n"
     #           sources_info_parts.append(part)
 
-      # Web Search 데이터
-      # create_all_section_content는 web_search_data.get("summary", "") 를 사용.
-      # agent_results.get("web_search", {}).get("data", {}) 에서 "summary"를 찾음.
-      web_search_main_data = agent_results.get("web_search", {}).get("data", {}) # 이 자체가 dict
-      if web_search_main_data and isinstance(web_search_main_data, dict):
-          web_search_summary = web_search_main_data.get("summary", "")
-          if web_search_summary and web_search_summary.strip(): # 요약이 있을 경우에만 추가
-              part = "------\n<웹 검색 결과>\n"
-              part += f"{web_search_summary}\n\n"
-              part += "</웹 검색 결과>\n"
-              sources_info_parts.append(part)
-      
-      # Knowledge Integrator 데이터
-      integrated_knowledge_data = agent_results.get("knowledge_integrator", {}).get("data", None) # 문자열 또는 None
-      if integrated_knowledge_data and isinstance(integrated_knowledge_data, str) and integrated_knowledge_data.strip():
-          part = "------\n<통합된 지식>\n"
-          part += f"{integrated_knowledge_data}\n\n"
-          part += "</통합된 지식>\n"
-          sources_info_parts.append(part)
+    # Web Search 데이터
+    # create_all_section_content는 web_search_data.get("summary", "") 를 사용.
+    # agent_results.get("web_search", {}).get("data", {}) 에서 "summary"를 찾음.
+    web_search_main_data = agent_results.get("web_search", {}).get("data", {})  # 이 자체가 dict
+    if web_search_main_data and isinstance(web_search_main_data, dict):
+        web_search_summary = web_search_main_data.get("summary", "")
+        if web_search_summary and web_search_summary.strip():  # 요약이 있을 경우에만 추가
+            part = "------\n<웹 검색 결과>\n"
+            part += f"{web_search_summary}\n\n"
+            part += "</웹 검색 결과>\n"
+            sources_info_parts.append(part)
 
-      if not sources_info_parts:
-          return "추가 컨텍스트 정보 없음."
-      
-      return "\n".join(sources_info_parts).strip()
+    # Knowledge Integrator 데이터
+    integrated_knowledge_data = agent_results.get("knowledge_integrator", {}).get("data", None)  # 문자열 또는 None
+    if integrated_knowledge_data and isinstance(integrated_knowledge_data, str) and integrated_knowledge_data.strip():
+        part = "------\n<통합된 지식>\n"
+        part += f"{integrated_knowledge_data}\n\n"
+        part += "</통합된 지식>\n"
+        sources_info_parts.append(part)
 
+    if not sources_info_parts:
+        return "추가 컨텍스트 정보 없음."
+
+    return "\n".join(sources_info_parts).strip()
