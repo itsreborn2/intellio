@@ -1591,7 +1591,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
 
                     if diff_pct <= threshold_pct:
                         group_levels.append(next_level)
-                        logger.info(f"그룹에 추가: {next_level:.0f}원")
+                        # logger.info(f"그룹에 추가: {next_level:.0f}원")
                         j += 1
                     else:
                         break

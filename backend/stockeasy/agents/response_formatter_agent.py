@@ -1361,11 +1361,11 @@ def create_list(ordered: bool, items: List[str]) -> Dict:
 
 
 @tool
-def create_table(title: str, headers: List[Dict[str, str]], rows: List[Dict[str, Any]]) -> Dict:
+def create_table(headers: List[Dict[str, str]], rows: List[Dict[str, Any]], title: Optional[str] = None) -> Dict:
     """테이블 컴포넌트를 생성합니다.
-    title은 테이블 제목,
     headers는 [{"key": "col0", "label": "항목명"}] 형식의 헤더 목록,
-    rows는 테이블 데이터입니다."""
+    rows는 테이블 데이터,
+    title은 테이블 제목(선택적)입니다."""
     table_headers = [TableHeader(**header) for header in headers]
     return TableComponent(title=title, data=TableData(headers=table_headers, rows=rows)).dict()
 
