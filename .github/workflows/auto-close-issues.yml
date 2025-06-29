@@ -53,19 +53,23 @@ jobs:
                     });
                     
                     // 코멘트 추가
+                    const commentBody = [
+                      '🤖 이 이슈는 develop 브랜치의 커밋에 의해 자동으로 닫혔습니다.',
+                      '',
+                      '**커밋 정보:**',
+                      `- 커밋 ID: ${commit.id.substring(0, 7)}`,
+                      `- 커밋 메시지: ${commit.message}`,
+                      `- 작성자: ${commit.author.name}`,
+                      `- 시간: ${new Date().toLocaleString('ko-KR')}`,
+                      '',
+                      `[커밋 보기](${commit.url})`
+                    ].join('\n');
+                    
                     await github.rest.issues.createComment({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       issue_number: issueNumber,
-                      body: `🤖 이 이슈는 develop 브랜치의 커밋에 의해 자동으로 닫혔습니다.
-
-**커밋 정보:**
-- 커밋 ID: ${commit.id.substring(0, 7)}
-- 커밋 메시지: ${commit.message}
-- 작성자: ${commit.author.name}
-- 시간: ${new Date().toLocaleString('ko-KR')}
-
-[커밋 보기](${commit.url})`
+                      body: commentBody
                     });
                     
                     console.log(`🎉 Successfully closed issue #${issueNumber}`);
