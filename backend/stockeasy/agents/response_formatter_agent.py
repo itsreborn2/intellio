@@ -349,6 +349,218 @@ class ResponseFormatterAgent(BaseAgent):
 
         return None
 
+    def _parse_json_fallback(self, text: str, tools: List[Callable], section_title: str) -> List[Dict[str, Any]]:
+        """
+        LLM이 tool calling 대신 JSON 텍스트로 응답한 경우를 파싱하여 컴포넌트를 생성합니다.
+
+        Args:
+            text: LLM이 반환한 텍스트 (JSON 포함)
+            tools: 사용 가능한 tool 함수들
+            section_title: 섹션 제목
+
+        Returns:
+            파싱된 컴포넌트들의 리스트, 파싱 실패 시 빈 리스트
+        """
+        try:
+            import json
+            import re
+
+            # JSON 블록 추출 (```json ... ``` 또는 단순 JSON 배열)
+            json_pattern = r"```json\s*(\[.*?\])\s*```"
+            json_match = re.search(json_pattern, text, re.DOTALL)
+
+            if json_match:
+                json_text = json_match.group(1)
+            else:
+                # ```json``` 블록이 없는 경우, 전체 텍스트에서 JSON 배열 찾기
+                json_array_pattern = r"(\[.*?\])"
+                json_array_match = re.search(json_array_pattern, text, re.DOTALL)
+                if json_array_match:
+                    json_text = json_array_match.group(1)
+                else:
+                    logger.warning(f"JSON 패턴을 찾을 수 없음: {text[:200]}...")
+                    return []
+
+            # JSON 파싱
+            try:
+                components_data = json.loads(json_text)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON 파싱 오류: {e}, JSON 텍스트: {json_text[:200]}...")
+                return []
+
+            if not isinstance(components_data, list):
+                logger.warning(f"JSON이 배열 형태가 아님: {type(components_data)}")
+                return []
+
+            # 컴포넌트 생성
+            processed_components = []
+            first_component_added = False
+
+            for i, component_data in enumerate(components_data):
+                if not isinstance(component_data, dict) or "type" not in component_data:
+                    logger.warning(f"잘못된 컴포넌트 데이터: {component_data}")
+                    continue
+
+                component_type = component_data.get("type")
+
+                try:
+                    if component_type == "heading":
+                        # 첫 번째 컴포넌트가 헤딩이 아니거나 섹션 제목과 다른 경우 섹션 제목 추가
+                        if not first_component_added:
+                            heading_content = component_data.get("content", "").strip()
+                            if heading_content != section_title.strip():
+                                section_heading = create_heading({"level": 2, "content": section_title})
+                                processed_components.append(section_heading)
+                            first_component_added = True
+
+                        level = component_data.get("level", 2)
+                        content = component_data.get("content", "")
+                        if isinstance(level, float):
+                            level = int(level)
+
+                        tool_func = next((t for t in tools if t.name == "create_heading"), None)
+                        if tool_func:
+                            component_dict = tool_func.invoke({"level": level, "content": content})
+                            processed_components.append(component_dict)
+
+                    elif component_type == "paragraph":
+                        if not first_component_added:
+                            section_heading = create_heading({"level": 2, "content": section_title})
+                            processed_components.append(section_heading)
+                            first_component_added = True
+
+                        content = component_data.get("content", "")
+                        tool_func = next((t for t in tools if t.name == "create_paragraph"), None)
+                        if tool_func:
+                            component_dict = tool_func.invoke({"content": content})
+                            processed_components.append(component_dict)
+
+                    elif component_type == "list":
+                        if not first_component_added:
+                            section_heading = create_heading({"level": 2, "content": section_title})
+                            processed_components.append(section_heading)
+                            first_component_added = True
+
+                        ordered = component_data.get("ordered", False)
+                        items = component_data.get("items", [])
+
+                        # items가 문자열 리스트인지 확인
+                        if isinstance(items, list) and all(isinstance(item, str) for item in items):
+                            tool_func = next((t for t in tools if t.name == "create_list"), None)
+                            if tool_func:
+                                component_dict = tool_func.invoke({"ordered": ordered, "items": items})
+                                processed_components.append(component_dict)
+
+                    elif component_type == "table":
+                        if not first_component_added:
+                            section_heading = create_heading({"level": 2, "content": section_title})
+                            processed_components.append(section_heading)
+                            first_component_added = True
+
+                        title = component_data.get("title")
+                        headers = component_data.get("headers", [])
+                        rows = component_data.get("rows", [])
+
+                        tool_func = next((t for t in tools if t.name == "create_table"), None)
+                        if tool_func:
+                            component_dict = tool_func.invoke({"headers": headers, "rows": rows, "title": title})
+                            processed_components.append(component_dict)
+
+                    elif component_type == "bar_chart":
+                        if not first_component_added:
+                            section_heading = create_heading({"level": 2, "content": section_title})
+                            processed_components.append(section_heading)
+                            first_component_added = True
+
+                        title = component_data.get("title", "")
+                        labels = component_data.get("labels", [])
+                        datasets = component_data.get("datasets", [])
+
+                        tool_func = next((t for t in tools if t.name == "create_bar_chart"), None)
+                        if tool_func:
+                            component_dict = tool_func.invoke({"title": title, "labels": labels, "datasets": datasets})
+                            processed_components.append(component_dict)
+
+                    elif component_type == "line_chart":
+                        if not first_component_added:
+                            section_heading = create_heading({"level": 2, "content": section_title})
+                            processed_components.append(section_heading)
+                            first_component_added = True
+
+                        title = component_data.get("title", "")
+                        labels = component_data.get("labels", [])
+                        datasets = component_data.get("datasets", [])
+
+                        tool_func = next((t for t in tools if t.name == "create_line_chart"), None)
+                        if tool_func:
+                            component_dict = tool_func.invoke({"title": title, "labels": labels, "datasets": datasets})
+                            processed_components.append(component_dict)
+
+                    elif component_type == "mixed_chart":
+                        if not first_component_added:
+                            section_heading = create_heading({"level": 2, "content": section_title})
+                            processed_components.append(section_heading)
+                            first_component_added = True
+
+                        title = component_data.get("title", "")
+                        labels = component_data.get("labels", [])
+                        bar_datasets = component_data.get("bar_datasets", [])
+                        line_datasets = component_data.get("line_datasets", [])
+                        y_axis_left_title = component_data.get("y_axis_left_title")
+                        y_axis_right_title = component_data.get("y_axis_right_title")
+
+                        tool_func = next((t for t in tools if t.name == "create_mixed_chart"), None)
+                        if tool_func:
+                            component_dict = tool_func.invoke(
+                                {
+                                    "title": title,
+                                    "labels": labels,
+                                    "bar_datasets": bar_datasets,
+                                    "line_datasets": line_datasets,
+                                    "y_axis_left_title": y_axis_left_title,
+                                    "y_axis_right_title": y_axis_right_title,
+                                }
+                            )
+                            processed_components.append(component_dict)
+
+                    elif component_type == "code_block":
+                        if not first_component_added:
+                            section_heading = create_heading({"level": 2, "content": section_title})
+                            processed_components.append(section_heading)
+                            first_component_added = True
+
+                        language = component_data.get("language")
+                        content = component_data.get("content", "")
+
+                        tool_func = next((t for t in tools if t.name == "create_code_block"), None)
+                        if tool_func:
+                            component_dict = tool_func.invoke({"language": language, "content": content})
+                            processed_components.append(component_dict)
+
+                    else:
+                        logger.warning(f"지원하지 않는 컴포넌트 타입: {component_type}")
+                        continue
+
+                except Exception as e:
+                    logger.error(f"컴포넌트 생성 오류 (타입: {component_type}): {e}")
+                    continue
+
+            # 섹션 제목이 아직 추가되지 않은 경우 추가
+            if not first_component_added and processed_components:
+                section_heading = create_heading({"level": 2, "content": section_title})
+                processed_components.insert(0, section_heading)
+            elif not processed_components:
+                # 컴포넌트가 하나도 없는 경우 기본 섹션 제목 추가
+                section_heading = create_heading({"level": 2, "content": section_title})
+                processed_components.append(section_heading)
+
+            logger.info(f"JSON fallback 파싱 완료: {len(processed_components)}개 컴포넌트 생성")
+            return processed_components
+
+        except Exception as e:
+            logger.error(f"JSON fallback 파싱 중 오류: {e}")
+            return []
+
     async def _process_section_async(
         self,
         section_data: Dict[str, Any],
@@ -556,16 +768,43 @@ class ResponseFormatterAgent(BaseAgent):
 
                 elif llm_generated_text_for_section.strip():  # 툴 콜 없이 텍스트만 반환된 경우
                     logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에 대해 Tool calling 없이 일반 텍스트 응답을 받았습니다.")
-                    # 섹션 제목 강제 추가
-                    section_components.append(create_heading({"level": 2, "content": section_title}))
 
-                    cleaned_text = remove_json_block(llm_generated_text_for_section)
+                    # JSON 형태의 tool calling 결과가 텍스트로 반환된 경우 파싱 시도
+                    fallback_components = self._parse_json_fallback(llm_generated_text_for_section, tools, section_title)
 
-                    # 텍스트에서 마스크를 플레이스홀더로 복원
-                    restored_text = cleaned_text
+                    if fallback_components:
+                        # JSON 파싱 성공 시 fallback 컴포넌트들 사용
+                        logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에서 JSON fallback 파싱 성공 - {len(fallback_components)}개 컴포넌트 생성")
+                        section_components.extend(fallback_components)
 
-                    if restored_text.strip():
-                        section_components.append(create_paragraph(restored_text))
+                        # 주가차트 컴포넌트가 있으면 마커를 찾아서 교체
+                        if price_chart_component:
+                            self._insert_price_chart_at_marker(section_components, price_chart_component)
+
+                        # 기술적 지표 차트 플레이스홀더 처리 (호환성 유지)
+                        if technical_indicator_chart_component:
+                            self._insert_technical_indicator_chart_at_marker(section_components, technical_indicator_chart_component)
+
+                        # 추세추종 지표 차트 플레이스홀더 처리
+                        if trend_following_chart_component:
+                            self._insert_trend_following_chart_at_marker(section_components, trend_following_chart_component)
+
+                        # 모멘텀 지표 차트 플레이스홀더 처리
+                        if momentum_chart_component:
+                            self._insert_momentum_chart_at_marker(section_components, momentum_chart_component)
+                    else:
+                        # JSON 파싱 실패 시 기존 텍스트 처리 방식 사용
+                        logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에서 JSON fallback 파싱 실패, 일반 텍스트로 처리")
+                        # 섹션 제목 강제 추가
+                        section_components.append(create_heading({"level": 2, "content": section_title}))
+
+                        cleaned_text = remove_json_block(llm_generated_text_for_section)
+
+                        # 텍스트에서 마스크를 플레이스홀더로 복원
+                        restored_text = cleaned_text
+
+                        if restored_text.strip():
+                            section_components.append(create_paragraph(restored_text))
 
                 # 성공적으로 처리되면 (툴콜이 있든 없든) 컴포넌트들과 LLM 텍스트, 제목 반환
                 logger.info(f"섹션 '{section_title}' 처리 완료: 소요시간 {datetime.now() - start_time_process_section}")
@@ -633,6 +872,7 @@ class ResponseFormatterAgent(BaseAgent):
                 return state
 
             # Tool Calling 설정
+
             tools = [
                 create_heading,
                 create_paragraph,

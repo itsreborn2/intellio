@@ -1077,15 +1077,15 @@ class SummarizerAgent(BaseAgent):
 
             if recent_data:
                 # 첫 번째와 마지막 데이터로 변화율 계산
-                first_close = recent_data[0].get("close", 0)
-                last_close = recent_data[-1].get("close", 0)
+                first_close = recent_data[0].get("close") or 0
+                last_close = recent_data[-1].get("close") or 0
 
                 if first_close > 0:
                     change_rate = ((last_close - first_close) / first_close) * 100
                     formatted_text += f"  기간 변화율: {change_rate:+.2f}%\n"
 
                 # 최고가, 최저가
-                closes = [data.get("close", 0) for data in recent_data if data.get("close")]
+                closes = [data.get("close") or 0 for data in recent_data if data.get("close")]
                 if closes:
                     max_price = max(closes)
                     min_price = min(closes)
@@ -1098,8 +1098,8 @@ class SummarizerAgent(BaseAgent):
                 for data in recent_1month:
                     date = data.get("date", "")
                     normalized_date = format_date_for_chart(date)
-                    close = data.get("close", 0)
-                    volume = data.get("volume", 0)
+                    close = data.get("close") or 0
+                    volume = data.get("volume") or 0
                     formatted_text += f"    {normalized_date}: 종가 {close:,.0f}원, 거래량 {volume:,}주\n"
 
             formatted_text += "\n"
