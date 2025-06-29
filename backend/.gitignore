@@ -89,6 +89,3 @@ evaluation/results
 # langgraph
 langgraph_project/
 .langgraph_api
-
-#git hub
-.github/
