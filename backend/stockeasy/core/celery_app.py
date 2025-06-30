@@ -18,6 +18,7 @@ celery = Celery(
         "stockeasy.workers.telegram.collector_tasks",
         "stockeasy.workers.telegram.embedding_tasks",
         "stockeasy.workers.statistics.daily_tasks",
+        "stockeasy.workers.statistics.user_statistics_tasks",  # 신규 사용자 통계 태스크
         "stockeasy.workers.maintenance.cleanup_tasks"  # 새로운 모듈 추가
     ]
 )
@@ -36,8 +37,6 @@ def handle_task_failure(sender=None, exception=None, **kwargs):
 
 # 태스크 자동 발견
 celery.autodiscover_tasks()
-celery.conf.enable_utc = False  # UTC 비활성화
-celery.conf.timezone = "Asia/Seoul"  # 서울 시간으로 설정
 
 # Exchange 정의
 telegram_exchange = Exchange('telegram-processing', type='direct')
@@ -65,6 +64,10 @@ celery.conf.task_routes = {
         "queue": "general-periodic",
         "routing_key": "general-periodic"
     },
+    "stockeasy.workers.statistics.user_statistics_tasks.*": {  # 신규 사용자 통계 라우팅
+        "queue": "general-periodic",
+        "routing_key": "general-periodic"
+    },
     "stockeasy.workers.maintenance.cleanup_tasks.*": {  # 새 태스크 라우팅 추가
         "queue": "general-periodic",
         "routing_key": "general-periodic"
@@ -74,6 +77,9 @@ celery.conf.task_routes = {
 # Celery 설정
 celery.conf.broker_connection_retry_on_startup = True
 celery.conf.update(
+    timezone="Asia/Seoul",  # 서울 시간으로 설정
+    enable_utc=False,  # timezone 설정을 위해 UTC 비활성화
+
     # 브로커 설정
     broker_transport_options={
         'visibility_timeout': 3600,  # 1시간
@@ -92,7 +98,6 @@ celery.conf.update(
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
-    enable_utc=True,
     task_track_started=True,
     task_time_limit=300,  # 5분
     task_soft_time_limit=300,  # 5분
@@ -120,14 +125,18 @@ celery.conf.beat_schedule = {
     },
     'cleanup-daily-messages': {
         'task': 'stockeasy.workers.telegram.collector_tasks.cleanup_daily_messages',
-        'schedule': crontab(hour=23, minute=59),  # 매일 23:59에 실행
+        'schedule': crontab(hour='23', minute='59'),  # 매일 23:59에 실행
     },
     'generate-daily-statistics': {
         'task': 'stockeasy.workers.statistics.daily_tasks.generate_daily_stats',
         'schedule': crontab(minute='*/10'),  # 10분마다 실행 
     },
+    'record-user-statistics': {
+        'task': 'stockeasy.workers.statistics.user_statistics_tasks.record_user_statistics',
+        'schedule': crontab(minute='*/10'),  # 10분마다 실행
+    },
     'cleanup-old-data': {  # 새 스케줄 추가
         'task': 'stockeasy.workers.maintenance.cleanup_tasks.cleanup_old_data',
-        'schedule': crontab(hour=4, minute=0),  # 매일 04:00에 실행
+        'schedule': crontab(hour='4', minute='0'),  # 매일 04:00에 실행
     }
 }

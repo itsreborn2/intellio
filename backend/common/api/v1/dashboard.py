@@ -73,7 +73,8 @@ async def get_all_users(
         users_orm = users_result.scalars().all()
 
         # Pydantic 모델 리스트로 명시적으로 변환하여 linter 오류 해결
-        return UserListResponse(total=total, users=[UserRead.from_orm(user) for user in users_orm])
+        # SQLAlchemy 2.0과 Pydantic v2 호환성을 위해 from_orm 대신 model_validate 사용
+        return UserListResponse(total=total, users=[UserRead.model_validate(user) for user in users_orm])
     except Exception as e:
         # 오류 발생 시, 상세한 로그를 남기고 500 에러를 발생시킵니다.
         error_traceback = traceback.format_exc()

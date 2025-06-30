@@ -10,11 +10,12 @@ from stockeasy.api.v1.chat import chat_router
 from stockeasy.api.v1._internal_test import router as internal_test_router
 from stockeasy.api.v1.financial_data import router as financial_data_router
 from stockeasy.api.v1.stats import stats_router
+from stockeasy.api.v1.user_stats_router import router as user_stats_router
 from loguru import logger
 
 # API v1 라우터
 #root_router = APIRouter(prefix="/stockeasy", tags=["stockeasy"])
-api_router_stockeasy = APIRouter(prefix="/stockeasy", tags=["stockeasy"])
+api_router_stockeasy = APIRouter(tags=["stockeasy"])
 
 logger = logging.getLogger(__name__)
 
@@ -42,3 +43,8 @@ logger.info("재무 데이터 라우터 등록 완료")
 logger.info("통계 라우터 등록 시작")
 api_router_stockeasy.include_router(stats_router)
 logger.info("통계 라우터 등록 완료")
+
+# 사용자 통계 라우터 등록
+logger.info("사용자 통계 라우터 등록 시작")
+api_router_stockeasy.include_router(user_stats_router)
+logger.info("사용자 통계 라우터 등록 완료")

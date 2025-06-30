@@ -37,6 +37,7 @@ from common.models.token_usage import TokenUsage
 from stockeasy.models.telegram_message import TelegramMessage
 from stockeasy.models.chat import StockChatSession, StockChatMessage, ShareStockChatSession, ShareStockChatMessage
 from stockeasy.models.web_search_cache import WebSearchQueryCache, WebSearchResultCache
+from stockeasy.models.user_statistics import UserStatistics
 
 # 재무 데이터 모델 임포트
 from stockeasy.models.companies import Company
@@ -65,7 +66,11 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Load environment variables
-config.set_main_option('sqlalchemy.url', os.getenv('DATABASE_URL'))
+# Load environment variables
+database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    raise ValueError("DATABASE_URL environment variable not set for Alembic")
+config.set_main_option('sqlalchemy.url', database_url)
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
