@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import Papa from 'papaparse';
 import dynamic from 'next/dynamic';
 import { PlotData, Layout, Config } from 'plotly.js';
 // 공통 로딩 스피너 컴포넌트 import
@@ -15,23 +14,21 @@ interface MarketMonitorData {
   [key: string]: any;
 }
 
-interface Chart2Props {
+interface Chart4Props {
   data: MarketMonitorData[];
 }
 
 interface ChartData {
   date: string[];
   kospi: number[];
-  downRatio200: number[];  // 200down_ratio
-  downRatio20: number[];   // 20down_ratio
+  adr: number[];   // ADR 데이터
 }
 
-export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
+export default function Chart4({ data: marketDataFromProps }: Chart4Props) {
   const [chartData, setChartData] = useState<ChartData>({ 
     date: [], 
     kospi: [], 
-    downRatio200: [],
-    downRatio20: []
+    adr: []
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [chartReady, setChartReady] = useState<boolean>(false);
@@ -79,8 +76,7 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
       try {
         const dates: string[] = [];
         const kospiValues: number[] = [];
-        const downRatio200Values: number[] = [];
-        const downRatio20Values: number[] = [];
+        const adrValues: number[] = [];
 
         // 모든 데이터 사용 - 시간순 정렬 (props로 받은 데이터는 이미 정렬되어있을 수 있으나, 안전하게 재정렬)
         const sortedData = [...marketDataFromProps].sort((a, b) => {
@@ -92,14 +88,12 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
         sortedData.forEach(row => {
           const date = row['일자'];
           const kospi = parseFloat(row['KOSPI']);
-          const downRatio200 = parseFloat(row['200down_ratio']);
-          const downRatio20 = parseFloat(row['20down_ratio']);
+          const adr = parseFloat(row['ADR(KOSPI)']); // ADR 데이터 추출
 
-          if (date && !isNaN(kospi) && !isNaN(downRatio200) && !isNaN(downRatio20)) {
+          if (date && !isNaN(kospi) && !isNaN(adr)) {
             dates.push(date);
             kospiValues.push(kospi);
-            downRatio200Values.push(downRatio200);
-            downRatio20Values.push(downRatio20);
+            adrValues.push(adr);
           } else {
             // console.warn('데이터 유효성 검사 실패 또는 누락된 값:', row);
           }
@@ -108,8 +102,7 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
         setChartData({
           date: dates,
           kospi: kospiValues,
-          downRatio200: downRatio200Values,
-          downRatio20: downRatio20Values
+          adr: adrValues
         });
         // setLoading(false)는 chartData 변경 후 chartReady를 설정하는 useEffect에서 관리
       } catch (e: any) {
@@ -119,9 +112,8 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
       }
     } else {
       // Props 데이터가 없거나 비어있는 경우 초기화 또는 로딩 상태 유지
-      setChartData({ date: [], kospi: [], downRatio200: [], downRatio20: [] });
+      setChartData({ date: [], kospi: [], adr: [] });
       // 부모에서 로딩을 관리하므로 여기서는 setLoading(true)를 하지 않을 수 있음.
-      // 다만, 데이터가 없을 때 명시적으로 로딩 상태를 유지하거나, '데이터 없음' 메시지를 표시하도록 할 수 있음.
       // 현재는 부모의 로딩/에러 상태를 따르도록 이 부분은 비워둠.
     }
   }, [marketDataFromProps]);
@@ -134,12 +126,8 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
     );
   }
 
-  // 데이터 로딩 중이거나 차트가 준비되지 않은 경우 로딩 스피너 표시
-  // 부모 컴포넌트에서 loading, error를 이미 처리하고 있으므로, Chart2에서는 chartData 유무와 chartReady만으로 판단.
-  // marketDataFromProps가 비어있으면 부모에서 로딩 중이거나 에러일 수 있음.
+  // 부모 컴포넌트에서 loading, error를 이미 처리하고 있으므로, Chart4에서는 chartData 유무와 chartReady만으로 판단.
   if (!marketDataFromProps || marketDataFromProps.length === 0) {
-    // 부모에서 로딩 스피너를 보여주므로 여기서는 아무것도 표시하지 않거나, 간단한 메시지 표시 가능
-    // return <LoadingSpinner size="md" message="차트 데이터 대기 중..." />;
     return null; // 부모의 로딩/에러 메시지에 의존
   }
 
@@ -154,13 +142,13 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
   // 데이터가 있고, 아직 차트가 준비되지 않은 경우
   if (!chartReady) {
     // 로딩 상태에 따라 다른 메시지 표시
-    const message = chartData.date.length > 0 ? "차트를 준비하는 중..." : "데이터를 불러오는 중...";
+    const message = chartData.date.length > 0 ? "차트를 준비하는 중..." : "데이터를 불러오는 중..."; 
     return <LoadingSpinner size="md" message={message} />;
   }
 
   // 차트 데이터와 레이아웃 설정
   const data: Partial<PlotData>[] = [
-    // KOSPI 라인 차트 (파란색, 좌측 Y축)
+    // KOSPI를 처음에 배치하여 레전드에 먼저 표시
     {
       type: 'scatter',
       mode: 'lines',
@@ -170,24 +158,14 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
       line: { color: '#2962FF', width: 2 },
       yaxis: 'y' as any
     },
-    // 200down_ratio 라인 차트 (주황색, 우측 Y축)
+    // ADR 데이터
     {
       type: 'scatter',
       mode: 'lines',
-      name: '200일선 하락비율',
+      name: 'ADR(KOSPI)',
       x: chartData.date,
-      y: chartData.downRatio200,
-      line: { color: '#FF6D00', width: 2 },
-      yaxis: 'y2' as any
-    },
-    // 20down_ratio 라인 차트 (초록색, 우측 Y축)
-    {
-      type: 'scatter',
-      mode: 'lines',
-      name: '20일선 하락비율',
-      x: chartData.date,
-      y: chartData.downRatio20,
-      line: { color: '#00C853', width: 2 },
+      y: chartData.adr,
+      line: { color: '#FF1744', width: 2 },
       yaxis: 'y2' as any
     }
   ];
@@ -196,16 +174,12 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
   const kospiMin = Math.min(...chartData.kospi) * 0.98;
   const kospiMax = Math.max(...chartData.kospi) * 1.02;
   
-  // 200down_ratio와 20down_ratio의 최대값을 함께 고려
-  const downRatioMax = Math.max(
-    Math.max(...chartData.downRatio200),
-    Math.max(...chartData.downRatio20)
-  ) * 1.1; // 여유 공간 10% 추가
-  
-  const downRatioMin = 0; // ratio는 0부터 시작
+  // ADR의 최소/최대값 계산
+  const adrMin = Math.min(...chartData.adr) * 0.98;
+  const adrMax = Math.max(...chartData.adr) * 1.02;
 
   const layout: Partial<Layout> = {
-    title: 'KOSPI vs 하락비율',
+    title: 'KOSPI vs ADR',
     autosize: true,
     height: 300,
     margin: { l: 50, r: 50, b: 50, t: 50, pad: 4 },
@@ -226,18 +200,15 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
       titlefont: { color: '#2962FF' },
       tickfont: { color: '#2962FF' },
       side: 'left' as 'left',
-      range: [kospiMin, kospiMax],
-      zeroline: false
+      range: [kospiMin, kospiMax]
     },
     yaxis2: {
-      title: '하락비율',
-      titlefont: { color: '#7F7F7F' },
-      tickfont: { color: '#7F7F7F' },
+      title: 'ADR(KOSPI)',
+      titlefont: { color: '#FF1744' },
+      tickfont: { color: '#FF1744' },
       overlaying: 'y',
       side: 'right' as 'right',
-      range: [0, 1.1], // 고정 범위: 0.00부터 1.10까지
-      tickformat: '.2f', // 소수점 두 자리까지 표시
-      zeroline: false
+      range: [adrMin, adrMax]
     },
     showlegend: true,
     plot_bgcolor: '#ffffff',
@@ -259,7 +230,10 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
         layout={{ ...layout, width: containerWidth }}
         config={config}
         style={{ width: '100%', height: '100%' }}
-        onInitialized={() => console.log('차트 초기화 완료')} 
+        onInitialized={() => {
+          console.log('차트 초기화 완료');
+          setChartReady(true); // 차트가 초기화 완료되면 표시
+        }}
       />
     </div>
   );

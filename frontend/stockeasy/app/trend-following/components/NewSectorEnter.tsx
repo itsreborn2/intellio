@@ -15,6 +15,8 @@ interface SectorData {
   '20일 이격': string;
   '돌파/이탈': string;
   '대표종목(RS)': string;
+  시가총액: string;
+  거래대금: string;
   // 문자열 키로 액세스할 수 있도록 인덱스 시그니처 추가
   [key: string]: string;
 }
@@ -164,7 +166,7 @@ export default function NewSectorEnter() {
   return (
     <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
       <div ref={headerContainerRef} className="flex justify-between items-center mb-2">
-        <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>신규 관심 섹터</div>
+        <div className="font-semibold flex items-center mb-1 text-base md:text-lg" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>신규 관심 섹터</div>
         <div className="flex items-center space-x-2">
           {updateDate && (
             <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
@@ -191,78 +193,78 @@ export default function NewSectorEnter() {
         <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
           <thead className="bg-gray-100">
             <tr>
-              <th className="px-3 py-2 border-b text-left font-medium w-[135px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>섹터</th>
-              <th className="px-3 py-2 border-b text-right font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
-              <th className="px-3 py-2 border-b text-left font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
-              <th className="px-3 py-2 border-b text-right font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
-              <th className="px-3 py-2 border-b text-center font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>포지션</th>
-              <th className="px-3 py-2 border-b text-center font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>20일 이격</th>
-              <th className="px-3 py-2 border-b text-center font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파/이탈</th>
-              <th className="px-3 py-2 border-b text-center font-medium w-[250px] max-w-[250px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>대표종목(RS)</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-left font-medium w-[135px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>섹터</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-left font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>포지션</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>20일 이격</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파/이탈</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>대표종목(RS)</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>시가총액</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>거래대금</th>
             </tr>
           </thead>
           <tbody className="bg-white">
             {Object.entries(data).map(([sector, sectorStocks]) => {
-              let isFirstRow = true;
-              
               return (
                 <React.Fragment key={sector}>
                   {sectorStocks.map((stock, stockIndex) => {
                     const showSector = stockIndex === 0;
                       
-                      return (
-                        <tr 
-                          key={`${sector}-${stockIndex}`}
-                          className="hover:bg-gray-50 transition-colors"
-                        >
-                          {showSector && (
-                            <td 
-                              className="px-3 py-2 border-b w-[135px]" 
-                              rowSpan={sectorStocks.length}
-                            >
-                              {sector}
-                            </td>
-                          )}
-                          <td className="px-3 py-2 border-b text-right w-24">
-                            <span className={`${parseFloat(stock["산업 등락률"]) > 0 ? 'text-red-500' : parseFloat(stock["산업 등락률"]) < 0 ? 'text-blue-500' : ''}`}>
-                              {stock["산업 등락률"]}%
+                    return (
+                      <tr 
+                        key={`${sector}-${stockIndex}`}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        {showSector && (
+                          <td 
+                            className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b w-[135px] align-middle"
+                            rowSpan={sectorStocks.length}
+                          >
+                            {sector}
+                          </td>
+                        )}
+                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right w-24 hidden md:table-cell">
+                          <span className={`${parseFloat(stock["산업 등락률"]) > 0 ? 'text-red-500' : parseFloat(stock["산업 등락률"]) < 0 ? 'text-blue-500' : ''}`}>
+                            {stock["산업 등락률"]}%
+                          </span>
+                        </td>
+                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b">{stock["종목명"]}</td>
+                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right">
+                          <span className={`${parseFloat(stock["등락률"]) > 0 ? 'text-red-500' : parseFloat(stock["등락률"]) < 0 ? 'text-blue-500' : ''}`}>
+                            {stock["등락률"]}%
+                          </span>
+                        </td>
+                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-28 hidden md:table-cell">
+                          <div className="mx-auto flex items-center justify-center w-20 h-6 bg-green-100 text-green-800 rounded-[4px]">
+                            <span className="text-xs font-medium">
+                              {stock["포지션"]}
                             </span>
-                          </td>
-                          <td className="px-3 py-2 border-b">{stock["종목명"]}</td>
-                          <td className="px-3 py-2 border-b text-right">
-                            <span className={`${parseFloat(stock["등락률"]) > 0 ? 'text-red-500' : parseFloat(stock["등락률"]) < 0 ? 'text-blue-500' : ''}`}>
-                              {stock["등락률"]}%
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 border-b text-center w-28">
-                            <div className="mx-auto flex items-center justify-center w-20 h-6 bg-green-100 text-green-800 rounded-[4px]">
-                              <span className="text-xs font-medium">
-                                {stock["포지션"]}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 border-b text-center">{stock["20일 이격"]}%</td>
-                          <td className="px-3 py-2 border-b text-center">{stock["돌파/이탈"]}</td>
-                          <td className="px-3 py-2 border-b w-[250px] max-w-[250px]">
-                            <div className="whitespace-normal text-xs overflow-hidden">
-                              {stock["대표종목(RS)"].split(', ').map((item, index) => {
-                                // 정규표현식을 사용하여 종목명과 괄호 안의 값 추출
-                                const match = item.match(/(.+)\((\d+)\)/);
-                                if (match) {
-                                  const [, name, rsValue] = match;
-                                  const rsNumber = parseInt(rsValue, 10);
-                                  // RS 값이 90 이상인 경우 굵게 표시
-                                  if (rsNumber >= 90) {
-                                    return <span key={index} className="font-bold">{name}({rsValue}){index < stock["대표종목(RS)"].split(', ').length - 1 ? ', ' : ''}</span>;
-                                  }
+                          </div>
+                        </td>
+                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center hidden md:table-cell">{stock["20일 이격"]}%
+                        </td>
+                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center hidden md:table-cell">{stock["돌파/이탈"]}</td>
+                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b w-[250px] max-w-[250px]">
+                          <div className="whitespace-normal text-xs overflow-hidden">
+                            {stock["대표종목(RS)"].split(', ').map((item, index) => {
+                              const match = item.match(/(.+)\((\d+)\)/);
+                              if (match) {
+                                const [, name, rsValue] = match;
+                                const rsNumber = parseInt(rsValue, 10);
+                                if (rsNumber >= 90) {
+                                  return <span key={index} className="font-bold">{name}({rsValue}){index < stock["대표종목(RS)"].split(', ').length - 1 ? ', ' : ''}</span>;
                                 }
-                                // 그 외의 경우 일반 텍스트로 표시
-                                return <span key={index}>{item}{index < stock["대표종목(RS)"].split(', ').length - 1 ? ', ' : ''}</span>;
-                              })}
-                            </div>
-                          </td>
-                        </tr>
-                      );
+                              }
+                              return <span key={index}>{item}{index < stock["대표종목(RS)"].split(', ').length - 1 ? ', ' : ''}</span>;
+                            })}
+                          </div>
+                        </td>
+                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right hidden md:table-cell">{stock["시가총액"]}</td>
+                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right hidden md:table-cell">{stock["거래대금"]}</td>
+                      </tr>
+                    );
                   })}
                 </React.Fragment>
               );
