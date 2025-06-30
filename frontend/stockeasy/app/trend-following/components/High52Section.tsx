@@ -140,7 +140,7 @@ export default function High52Section() {
     <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
         <div className="flex justify-between items-center mb-2">
           {/* 제목 (52주 신고/신저가 주요종목) */}
-          <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>52주 신고가 주요종목</div>
+          <div className="font-semibold flex items-center mb-1 text-base md:text-lg" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>52주 신고가 주요종목</div>
           <div className="flex items-center space-x-2">
             {updateDate && (
               <span className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
@@ -159,31 +159,31 @@ export default function High52Section() {
         </div>
         <div className="overflow-x-auto rounded-[6px]" ref={highTableRef}>
           {highData && highData.rows.length > 0 ? (
-            <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
+            <table className="min-w-full text-xs sm:text-sm border border-gray-200 rounded-[6px]">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
-                  <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>업종명</th>
-                  <th className="px-3 py-2 border-b font-medium text-right cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('등락률')}>등락률{highSortKey === '등락률' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
-                  <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>당일 캔들</th>
-                  <th className="px-3 py-2 border-b font-medium text-right cursor-pointer" style={{ width: '120px', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('시가총액')}>시가총액(억){highSortKey === '시가총액' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
-                  <th className="px-3 py-2 border-b font-medium text-right cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('거래대금')}>거래대금(억){highSortKey === '거래대금' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
-                  <th className="px-3 py-2 border-b font-medium text-center cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('RS')}>RS{highSortKey === 'RS' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
-                  <th className="px-3 py-2 border-b font-medium text-center cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('MTT')}>MTT{highSortKey === 'MTT' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left hidden sm:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>업종명</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('등락률')}>등락률{highSortKey === '등락률' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>당일 캔들</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right cursor-pointer hidden md:table-cell" style={{ width: '120px', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('시가총액')}>시가총액(억){highSortKey === '시가총액' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right cursor-pointer hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('거래대금')}>거래대금(억){highSortKey === '거래대금' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('RS')}>RS{highSortKey === 'RS' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center cursor-pointer" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }} onClick={() => handleHighSort('MTT')}>MTT{highSortKey === 'MTT' && <span className="ml-1">{highSortDirection === 'asc' ? '↑' : '↓'}</span>}</th>
                 </tr>
               </thead>
               <tbody>
                 {getSortedHighData(highData.rows).map((row: any, rowIndex: number) => (
                   <tr key={rowIndex} className={`${rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'} hover:bg-gray-50 transition-colors`}>
-                    <td className="px-3 py-2 border-b text-left">{row['종목명']}</td>
-                    <td className="px-3 py-2 border-b text-left">{row['업종명']}</td>
-                    <td className="px-3 py-2 border-b text-right"><span className={`${Number(row['등락률']) > 5 ? 'text-red-500' : Number(row['등락률']) < 0 ? 'text-blue-500' : ''}`}>{(Number(row['등락률']) > 0 ? '+' : '') + (Number(row['등락률']) || 0).toFixed(2)}%</span></td>
-                    <td className="px-3 py-2 border-b text-center"><div className="flex items-center justify-center"><CandleMini open={Number(row['시가'])} high={Number(row['고가'])} low={Number(row['저가'])} close={Number(row['종가'])} width={28} height={44} /></div></td>
-                    <td className="px-3 py-2 border-b text-right" style={{ width: '120px' }}>{formatMarketCap(row['시가총액'])}</td>
-                    <td className="px-3 py-2 border-b text-right">{formatMarketCap(row['거래대금'])}</td>
-                    <td className="px-3 py-2 border-b text-center">{row['RS']}</td>
-                    <td className="px-3 py-2 border-b text-center">
-                      {row['MTT'] === 'y' && <CheckCircleIcon className="h-5 w-5 text-green-500 inline-block" />}
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-left">{row['종목명']}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-left hidden sm:table-cell">{row['업종명']}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right"><span className={`${Number(row['등락률']) > 5 ? 'text-red-500' : Number(row['등락률']) < 0 ? 'text-blue-500' : ''}`}>{(Number(row['등락률']) > 0 ? '+' : '') + (Number(row['등락률']) || 0).toFixed(2)}%</span></td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center"><div className="flex items-center justify-center"><CandleMini open={Number(row['시가'])} high={Number(row['고가'])} low={Number(row['저가'])} close={Number(row['종가'])} width={28} height={44} /></div></td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right hidden md:table-cell" style={{ width: '120px' }}>{formatMarketCap(row['시가총액'])}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right hidden md:table-cell">{formatMarketCap(row['거래대금'])}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">{row['RS']}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">
+                      {row['MTT'] === 'y' && <CheckCircleIcon className="h-4 w-4 text-green-500 inline-block" />}
                     </td>
                   </tr>
                 ))}

@@ -160,7 +160,7 @@ export default function TrendFollowingMain() {
           <div className="border-b border-gray-200">
             <div className="flex w-max space-x-0">
               <button
-                className={`px-4 py-2 text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${activeTab === 'trend' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+                className={`px-4 py-2 text-xs sm:text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${activeTab === 'trend' ? 'bg-white font-extrabold text-sm sm:text-base' : 'hover:bg-gray-100 border-b'}`}
                 onClick={() => setActiveTab('trend')}
                 style={{ 
                   color: activeTab === 'trend' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
@@ -170,7 +170,7 @@ export default function TrendFollowingMain() {
                 추세추종
               </button>
               <button
-                className={`px-4 py-2 text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${activeTab === 'monitor' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+                className={`px-4 py-2 text-xs sm:text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${activeTab === 'monitor' ? 'bg-white font-extrabold text-sm sm:text-base' : 'hover:bg-gray-100 border-b'}`}
                 onClick={() => setActiveTab('monitor')}
                 style={{ 
                   color: activeTab === 'monitor' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
@@ -194,7 +194,7 @@ export default function TrendFollowingMain() {
               <div className="border-b border-gray-200">
                 <div className="flex w-max space-x-0">
                   <button
-                    className={`px-4 py-2 text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${sectorTab === 'sector' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+                    className={`px-4 py-2 text-xs sm:text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${sectorTab === 'sector' ? 'bg-white font-extrabold text-sm sm:text-base' : 'hover:bg-gray-100 border-b'}`}
                     onClick={() => setSectorTab('sector')}
                     style={{ 
                       color: sectorTab === 'sector' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
@@ -204,7 +204,7 @@ export default function TrendFollowingMain() {
                     주도섹터
                   </button>
                   <button
-                    className={`px-4 py-2 text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${sectorTab === 'industry' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+                    className={`px-4 py-2 text-xs sm:text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${sectorTab === 'industry' ? 'bg-white font-extrabold text-sm sm:text-base' : 'hover:bg-gray-100 border-b'}`}
                     onClick={() => setSectorTab('industry')}
                     style={{ 
                       color: sectorTab === 'industry' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
@@ -230,7 +230,7 @@ export default function TrendFollowingMain() {
               <div className="border-b border-gray-200">
                 <div className="flex w-max space-x-0">
                   <button
-                    className={`px-4 py-2 text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${high52Tab === 'table' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+                    className={`px-4 py-2 text-xs sm:text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${high52Tab === 'table' ? 'bg-white font-extrabold text-sm sm:text-base' : 'hover:bg-gray-100 border-b'}`}
                     onClick={() => setHigh52Tab('table')}
                     style={{ 
                       color: high52Tab === 'table' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
@@ -240,7 +240,7 @@ export default function TrendFollowingMain() {
                     52주 신고가
                   </button>
                   <button
-                    className={`px-4 py-2 text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${high52Tab === 'chart' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+                    className={`px-4 py-2 text-xs sm:text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${high52Tab === 'chart' ? 'bg-white font-extrabold text-sm sm:text-base' : 'hover:bg-gray-100 border-b'}`}
                     onClick={() => setHigh52Tab('chart')}
                     style={{ 
                       color: high52Tab === 'chart' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
@@ -261,7 +261,7 @@ export default function TrendFollowingMain() {
               <div className="border-b border-gray-200">
                 <div className="flex w-max space-x-0">
                   <button
-                    className={`px-4 py-2 text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${breakoutTab === 'list' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+                    className={`px-4 py-2 text-xs sm:text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${breakoutTab === 'list' ? 'bg-white font-extrabold text-sm sm:text-base' : 'hover:bg-gray-100 border-b'}`}
                     onClick={() => setBreakoutTab('list')}
                     style={{ 
                       color: breakoutTab === 'list' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
@@ -271,7 +271,7 @@ export default function TrendFollowingMain() {
                     돌파 리스트
                   </button>
                   <button
-                    className={`px-4 py-2 text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${breakoutTab === 'chart' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+                    className={`px-4 py-2 text-xs sm:text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${breakoutTab === 'chart' ? 'bg-white font-extrabold text-sm sm:text-base' : 'hover:bg-gray-100 border-b'}`}
                     onClick={() => setBreakoutTab('chart')}
                     style={{ 
                       color: breakoutTab === 'chart' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
@@ -287,7 +287,7 @@ export default function TrendFollowingMain() {
                   <>
                     <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
                       <div className="mb-2">
-                        <div className="font-semibold" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>스탁이지 돌파 리스트</div>
+                        <div className="font-semibold text-base md:text-lg" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>스탁이지 돌파 리스트</div>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">

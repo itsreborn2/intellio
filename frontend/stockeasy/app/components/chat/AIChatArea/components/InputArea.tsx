@@ -101,6 +101,7 @@ export function InputArea({
   
   // 입력 영역 스타일
   const inputAreaStyle: React.CSSProperties = {
+    transform: 'translateZ(0)', // Webkit 렌더링 버그 수정을 위한 3D 변환
     width: '100%',
     marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '27vh')) : '0px',
     marginBottom: '5px',

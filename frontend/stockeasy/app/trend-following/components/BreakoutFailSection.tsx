@@ -44,7 +44,7 @@ export default function BreakoutFailSection({ data: failItems, updateDate, loadi
   return (
     <section>
       <div className="flex justify-between items-center mb-2">
-        <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+        <div className="font-semibold flex items-center mb-1 text-base md:text-lg" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
           <span>돌파 실패</span>
           <ArrowTrendingDownIcon className="w-5 h-5 ml-1 text-blue-500" />
         </div>
@@ -57,16 +57,16 @@ export default function BreakoutFailSection({ data: failItems, updateDate, loadi
       {!loading && !error && failItems.length === 0 && <div className="text-sm" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>표시할 데이터가 없습니다.</div>}
       {!loading && !error && failItems.length > 0 && (
         <div className="overflow-x-auto rounded-[6px] overflow-hidden">
-          <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
+          <table className="min-w-full text-xs sm:text-sm border border-gray-200 rounded-[6px]">
             <thead className="bg-gray-100">
               <tr className="bg-gray-50">
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
-                <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
-                <th className="px-3 py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
-                <th className="px-3 py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>갭</th>
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden sm:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>갭</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
               </tr>
             </thead>
             <tbody>
@@ -76,10 +76,10 @@ export default function BreakoutFailSection({ data: failItems, updateDate, loadi
                 
                 return (
                   <tr key={idx} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                    <td className="px-3 py-2 border-b text-center">{item.Code}</td>
-                    <td className="px-3 py-2 border-b text-left">{item.Name}</td>
-                    <td className="px-3 py-2 border-b text-right">{item['Breakthrough Price'] ? formatPrice(item['Breakthrough Price']) + '원' : '-'}</td>
-                    <td className="px-3 py-2 border-b text-right">
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center hidden md:table-cell">{item.Code}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-left">{item.Name}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">{item['Breakthrough Price'] ? formatPrice(item['Breakthrough Price']) + '원' : '-'}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">
                       <span className={
                         item['Daily Change %'] && parseFloat(item['Daily Change %']) < 0 ? 'text-blue-500' :
                         item['Daily Change %'] && parseFloat(item['Daily Change %']) > 0 ? 'text-red-500' :
@@ -89,14 +89,14 @@ export default function BreakoutFailSection({ data: failItems, updateDate, loadi
                           `${parseFloat(item['Daily Change %']).toFixed(2)}%` : '-'}
                       </span>
                     </td>
-                    <td className="px-3 py-2 border-b text-right">
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right hidden sm:table-cell">
                       {item['Gap %'] && !isNaN(parseFloat(item['Gap %'])) ? 
                         `${parseFloat(item['Gap %']).toFixed(2)}%` : '-'}
                     </td>
-                    <td className="px-3 py-2 border-b text-center">{rsValue}</td>
-                    <td className="px-3 py-2 border-b text-center">
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">{rsValue}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">
                       {mttValue && mttValue !== '0' ? (
-                        <CheckCircleIcon className="h-5 w-5 text-green-500 mx-auto" />
+                        <CheckCircleIcon className="h-4 w-4 text-green-500 mx-auto" />
                       ) : null}
                     </td>
                   </tr>

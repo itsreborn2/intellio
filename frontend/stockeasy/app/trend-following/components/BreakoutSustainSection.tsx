@@ -44,7 +44,7 @@ export default function BreakoutSustainSection({ data: sustainItems, updateDate,
     <section>
       {/* 제목과 업데이트 시간 */}
       <div className="flex justify-between items-center mb-2">
-        <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+        <div className="font-semibold flex items-center mb-1 text-base md:text-lg" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
           <span>돌파 성공</span>
           <ArrowTrendingUpIcon className="w-5 h-5 ml-1 text-red-600" />
         </div>
@@ -63,15 +63,15 @@ export default function BreakoutSustainSection({ data: sustainItems, updateDate,
       {/* 데이터 표시 - 테이블 형식으로 변경 */}
       {!loading && !error && sustainItemsToDisplay.length > 0 && (
         <div className="overflow-x-auto rounded-[6px] overflow-hidden">
-          <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
+          <table className="min-w-full text-xs sm:text-sm border border-gray-200 rounded-[6px]">
             <thead className="bg-gray-100">
               <tr className="bg-gray-50">
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
-                <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
-                <th className="px-3 py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
-                <th className="px-3 py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
               </tr>
             </thead>
             <tbody>
@@ -84,16 +84,16 @@ export default function BreakoutSustainSection({ data: sustainItems, updateDate,
                 
                 return (
                   <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                    <td className="px-3 py-2 border-b text-center">{item.Code}</td>
-                    <td className="px-3 py-2 border-b text-left">{item.Name}</td>
-                    <td className="px-3 py-2 border-b text-right">{item['Breakthrough Price'] ? formatPrice(item['Breakthrough Price']) + '원' : '-'}</td>
-                    <td className={`px-3 py-2 border-b text-right ${dailyChangeColorClass}`}>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center hidden md:table-cell">{item.Code}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-left">{item.Name}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">{item['Breakthrough Price'] ? formatPrice(item['Breakthrough Price']) + '원' : '-'}</td>
+                    <td className={`px-2 py-1 md:px-3 md:py-2 border-b text-right ${dailyChangeColorClass}`}>
                       {dailyChangeNumeric !== null ? `${dailyChangeNumeric.toFixed(2)}%` : '-'}
                     </td>
-                    <td className="px-3 py-2 border-b text-center">{rsValue}</td>
-                    <td className="px-3 py-2 border-b text-center">
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">{rsValue}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">
                       {mttValue && mttValue !== '0' ? (
-                        <CheckCircleIcon className="h-5 w-5 text-green-500 mx-auto" />
+                        <CheckCircleIcon className="h-4 w-4 text-green-500 mx-auto" />
                       ) : null}
                     </td>
                   </tr>

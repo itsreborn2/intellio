@@ -37,7 +37,7 @@ export default function BreakoutCandidatesSection({ data: candidatesData, update
   return (
     <section>
       <div className="flex justify-between items-center mb-2">
-        <div className="font-semibold flex items-center mb-1" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>돌파 임박</div>
+        <div className="font-semibold flex items-center mb-1 text-base md:text-lg" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>돌파 임박</div>
         {updateDate && (
           <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
             updated {updateDate}
@@ -47,16 +47,16 @@ export default function BreakoutCandidatesSection({ data: candidatesData, update
       {error && <div className="text-red-500">{error}</div>}
       {!loading && !error && (
         <div className="overflow-x-auto rounded-[6px] overflow-hidden">
-          <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
+          <table className="min-w-full text-xs sm:text-sm border border-gray-200 rounded-[6px]">
             <thead className="bg-gray-100">
               <tr className="bg-gray-50">
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
-                <th className="px-3 py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
-                <th className="px-3 py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
-                <th className="px-3 py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>갭</th>
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
-                <th className="px-3 py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden sm:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>갭</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
+                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
               </tr>
             </thead>
             <tbody>
@@ -81,21 +81,21 @@ export default function BreakoutCandidatesSection({ data: candidatesData, update
 
                 return (
                   <tr key={idx} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                    <td className="px-3 py-2 border-b text-center">{stockCode}</td>
-                    <td className="px-3 py-2 border-b text-left">{stockName}</td>
-                    <td className="px-3 py-2 border-b text-right">
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center hidden md:table-cell">{item['Code']}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-left">{stockName}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">
                       {breakoutPriceValue && !isNaN(Number(breakoutPriceValue)) ? Number(breakoutPriceValue).toLocaleString('ko-KR') + '원' : '-'}
                     </td>
-                    <td className={`px-3 py-2 border-b text-right ${dailyChangeColorClass}`}>
+                    <td className={`px-2 py-1 md:px-3 md:py-2 border-b text-right ${dailyChangeColorClass}`}>
                       {dailyChangeNumeric !== null ? `${dailyChangeNumeric.toFixed(2)}%` : (dailyChange || '-')}
                     </td>
-                    <td className="px-3 py-2 border-b text-right">
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right hidden sm:table-cell">
                       {gapPercentValue && !isNaN(Number(gapPercentValue)) ? `${Number(gapPercentValue).toFixed(2)}%` : (gapPercentValue || '-')}
                     </td>
-                    <td className="px-3 py-2 border-b text-center">{rsValue}</td>
-                    <td className="px-3 py-2 border-b text-center">
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">{rsValue}</td>
+                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">
                       {mttValue && mttValue !== '0' ? (
-                        <CheckCircleIcon className="h-5 w-5 text-green-500 mx-auto" />
+                        <CheckCircleIcon className="h-4 w-4 text-green-500 mx-auto" />
                       ) : null}
                     </td>
                   </tr>

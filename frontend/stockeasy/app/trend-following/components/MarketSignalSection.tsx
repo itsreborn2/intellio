@@ -21,23 +21,22 @@ const signalColorValues: SignalColors = {
 // 신호등 단일 표시용 컴포넌트
 function SignalLight({ label, colors }: { label: string; colors: [string, string, string] }) {
   return (
-    <span className="flex flex-row items-center gap-1 mr-4">
-      <span className="text-[16px] font-medium mr-2 whitespace-nowrap" style={{ color: '#ABABAB' }}>{label}</span>
+    <span className="flex flex-row items-center gap-1 mr-2 md:mr-4">
+      <span className="text-sm md:text-base font-medium mr-1 md:mr-2 whitespace-nowrap" style={{ color: '#ABABAB' }}>{label}</span>
       <span
-        className="flex flex-row justify-center items-center bg-gray-900 border border-gray-700 rounded-xl shadow-md px-3 py-1"
-        style={{ height: '28px', minWidth: '70px' }}
+        className="flex flex-row justify-center items-center bg-gray-900 border border-gray-700 rounded-xl shadow-md px-2 md:px-3 h-6 md:h-7 min-w-[60px] md:min-w-[70px]"
       >
         <span
-          className="rounded-full border-2 shadow-[0_0_8px_1px_rgba(239,68,68,0.6)] mx-0.5"
-          style={{ width: '18px', height: '18px', backgroundColor: colors[0], borderColor: colors[0] + '80' }}
+          className="rounded-full border-2 shadow-[0_0_8px_1px_rgba(239,68,68,0.6)] mx-0.5 w-4 h-4 md:w-[18px] md:h-[18px]"
+          style={{ backgroundColor: colors[0], borderColor: colors[0] + '80' }}
         />
         <span
-          className="rounded-full border-2 shadow-[0_0_8px_1px_rgba(253,224,71,0.5)] mx-0.5"
-          style={{ width: '18px', height: '18px', backgroundColor: colors[1], borderColor: colors[1] + '80' }}
+          className="rounded-full border-2 shadow-[0_0_8px_1px_rgba(253,224,71,0.5)] mx-0.5 w-4 h-4 md:w-[18px] md:h-[18px]"
+          style={{ backgroundColor: colors[1], borderColor: colors[1] + '80' }}
         />
         <span
-          className="rounded-full border-2 shadow-[0_0_8px_1px_rgba(34,197,94,0.5)] mx-0.5"
-          style={{ width: '18px', height: '18px', backgroundColor: colors[2], borderColor: colors[2] + '80' }}
+          className="rounded-full border-2 shadow-[0_0_8px_1px_rgba(34,197,94,0.5)] mx-0.5 w-4 h-4 md:w-[18px] md:h-[18px]"
+          style={{ backgroundColor: colors[2], borderColor: colors[2] + '80' }}
         />
       </span>
     </span>
@@ -134,20 +133,55 @@ export default function MarketSignalSection() {
   return (
     <div className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
       <section className="flex items-center w-full">
-        <div className="flex flex-row items-center justify-between w-full">
+        <div className="flex flex-col md:flex-row md:items-center justify-between w-full">
           {/* 좌측: 시장 신호 제목, 단기/장기 신호등 */}
-          <div className="flex flex-row items-center gap-2">
-            <div className="font-semibold flex items-center mr-6" style={{ fontSize: '18px', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
-              시장 신호
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-2">
+            <div className="flex items-baseline justify-between w-full md:flex-wrap md:w-auto md:justify-start mb-2 md:mb-0 md:mr-6">
+              <div className="flex items-baseline">
+                <div className="font-semibold mr-2 text-base md:text-lg" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+                  시장 신호
+                </div>
+                <div className="flex items-baseline gap-2 md:hidden">
+                  {kospiChange && (
+                    <span className="mr-2" style={{ fontSize: 'clamp(0.6rem, 0.6vw, 0.6rem)', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+                      KOSPI{' '}
+                      {kospiChange.startsWith('+') ? (
+                        <span className="font-semibold text-red-500">{kospiChange}</span>
+                      ) : (
+                        <span className="font-semibold text-blue-500">{kospiChange}</span>
+                      )}
+                    </span>
+                  )}
+                  {kosdaqChange && (
+                    <span style={{ fontSize: 'clamp(0.6rem, 0.6vw, 0.6rem)', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+                      KOSDAQ{' '}
+                      {kosdaqChange.startsWith('+') ? (
+                        <span className="font-semibold text-red-500">{kosdaqChange}</span>
+                      ) : (
+                        <span className="font-semibold text-blue-500">{kosdaqChange}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {lastUpdated && (
+                <span className="text-xs md:hidden" style={{ fontSize: 'clamp(0.6rem, 0.6vw, 0.6rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+                  {lastUpdated}
+                </span>
+              )}
             </div>
-            <SignalLight label="단기" colors={shortTermColors} />
-            <SignalLight label="장기" colors={longTermColors} />
+            <div className="flex flex-row items-center gap-2">
+              <SignalLight label="단기" colors={shortTermColors} />
+              <SignalLight label="장기" colors={longTermColors} />
+            </div>
           </div>
 
-          {/* 우측: 업데이트 시간, KOSPI/KOSDAQ 등락률 */}
-          <div className="flex flex-row items-center gap-4"> 
+
+
+          {/* 우측: 업데이트 시간, KOSPI/KOSDAQ 등락률 (데스크톱) */}
+          <div className="hidden md:flex flex-row items-center gap-4"> 
             {lastUpdated && (
-              <span className="text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
+              <span className="hidden md:inline text-xs mr-2 js-remove-for-capture" style={{ fontSize: 'clamp(0.6rem, 0.6vw, 0.6rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
                 updated {lastUpdated}
               </span>
             )}
