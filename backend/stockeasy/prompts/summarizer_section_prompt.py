@@ -258,7 +258,7 @@ PROMPT_GENERATE_TECHNICAL_ANALYSIS_SECTION = """
 3. **플레이스홀더 선택 기준**:
    - **추세추종 지표 분석**: ADX, ADR, SuperTrend 등 추세 관련 내용이면 `[CHART_PLACEHOLDER:TREND_FOLLOWING_CHART]` 사용
    - **모멘텀 지표 분석**: RSI, MACD, 스토캐스틱 등 모멘텀 관련 내용이면 `[CHART_PLACEHOLDER:MOMENTUM_CHART]` 사용
-   - **전체 기술적 분석**: 통합적인 기술적 분석이면 `[CHART_PLACEHOLDER:TECHNICAL_INDICATOR_CHART]` 사용
+   - **주가 및 지지/저항선 분석**: 주가 차트 및 지지,저항선 분석이면 `[CHART_PLACEHOLDER:PRICE_CHART]` 사용
 
 4. **플레이스홀더 주변 맥락**:
    - 플레이스홀더 전에는 차트에서 보여줄 내용에 대한 간단한 설명을 제공하세요
