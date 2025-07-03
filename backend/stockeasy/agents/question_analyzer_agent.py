@@ -338,7 +338,7 @@ class QuestionAnalyzerAgent(BaseAgent):
             # user_id 추출
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
-            user_email = user_context.get("email", None)
+            user_email = user_context.get("user_email", None)
 
             # 대화 기록 확인
             conversation_history = state.get("conversation_history", [])
@@ -678,6 +678,7 @@ class QuestionAnalyzerAgent(BaseAgent):
 
             # 2. 최근 이슈 검색 및 목차 생성 비동기 함수
             async def search_issues_and_generate_toc():
+                logger.info(f"search_issues_and_generate_toc 실행: {user_email} - {settings.ADMIN_IDS}, {user_email in settings.ADMIN_IDS}")
                 is_admin_and_prod = settings.ENV == "production" and user_email in settings.ADMIN_IDS
                 redis_client = self.redis_client
                 cache_key_prefix = "recent_issues_summary"
