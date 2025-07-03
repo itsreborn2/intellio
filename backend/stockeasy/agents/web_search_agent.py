@@ -134,13 +134,6 @@ class WebSearchAgent(BaseAgent):
             # 12. 앞뒤 공백 제거
             content = content.strip()
 
-            # 정제 효과 로그
-            cleaned_length = len(content)
-            cleaned_markdown_count = content.count("#") + content.count("*") + content.count("|")
-
-            if original_markdown_count > cleaned_markdown_count:
-                logger.info(f"텍스트 정제 완료: 길이 {original_length}→{cleaned_length}, 마크다운 기호 {original_markdown_count}→{cleaned_markdown_count}")
-
             return content
 
         except Exception as e:

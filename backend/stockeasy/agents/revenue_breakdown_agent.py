@@ -16,7 +16,7 @@ from common.models.token_usage import ProjectType
 from common.services.agent_llm import get_agent_llm
 from stockeasy.agents.base import BaseAgent
 from stockeasy.models.agent_io import RetrievedAllAgentData
-from stockeasy.prompts.revenue_breakdown_prompt import REVENUE_BREAKDOWN_SYSTEM_PROMPT3, REVENUE_BREAKDOWN_USER_PROMPT
+from stockeasy.prompts.revenue_breakdown_prompt import REVENUE_BREAKDOWN_SYSTEM_PROMPT, REVENUE_BREAKDOWN_USER_PROMPT
 from stockeasy.services.financial.data_service_pdf import FinancialDataServicePDF
 from stockeasy.services.financial.stock_info_service import StockInfoService
 
@@ -37,10 +37,8 @@ class RevenueBreakdownAgent(BaseAgent):
         logger.info(f"RevenueBreakdownAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.financial_service = FinancialDataServicePDF()
         self.stock_service = StockInfoService()
-        self.prompt_template = REVENUE_BREAKDOWN_SYSTEM_PROMPT3
+        self.prompt_template = REVENUE_BREAKDOWN_SYSTEM_PROMPT
         logger.info("RevenueBreakdownAgent 구현 완료 - 매출 및 수주 현황 정보 추출 준비 완료")
-
-
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -112,12 +110,7 @@ class RevenueBreakdownAgent(BaseAgent):
 
             # 매출 및 수주 데이터 추출 및 분석
             start_time_analyze_revenue_breakdown = datetime.now()
-            analysis_results = await self._analyze_revenue_breakdown(
-                revenue_breakdown_data,
-                query,
-                stock_code,
-                stock_name or ""
-            )
+            analysis_results = await self._analyze_revenue_breakdown(revenue_breakdown_data, query, stock_code, stock_name or "")
             logger.info(f"매출 및 수주 분석 완료: 소요시간 {datetime.now() - start_time_analyze_revenue_breakdown}")
 
             # 실행 시간 계산
@@ -132,11 +125,7 @@ class RevenueBreakdownAgent(BaseAgent):
                 "data": analysis_results,
                 "error": None,
                 "execution_time": duration,
-                "metadata": {
-                    "stock_code": stock_code,
-                    "stock_name": stock_name,
-                    "date_range": date_range
-                }
+                "metadata": {"stock_code": stock_code, "stock_name": stock_name, "date_range": date_range},
             }
 
             # 타입 주석을 사용한 데이터 할당
@@ -169,7 +158,7 @@ class RevenueBreakdownAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.agent_llm.get_model_name()
+                "model_name": self.agent_llm.get_model_name(),
             }
 
             logger.info(f"RevenueBreakdownAgent {duration:.2f}초 내에 완료됨")
@@ -202,7 +191,7 @@ class RevenueBreakdownAgent(BaseAgent):
             "data": {},
             "error": error_message,
             "execution_time": duration,
-            "metadata": {}
+            "metadata": {},
         }
 
         # 타입 주석을 사용한 데이터 할당
@@ -259,7 +248,7 @@ class RevenueBreakdownAgent(BaseAgent):
 
             # 보고서 데이터 구조화
             year = int(metadata.get("year", ""))
-            report_type = metadata.get('type')
+            report_type = metadata.get("type")
             # if report_type.lower() == "annual":
             #     year = year - 1
 
@@ -269,7 +258,7 @@ class RevenueBreakdownAgent(BaseAgent):
                 "content": content,
                 "type": report_type,
                 "year": year,
-                "metadata": metadata
+                "metadata": metadata,
             }
 
             formatted_data.append(formatted_report)
@@ -289,12 +278,7 @@ class RevenueBreakdownAgent(BaseAgent):
         Returns:
             보고서 유형 한글 이름
         """
-        report_type_map = {
-            "Q1": "1분기",
-            "Q3": "3분기",
-            "semiannual": "반기",
-            "annual": "연간"
-        }
+        report_type_map = {"Q1": "1분기", "Q3": "3분기", "semiannual": "반기", "annual": "연간"}
         return report_type_map.get(report_type, report_type)
 
     def _get_report_order(self, report_type: str) -> int:
@@ -307,19 +291,10 @@ class RevenueBreakdownAgent(BaseAgent):
         Returns:
             정렬을 위한 순서 값
         """
-        report_order_map = {
-            "annual": 4,
-            "Q3": 3,
-            "semiannual": 2,
-            "Q1": 1
-        }
+        report_order_map = {"annual": 4, "Q3": 3, "semiannual": 2, "Q1": 1}
         return report_order_map.get(report_type.lower(), 0)
 
-    async def _analyze_revenue_breakdown(self,
-                                  revenue_breakdown_data: str,
-                                  query: str,
-                                  stock_code: str,
-                                  stock_name: str) -> Dict[str, Any]:
+    async def _analyze_revenue_breakdown(self, revenue_breakdown_data: str, query: str, stock_code: str, stock_name: str) -> Dict[str, Any]:
         """
         매출 및 수주 현황 데이터를 분석합니다.
 
@@ -342,14 +317,14 @@ class RevenueBreakdownAgent(BaseAgent):
             # 메시지 구성
             from langchain_core.messages import HumanMessage, SystemMessage
 
+            today_date = datetime.now().strftime("%Y-%m-%d")
             messages = [
-                SystemMessage(content=REVENUE_BREAKDOWN_SYSTEM_PROMPT3),
-                HumanMessage(content=REVENUE_BREAKDOWN_USER_PROMPT.format(
-                                            query=query,
-                                            stock_code=stock_code,
-                                            stock_name=stock_name,
-                                            revenue_breakdown_data=revenue_breakdown_data))
-
+                SystemMessage(content=REVENUE_BREAKDOWN_SYSTEM_PROMPT),
+                HumanMessage(
+                    content=REVENUE_BREAKDOWN_USER_PROMPT.format(
+                        today_date=today_date, query=query, stock_code=stock_code, stock_name=stock_name, revenue_breakdown_data=revenue_breakdown_data
+                    )
+                ),
             ]
 
             # LLM 호출
@@ -357,12 +332,7 @@ class RevenueBreakdownAgent(BaseAgent):
             user_id = user_context.get("user_id", None)
 
             # 폴백 메커니즘을 사용하여 LLM 호출
-            response: AIMessage = await self.agent_llm.ainvoke_with_fallback(
-                messages,
-                user_id=user_id,
-                project_type=ProjectType.STOCKEASY,
-                db=self.db
-            )
+            response: AIMessage = await self.agent_llm.ainvoke_with_fallback(messages, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db)
 
             # 응답 처리 및 JSON 변환
             analysis_content = response.content if response else "분석 결과를 생성할 수 없습니다."
@@ -387,12 +357,7 @@ class RevenueBreakdownAgent(BaseAgent):
 
         except Exception as e:
             logger.exception(f"매출 및 수주 분석 중 오류: {str(e)}")
-            return {
-                "stock_code": stock_code,
-                "stock_name": stock_name,
-                "analysis": {"error": f"매출 및 수주 분석 중 오류 발생: {str(e)}"},
-                "source_data": "오류 발생"
-            }
+            return {"stock_code": stock_code, "stock_name": stock_name, "analysis": {"error": f"매출 및 수주 분석 중 오류 발생: {str(e)}"}, "source_data": "오류 발생"}
 
     async def _extract_revenue_breakdown_data(self, formatted_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -427,8 +392,8 @@ class RevenueBreakdownAgent(BaseAgent):
                     "수주현황": self._extract_order_data(section_text),
                     "사업부문별매출": self._extract_business_segment_data(section_text),
                     "제품별매출": self._extract_product_data(section_text),
-                    "지역별매출": self._extract_regional_data(section_text)
-                }
+                    "지역별매출": self._extract_regional_data(section_text),
+                },
             }
 
             result.append(revenue_data)
@@ -458,7 +423,7 @@ class RevenueBreakdownAgent(BaseAgent):
             r"(?:^|\n)\s*[①②③④⑤⑥⑦⑧⑨⑩]\s*매출\s*및\s*수주\s*상황[가-힣\s]*(?:\n|$)",
             r"(?:^|\n)\s*사업부문별\s*매출\s*현황[가-힣\s]*(?:\n|$)",
             r"(?:^|\n)\s*제품별\s*매출\s*현황[가-힣\s]*(?:\n|$)",
-            r"(?:^|\n)\s*지역별\s*매출\s*현황[가-힣\s]*(?:\n|$)"
+            r"(?:^|\n)\s*지역별\s*매출\s*현황[가-힣\s]*(?:\n|$)",
         ]
 
         # 섹션 끝 패턴들 (다음 섹션의 시작)
@@ -474,7 +439,7 @@ class RevenueBreakdownAgent(BaseAgent):
             r"(?:^|\n)\s*[가나다라마바사아자차카타파하]\.\s*시장점유율[가-힣\s]*(?:\n|$)",
             r"(?:^|\n)\s*[가나다라마바사아자차카타파하]\.\s*시장의\s*특성[가-힣\s]*(?:\n|$)",
             r"(?:^|\n)\s*III\.[가-힣\s]*(?:\n|$)",  # 다음 큰 섹션 (예: III. 재무에 관한 사항)
-            r"(?:^|\n)\s*Ⅲ\.[가-힣\s]*(?:\n|$)"    # 다음 큰 섹션 (유니코드 로마자)
+            r"(?:^|\n)\s*Ⅲ\.[가-힣\s]*(?:\n|$)",  # 다음 큰 섹션 (유니코드 로마자)
         ]
 
         # 가장 먼저 나오는 섹션 시작 패턴 찾기
@@ -535,7 +500,7 @@ class RevenueBreakdownAgent(BaseAgent):
         # 주요 매출처 관련 패턴
         patterns = [
             r"(?:^|\n).*?주요.*?(?:매출처|거래처|고객).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
-            r"(?:^|\n).*?(?:매출처|거래처|고객).*?(?:현황|구성).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)"
+            r"(?:^|\n).*?(?:매출처|거래처|고객).*?(?:현황|구성).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
         ]
 
         for pattern in patterns:
@@ -575,7 +540,7 @@ class RevenueBreakdownAgent(BaseAgent):
         # 수주 현황 관련 패턴
         patterns = [
             r"(?:^|\n).*?수주.*?(?:현황|상황|실적|내역).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
-            r"(?:^|\n).*?(?:수주잔고|수주량|계약).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)"
+            r"(?:^|\n).*?(?:수주잔고|수주량|계약).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
         ]
 
         for pattern in patterns:
@@ -610,7 +575,7 @@ class RevenueBreakdownAgent(BaseAgent):
         patterns = [
             r"(?:^|\n).*?사업부문별.*?(?:매출|실적|현황).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
             r"(?:^|\n).*?부문별.*?(?:매출|실적).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
-            r"(?:^|\n).*?(?:사업)?부문별\s+매출.*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)"
+            r"(?:^|\n).*?(?:사업)?부문별\s+매출.*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
         ]
 
         for pattern in patterns:
@@ -645,7 +610,7 @@ class RevenueBreakdownAgent(BaseAgent):
         patterns = [
             r"(?:^|\n).*?제품별.*?(?:매출|실적|현황).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
             r"(?:^|\n).*?(?:제품|품목|상품).*?(?:매출|실적).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
-            r"(?:^|\n).*?주요\s+제품.*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)"
+            r"(?:^|\n).*?주요\s+제품.*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
         ]
 
         for pattern in patterns:
@@ -680,7 +645,7 @@ class RevenueBreakdownAgent(BaseAgent):
         patterns = [
             r"(?:^|\n).*?지역별.*?(?:매출|실적|현황).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
             r"(?:^|\n).*?(?:국내|해외|수출|내수).*?(?:매출|실적).*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
-            r"(?:^|\n).*?수출[^\n]*?내수.*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)"
+            r"(?:^|\n).*?수출[^\n]*?내수.*?(?:\n|$)([\s\S]*?)(?:\n\s*[0-9가-힣①-⑩]+\.|\n\s*$|$)",
         ]
 
         for pattern in patterns:
@@ -747,8 +712,8 @@ class RevenueBreakdownAgent(BaseAgent):
         # JSON 시작과 끝 찾기
         json_patterns = [
             r"```json\s*([\s\S]*?)\s*```",  # ```json ... ``` 형식
-            r"```\s*([\s\S]*?)\s*```",      # ``` ... ``` 형식
-            r"\{[\s\S]*\}"                   # { ... } 형식
+            r"```\s*([\s\S]*?)\s*```",  # ``` ... ``` 형식
+            r"\{[\s\S]*\}",  # { ... } 형식
         ]
 
         for pattern in json_patterns:

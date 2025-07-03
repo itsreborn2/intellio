@@ -1,30 +1,16 @@
-"""
-리랭커 테스트 예제
-"""
-
-import asyncio
-import os
-import sys
-import time
-import warnings
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
+import logging
 import re  # 정규식 라이브러리
+import warnings
 
 import fitz  # PyMuPDF 라이브러리
 import pandas as pd  # DataFrame 라이브러리
-
-# markdown을 html로 변환하는 라이브러리 추가
-import pdfplumber
 from dotenv import load_dotenv
 
+# markdown을 html로 변환하는 라이브러리 추가
 # LangChain 관련 라이브러리
 # OpenAI 모델 임포트 추가
 # from langchain_openai import ChatOpenAI
 from loguru import logger
-
-from common.core.config import settings
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pdfminer")
 warnings.filterwarnings("ignore", category=UserWarning, module="pdfplumber")
@@ -34,9 +20,6 @@ warnings.filterwarnings("ignore", message="CropBox missing from /Page, defaultin
 # fitz 라이브러리의 경고 출력 레벨 변경 (0: 모든 출력, 1: 경고만, 2: 오류만, 3: 모두 억제)
 # 모든 경고 메시지 억제
 fitz.TOOLS.mupdf_warnings_handler = lambda warn_level, message: None
-
-import logging
-
 # # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
@@ -51,352 +34,6 @@ logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 # 환경 변수 로드
 load_dotenv()
-# GEMINI_API_KEY를 사용자가 입력해야 합니다
-GEMINI_API_KEY = settings.GEMINI_API_KEY
-# OpenAI API 키 설정
-OPENAI_API_KEY = settings.OPENAI_API_KEY
-
-
-async def extract_page_hybrid(page, page_num: int):
-    """
-    단일 페이지에서 하이브리드 방법으로 테이블과 텍스트를 추출합니다.
-
-    Args:
-        page: pdfplumber page 객체
-        page_num: 페이지 번호
-
-    Returns:
-        str: 추출된 텍스트 (테이블 + 주변 텍스트)
-    """
-    try:
-        page_content = ""
-        page_height = page.height
-
-        # 1. 페이지에서 테이블 찾기
-        tables = page.find_tables()
-
-        if not tables:
-            # 테이블이 없으면 일반 텍스트만 추출
-            text = page.extract_text()
-            if text:
-                page_content += text
-            return page_content
-
-        logger.debug(f"페이지 {page_num}에서 {len(tables)} 개의 테이블을 발견했습니다.")
-
-        # 2. 테이블 위치 정보를 수집하고 정렬
-        table_positions = []
-        for i, table in enumerate(tables):
-            bbox = table.bbox  # (x0, y0, x1, y1)
-            table_positions.append(
-                {
-                    "index": i,
-                    "table": table,
-                    "bbox": bbox,
-                    "top": bbox[1],  # y0
-                    "bottom": bbox[3],  # y1
-                }
-            )
-
-        # Y 좌표 기준으로 정렬 (위에서 아래로)
-        table_positions.sort(key=lambda x: x["top"])
-
-        # 3. 테이블 사이사이와 주변의 텍스트 추출
-        current_y = 0  # 페이지 맨 위부터 시작
-
-        for i, table_info in enumerate(table_positions):
-            table = table_info["table"]
-            bbox = table_info["bbox"]
-            table_top = bbox[1]
-            table_bottom = bbox[3]
-
-            # 테이블 위쪽 텍스트 추출 (현재 Y 위치부터 테이블 시작까지)
-            if table_top > current_y:
-                try:
-                    # 테이블 위쪽 영역 크롭
-                    text_area_above = page.crop((0, current_y, page.width, table_top))
-                    text_above = text_area_above.extract_text()
-                    if text_above and text_above.strip():
-                        # page_content += f"[테이블 {i + 1} 이전 텍스트]\n{text_above.strip()}\n\n"
-                        page_content += f"{text_above.strip()}\n\n"
-                except Exception as crop_error:
-                    logger.debug(f"테이블 {i + 1} 위쪽 텍스트 추출 오류: {str(crop_error)}")
-
-                    # 테이블 데이터 추출
-            try:
-                # 방법 1: table 객체의 extract() 메서드 사용 (가장 안정적)
-                table_data = table.extract()
-                if table_data:
-                    page_content += f"[테이블 {i + 1}]\n"
-                    for row in table_data:
-                        if row and any(cell for cell in row if cell):  # 빈 행이 아닌 경우만
-                            # None 값을 빈 문자열로 변환하고 각 셀을 | 로 구분
-                            cleaned_row = [str(cell).strip() if cell else "" for cell in row]
-                            page_content += "| " + " | ".join(cleaned_row) + " |\n"
-                    page_content += "\n"
-                    logger.debug(f"테이블 {i + 1} 구조화 추출 성공: {len(table_data)} 행")
-                else:
-                    raise Exception("table.extract() 반환값이 None")
-            except Exception as table_error:
-                logger.debug(f"테이블 {i + 1} 구조화 추출 오류: {str(table_error)}")
-                # 방법 2: 테이블 영역을 텍스트로 추출 (폴백)
-                try:
-                    table_text_area = page.crop(bbox)
-                    table_text = table_text_area.extract_text()
-                    if table_text and table_text.strip():
-                        page_content += f"[테이블 {i + 1} - 텍스트 형태]\n{table_text.strip()}\n\n"
-                        logger.debug(f"테이블 {i + 1} 텍스트 추출 성공: {len(table_text)} 글자")
-                    else:
-                        logger.warning(f"테이블 {i + 1} 모든 추출 방법 실패")
-                except Exception as fallback_error:
-                    logger.error(f"테이블 {i + 1} 텍스트 추출도 실패: {str(fallback_error)}")
-
-            # 현재 Y 위치를 테이블 끝으로 업데이트
-            current_y = table_bottom
-
-        # 마지막 테이블 아래쪽 텍스트 추출
-        if current_y < page_height:
-            try:
-                text_area_below = page.crop((0, current_y, page.width, page_height))
-                text_below = text_area_below.extract_text()
-                if text_below and text_below.strip():
-                    page_content += f"[마지막 테이블 이후 텍스트]\n{text_below.strip()}\n"
-            except Exception as crop_error:
-                logger.debug(f"마지막 테이블 아래쪽 텍스트 추출 오류: {str(crop_error)}")
-
-        return page_content
-
-    except Exception as e:
-        logger.error(f"페이지 {page_num} 하이브리드 추출 중 오류: {str(e)}")
-        # 오류가 발생하면 일반 텍스트 추출로 폴백
-        try:
-            fallback_text = page.extract_text()
-            if fallback_text:
-                return f"[폴백 텍스트]\n{fallback_text}\n"
-        except Exception as fallback_error:
-            logger.error(f"페이지 {page_num} 폴백 텍스트 추출 오류: {str(fallback_error)}")
-        return ""
-
-
-async def extract_revenue_breakdown_data_3(target_report: str):
-    """
-    Gemini 방식을 도입한 하이브리드 방법으로 사업보고서에서 매출 및 수주 현황 정보를 추출합니다.
-    - page.crop().extract_table(settings) 사용
-    - 명시적인 테이블 추출 전략 적용
-    - pandas DataFrame으로 구조화
-    - 단위 정보 추출
-
-    Args:
-        target_report: 사업보고서 파일 경로
-    return :
-        Dict[str, Any]: {
-            'text': 텍스트 형태의 추출 결과,
-            'tables': [
-                {
-                    'table_id': int,
-                    'page_num': int,
-                    'dataframe': pandas.DataFrame,
-                    'unit_info': str,
-                    'markdown': str
-                }
-            ],
-            'summary': 추출 요약 정보
-        }
-    """
-    doc = None
-    try:
-        if not os.path.exists(target_report):
-            logger.error(f"파일을 찾을 수 없습니다: {target_report}")
-            return ""
-
-        base_file_name = os.path.basename(target_report)
-        logger.info(f"매출 정보 추출 시작 (Gemini 방식): {base_file_name}")
-
-        year = base_file_name.split("_")[0][:4]
-        quater_file = base_file_name.split("_")[4]
-
-        report_type_map = {"Q1": "1Q", "Q3": "3Q", "semiannual": "2Q", "annual": "4Q"}
-        quater = report_type_map.get(quater_file, "")
-
-        # fitz를 사용하여 목차 내용 추출
-        doc = await asyncio.to_thread(fitz.open, target_report)
-        toc = await asyncio.to_thread(doc.get_toc)
-
-        if not toc:
-            logger.error("목차를 찾을 수 없습니다.")
-            return ""
-
-        # 목차에서 페이지 범위 찾기 (기존 로직과 동일)
-        business_content_start_page = None
-        business_content_end_page = None
-        sales_section_start_page = None
-        sales_section_end_page = None
-
-        for i, item in enumerate(toc):
-            level, title, page_num = item
-
-            if "사업의 내용" in title and (title.startswith("II.") or title.startswith("Ⅱ.")):
-                business_content_start_page = page_num - 1
-
-                for next_item in toc[i + 1 :]:
-                    next_level, next_title, next_page = next_item
-                    if next_level <= level and (next_title.startswith("III.") or next_title.startswith("Ⅲ.") or next_title.startswith("IV.") or next_title.startswith("Ⅳ.")):
-                        business_content_end_page = next_page - 2
-                        break
-
-                if business_content_end_page is None:
-                    business_content_end_page = len(doc) - 1
-
-            if business_content_start_page is not None and "매출" in title and "수주" in title:
-                sales_section_start_page = page_num - 1
-                logger.info(f"✅ '매출 및 수주상황' 섹션 발견: '{title}' (L{level}, P{page_num}). 시작 페이지 인덱스: {sales_section_start_page}")
-
-                for next_item in toc[i + 1 :]:
-                    next_level, next_title, next_page = next_item
-                    logger.info(f"  ➡️ 다음 목차 확인 중: '{next_title}' (L{next_level}, P{next_page})")
-                    if next_level <= level:
-                        sales_section_end_page = next_page - 1
-                        logger.info(f"  ✅ 종료 조건 충족 (next_level({next_level}) <= level({level})). 종료 페이지 인덱스 설정: {next_page} - 1 = {sales_section_end_page}")
-                        break
-                    else:
-                        logger.info(f"  ℹ️ 종료 조건 미충족 (next_level({next_level}) > level({level})). 계속 탐색.")
-
-                if sales_section_end_page is None:
-                    sales_section_end_page = business_content_end_page
-                    logger.info(f"  ⚠️ 다음 섹션을 찾지 못함. '사업의 내용' 끝 페이지를 사용: {sales_section_end_page}")
-
-        if not business_content_start_page:
-            logger.error(f"{year}.{quater}: 'II. 사업의 내용' 섹션을 찾을 수 없습니다.")
-            return ""
-
-        # 페이지 범위 결정
-        start_page = None
-        end_page = None
-
-        if sales_section_start_page is not None and sales_section_end_page is not None:
-            start_page = sales_section_start_page
-            end_page = sales_section_end_page
-            logger.info(f"{year}.{quater}: '매출 및 수주상황' 섹션을 찾았습니다: 페이지 {start_page + 1}~{end_page + 1}")
-        elif business_content_start_page is not None and business_content_end_page is not None:
-            start_page = business_content_start_page
-            end_page = business_content_end_page
-            logger.info(f"{year}.{quater}: 'II. 사업의 내용' 섹션을 찾았습니다: 페이지 {start_page + 1}~{end_page + 1}")
-        else:
-            logger.error(f"{year}.{quater}: 매출 및 수주상황, 사업의 내용 섹션을 찾을 수 없습니다.")
-            return ""
-
-        if start_page is None or end_page is None:
-            logger.error(f"{year}.{quater}: 유효한 페이지 범위를 결정할 수 없습니다.")
-            return ""
-
-        # 추출할 페이지 수 제한
-        if end_page - start_page > 30:  # 30페이지 이상이면 제한
-            logger.warning(f"{year}.{quater}: 페이지 범위가 너무 큽니다 ({end_page - start_page} 페이지). 30 페이지만 처리합니다.")
-            end_page = start_page + 29
-
-        # 결과 저장 구조체 초기화
-        result = {"text": "", "tables": [], "summary": {"year": year, "quarter": quater, "total_tables": 0, "total_pages": 0, "page_range": f"{start_page + 1}~{end_page + 1}"}}
-
-        # Gemini 방식으로 페이지 내용 추출
-        extracted_text = "-----------------------------\n\n"
-        extracted_text += f"## {year}.{quater} 데이터\n"
-
-        try:
-            extracted_page_content = ""
-            all_page_tables = []  # 모든 페이지의 테이블 정보를 저장
-
-            with pdfplumber.open(target_report) as pdf:
-                max_pages = 30
-                pdf_length = len(pdf.pages)
-
-                if start_page >= pdf_length:
-                    logger.warning(f"시작 페이지({start_page + 1})가 PDF 길이({pdf_length})를 초과합니다")
-                    start_page = max(0, pdf_length - 1)
-
-                if end_page >= pdf_length:
-                    logger.warning(f"종료 페이지({end_page + 1})가 PDF 길이({pdf_length})를 초과합니다")
-                    end_page = pdf_length - 1
-
-                effective_end_page = end_page
-                if end_page - start_page > max_pages:
-                    logger.warning(f"페이지 범위가 너무 큽니다({start_page + 1}~{end_page + 1}). 처음 {max_pages}페이지만 추출합니다.")
-                    effective_end_page = start_page + max_pages
-
-                logger.info(f"{year}.{quater}: 최종 추출 페이지 범위: {start_page + 1}~{effective_end_page + 1}")
-                extracted_text += f"### Page : {start_page + 1} ~ {effective_end_page + 1}\n\n"
-                result["summary"]["page_range"] = f"{start_page + 1}~{effective_end_page + 1}"
-                result["summary"]["total_pages"] = effective_end_page - start_page + 1
-
-                # 1단계: 모든 페이지에서 개별적으로 테이블 추출
-                for page_num in range(start_page, effective_end_page + 1):
-                    try:
-                        page = pdf.pages[page_num]
-                        page_result = await extract_page_gemini_style_with_dataframe(page, page_num + 1)
-
-                        if page_result:
-                            # 텍스트 결과 누적
-                            if page_result["text"]:
-                                extracted_page_content += f"{page_result['text']}\n"
-
-                            # 페이지별 테이블 정보 저장
-                            if page_result["tables"]:
-                                all_page_tables.append({"page_num": page_num + 1, "tables": page_result["tables"]})
-
-                            logger.debug(f"페이지 {page_num + 1} Gemini 방식 추출 완료: 텍스트 {len(page_result['text'])}글자, 테이블 {len(page_result['tables'])}개")
-                    except Exception as page_error:
-                        logger.error(f"페이지 {page_num + 1} Gemini 방식 추출 오류: {str(page_error)}")
-
-                # 2단계: 페이지 간 테이블 연결성 분석 및 병합
-                if all_page_tables:
-                    logger.info(f"테이블 연결성 분석 시작: 총 {len(all_page_tables)}개 페이지, {sum(len(pt['tables']) for pt in all_page_tables)}개 테이블")
-
-                    merged_tables = analyze_table_structure_across_pages(all_page_tables)
-
-                    # 병합된 테이블들을 결과에 저장
-                    result["tables"] = merged_tables
-                    result["summary"]["total_tables"] = len(merged_tables)
-
-                    # 병합된 테이블 정보 로깅
-                    for i, table_info in enumerate(merged_tables):
-                        pages_info = table_info.get("merged_from_pages", [table_info.get("page_num")])
-                        table_count = table_info.get("table_count_in_group", 1)
-                        df_shape = table_info.get("dataframe").shape if table_info.get("dataframe") is not None else (0, 0)
-
-                        logger.info(f"병합된 테이블 {i + 1}: 페이지 {pages_info}, {table_count}개 테이블 병합, DataFrame 크기: {df_shape}")
-
-                # 3단계: 최종 텍스트 생성 (병합된 테이블로 원본 텍스트의 테이블 부분 대체)
-                if result["tables"]:
-                    # 병합된 테이블로 원본 텍스트 재구성 (완벽한 원본 문서 구조 유지)
-                    final_page_content = reconstruct_text_with_merged_tables(extracted_page_content, result["tables"])
-                    extracted_text += final_page_content
-                else:
-                    # 병합된 테이블이 없으면 원본 텍스트 사용
-                    extracted_text += extracted_page_content
-
-        except Exception as pdf_error:
-            logger.exception(f"PDF Gemini 방식 처리 중 오류: {str(pdf_error)}")
-
-        # extracted_text += f"\n\n</{year}.{quater} 데이터>\n"
-        result["text"] = extracted_text
-
-        if not extracted_page_content or not extracted_page_content.strip():
-            logger.error("추출된 텍스트가 없습니다.")
-            return ""
-
-        logger.info(f"Gemini 방식 텍스트 추출 완료: {len(extracted_text)} 글자, {result['summary']['total_tables']} 테이블 (병합 후), {result['summary']['total_pages']} 페이지")
-        return result
-
-    except Exception as e:
-        logger.exception(f"Error extracting revenue breakdown data (Gemini style): {str(e)}")
-        return ""
-
-    finally:
-        if doc is not None:
-            try:
-                doc.close()
-                logger.debug("PDF 문서 리소스 해제 완료")
-            except Exception as close_error:
-                logger.error(f"PDF 문서 리소스 해제 오류: {str(close_error)}")
 
 
 def extract_unit_info(text: str) -> str:
@@ -440,7 +77,7 @@ def extract_unit_info(text: str) -> str:
             if matches:
                 # 가장 첫 번째 매치 반환, 앞뒤 공백 제거
                 unit = matches[0].strip()
-                logger.debug(f"단위 정보 추출 성공: 패턴{i + 1} '{pattern}' -> '{unit}'")
+                # logger.debug(f"단위 정보 추출 성공: 패턴{i + 1} '{pattern}' -> '{unit}'")
                 return f"단위: {unit}"
             # else:
             #     logger.debug(f"단위 정보 패턴{i + 1} 매칭 실패: '{pattern}'")
@@ -675,23 +312,17 @@ def convert_value_to_target_unit(value: str, source_multiplier: float, target_mu
         if is_negative:
             numeric_value = -numeric_value
 
-        # logger.debug(f"convert_value_to_target_unit: numeric_value={numeric_value}")
-
         # 단위 변환
         converted_value = numeric_value * source_multiplier / target_multiplier
-
-        # logger.debug(f"convert_value_to_target_unit: converted_value={converted_value} (계산: {numeric_value} * {source_multiplier} / {target_multiplier})")
 
         # 포맷팅
         if converted_value == 0:
             formatted = "0"
         elif abs(converted_value) >= 1000:  # 1000 이상이면, 반올림하여 정수로 표시
-            # 반올림하여 정수로 표시
             formatted = f"{round(converted_value):,.0f}"
         elif abs(converted_value) >= 10:  # 10 이상이면, 소수점 1자리
             formatted = f"{converted_value:,.1f}".rstrip("0").rstrip(".")
         else:
-            # 10보다 작은 경우 소수점 2자리까지
             formatted = f"{converted_value:.2f}".rstrip("0").rstrip(".")
         return formatted
 
@@ -726,7 +357,7 @@ def convert_dataframe_units(df: pd.DataFrame, source_unit: str, target_unit: str
 
     # 외화 단위가 포함된 경우 변환하지 않고 원본 DataFrame 반환
     if any(currency in source_unit_lower for currency in foreign_currencies):
-        logger.debug(f"외화 단위 감지: '{source_unit_clean}' - 단위 변환을 건너뜁니다")
+        # logger.debug(f"외화 단위 감지: '{source_unit_clean}' - 단위 변환을 건너뜁니다")
         # 원본 DataFrame을 복사하되 단위 정보만 메타데이터로 추가
         result_df = df.copy()
         result_df.attrs["original_unit"] = source_unit
@@ -739,13 +370,13 @@ def convert_dataframe_units(df: pd.DataFrame, source_unit: str, target_unit: str
 
     # 변환할 수 없는 단위인 경우 (source_multiplier가 1.0인 경우)
     if source_multiplier == 1.0 and source_unit_clean.lower() not in ["원", "won"]:
-        logger.debug(f"알 수 없는 단위: '{source_unit_clean}' - 단위 변환을 건너뜁니다")
+        # logger.debug(f"알 수 없는 단위: '{source_unit_clean}' - 단위 변환을 건너뜁니다")
         result_df = df.copy()
         result_df.attrs["original_unit"] = source_unit
         result_df.attrs["converted_unit"] = source_unit
         return result_df
 
-    logger.debug(f"단위 변환: {source_unit_clean} ({source_multiplier:,}) -> {target_unit} ({target_multiplier:,})")
+    # logger.debug(f"단위 변환: {source_unit_clean} ({source_multiplier:,}) -> {target_unit} ({target_multiplier:,})")
 
     # pandas DataFrame의 완전한 복사 (새로운 독립 객체 생성)
     converted_df = pd.DataFrame(df.values.copy(), columns=df.columns.copy(), index=df.index.copy())
@@ -926,12 +557,12 @@ def create_dataframe_from_table(table_data: list, unit_info: str = "", has_heade
             if len(cleaned_data) == 1:
                 # 헤더만 있는 테이블의 경우
                 df = pd.DataFrame([], columns=new_header)
-                logger.debug(f"DataFrame 생성: 헤더만 있는 테이블. 컬럼: {new_header}")
+                # logger.debug(f"DataFrame 생성: 헤더만 있는 테이블. 컬럼: {new_header}")
             else:
                 # 데이터가 있는 경우, 첫 행을 헤더로 설정
                 df.columns = new_header
                 df = df.iloc[1:].reset_index(drop=True)
-                logger.debug(f"DataFrame 생성: 첫 행을 헤더로 설정. 컬럼: {new_header}")
+                # logger.debug(f"DataFrame 생성: 첫 행을 헤더로 설정. 컬럼: {new_header}")
         else:
             # 헤더 없음 - 기본 컬럼명 사용
             logger.debug(f"DataFrame 생성: 헤더 없음, 기본 컬럼명 사용. 크기: {df.shape}")
@@ -1018,14 +649,12 @@ def is_position_based_continuation(prev_table_info: dict, current_table_info: di
 
         is_continuous = prev_near_bottom and curr_near_top
 
-        if is_continuous:
-            logger.debug(f"[페이지간][{prev_page}~{curr_page}] 좌표 기반 연속성 감지: 이전 테이블 하단={prev_bottom:.1f}, 현재 테이블 상단={curr_top:.1f}")
-        else:
-            logger.debug(f"[페이지간][{prev_page}~{curr_page}] 좌표 기반 연속성 거부: 이전 테이블 하단={prev_bottom:.1f}, 현재 테이블 상단={curr_top:.1f}")
+        # if is_continuous:
+        #     logger.debug(f"[페이지간][{prev_page}~{curr_page}] 좌표 기반 연속성 감지: 이전 테이블 하단={prev_bottom:.1f}, 현재 테이블 상단={curr_top:.1f}")
+        # else:
+        #     logger.debug(f"[페이지간][{prev_page}~{curr_page}] 좌표 기반 연속성 거부: 이전 테이블 하단={prev_bottom:.1f}, 현재 테이블 상단={curr_top:.1f}")
 
         return is_continuous
-
-    # 케이스 3: 페이지가 2개 이상 떨어져 있으면 연속성 없음
     else:
         return False
 
@@ -1107,9 +736,9 @@ def merge_continued_tables(prev_table_df: pd.DataFrame, current_table_df: pd.Dat
         # 메타데이터 보존
         merged_df.attrs = prev_table_df.attrs.copy()
 
-        logger.debug(f"테이블 병합 완료: 이전 {len(prev_df_to_merge)}행 + 현재 {len(current_df_to_merge)}행 = 총 {len(merged_df)}행")
-        if prev_col_count != curr_col_count:
-            logger.debug(f"병합된 테이블:\n{merged_df.to_string()}")
+        # logger.debug(f"테이블 병합 완료: 이전 {len(prev_df_to_merge)}행 + 현재 {len(current_df_to_merge)}행 = 총 {len(merged_df)}행")
+        # if prev_col_count != curr_col_count:
+        #     logger.debug(f"병합된 테이블:\n{merged_df.to_string()}")
         return merged_df
 
     except Exception as e:
@@ -1173,7 +802,6 @@ def reconstruct_text_with_merged_tables(original_text: str, merged_tables: list)
         for i in range(table_count_in_group):
             if current_original_index < len(table_positions):
                 original_to_merged_mapping[current_original_index] = merged_idx
-                # logger.debug(f"매핑: 원본 테이블 {current_original_index} → 병합된 테이블 {merged_idx}")
                 current_original_index += 1
 
     logger.debug(f"매핑 완료: {original_to_merged_mapping}")
@@ -1200,8 +828,8 @@ def reconstruct_text_with_merged_tables(original_text: str, merged_tables: list)
 
             if table_info.get("markdown"):
                 # 병합 정보 표시
-                pages_info = table_info.get("merged_from_pages", [table_info.get("page_num")])
-                table_count_merge = table_info.get("table_count_in_group", 1)
+                # pages_info = table_info.get("merged_from_pages", [table_info.get("page_num")])
+                # table_count_merge = table_info.get("table_count_in_group", 1)
 
                 replacement_lines = []
                 # if table_count_merge > 1:
@@ -1214,7 +842,7 @@ def reconstruct_text_with_merged_tables(original_text: str, merged_tables: list)
                 # 원본 테이블 영역을 병합된 테이블로 교체
                 result_lines[start_idx : end_idx + 1] = replacement_lines
 
-                logger.debug(f"원본 테이블 {original_table_order} → 병합된 테이블 {merged_table_idx} 교체 완료")
+                # logger.debug(f"원본 테이블 {original_table_order} → 병합된 테이블 {merged_table_idx} 교체 완료")
         else:
             logger.debug(f"원본 테이블 {original_table_order}에 대응하는 병합된 테이블 없음 - 영역 제거")
             # 매핑되지 않은 원본 테이블 영역 제거 (병합되어 사라진 테이블)
@@ -1261,7 +889,7 @@ def analyze_table_structure_across_pages(all_page_tables: list) -> list:
             # 첫 번째 테이블이거나 이전 그룹이 없으면 새 그룹 시작
             if current_group is None:
                 current_group = {"merged_table": table_info, "pages": [page_num], "table_count": 1}
-                logger.debug(f"새로운 테이블 그룹 시작: 페이지 {page_num} 테이블 {i + 1}")
+                # logger.debug(f"새로운 테이블 그룹 시작: 페이지 {page_num} 테이블 {i + 1}")
                 continue
 
             # 1차: 좌표 기반 연속성 판단 (우선순위)
@@ -1272,7 +900,7 @@ def analyze_table_structure_across_pages(all_page_tables: list) -> list:
             if is_position_based_continuation(prev_table_info, table_info):
                 should_merge = True
                 merge_reason = "좌표 기반 연속성"
-                logger.debug(f"테이블 연결 판단[{page_num}]: {merge_reason} 감지")
+                # logger.debug(f"테이블 연결 판단[{page_num}]: {merge_reason} 감지")
 
                 # 📋 핵심 개선: 페이지 간 연속성이 확인되면 현재 테이블의 헤더를 첫 행으로 복구
                 current_df = table_df.copy()
@@ -1284,10 +912,10 @@ def analyze_table_structure_across_pages(all_page_tables: list) -> list:
                     header_row = pd.DataFrame([current_df.columns], columns=current_df.columns)
                     current_df = pd.concat([header_row, current_df], ignore_index=True)
 
-                    if was_header_only:
-                        logger.debug("페이지 간 연속성 확인: 헤더만 있는 테이블의 헤더를 첫 행으로 복구 완료")
-                    else:
-                        logger.debug("페이지 간 연속성 확인: 현재 테이블의 헤더를 첫 행으로 복구 완료")
+                    # if was_header_only:
+                    #     logger.debug("페이지 간 연속성 확인: 헤더만 있는 테이블의 헤더를 첫 행으로 복구 완료")
+                    # else:
+                    #     logger.debug("페이지 간 연속성 확인: 현재 테이블의 헤더를 첫 행으로 복구 완료")
 
                 # 복구된 DataFrame으로 테이블 정보 업데이트
                 table_info["dataframe"] = current_df
@@ -1305,13 +933,13 @@ def analyze_table_structure_across_pages(all_page_tables: list) -> list:
                 current_group["table_count"] += 1
 
                 # 마크다운은 나중에 단위 변환 후 생성
-                logger.debug(f"✅ 테이블 병합 성공: 페이지 {page_num} 테이블 {i + 1} ({merge_reason}, 총 {len(merged_df)}행)")
+                # logger.debug(f"✅ 테이블 병합 성공: 페이지 {page_num} 테이블 {i + 1} ({merge_reason}, 총 {len(merged_df)}행)")
 
             else:
                 # 이전 그룹을 완료하고 새 그룹 시작
                 grouped_tables.append(current_group)
                 current_group = {"merged_table": table_info, "pages": [page_num], "table_count": 1}
-                logger.debug(f"새로운 테이블 그룹 시작: 페이지 {page_num} 테이블 {i + 1}")
+                # logger.debug(f"새로운 테이블 그룹 시작: 페이지 {page_num} 테이블 {i + 1}")
 
     # 마지막 그룹 추가
     if current_group is not None:
@@ -1370,7 +998,7 @@ def analyze_table_structure_across_pages(all_page_tables: list) -> list:
                     if converted_df is not None and not converted_df.empty:
                         group_info["dataframe"] = converted_df
                         group_info["converted_unit"] = converted_df.attrs.get("converted_unit")
-                        logger.debug(f"병합된 테이블 {i + 1} 단위 변환: {unit_info} -> {group_info['converted_unit']}")
+                        # logger.debug(f"병합된 테이블 {i + 1} 단위 변환: {unit_info} -> {group_info['converted_unit']}")
                 else:
                     logger.debug(f"병합된 테이블 {i + 1} 단위 변환 건너뜀: 타겟 단위({target_unit})가 소스와 동일하거나 없음")
 
@@ -1426,7 +1054,7 @@ async def extract_page_gemini_style_with_dataframe(page, page_num: int):
             result["text"] = page_content
             return result
 
-        logger.debug(f"페이지 {page_num}에서 {len(tables)} 개의 테이블을 발견했습니다 (DataFrame 방식).")
+        # logger.debug(f"페이지 {page_num}에서 {len(tables)} 개의 테이블을 발견했습니다 (DataFrame 방식).")
 
         # 2. 테이블들을 Y 좌표 기준으로 정렬
         sorted_tables = sorted(tables, key=lambda t: t.bbox[1])  # Y 좌표(상단) 기준 정렬
@@ -1479,7 +1107,7 @@ async def extract_page_gemini_style_with_dataframe(page, page_num: int):
                                 new_unit_info = extract_unit_info(str(cell_content))
                                 if new_unit_info:
                                     unit_info = new_unit_info
-                                    logger.debug(f"테이블 {i + 1} 내부에서 단위 정보 발견: '{unit_info}'. 해당 행을 테이블에서 제거합니다.")
+                                    # logger.debug(f"테이블 {i + 1} 내부에서 단위 정보 발견: '{unit_info}'. 해당 행을 테이블에서 제거합니다.")
                                     # 단위 정보를 포함한 행은 실제 데이터가 아니므로 제거
                                     structured_table = structured_table[1:]
                                     break  # 단위 정보를 찾았으면 반복 중단
@@ -1535,14 +1163,9 @@ async def extract_page_gemini_style_with_dataframe(page, page_num: int):
                         "page_height": page.height,  # 실제 페이지 높이 추가
                     }
 
-                    # 저장된 DataFrame 검증
-                    logger.debug(f"테이블 {i + 1} 저장 검증: DataFrame 크기 {df.shape if df is not None else 'None'}")
-                    if df is not None and not df.empty and len(df) > 0:
-                        sample_cell = df.iloc[0, 0] if len(df.columns) > 0 else "N/A"
-                        logger.debug(f"테이블 {i + 1} 저장된 샘플 값: [0,0] = '{sample_cell}'")
                     result["tables"].append(table_info)
 
-                    logger.debug(f"테이블 {i + 1} DataFrame 처리 완료: {df.shape if df is not None else 'None'}, 단위: {unit_info} (변환 전)")
+                    # logger.debug(f"테이블 {i + 1} DataFrame 처리 완료: {df.shape if df is not None else 'None'}, 단위: {unit_info} (변환 전)")
                 else:
                     raise Exception("구조화된 테이블 추출 실패")
 
@@ -1584,146 +1207,3 @@ async def extract_page_gemini_style_with_dataframe(page, page_num: int):
         except Exception as fallback_error:
             logger.error(f"페이지 {page_num} 폴백 텍스트 추출 오류: {str(fallback_error)}")
             return {"text": "", "tables": []}
-
-
-def test_unit_extraction():
-    """단위 정보 추출 테스트"""
-    print("=== 단위 정보 추출 테스트 ===")
-
-    test_cases = [
-        "(단위 : 백만USD)",
-        "(단위: 원)",
-        "(단위 : 십억원, USD)",
-        "[단위: 백만원]",
-        "단위: 조원",
-        "（단위：백만EUR）",  # 전각 문자
-        "(단위 : 백만 USD)",  # 공백 포함
-        "무관한 텍스트 (단위 : 백만USD) 추가 텍스트",
-    ]
-
-    for test_text in test_cases:
-        result = extract_unit_info(test_text)
-        print(f"입력: '{test_text}' -> 결과: '{result}'")
-
-    print("=== 단위 정보 추출 테스트 완료 ===\n")
-
-
-async def test_all(enable_content: bool = True):
-    # 단위 추출 테스트 먼저 실행
-    test_unit_extraction()
-
-    start_time = time.time()
-
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/089030/20250301_테크윙_089030_기계·장비_Q1_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/007660/20240901_이수페타시스_007660_전기·전자_Q3_DART.pdf"
-    ff = "stockeasy/local_cache/financial_reports/정기보고서/257720/20250301_실리콘투_257720_유통_Q1_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/083650/20250301_비에이치아이_083650_기계·장비_Q1_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/034020/20250301_두산에너빌리티_034020_기계·장비_Q1_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/000660/20250301_SK하이닉스_000660_전기·전자_Q1_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/112610/20240901_씨에스윈드_112610_금속_Q3_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/298040/20250301_효성중공업_298040_전기·전자_Q1_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/141080/20241201_리가켐바이오_141080_일반서비스_annual_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/145020/20240901_휴젤_145020_제약_Q3_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/103590/20250301_일진전기_103590_전기·전자_Q1_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/036890/20241201_진성티이씨_036890_기계·장비_annual_DART.pdf"
-    # ff = "stockeasy/local_cache/financial_reports/정기보고서/001040/20241201_CJ_001040_기타금융_annual_DART.pdf"
-    ff = "stockeasy/local_cache/financial_reports/정기보고서/105560/20250301_KB금융_105560_기타금융_Q1_DART.pdf"
-    print("=== PDF 테스트 (간소화) ===")
-    result_gemini = await extract_revenue_breakdown_data_3(ff)
-
-    if result_gemini == "":
-        print("파일이 없어욧.")
-        return
-    elif isinstance(result_gemini, dict):
-        if enable_content:
-            print("\n\n--- PDF 추출 결과 ---")
-            print(result_gemini.get("text", "추출된 텍스트가 없습니다."))
-            print("--- PDF 추출 결과 끝 ---\n\n")
-
-        tables = result_gemini.get("tables", [])
-        if tables:
-            print("\n=== 테이블 병합 결과 분석 ===")
-            print(f"총 테이블 개수: {len(tables)}")
-
-            # 병합 성공한 테이블 개수 확인
-            merged_count = sum(1 for table in tables if table.get("table_count_in_group", 1) > 1)
-            print(f"병합 성공한 테이블: {merged_count}개")
-
-            # 모든 테이블의 병합 정보 출력
-            for i, table in enumerate(tables):
-                merged_pages = table.get("merged_from_pages", [table.get("page_num", "?")])
-                table_count = table.get("table_count_in_group", 1)
-                df = table.get("dataframe")
-                df_shape = df.shape if df is not None else (0, 0)
-
-                print(f"\n테이블 {i + 1}:")
-                print(f"  - 병합된 페이지: {merged_pages}")
-                print(f"  - 병합된 테이블 개수: {table_count}")
-                print(f"  - DataFrame 크기: {df_shape}")
-                print(f"  - 단위 정보: {table.get('unit_info', '없음')}")
-                print(f"  - 변환 단위: {table.get('converted_unit', '없음')}")
-
-                # 컬럼 정보도 출력
-                if df is not None and not df.empty:
-                    columns_preview = list(df.columns)[:5]  # 처음 5개 컬럼만
-                    if len(df.columns) > 5:
-                        columns_preview.append("...")
-                    print(f"  - 컬럼: {columns_preview}")
-
-                # 병합된 테이블이 있으면 더 자세히 표시
-                if table_count > 1:
-                    print("  ✅ 페이지 간 병합 성공!")
-
-                    # bbox 정보 확인
-                    bbox_info = table.get("bbox")
-                    if bbox_info:
-                        print(f"    좌표 정보: {bbox_info}")
-                    else:
-                        print("    ⚠️  좌표 정보 없음")
-
-            # 특별 케이스: 테이블 2와 3 병합 상황 확인
-            table_2_3_merged = False
-            for table in tables:
-                merged_pages = table.get("merged_from_pages", [])
-                if len(merged_pages) >= 2 and 17 in merged_pages and 18 in merged_pages:
-                    table_2_3_merged = True
-                    print(f"  🎯 테이블 2와 3 병합 성공! 페이지: {merged_pages}")
-                    break
-
-            if not table_2_3_merged:
-                print("  ❌ 테이블 2와 3이 병합되지 않았습니다.")
-                # 개별 테이블들의 상세 정보 출력
-                for i, table in enumerate(tables):
-                    pages = table.get("merged_from_pages", [table.get("page_num")])
-                    df = table.get("dataframe")
-                    if df is not None and not df.empty and len(pages) == 1:
-                        print(f"    테이블 {i + 1} (페이지 {pages[0]}): {df.shape}")
-                        if len(df.columns) <= 6:  # 컬럼이 적으면 출력
-                            print(f"      컬럼: {list(df.columns)}")
-                        if len(df) <= 5:  # 행이 적으면 샘플 출력
-                            print(f"      샘플 데이터:\n{df.head(3).to_string(index=False)}")
-
-            # 가장 큰 테이블이나 병합된 테이블 찾기
-            target_table = None
-            for table in tables:
-                df = table.get("dataframe")
-                if df is not None and not df.empty:
-                    # 병합된 테이블을 우선으로 선택
-                    if table.get("table_count_in_group", 1) > 1:
-                        target_table = table
-                        break
-                    # 아니면 가장 큰 테이블 선택
-                    elif target_table is None or len(df) > len(target_table.get("dataframe", pd.DataFrame())):
-                        target_table = table
-
-    else:
-        print("결과가 딕셔너리 형태가 아닙니다.")
-        result_gemini = None
-
-    end_time = time.time()
-    print(f"\n⏱️ 총 실행 시간: {end_time - start_time:.2f}초")
-    return result_gemini
-
-
-if __name__ == "__main__":
-    asyncio.run(test_all(enable_content=True))
