@@ -572,9 +572,9 @@ class ReportAnalyzerAgent(BaseAgent):
                     top_10_reports = self._select_top_reports_by_score(toc_item_reports_raw, top_k=10)
                     # 선별된 10개에서 중복 제거
                     report_data_for_summary_agent["toc_results"][task_name] = self._deduplicate_company_reports_in_list(top_10_reports)
-                    logger.debug(
-                        f"      TOC 검색 결과 [{task_name}]: 원본 {len(result.documents)}개 -> 상위 10개 선별 -> 중복제거 후 {len(report_data_for_summary_agent['toc_results'][task_name])}개"
-                    )
+                    # logger.debug(
+                    #     f"      TOC 검색 결과 [{task_name}]: 원본 {len(result.documents)}개 -> 상위 10개 선별 -> 중복제거 후 {len(report_data_for_summary_agent['toc_results'][task_name])}개"
+                    # )
 
         except Exception as e:
             logger.error(f"[_search_reports] 심각한 오류 발생: {str(e)}", exc_info=True)

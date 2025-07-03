@@ -1602,8 +1602,8 @@ class TechnicalAnalyzerAgent(BaseAgent):
 
                 compressed_groups.append({"avg_price": avg_price, "strength": strength, "count": len(group_levels)})
 
-                if len(group_levels) > 1:
-                    logger.info(f"레벨 그룹 압축: {[f'{l:.0f}원' for l in group_levels]} → {avg_price:.0f}원 (강도: {strength})")
+                # if len(group_levels) > 1:
+                #     logger.info(f"레벨 그룹 압축: {[f'{l:.0f}원' for l in group_levels]} → {avg_price:.0f}원 (강도: {strength})")
 
                 # 다음 인덱스로 이동
                 i = j

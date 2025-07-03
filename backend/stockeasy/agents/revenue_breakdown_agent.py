@@ -317,10 +317,13 @@ class RevenueBreakdownAgent(BaseAgent):
             # 메시지 구성
             from langchain_core.messages import HumanMessage, SystemMessage
 
+            today_date = datetime.now().strftime("%Y-%m-%d")
             messages = [
                 SystemMessage(content=REVENUE_BREAKDOWN_SYSTEM_PROMPT),
                 HumanMessage(
-                    content=REVENUE_BREAKDOWN_USER_PROMPT.format(query=query, stock_code=stock_code, stock_name=stock_name, revenue_breakdown_data=revenue_breakdown_data)
+                    content=REVENUE_BREAKDOWN_USER_PROMPT.format(
+                        today_date=today_date, query=query, stock_code=stock_code, stock_name=stock_name, revenue_breakdown_data=revenue_breakdown_data
+                    )
                 ),
             ]
 

@@ -7,6 +7,7 @@ GCS에서 PDF 파일을 관리하고 처리하는 로직을 포함합니다.
 
 import asyncio
 import json
+import logging
 import os
 import re
 import warnings
@@ -23,6 +24,11 @@ from common.core.config import settings
 from common.core.database import get_db
 from common.services.storage import GoogleCloudStorageService
 from stockeasy.repositories.financial_repository import FinancialRepository
+from stockeasy.services.financial.data_service_util import (
+    analyze_table_structure_across_pages,
+    extract_page_gemini_style_with_dataframe,
+    reconstruct_text_with_merged_tables,
+)
 from stockeasy.services.financial.pdf_extractor import FinancialPDFExtractor
 from stockeasy.services.llm_service import FinancialLLMService
 
@@ -34,7 +40,6 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pdfminer")
 warnings.filterwarnings("ignore", category=UserWarning, module="pdfplumber")
 warnings.filterwarnings("ignore", category=UserWarning, module="fitz")  # PyMuPDF 경고 숨기기
 warnings.filterwarnings("ignore", message="CropBox missing from /Page, defaulting to MediaBox")
-import logging
 
 # # 로깅 설정
 logging.basicConfig(
@@ -535,7 +540,7 @@ class FinancialDataServicePDF:
 
             # 파일이 이미 존재하는지 확인
             if os.path.exists(local_path):
-                logger.info(f"Using cached file: {local_path}")
+                # logger.info(f"Using cached file: {local_path}")
                 return str(local_path)
 
             # GCS에서 파일 다운로드
@@ -625,7 +630,7 @@ class FinancialDataServicePDF:
                 fs_pages.sort(key=lambda x: x[0])
 
                 # 추출된 텍스트 반환
-                logger.info(f"Extracted {len(fs_pages)} pages from {pdf_path}")
+                # logger.info(f"Extracted {len(fs_pages)} pages from {pdf_path}")
                 return "\n\n------- 페이지 구분선 -------\n\n".join([text for _, text in fs_pages])
 
             logger.warning(f"No financial statement pages found in {pdf_path}")
@@ -637,215 +642,35 @@ class FinancialDataServicePDF:
 
     async def extract_revenue_breakdown_data(self, target_report: str, business_report_info: Dict[str, Any]):
         """
-        주어진 사업보고서 파일에서 매출 및 수주 현황 정보를 추출합니다.
-
-        Args:
-            target_report: 사업보고서 파일 경로
-            business_report_info: 사업보고서 정보
-             Dict[str, Any]: 기수 및 사업년도 정보를 포함하는 딕셔너리
-                - period_number: 기수 (int)
-                - business_year_start: 사업년도 시작일 (str, 'YYYY-MM-DD' 형식)
-                - business_year_end: 사업년도 종료일 (str, 'YYYY-MM-DD' 형식)
-                - title: 보고서 제목 (str)
-                - company_name: 회사명 (str)
-        return :
-            매출 및 수주상황 섹션 텍스트
-        """
-        doc = None  # 함수 반환 시 닫아야 할 doc 객체를 위한 변수 선언
-        try:
-            base_file_name = os.path.basename(target_report)
-            logger.info(f"매출 정보 추출 시작: {base_file_name}")
-
-            year = base_file_name.split("_")[0][:4]
-            quater_file = base_file_name.split("_")[4]
-
-            report_type_map = {"Q1": "1Q", "Q3": "3Q", "semiannual": "2Q", "annual": "4Q"}
-
-            quater = report_type_map.get(quater_file, "")
-            # logger.info(f"보고서 기간: {year}.{quater}")
-
-            # 3. fitz를 사용하여 목차 내용 추출
-            doc = await asyncio.to_thread(fitz.open, target_report)
-            toc = await asyncio.to_thread(doc.get_toc)  # 목차 가져오기 비동기로 처리
-            # logger.info(f"목차 항목 수: {len(toc)}")
-
-            if not toc:
-                logger.error("목차를 찾을 수 없습니다.")
-                return ""
-
-            # 4. 목차에서 'II. 사업의 내용' 및 '매출 및 수주상황' 찾기
-            business_content_start_page = None
-            business_content_end_page = None
-            sales_section_start_page = None
-            sales_section_end_page = None
-
-            # 페이지 범위 정보 디버깅을 위한 함수
-            # def log_page_info(prefix, page_var, page_num):
-            #     if page_var is not None:
-            #         logger.info(f"{prefix} {page_var}(값: {page_num})")
-            #     else:
-            #         logger.info(f"{prefix} 없음")
-
-            for i, item in enumerate(toc):
-                level, title, page_num = item
-                # logger.debug(f"목차 항목: {level} - {title} - {page_num}")
-
-                # 'II. 사업의 내용' 목차 찾기
-                if "사업의 내용" in title and (title.startswith("II.") or title.startswith("Ⅱ.")):
-                    business_content_start_page = page_num - 1  # 0-based 페이지 번호로 변환
-                    # logger.info(f"'사업의 내용' 섹션 시작: 페이지 {business_content_start_page+1}")
-
-                    # 다음 대분류 목차를 찾아 끝 페이지 결정
-                    for next_item in toc[i + 1 :]:
-                        next_level, next_title, next_page = next_item
-                        if next_level <= level and (next_title.startswith("III.") or next_title.startswith("Ⅲ.") or next_title.startswith("IV.") or next_title.startswith("Ⅳ.")):
-                            business_content_end_page = next_page - 2  # 다음 대분류 시작 전 페이지
-                            # logger.info(f"'사업의 내용' 섹션 종료: 페이지 {business_content_end_page+1}")
-                            break
-
-                    # 다음 대분류가 없으면 문서 끝까지를 범위로 설정
-                    if business_content_end_page is None:
-                        business_content_end_page = len(doc) - 1
-                        # logger.info(f"'사업의 내용' 섹션 종료(문서 끝): 페이지 {business_content_end_page+1}")
-
-                # '매출 및 수주상황' 목차 찾기 (II. 사업의 내용 아래에 있어야 함)
-                if business_content_start_page is not None and "매출" in title and "수주" in title:
-                    sales_section_start_page = page_num - 1  # 0-based 페이지 번호로 변환
-                    # logger.info(f"'매출 및 수주상황' 섹션 시작: 페이지 {sales_section_start_page+1}")
-
-                    # 다음 동일 레벨 또는 상위 레벨 목차를 찾아 끝 페이지 결정
-                    for next_item in toc[i + 1 :]:
-                        next_level, next_title, next_page = next_item
-                        if next_level <= level:
-                            sales_section_end_page = next_page - 2  # 다음 섹션 시작 전 페이지
-                            # logger.info(f"'매출 및 수주상황' 섹션 종료: 페이지 {sales_section_end_page+1}")
-                            break
-
-                    # 다음 섹션이 없으면 사업의 내용 끝까지를 범위로 설정
-                    if sales_section_end_page is None and business_content_end_page is not None:
-                        sales_section_end_page = business_content_end_page
-                        # logger.info(f"'매출 및 수주상황' 섹션 종료(사업의 내용 끝): 페이지 {sales_section_end_page+1}")
-
-                    break  # 매출 및 수주상황 섹션을 찾았으므로 검색 종료
-
-            # 5. 페이지 범위 결정 (매출 및 수주상황을 찾지 못했다면 사업의 내용 전체를 사용)
-            start_page = None
-            end_page = None
-
-            # 각 값의 상태 기록
-            # log_page_info("sales_section_start_page:", "변수", sales_section_start_page)
-            # log_page_info("sales_section_end_page:", "변수", sales_section_end_page)
-            # log_page_info("business_content_start_page:", "변수", business_content_start_page)
-            # log_page_info("business_content_end_page:", "변수", business_content_end_page)
-
-            if sales_section_start_page is not None and sales_section_end_page is not None:
-                start_page = sales_section_start_page
-                end_page = sales_section_end_page
-                logger.info(f"{year}.{quater}: '매출 및 수주상황' 섹션을 찾았습니다: 페이지 {start_page + 1}~{end_page + 1}")
-            elif business_content_start_page is not None and business_content_end_page is not None:
-                start_page = business_content_start_page
-                end_page = business_content_end_page
-                logger.info(f"{year}.{quater}: 'II. 사업의 내용' 섹션을 찾았습니다: 페이지 {start_page + 1}~{end_page + 1}")
-            else:
-                logger.error(f"{year}.{quater}: 매출 및 수주상황, 사업의 내용 섹션을 찾을 수 없습니다.")
-                return ""
-
-            # 추가 검증
-            if start_page is None or end_page is None:
-                logger.error(f"페이지 범위가 제대로 설정되지 않았습니다: start_page={start_page}, end_page={end_page}")
-                return ""
-
-            if end_page < start_page:
-                logger.error(f"페이지 범위가 잘못되었습니다: start_page={start_page}, end_page={end_page}")
-                # 안전 처리: end_page가 start_page보다 작으면 end_page를 start_page로 설정
-                end_page = start_page
-
-            # 6. pdfplumber를 사용하여 해당 페이지 내용 추출
-            extracted_text = "-----------------------------\n\n"
-            extracted_text += f"<{year}.{quater} 데이터>\n\n"
-            extracted_text += f"<기수>제 {business_report_info.get('period_number')}기</기수>\n"
-            extracted_text += f"<사업년도>{business_report_info.get('business_year_start')} ~ {business_report_info.get('business_year_end')}</사업년도>\n"
-
-            # pdfplumber 사용 (try/except 블록 적용)
-            try:
-                # logger.info(f"PDF 페이지 추출 시작: {start_page+1}~{end_page+1}")
-
-                with pdfplumber.open(target_report) as pdf:
-                    # 페이지 범위가 너무 크면 최대 페이지로 제한
-                    max_pages = 30
-                    pdf_length = len(pdf.pages)
-                    # logger.info(f"PDF 총 페이지 수: {pdf_length}")
-
-                    # 페이지 범위 유효성 검사 및 조정
-                    if start_page >= pdf_length:
-                        logger.warning(f"시작 페이지({start_page + 1})가 PDF 길이({pdf_length})를 초과합니다")
-                        start_page = max(0, pdf_length - 1)
-
-                    if end_page >= pdf_length:
-                        logger.warning(f"종료 페이지({end_page + 1})가 PDF 길이({pdf_length})를 초과합니다")
-                        end_page = pdf_length - 1
-
-                    # 범위가 너무 넓으면 제한
-                    effective_end_page = end_page
-                    if end_page - start_page > max_pages:
-                        logger.warning(f"페이지 범위가 너무 큽니다({start_page + 1}~{end_page + 1}). 처음 {max_pages}페이지만 추출합니다.")
-                        effective_end_page = start_page + max_pages
-
-                    logger.info(f"{year}.{quater}: 최종 추출 페이지 범위: {start_page + 1}~{effective_end_page + 1}")
-
-                    # 페이지 추출
-                    for page_num in range(start_page, effective_end_page + 1):
-                        try:
-                            page = pdf.pages[page_num]
-                            text = page.extract_text()  # 동기 처리 (더 안정적)
-                            if text:
-                                extracted_text += f"<Page.{page_num + 1}>\n{text}\n</Page.{page_num + 1}>\n"
-                                # logger.debug(f"페이지 {page_num + 1} 추출 완료: {len(text)} 글자")
-                        except Exception as page_error:
-                            logger.error(f"페이지 {page_num + 1} 추출 오류: {str(page_error)}")
-
-            except Exception as pdf_error:
-                logger.exception(f"PDF 처리 중 오류: {str(pdf_error)}")
-                # 오류가 발생했더라도, 지금까지 추출한 내용은 반환
-
-            extracted_text += f"## {year}.{quater} 데이터\n"
-
-            # 추출된 결과 확인
-            if not extracted_text or extracted_text.count("<Page.") == 0:
-                logger.error("추출된 텍스트가 없습니다.")
-                return ""
-
-            logger.info(f"텍스트 추출 완료: {len(extracted_text)} 글자, {extracted_text.count('<Page.')} 페이지")
-            return extracted_text
-
-        except Exception as e:
-            logger.exception(f"Error extracting revenue breakdown data: {str(e)}")
-            return ""
-
-        finally:
-            # 리소스 정리
-            if doc is not None:
-                try:
-                    doc.close()
-                    logger.debug("PDF 문서 리소스 해제 완료")
-                except Exception as close_error:
-                    logger.error(f"PDF 문서 리소스 해제 오류: {str(close_error)}")
-
-    async def improved_extract_revenue_breakdown_data(self, target_report: str, business_report_info: Dict[str, Any]):
-        """
         Gemini 방식을 도입한 하이브리드 방법으로 사업보고서에서 매출 및 수주 현황 정보를 추출합니다.
         - page.crop().extract_table(settings) 사용
         - 명시적인 테이블 추출 전략 적용
-        - 마크다운 테이블 형태로 출력
+        - pandas DataFrame으로 구조화
+        - 단위 정보 추출
 
         Args:
             target_report: 사업보고서 파일 경로
-            business_report_info: 사업보고서 정보 딕셔너리
         return :
-            매출 및 수주상황 섹션 텍스트 (테이블 + 주변 텍스트)
+            Dict[str, Any]: {
+                'text': 텍스트 형태의 추출 결과,
+                'tables': [
+                    {
+                        'table_id': int,
+                        'page_num': int,
+                        'dataframe': pandas.DataFrame,
+                        'unit_info': str,
+                        'markdown': str
+                    }
+                ],
+                'summary': 추출 요약 정보
+            }
         """
         doc = None
         try:
+            if not os.path.exists(target_report):
+                logger.error(f"파일을 찾을 수 없습니다: {target_report}")
+                return ""
+
             base_file_name = os.path.basename(target_report)
             logger.info(f"매출 정보 추출 시작 (Gemini 방식): {base_file_name}")
 
@@ -886,16 +711,25 @@ class FinancialDataServicePDF:
 
                 if business_content_start_page is not None and "매출" in title and "수주" in title:
                     sales_section_start_page = page_num - 1
+                    logger.info(f"✅ '매출 및 수주상황' 섹션 발견: '{title}' (L{level}, P{page_num}). 시작 페이지 인덱스: {sales_section_start_page}")
 
                     for next_item in toc[i + 1 :]:
                         next_level, next_title, next_page = next_item
+                        logger.info(f"  ➡️ 다음 목차 확인 중: '{next_title}' (L{next_level}, P{next_page})")
                         if next_level <= level:
-                            sales_section_end_page = next_page - 2
+                            sales_section_end_page = next_page - 1
+                            logger.info(f"  ✅ 종료 조건 충족 (next_level({next_level}) <= level({level})). 종료 페이지 인덱스 설정: {next_page} - 1 = {sales_section_end_page}")
                             break
+                        else:
+                            logger.info(f"  ℹ️ 종료 조건 미충족 (next_level({next_level}) > level({level})). 계속 탐색.")
 
-                    if sales_section_end_page is None and business_content_end_page is not None:
+                    if sales_section_end_page is None:
                         sales_section_end_page = business_content_end_page
-                    break
+                        logger.info(f"  ⚠️ 다음 섹션을 찾지 못함. '사업의 내용' 끝 페이지를 사용: {sales_section_end_page}")
+
+            if not business_content_start_page:
+                logger.error(f"{year}.{quater}: 'II. 사업의 내용' 섹션을 찾을 수 없습니다.")
+                return ""
 
             # 페이지 범위 결정
             start_page = None
@@ -914,21 +748,26 @@ class FinancialDataServicePDF:
                 return ""
 
             if start_page is None or end_page is None:
-                logger.error(f"페이지 범위가 제대로 설정되지 않았습니다: start_page={start_page}, end_page={end_page}")
+                logger.error(f"{year}.{quater}: 유효한 페이지 범위를 결정할 수 없습니다.")
                 return ""
 
-            if end_page < start_page:
-                logger.error(f"페이지 범위가 잘못되었습니다: start_page={start_page}, end_page={end_page}")
-                end_page = start_page
+            # 추출할 페이지 수 제한
+            if end_page - start_page > 30:  # 30페이지 이상이면 제한
+                logger.warning(f"{year}.{quater}: 페이지 범위가 너무 큽니다 ({end_page - start_page} 페이지). 30 페이지만 처리합니다.")
+                end_page = start_page + 29
 
-            # Gemini 방식으로 페이지 내용 추출
+            # 결과 저장 구조체 초기화
+            result = {"text": "", "tables": [], "summary": {"year": year, "quarter": quater, "total_tables": 0, "total_pages": 0, "page_range": f"{start_page + 1}~{end_page + 1}"}}
+
             extracted_text = "---------\n"
-            extracted_text += f"## {year}.{quater} 데이터\n"
+            extracted_text += f"## {year}.{quater} 정기보고서\n"
             extracted_text += f"### 기수: {business_report_info.get('period_number')} 기\n"
             extracted_text += f"### 사업년도: {business_report_info.get('business_year_start')} ~ {business_report_info.get('business_year_end')}\n"
 
             try:
                 extracted_page_content = ""
+                all_page_tables = []  # 모든 페이지의 테이블 정보를 저장
+
                 with pdfplumber.open(target_report) as pdf:
                     max_pages = 30
                     pdf_length = len(pdf.pages)
@@ -946,35 +785,69 @@ class FinancialDataServicePDF:
                         logger.warning(f"페이지 범위가 너무 큽니다({start_page + 1}~{end_page + 1}). 처음 {max_pages}페이지만 추출합니다.")
                         effective_end_page = start_page + max_pages
 
-                    logger.info(f"{year}.{quater}: 최종 추출 페이지 범위: {start_page + 1}~{effective_end_page + 1}")
-
-                    # Page 정보 추가
+                    # logger.info(f"{year}.{quater}: 최종 추출 페이지 범위: {start_page + 1}~{effective_end_page + 1}")
                     extracted_text += f"### Page : {start_page + 1} ~ {effective_end_page + 1}\n\n"
+                    result["summary"]["page_range"] = f"{start_page + 1}~{effective_end_page + 1}"
+                    result["summary"]["total_pages"] = effective_end_page - start_page + 1
 
-                    # 각 페이지에서 Gemini 방식 추출 수행
+                    # 1단계: 모든 페이지에서 개별적으로 테이블 추출
                     for page_num in range(start_page, effective_end_page + 1):
                         try:
                             page = pdf.pages[page_num]
-                            page_content = await self._extract_page_gemini_style(page, page_num + 1)
-                            if page_content:
-                                # extracted_text += f"<Page.{page_num + 1}>\n{page_content}\n</Page.{page_num + 1}>\n"
-                                extracted_page_content += f"{page_content}\n"
-                                extracted_text += f"{page_content}\n"
-                                # logger.debug(f"페이지 {page_num + 1} Gemini 방식 추출 완료: {len(page_content)} 글자")
+                            page_result = await extract_page_gemini_style_with_dataframe(page, page_num + 1)
+
+                            if page_result:
+                                # 텍스트 결과 누적
+                                if page_result["text"]:
+                                    extracted_page_content += f"{page_result['text']}\n"
+
+                                # 페이지별 테이블 정보 저장
+                                if page_result["tables"]:
+                                    all_page_tables.append({"page_num": page_num + 1, "tables": page_result["tables"]})
+
+                                # logger.debug(f"페이지 {page_num + 1} Gemini 방식 추출 완료: 텍스트 {len(page_result['text'])}글자, 테이블 {len(page_result['tables'])}개")
                         except Exception as page_error:
                             logger.error(f"페이지 {page_num + 1} Gemini 방식 추출 오류: {str(page_error)}")
 
+                    # 2단계: 페이지 간 테이블 연결성 분석 및 병합
+                    if all_page_tables:
+                        # logger.info(f"테이블 연결성 분석 시작: 총 {len(all_page_tables)}개 페이지, {sum(len(pt['tables']) for pt in all_page_tables)}개 테이블")
+
+                        merged_tables = analyze_table_structure_across_pages(all_page_tables)
+
+                        # 병합된 테이블들을 결과에 저장
+                        result["tables"] = merged_tables
+                        result["summary"]["total_tables"] = len(merged_tables)
+
+                        # # 병합된 테이블 정보 로깅
+                        # for i, table_info in enumerate(merged_tables):
+                        #     pages_info = table_info.get("merged_from_pages", [table_info.get("page_num")])
+                        #     table_count = table_info.get("table_count_in_group", 1)
+                        #     df_shape = table_info.get("dataframe").shape if table_info.get("dataframe") is not None else (0, 0)
+
+                        #     logger.info(f"병합된 테이블 {i + 1}: 페이지 {pages_info}, {table_count}개 테이블 병합, DataFrame 크기: {df_shape}")
+
+                    # 3단계: 최종 텍스트 생성 (병합된 테이블로 원본 텍스트의 테이블 부분 대체)
+                    if result["tables"]:
+                        # 병합된 테이블로 원본 텍스트 재구성 (완벽한 원본 문서 구조 유지)
+                        final_page_content = reconstruct_text_with_merged_tables(extracted_page_content, result["tables"])
+                        extracted_text += final_page_content
+                    else:
+                        # 병합된 테이블이 없으면 원본 텍스트 사용
+                        extracted_text += extracted_page_content
+
             except Exception as pdf_error:
-                logger.exception(f"PDF Gemini 방식 처리 중 오류: {str(pdf_error)}")
+                logger.exception(f"PDF 처리 중 오류: {str(pdf_error)}")
 
             # extracted_text += f"\n\n</{year}.{quater} 데이터>\n"
+            result["text"] = extracted_text
 
             if not extracted_page_content or not extracted_page_content.strip():
                 logger.error("추출된 텍스트가 없습니다.")
                 return ""
 
-            logger.info(f"Gemini 방식 텍스트 추출 완료: {len(extracted_text)} 글자, {extracted_text.count('<Page.')} 페이지")
-            return extracted_text
+            logger.info(f"텍스트 추출 완료: {len(extracted_text)} 글자, {result['summary']['total_tables']} 테이블 (병합 후), {result['summary']['total_pages']} 페이지")
+            return result
 
         except Exception as e:
             logger.exception(f"Error extracting revenue breakdown data (Gemini style): {str(e)}")
@@ -988,166 +861,25 @@ class FinancialDataServicePDF:
                 except Exception as close_error:
                     logger.error(f"PDF 문서 리소스 해제 오류: {str(close_error)}")
 
-    def _clean_extracted_text(self, text: str) -> str:
+    async def improved_extract_revenue_breakdown_data(self, target_report: str, business_report_info: Dict[str, Any]):
         """
-        추출된 텍스트에서 불필요한 라인을 제거합니다.
+        Gemini 방식을 도입한 하이브리드 방법으로 사업보고서에서 매출 및 수주 현황 정보를 추출합니다.
+        - page.crop().extract_table(settings) 사용
+        - 명시적인 테이블 추출 전략 적용
+        - 마크다운 테이블 형태로 출력
 
         Args:
-            text: 정리할 텍스트
-
-        Returns:
-            str: 정리된 텍스트
+            target_report: 사업보고서 파일 경로
+            business_report_info: 사업보고서 정보 딕셔너리
+        return :
+            매출 및 수주상황 섹션 텍스트 (테이블 + 주변 텍스트)
         """
-        if not text:
-            return text
 
-        lines = text.split("\n")
-        cleaned_lines = []
+        result = await self.extract_revenue_breakdown_data(target_report, business_report_info)
 
-        for line in lines:
-            # '전자공시시스템 dart.fss.or.kr Page' 문구가 있는 라인 제거
-            if "전자공시시스템 dart.fss.or.kr" in line:
-                continue
-            cleaned_lines.append(line)
-
-        return "\n".join(cleaned_lines)
-
-    async def _extract_page_gemini_style(self, page, page_num: int):
-        """
-        Gemini 방식으로 단일 페이지에서 테이블과 텍스트를 추출합니다.
-
-        핵심 차이점:
-        1. page.crop(bbox).extract_table(settings) 사용
-        2. 명시적인 테이블 추출 전략 적용
-        3. 정교한 영역 분할
-
-        Args:
-            page: pdfplumber page 객체
-            page_num: 페이지 번호
-
-        Returns:
-            str: 추출된 텍스트 (테이블 + 주변 텍스트)
-        """
-        try:
-            page_content = ""
-
-            # 1. 페이지에 있는 테이블들의 위치 정보 찾기
-            tables = page.find_tables()
-
-            if not tables:
-                # 테이블이 없으면 전체를 텍스트로 추출
-                text = page.extract_text()
-                if text:
-                    cleaned_text = self._clean_extracted_text(text)
-                    page_content += cleaned_text
-                return page_content
-
-            logger.debug(f"페이지 {page_num}에서 {len(tables)} 개의 테이블을 발견했습니다 (Gemini 방식).")
-
-            # 2. 테이블들을 Y 좌표 기준으로 정렬
-            sorted_tables = sorted(tables, key=lambda t: t.bbox[1])  # Y 좌표(상단) 기준 정렬
-
-            current_y = 0  # 페이지 상단부터 시작
-
-            for i, table in enumerate(sorted_tables):
-                table_bbox = table.bbox  # (x0, top, x1, bottom)
-
-                # 3. 테이블 '위쪽' 영역을 잘라내서 텍스트 추출
-                if table_bbox[1] > current_y:  # 테이블 상단이 현재 Y 위치보다 아래에 있으면
-                    try:
-                        top_part_bbox = (0, current_y, page.width, table_bbox[1])
-                        text_above_table = page.crop(top_part_bbox).extract_text()
-                        if text_above_table and text_above_table.strip():
-                            cleaned_text = self._clean_extracted_text(text_above_table)
-                            if cleaned_text.strip():
-                                page_content += f"{cleaned_text.strip()}\n"
-                    except Exception as crop_error:
-                        logger.debug(f"테이블 {i + 1} 위쪽 텍스트 추출 오류: {str(crop_error)}")
-
-                # 4. 테이블 영역을 잘라내서 구조화된 데이터로 추출
-                try:
-                    # Gemini 방식의 핵심: 명시적인 테이블 추출 전략 사용
-                    table_settings = {
-                        "vertical_strategy": "lines",
-                        "horizontal_strategy": "lines",
-                        # 추가 정교한 설정
-                        "snap_tolerance": 3,  # 라인 스냅 허용 오차
-                        "join_tolerance": 3,  # 라인 결합 허용 오차
-                        "edge_min_length": 3,  # 최소 엣지 길이
-                        "min_words_vertical": 1,  # 세로 구분 최소 단어 수
-                        "min_words_horizontal": 1,  # 가로 구분 최소 단어 수
-                    }
-
-                    structured_table = page.crop(table_bbox).extract_table(table_settings)
-
-                    if structured_table and len(structured_table) > 0:
-                        # 구조화된 테이블을 마크다운 테이블 형태로 변환
-                        for row_idx, row in enumerate(structured_table):
-                            if row and any(cell for cell in row if cell):  # 빈 행이 아닌 경우만
-                                # None 값을 빈 문자열로 변환하고 각 셀 정리
-                                cleaned_row = []
-                                for cell in row:
-                                    if cell:
-                                        # 셀 내용 정리: 불필요한 공백 제거, 줄바꿈을 공백으로 변환
-                                        clean_cell = str(cell).strip().replace("\n", " ").replace("\r", "")
-                                        # 연속된 공백을 하나로 통합
-                                        clean_cell = " ".join(clean_cell.split())
-                                        cleaned_row.append(clean_cell)
-                                    else:
-                                        cleaned_row.append("")
-
-                                page_content += "| " + " | ".join(cleaned_row) + " |\n"
-
-                                # 헤더 행 다음에 구분선 추가
-                                if row_idx == 0 and len(structured_table) > 1:
-                                    separator = ["---"] * len(cleaned_row)
-                                    page_content += "| " + " | ".join(separator) + " |\n"
-
-                        page_content += "\n"
-                        logger.debug(f"테이블 {i + 1} 구조화 추출 성공 (Gemini 방식): {len(structured_table)} 행")
-                    else:
-                        raise Exception("구조화된 테이블 추출 실패")
-
-                except Exception as table_error:
-                    logger.debug(f"테이블 {i + 1} 구조화 추출 오류 (Gemini 방식): {str(table_error)}")
-                    # 폴백: 테이블 영역을 텍스트로 추출
-                    try:
-                        table_text = page.crop(table_bbox).extract_text()
-                        if table_text and table_text.strip():
-                            cleaned_table_text = self._clean_extracted_text(table_text)
-                            if cleaned_table_text.strip():
-                                page_content += f"[테이블 {i + 1} - 텍스트 형태]\n{cleaned_table_text.strip()}\n\n"
-                                logger.debug(f"테이블 {i + 1} 텍스트 추출 성공 (폴백): {len(cleaned_table_text)} 글자")
-                    except Exception as fallback_error:
-                        logger.error(f"테이블 {i + 1} 모든 추출 방법 실패: {str(fallback_error)}")
-
-                # 현재 Y 위치를 테이블 하단으로 업데이트
-                current_y = table_bbox[3]
-
-            # 5. 마지막 테이블 '아래쪽' 영역을 잘라내서 텍스트 추출
-            if current_y < page.height:
-                try:
-                    bottom_part_bbox = (0, current_y, page.width, page.height)
-                    text_below_table = page.crop(bottom_part_bbox).extract_text()
-                    if text_below_table and text_below_table.strip():
-                        cleaned_text = self._clean_extracted_text(text_below_table)
-                        if cleaned_text.strip():
-                            page_content += f"{cleaned_text.strip()}\n"
-                except Exception as crop_error:
-                    logger.debug(f"마지막 테이블 아래쪽 텍스트 추출 오류: {str(crop_error)}")
-
-            return page_content
-
-        except Exception as e:
-            logger.error(f"페이지 {page_num} Gemini 방식 추출 중 오류: {str(e)}")
-            # 오류가 발생하면 일반 텍스트 추출로 폴백
-            try:
-                fallback_text = page.extract_text()
-                if fallback_text:
-                    cleaned_fallback_text = self._clean_extracted_text(fallback_text)
-                    return f"[폴백 텍스트]\n{cleaned_fallback_text}\n"
-            except Exception as fallback_error:
-                logger.error(f"페이지 {page_num} 폴백 텍스트 추출 오류: {str(fallback_error)}")
+        if isinstance(result, dict):
+            return result.get("text")
+        else:
             return ""
 
     async def extract_business_report_info(self, target_report: str) -> Dict[str, Any]:
