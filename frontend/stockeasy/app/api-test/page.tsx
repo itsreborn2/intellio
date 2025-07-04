@@ -174,7 +174,7 @@ export default function ApiTestPage() {
                     onChange={(e) => setChartInterval(e.target.value)}
                     placeholder="예: 1m, 5m, 1h"
                   />
-                </div>
+              </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
