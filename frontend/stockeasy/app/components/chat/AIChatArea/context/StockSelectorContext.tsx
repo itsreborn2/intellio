@@ -191,7 +191,8 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
 
       try {
         // 1차 시도: Stock Data 컨테이너 API에서 종목 리스트 가져오기
-        const apiUrl = 'http://localhost:8001/api/v1/stock/list_for_stockai?gzip_enabled=true';
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_STOCK_DATA_URL;
+        const apiUrl = `${apiBaseUrl}/api/v1/stock/list_for_stockai?gzip_enabled=true`;
         
         const response = await fetch(apiUrl, { 
           headers: {

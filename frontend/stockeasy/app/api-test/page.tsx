@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2, Send, Copy, RefreshCw } from 'lucide-react'
 
 // 백엔드 API 기본 URL
-const API_BASE_URL = 'http://localhost:8001'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_STOCK_DATA_URL || '/stockdata' 
 
 interface IApiResponse {
   data?: any
