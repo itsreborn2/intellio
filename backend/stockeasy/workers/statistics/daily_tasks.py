@@ -4,7 +4,8 @@
 이 모듈은 매일 정해진 시간에 실행되어 하루 동안의 데이터를 수집하고 
 통계를 생성하는 Celery 태스크를 포함합니다.
 """
-import logging
+#import logging
+from loguru import logger
 from datetime import datetime, timedelta
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,9 +17,6 @@ from common.models.user import User
 from stockeasy.core.celery_app import celery
 from stockeasy.models.chat import StockChatSession, StockChatMessage
 from stockeasy.services.google_sheet_service import GoogleSheetService
-
-logger = logging.getLogger(__name__)
-
 
 @celery.task(
     bind=True,

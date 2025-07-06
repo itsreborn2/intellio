@@ -127,6 +127,8 @@ services:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
+      - ./logs/redis:/var/log/redis  # 로그 디렉토리 마운트
+    command: redis-server --logfile /var/log/redis/redis.log --loglevel notice
     networks:
       - app-network
 
