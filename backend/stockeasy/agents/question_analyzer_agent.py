@@ -338,18 +338,12 @@ class QuestionAnalyzerAgent(BaseAgent):
             # user_id 추출
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
+            user_email = user_context.get("user_email", None)
 
             # 대화 기록 확인
             conversation_history = state.get("conversation_history", [])
             logger.info(f"대화 기록 타입: {type(conversation_history)}, 길이: {len(conversation_history) if isinstance(conversation_history, list) else '알 수 없음'}")
-            # 대화 컨텍스트 의존성 분석
-            # 수정된 조건: 대화 기록이 2개 이상 있는지 확인
-            # 상용 서비스에 맞게 type 속성이 있는 경우도 처리
-            # has_valid_history = (
-            #     conversation_history and
-            #     isinstance(conversation_history, list) and
-            #     len(conversation_history) >= 1
-            # )
+
             has_valid_history = False  # 강제 비활성화
 
             if has_valid_history:
@@ -684,26 +678,38 @@ class QuestionAnalyzerAgent(BaseAgent):
 
             # 2. 최근 이슈 검색 및 목차 생성 비동기 함수
             async def search_issues_and_generate_toc():
+                #logger.info(f"search_issues_and_generate_toc 실행: {user_email} - {settings.ADMIN_IDS}, {user_email in settings.ADMIN_IDS}")
+                is_admin_and_prod = settings.ENV == "production" and user_email in settings.ADMIN_IDS
                 redis_client = self.redis_client
                 cache_key_prefix = "recent_issues_summary"
-                # user_id를 캐시 키에서 제외하여 종목별로 공통 캐시 사용
                 cache_key = f"{cache_key_prefix}:{stock_name}:{stock_code}"
 
-                # 1. 캐시에서 데이터 조회
-                cached_summary = await redis_client.get_key(cache_key)
+                recent_issues_summary = None
 
-                if cached_summary:
-                    logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시된 최근 이슈 요약 사용: {cache_key}")
-                    recent_issues_summary = cached_summary
-                else:
-                    logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시 없음, 최근 이슈 요약 생성: {cache_key}")
+                # 1. 관리자가 아닌 경우에만 캐시에서 조회
+                if not is_admin_and_prod:
+                    cached_summary = await redis_client.get_key(cache_key)
+                    if cached_summary:
+                        logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시된 최근 이슈 요약 사용: {cache_key}")
+                        recent_issues_summary = cached_summary
+
+                # 2. 캐시에 데이터가 없거나 관리자인 경우, 새로 생성하고 캐시에 저장
+                if recent_issues_summary is None:
+                    if is_admin_and_prod:
+                        logger.info(f"관리자({user_email}) 요청: 캐시를 건너뛰고 최근 이슈를 다시 검색 및 요약합니다.")
+                    else:
+                        logger.info(f"종목 [{stock_name}/{stock_code}]에 대한 캐시 없음, 최근 이슈 요약 생성: {cache_key}")
+
                     recent_issues_summary = await self.summarize_recent_issues(stock_name, stock_code, user_id)
-                    # 2. 생성된 요약을 캐시에 저장 (만료 시간: 1일 = 86400초) -> 2일로 변경(크레딧 문제때문에..)
-                    expire_time = 172800
+
+                    # 생성된 요약을 캐시에 저장
+                    expire_time = 259200  # 172800 2일 -> 3일
                     if settings.ENV == "development":
                         expire_time = 86400 * 7  # 개발버전은 7일단위.
                     await redis_client.set_key(cache_key, recent_issues_summary, expire=expire_time)
-                    logger.info(f"종목 [{stock_name}/{stock_code}]에 최근 이슈 요약 캐시 저장 (만료: 1일): {cache_key}")
+
+                    log_message_prefix = "관리자 요청으로 갱신된 " if is_admin_and_prod else ""
+                    logger.info(f"{log_message_prefix}최근 이슈 요약을 캐시에 저장 (만료: {expire_time}초): {cache_key}")
 
                 final_report_toc = await self.generate_dynamic_toc(query, recent_issues_summary, user_id)
                 return {"recent_issues_summary": recent_issues_summary, "final_report_toc": final_report_toc.model_dump()}

@@ -42,7 +42,11 @@ function formatKoreanCurrency(value: string | number | null | undefined): string
   
   // API에서 제공하는 값이 이미 억원 단위인 것으로 보임 (시가총액 "673" = 673억원)
   if (numValue >= 10000) {
-    return `${(numValue / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}조원`;
+    // 1000억원 이상이면 반올림하여 정수 조원으로 표시
+    return `${Math.round(numValue / 10000).toLocaleString('ko-KR')}조원`;
+  } else if (numValue >= 1000) {
+    // 1000억원 이상이면 반올림하여 정수 억원으로 표시
+    return `${Math.round(numValue).toLocaleString('ko-KR')}억원`;
   } else {
     return `${numValue.toLocaleString('ko-KR')}억원`;
   }
