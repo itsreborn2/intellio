@@ -188,6 +188,8 @@ export function LatestUpdates({ updatesDaily, updatesWeekly, onSelectUpdate }: L
       minWidth: 'unset',
       maxWidth: '420px',
       overflow: 'hidden',
+      // 모바일에서 입력창에 가려지는 것 방지를 위한 추가 속성
+      marginBottom: isMobile ? '60px' : '0',
     }}>
       <div style={{ display: 'flex', gap: '12px', alignItems: 'baseline', marginBottom: '8px' }}>
         {/* Column 1 */}

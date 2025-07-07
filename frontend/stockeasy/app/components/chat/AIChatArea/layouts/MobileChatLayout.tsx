@@ -93,7 +93,9 @@ export function MobileChatLayout({
       : `calc(${windowHeight}px - 110px - ${statusBarHeight}px)`, // 기본 모드일 때 (상단 헤더 추가 고려)
     width: '100%',
     padding: 0,
-    overscrollBehaviorY: 'none',
+    // 입력창에 가려지는 것을 방지하기 위한 하단 패딩 추가
+    paddingBottom: '60px', // 입력창 높이만큼 하단 패딩 추가
+    overscrollBehaviorY: 'contain', // 스크롤 바운스 효과 제한
   };
   
   return (
@@ -109,7 +111,7 @@ export function MobileChatLayout({
           
           ::-webkit-scrollbar-thumb {
             background-color: rgba(0, 0, 0, 0.2);
-            border-radius: 4px;
+            border-radius: 6px;
           }
           
           ::-webkit-scrollbar-track {

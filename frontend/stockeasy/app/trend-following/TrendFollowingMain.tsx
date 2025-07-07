@@ -13,6 +13,7 @@ import BreakoutSustainSection from './components/BreakoutSustainSection';
 import BreakoutFailSection from './components/BreakoutFailSection';
 import MarketMonitor from './components/MarketMonitor';
 import NewSectorEnter from './components/NewSectorEnter';
+import NewSectorOut from './components/NewSectorOut';
 import IndisrtongrsChart from '../components/IndisrtongrsChart';
 // @ts-ignore
 import High52Chart from './components/High52Chart';
@@ -223,6 +224,11 @@ export default function TrendFollowingMain() {
             <div className="mb-2 md:mb-4">
               <div className="bg-white rounded-[6px] shadow p-2 md:p-4 border border-gray-200">
                 <NewSectorEnter />
+              </div>
+            </div>
+            <div className="mb-2 md:mb-4">
+              <div className="bg-white rounded-[6px] shadow p-2 md:p-4 border border-gray-200">
+                <NewSectorOut />
               </div>
             </div>
             {/* 52주 신고가 주요 종목 섹션 - rs-rank/page.tsx와 완전히 동일하게 동작 */}

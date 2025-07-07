@@ -5,6 +5,51 @@ import React, { useEffect, useState, useRef } from 'react';
 import Papa from 'papaparse';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 
+// 신호등 색상 값 정의
+const signalColorValues = {
+  red: '#ef4444', // Tailwind red-500
+  yellow: '#fde047', // Tailwind yellow-400
+  green: '#22c55e', // Tailwind green-500
+  inactive: '#e5e7eb', // Tailwind gray-200
+};
+
+// 단일 신호등 컴포넌트 (하나의 신호만 표시)
+function SingleSignalLight({ signal }: { signal: string | null }) {
+  // 신호에 따른 색상 결정
+  let backgroundColor = signalColorValues.inactive;
+  let borderColor = signalColorValues.inactive + '80';
+  let shadowColor = 'rgba(229,231,235,0.5)';
+  
+  switch (signal?.toLowerCase()) {
+    case 'red':
+      backgroundColor = signalColorValues.red;
+      borderColor = signalColorValues.red + '80';
+      shadowColor = 'rgba(239,68,68,0.6)';
+      break;
+    case 'yellow':
+      backgroundColor = signalColorValues.yellow;
+      borderColor = signalColorValues.yellow + '80';
+      shadowColor = 'rgba(253,224,71,0.5)';
+      break;
+    case 'green':
+      backgroundColor = signalColorValues.green;
+      borderColor = signalColorValues.green + '80';
+      shadowColor = 'rgba(34,197,94,0.5)';
+      break;
+  }
+
+  return (
+    <span
+      className="rounded-full border-2 inline-block mx-0.5 w-4 h-4"
+      style={{
+        backgroundColor, 
+        borderColor,
+        boxShadow: `0 0 6px 1px ${shadowColor}`
+      }}
+    />
+  );
+}
+
 interface SectorData {
   산업: string;
   섹터: string;
@@ -13,6 +58,7 @@ interface SectorData {
   종목코드: string;
   종목명: string;
   등락률: string;
+  신호등: string; // 신호등 컬럼 추가
   시가총액: string;
   거래대금: string;
   포지션: string;
@@ -201,6 +247,7 @@ export default function SectorLeaderSection() {
               <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right w-[80px] hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>시가총액(억)</th>
               <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right w-[80px] hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>거래대금(억)</th>
               <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>포지션</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center w-[65px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>신호</th>
               <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
               <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center w-[60px] hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS_1M</th>
               <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
@@ -237,13 +284,16 @@ export default function SectorLeaderSection() {
                           <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right w-[60px] hidden md:table-cell">{formatNumberWithCommas(stock["시가총액"]) }</td>
                           <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right w-[60px] hidden md:table-cell">{formatNumberWithCommas(stock["거래대금"]) }</td>
                           <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-[60px]">
-                            <div className="mx-auto flex items-center justify-center w-16 h-5 bg-green-100 text-green-800 rounded-[4px]">
+                            <div className="mx-auto flex items-center justify-center w-20 h-6 bg-green-100 text-green-800 rounded-[4px]">
                               <span className="text-xs font-medium">
                                 {stock["포지션"].includes('유지') 
                                   ? stock["포지션"] 
                                   : `유지 ${stock["포지션"]}`}
                               </span>
                             </div>
+                          </td>
+                          <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-[65px]">
+                            {stock["신호등"] ? <SingleSignalLight signal={stock["신호등"]} /> : null}
                           </td>
                           <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-[60px]">{stock["RS"]}</td>
                           <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-[60px] hidden md:table-cell">{stock["RS_1M"]}</td>

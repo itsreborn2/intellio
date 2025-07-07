@@ -37,7 +37,7 @@ export function SendButton({ onClick, disabled, isProcessing }: SendButtonProps)
         backgroundColor: 'transparent',
         cursor: disabled || isProcessing ? 'not-allowed' : 'pointer',
         opacity: disabled || isProcessing ? 0.5 : 1,
-        marginRight: '8px'
+        marginRight: isMobile ? '6px' : '8px'
       }}
     >
       <svg

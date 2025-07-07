@@ -9,6 +9,51 @@ import TableCopyButton from './TableCopyButton';
 import { formatDateMMDD } from '../utils/dateUtils';
 import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip'; // GuideTooltip 컴포넌트 임포트 경로 수정
 
+// 신호등 색상 값 정의
+const signalColorValues = {
+  red: '#ef4444', // Tailwind red-500
+  yellow: '#fde047', // Tailwind yellow-400
+  green: '#22c55e', // Tailwind green-500
+  inactive: '#e5e7eb', // Tailwind gray-200
+};
+
+// 단일 신호등 컴포넌트 (하나의 신호만 표시)
+function SingleSignalLight({ signal }: { signal: string | null }) {
+  // 신호에 따른 색상 결정
+  let backgroundColor = signalColorValues.inactive;
+  let borderColor = signalColorValues.inactive + '80';
+  let shadowColor = 'rgba(229,231,235,0.5)';
+  
+  switch (signal?.toLowerCase()) {
+    case 'red':
+      backgroundColor = signalColorValues.red;
+      borderColor = signalColorValues.red + '80';
+      shadowColor = 'rgba(239,68,68,0.6)';
+      break;
+    case 'yellow':
+      backgroundColor = signalColorValues.yellow;
+      borderColor = signalColorValues.yellow + '80';
+      shadowColor = 'rgba(253,224,71,0.5)';
+      break;
+    case 'green':
+      backgroundColor = signalColorValues.green;
+      borderColor = signalColorValues.green + '80';
+      shadowColor = 'rgba(34,197,94,0.5)';
+      break;
+  }
+
+  return (
+    <span
+      className="rounded-full border-2 inline-block mx-0.5 w-4 h-4"
+      style={{
+        backgroundColor, 
+        borderColor,
+        boxShadow: `0 0 6px 1px ${shadowColor}`
+      }}
+    />
+  );
+}
+
 // CSV 데이터를 파싱한 결과를 위한 인터페이스
 interface CSVData {
   headers: string[];
@@ -31,6 +76,7 @@ interface ETFData {
   changePercent: number;
   volume: number;
   marketCap: number; // 시가총액
+  signal: string | null; // 신호등 상태(red, yellow, green, 또는 null)
 }
 
 // 정렬 타입 정의
@@ -176,97 +222,43 @@ export default function ETFCurrentTable() {
   const tableRef = useRef<HTMLTableElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
-  // 개별 ETF 차트 데이터 관련 티커 목록 및 매핑 테이블 제거됨
-  
-  // 개별 ETF 차트 데이터 로딩 관련 함수들(loadPriceData, loadAllPriceData, normalizeTicker) 제거됨
-  
-  // 업데이트 날짜와 시간을 파일 수정 정보로부터 로드하는 함수
-  const loadUpdateDate = async () => {
-    try {
-      // GET 요청으로 etf_table.csv 파일의 수정 날짜를 가져옴
-      // 캐시를 방지하기 위해 타임스탬프 추가
-      const etfFilePath = '/requestfile/etf_sector/etf_table.csv?t=' + Date.now();
-      
-      const response = await fetch(etfFilePath, { 
-        method: 'GET',
-        cache: 'no-store',
-        headers: {
-          'Pragma': 'no-cache',
-          'Cache-Control': 'no-cache'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`ETF 테이블 파일 접근 실패: ${response.status}`);
-      }
-      
-      // 응답 헤더에서 Last-Modified 정보 추출
-      const lastModified = response.headers.get('Last-Modified');
-      
-      if (lastModified) {
-        // Last-Modified 날짜를 Date 객체로 변환
-        const modifiedDate = new Date(lastModified);
-        
-        // 날짜 형식 변환 (M/DD 형식 - 예: 5/10)
-        const month = String(modifiedDate.getMonth() + 1); // 앞의 0 제거
-        const day = String(modifiedDate.getDate()).padStart(2, '0'); // 일은 두 자리 유지
-        
-        // 시간 형식 변환 (HH:MM 형식 - 예: 14:30)
-        const hours = String(modifiedDate.getHours()).padStart(2, '0');
-        const minutes = String(modifiedDate.getMinutes()).padStart(2, '0');
-        
-        // 날짜와 시간을 포함한 형식으로 변환 (M/DD HH:MM)
-        const formattedDate = `${month}/${day} ${hours}:${minutes}`;
-        
-        // 업데이트 날짜 설정
-        setUpdateDate(formattedDate);
-      } else {
-        console.error('ETFCurrentTable: 파일의 수정 날짜 정보를 가져올 수 없습니다.');
-        
-        // 파일의 수정 날짜를 가져올 수 없는 경우 현재 날짜와 시간 사용
-        const now = new Date();
-        const month = String(now.getMonth() + 1); // 앞의 0 제거
-        const day = String(now.getDate()).padStart(2, '0'); // 일은 두 자리 유지
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        const formattedDate = `${month}/${day} ${hours}:${minutes}`;
-        setUpdateDate(formattedDate);
-      }
-    } catch (err) {
-      console.error('ETFCurrentTable: 업데이트 날짜 로드 중 오류 발생:', err);
-      // 오류 발생 시 현재 날짜와 시간 사용
-      const now = new Date();
-      const month = String(now.getMonth() + 1); // 앞의 0 제거
-      const day = String(now.getDate()).padStart(2, '0'); // 일은 두 자리 유지
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const formattedDate = `${month}/${day} ${hours}:${minutes}`;
-      setUpdateDate(formattedDate);
-    }
-  };
-
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       setError(null);
-      
-      await loadUpdateDate(); // 새로운 업데이트 날짜 로드 함수 호출
 
       try {
         // etf_table.csv만 로드하여 테이블 구성
         const response = await fetch('/requestfile/etf_sector/etf_table.csv?t=' + Date.now());
         if (!response.ok) throw new Error(`etf_table.csv 로드 실패: ${response.status}`);
+
         const csvText = await response.text();
         const result = Papa.parse<MaListData>(csvText, {
           header: true,
           skipEmptyLines: true,
           dynamicTyping: false,
         });
+
         if (result.errors.length > 0) console.error('etf_table.csv 파싱 오류:', result.errors);
         const rows = result.data;
         // 종목명 및 티커 매핑
         const maMap: Record<string, MaListData> = {};
         const tickerMap: Record<string, string> = {};
+
+        // 저장시간 정보 처리 (첫 번째 행에서 찾기)
+        if (rows.length > 0 && rows[0]['저장시간']) {
+          setUpdateDate(rows[0]['저장시간']);
+        } else {
+          // 저장시간 정보가 없는 경우 현재 날짜와 시간 사용
+          const now = new Date();
+          const month = String(now.getMonth() + 1); // 앞의 0 제거
+          const day = String(now.getDate()).padStart(2, '0'); // 일은 두 자리 유지
+          const hours = String(now.getHours()).padStart(2, '0');
+          const minutes = String(now.getMinutes()).padStart(2, '0');
+          const formattedDate = `${month}/${day} ${hours}:${minutes}`;
+          setUpdateDate(formattedDate);
+        }
+
         rows.forEach(r => {
           const code = r['종목코드'].padStart(6, '0');
           const name = r['종목명'].trim();
@@ -275,6 +267,7 @@ export default function ETFCurrentTable() {
         });
         setMaListMap(maMap);
         setTickerMappingInfo({ tickerMap, stockNameMap: tickerMap });
+        
         // 산업별 그룹화
         const grouped: GroupedData = {};
         rows.forEach(r => {
@@ -288,9 +281,11 @@ export default function ETFCurrentTable() {
             '포지션': r['포지션'],
             '20일 이격': r['20일 이격'],
             '돌파/이탈': r['돌파/이탈'], // 수정
-            '대표종목(RS)': r['대표종목(RS)']
+            '대표종목(RS)': r['대표종목(RS)'],
+            '신호등': r['신호등'] // 신호등 컬럼 추가
           });
         });
+        
         const processedRows = rows.map(r => ({
           ...r,
           '티커': r['종목코드'] ? String(r['종목코드']).padStart(6, '0') : undefined
@@ -770,6 +765,29 @@ const orderedIndustries = Object.keys(sortedData);
                   </div>
                 </GuideTooltip>
               </th>
+              {/* 신호등 헤더 추가 */}
+              <th
+                key="신호"
+                scope="col"
+                className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider cursor-help border border-gray-200"
+                style={{
+                  color: 'var(--text-muted-color, var(--text-muted-color-fallback))',
+                  width: '60px',
+                  height: '35px'
+                }}
+              >
+                <GuideTooltip
+                  title="신호 지표란?"
+                  description="신호 색상으로 현재 ETF의 시장 상태를 표시합니다. 파란색은 매수를 해도 좋은 상태, 노란색은 매수에 주의해야하는 상태, 빨간색은 매수를 하면 안되는 상태를 의미합니다."
+                  side="top"
+                  width="min(90vw, 360px)" // 반응형 너비
+                  collisionPadding={{ left: 260 }} // 왼쪽 여백
+                >
+                  <div className="flex justify-center items-center">
+                    신호
+                  </div>
+                </GuideTooltip>
+              </th>
               {['20일 이격', '돌파/이탈', '대표종목(RS)'].map((header) => (
                 <th
                   key={header}
@@ -888,6 +906,12 @@ const orderedIndustries = Object.keys(sortedData);
                       {/* 포지션 상태 표시 */}
                       <div className="flex items-center justify-center">
                         {renderPositionBadge(row['종목명'])}
+                      </div>
+                    </td>
+                    {/* 신호등 컬럼 추가 */}
+                    <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '60px', height: '16px' }}>
+                      <div className="flex items-center justify-center">
+                        <SingleSignalLight signal={row['신호등'] || null} />
                       </div>
                     </td>
                     {['20일 이격', '돌파/이탈', '대표종목(RS)'].map((header) => (
@@ -1010,4 +1034,8 @@ interface MaListData {
   포지션: string;
   '20일 이격': string; // 또는 number
   '대표종목(RS)': string;
+  '신호등'?: string; // 선택적 속성(존재할 수도, 안할 수도 있음)
+  '저장시간'?: string; // CSV 파일에 포함된 저장 시간 정보 (MM/DD HH:MM 형식)
 }
+
+// ...
