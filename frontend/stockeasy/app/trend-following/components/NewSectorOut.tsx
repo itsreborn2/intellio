@@ -1,4 +1,4 @@
-// frontend/stockeasy/app/trend-following/components/NewSectorEnter.tsx
+// frontend/stockeasy/app/trend-following/components/NewSectorOut.tsx
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -6,17 +6,31 @@ import Papa from 'papaparse';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 // import { TableCopyButton } from '@/app/components/TableCopyButton';
 
+interface SectorData {
+  섹터: string;
+  '산업 등락률': string;
+  종목명: string;
+  등락률: string;
+  포지션: string;
+  신호등: string;
+  '20일 이격': string;
+  '돌파/이탈': string;
+  '대표종목(RS)': string;
+
+  // 문자열 키로 액세스할 수 있도록 인덱스 시그니처 추가
+  [key: string]: string;
+}
+
 // 신호등 색상 값 정의
 const signalColorValues = {
-  red: '#ef4444', // Tailwind red-500
-  yellow: '#fde047', // Tailwind yellow-400
-  green: '#22c55e', // Tailwind green-500
-  inactive: '#e5e7eb', // Tailwind gray-200
+  red: '#ef4444', // 빨강
+  yellow: '#fde047', // 노랑
+  green: '#22c55e', // 초록
+  inactive: '#e5e7eb', // 비활성
 };
 
-// 단일 신호등 컴포넌트 (하나의 신호만 표시)
+// 신호등 컴포넌트
 function SingleSignalLight({ signal }: { signal: string | null }) {
-  // 신호에 따른 색상 결정
   let backgroundColor = signalColorValues.inactive;
   let borderColor = signalColorValues.inactive + '80';
   let shadowColor = 'rgba(229,231,235,0.5)';
@@ -51,21 +65,6 @@ function SingleSignalLight({ signal }: { signal: string | null }) {
   );
 }
 
-interface SectorData {
-  섹터: string;
-  '산업 등락률': string;
-  종목명: string;
-  등락률: string;
-  신호등: string; // 신호등 필드 추가
-  포지션: string;
-  '20일 이격': string;
-  '돌파/이탈': string;
-  '대표종목(RS)': string;
-
-  // 문자열 키로 액세스할 수 있도록 인덱스 시그니처 추가
-  [key: string]: string;
-}
-
 interface GroupedSectorData {
   [key: string]: SectorData[];
 }
@@ -77,7 +76,7 @@ interface CSVParseResult {
   errors: any[];
 }
 
-export default function NewSectorEnter() {
+export default function NewSectorOut() {
   const [data, setData] = useState<GroupedSectorData>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +104,7 @@ export default function NewSectorEnter() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetch('/requestfile/trend-following/newsectorenter.csv', { cache: 'no-store' });
+        const response = await fetch('/requestfile/trend-following/newsectorout.csv', { cache: 'no-store' });
         const csvText = await response.text();
         
         Papa.parse(csvText, {
@@ -157,7 +156,7 @@ export default function NewSectorEnter() {
                 const minutes = now.getMinutes();
                 const formattedDate = `${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
                 setUpdateDate(formattedDate);
-                console.warn('newsectorenter.csv 파일의 저장시간 및 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
+                console.warn('newsectorout.csv 파일의 저장시간 및 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
               }
             }
             setLoading(false);
@@ -184,7 +183,7 @@ export default function NewSectorEnter() {
   if (loading) {
     return (
       <section className="mb-6">
-        <h2 className="text-sm font-semibold mb-2">신규 관심 섹터</h2>
+        <h2 className="text-sm font-semibold mb-2">신규 이탈 섹터</h2>
         <div className="min-h-[200px] flex items-center justify-center">
           <div className="animate-pulse text-gray-500">데이터 로딩 중...</div>
         </div>
@@ -195,7 +194,7 @@ export default function NewSectorEnter() {
   if (error) {
     return (
       <section className="mb-6">
-        <h2 className="text-sm font-semibold mb-2">신규 관심 섹터</h2>
+        <h2 className="text-sm font-semibold mb-2">신규 이탈 섹터</h2>
         <div className="min-h-[200px] flex items-center justify-center">
           <div className="text-red-500">{error}</div>
         </div>
@@ -211,7 +210,7 @@ export default function NewSectorEnter() {
   return (
     <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
       <div ref={headerContainerRef} className="flex justify-between items-center mb-2">
-        <div className="font-semibold flex items-center mb-1 text-base md:text-lg" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>신규 관심 섹터</div>
+        <div className="font-semibold flex items-center mb-1 text-base md:text-lg" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>신규 이탈 섹터</div>
         <div className="flex items-center space-x-2">
           {updateDate && (
             <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
@@ -223,7 +222,7 @@ export default function NewSectorEnter() {
             <TableCopyButton 
               tableRef={tableContainerRef} 
               headerRef={headerContainerRef}
-              tableName="신규 관심 섹터" 
+              tableName="신규 이탈 섹터" 
               options={{
                 copyrightText: "© intellio.kr",
                 scale: 4
@@ -281,7 +280,7 @@ export default function NewSectorEnter() {
                           </span>
                         </td>
                         <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-28 hidden md:table-cell">
-                          <div className="mx-auto flex items-center justify-center w-20 h-6 bg-green-100 text-green-800 rounded-[4px]">
+                          <div className="mx-auto flex items-center justify-center w-20 h-6 bg-red-100 text-red-800 rounded-[4px]">
                             <span className="text-xs font-medium">
                               {stock["포지션"]}
                             </span>

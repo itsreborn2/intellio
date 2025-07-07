@@ -101,7 +101,7 @@ export function InputArea({
   
   // 입력 영역 스타일
   const inputAreaStyle: React.CSSProperties = {
-    transform: 'translateZ(0)', // Webkit 렌더링 버그 수정을 위한 3D 변환
+    // iOS에서 3D 변환이 입력 필드 렌더링에 문제를 일으킬 수 있어 제거
     width: '100%',
     marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '27vh')) : '0px',
     marginBottom: '5px',
@@ -111,28 +111,54 @@ export function InputArea({
     zIndex: 100,
     backgroundColor: isInputCentered ? 'transparent' : '#F4F4F4',
     maxWidth: isInputCentered ? '100%' : (!isMobile ? `1037px` : '100%'),
-    paddingBottom: '5px'
+    paddingBottom: '5px',
+    display: 'flex',
+    justifyContent: 'center',
+    WebkitTransform: 'none', // iOS Safari에서의 렌더링 버그 방지
+    transform: 'none'  // 입력 박스 스타일 - 애니메이션, 그림자 등 추가
   };
   
+  const inputBoxStyle: React.CSSProperties = {
+    position: 'relative',
+    width: '100%',
+    borderRadius: isMobile ? '6px' : '8px',
+    backgroundColor: 'white',
+    boxShadow: isInputCentered ? '0px 2px 15px rgba(0, 0, 0, 0.1)' : '0px 1px 3px rgba(0, 0, 0, 0.05)',
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    boxSizing: 'border-box',
+    border: '1px solid rgba(0, 0, 0, 0.08)',
+    overflow: 'visible', // iOS에서 자식 요소가 클리핑되는 문제 해결
+    WebkitBackfaceVisibility: 'visible', // iOS 렌더링 개선
+    backfaceVisibility: 'visible', // iOS 렌더링 개선
+    WebkitMaskImage: 'none', // iOS에서 텍스트 필드가 숨겨지는 버그 해결
+    WebkitOverflowScrolling: 'touch' // iOS 스크롤 개선
+  };
+
   const integratedInputStyle: React.CSSProperties = {
     position: 'relative',
-    width: isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%')),
-    maxWidth: isMobile ? '100%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%')),
-    margin: isMobile ? '0' : '0 auto',
+    width: isMobile ? '98%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%')),
+    maxWidth: isMobile ? '98%' : (windowWidth < 768 ? '95%' : (windowWidth < 1024 ? '85%' : '70%')),
+    margin: '0',
     boxSizing: 'border-box',
-    padding: 0
+    padding: 0,
+    WebkitTransform: 'none', // iOS에서의 문제 방지
+    transform: 'none', // 변환 효과 제거
+    isolation: 'isolate' // iOS에서 자식 요소의 렌더링 문제 방지
   };
   
   // 입력박스의 스타일을 고정값으로 설정하여 렌더링 시 크기 변경 방지
   const inputStyle: React.CSSProperties = {
     width: '100%',
     minHeight: '40px',
+    height: 'auto', // 명시적인 높이 설정으로 iOS에서의 렌더링 개선
     border: 'none',
     borderRadius: isMobile ? '6px' : '8px',
     paddingTop: '8px',
-    paddingRight: isMobile ? '35px' : '40px',
+    paddingRight: '5px', // 모바일에서 텍스트가 전송 버튼과 겹치지 않도록 조정
     paddingBottom: '8px',
-    paddingLeft: selectedStock ? (isMobile ? '75px' : '85px') : (isMobile ? '6px' : '8px'),
+    paddingLeft: selectedStock ? (isMobile ? '75px' : '85px') : (isMobile ? '8px' : '8px'),
     fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'),
     outline: 'none',
     boxSizing: 'border-box',
@@ -140,13 +166,17 @@ export function InputArea({
     overflow: 'hidden',
     maxWidth: '100%',
     backgroundColor: 'white',
-    color: 'oklch(0.372 0.044 257.287)',
+    color: '#333333', // iOS에서의 호환성을 위해 표준 색상 표기법 사용
     WebkitAppearance: 'none',
     appearance: 'none',
     lineHeight: '1.5',
     transition: 'none',
     display: 'block', // 특정 브라우저에서 렌더링 개선
-    position: 'relative' // 포지션 고정하여 레이아웃 안정성 향상
+    position: 'relative', // 포지션 고정하여 레이아웃 안정성 향상
+    opacity: 1, // iOS에서 입력 필드 보이게 하기 위해 명시적 설정
+    visibility: 'visible', // iOS에서의 가시성 명시적 설정
+    userSelect: 'text', // iOS에서 텍스트 선택 가능하도록 설정
+    touchAction: 'manipulation' // iOS에서 터치 동작 최적화
   };
   
   // 종목 필터링 함수
@@ -570,7 +600,7 @@ export function InputArea({
           position: 'relative',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'space-between',
           width: '100%',
           backgroundColor: 'white',
           borderRadius: '6px',
@@ -609,7 +639,7 @@ export function InputArea({
               border: 'none',
               boxShadow: 'none',
               paddingTop: '8px',
-              paddingRight: isMobile ? '8px' : '16px',
+              paddingRight: '5px', // 전송 버튼과의 간격 최소화
               paddingBottom: '8px',
               paddingLeft: isMobile ? '8px' : '16px',
               flex: 1,
@@ -618,6 +648,7 @@ export function InputArea({
               resize: 'none',
               maxHeight: 'none',
               lineHeight: '1.5',
+              minWidth: 0, // 중요: 입력창이 부모 컨테이너에 맞게 축소되도록 함
             }}
           />
           
