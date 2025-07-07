@@ -15,9 +15,11 @@ module.exports = {
     name: 'turbo-app',
     script: 'npx',
     //args: 'turbo run start --filter=main --filter=stockeasy',
-    args: 'turbo run start',
+    args: 'turbo run serve',
     watch: false,
     autorestart: true,
+    instances: 2,
+    exec_mode: 'cluster',
     env: {
       NODE_ENV: 'production'
     }

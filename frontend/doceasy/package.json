@@ -6,6 +6,7 @@
     "dev": "next dev -p 3010",
     "build": "cross-env NODE_OPTIONS=--max_old_space_size=8192 next build --no-lint",
     "start": "next start -p 3010",
+    "serve": "next start -p 3010",
     "lint": "next lint"
   },
   "dependencies": {

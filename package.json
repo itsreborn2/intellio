@@ -13,7 +13,12 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "start": "turbo run start"
+    "start": "turbo run start",
+    "serve": "turbo run serve",
+    "serve:main": "cd frontend/main && next start -p 3000",
+    "serve:doceasy": "cd frontend/doceasy && next start -p 3010",
+    "serve:stockeasy": "cd frontend/stockeasy && next start -p 3020",
+    "deploy": "./deploy.sh"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
