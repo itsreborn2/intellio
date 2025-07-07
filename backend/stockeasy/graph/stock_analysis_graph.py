@@ -411,7 +411,8 @@ class StockAnalysisGraph:
                 wrapped_process = self._create_wrapped_process(node_name, agent.process)
                 workflow.add_node(node_name, wrapped_process)
             else:
-                workflow.add_node(node_name, {})  # 빈 노드
+                logger.warning(f"에이전트 '{node_name}'가 None이므로 노드에 추가하지 않습니다.")
+                # 빈 노드를 추가하지 않음 - 실행할 수 없는 노드를 추가하면 오류 발생
 
         # 병렬 검색 노드 추가 - 콜백 래핑
         wrapped_parallel_search = self._create_wrapped_process("parallel_search", parallel_search_agent.process)
@@ -426,7 +427,22 @@ class StockAnalysisGraph:
             """질문 분석기 이후 라우팅 결정"""
             # 컨텍스트 분석 결과 확인
             is_follow_up = state.get("is_follow_up", False)
-            context_analysis = state.get("context_analysis", False)
+            context_analysis = state.get(
+                "context_analysis",
+                {
+                    "requires_context": False,
+                    "is_followup_question": False,
+                    "relation_to_previous": "독립적",
+                    "is_conversation_closing": False,
+                    "closing_type": None,
+                    "closing_response": None,
+                    "is_different_stock": False,
+                    "previous_stock_name": None,
+                    "previous_stock_code": None,
+                    "stock_relation": "알수없음",
+                    "reasoning": "컨텍스트 분석 결과가 없습니다.",
+                },
+            )
             is_conversation_closing = context_analysis.get("is_conversation_closing", False)
 
             logger.info(f"[question_analyzer_router] 후속질문 여부: {is_follow_up}, 대화마무리 : {is_conversation_closing}")
@@ -1214,11 +1230,15 @@ class StockAnalysisGraph:
 
         # 다음 단계 결정
         if "knowledge_integrator" in executed_agents:
-            if "summarizer" in execution_order and "summarizer" not in executed_agents:
+            # summarizer가 실행 순서에 있고 아직 실행되지 않았으며, 실제로 그래프에 등록되어 있는지 확인
+            if "summarizer" in execution_order and "summarizer" not in executed_agents and "summarizer" in self.agents and self.agents.get("summarizer") is not None:
                 logger.info("knowledge_integrator 이후 summarizer로 라우팅합니다.")
                 return "summarizer"
             else:
-                logger.info("knowledge_integrator 이후 response_formatter로 라우팅합니다.")
+                if "summarizer" in execution_order and "summarizer" not in executed_agents:
+                    logger.warning("summarizer가 실행 순서에 있지만 그래프에 등록되지 않았습니다. response_formatter로 직접 라우팅합니다.")
+                else:
+                    logger.info("knowledge_integrator 이후 response_formatter로 라우팅합니다.")
                 return "response_formatter"
         elif "summarizer" in executed_agents:
             logger.info("summarizer 이후 response_formatter로 라우팅합니다.")

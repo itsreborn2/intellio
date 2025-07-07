@@ -13,7 +13,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Union
 
-#from sqlalchemy import UUID
+# from sqlalchemy import UUID
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -70,11 +70,11 @@ class TelegramRetrieverAgent(BaseAgent):
 
         # 예시 패턴: "YYYY-MM-DD", "YYYYMMDD"
         # 정규 표현식으로 날짜 부분 추출 시도
-        match = re.search(r'(\d{4}-\d{2}-\d{2})|(\d{8})', source_str)
+        match = re.search(r"(\d{4}-\d{2}-\d{2})|(\d{8})", source_str)
         if match:
             date_part = match.group(1) or match.group(2)
             try:
-                if '-' in date_part:
+                if "-" in date_part:
                     dt = datetime.strptime(date_part, "%Y-%m-%d")
                 else:
                     dt = datetime.strptime(date_part, "%Y%m%d")
@@ -119,7 +119,8 @@ class TelegramRetrieverAgent(BaseAgent):
             stock_code = entities.get("stock_code", state.get("stock_code"))
             stock_name = entities.get("stock_name", state.get("stock_name"))
             sector = entities.get("sector", "")
-            subgroup = question_analysis.get("subgroup", [])
+            subgroup = entities.get("subgroup", [])
+            # logger.info(f"[텔레그램][process]subgroup: {subgroup}")
             subgroup.append(stock_code)
             subgroup.append(stock_name)
 
@@ -128,20 +129,19 @@ class TelegramRetrieverAgent(BaseAgent):
                 self._add_error(state, "검색 쿼리가 제공되지 않았습니다.")
                 state["agent_results"] = state.get("agent_results", {})
                 state["agent_results"]["telegram_retriever"] = {
-                    "agent_name": "telegram_retriever", "status": "failed",
+                    "agent_name": "telegram_retriever",
+                    "status": "failed",
                     "data": {"summary_text": "검색 쿼리 없음", "main_query_results": [], "toc_results": {}},
-                    "error": "검색 쿼리가 제공되지 않았습니다.", "execution_time": 0,
-                    "metadata": {"model_name": self.agent_llm.get_model_name(), "provider": self.agent_llm.get_provider()}
+                    "error": "검색 쿼리가 제공되지 않았습니다.",
+                    "execution_time": 0,
+                    "metadata": {"model_name": self.agent_llm.get_model_name(), "provider": self.agent_llm.get_provider()},
                 }
-                if "retrieved_data" not in state: state["retrieved_data"] = {}
-                state["retrieved_data"][self.retrieved_str] = {
-                    "main_query_results": [],
-                    "toc_results": {}
-                }
+                if "retrieved_data" not in state:
+                    state["retrieved_data"] = {}
+                state["retrieved_data"][self.retrieved_str] = {"main_query_results": [], "toc_results": {}}
                 return state
 
             logger.info(f"TelegramRetrieverAgent processing query: {query}")
-
 
             threshold = self._calculate_dynamic_threshold(classification)
             message_count = self._get_message_count(classification)
@@ -151,14 +151,9 @@ class TelegramRetrieverAgent(BaseAgent):
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
 
-            messages:List[RetrievedTelegramMessage] = await self._search_messages(
-                user_id=user_id,
-                search_query=search_query,
-                k=message_count,
-                threshold=threshold,
-                subgroup=subgroup
+            messages: List[RetrievedTelegramMessage] = await self._search_messages(
+                user_id=user_id, search_query=search_query, k=message_count, threshold=threshold, subgroup=subgroup
             )
-
 
             custom_prompt_from_state = state.get("custom_prompt_template")
             custom_prompt_from_attr = getattr(self, "prompt_template_test", None)
@@ -168,16 +163,13 @@ class TelegramRetrieverAgent(BaseAgent):
 
             final_report_toc = state.get("final_report_toc", {})
 
-            summary_data: Dict[str, Any] = await self.summarize(
-                query, stock_code, stock_name, messages, classification, user_id, system_prompt_override, final_report_toc
-            )
+            summary_data: Dict[str, Any] = await self.summarize(query, stock_code, stock_name, messages, classification, user_id, system_prompt_override, final_report_toc)
 
             overall_summary_text = summary_data.get("overall_summary", "텔레그램 메시지에 대한 전체 요약 정보가 생성되지 않았습니다. 목차별 세부 내용을 참고하세요.")
             processed_main_results = summary_data.get("main_query_results", messages)
             processed_toc_results = summary_data.get("toc_results", {})
 
-
-            if not processed_main_results and not processed_toc_results :
+            if not processed_main_results and not processed_toc_results:
                 logger.warning("텔레그램 메시지 검색 결과가 없거나 요약 데이터가 없습니다.")
                 end_time = datetime.now()
                 duration = (end_time - start_time).total_seconds()
@@ -189,14 +181,12 @@ class TelegramRetrieverAgent(BaseAgent):
                     "data": {"summary_text": overall_summary_text, "main_query_results": [], "toc_results": {}},
                     "error": "텔레그램 메시지 검색 결과가 없거나 요약 데이터가 없습니다.",
                     "execution_time": duration,
-                    "metadata": {"message_count": 0, "threshold": threshold, "model_name": self.agent_llm.get_model_name(), "provider": self.agent_llm.get_provider()}
+                    "metadata": {"message_count": 0, "threshold": threshold, "model_name": self.agent_llm.get_model_name(), "provider": self.agent_llm.get_provider()},
                 }
 
-                if "retrieved_data" not in state: state["retrieved_data"] = {}
-                state["retrieved_data"][self.retrieved_str] = {
-                    "main_query_results": [],
-                    "toc_results": {}
-                }
+                if "retrieved_data" not in state:
+                    state["retrieved_data"] = {}
+                state["retrieved_data"][self.retrieved_str] = {"main_query_results": [], "toc_results": {}}
 
                 # 상태 업데이트 - 콜백 함수 사용
                 if "update_processing_status" in state and "agent_name" in state:
@@ -216,25 +206,20 @@ class TelegramRetrieverAgent(BaseAgent):
             state["agent_results"]["telegram_retriever"] = {
                 "agent_name": "telegram_retriever",
                 "status": "success",
-                "data": {
-                    "summary_text": overall_summary_text,
-                    "main_query_results": processed_main_results,
-                    "toc_results": processed_toc_results
-                },
+                "data": {"summary_text": overall_summary_text, "main_query_results": processed_main_results, "toc_results": processed_toc_results},
                 "error": None,
                 "execution_time": duration,
                 "metadata": {
                     "message_count": len(processed_main_results),
                     "threshold": threshold,
-                    "model_name": self.agent_llm.get_model_name(), "provider": self.agent_llm.get_provider()
-                }
+                    "model_name": self.agent_llm.get_model_name(),
+                    "provider": self.agent_llm.get_provider(),
+                },
             }
 
-            if "retrieved_data" not in state: state["retrieved_data"] = {}
-            state["retrieved_data"][self.retrieved_str] = {
-                "main_query_results": processed_main_results,
-                "toc_results": processed_toc_results
-            }
+            if "retrieved_data" not in state:
+                state["retrieved_data"] = {}
+            state["retrieved_data"][self.retrieved_str] = {"main_query_results": processed_main_results, "toc_results": processed_toc_results}
 
             # 상태 업데이트 - 콜백 함수 사용
             if "update_processing_status" in state and "agent_name" in state:
@@ -258,11 +243,12 @@ class TelegramRetrieverAgent(BaseAgent):
                 "data": {"summary_text": "", "main_query_results": [], "toc_results": {}},
                 "error": str(e),
                 "execution_time": 0,
-                "metadata": {}
+                "metadata": {},
             }
 
-            if "retrieved_data" not in state: state["retrieved_data"] = {}
-            state["retrieved_data"][self.retrieved_str] = {"summary_text": "", "main_query_results": [], "toc_results": {} }
+            if "retrieved_data" not in state:
+                state["retrieved_data"] = {}
+            state["retrieved_data"][self.retrieved_str] = {"summary_text": "", "main_query_results": [], "toc_results": {}}
 
             # 상태 업데이트 - 콜백 함수 사용
             if "update_processing_status" in state and "agent_name" in state:
@@ -275,20 +261,19 @@ class TelegramRetrieverAgent(BaseAgent):
             return state
 
     @async_retry(retries=0, delay=2.0, exceptions=(Exception,))
-    async def summarize(self, query:str, stock_code: str, stock_name: str,
-                        found_messages: List[RetrievedTelegramMessage],
-                        classification: Dict[str, Any],
-                        user_id: Optional[Union[str, UUID]] = None,
-                        system_prompt_override: Optional[str] = None,
-                        final_report_toc: Optional[Dict[str, Any]] = None
-                        ) -> Dict[str, Any]:
-
+    async def summarize(
+        self,
+        query: str,
+        stock_code: str,
+        stock_name: str,
+        found_messages: List[RetrievedTelegramMessage],
+        classification: Dict[str, Any],
+        user_id: Optional[Union[str, UUID]] = None,
+        system_prompt_override: Optional[str] = None,
+        final_report_toc: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         default_overall_summary = "텔레그램 메시지에 대한 전체 요약 정보가 생성되지 않았습니다. 목차별 세부 내용을 참고하세요."
-        default_summary_output = {
-            "overall_summary": default_overall_summary,
-            "toc_results": {},
-            "main_query_results": found_messages
-        }
+        default_summary_output = {"overall_summary": default_overall_summary, "toc_results": {}, "main_query_results": found_messages}
 
         if not found_messages:
             logger.warning("요약을 위한 메시지가 제공되지 않았습니다.")
@@ -349,7 +334,7 @@ class TelegramRetrieverAgent(BaseAgent):
                     for i, section in enumerate(sections):
                         if isinstance(section, dict) and "title" in section:
                             title = section["title"]
-                            default_id = f"s{i+1}"
+                            default_id = f"s{i + 1}"
                             title_to_section_id[title] = default_id
                             section_id_to_title[default_id] = title
                             logger.info(f"기본 매핑 생성: '{title}' -> '{default_id}'")
@@ -358,12 +343,7 @@ class TelegramRetrieverAgent(BaseAgent):
             if not title_to_section_id and found_messages:
                 logger.warning("TOC 매핑이 없어 기본 목차 구조 생성 (기술적 분석 제외)")
                 # 간단한 기본 목차 생성 (기술적 분석 제외)
-                title_to_section_id = {
-                    "종목 관련 주요 소식": "s1",
-                    "실적 및 전망": "s2",
-                    "투자 의견": "s3",
-                    "기타 정보": "s4"
-                }
+                title_to_section_id = {"종목 관련 주요 소식": "s1", "실적 및 전망": "s2", "투자 의견": "s3", "기타 정보": "s4"}
                 section_id_to_title = {v: k for k, v in title_to_section_id.items()}
 
             # LLM에 전달할 메시지 포맷팅
@@ -398,9 +378,7 @@ class TelegramRetrieverAgent(BaseAgent):
             if user_id and user_id != "test_user":
                 parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
 
-            response: AIMessage = await self.agent_llm.ainvoke_with_fallback(
-                input=combined_prompt, user_id=parsed_user_id, project_type=ProjectType.STOCKEASY, db=self.db
-            )
+            response: AIMessage = await self.agent_llm.ainvoke_with_fallback(input=combined_prompt, user_id=parsed_user_id, project_type=ProjectType.STOCKEASY, db=self.db)
 
             if not response or not response.content or not isinstance(response.content, str):
                 logger.error("LLM이 빈 응답 또는 문자열이 아닌 응답을 반환했습니다.")
@@ -446,7 +424,7 @@ class TelegramRetrieverAgent(BaseAgent):
                         messages_for_this_section: List[RetrievedTelegramMessage] = []
                         for item in content_items:
                             if isinstance(item, dict):
-                                #logger.info(f"item: {item}")
+                                # logger.info(f"item: {item}")
                                 content = item.get("content", "내용 없음")
                                 source = item.get("source", "")
                                 msg_date = self._parse_source_date(source) or datetime.now(ZoneInfo("Asia/Seoul"))
@@ -460,8 +438,8 @@ class TelegramRetrieverAgent(BaseAgent):
                                         "original_source_string": source,
                                         "llm_generated_for_toc": True,
                                         "toc_key": section_id,
-                                        "original_title": title_key
-                                    }
+                                        "original_title": title_key,
+                                    },
                                 }
                                 messages_for_this_section.append(structured_msg)
                         if messages_for_this_section:
@@ -474,21 +452,14 @@ class TelegramRetrieverAgent(BaseAgent):
 
             logger.info(f"TOC 결과 생성 완료: {len(toc_results_structured)}개 섹션")
 
-            return {
-                "overall_summary": default_overall_summary,
-                "toc_results": toc_results_structured,
-                "main_query_results": found_messages
-            }
+            return {"overall_summary": default_overall_summary, "toc_results": toc_results_structured, "main_query_results": found_messages}
 
         except Exception as e:
             error_msg = f"메시지 요약 및 구조화 중 오류 발생: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return self._fallback_toc_results(default_overall_summary, found_messages, {})
 
-    def _fallback_toc_results(
-        self, summary: str, messages: List[RetrievedTelegramMessage],
-        section_id_to_title: Dict[str, str]
-    ) -> Dict[str, Any]:
+    def _fallback_toc_results(self, summary: str, messages: List[RetrievedTelegramMessage], section_id_to_title: Dict[str, str]) -> Dict[str, Any]:
         """LLM 응답이 실패했을 때 대체 결과를 생성합니다"""
         logger.info("폴백 TOC 결과 생성 시작")
 
@@ -496,27 +467,15 @@ class TelegramRetrieverAgent(BaseAgent):
 
         # 섹션 ID가 없으면 기본 섹션 생성 (기술적 분석 제외)
         if not section_id_to_title:
-            section_id_to_title = {
-                "s1": "종목 관련 주요 소식",
-                "s2": "실적 및 전망",
-                "s3": "투자 의견",
-                "s4": "기타 정보"
-            }
+            section_id_to_title = {"s1": "종목 관련 주요 소식", "s2": "실적 및 전망", "s3": "투자 의견", "s4": "기타 정보"}
 
         # 메시지가 없으면 빈 결과 반환
         if not messages:
             logger.warning("폴백 생성을 위한 메시지가 없습니다")
-            return {
-                "overall_summary": summary,
-                "toc_results": {},
-                "main_query_results": []
-            }
+            return {"overall_summary": summary, "toc_results": {}, "main_query_results": []}
 
         # 1. 메시지를 시간순으로 정렬
-        sorted_msgs = sorted(messages,
-                            key=lambda x: x.get("message_created_at", datetime.now())
-                            if isinstance(x.get("message_created_at"), datetime)
-                            else datetime.now())
+        sorted_msgs = sorted(messages, key=lambda x: x.get("message_created_at", datetime.now()) if isinstance(x.get("message_created_at"), datetime) else datetime.now())
 
         # 2. 전체 메시지 수
         total_msgs = len(sorted_msgs)
@@ -551,13 +510,9 @@ class TelegramRetrieverAgent(BaseAgent):
 
         logger.info(f"폴백 TOC 결과 생성 완료: {len(fallback_toc_results)}개 섹션")
 
-        return {
-            "overall_summary": summary,
-            "toc_results": fallback_toc_results,
-            "main_query_results": messages
-        }
+        return {"overall_summary": summary, "toc_results": fallback_toc_results, "main_query_results": messages}
 
-    def MakeSummaryPrompt2(self,stock_code: str, stock_name: str, final_report_toc: Optional[Dict[str, Any]]) -> str:
+    def MakeSummaryPrompt2(self, stock_code: str, stock_name: str, final_report_toc: Optional[Dict[str, Any]]) -> str:
         """
         제공된 TELEGRAM_SUMMARY_PROMPT_2를 사용하여 최종 프롬프트를 구성합니다.
         """
@@ -565,6 +520,7 @@ class TelegramRetrieverAgent(BaseAgent):
         filtered_toc = None
         if final_report_toc:
             import copy
+
             filtered_toc = copy.deepcopy(final_report_toc)
 
             # sections 배열에서 '기술적 분석'이 포함된 섹션 제거
@@ -612,30 +568,45 @@ class TelegramRetrieverAgent(BaseAgent):
 
     # MakeSummaryPrompt 함수는 현재 summarize 로직에서 직접 사용되지 않으므로 그대로 둡니다.
     def MakeSummaryPrompt(self, classification: Dict[str, Any]) -> str:
-        base_prompt = self.prompt_template # self.prompt_template 사용
+        base_prompt = self.prompt_template  # self.prompt_template 사용
         primary_intent = classification.get("primary_intent", "기타")
         intent_prompt = ""
-        if primary_intent == "종목기본정보": intent_prompt = "종목 기본 정보에 관한 질문입니다..."
-        elif primary_intent == "성과전망": intent_prompt = "해당 종목의 성과 및 전망에 관한 질문입니다..."
-        elif primary_intent == "재무분석": intent_prompt = "재무 분석에 관한 질문입니다..."
-        elif primary_intent == "산업동향": intent_prompt = "산업 동향에 관한 질문입니다..."
+        if primary_intent == "종목기본정보":
+            intent_prompt = "종목 기본 정보에 관한 질문입니다..."
+        elif primary_intent == "성과전망":
+            intent_prompt = "해당 종목의 성과 및 전망에 관한 질문입니다..."
+        elif primary_intent == "재무분석":
+            intent_prompt = "재무 분석에 관한 질문입니다..."
+        elif primary_intent == "산업동향":
+            intent_prompt = "산업 동향에 관한 질문입니다..."
 
         complexity = classification.get("complexity", "중간")
         complexity_prompt = ""
-        if complexity == "단순": complexity_prompt = "간결하고 직접적인 요약을 제공하세요..."
-        elif complexity == "중간": complexity_prompt = "균형 잡힌 요약을 제공하세요..."
-        elif complexity == "복합": complexity_prompt = "상세한 요약을 제공하세요..."
-        elif complexity == "전문가급": complexity_prompt = "심층적이고 전문적인 분석 요약을 제공하세요..."
+        if complexity == "단순":
+            complexity_prompt = "간결하고 직접적인 요약을 제공하세요..."
+        elif complexity == "중간":
+            complexity_prompt = "균형 잡힌 요약을 제공하세요..."
+        elif complexity == "복합":
+            complexity_prompt = "상세한 요약을 제공하세요..."
+        elif complexity == "전문가급":
+            complexity_prompt = "심층적이고 전문적인 분석 요약을 제공하세요..."
 
         answer_type = classification.get("expected_answer_type", "사실형")
         answer_type_prompt = ""
-        if answer_type == "사실형": answer_type_prompt = "사실에 기반한 객관적인 정보 중심으로 요약하세요..."
-        elif answer_type == "추론형": answer_type_prompt = "주어진 정보를 바탕으로 논리적 추론을 제공하세요..."
-        elif answer_type == "비교형": answer_type_prompt = "비교 분석을 중심으로 요약하세요..."
-        elif answer_type == "예측형": answer_type_prompt = "미래 전망에 초점을 맞춰 요약하세요..."
-        elif answer_type == "설명형": answer_type_prompt = "개념과 관계를 명확히 설명하는 요약을 제공하세요..."
-        elif answer_type == "종합형": answer_type_prompt = "다양한 관점과 정보를 종합적으로 분석하여 전체적인 상황을 요약하세요..."
-        else: answer_type_prompt = "다양한 관점과 정보를 종합적으로 분석하여 전체적인 상황을 요약하세요..." # 기본값
+        if answer_type == "사실형":
+            answer_type_prompt = "사실에 기반한 객관적인 정보 중심으로 요약하세요..."
+        elif answer_type == "추론형":
+            answer_type_prompt = "주어진 정보를 바탕으로 논리적 추론을 제공하세요..."
+        elif answer_type == "비교형":
+            answer_type_prompt = "비교 분석을 중심으로 요약하세요..."
+        elif answer_type == "예측형":
+            answer_type_prompt = "미래 전망에 초점을 맞춰 요약하세요..."
+        elif answer_type == "설명형":
+            answer_type_prompt = "개념과 관계를 명확히 설명하는 요약을 제공하세요..."
+        elif answer_type == "종합형":
+            answer_type_prompt = "다양한 관점과 정보를 종합적으로 분석하여 전체적인 상황을 요약하세요..."
+        else:
+            answer_type_prompt = "다양한 관점과 정보를 종합적으로 분석하여 전체적인 상황을 요약하세요..."  # 기본값
 
         additional_prompt = f"\n{intent_prompt}\n{complexity_prompt}\n{answer_type_prompt}\n종합적으로, 이 메시지들을 분석하여 질문에 대한 명확하고 유용한 답변을 제공하세요. 답변 시에는 메시지의 신뢰도, 최신성, 관련성을 고려하여 가중치를 부여하세요."
         final_prompt = base_prompt + additional_prompt
@@ -650,13 +621,9 @@ class TelegramRetrieverAgent(BaseAgent):
             error_message: 오류 메시지
         """
         state["errors"] = state.get("errors", [])
-        state["errors"].append({
-            "agent": "telegram_retriever",
-            "error": error_message,
-            "type": "processing_error",
-            "timestamp": datetime.now(),
-            "context": {"query": state.get("query", "")}
-        })
+        state["errors"].append(
+            {"agent": "telegram_retriever", "error": error_message, "type": "processing_error", "timestamp": datetime.now(), "context": {"query": state.get("query", "")}}
+        )
 
     def _calculate_dynamic_threshold(self, classification: Dict[str, Any]) -> float:
         """
@@ -714,15 +681,28 @@ class TelegramRetrieverAgent(BaseAgent):
         importance_score = 0.0
 
         # 1. 금액/수치 정보 포함 여부 (40%)
-        if re.search(r'[0-9]+(?:,[0-9]+)*(?:\.[0-9]+)?%?원?', message):
+        if re.search(r"[0-9]+(?:,[0-9]+)*(?:\.[0-9]+)?%?원?", message):
             importance_score += 0.4
 
         # 2. 주요 키워드 포함 여부 (40%)
         important_keywords = [
-            '실적', '공시', '매출', '영업이익', '순이익',
-            '계약', '특허', '인수', '합병', 'M&A',
-            '상한가', '하한가', '급등', '급락',
-            '목표가', '투자의견', '리포트'
+            "실적",
+            "공시",
+            "매출",
+            "영업이익",
+            "순이익",
+            "계약",
+            "특허",
+            "인수",
+            "합병",
+            "M&A",
+            "상한가",
+            "하한가",
+            "급등",
+            "급락",
+            "목표가",
+            "투자의견",
+            "리포트",
         ]
         keyword_count = sum(1 for keyword in important_keywords if keyword in message)
         if keyword_count > 0:
@@ -761,7 +741,7 @@ class TelegramRetrieverAgent(BaseAgent):
             시간 기반 가중치 (0.4 ~ 1.0)
         """
         try:
-            seoul_tz = timezone(timedelta(hours=9), 'Asia/Seoul')
+            seoul_tz = timezone(timedelta(hours=9), "Asia/Seoul")
 
             # naive datetime인 경우 서버 로컬 시간(Asia/Seoul)으로 간주
             if created_at.tzinfo is None:
@@ -787,9 +767,7 @@ class TelegramRetrieverAgent(BaseAgent):
             logger.warning(f"시간 가중치 계산 오류: {str(e)}")
             return 0.5  # 오류 시 중간값 반환
 
-    def _make_search_query(self, query: str, stock_code: Optional[str],
-                          stock_name: Optional[str], classification: Dict[str, Any],
-                          sector: Optional[str] = None) -> str:
+    def _make_search_query(self, query: str, stock_code: Optional[str], stock_name: Optional[str], classification: Dict[str, Any], sector: Optional[str] = None) -> str:
         """
         검색 쿼리를 구성합니다.
 
@@ -805,21 +783,31 @@ class TelegramRetrieverAgent(BaseAgent):
         """
         primary_intent = classification.get("primary_intent", "")
         important_keywords = []
-        if primary_intent == "현재가치": important_keywords.extend(["현재가", "주가", "시세", "시가총액"])
-        elif primary_intent == "성과전망": important_keywords.extend(["전망", "예측", "기대", "목표가"])
-        elif primary_intent == "투자의견": important_keywords.extend(["투자의견", "매수", "매도", "보유", "추천"])
-        elif primary_intent == "재무정보": important_keywords.extend(["실적", "매출", "영업이익", "순이익", "재무"])
-        elif primary_intent == "기업정보": important_keywords.extend(["기업", "사업", "제품", "서비스"])
+        if primary_intent == "현재가치":
+            important_keywords.extend(["현재가", "주가", "시세", "시가총액"])
+        elif primary_intent == "성과전망":
+            important_keywords.extend(["전망", "예측", "기대", "목표가"])
+        elif primary_intent == "투자의견":
+            important_keywords.extend(["투자의견", "매수", "매도", "보유", "추천"])
+        elif primary_intent == "재무정보":
+            important_keywords.extend(["실적", "매출", "영업이익", "순이익", "재무"])
+        elif primary_intent == "기업정보":
+            important_keywords.extend(["기업", "사업", "제품", "서비스"])
 
         query_parts = [query]
-        if stock_name and isinstance(stock_name, str): query_parts.append(stock_name)
-        if stock_code and isinstance(stock_code, str): query_parts.append(stock_code)
-        if sector and isinstance(sector, str): query_parts.append(sector)
-        query_parts.extend(k for k in important_keywords if k) # None이나 빈 문자열 제외
-        return " ".join(list(dict.fromkeys(query_parts))) # 중복제거 및 순서유지
+        if stock_name and isinstance(stock_name, str):
+            query_parts.append(stock_name)
+        if stock_code and isinstance(stock_code, str):
+            query_parts.append(stock_code)
+        if sector and isinstance(sector, str):
+            query_parts.append(sector)
+        query_parts.extend(k for k in important_keywords if k)  # None이나 빈 문자열 제외
+        return " ".join(list(dict.fromkeys(query_parts)))  # 중복제거 및 순서유지
 
     @async_retry(retries=0, delay=1.0, exceptions=(Exception,))
-    async def _search_messages(self, search_query: str, k: int, threshold: float, user_id: Optional[Union[str, UUID]] = None, subgroup: Optional[List[str]] = None) -> List[RetrievedTelegramMessage]:
+    async def _search_messages(
+        self, search_query: str, k: int, threshold: float, user_id: Optional[Union[str, UUID]] = None, subgroup: Optional[List[str]] = None
+    ) -> List[RetrievedTelegramMessage]:
         """
         텔레그램 메시지 검색을 수행합니다.
 
@@ -843,26 +831,19 @@ class TelegramRetrieverAgent(BaseAgent):
                 from stockeasy.graph.agent_registry import get_cached_vector_store_manager
 
                 self.vs_manager = get_cached_vector_store_manager(
-                    embedding_model_type=self.embedding_service.get_model_type(),
-                    namespace=settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM,
-                    project_name="stockeasy"
+                    embedding_model_type=self.embedding_service.get_model_type(), namespace=settings.PINECONE_NAMESPACE_STOCKEASY_TELEGRAM, project_name="stockeasy"
                 )
                 logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 완료 (TelegramRetriever)")
 
-            initial_k = min(k * 3, 40) # 최대 가져올 문서 수 약간 늘림
+            initial_k = min(k * 3, 40)  # 최대 가져올 문서 수 약간 늘림
 
             parsed_user_id = None
             if user_id and user_id != "test_user":
                 parsed_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
 
-            semantic_retriever_config = SemanticRetrieverConfig(min_score=threshold,
-                                                    user_id=parsed_user_id,
-                                                    project_type=ProjectType.STOCKEASY    )
+            semantic_retriever_config = SemanticRetrieverConfig(min_score=threshold, user_id=parsed_user_id, project_type=ProjectType.STOCKEASY)
             # 시맨틱 검색 설정
-            semantic_retriever = SemanticRetriever(
-                config=semantic_retriever_config,
-                vs_manager=self.vs_manager
-            )
+            semantic_retriever = SemanticRetriever(config=semantic_retriever_config, vs_manager=self.vs_manager)
 
             # 외국계 증권사 필터 준비
             # dict_values는 직렬화할 수 없으므로 list로 변환해야 함
@@ -874,32 +855,25 @@ class TelegramRetrieverAgent(BaseAgent):
             # 병렬 검색 태스크 준비
             search_tasks = [
                 # 일반 검색
-                semantic_retriever.retrieve(
-                    query=search_query,
-                    top_k=initial_k
-                ),
+                semantic_retriever.retrieve(query=search_query, top_k=initial_k),
                 # 외국계 증권사 필터 검색
-                semantic_retriever.retrieve(
-                    query=search_query,
-                    top_k=initial_k,
-                    filters=foreign_filters
-                )
+                semantic_retriever.retrieve(query=search_query, top_k=initial_k, filters=foreign_filters),
             ]
 
             # subgroup이 존재하고 비어있지 않을 때만 subgroup 필터 검색 추가
             subgroup_task_added = False
             if subgroup and len(subgroup) > 0:
-                subgroup_filters = {"keywords": {"$in": subgroup}}
-                logger.info(f"[텔레검색] subgroup_filters: {subgroup_filters}")
+                # None 값을 제거한 유효한 subgroup 항목 리스트 생성
+                valid_subgroup_items = [item for item in subgroup if item is not None]
 
-                search_tasks.append(
-                    semantic_retriever.retrieve(
-                        query=search_query,
-                        top_k=initial_k,
-                        filters=subgroup_filters
-                    )
-                )
-                subgroup_task_added = True
+                if valid_subgroup_items:
+                    subgroup_filters = {"keywords": {"$in": valid_subgroup_items}}
+                    logger.info(f"[텔레검색] subgroup_filters: {subgroup_filters}")
+
+                    search_tasks.append(semantic_retriever.retrieve(query=search_query, top_k=initial_k, filters=subgroup_filters))
+                    subgroup_task_added = True
+                else:
+                    logger.info("[텔레검색] subgroup에 유효한(None이 아닌) 항목이 없어 subgroup 검색 제외")
             else:
                 logger.info("[텔레검색] subgroup이 없거나 비어있어 subgroup 검색 제외")
 
@@ -911,7 +885,9 @@ class TelegramRetrieverAgent(BaseAgent):
             result_foreign = search_results[1]  # 외국계 증권사 검색
             result_subgroup = search_results[2] if subgroup_task_added else None  # 서브그룹 검색
 
-            logger.info(f"[병렬검색 완료] 일반: {len(result.documents)}개, 외국계: {len(result_foreign.documents)}개, 서브그룹: {len(result_subgroup.documents) if result_subgroup else 0}개")
+            logger.info(
+                f"[병렬검색 완료] 일반: {len(result.documents)}개, 외국계: {len(result_foreign.documents)}개, 서브그룹: {len(result_subgroup.documents) if result_subgroup else 0}개"
+            )
 
             # 검색 결과 통합
             combined_documents = []
@@ -942,7 +918,9 @@ class TelegramRetrieverAgent(BaseAgent):
             if len(combined_documents) == 0:
                 logger.warning(f"No telegram messages found for query: {search_query}")
                 return []
-            logger.info(f"Found {len(combined_documents)} telegram messages after combining results (general: {len(result.documents)}, foreign securities: {len(result_foreign.documents)})")
+            logger.info(
+                f"Found {len(combined_documents)} telegram messages after combining results (general: {len(result.documents)}, foreign securities: {len(result_foreign.documents)})"
+            )
 
             # 중복 메시지 필터링 및 점수 계산
             processed_messages = []
@@ -951,16 +929,16 @@ class TelegramRetrieverAgent(BaseAgent):
 
             for doc in combined_documents:
                 doc_metadata = doc.metadata
-                content = doc.page_content# doc_metadata.get("text", "")
+                content = doc.page_content  # doc_metadata.get("text", "")
 
                 # 내용이 없거나 너무 짧은 메시지 제외
                 if not content or len(content) < 20:
                     continue
 
-                normalized_content = re.sub(r'\s+', ' ', content).strip().lower()
+                normalized_content = re.sub(r"\s+", " ", content).strip().lower()
                 # 중복 메시지 확인
                 if self._is_duplicate(normalized_content, seen_messages):
-                    #logger.info(f"중복 메시지 제외: {normalized_content[:50]}")
+                    # logger.info(f"중복 메시지 제외: {normalized_content[:50]}")
                     continue
 
                 seen_messages.add(self._get_message_hash(normalized_content))
@@ -974,15 +952,11 @@ class TelegramRetrieverAgent(BaseAgent):
                     reranker_type=RerankerType.PINECONE,
                     pinecone_config=PineconeRerankerConfig(
                         api_key=settings.PINECONE_API_KEY_STOCKEASY,
-                        min_score=0.2  # 낮은 임계값으로 더 많은 결과 포함
-                    )
+                        min_score=0.2,  # 낮은 임계값으로 더 많은 결과 포함
+                    ),
                 )
             ) as reranker:
-                reranked_results = await reranker.rerank(
-                    query=search_query,
-                    documents=remove_duplicated_result,
-                    top_k=k
-                )
+                reranked_results = await reranker.rerank(query=search_query, documents=remove_duplicated_result, top_k=k)
 
             logger.info(f"리랭킹 완료 - 결과: {len(result.documents)} -> {len(reranked_results.documents)} 문서")
 
@@ -1030,15 +1004,15 @@ class TelegramRetrieverAgent(BaseAgent):
                 time_weight = self._calculate_time_weight(message_created_at)
 
                 # 최종 점수 = 유사도 * 중요도 * 시간 가중치
-                #final_score = doc.score * importance_score * time_weight
+                # final_score = doc.score * importance_score * time_weight
                 final_score = (doc.score * 0.65) + (time_weight * 0.35)
                 # 메시지 데이터 구성
-                message:RetrievedTelegramMessage = {
+                message: RetrievedTelegramMessage = {
                     "content": content,
-                    #"channel_name": doc_metadata.get("channel_title", "알 수 없음"), # 그러나 숨겨야함
+                    # "channel_name": doc_metadata.get("channel_title", "알 수 없음"), # 그러나 숨겨야함
                     "message_created_at": message_created_at,
                     "final_score": final_score,
-                    "metadata": doc_metadata
+                    "metadata": doc_metadata,
                 }
 
                 processed_messages.append(message)
@@ -1074,11 +1048,11 @@ class TelegramRetrieverAgent(BaseAgent):
             메시지 해시값
         """
         # 메시지 전처리 (공백 제거, 소문자 변환)
-        normalized_content = re.sub(r'\s+', ' ', content).strip().lower()
+        normalized_content = re.sub(r"\s+", " ", content).strip().lower()
 
         # 너무 긴 메시지는 앞부분만 사용
         if len(normalized_content) > 200:
             normalized_content = normalized_content[:200]
 
         # SHA-256 해시 생성하여 반환
-        return hashlib.sha256(normalized_content.encode('utf-8')).hexdigest()
+        return hashlib.sha256(normalized_content.encode("utf-8")).hexdigest()

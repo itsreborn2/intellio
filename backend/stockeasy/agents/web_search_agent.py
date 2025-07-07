@@ -444,50 +444,18 @@ class WebSearchAgent(BaseAgent):
         Returns:
             생성된 검색 쿼리 목록
         """
+        # 종목 정보 유무 확인 (일반 질문 vs 주식 관련 질문)
+        is_stock_related = bool(stock_code and stock_code.strip()) or bool(stock_name and stock_name.strip())
+
         try:
-            # 기술적 분석 섹션을 제거한 새로운 목차 생성
-            filtered_toc = self._filter_technical_analysis_from_toc(final_report_toc)
-
-            # 프롬프트 구성
-            prompt = f"""
-당신은 주식 및 금융 정보 검색 전문가입니다. 사용자의 질문과 주식 정보를 분석하여 효과적인 웹 검색 쿼리를 생성해주세요.
-
-사용자 질문: {query}
-
-관련 주식 정보:
-- 종목 코드: {stock_code if stock_code else "없음"}
-- 종목명: {stock_name if stock_name else "없음"}
-
-문서 최종 목차:
-{json.dumps(filtered_toc, ensure_ascii=False, indent=2) if filtered_toc else "목차 정보가 없습니다."}
-
-검색 쿼리를 생성할 때 다음 사항을 고려하세요:
-1. **문서 최종 목차 활용**: 목차에 있는 각 섹션과 주제를 참고하여 관련 검색 쿼리를 생성하세요.
-   - 각 목차 항목은 중요한 정보 영역을 나타내므로, 이에 맞춰 검색 쿼리를 설계하세요.
-   - 특히 "주요 이슈", "산업 동향", "경쟁사 현황"과 같은 섹션을 중점적으로 참고하세요.
-
-2. **종합적인 검색 전략**:
-   - 주식 기본 정보, 최근 재무 실적, 시장 트렌드, 경쟁사 분석 등 다양한 측면을 다루는 쿼리를 생성하세요.
-   - 각 쿼리는 목차의 서로 다른 섹션에 대응되도록 하여 포괄적인 정보 수집이 가능하게 하세요.
-
-3. **쿼리 구성 요소**:
-   - 쿼리는 구체적이고, 명확하며, 검색 가능한 형태로 작성되어야 합니다.
-   - 관련 키워드, 개체명, 숫자, 최근 이벤트 등 검색에 유용한 요소를 포함하세요.
-   - 종목명과 코드를 적절히 활용하되, 너무 많은 키워드를 한 쿼리에 포함하지 마세요.
-
-4. **최대 {self.max_queries}개의 검색 쿼리**를 생성해주세요.
-
-# 아래와 관련된 검색 쿼리는 반드시 제외하세요.
-- ESG 경영 평가
-- 재무데이터
-- 주가전망
-
-# 출력 형식: JSON
-검색 쿼리 목록만 반환하세요. 다음 형식으로 JSON을 반환하세요:
-{{
-  "search_queries": ["쿼리1", "쿼리2", "쿼리3"]
-}}
-"""
+            if is_stock_related:
+                # 주식 관련 질문용 프롬프트
+                logger.info(f"종목 관련 질문으로 판단: stock_code={stock_code}, stock_name={stock_name}")
+                prompt = await self._create_stock_related_prompt(query, stock_code, stock_name, final_report_toc)
+            else:
+                # 일반 질문용 프롬프트
+                logger.info(f"일반 질문으로 판단: stock_code={stock_code}, stock_name={stock_name}")
+                prompt = await self._create_general_prompt(query, final_report_toc)
 
             # LLM 호출
             response = await self.agent_llm_lite.ainvoke_with_fallback(input=prompt, project_type=ProjectType.STOCKEASY, db=self.db)
@@ -527,8 +495,109 @@ class WebSearchAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Error generating search queries: {str(e)}", exc_info=True)
             # 오류 발생 시 기본 쿼리 생성
-            default_query = f"{stock_name if stock_name else ''} {query}".strip()
+            if is_stock_related:
+                default_query = f"{stock_name if stock_name else ''} {query}".strip()
+            else:
+                default_query = query.strip()
             return [default_query]
+
+    async def _create_stock_related_prompt(self, query: str, stock_code: Optional[str], stock_name: Optional[str], final_report_toc: Dict[str, Any]) -> str:
+        """
+        주식 관련 질문을 위한 프롬프트를 생성합니다.
+
+        Args:
+            query: 원본 사용자 쿼리
+            stock_code: 종목 코드
+            stock_name: 종목 이름
+            final_report_toc: 문서 최종 목차
+
+        Returns:
+            주식 관련 검색 쿼리 생성용 프롬프트
+        """
+        # 기술적 분석 섹션을 제거한 새로운 목차 생성
+        filtered_toc = self._filter_technical_analysis_from_toc(final_report_toc)
+
+        return f"""
+당신은 주식 및 금융 정보 검색 전문가입니다. 사용자의 질문과 주식 정보를 분석하여 효과적인 웹 검색 쿼리를 생성해주세요.
+
+사용자 질문: {query}
+
+관련 주식 정보:
+- 종목 코드: {stock_code if stock_code else "없음"}
+- 종목명: {stock_name if stock_name else "없음"}
+
+문서 최종 목차:
+{json.dumps(filtered_toc, ensure_ascii=False, indent=2) if filtered_toc else "목차 정보가 없습니다."}
+
+검색 쿼리를 생성할 때 다음 사항을 고려하세요:
+1. **문서 최종 목차 활용**: 목차에 있는 각 섹션과 주제를 참고하여 관련 검색 쿼리를 생성하세요.
+   - 각 목차 항목은 중요한 정보 영역을 나타내므로, 이에 맞춰 검색 쿼리를 설계하세요.
+   - 특히 "주요 이슈", "산업 동향", "경쟁사 현황"과 같은 섹션을 중점적으로 참고하세요.
+
+2. **종합적인 검색 전략**:
+   - 주식 기본 정보, 최근 재무 실적, 시장 트렌드, 경쟁사 분석 등 다양한 측면을 다루는 쿼리를 생성하세요.
+   - 각 쿼리는 목차의 서로 다른 섹션에 대응되도록 하여 포괄적인 정보 수집이 가능하게 하세요.
+
+3. **쿼리 구성 요소**:
+   - 쿼리는 구체적이고, 명확하며, 검색 가능한 형태로 작성되어야 합니다.
+   - 관련 키워드, 개체명, 숫자, 최근 이벤트 등 검색에 유용한 요소를 포함하세요.
+   - 종목명과 코드를 적절히 활용하되, 너무 많은 키워드를 한 쿼리에 포함하지 마세요.
+
+4. **최대 {self.max_queries}개의 검색 쿼리**를 생성해주세요.
+
+# 아래와 관련된 검색 쿼리는 반드시 제외하세요.
+- ESG 경영 평가
+- 재무데이터
+- 주가전망
+
+# 출력 형식: JSON
+검색 쿼리 목록만 반환하세요. 다음 형식으로 JSON을 반환하세요:
+{{
+  "search_queries": ["쿼리1", "쿼리2", "쿼리3"]
+}}
+"""
+
+    async def _create_general_prompt(self, query: str, final_report_toc: Dict[str, Any]) -> str:
+        """
+        일반 질문을 위한 프롬프트를 생성합니다.
+
+        Args:
+            query: 원본 사용자 쿼리
+            final_report_toc: 문서 최종 목차
+
+        Returns:
+            일반 검색 쿼리 생성용 프롬프트
+        """
+        return f"""
+당신은 정보 검색 전문가입니다. 사용자의 질문을 분석하여 효과적인 웹 검색 쿼리를 생성해주세요.
+
+사용자 질문: {query}
+
+문서 목차 (참고용):
+{json.dumps(final_report_toc, ensure_ascii=False, indent=2) if final_report_toc else "목차 정보가 없습니다."}
+
+검색 쿼리를 생성할 때 다음 사항을 고려하세요:
+1. **질문 의도 파악**: 사용자가 원하는 정보가 무엇인지 명확히 파악하여 관련 검색 쿼리를 생성하세요.
+   - 핵심 키워드를 추출하고, 동의어나 관련 용어도 포함하세요.
+   - 질문의 맥락과 배경을 고려한 검색 쿼리를 설계하세요.
+
+2. **다각도 검색 전략**:
+   - 기본 정보, 정의, 특징, 동향, 최신 뉴스 등 다양한 관점에서 접근하는 쿼리를 생성하세요.
+   - 주제와 관련된 여러 측면을 다루는 포괄적인 검색이 가능하도록 하세요.
+
+3. **쿼리 구성 요소**:
+   - 쿼리는 구체적이고, 명확하며, 검색 가능한 형태로 작성되어야 합니다.
+   - 관련 키워드, 전문용어, 최신 이벤트 등 검색에 유용한 요소를 포함하세요.
+   - 너무 복잡하지 않으면서도 정확한 결과를 얻을 수 있는 쿼리를 만드세요.
+
+4. **최대 {self.max_queries}개의 검색 쿼리**를 생성해주세요.
+
+# 출력 형식: JSON
+검색 쿼리 목록만 반환하세요. 다음 형식으로 JSON을 반환하세요:
+{{
+  "search_queries": ["쿼리1", "쿼리2", "쿼리3"]
+}}
+"""
 
     @async_retry(retries=0, delay=1.0, exceptions=(Exception,))
     async def _perform_web_searches(self, search_queries: List[str], stock_code: Optional[str] = None, stock_name: Optional[str] = None) -> List[Dict[str, Any]]:

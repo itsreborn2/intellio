@@ -26,10 +26,10 @@ from common.services.agent_llm import get_agent_llm
 
 # from langchain_tavily import TavilySearch
 from common.services.tavily import TavilyService
-from common.utils.util import extract_json_from_text
+from common.utils.util import extract_json_from_text, remove_json_block
 from stockeasy.agents.base import BaseAgent
 from stockeasy.models.agent_io import QuestionAnalysisResult
-from stockeasy.prompts.question_analyzer_prompts import PROMPT_DYNAMIC_TOC, SYSTEM_PROMPT, format_question_analyzer_prompt
+from stockeasy.prompts.question_analyzer_prompts import PROMPT_DYNAMIC_GENERAL_TOC, PROMPT_DYNAMIC_TOC, SYSTEM_PROMPT, format_question_analyzer_prompt
 from stockeasy.services.financial.stock_info_service import StockInfoService
 
 
@@ -1291,24 +1291,35 @@ class QuestionAnalyzerAgent(BaseAgent):
         try:
             logger.info("일반 질문 분석 시작")
 
-            # 사용자 질문에서 종목 정보 추출 시도
-            extracted_entities = await self._extract_entities_from_query(query)
+            # user_id 추출
+            user_context = state.get("user_context", {})
+            user_id = user_context.get("user_id", None)
 
-            # 일반 질문용 분석 결과 생성
+            # 1. 사용자 질문에서 종목 정보 추출 시도
+            extracted_entities = await self._extract_entities_from_query(query, user_id)
+            stock_name = extracted_entities.get("stock_name")
+            stock_code = extracted_entities.get("stock_code")
+            has_stock_reference = extracted_entities.get("has_stock_reference", False)
+
+            # 2. 질문 분석
             analysis_result = await self._analyze_general_question(query, extracted_entities, state)
 
-            # 기술적 분석 섹션 제외한 동적 목차 생성
-            dynamic_toc = await self._generate_general_toc(query, analysis_result)
+            # 3. 최근 이슈 요약 (종목이 언급된 경우)
+            recent_issues_summary = ""
+            if has_stock_reference and stock_name and stock_code:
+                logger.info(f"일반 질문 내 종목({stock_name}) 언급 확인, 최근 이슈 검색 수행")
+                recent_issues_summary = await self.summarize_recent_issues(stock_name, stock_code, user_id)
 
-            # 결과 저장
+            # 4. 기술적 분석 섹션 제외한 동적 목차 생성
+            # 참고: _generate_general_toc는 analysis_result가 필요하여 병렬처리 불가
+            final_report_toc = await self._generate_general_toc(query, analysis_result, user_id)
+
+            # 5. 결과 저장 (stock-specific 플로우와 동일한 구조로)
+            state["question_analysis"] = analysis_result
             state["agent_results"] = state.get("agent_results", {})
-            state["agent_results"]["question_analyzer"] = {
-                "agent_name": "question_analyzer",
-                "status": "success",
-                "data": analysis_result,
-                "dynamic_toc": dynamic_toc,
-                "general_mode": True,
-            }
+            state["agent_results"]["question_analysis"] = analysis_result
+            state["recent_issues_summary"] = recent_issues_summary
+            state["final_report_toc"] = final_report_toc
 
             # 메트릭 기록
             end_time = datetime.now()
@@ -1336,7 +1347,7 @@ class QuestionAnalyzerAgent(BaseAgent):
             self._add_error(state, f"일반 질문 분석 오류: {str(e)}")
             return state
 
-    async def _extract_entities_from_query(self, query: str) -> Dict[str, Any]:
+    async def _extract_entities_from_query(self, query: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """사용자 질문에서 종목 정보 추출"""
         try:
             extraction_prompt = f"""
@@ -1344,21 +1355,34 @@ class QuestionAnalyzerAgent(BaseAgent):
             
             질문: {query}
             
+            - subgroup은 사용자 질문에 포함된 키워드 혹은 사용자 질문이 의도하는 키워드를 포함해야합니다.
+            - subgroup은 최소 1개 이상의 키워드를 포함해야합니다.
+            
             JSON 형식으로 답변해주세요:
             {{
                 "stock_name": "종목명 또는 null",
                 "stock_code": "종목코드 또는 null", 
                 "sector": "섹터 또는 null",
-                "has_stock_reference": true/false
+                "subgroup": ["키워드1", "키워드2", "키워드3"],
+                "has_stock_reference": True/False,
             }}
             """
 
-            response = await self.agent_llm.generate_response(extraction_prompt)
-            from stockeasy.utils.parsing_util import extract_json_from_text
+            response = await self.agent_llm_lite.ainvoke_with_fallback(extraction_prompt, project_type=ProjectType.STOCKEASY, user_id=user_id, db=self.db)
 
-            result = extract_json_from_text(response)
+            # JSON 응답 파싱
+            content = response.content if hasattr(response, "content") else str(response)
+            json_str = remove_json_block(content)
 
-            return result
+            if json_str:
+                try:
+                    result = json.loads(json_str)
+                except json.JSONDecodeError:
+                    result = {"has_stock_reference": False}
+            else:
+                result = {"has_stock_reference": False}
+
+            return result if result else {"has_stock_reference": False}
 
         except Exception as e:
             logger.error(f"엔티티 추출 오류: {str(e)}")
@@ -1367,22 +1391,39 @@ class QuestionAnalyzerAgent(BaseAgent):
     async def _analyze_general_question(self, query: str, entities: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
         """일반 질문 분석"""
         try:
-            # 일반 질문 분석 로직
+            # 기술적 분석 필요성 설정 (기본값과 동일)
+            ta_needed_default = True
+            logger.info(f"[일반질문분석] 기술적분석 필요성 설정: {ta_needed_default} (무조건 활성화)")
+
+            stock_name = entities.get("stock_name")
+            stock_code = entities.get("stock_code")
+            subgroup = entities.get("subgroup")
+
+            # create_default_question_analysis와 완전히 동일한 구조
             analysis_result = {
-                "question_type": "general",
-                "entities": entities,
-                "requires_stock_data": entities.get("has_stock_reference", False),
-                "classification": {"primary_intent": "기타", "complexity": "중간", "expected_answer_type": "설명형"},
+                "entities": {
+                    "stock_name": stock_name,
+                    "stock_code": stock_code,
+                    "sector": None,
+                    "subgroup": subgroup if subgroup else [],  # None 대신 빈 리스트
+                    "time_range": None,
+                    "financial_metric": None,
+                    "competitor": None,
+                    "product": None,
+                },
+                "classification": {"primary_intent": "종목기본정보", "complexity": "중간", "expected_answer_type": "사실형"},
                 "data_requirements": {
                     "telegram_needed": True,
-                    "reports_needed": entities.get("has_stock_reference", False),
-                    "financial_statements_needed": False,
+                    "reports_needed": True,
+                    "financial_statements_needed": True,
                     "industry_data_needed": True,
-                    "confidential_data_needed": False,
-                    "web_search_needed": True,
-                    "technical_analysis_needed": False,  # 일반 질문에서는 기술적 분석 제외
+                    "confidential_data_needed": True,
+                    "revenue_data_needed": True,
+                    "web_search_needed": False,
+                    "technical_analysis_needed": ta_needed_default,
                 },
-                "keywords": self._extract_keywords_from_query(query),
+                "keywords": [stock_name or "일반질문", "정보"],
+                "detail_level": "보통",
             }
 
             return analysis_result
@@ -1391,39 +1432,87 @@ class QuestionAnalyzerAgent(BaseAgent):
             logger.error(f"일반 질문 분석 오류: {str(e)}")
             raise
 
-    async def _generate_general_toc(self, query: str, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_general_toc(self, query: str, analysis_result: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
         """일반 질문용 동적 목차 생성 (기술적 분석 섹션 제외)"""
         try:
-            toc_prompt = f"""
-            다음 일반 질문에 대한 보고서 목차를 생성해주세요 (종목 특정 기술적 분석 제외):
-            
-            질문: {query}
-            분석 결과: {analysis_result}
-            
-            JSON 형식으로 답변해주세요:
-            {{
-                "title": "보고서 제목",
-                "sections": [
-                    {{
-                        "section_id": "section_1",
-                        "title": "1. 핵심 요약",
-                        "description": "섹션 설명"
-                    }}
-                ]
-            }}
-            """
+            logger.info("\n📋 일반 질문 동적 목차 생성 중...")
 
-            response = await self.agent_llm.generate_response(toc_prompt)
-            from stockeasy.utils.parsing_util import extract_json_from_text
+            prompt_template = ChatPromptTemplate.from_template(PROMPT_DYNAMIC_GENERAL_TOC).partial(
+                query=query, analysis_result=analysis_result, today_date=datetime.now().strftime("%Y-%m-%d")
+            )
+            formatted_prompt = prompt_template.format_prompt()
 
-            result = extract_json_from_text(response)
+            # 1. 먼저 구조화된 출력을 시도
+            try:
+                logger.info("구조화된 출력(DynamicTocOutput)을 사용하여 일반 목차 생성 시도")
+                structured_response = await self.agent_llm.with_structured_output(DynamicTocOutput).ainvoke(
+                    formatted_prompt, project_type=ProjectType.STOCKEASY, user_id=user_id, db=self.db
+                )
 
-            return result
+                # 구조화된 출력이 성공적으로 파싱된 경우
+                logger.info(f"\n✅ 구조화된 출력 성공: title={structured_response.title}, sections={len(structured_response.sections)}개")
+
+                # 섹션이 비어있는 경우 확인
+                if len(structured_response.sections) == 0:
+                    logger.warning("구조화된 출력에 섹션이 없습니다. 기본 응답 구조로 fallback합니다.")
+                    raise ValueError("구조화된 출력에 섹션이 없습니다.")
+
+                # DynamicTocOutput을 Dict로 변환
+                return {
+                    "title": structured_response.title,
+                    "sections": [
+                        {
+                            "section_id": section.section_id,
+                            "title": section.title,
+                            "description": section.description,
+                            "subsections": [
+                                {"subsection_id": subsection.subsection_id, "title": subsection.title, "description": subsection.description} for subsection in section.subsections
+                            ],
+                        }
+                        for section in structured_response.sections
+                    ],
+                }
+
+            except Exception as e:
+                # 구조화된 출력 파싱 실패 시 fallback으로 일반 텍스트 응답 시도
+                logger.warning(f"\n⚠️ 구조화된 출력 실패: {str(e)}, 일반 텍스트 응답으로 fallback")
+
+                # 2. 일반 텍스트 응답 시도
+                response = await self.agent_llm.ainvoke_with_fallback(formatted_prompt, project_type=ProjectType.STOCKEASY, user_id=user_id, db=self.db)
+
+                # JSON 응답 파싱
+                content = response.content if hasattr(response, "content") else str(response)
+                json_str = extract_json_from_text(content)
+
+                if json_str:
+                    try:
+                        result = json.loads(json_str)
+                        logger.info(f"\n✅ JSON 파싱 성공: title={result.get('title')}, sections={len(result.get('sections', []))}개")
+
+                        # 섹션이 비어있는 경우 확인
+                        if len(result.get("sections", [])) == 0:
+                            logger.warning("JSON 파싱 성공했으나 섹션이 없습니다. 기본 목차 구조를 사용합니다.")
+                            raise ValueError("JSON 파싱 성공했으나 섹션이 없습니다.")
+
+                        return result
+                    except json.JSONDecodeError as parse_error:
+                        logger.error(f"일반 목차 JSON 파싱 오류: {parse_error}")
+                        raise ValueError("JSON 파싱 실패")
+                else:
+                    logger.warning("JSON 문자열을 추출할 수 없음, 기본 응답 구조 사용")
+                    raise ValueError("JSON 문자열을 추출할 수 없습니다.")
 
         except Exception as e:
             logger.error(f"일반 질문 목차 생성 오류: {str(e)}")
             # 기본 목차 반환
-            return {"title": "일반 질문 분석 결과", "sections": [{"section_id": "section_1", "title": "1. 핵심 요약", "description": "질문에 대한 핵심 내용 요약"}]}
+            return {
+                "title": "일반 질문 분석 결과",
+                "sections": [
+                    {"section_id": "section_1", "title": "1. 핵심 요약", "description": "질문에 대한 핵심 내용 요약", "subsections": []},
+                    {"section_id": "section_2", "title": "2. 상세 분석", "description": "질문 주제에 대한 상세한 분석 내용", "subsections": []},
+                    {"section_id": "section_3", "title": "3. 결론 및 시사점", "description": "분석 결과 및 향후 전망", "subsections": []},
+                ],
+            }
 
     def _extract_keywords_from_query(self, query: str) -> List[str]:
         """질문에서 키워드 추출"""
