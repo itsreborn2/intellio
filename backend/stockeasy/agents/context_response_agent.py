@@ -4,32 +4,33 @@
 이 모듈은 이전 대화 컨텍스트를 활용하여 후속 질문에 답변하는 에이전트를 정의합니다.
 """
 
-import json
-from loguru import logger
-from typing import Dict, List, Any, Optional, Literal
 from datetime import datetime
+from typing import Any, Dict
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import SystemMessage, HumanMessage
-from common.models.token_usage import ProjectType
-from common.services.agent_llm import get_llm_for_agent, get_agent_llm
-from stockeasy.agents.base import BaseAgent
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from common.models.token_usage import ProjectType
+from common.services.agent_llm import get_agent_llm
+from stockeasy.agents.base import BaseAgent
 
 
 class ContextResponseAgent(BaseAgent):
     """
     이전 대화 컨텍스트를 활용하여 후속 질문에 답변하는 에이전트
-    
+
     이 에이전트는 다음을 수행합니다:
     1. 이전 대화 컨텍스트와 현재 질문을 분석
     2. 컨텍스트를 고려한 구체적인 응답 생성
     3. 이전 응답에서 언급된 정보를 활용해 연속적인 대화 유지
     """
-    
-    def __init__(self, name: Optional[str] = None, db: Optional[AsyncSession] = None):
+
+    def __init__(self, name: str | None = None, db: AsyncSession | None = None):
         """
         컨텍스트 응답 에이전트 초기화
-        
+
         Args:
             name: 에이전트 이름 (지정하지 않으면 클래스명 사용)
             db: 데이터베이스 세션 객체 (선택적)
@@ -38,14 +39,14 @@ class ContextResponseAgent(BaseAgent):
         #self.llm, self.agent_llm.get_model_name(), self.agent_llm.get_provider() = get_llm_for_agent("context_response_agent")
         self.agent_llm = get_agent_llm("context_response_agent")
         logger.info(f"ContextResponseAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
-    
+
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         대화 컨텍스트를 바탕으로 질문을 분석하고 응답을 생성합니다.
-        
+
         Args:
             state: 현재 상태 정보를 포함하는 딕셔너리
-            
+
         Returns:
             업데이트된 상태 딕셔너리
         """
@@ -53,10 +54,10 @@ class ContextResponseAgent(BaseAgent):
             # 성능 측정 시작
             start_time = datetime.now()
             logger.info("ContextResponseAgent 처리 시작")
-            
+
             # 현재 사용자 쿼리 및 분석 결과 추출
             query = state.get("query", "")
-            
+
 
             stock_code = state.get("stock_code", "")
             stock_name = state.get("stock_name", "")
@@ -64,45 +65,44 @@ class ContextResponseAgent(BaseAgent):
             conversation_history = state.get("conversation_history", [])
             is_follow_up = state.get("is_follow_up", False)
 
-            modified_query = f"종목명: {stock_name} 종목코드: {stock_code} 질문: {query}"
-            
+
             if not query:
                 logger.warning("빈 쿼리가 ContextResponseAgent에 제공됨")
                 self._add_error(state, "질문이 비어 있습니다.")
                 return state
-            
+
             if not context_analysis:
                 logger.warning("컨텍스트 분석 결과가 없음")
                 self._add_error(state, "컨텍스트 분석 결과가 없습니다.")
                 return state
-            
+
             if not is_follow_up: # state['is_follow_up] 은 프론트에서 후속질문인지 판단해서 전송한값. question_analyzer_agent에서 설정한 값이 아님.
                 logger.warning("후속질문이 아님")
                 self._add_error(state, "후속질문이 아닙니다.")
                 return state
-            
+
             if not conversation_history or len(conversation_history) < 2:
                 logger.warning("대화 기록이 충분하지 않음")
                 self._add_error(state, "대화 기록이 충분하지 않습니다.")
                 return state
-            
+
             formatted_agent_results = self._format_agent_results(state)
             logger.info(f"formatted_agent_results: {formatted_agent_results[:500]}")
 
             # 대화 기록 포맷팅 (최근 5번의 대화만 사용)
             formatted_history = ""
             recent_history = conversation_history[-10:] if len(conversation_history) >= 10 else conversation_history
-            
+
             for i, msg in enumerate(recent_history):
                 role = "사용자" if msg.type == "human" else "AI"
                 formatted_history += f"{role}: {msg.content}\n\n"
-            
+
             # 컨텍스트 응답 프롬프트 구성
 #             system_prompt = """
 # 당신은 깊이 있는 주식 분석 전문가로서 다양한 데이터 소스를 종합하여 사용자의 후속 질문에 심층적으로 답변하는 역할을 합니다.
 
-# 이전 대화 내용을 기반으로 사용자의 현재 질문에 맥락을 유지하며 통찰력 있는 답변을 제공하세요. 
-# 주어진 분석 결과물(기업리포트, 텔레그램, 재무/사업보고서, 산업 분석, 비공개 자료, 매출별 특징)을 종합적으로 활용하여 
+# 이전 대화 내용을 기반으로 사용자의 현재 질문에 맥락을 유지하며 통찰력 있는 답변을 제공하세요.
+# 주어진 분석 결과물(기업리포트, 텔레그램, 재무/사업보고서, 산업 분석, 비공개 자료, 매출별 특징)을 종합적으로 활용하여
 # 사용자가 질문하는 관점에 맞게 깊이 있는 분석과 해석을 제공해야 합니다.
 
 # A. 심층 분석 가이드라인
@@ -163,11 +163,11 @@ class ContextResponseAgent(BaseAgent):
 
 답변 형식:
 - 짧은 문단 사용 (2-3문장)
-- 긴 나열보다 핵심 포인트 2-3개 
+- 긴 나열보다 핵심 포인트 2-3개
 - 전문용어 설명은 가장 중요한 것만
 - 출처 인용은 간결하게 (날짜, 기관명만)
 
-정보가 부족하면 즉시 "해당 질문에 대한 충분한 정보가 없습니다"라고 명시하고, 
+정보가 부족하면 즉시 "해당 질문에 대한 충분한 정보가 없습니다"라고 명시하고,
 대신 관련된 다른 정보를 짧게 제공하세요.
 """
             user_prompt = f"""
@@ -183,12 +183,12 @@ class ContextResponseAgent(BaseAgent):
 
 위 대화 맥락을 고려하여 현재 질문에 답변해주세요.
 """
-            
+
             # user_id 추출
             user_context = state.get("user_context", {})
             user_id = user_context.get("user_id", None)
-            
-            
+
+
             # LLM 호출로 컨텍스트 기반 응답 생성
             analysis_prompt = ChatPromptTemplate.from_messages([
                 SystemMessage(content=system_prompt),
@@ -201,12 +201,12 @@ class ContextResponseAgent(BaseAgent):
                 project_type=ProjectType.STOCKEASY,
                 db=self.db
             )
-            
+
             # 응답 추출
             answer = response.content
             logger.info(f"컨텍스트 응답 생성 완료: {len(answer)} 자")
-            
-            # 응답을 상태에 저장 
+
+            # 응답을 상태에 저장
             # summary에 저장하면, response에서 이걸 읽는다.
 
             state["agent_results"]["context_response_agent"] = {
@@ -214,19 +214,19 @@ class ContextResponseAgent(BaseAgent):
                 "based_on_context": True,
                 "reference_length": len(conversation_history)
             }
-            
+
             # answer 필드 업데이트 (최종 응답 제공용)
             #state["answer"] = answer
             state["summary"] = answer
-            
+
             # 키 설정 확인 로그 추가
             logger.info(f"[ContextResponseAgent] summary 키 설정 완료: {bool(state.get('summary'))}, 길이: {len(state.get('summary', ''))}")
             logger.info(f"[ContextResponseAgent] answer 키 존재: {bool(state.get('answer'))}")
-            
+
             # 성능 지표 업데이트
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            
+
             # 메트릭 기록
             state["metrics"] = state.get("metrics", {})
             state["metrics"]["context_response"] = {
@@ -237,15 +237,15 @@ class ContextResponseAgent(BaseAgent):
                 "error": None,
                 "model_name": self.agent_llm.get_model_name()
             }
-            
+
             # 처리 상태 업데이트
             state["processing_status"] = state.get("processing_status", {})
             state["processing_status"]["context_response"] = "completed"
             state["next"] = "response_formatter"  # 다음 단계로 응답 포맷터 지정
-            
+
             logger.info(f"ContextResponseAgent 완료: {duration:.2f}초 소요")
             return state
-            
+
         except Exception as e:
             logger.exception(f"ContextResponseAgent 오류: {str(e)}")
             self._add_error(state, f"컨텍스트 응답 에이전트 오류: {str(e)}")
@@ -262,36 +262,36 @@ class ContextResponseAgent(BaseAgent):
         report_analyzer_data = report_analyzer.get("data", {})
         report_analyzer_analysis = report_analyzer_data.get("analysis", {})
         report_analyzer_llm_response = report_analyzer_analysis.get("llm_response", "")
-        report_analyzer_investment_opinions  = report_analyzer_analysis.get("investment_opinions", "")
-        report_analyzer_searched_reports = report_analyzer_data.get("searched_reports", {})
+        report_analyzer_analysis.get("investment_opinions", "")
+        report_analyzer_data.get("searched_reports", {})
 
         ## telegram_retriever
         telegram_analyzer = ar.get("telegram_retriever", {})
         telegram_analyzer_data = telegram_analyzer.get("data", {})
         telegram_analyzer_summary = telegram_analyzer_data.get("summary", {})
-        
-        
+
+
         ## financial_analyzer
         # financial_analyzer
         financial_analyzer = ar.get("financial_analyzer", {})
         financial_analyzer_data = financial_analyzer.get("data", {})
         financial_analyzer_llm_response = financial_analyzer_data.get("llm_response", "")
-        financial_analyzer_raw_financial_data = financial_analyzer_data.get("raw_financial_data", "")
-        
+        financial_analyzer_data.get("raw_financial_data", "")
+
         ## industry_analyzer
         industry_analyzer = ar.get("industry_analyzer", {})
         industry_analyzer_data = industry_analyzer.get("data", {})
         industry_analyzer_analysis = industry_analyzer_data.get("analysis", {})
         industry_analyzer_llm_response = industry_analyzer_analysis.get("llm_response", "")
-        industry_analyzer_searched_reports = industry_analyzer_data.get("searched_reports", {})
+        industry_analyzer_data.get("searched_reports", {})
 
         ## confidential_analyzer
         confidential_analyzer = ar.get("confidential_analyzer", {})
         confidential_analyzer_data = confidential_analyzer.get("data", {})
         confidential_analyzer_analysis = confidential_analyzer_data.get("analysis", {})
         confidential_analyzer_llm_response = confidential_analyzer_analysis.get("llm_response", "")
-        confidential_analyzer_searched_reports = confidential_analyzer_data.get("searched_reports", {})
-        
+        confidential_analyzer_data.get("searched_reports", {})
+
         # revenue_breakdown
         revenue_breakdown = ar.get("revenue_breakdown", {})
         revenue_breakdown_result = revenue_breakdown.get("data", {})
@@ -328,7 +328,7 @@ class ContextResponseAgent(BaseAgent):
 {revenue_breakdown_result}
 -----------------------------
         """
-        
+
         return result_str
         # return result_str.format(
         #     report_analyzer_llm_response=report_analyzer_llm_response,
@@ -337,11 +337,11 @@ class ContextResponseAgent(BaseAgent):
         #     industry_analyzer_llm_response=industry_analyzer_llm_response,
         #     confidential_analyzer_llm_response=confidential_analyzer_llm_response,
         # )
-    
+
     def _add_error(self, state: Dict[str, Any], error_message: str) -> None:
         """
         상태 객체에 오류 정보를 추가합니다.
-        
+
         Args:
             state: 상태 객체
             error_message: 오류 메시지
@@ -354,7 +354,7 @@ class ContextResponseAgent(BaseAgent):
             "timestamp": datetime.now(),
             "context": {"query": state.get("query", "")}
         })
-        
+
         # 처리 상태 업데이트
         state["processing_status"] = state.get("processing_status", {})
-        state["processing_status"]["context_response"] = "failed" 
+        state["processing_status"]["context_response"] = "failed"

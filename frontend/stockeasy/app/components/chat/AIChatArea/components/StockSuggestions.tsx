@@ -46,11 +46,9 @@ export function StockSuggestions({
     right: 0,
     width: isMobile ? '100%' : '100%',
     margin: isMobile ? '0 auto' : '0',
-    // 헤더 영역을 침범하지 않도록 최대 높이를 동적으로 계산
-    // 화면 높이의 40%를 최대로 하되, 모바일에서는 더 작게 설정
-    maxHeight: `calc(40vh - ${isMobile ? 80 : 100}px)`,
-    // 최소 높이도 설정하여 너무 작아지지 않도록 함
-    minHeight: isMobile ? '150px' : '200px',
+    // 최대 3개의 결과만 한번에 표시하도록 고정 높이 설정
+    // 단일 결과 항목의 높이를 56px로 계산하여 3개에 헤더와 여백 포함
+    height: '190px', // 3개 결과(56px * 3) + 헤더(22px)
     overflowY: 'auto',
     backgroundColor: 'white',
     border: '1px solid #ccc',

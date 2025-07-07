@@ -113,6 +113,51 @@ export interface IMixedChartComponent extends IMessageComponentBase {
     data: IMixedChartData;
 }
 
+export interface IPriceChartData {
+    symbol: string;
+    name: string;
+    candle_data: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number; price_change_percent: number; [key: string]: any }>;
+    volume_data?: Array<{ time: string; value: number; color?: string; [key: string]: any }>;
+    moving_averages?: Array<{ time: string; value: number; label: string; color?: string; [key: string]: any }>;
+    support_lines?: Array<{ price: number; label?: string; color?: string; [key: string]: any }>;
+    resistance_lines?: Array<{ price: number; label?: string; color?: string; [key: string]: any }>;
+    period?: string;
+    interval?: string;
+    metadata?: Record<string, any>;
+}
+
+export interface IPriceChartComponent extends IMessageComponentBase {
+    type: 'price_chart';
+    title?: string;
+    data: IPriceChartData;
+}
+
+export interface ITechnicalIndicatorData {
+    name: string;
+    data: number[];
+    color?: string;
+    chart_type: 'line' | 'bar' | 'area';
+    y_axis_id?: string;
+    line_style: 'solid' | 'dashed' | 'dotted';
+}
+
+export interface ITechnicalIndicatorChartData {
+    symbol: string;
+    name: string;
+    dates: string[];
+    candle_data?: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number; price_change_percent: number;[key: string]: any }>;
+    indicators: ITechnicalIndicatorData[];
+    y_axis_configs?: Record<string, Record<string, any>>;
+    period?: string;
+    metadata?: Record<string, any>;
+}
+
+export interface ITechnicalIndicatorChartComponent extends IMessageComponentBase {
+    type: 'technical_indicator_chart';
+    title?: string;
+    data: ITechnicalIndicatorChartData;
+}
+
 export interface IImageComponent extends IMessageComponentBase {
   type: 'image';
   url: string;
@@ -174,7 +219,9 @@ export type MessageComponent =
   | ILineChartComponent
   | IImageComponent
   | ITableComponent
-  | IMixedChartComponent;
+  | IMixedChartComponent
+  | IPriceChartComponent
+  | ITechnicalIndicatorChartComponent;
 
 // --- 'complete' SSE 이벤트 데이터 인터페이스 ---
 export interface IStructuredChatResponseData {

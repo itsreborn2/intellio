@@ -209,7 +209,7 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
     autosize: true,
     height: 300,
     margin: { l: 50, r: 50, b: 50, t: 50, pad: 4 },
-    legend: { orientation: 'h', y: 1.1 },
+    legend: { orientation: 'h', y: 1.2, x: 0.5, xanchor: 'center' },
     xaxis: {
       title: '일자',
       tickangle: -45,
@@ -226,7 +226,8 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
       titlefont: { color: '#2962FF' },
       tickfont: { color: '#2962FF' },
       side: 'left' as 'left',
-      range: [kospiMin, kospiMax]
+      range: [kospiMin, kospiMax],
+      zeroline: false
     },
     yaxis2: {
       title: '하락비율',
@@ -234,8 +235,9 @@ export default function Chart2({ data: marketDataFromProps }: Chart2Props) {
       tickfont: { color: '#7F7F7F' },
       overlaying: 'y',
       side: 'right' as 'right',
-      range: [0, 1.0], // 고정 범위: 0.00부터 1.00까지
-      tickformat: '.2f' // 소수점 두 자리까지 표시
+      range: [0, 1.1], // 고정 범위: 0.00부터 1.10까지
+      tickformat: '.2f', // 소수점 두 자리까지 표시
+      zeroline: false
     },
     showlegend: true,
     plot_bgcolor: '#ffffff',

@@ -6,7 +6,7 @@ import { parseCookies } from 'nookies';
 import { isLoggedIn } from '../utils/auth';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore, useIsClient } from '@/stores/userModeStore';
-import { MessageSquare, Download, Loader2, Share } from 'lucide-react';
+import { MessageSquare, Download, Loader2, Share, History } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -18,7 +18,19 @@ import { useChatShare } from '@/services/api/useChatShare';
  * StockEasy 애플리케이션의 고정 헤더 컴포넌트.
  * 화면 상단에 고정되며, 데스크톱에서는 사이드바 영역을 제외한 너비를 가집니다.
  */
-const Header: React.FC = () => {
+interface HeaderProps {
+  isMobile: boolean;
+  pathname: string;
+  isHistoryPanelOpen: boolean;
+  toggleHistoryPanel: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({
+  isMobile,
+  pathname,
+  isHistoryPanelOpen,
+  toggleHistoryPanel,
+}) => {
   // 사용자 정보 관련 상태
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState('');
@@ -32,9 +44,13 @@ const Header: React.FC = () => {
 
   // 클라이언트 측 마운트 상태 확인
   const isClient = useIsClient();
+  
+  // 히스토리 패널 상태가 변경될 때 툴팁 상태 초기화
+  useEffect(() => {
+    setToggleVisible(false);
+  }, [isHistoryPanelOpen]);
 
-  // 현재 경로 가져오기
-  const pathname = usePathname();
+  // pathname is now passed as a prop
   
   // 채팅 스토어에서 메시지 목록과 현재 세션 가져오기
   const { messages: storeMessages, currentSession } = useChatStore();
@@ -241,7 +257,28 @@ const Header: React.FC = () => {
       <div className="flex justify-between items-center w-full">
         <div className="flex items-center">
           {/* 로고 텍스트 */}
-          <div className="text-lg font-semibold pl-[25px] md:pl-0">StockEasy</div>
+          <div className="text-lg font-semibold pl-[27px] md:pl-0">StockEasy</div>
+          {/* 모바일 히스토리 버튼 */}
+          {isMobile && pathname === '/' && !isHistoryPanelOpen && (
+            <div className="relative ml-2">
+              <button
+                onClick={() => {
+                  setToggleVisible(false); // 클릭 시 툴팁 즉시 숨김
+                  toggleHistoryPanel();
+                }}
+                className="p-1 text-gray-600 hover:text-gray-900 flex items-center"
+                onMouseEnter={() => setToggleVisible(true)}
+                onMouseLeave={() => setToggleVisible(false)}
+              >
+                <History size={22} />
+              </button>
+              {toggleVisible && (
+                <div className="absolute top-1/2 left-full transform -translate-y-1/2 ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded-[6px] whitespace-nowrap z-[9999]">
+                  검색 히스토리
+                </div>
+              )}
+            </div>
+          )}
           {/* 헤더 메뉴 */}
           {/* <nav>
             <ul className="flex items-center ml-4 space-x-4 text-[#3F424A] text-sm">
@@ -342,9 +379,9 @@ const Header: React.FC = () => {
           {isUserLoggedIn && (
             <div className="flex items-center gap-0.5">
               <MessageSquare size={16} className="text-gray-600" />
-              <Badge variant="outline" className="h-5 text-xs px-1.5 ml-0.5 rounded-md flex items-center justify-center">
+              <button className="border py-0.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground h-5 text-xs px-1.5 ml-0.5 rounded-[6px] flex items-center justify-center hover:bg-accent hover:text-accent-foreground">
                 {isQuestionLoading ? "..." : `${10 - (questionSummary?.total_questions || 0)}`}
-              </Badge>
+              </button>
             </div>
           )}
           {/* 아바타 */}

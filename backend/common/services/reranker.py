@@ -69,6 +69,7 @@ class PineconeRerankerConfig(BaseRerankerConfig):
     model_name: str = Field(default="bge-reranker-v2-m3", description="Pinecone 리랭킹 모델 이름")
     api_key: Optional[str] = Field(default=None, description="Pinecone API 키")
     parameters: Dict[str, Any] = Field(default_factory=lambda: {"truncate": "END"}, description="추가 파라미터")
+    max_documents: int = Field(default=100, description="모델이 처리할 수 있는 최대 문서 수 (bge-reranker-v2-m3 제한)")
     # "END": 입력 시퀀스가 토큰 제한을 초과할 경우, 끝부분을 잘라냅니다
     # "NONE": 입력 시퀀스가 토큰 제한을 초과할 경우, 에러를 반환합니다
     # 기본값: bge-reranker-v2-m3의 경우 "NONE"
@@ -175,6 +176,12 @@ class PineconeReranker(BaseReranker):
         _top_k = top_k or self.config.top_k
 
         try:
+            # candidate_k와 max_documents 제한 모두 확인
+            limit = min(self.config.candidate_k, self.config.max_documents)
+            if len(documents) > limit:
+                logger.warning(f"문서 개수가 {len(documents)}개로 제한({limit}개)을 초과하여 상위 {limit}개만 사용합니다. (candidate_k={self.config.candidate_k}, max_documents={self.config.max_documents})")
+                documents = documents[:limit]
+            
             # 문서 텍스트 추출
             doc_texts = [doc.page_content for doc in documents]
 
@@ -238,6 +245,13 @@ class PineconeReranker(BaseReranker):
         try:
             from pinecone import PineconeAsyncio
             print(f"Pinecone 리랭킹:{query[:100]}, 문서:{len(documents)}")
+            
+            # candidate_k와 max_documents 제한 모두 확인
+            limit = min(self.config.candidate_k, self.config.max_documents)
+            if len(documents) > limit:
+                logger.warning(f"문서 개수가 {len(documents)}개로 제한({limit}개)을 초과하여 상위 {limit}개만 사용합니다. (candidate_k={self.config.candidate_k}, max_documents={self.config.max_documents})")
+                documents = documents[:limit]
+            
             # 문서 텍스트 추출
             doc_texts = [doc.page_content for doc in documents]
 

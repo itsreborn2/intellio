@@ -29,6 +29,8 @@ from stockeasy.agents.summarizer_agent import SummarizerAgent
 from stockeasy.agents.context_response_agent import ContextResponseAgent
 # 매출 및 수주 현황 분석 에이전트 임포트
 from stockeasy.agents.revenue_breakdown_agent import RevenueBreakdownAgent
+# 기술적 분석 에이전트 임포트
+from stockeasy.agents.technical_analyzer_agent import TechnicalAnalyzerAgent
 from common.core.config import settings
 from langchain.callbacks.tracers import LangChainTracer
 
@@ -177,6 +179,7 @@ class AgentRegistry:
             "industry_analyzer": IndustryAnalyzerAgent,
             "confidential_analyzer": ConfidentialAnalyzerAgent,
             "revenue_breakdown": RevenueBreakdownAgent,
+            "technical_analyzer": TechnicalAnalyzerAgent,
             "knowledge_integrator": KnowledgeIntegratorAgent,
             "summarizer": SummarizerAgent,
             "response_formatter": ResponseFormatterAgent,
@@ -245,6 +248,7 @@ class AgentRegistry:
             ("industry_analyzer", IndustryAnalyzerAgent),
             ("confidential_analyzer", ConfidentialAnalyzerAgent),
             ("revenue_breakdown", RevenueBreakdownAgent),
+            ("technical_analyzer", TechnicalAnalyzerAgent),
             ("web_search", WebSearchAgent),
         ]
         

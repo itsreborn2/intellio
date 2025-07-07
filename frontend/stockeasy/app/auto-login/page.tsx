@@ -10,7 +10,7 @@ import { useQuestionCountStore } from '@/stores/questionCountStore';
 function AutoLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setUser, setToken, login } = useAuth();
+  const { setUser, login } = useAuth();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
   
@@ -41,15 +41,13 @@ function AutoLoginContent() {
           
           // 쿠키 설정 (서브도메인에서 접근 가능하도록)
           document.cookie = `token=${token}; path=/; domain=.intellio.kr`;
-          document.cookie = `auth_token=${token}; path=/; max-age=2592000`; // auth_token 쿠키 추가
           
           // 쿠키에 사용자 정보를 안전하게 저장
           // JSON 문자열로 변환 후 바로 쿠키에 설정 (중간에 encodeURIComponent 사용)
           const userDataString = JSON.stringify(userData);
           document.cookie = `user=${encodeURIComponent(userDataString)}; path=/; domain=.intellio.kr`;
           
-          // 상태 업데이트
-          setToken(token);
+          // 상태 업데이트 (토큰은 쿠키로만 관리)
           setUser(userData);
           login(userData);
           
@@ -82,7 +80,7 @@ function AutoLoginContent() {
     };
 
     autoLogin();
-  }, [searchParams, router, setUser, setToken, login, fetchTokenSummary, fetchQuestionSummary]);
+  }, [searchParams, router, setUser, login, fetchTokenSummary, fetchQuestionSummary]);
 
   // 에러 상태일 때만 화면을 렌더링
   if (status !== 'error') {

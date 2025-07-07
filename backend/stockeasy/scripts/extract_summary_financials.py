@@ -720,6 +720,7 @@ async def main():
     stock_info_service = StockInfoService()
     await asyncio.sleep(0.5)  # 1초만 대기 후 진행
     all_code_list = await stock_info_service.get_all_stock_codes()
+    all_code_list = ["005930"]
     #all_code_list = ["900100","900140","900070","008700","950130","950210","950220","241560","950140","950160","950190"]
     #end_index = len(all_code_list)
     end_index = len(tmp_file_list)

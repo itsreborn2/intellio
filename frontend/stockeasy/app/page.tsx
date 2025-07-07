@@ -8,10 +8,14 @@ import { Loader2 } from 'lucide-react'
 import { useTokenUsageStore } from '@/stores/tokenUsageStore'
 import { useQuestionCountStore } from '@/stores/questionCountStore'
 import { isLoggedIn } from './utils/auth'
+import { useAuthCheck } from '@/hooks/useAuth'
 
 import { NoticePopup } from './components/NoticePopup';
 
 export default function StockEasyLandingPage() {
+  // 쿠키 기반 인증 상태 확인
+  useAuthCheck();
+  
   // 토큰 사용량과 질문 개수 스토어 훅
   const { fetchSummary: fetchTokenSummary } = useTokenUsageStore()
   const { fetchSummary: fetchQuestionSummary } = useQuestionCountStore()
@@ -41,14 +45,36 @@ export default function StockEasyLandingPage() {
 
   // 공지사항 상태 및 팝업 표시 제어
   const [notice, setNotice] = useState<any>(null);
-  const [showNotice, setShowNotice] = useState(true);
+  const [showNotice, setShowNotice] = useState(false); // 초기값을 false로 설정하여 번짝임 방지
 
-  // 1. 공지사항 데이터 fetch
+  // 1. 공지사항 데이터 fetch 및 로컬스토리지 체크
   useEffect(() => {
-    fetch('/requestfile/notice/notice.json')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => setNotice(data))
-      .catch(() => setNotice(null));
+    // 공지사항 로드 전에 로컬스토리지 값 미리 확인
+    const LS_KEY = 'stockeasy_notice_hide_until';
+    const LS_ID_KEY = 'stockeasy_notice_last_id';
+    const hideUntil = localStorage.getItem(LS_KEY);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const shouldCheckNotice = !hideUntil || todayStr > hideUntil;
+    
+    // 숨김 설정이 없거나 만료된 경우에만 공지사항 가져오기
+    if (shouldCheckNotice) {
+      fetch('/requestfile/notice/notice.json')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data) {
+            // 공지 ID 확인 (최신 공지인지 체크)
+            const noticeId = `${data.updatedAt ?? ''}_${data.title}`;
+            const lastId = localStorage.getItem(LS_ID_KEY);
+            
+            // 공지 ID가 바뀌었거나 이전에 설정이 없으면 표시
+            if (lastId !== noticeId) {
+              setNotice(data);
+              setShowNotice(true);
+            }
+          }
+        })
+        .catch(() => {/* 오류 무시 - 공지사항 가져오기 실패 시 표시하지 않음 */});
+    }
   }, []);
 
   return (

@@ -97,7 +97,7 @@ INDUSTRY_ANALYSIS_USER_PROMPT = """
 질문: {query}
 종목코드: {stock_code}
 종목명: {stock_name}
-산업/섹터: {sector}
+{sector}
 질문분류: {classification}
 ---
 산업 데이터:
@@ -118,13 +118,15 @@ def format_industry_data(industry_data: List[Dict[str, Any]]) -> str:
     
     formatted_data = []
     
-    for item in industry_data:
+    for i,item in enumerate(industry_data):
         source = item.get("source", "알 수 없는 출처")
         date = item.get("publish_date", "날짜 없음")
         title = item.get("title", "제목 없음")
         content = item.get("content", "")
-        
-        data_str = f"[출처: {source} ({date})]\n내용: \n{content}\n"
+        data_str = f"### 산업데이터 {i+1}\n"
+        data_str += f" 출처: ||{source}||\n"
+        data_str += f" 날짜: ||{date}||\n"
+        data_str += f" 내용: {content}\n"
         
         # 주요 트렌드 정보가 있는 경우
         key_trends = item.get("key_trends", [])
@@ -139,14 +141,8 @@ def format_industry_data(industry_data: List[Dict[str, Any]]) -> str:
             data_str += "\n시장 데이터:\n"
             for key, value in market_data.items():
                 data_str += f"- {key}: {value}\n"
-        
-        # 정책 변화 정보가 있는 경우
-        policy_changes = item.get("policy_changes", [])
-        if policy_changes:
-            data_str += "\n정책 변화:\n"
-            for policy in policy_changes:
-                data_str += f"- {policy}\n"
-        data_str += '--------------------------\n'
+
+        data_str += '-------\n'
         formatted_data.append(data_str)
     
     return "\n\n".join(formatted_data) 

@@ -1,49 +1,54 @@
 import os
-import json
-from typing import Any, Dict, Optional, List, ClassVar
-from pydantic_settings import BaseSettings
-from loguru import logger
 from functools import lru_cache
+from typing import Any, ClassVar, Dict, List
+
+from loguru import logger
+from pydantic_settings import BaseSettings
+
 
 def detect_file_encoding(file_path):
     """파일의 인코딩을 자동으로 감지"""
     import chardet
-    
-    with open(file_path, 'rb') as file:
+
+    with open(file_path, "rb") as file:
         raw = file.read()
         result = chardet.detect(raw)
-        return result['encoding']
-        
+        return result["encoding"]
+
+
 class CommonSettings(BaseSettings):
     # 환경 설정
     ENV: str = os.getenv("ENV", "development")  # development 또는 production
-    
+
     # API Settings
     PROJECT_NAME: str
     API_V1_STR: str
-    FASTAPI_URL:str
-    
+    FASTAPI_URL: str
+
     # 프론트엔드 URL
     DOCEASY_URL: str
     INTELLIO_URL: str
     STOCKEASY_URL: str
-    
+
+    ADMIN_IDS: List[str] = [""]
+
     # 쿠키 설정
     COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", ".intellio.kr" if os.getenv("ENV") == "production" else None)
     COOKIE_SECURE: bool = ENV == "production"  # production에서만 True
 
     # 데이터베이스
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "localhost")
-    
+
     # Database - from .env
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
     POSTGRES_HOST: str
     POSTGRES_PORT: str
-    PGBOUNCER_HOST:str
-    PGBOUNCER_PORT:str
-    #DATABASE_URL:str
+    PGBOUNCER_HOST: str
+    PGBOUNCER_PORT: str
+
+    # DATABASE_URL:str
     @property
     def DATABASE_URL(self) -> str:
         """데이터베이스 URL을 동적으로 생성"""
@@ -61,21 +66,21 @@ class CommonSettings(BaseSettings):
     OPENAI_API_KEY: str
     GEMINI_API_KEY: str
     UPSTAGE_API_KEY: str
-    CLAUDE_API_KEY: str 
+    CLAUDE_API_KEY: str
     TAVILY_API_KEY: str
 
     # Redis 설정
-    REDIS_HOST: str 
-    REDIS_PORT: int 
+    REDIS_HOST: str
+    REDIS_PORT: int
     REDIS_URL: str
     REDIS_CACHE_EXPIRE: int = int(os.getenv("REDIS_CACHE_EXPIRE", "3600"))  # 1시간
-    CELERY_BROKER_URL: str 
-    CELERY_RESULT_BACKEND: str 
-    
+    CELERY_BROKER_URL: str
+    CELERY_RESULT_BACKEND: str
+
     # PGAdmin - from .env
     PGADMIN_EMAIL: str
     PGADMIN_PASSWORD: str
-    
+
     # Google Cloud Storage - from .env
     GOOGLE_CLOUD_PROJECT: str
     GOOGLE_APPLICATION_CREDENTIALS: str
@@ -119,40 +124,37 @@ class CommonSettings(BaseSettings):
     )
 
     # File Upload Settings
-    ALLOWED_EXTENSIONS: set = {
-        'txt', 'pdf', 'doc', 'docx', 'hwp', 'hwpx',
-        'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'tiff'
-    }
+    ALLOWED_EXTENSIONS: set = {"txt", "pdf", "doc", "docx", "hwp", "hwpx", "xls", "xlsx", "jpg", "jpeg", "png", "tiff"}
     MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024  # 16MB
 
     # Pinecone Settings
-    PINECONE_API_KEY_DOCEASY:str
-    PINECONE_API_KEY_STOCKEASY:str
+    PINECONE_API_KEY_DOCEASY: str
+    PINECONE_API_KEY_STOCKEASY: str
     PINECONE_ENVIRONMENT: str
-    PINECONE_NAMESPACE_DOCEASY:str
-    PINECONE_NAMESPACE_STOCKEASY:str
-    PINECONE_NAMESPACE_STOCKEASY_TELEGRAM:str
-    PINECONE_NAMESPACE_STOCKEASY_INDUSTRY:str
-    PINECONE_NAMESPACE_STOCKEASY_CONFIDENTIAL_NOTE:str
+    PINECONE_NAMESPACE_DOCEASY: str
+    PINECONE_NAMESPACE_STOCKEASY: str
+    PINECONE_NAMESPACE_STOCKEASY_TELEGRAM: str
+    PINECONE_NAMESPACE_STOCKEASY_INDUSTRY: str
+    PINECONE_NAMESPACE_STOCKEASY_CONFIDENTIAL_NOTE: str
 
     # Admin Test
     ADMIN_TEST_USER_ID: str = "admin_test"
     ADMIN_TEST_API_KEY: str = "test_key_123"
     ALLOW_ANONYMOUS: bool = True
-    
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
     # Telegram
-    TELEGRAM_SESSION_NAME: str = 'telegram_collector'
+    TELEGRAM_SESSION_NAME: str = "telegram_collector"
     TELEGRAM_API_ID: str
     TELEGRAM_API_HASH: str
 
     # LangSmith
-    LANGCHAIN_TRACING_V2:str = os.getenv("LANGCHAIN_TRACING_V2", "true")
-    LANGCHAIN_ENDPOINT:str = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
-    LANGCHAIN_API_KEY:str = os.getenv("LANGCHAIN_API_KEY", "")
-    LANGCHAIN_PROJECT:str = os.getenv("LANGCHAIN_PROJECT", "intellio_doceasy_base")
+    LANGCHAIN_TRACING_V2: str = os.getenv("LANGCHAIN_TRACING_V2", "true")
+    LANGCHAIN_ENDPOINT: str = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+    LANGCHAIN_API_KEY: str = os.getenv("LANGCHAIN_API_KEY", "")
+    LANGCHAIN_PROJECT: str = os.getenv("LANGCHAIN_PROJECT", "intellio_doceasy_base")
 
     # 추가 필드
     DEBUG: bool = False
@@ -174,11 +176,11 @@ class CommonSettings(BaseSettings):
     ## RAG Settings
     ###############
     # Text Splitter
-    TEXT_SPLITTER:str
-    CHUNK_SIZE:int
-    CHUNK_OVERLAP:int
+    TEXT_SPLITTER: str
+    CHUNK_SIZE: int
+    CHUNK_OVERLAP: int
     # 임베딩 설정. 아직 안씀
-    KAKAO_EMBEDDING_MODEL_PATH:str = "common/external/kf-deberta"
+    KAKAO_EMBEDDING_MODEL_PATH: str = "common/external/kf-deberta"
 
     # STOCKEASY
 
@@ -193,7 +195,7 @@ class CommonSettings(BaseSettings):
         "env_file": env_file,
         "case_sensitive": True,
         "env_file_encoding": "utf-8",
-        "extra": "allow"  # 추가 필드 허용
+        "extra": "allow",  # 추가 필드 허용
     }
 
     def __init__(self, **kwargs):
@@ -218,12 +220,13 @@ class CommonSettings(BaseSettings):
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
             "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": os.getenv("GOOGLE_CLOUD_CLIENT_CERT_URL")
+            "client_x509_cert_url": os.getenv("GOOGLE_CLOUD_CLIENT_CERT_URL"),
         }
 
     # 임시 파일 경로
     TEMP_DIR: str = "tmp_download"
-    
+    TEST_TECH_AGENT: bool = os.getenv("TEST_TECH_AGENT", False)  # 기본 false
+
 
 @lru_cache()
 def get_settings() -> CommonSettings:
@@ -232,10 +235,11 @@ def get_settings() -> CommonSettings:
     logger.info(f"Generated DATABASE_URL: {settings.DATABASE_URL}")
     return settings
 
+
 settings = get_settings()
-logger.info(f"commonsetting")
+logger.info("commonsetting")
 logger.info(f"ENV: {settings.ENV}")
-#logger.info(f"REDIS_HOST: {settings.REDIS_HOST}")
+# logger.info(f"REDIS_HOST: {settings.REDIS_HOST}")
 # logger.info(f"REDIS_URL: {settings.REDIS_URL}")
 # logger.info(f"CELERY_BROKER_URL: {settings.CELERY_BROKER_URL}")
 # logger.info(f"CELERY_RESULT_BACKEND: {settings.CELERY_RESULT_BACKEND}")
@@ -243,15 +247,15 @@ logger.info(f"ENV: {settings.ENV}")
 # logger.info(f"TIKA_SERVER_ENDPOINT: {settings.TIKA_SERVER_ENDPOINT}")
 logger.info(f"FASTAPI_URL: {settings.FASTAPI_URL}")
 logger.info(f"INTELLIO_URL: {settings.INTELLIO_URL}")
-#logger.info(f"DOCEASY_URL: {settings.DOCEASY_URL}")
+# logger.info(f"DOCEASY_URL: {settings.DOCEASY_URL}")
 
-#logger.info(f"PINECONE_NAMESPACE_DOCEASY: {settings.PINECONE_NAMESPACE_DOCEASY}")
+# logger.info(f"PINECONE_NAMESPACE_DOCEASY: {settings.PINECONE_NAMESPACE_DOCEASY}")
 
 logger.info(f"POSTGRES_SERVER: {settings.POSTGRES_SERVER}")
 # logger.info(f"POSTGRES_USER: {settings.POSTGRES_USER}")
 # logger.info(f"POSTGRES_DB: {settings.POSTGRES_DB}")
 # logger.info(f"POSTGRES_HOST: {settings.POSTGRES_HOST}")
-#logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
+# logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
 
 logger.info(f"POSTGRES_SERVER: {settings.POSTGRES_SERVER}")
 logger.info(f"POSTGRES_USER: {settings.POSTGRES_USER}")
@@ -264,4 +268,3 @@ logger.info(f"DATABASE_URL: {settings.DATABASE_URL}")
 # 캐시 디렉토리 설정
 settings.LOCAL_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "cache")
 os.makedirs(settings.LOCAL_CACHE_DIR, exist_ok=True)
-

@@ -13,13 +13,18 @@ import {
   RecommendedQuestions, 
   LatestUpdates
 } from './components';
+import { PreliminaryChartDisplay } from './components/PreliminaryChartDisplay';
+import { GeneralModeToggle } from './components/GeneralModeToggle';
+
 import { useMessageProcessing } from './hooks';
 import { useIsMobile } from './hooks';
 import { useChatStore } from '@/stores/chatStore';
 import { useTokenUsageStore } from '@/stores/tokenUsageStore';
 import { useQuestionCountStore } from '@/stores/questionCountStore';
 import { useUserModeStore } from '@/stores/userModeStore';
-import { StockOption } from './types';
+import { StockOption, PopularStock } from './types';
+import { getPopularStocks } from '@/services/api/stats';
+import type { IStockPopularityItem } from '@/types/api/stats';
 
 /**
  * AIChatArea 메인 컴포넌트
@@ -86,87 +91,84 @@ function AIChatAreaContent() {
   const questionStore = useQuestionCountStore();
   const questionCount = questionStore.summary?.total_questions || 0;
 
-  // 추천 질문 데이터 선언 추가
-  const sampleRecommendedQuestions = [
-    {
-      stock: { 
-        value: '005930', 
-        label: '삼성전자', 
-        stockName: '삼성전자', 
-        stockCode: '005930' 
-      },
-      question: '최근 HBM 개발 상황은?'
-    },
-    {
-      stock: { 
-        value: '000660', 
-        label: 'SK하이닉스', 
-        stockName: 'SK하이닉스', 
-        stockCode: '000660' 
-      },
-      question: 'AI 반도체 시장 전망은?'
-    },
-    {
-      stock: { 
-        value: '005380', 
-        label: '현대차', 
-        stockName: '현대차', 
-        stockCode: '005380' 
-      },
-      question: '전기차 시장에서의 경쟁력은?'
-    },
-    {
-      stock: { 
-        value: '373220', 
-        label: 'LG에너지솔루션', 
-        stockName: 'LG에너지솔루션', 
-        stockCode: '373220' 
-      },
-      question: '배터리 기술 개발 현황은?'
-    },
-    {
-      stock: { 
-        value: '035420', 
-        label: 'NAVER', 
-        stockName: 'NAVER', 
-        stockCode: '035420' 
-      },
-      question: '인공지능 사업 확장과 전망은?'
-    }
-  ];
-
-  // 최신 업데이트 종목 데이터 선언 추가
-  const sampleLatestUpdates = [
-    {
-      stock: { 
-        value: '373220', 
-        label: 'LG에너지솔루션', 
-        stockName: 'LG에너지솔루션', 
-        stockCode: '373220' 
-      },
-      updateInfo: '배터리 생산량 증대'
-    },
-    {
-      stock: { 
-        value: '035720', 
-        label: '카카오', 
-        stockName: '카카오', 
-        stockCode: '035720' 
-      },
-      updateInfo: '글로벌 AI 기업과 협력 발표'
-    },
-    {
-      stock: { 
-        value: '049800', 
-        label: '우진플라임', 
-        stockName: '우진플라임', 
-        stockCode: '049800' 
-      },
-      updateInfo: '월별 수출데이터, 잠정치, 실적 등의 통계, 앞으로 전망'
-    }
-  ];
   
-  // 메시지 처리 로직을 위한 커스텀 훅 사용 - 상태 관리 함수 전달
+  // 창 너비 상태 추가
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  const [popularStocksDaily, setPopularStocksDaily] = useState<PopularStock[]>([]);
+  const [popularStocksWeekly, setPopularStocksWeekly] = useState<PopularStock[]>([]); // CSV 데이터를 저장할 상태
+  const [windowWidth, setWindowWidth] = useState<number>(1024); // 기본값 설정
+
+  // 실시간 차트 스트리밍 관련 상태
+  const [preliminaryChart, setPreliminaryChart] = useState<{
+    components: any[];
+    message: string;
+    timestamp: number;
+    stockCode: string;
+    stockName: string;
+    stockInfo?: any;  // stockInfo 필드 추가
+  } | null>(null);
+
+  const [finalResponse, setFinalResponse] = useState<any>(null);
+  const [currentStatus, setCurrentStatus] = useState<string>('');
+
+  // API에서 인기 검색 종목 데이터를 가져오기 위한 함수 (useCallback으로 메모이제이션)
+  const fetchPopularStocks = useCallback(async () => {
+    try {
+      const response = await getPopularStocks(10); // API 한 번만 호출
+
+      // 당일 데이터 처리 (data_24h 사용)
+      if (response.ok && response.data_24h?.stocks) {
+        const parsedDailyData = response.data_24h.stocks.map((item: IStockPopularityItem, index: number) => ({
+          rank: index + 1,
+          stock: {
+            value: item.stock_code,
+            label: item.stock_name,
+            stockName: item.stock_name,
+            stockCode: item.stock_code,
+          },
+          rankChange: item.rank_change, // 순위 변동 정보 추가
+        }));
+        setPopularStocksDaily(parsedDailyData);
+      } else {
+        setPopularStocksDaily([]);
+      }
+
+      // 주간 데이터 처리 (data_7d 사용)
+      if (response.ok && response.data_7d?.stocks) {
+        const parsedWeeklyData = response.data_7d.stocks.map((item: IStockPopularityItem, index: number) => ({
+          rank: index + 1,
+          stock: {
+            value: item.stock_code,
+            label: item.stock_name,
+            stockName: item.stock_name,
+            stockCode: item.stock_code,
+          },
+          rankChange: item.rank_change, // 순위 변동 정보 추가
+        }));
+        setPopularStocksWeekly(parsedWeeklyData);
+      } else {
+        setPopularStocksWeekly([]);
+      }
+    } catch (error) {
+      console.error('[AIChatArea] 인기 검색어 API 호출 중 에러 발생:', error);
+      setPopularStocksDaily([]);
+      setPopularStocksWeekly([]);
+    }
+  }, [getPopularStocks, setPopularStocksDaily, setPopularStocksWeekly]); // useCallback 의존성 배열에 필요한 함수들 추가
+
+  // API에서 인기 검색 종목 데이터를 가져오기 위한 useEffect
+  useEffect(() => {
+    fetchPopularStocks();
+  }, [fetchPopularStocks]); // useEffect의 의존성 배열에 fetchPopularStocks 추가
+
+  useEffect(() => {
+  }, [popularStocksDaily]);
+
+  useEffect(() => {
+  }, [popularStocksWeekly]);
+
+  // 사용자가 주식 종목을 선택했을 때 호출되는 함수
+  // useCallback을 사용하여 함수 재생성 방지관리 함수 전달
   const { 
     elapsedTime: processingElapsedTime, 
     sendMessage
@@ -199,20 +201,36 @@ function AIChatAreaContent() {
         
         // 토큰 사용량 업데이트 (Zustand 스토어)
         fetchSummary && fetchSummary();
+        
+        // 최종 응답 설정 (기존 메시지들을 최종 응답으로 설정)
+        setFinalResponse(uiMessages);
+      },
+      onPreliminaryChart: (data) => {
+        console.log('[AI채팅영역] 임시 차트 수신:', data);
+        console.log('[AI채팅영역] data.stockInfo:', data.stockInfo);
+        // 임시 차트 데이터 설정 (stockInfo 포함)
+        setPreliminaryChart({
+          components: data.components,
+          message: data.message,
+          timestamp: data.timestamp,
+          stockCode: data.stock_code,
+          stockName: data.stock_name,
+          stockInfo: data.stockInfo  // stockInfo 추가
+        });
+        // 현재 상태 업데이트
+        setCurrentStatus("📊 차트가 준비되었습니다. 추가 분석을 진행하고 있습니다...");
       },
     }
   );
 
   // 마운트/언마운트 이벤트 핸들링
   useEffect(() => {
-    console.log('[AIChatArea] 컴포넌트 마운트: 이벤트 리스너 설정');
     
     // AIChatArea 컴포넌트가 마운트되었음을 알리는 이벤트 발생
     const mountEvent = new CustomEvent('aiChatAreaMounted', { detail: { isMounted: true } });
     window.dispatchEvent(mountEvent);
     
     // 초기 마운트 시 항상 상태 초기화 - 페이지 새로고침 또는 다른 페이지에서 이동 시 적용
-    console.log('[AIChatArea] 컴포넌트 마운트 - 초기 상태로 초기화');
     
     // 리액트 상태 초기화
     setInputCentered(true);
@@ -273,7 +291,6 @@ function AIChatAreaContent() {
     };
     
     // 이벤트 리스너 등록 - document에도 등록 시도
-    console.log('[AIChatArea] homeButtonClick 이벤트 리스너 등록');
     window.addEventListener('homeButtonClick', handleHomeButtonClick);
     document.addEventListener('homeButtonClick', handleHomeButtonClick);
     
@@ -302,9 +319,6 @@ function AIChatAreaContent() {
     };
   }, []); // 의존성 배열 비움 - 마운트 시 한 번만 실행
 
-  // 창 너비 상태 추가
-  const [windowWidth, setWindowWidth] = useState<number>(1024); // 기본값 설정
-
   // 클라이언트 측에서만 window 객체 접근
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -323,6 +337,11 @@ function AIChatAreaContent() {
 
   // 메시지 전송 핸들러
   const handleSendMessage = async () => {
+    // 입력창을 즉시 중앙에서 해제하여 하단 입력창이 보이지 않도록 함
+    if (isInputCentered) {
+      setInputCentered(false);
+    }
+    
     // 시간 제한 체크
     const { isRestricted, nextAvailableTime } = checkTimeRestriction();
     if (isRestricted) {
@@ -339,9 +358,14 @@ function AIChatAreaContent() {
 
     console.log(`[AIChatAreaContent] 메시지 전송 요청 : ${stockState.searchTerm.trim()}`);
 
-    // 선택된 종목과 입력 메시지 확인
-    if ((!selectedStock && !currentSession) || !stockState.searchTerm.trim()) {
-      console.error('종목이 선택되지 않았거나 활성 세션이 없거나 메시지가 없습니다.');
+    // 일반 질문 모드가 아닌 경우 선택된 종목과 입력 메시지 확인
+    if (!stockState.isGeneralMode && (!selectedStock && !currentSession)) {
+      console.error('종목이 선택되지 않았거나 활성 세션이 없습니다.');
+      return;
+    }
+    
+    if (!stockState.searchTerm.trim()) {
+      console.error('메시지가 없습니다.');
       return;
     }
     
@@ -379,8 +403,19 @@ function AIChatAreaContent() {
       
       // 세션 정보 및 종목 정보 준비
       const sessionId = currentSession?.id || '';
-      const stockName = currentStock?.stockName || currentSession?.stock_name || '';
-      const stockCode = currentStock?.stockCode || currentSession?.stock_code || '';
+      
+      // 일반 질문 모드일 때 처리
+      let stockName: string;
+      let stockCode: string;
+      
+      if (stockState.isGeneralMode) {
+        stockName = 'general';
+        stockCode = 'general';
+        console.log('[AIChatAreaContent] 일반 질문 모드: stock_code와 stock_name을 general로 설정');
+      } else {
+        stockName = currentStock?.stockName || currentSession?.stock_name || '';
+        stockCode = currentStock?.stockCode || currentSession?.stock_code || '';
+      }
       
       // 메시지 ID 생성 (UUID 사용)
       const userMessageId = `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -412,7 +447,8 @@ function AIChatAreaContent() {
         currentMessage,
         currentStock || null, // 종목이 선택되지 않아도 null로 전달
         currentRecentStocks,
-        currentSession !== null // 현재 세션이 있으면 후속질문으로 간주
+        currentSession !== null, // 현재 세션이 있으면 후속질문으로 간주
+        stockState.isGeneralMode // 일반 질문 모드 상태 전달
       );
       
       // 기존 로그 대신 사용자 메시지 추적 로그 추가
@@ -487,11 +523,14 @@ function AIChatAreaContent() {
     // ChatStore에 상태 업데이트
     handleSelectStock(stock);
     
-    // 업데이트 정보를 입력창에 설정
-    setSearchTerm(updateInfo);
+    // 입력창을 비워서 placeholder("이 종목에 관하여 궁금한 점을 물어보세요")가 보이도록 설정
+    setSearchTerm("");
     
     // 종목 제안 팝업 닫기
     showSuggestions(false);
+    
+    // searchMode를 false로 설정하여 "이 종목에 관하여 궁금한 점을 물어보세요" 문구가 표시되도록 함
+    setSearchMode(false);
   };
 
   // ChatStore에서 UI용 메시지 가져오기
@@ -501,33 +540,37 @@ function AIChatAreaContent() {
   const renderChatContent = () => {
     // 메모이제이션된 StockSuggestions Props 생성
     const stockSuggestionsProps = useMemo(() => ({
+      onSelectStock: handleSelectStock,
+      popularStocksDaily,
+      popularStocksWeekly,
+      recentStocks: stockState.recentStocks,
+      isMobile,
+      isInputCentered,
+      searchTerm: stockState.searchTerm,
       isLoading: stockState.isLoading,
       error: stockState.error,
       filteredStocks: stockState.filteredStocks,
-      recentStocks: stockState.recentStocks,
-      stockOptions: stockState.stockOptions,
-      onSelectStock: (stock: StockOption) => {
-        //console.log(`[디버깅:AIChatArea] 종목 제안에서 선택: ${stock.stockName}(${stock.stockCode})`);
-        handleSelectStock(stock);
-      },
       onClearRecentStocks: clearRecentStocks,
-      isInputCentered: isInputCentered,
-      searchTerm: stockState.searchTerm
     }), [
+      handleSelectStock,
+      popularStocksDaily,
+      popularStocksWeekly,
+      stockState.recentStocks,
+      isMobile,
+      isInputCentered,
+      stockState.searchTerm,
       stockState.isLoading,
       stockState.error,
       stockState.filteredStocks,
-      stockState.recentStocks,
-      stockState.stockOptions,
-      stockState.searchTerm,
-      isInputCentered,
-      handleSelectStock,
-      clearRecentStocks
+      clearRecentStocks,
     ]);
 
     return (
       <>
         {/* 메시지 목록 영역 */}
+        {/* 관리자 전용 일반 질문 모드 토글 */}
+        <GeneralModeToggle className="mb-4" />
+        
         {!isInputCentered && uiMessages.length > 0 && (
           <MessageList
             ref={messageListRef}
@@ -542,9 +585,26 @@ function AIChatAreaContent() {
           />
         )}
 
+        {/* 임시 차트 팝업 - 분석 중이거나 완료된 상태에서 표시 */}
+        {preliminaryChart && (isLoading || !isLoading) && (
+          <PreliminaryChartDisplay 
+            chartData={preliminaryChart}
+            onClose={() => setPreliminaryChart(null)}
+            isCompleted={!isLoading}
+            onViewFinalReport={() => {
+              // 임시 차트 팝업 닫기
+              setPreliminaryChart(null);
+              // 최종 메시지로 스크롤
+              if (messageListRef.current?.scrollToBottom) {
+                messageListRef.current.scrollToBottom();
+              }
+            }}
+          />
+        )}
+
         {/* 입력 영역 (상단 중앙 또는 하단에 위치) */}
         {/* 후속 질문 일단 차단.*/}
-        {!currentSession && (
+        {!currentSession && !isUserSending && (
           <InputArea
             inputMessage={stockState.searchTerm || ''}
             setInputMessage={setSearchTerm}
@@ -566,51 +626,43 @@ function AIChatAreaContent() {
             scrollToBottom={() => messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom()}
             showTitle={showTitle}
             currentChatSession={currentSession}
+            isGeneralMode={stockState.isGeneralMode}
           />
         )}
         
         {/* 추천 질문 및 최신 업데이트 종목 영역 - 첫 진입 시 */}
         {isInputCentered && uiMessages.length === 0 && (
-          <div style={{
-            width: isMobile ? '100%' : 'min(85%, 1000px)',
-            minWidth: isMobile ? 'unset' : '280px',
-            maxWidth: '1000px',
-            margin: isMobile ? '50px auto 0' : '12px auto 0',
-            padding: isMobile ? '0 0' : '0',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
-          }}>
-            {/* 데스크탑: 중앙정렬, 모바일: 기존 중앙정렬 유지 */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: isMobile ? 'column' : 'row',
-                gap: isMobile ? '6px' : '8px',
-                width: '100%',
-                justifyContent: isMobile ? 'center' : 'center', // 항상 중앙정렬
-                alignItems: isMobile ? 'center' : 'flex-start', // 데스크탑은 위에서부터 시작
-              }}
-            >
+          <div 
+            style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? '20px' : '20px',
+              width: '100%',
+              justifyContent: 'center', 
+              alignItems: isMobile ? 'center' : 'flex-start',
+              marginTop: isMobile ? '2rem' : '0'
+            }}
+          >
             {/* 추천 질문 컴포넌트 */}
             <RecommendedQuestions 
-              questions={sampleRecommendedQuestions}
               onSelectQuestion={handleSelectQuestion}
             />
             
             {/* 최신 업데이트 종목 컴포넌트 */}
             <LatestUpdates 
-              updates={sampleLatestUpdates}
+              updatesDaily={popularStocksDaily}
+              updatesWeekly={popularStocksWeekly}
               onSelectUpdate={handleSelectUpdate}
             />
           </div>
-        </div>
-      )}
-      
-      {/* 종목 제안 영역 - 메모이제이션된 props 사용 */}
-      <StockSuggestions {...stockSuggestionsProps} />
-    </>
-  );
+        )}
+        
+        {/* 종목 제안 영역 - 일반 질문 모드가 아닐 때만 표시 */}
+        {!stockState.isGeneralMode && (
+          <StockSuggestions {...stockSuggestionsProps} />
+        )}
+      </>
+    );
 };
 
 // 컴포넌트 마운트 시 종목 데이터 로드 (빈 의존성 배열로 최초 1회만 실행)
@@ -619,13 +671,10 @@ useEffect(() => {
   let isFirstLoad = true;
 
   if (isFirstLoad) {
-    console.log('[AIChatAreaContent] 컴포넌트 마운트 - 종목 데이터 로드 검사');
     const { stockOptions } = stockState;
     if (stockOptions.length === 0) {
-      console.log('[AIChatAreaContent] 종목 데이터 없음 - 로드 시작');
       fetchStockList();
     } else {
-      console.log('[AIChatAreaContent] 종목 데이터 이미 로드됨 (', stockOptions.length, '개)');
     }
     isFirstLoad = false;
   }

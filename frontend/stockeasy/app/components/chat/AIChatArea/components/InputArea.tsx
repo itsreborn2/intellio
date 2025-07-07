@@ -34,6 +34,7 @@ interface InputAreaProps {
   scrollToBottom?: () => void;
   showTitle?: boolean;
   currentChatSession?: any; // 현재 채팅 세션 정보 추가
+  isGeneralMode?: boolean; // 일반 질문 모드 여부 추가
 }
 
 export function InputArea({
@@ -55,11 +56,37 @@ export function InputArea({
   onSearchModeChange,
   onClearRecentStocks,
   scrollToBottom,
-  showTitle = false,
-  currentChatSession
+  showTitle,
+  currentChatSession,
+  isGeneralMode = false
 }: InputAreaProps) {
+  // 입력창 텍스트 길이에 따라 높이 자동 조절
+  useEffect(() => {
+    if (inputRef.current) {
+      const textarea = inputRef.current;
+      const MIN_TEXTAREA_HEIGHT_PX = 40; // 한 줄일 때의 textarea 높이 (패딩 포함)
+      const LINE_CONTENT_HEIGHT_PX = 24; // 한 줄의 순수 텍스트 내용 높이 (font-size, line-height 등 기반)
+      const TOTAL_VERTICAL_PADDING_PX = 16; // py-2 (0.5rem * 2 = 8px * 2 = 16px)
+      const MAX_LINES = 3;
+      const MAX_TEXTAREA_HEIGHT_PX = (MAX_LINES * LINE_CONTENT_HEIGHT_PX) + TOTAL_VERTICAL_PADDING_PX; // (3 * 24px) + 16px = 88px
+
+      // 높이를 먼저 최소 높이로 리셋하여, 텍스트가 줄어들었을 때도 높이가 작아지도록 함
+      textarea.style.height = `${MIN_TEXTAREA_HEIGHT_PX}px`;
+      
+      const scrollHeight = textarea.scrollHeight;
+
+      if (scrollHeight > MAX_TEXTAREA_HEIGHT_PX) {
+        textarea.style.height = `${MAX_TEXTAREA_HEIGHT_PX}px`;
+        textarea.style.overflowY = 'auto'; // 내용이 최대 높이를 넘으면 스크롤 바 표시
+      } else {
+        textarea.style.height = `${scrollHeight}px`;
+        textarea.style.overflowY = 'hidden'; // 내용이 최대 높이 이내면 스크롤 바 숨김
+      }
+    }
+  }, [inputMessage]);
+
   const isMobile = useIsMobile();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const inputBoxRef = useRef<HTMLDivElement>(null);
   const stockSuggestionsRef = useRef<HTMLDivElement>(null);
   
@@ -76,8 +103,9 @@ export function InputArea({
   
   // 입력 영역 스타일
   const inputAreaStyle: React.CSSProperties = {
+    transform: 'translateZ(0)', // Webkit 렌더링 버그 수정을 위한 3D 변환
     width: '100%',
-    marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '35vh')) : '0px',
+    marginTop: isInputCentered ? (isMobile ? '25vh' : (windowWidth < 768 ? '30vh' : '27vh')) : '0px',
     marginBottom: '5px',
     position: isInputCentered ? 'relative' : 'fixed',
     bottom: isInputCentered ? 'auto' : '0',
@@ -97,22 +125,30 @@ export function InputArea({
     padding: 0
   };
   
+  // 입력박스의 스타일을 고정값으로 설정하여 렌더링 시 크기 변경 방지
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    minHeight: isMobile ? '2.2rem' : (windowWidth < 768 ? '2.3rem' : '2.5rem'),
-    height: 'auto',
-    border: '1px solid #ccc',
+    minHeight: '40px',
+    border: 'none',
     borderRadius: isMobile ? '6px' : '8px',
-    paddingTop: '0',
+    paddingTop: '8px',
     paddingRight: isMobile ? '35px' : '40px',
-    paddingBottom: '0',
+    paddingBottom: '8px',
     paddingLeft: selectedStock ? (isMobile ? '75px' : '85px') : (isMobile ? '6px' : '8px'),
     fontSize: isMobile ? '14px' : (windowWidth < 768 ? '15px' : '16px'),
     outline: 'none',
     boxSizing: 'border-box',
     resize: 'none',
     overflow: 'hidden',
-    maxWidth: '100%'
+    maxWidth: '100%',
+    backgroundColor: 'white',
+    color: 'oklch(0.372 0.044 257.287)',
+    WebkitAppearance: 'none',
+    appearance: 'none',
+    lineHeight: '1.5',
+    transition: 'none',
+    display: 'block', // 특정 브라우저에서 렌더링 개선
+    position: 'relative' // 포지션 고정하여 레이아웃 안정성 향상
   };
   
   // 종목 필터링 함수
@@ -333,8 +369,8 @@ export function InputArea({
   
   // 입력 필드 포커스 시 종목 추천 목록 표시
   const handleInputFocus = () => {
-    // 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
-    if (currentChatSession) {
+    // 일반 질문 모드이거나 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
+    if (isGeneralMode || currentChatSession) {
       return;
     }
     
@@ -374,8 +410,8 @@ export function InputArea({
     // 입력값을 먼저 설정하여 UI가 즉시 업데이트되도록 함
     setInputMessage(value);
     
-    // 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
-    if (currentChatSession) {
+    // 일반 질문 모드이거나 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
+    if (isGeneralMode || currentChatSession) {
       return;
     }
     
@@ -412,6 +448,7 @@ export function InputArea({
     searchMode, 
     onShowStockSuggestions, 
     onSearchModeChange, 
+    isGeneralMode,
     currentChatSession, 
     filterStocks,
     recentStocks,
@@ -456,22 +493,22 @@ export function InputArea({
       return;
     }
 
-    // 종목이 선택되어 있거나 현재 채팅 세션이 있는 경우 메시지 전송 가능
-    if ((selectedStock || hasActiveSession) && inputMessage.trim() !== '' && !isProcessing) {
+    // 일반 질문 모드이거나, 종목이 선택되어 있거나, 현재 채팅 세션이 있는 경우 메시지 전송 가능
+    if ((isGeneralMode || selectedStock || hasActiveSession) && inputMessage.trim() !== '' && !isProcessing) {
       onSendMessage();
       // scrollToBottom이 제공되었다면 호출
       if (scrollToBottom) {
         scrollToBottom();
       }
-    } else if (!selectedStock && !hasActiveSession) {
+    } else if (!isGeneralMode && !selectedStock && !hasActiveSession) {
       // 전송 불가 상태
     }
-  }, [selectedStock, inputMessage, isProcessing, onSendMessage, scrollToBottom, hasActiveSession]);
+  }, [isGeneralMode, selectedStock, inputMessage, isProcessing, onSendMessage, scrollToBottom, hasActiveSession]);
   
   // 컴포넌트 마운트 시 초기 상태 설정
   useEffect(() => {
-    // 초기 마운트 시 종목이 선택되어 있지 않고 활성 세션도 없는 경우 검색 모드 활성화
-    if (!selectedStock && !currentChatSession && !isInputCentered) {
+    // 일반 질문 모드가 아닌 경우에만 종목 선택 팝업 표시
+    if (!isGeneralMode && !selectedStock && !currentChatSession && !isInputCentered) {
       onSearchModeChange(true);
 
       // 종목 추천 팝업도 표시
@@ -498,6 +535,8 @@ export function InputArea({
   const handleDisplayedStocksChange = useCallback((stocks: StockOption[]) => {
     setDisplayedStocks(stocks);
   }, []);
+
+
   
   return (
     <div className="input-area" ref={inputBoxRef} style={inputAreaStyle}>
@@ -525,7 +564,7 @@ export function InputArea({
               transition: 'all 0.3s ease-in-out',
               display: isMobile ? 'none' : 'block'
             }}>
-              종목 선택 후 분석을 요청하세요.
+              {isGeneralMode ? "일반 질문을 입력하세요." : "종목 선택 후 분석을 요청하세요."}
             </h1>
           </div>
         )}
@@ -550,15 +589,16 @@ export function InputArea({
             />
           )}
           
-          <input
+          <textarea
             ref={inputRef}
-            placeholder={showStockSuggestions || searchMode 
-              ? "종목명 또는 종목코드 검색" 
-              : (hasActiveSession
-                ? "생성된 문서 내에서 이어지는 질문을 해보세요. 다른 종목은 새 채팅을 시작해주세요."
-                : "이 종목에 관하여 궁금한 점을 물어보세요.")}
+            placeholder={isGeneralMode 
+              ? "일반 질문을 입력하세요. (예: 2024년 AI 업계 동향은?)"
+              : (showStockSuggestions || searchMode 
+                ? "종목명 또는 종목코드 검색" 
+                : (hasActiveSession
+                  ? "생성된 문서 내에서 이어지는 질문을 해보세요. 다른 종목은 새 채팅을 시작해주세요."
+                  : "이 종목에 관하여 궁금한 점을 물어보세요."))}
             className="integrated-input-field"
-            type="text"
             value={inputMessage}
             onChange={handleInputChange}
             onFocus={(e) => {
@@ -579,14 +619,17 @@ export function InputArea({
               paddingLeft: isMobile ? '8px' : '16px',
               flex: 1,
               borderRadius: '6px',
-              cursor: isProcessing ? 'not-allowed' : 'text'
+              cursor: isProcessing ? 'not-allowed' : 'text',
+              resize: 'none',
+              maxHeight: 'none',
+              lineHeight: '1.5',
             }}
           />
           
           {/* 전송 아이콘 */}
           <SendButton
             onClick={handleSendButtonClick}
-            disabled={isProcessing || !inputMessage.trim() || (!selectedStock && !hasActiveSession)}
+            disabled={isProcessing || !inputMessage.trim() || (!isGeneralMode && !selectedStock && !hasActiveSession)}
             isProcessing={isProcessing}
           />
         </div>

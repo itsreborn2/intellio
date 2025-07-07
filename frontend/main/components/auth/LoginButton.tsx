@@ -153,14 +153,22 @@ export const LoginButton: React.FC<ILoginButtonProps> = ({ provider, redirectTo 
 
   // 강력한 시스템 브라우저 호출 (네이버 앱 대응)
   const handleOAuth = useCallback(() => {
-    // 절대 URL 생성 (새 탭에서 접근할 때 필요)
+    // 브라우저 환경에서 절대 URL 생성
     let backendUrl: string;
     
     if (typeof window !== 'undefined') {
-      // 브라우저 환경에서는 현재 도메인 + /api 사용
-      const currentDomain = window.location.origin;
-      backendUrl = `${currentDomain}/api`;
+      // 프로덕션 환경인지 확인
+      const isProduction = process.env.NEXT_PUBLIC_ENV === 'production';
+      
+      if (isProduction) {
+        // 프로덕션: https://intellio.kr/api 사용
+        backendUrl = `${window.location.origin}/api`;
+      } else {
+        // 개발: localhost:8000 직접 사용
+        backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+      }
     } else {
+      console.log('서버 환경');
       // 서버 환경에서는 환경변수 또는 기본값 사용
       backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
     }

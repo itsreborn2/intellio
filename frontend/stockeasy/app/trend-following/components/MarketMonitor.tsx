@@ -4,6 +4,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import Papa from 'papaparse';
 import Chart2 from './MarketMonitorChart/Chart2';
 import Chart3 from './MarketMonitorChart/Chart3';
+import Chart4 from './MarketMonitorChart/Chart4';
+import Chart5 from './MarketMonitorChart/Chart5';
 import { TableCopyButton } from '@/app/components/TableCopyButton';
 
 // CSV 데이터 타입 정의 (간단하게 정의, 필요시 구체화)
@@ -116,7 +118,7 @@ export default function MarketMonitor() {
   return (
     <div className="bg-white rounded border border-gray-100 px-2 md:px-4 py-3 md:py-4">
       <div ref={headerContainerRef} className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3">
-        <h3 className="text-lg font-semibold mb-1 sm:mb-0" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>시장 지표</h3>
+        <h3 className="text-base md:text-lg font-semibold mb-1 sm:mb-0" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>시장 지표</h3>
         {updateDate && (
           <span className="text-xs sm:mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
             updated {updateDate}
@@ -145,7 +147,23 @@ export default function MarketMonitor() {
           <div className="h-[300px]">
             <Chart3 data={marketData} />
           </div>
+        </div>
+        
+        {/* 네 번째 차트: KOSPI vs ADR */}
+        <div className="bg-white rounded border border-gray-200 p-3 md:p-4 shadow-sm">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">KOSPI 지수와 ADR</h3>
+          <div className="h-[300px]">
+            <Chart4 data={marketData} />
           </div>
+        </div>
+        
+        {/* 다섯 번째 차트: KOSDAQ vs ADR */}
+        <div className="bg-white rounded border border-gray-200 p-3 md:p-4 shadow-sm">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">KOSDAQ 지수와 ADR</h3>
+          <div className="h-[300px]">
+            <Chart5 data={marketData} />
+          </div>
+        </div>
         </div>
       )}
     </div>

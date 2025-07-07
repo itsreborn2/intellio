@@ -4,7 +4,6 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 from uuid import UUID
 from common.services.user import UserService
-from common.api.v1.auth import get_current_user
 from common.core.deps import get_current_session, get_db
 from common.models.user import Session, User
 from common.services.token_usage_service import get_token_usage, get_user_question_count

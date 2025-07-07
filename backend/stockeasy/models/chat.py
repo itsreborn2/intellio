@@ -13,6 +13,9 @@ class StockChatSession(Base):
     """
     __tablename__ = "stockeasy_chat_sessions"
     __table_args__ = (
+        # 사용자별 세션 조회 성능을 위한 복합 인덱스
+        Index("ix_stockeasy_chat_sessions_user_id_updated_at", "user_id", "updated_at"),
+        Index("ix_stockeasy_chat_sessions_user_id_is_active", "user_id", "is_active"),
         {"schema": "stockeasy"}  # stockeasy 스키마 사용
     )
     

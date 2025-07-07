@@ -9,6 +9,7 @@ from stockeasy.api.v1.telegram import telegram_router
 from stockeasy.api.v1.chat import chat_router
 from stockeasy.api.v1._internal_test import router as internal_test_router
 from stockeasy.api.v1.financial_data import router as financial_data_router
+from stockeasy.api.v1.stats import stats_router
 from loguru import logger
 
 # API v1 라우터
@@ -36,3 +37,8 @@ logger.info("내부 테스트 라우터 등록 완료")
 logger.info("재무 데이터 라우터 등록 시작")
 api_router_stockeasy.include_router(financial_data_router)
 logger.info("재무 데이터 라우터 등록 완료")
+
+# 통계 라우터 등록
+logger.info("통계 라우터 등록 시작")
+api_router_stockeasy.include_router(stats_router)
+logger.info("통계 라우터 등록 완료")

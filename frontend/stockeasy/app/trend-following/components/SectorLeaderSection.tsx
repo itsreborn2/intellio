@@ -4,7 +4,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Papa from 'papaparse';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
-import { TableCopyButton } from '@/app/components/TableCopyButton';
 
 interface SectorData {
   산업: string;
@@ -180,7 +179,7 @@ export default function SectorLeaderSection() {
   return (
     <section className="bg-white rounded border border-gray-100 px-2 md:px-4 py-2 md:py-3">
       <div ref={headerContainerRef} className="flex justify-between items-center mb-3">
-        <h2 className="text-lg font-semibold" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+        <h2 className="text-base md:text-lg font-semibold" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
           주도 섹터 및 주도주 현황
         </h2>
         <div className="flex items-center space-x-2">
@@ -189,12 +188,6 @@ export default function SectorLeaderSection() {
               updated {updateDate}
             </span>
           )}
-          <TableCopyButton 
-            tableRef={tableContainerRef} 
-            headerRef={headerContainerRef} 
-            tableName="수탁이지_주도섹터"
-            updateDateText={updateDate ? `updated ${updateDate}` : undefined}
-          />
         </div>
       </div>
 
@@ -202,30 +195,25 @@ export default function SectorLeaderSection() {
         <table className="min-w-full text-sm border border-gray-200 rounded-[6px]">
           <thead className="bg-gray-100">
             <tr>
-              <th className="px-3 py-2 border-b font-medium text-left w-[80px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>섹터</th>
-              <th className="px-3 py-2 border-b font-medium text-left w-[100px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
-              <th className="px-3 py-2 border-b font-medium text-right w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
-              <th className="px-3 py-2 border-b font-medium text-right w-[80px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>시가총액(억)</th>
-              <th className="px-3 py-2 border-b font-medium text-right w-[80px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>거래대금(억)</th>
-              <th className="px-3 py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>포지션</th>
-              <th className="px-3 py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
-              <th className="px-3 py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS_1M</th>
-              <th className="px-3 py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left w-[80px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>섹터</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left w-[100px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right w-[80px] hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>시가총액(억)</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right w-[80px] hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>거래대금(억)</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>포지션</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center w-[60px] hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS_1M</th>
+              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center w-[60px]" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
             </tr>
           </thead>
           <tbody>
             {Object.keys(data).map(sector => {
               const sectorStocks = data[sector];
-              let isFirstRow = true;
               
               return (
                 <React.Fragment key={sector}>
                   {sectorStocks.map((stock, stockIndex) => {
                     const showSector = stockIndex === 0;
-                    
-                    if (stockIndex === 0) {
-                      isFirstRow = false;
-                    }
                     
                     return (
                       <tr 
@@ -234,21 +222,21 @@ export default function SectorLeaderSection() {
                       >
                         {showSector && (
                           <td 
-                            className="px-3 py-2 border-b w-[80px]" 
+                            className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b w-[80px] align-middle" 
                             rowSpan={sectorStocks.length}
                           >
                             {sector}
                           </td>
                         )}
-                          <td className="px-3 py-2 border-b w-[100px]">{stock["종목명"]}</td>
-                          <td className="px-3 py-2 border-b text-right w-[60px]">
+                          <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b w-[100px]">{stock["종목명"]}</td>
+                          <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right w-[60px]">
                             <span className={`${parseFloat(stock["등락률"]) > 0 ? 'text-red-500' : parseFloat(stock["등락률"]) < 0 ? 'text-blue-500' : ''}`}>
                               {stock["등락률"]}%
                             </span>
                           </td>
-                          <td className="px-3 py-2 border-b text-right w-[60px]">{formatNumberWithCommas(stock["시가총액"])}</td>
-                          <td className="px-3 py-2 border-b text-right w-[60px]">{formatNumberWithCommas(stock["거래대금"])}</td>
-                          <td className="px-3 py-2 border-b text-center w-[60px]">
+                          <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right w-[60px] hidden md:table-cell">{formatNumberWithCommas(stock["시가총액"]) }</td>
+                          <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right w-[60px] hidden md:table-cell">{formatNumberWithCommas(stock["거래대금"]) }</td>
+                          <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-[60px]">
                             <div className="mx-auto flex items-center justify-center w-16 h-5 bg-green-100 text-green-800 rounded-[4px]">
                               <span className="text-xs font-medium">
                                 {stock["포지션"].includes('유지') 
@@ -257,9 +245,9 @@ export default function SectorLeaderSection() {
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-2 border-b text-center w-[60px]">{stock["RS"]}</td>
-                          <td className="px-3 py-2 border-b text-center w-[60px]">{stock["RS_1M"]}</td>
-                          <td className="px-3 py-2 border-b text-center w-[60px]">
+                          <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-[60px]">{stock["RS"]}</td>
+                          <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-[60px] hidden md:table-cell">{stock["RS_1M"]}</td>
+                          <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center w-[60px]">
                             {stock["MTT"] === 'y' ? (
                               <CheckCircleIcon className="h-4 w-4 text-green-500 mx-auto" />
                             ) : (

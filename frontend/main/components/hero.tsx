@@ -30,8 +30,7 @@ export default function Hero() {
   // 서비스 이동 시 로그인 상태 확인
   const handleServiceNavigation = (service: 'doceasy' | 'stockeasy') => {
     if (isAuthenticated) {
-      // 로그인 상태면 해당 서비스로 바로 이동 (토큰과 사용자 정보 포함)
-      const { token, user } = useAuth.getState();
+      // 로그인 상태면 해당 서비스로 바로 이동 (쿠키 기반)
       const domain_url = process.env.NEXT_PUBLIC_ENV === 'production' ? 'https://' : 'http://';
       let service_url
       if( process.env.NEXT_PUBLIC_ENV === 'production')
@@ -43,15 +42,9 @@ export default function Hero() {
         if( service === 'doceasy') service_url = `localhost:3010`;
         else if( service === 'stockeasy') service_url = `localhost:3020`;
       }
-      if (token && user) {
-        // 사용자 정보 인코딩
-        const encodedUser = encodeURIComponent(JSON.stringify(user));
-        // 토큰을 URL 파라미터로 포함
-        window.location.href = `${domain_url}${service_url}/auto-login?token=${token}&user=${encodedUser}`;
-      } else {
-        // 토큰이 없으면 그냥 이동
-        window.location.href = `${domain_url}${service_url}`;
-      }
+      
+      // 쿠키가 자동으로 전달되므로 토큰 파라미터 불필요
+      window.location.href = `${domain_url}${service_url}`;
     } else {
       // 비로그인 상태면 로그인 페이지로 이동 후 리디렉션
       setRedirectTo(service);
@@ -76,7 +69,7 @@ export default function Hero() {
         <span className={`absolute inset-[-1000%] animate-[spin_2s_linear_infinite] ${gradientClass}`} />
         <Button 
           size="lg" 
-          className="relative rounded-full bg-background px-8 py-4 text-lg font-semibold leading-none tracking-tight inline-flex h-full w-full cursor-pointer items-center justify-center text-foreground hover:bg-accent/10 transition-colors"
+          className="relative rounded-full bg-background px-14 py-6 text-xl font-semibold leading-none tracking-tight inline-flex h-20 w-full cursor-pointer items-center justify-center text-foreground hover:bg-accent/10 transition-colors"
           disabled={isAuthLoading}
         >
           {buttonContent}
@@ -86,28 +79,22 @@ export default function Hero() {
   };
   
   return (
-    <section className="container relative flex min-h-[calc(75vh-3.5rem)] max-w-screen-2xl flex-col items-center justify-center space-y-6 py-8 mt-10 text-center md:py-12">
+    <section className="container relative flex min-h-[calc(100vh-9rem)] max-w-screen-2xl flex-col items-center justify-center space-y-10 pt-0 pb-8 text-center md:pb-12">
       <div className="absolute inset-0 bg-radial-gradient from-primary to-accent opacity-10 blur-xl"></div>
       <div className="relative space-y-3">
-        <h1 className="bg-gradient-to-br from-foreground from-30% via-foreground/90 to-foreground/70 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl md:text-6xl lg:text-7xl">
-          Innovate Faster with
-          <br />
-          Intellio
-        </h1>
-        <p className="mx-auto leading-normal text-muted-foreground sm:text-xl sm:leading-7">
-          스탁이지(StockEasy)는 주식 전문 AI 어시스턴트로 당신의 리서치 시간을 줄여줍니다.
-        </p>
+        <h1 className="bg-gradient-to-br from-foreground from-30% via-foreground/90 to-foreground/70 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl md:text-6xl lg:text-7xl leading-tight">
+  전업 투자자들이 직접 만든 AI
+  <span className="block mt-[0.5em] leading-tight">스탁이지</span>
+  <span className="block mt-[0.5em] leading-loose text-[40%] font-normal ">실전 투자에 필요한 정보로 당신의 리서치 시간을 줄여줍니다.</span>
+</h1>
       </div>
-      <br />
-      <div className="relative flex gap-6">
+      <div className="relative flex gap-6 justify-center mt-8">
         {renderServiceButton(
           'stockeasy', 
-          'StockEasy',
+          '스탁이지 무료체험 시작하기',
           'bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]'
         )}
       </div>
-      <br />
     </section>
   )
 }
-

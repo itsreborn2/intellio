@@ -4,6 +4,7 @@
  */
 import React, { createContext, useContext, useReducer, ReactNode, useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { StockOption, StockSearchState, StockSearchAction } from '../types';
+import { parseCookies } from 'nookies';
 import Papa from 'papaparse';
 
 // 로컬 스토리지 키 상수 정의
@@ -17,8 +18,11 @@ const initialState: StockSearchState = {
   showStockSuggestions: false,
   isLoading: false,
   error: null,
-  searchMode: false,
-  stockOptions: [] // 종목 목록 추가
+  searchMode: true, // 새로고침 시 처음부터 '종목명 또는 종목코드 검색' 표시하도록 설정
+  stockOptions: [], // 종목 목록 추가
+  // 일반 질문 모드 관련 상태 추가
+  isGeneralMode: false,
+  isAdminUser: false,
 };
 
 // 리듀서 함수 정의
@@ -121,6 +125,19 @@ function stockSearchReducer(state: StockSearchState, action: StockSearchAction):
         stockOptions: action.payload
       };
       
+    // 일반 질문 모드 관련 액션 처리
+    case 'SET_GENERAL_MODE':
+      return {
+        ...state,
+        isGeneralMode: action.payload
+      };
+      
+    case 'SET_ADMIN_USER':
+      return {
+        ...state,
+        isAdminUser: action.payload
+      };
+      
     default:
       return state;
   }
@@ -142,6 +159,10 @@ type StockSelectorContextType = {
   clearRecentStocks: () => void;
   setStockOptions: (stocks: StockOption[]) => void;
   fetchStockList: () => Promise<void>;
+  // 일반 질문 모드 관련 함수들
+  setGeneralMode: (isGeneral: boolean) => void;
+  setAdminUser: (isAdmin: boolean) => void;
+  checkAdminUser: () => void;
 };
 
 // 컨텍스트 생성
@@ -158,6 +179,39 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
   const isLoadingRef = useRef(false);
   const hasLoggedRef = useRef(false);
   
+  // 관리자 체크 함수
+  const checkAdminUser = useCallback(() => {
+    try {
+      const adminIds = JSON.parse(process.env.NEXT_PUBLIC_ADMIN_IDS || "[]");
+      const cookies = parseCookies();
+      
+      let userEmail = '';
+      
+      // 쿠키에서 이메일 가져오기
+      if (cookies.user_email) {
+        userEmail = cookies.user_email;
+      } else if (cookies.user) {
+        try {
+          let jsonString = decodeURIComponent(cookies.user);
+          if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
+            jsonString = jsonString.slice(1, -1).replace(/\\"/g, '"');
+          }
+          const userInfo = JSON.parse(jsonString);
+          userEmail = userInfo.email || '';
+        } catch (e) {
+          console.error('사용자 정보 파싱 오류:', e);
+        }
+      }
+      
+      const isAdmin = adminIds.includes(userEmail);
+      dispatch({ type: 'SET_ADMIN_USER', payload: isAdmin });
+      
+      console.log('관리자 체크:', { userEmail, isAdmin, adminIds });
+    } catch (error) {
+      console.error('관리자 체크 오류:', error);
+    }
+  }, []);
+
   // 종목 목록 가져오기 함수 (useCallback으로 안정화)
   const fetchStockList = useCallback(async () => {
     // 이미 로드 중이면 중복 호출 방지
@@ -186,50 +240,151 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'SET_ERROR', payload: null }); // 요청 시작 시 오류 상태 초기화
 
-      // 서버 캐시 CSV 파일 경로
-      const csvFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+      let stockData: any[] = [];
+      let dataSource = '';
 
-      // 서버 캐시 파일 가져오기 (항상 최신 데이터 사용)
-      const response = await fetch(csvFilePath, { cache: 'no-store' });
-
-      if (!response.ok) {
-        throw new Error(`서버 캐시 파일 로드 오류: ${response.status}`);
-      }
-
-      // CSV 파일 내용 가져오기
-      const csvContent = await response.text();
-
-      // CSV 파싱
-      const parsedData = Papa.parse(csvContent, {
-        header: true,
-        skipEmptyLines: true
-      });
-
-      // 중복 제거를 위한 Set 생성
-      const uniqueStocks = new Set();
-
-      // 종목 데이터 추출 (종목명(종목코드) 형식으로 변경)
-      const stockData = parsedData.data
-        .filter((row: any) => row.종목명 && row.종목코드) // 종목명과 종목코드가 있는 행만 필터링
-        .filter((row: any) => {
-          // 중복 제거 (같은 종목코드는 한 번만 포함)
-          if (uniqueStocks.has(row.종목코드)) {
-            return false;
+      try {
+        // 1차 시도: Stock Data 컨테이너 API에서 종목 리스트 가져오기
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_STOCK_DATA_URL;
+        const apiUrl = `${apiBaseUrl}/api/v1/stock/list_for_stockai?gzip_enabled=true`;
+        
+        const response = await fetch(apiUrl, { 
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
           }
-          uniqueStocks.add(row.종목코드);
-          return true;
-        })
-        .map((row: any) => ({
-          value: row.종목코드, // 값은 종목코드로 설정
-          label: `${row.종목명}(${row.종목코드})`, // 라벨은 종목명(종목코드)로 설정
-          display: row.종목명, // 메인 디스플레이 텍스트는 종목명만 (react-mentions용)
-          stockName: row.종목명, // 종목명 저장
-          stockCode: row.종목코드 // 종목코드 저장
-        }));
+        });
+
+        if (response.ok) {
+          // API 응답 데이터 가져오기
+          const apiData = await response.json();
+          
+          // API 응답에서 종목 리스트 추출 (응답 구조에 따라 조정 필요)
+          const stockList = apiData.data || apiData.stocks || apiData;
+
+          // API 응답 구조 확인 및 데이터 추출
+          let rawStockList: any[] = [];
+          
+          if (apiData.data && Array.isArray(apiData.data) && apiData.headers) {
+            // 압축된 형태의 응답 처리: headers와 data 배열
+            const headers = apiData.headers; // ["code", "name", "market"]
+            const codeIndex = headers.indexOf('code');
+            const nameIndex = headers.indexOf('name');
+            const marketIndex = headers.indexOf('market');
+            
+            if (codeIndex !== -1 && nameIndex !== -1) {
+              rawStockList = apiData.data.map((row: any[]) => ({
+                종목코드: row[codeIndex],
+                종목명: row[nameIndex],
+                market: marketIndex !== -1 ? row[marketIndex] : ''
+              }));
+            } else {
+              throw new Error('API 응답의 헤더 구조가 예상과 다릅니다.');
+            }
+          } else if (apiData.stocks && Array.isArray(apiData.stocks)) {
+            // 일반 형태의 응답 처리
+            rawStockList = apiData.stocks.map((stock: any) => ({
+              종목코드: stock.code,
+              종목명: stock.name,
+              market: stock.market || ''
+            }));
+          } else if (Array.isArray(apiData)) {
+            // 배열 형태의 직접 응답
+            rawStockList = apiData.map((stock: any) => ({
+              종목코드: stock.code || stock.종목코드,
+              종목명: stock.name || stock.종목명,
+              market: stock.market || ''
+            }));
+          } else {
+            throw new Error('API 응답 형식을 인식할 수 없습니다.');
+          }
+
+          if (rawStockList.length > 0) {
+            // 중복 제거를 위한 Set 생성
+            const uniqueStocks = new Set();
+
+            // 종목 데이터 변환 (기존 구조 유지)
+            stockData = rawStockList
+              .filter((stock: any) => stock.종목명 && stock.종목코드) // 종목명과 종목코드가 있는 항목만 필터링
+              .filter((stock: any) => {
+                // 중복 제거 (같은 종목코드는 한 번만 포함)
+                if (uniqueStocks.has(stock.종목코드)) {
+                  return false;
+                }
+                uniqueStocks.add(stock.종목코드);
+                return true;
+              })
+              .map((stock: any) => ({
+                value: stock.종목코드, // 값은 종목코드로 설정
+                label: `${stock.종목명}(${stock.종목코드})`, // 라벨은 종목명(종목코드)로 설정
+                display: stock.종목명, // 메인 디스플레이 텍스트는 종목명만 (react-mentions용)
+                stockName: stock.종목명, // 종목명 저장
+                stockCode: stock.종목코드 // 종목코드 저장
+              }));
+
+            dataSource = 'API';
+            console.log(`종목 리스트 API 로드 완료: ${stockData.length}개 종목`);
+          } else {
+            throw new Error('API 응답에서 유효한 종목 데이터를 찾을 수 없습니다.');
+          }
+        } else {
+          throw new Error(`Stock Data API 요청 오류: ${response.status}`);
+        }
+      } catch (apiError) {
+        console.warn('API에서 종목 리스트 로드 실패, CSV 파일로 fallback 시도:', apiError);
+        
+        try {
+          // 2차 시도: CSV 파일에서 종목 리스트 가져오기 (fallback)
+          const csvFilePath = '/requestfile/stock-data/stock_1idvb5kio0d6dchvoywe7ovwr-ez1cbpb.csv';
+          
+          const csvResponse = await fetch(csvFilePath, { cache: 'no-store' });
+
+          if (!csvResponse.ok) {
+            throw new Error(`CSV 파일 로드 오류: ${csvResponse.status}`);
+          }
+
+          // CSV 파일 내용 가져오기
+          const csvContent = await csvResponse.text();
+
+          // CSV 파싱
+          const parsedData = Papa.parse(csvContent, {
+            header: true,
+            skipEmptyLines: true
+          });
+
+          // 중복 제거를 위한 Set 생성
+          const uniqueStocks = new Set();
+
+          // 종목 데이터 추출 (종목명(종목코드) 형식으로 변경)
+          stockData = parsedData.data
+            .filter((row: any) => row.종목명 && row.종목코드) // 종목명과 종목코드가 있는 행만 필터링
+            .filter((row: any) => {
+              // 중복 제거 (같은 종목코드는 한 번만 포함)
+              if (uniqueStocks.has(row.종목코드)) {
+                return false;
+              }
+              uniqueStocks.add(row.종목코드);
+              return true;
+            })
+            .map((row: any) => ({
+              value: row.종목코드, // 값은 종목코드로 설정
+              label: `${row.종목명}(${row.종목코드})`, // 라벨은 종목명(종목코드)로 설정
+              display: row.종목명, // 메인 디스플레이 텍스트는 종목명만 (react-mentions용)
+              stockName: row.종목명, // 종목명 저장
+              stockCode: row.종목코드 // 종목코드 저장
+            }));
+
+          dataSource = 'CSV';
+          console.log(`종목 리스트 CSV 로드 완료 (fallback): ${stockData.length}개 종목`);
+        } catch (csvError) {
+          throw new Error(`API 및 CSV 파일 모두에서 종목 리스트 로드 실패: ${csvError}`);
+        }
+      }
 
       if (stockData.length > 0) {
         // 한 번만 로그 출력 (세션당)
         if (!hasLoggedRef.current) {
+          console.log(`종목 리스트 로드 완료 (${dataSource}): ${stockData.length}개 종목`);
           hasLoggedRef.current = true;
         }
         dispatch({ type: 'SET_STOCK_OPTIONS', payload: stockData });
@@ -252,6 +407,9 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setIsMounted(true);
     
+    // 관리자 체크
+    checkAdminUser();
+    
     // 로컬 스토리지에서 최근 조회 종목 가져오기
     try {
       const savedStocks = localStorage.getItem(LOCAL_STORAGE_RECENT_STOCKS_KEY);
@@ -263,7 +421,7 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
     }
-  }, []);
+  }, [checkAdminUser]);
 
   // 컴포넌트 마운트 시 종목 리스트 가져오기 (최초 한 번만)
   useEffect(() => {
@@ -326,8 +484,14 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
     },
     setStockOptions: (stocks: StockOption[]) => 
       dispatch({ type: 'SET_STOCK_OPTIONS', payload: stocks }),
-    fetchStockList // 종목 목록 가져오기 함수 추가
-  }), [state, dispatch, isMounted]);
+    fetchStockList, // 종목 목록 가져오기 함수 추가
+    // 일반 질문 모드 관련 함수들
+    setGeneralMode: (isGeneral: boolean) => 
+      dispatch({ type: 'SET_GENERAL_MODE', payload: isGeneral }),
+    setAdminUser: (isAdmin: boolean) => 
+      dispatch({ type: 'SET_ADMIN_USER', payload: isAdmin }),
+    checkAdminUser
+  }), [state, dispatch, isMounted, checkAdminUser]);
   
   return (
     <StockSelectorContext.Provider value={contextValue}>

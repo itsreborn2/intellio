@@ -431,6 +431,8 @@ export default function High52Chart() {
                       stockName={chartInfo.name}
                       showMA20={false}
                       parentComponent="High52Chart"
+                      kospiIndexData={kospiIndexData}
+                      kosdaqIndexData={kosdaqIndexData}
                     />
                   )}
                 </div>

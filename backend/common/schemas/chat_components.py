@@ -6,6 +6,7 @@ Pydantic 모델들을 정의합니다.
 """
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Literal, Union, Optional
+from datetime import datetime
 
 
 # --- 복합 컴포넌트 ---
@@ -49,6 +50,57 @@ class MixedChartComponent(BaseModel):
     type: Literal['mixed_chart'] = 'mixed_chart'
     title: Optional[str] = Field(None, description="차트 제목")
     data: MixedChartData = Field(..., description="차트 데이터")
+
+
+class PriceChartData(BaseModel):
+    """주가차트 데이터 모델"""
+    symbol: str = Field(..., description="종목코드")
+    name: str = Field(..., description="종목명")
+    candle_data: List[Dict[str, Any]] = Field(..., description="캔들스틱 데이터 (OHLCV)")
+    volume_data: Optional[List[Dict[str, Any]]] = Field(None, description="거래량 데이터")
+    moving_averages: Optional[List[Dict[str, Any]]] = Field(None, description="이동평균선 데이터")
+    support_lines: Optional[List[Dict[str, Any]]] = Field(None, description="지지선 데이터")
+    resistance_lines: Optional[List[Dict[str, Any]]] = Field(None, description="저항선 데이터")
+    period: Optional[str] = Field(None, description="조회 기간")
+    interval: Optional[str] = Field(None, description="차트 간격")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="추가 메타데이터")
+
+
+class PriceChartComponent(BaseModel):
+    """주가차트 컴포넌트 모델"""
+    type: Literal['price_chart'] = 'price_chart'
+    title: Optional[str] = Field(None, description="차트 제목")
+    data: PriceChartData = Field(..., description="주가차트 데이터")
+
+
+class TechnicalIndicatorData(BaseModel):
+    """기술적 지표 데이터 모델 (시계열 데이터)"""
+    name: str = Field(..., description="지표명")
+    data: List[float] = Field(..., description="지표 값 배열")
+    color: Optional[str] = Field(None, description="지표 색상")
+    chart_type: Literal['line', 'bar', 'area'] = Field(default='line', description="차트 타입")
+    y_axis_id: Optional[str] = Field(default='primary', description="Y축 ID (primary, secondary)")
+    line_style: Literal['solid', 'dashed', 'dotted'] = Field(default='solid', description="선 스타일")
+    directions: Optional[List[float]] = Field(None, description="방향 데이터 배열 (슈퍼트렌드용: 1=상승, -1=하락)")
+
+
+class TechnicalIndicatorChartData(BaseModel):
+    """기술적 지표 차트 데이터 모델"""
+    symbol: str = Field(..., description="종목코드")
+    name: str = Field(..., description="종목명")
+    dates: List[str] = Field(..., description="날짜 배열 (X축)")
+    candle_data: Optional[List[Dict[str, Any]]] = Field(None, description="주가 캔들 데이터 (선택적)")
+    indicators: List[TechnicalIndicatorData] = Field(..., max_items=5, description="기술적 지표 목록 (최대 5개)")
+    y_axis_configs: Optional[Dict[str, Dict[str, Any]]] = Field(None, description="Y축 설정")
+    period: Optional[str] = Field(None, description="조회 기간")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="추가 메타데이터")
+
+
+class TechnicalIndicatorChartComponent(BaseModel):
+    """기술적 지표 차트 컴포넌트 모델"""
+    type: Literal['technical_indicator_chart'] = 'technical_indicator_chart'
+    title: Optional[str] = Field(None, description="차트 제목")
+    data: TechnicalIndicatorChartData = Field(..., description="기술적 지표 차트 데이터")
 
 
 class ImageComponent(BaseModel):
@@ -121,6 +173,8 @@ MessageComponent = Union[
     BarChartComponent,
     LineChartComponent,
     MixedChartComponent,
+    PriceChartComponent,
+    TechnicalIndicatorChartComponent,
     ImageComponent,
     TableComponent,
     # 필요시 추가 컴포넌트 정의

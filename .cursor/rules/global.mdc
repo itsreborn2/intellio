@@ -23,3 +23,8 @@ alwaysApply: false
 - Main : port 3000 ( www.intellio.kr )
 - Doceasy : port 3010 ( doceasy.intellio.kr )
 - Stockeasy : port 3020 ( stockeasy.intellio.kr ) 
+
+# response formatter
+- Gemini의 @tool 데코레이터는 파라미터로 dictionary를 넘겨야한다.
+- 정상 : create_paragraph({"content": before_text})
+- 오류 : create_paragraph(content=before_text)

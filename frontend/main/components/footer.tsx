@@ -4,10 +4,10 @@ import { Github, Twitter, Linkedin } from "lucide-react"
 export default function Footer() {
   return (
     <footer className="border-0 mt-auto pt-12">
-      <div className="container py-16">
+      <div className="container pt-16">
         <div className="mx-auto max-w-4xl text-center">
           <div className="mb-4">
-            <p className="font-medium text-sm">주식회사 인텔리오 (스탁이지)</p>
+            <p className="font-medium text-sm">주식회사 인텔리오</p>
             <div className="text-xs text-muted-foreground space-y-1 mt-3">
               <p>대표이사 : 김상균, 조훈</p>
               <p>경기도 수원시 영통구 대학4로 17, 316-47호(이의동)</p>

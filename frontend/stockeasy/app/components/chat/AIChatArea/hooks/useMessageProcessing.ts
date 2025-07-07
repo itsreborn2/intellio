@@ -18,6 +18,7 @@ interface MessageProcessingOptions {
   onQuestionLimitExceeded?: () => void;
   onProcessingStart?: () => void;
   onProcessingComplete?: () => void;
+  onPreliminaryChart?: (data: any) => void;
   maxQuestions?: number;
 }
 
@@ -37,7 +38,8 @@ interface MessageProcessingHook {
     inputMessage: string, 
     selectedStock: StockOption | null, 
     recentStocks: StockOption[],
-    isFollowUp?: boolean
+    isFollowUp?: boolean,
+    isGeneralMode?: boolean
   ) => Promise<void>;
   saveAsPdf: (sessionId: string, expertMode?: boolean) => Promise<void>;
   isPdfLoading: boolean;
@@ -62,6 +64,7 @@ function useMessageProcessing(
     onQuestionLimitExceeded = () => toast.error('오늘의 질문 할당량을 모두 소진하였습니다. 내일 다시 이용해주세요.'),
     onProcessingStart = () => {},
     onProcessingComplete = () => {},
+    onPreliminaryChart = () => {},
     maxQuestions = 10
   } = options;
 
@@ -141,7 +144,8 @@ function useMessageProcessing(
     inputMessage: string,
     selectedStock: StockOption | null,
     recentStocks: StockOption[],
-    isFollowUp: boolean = false
+    isFollowUp: boolean = false,
+    isGeneralMode: boolean = false
   ) => {
     // 시간 제한 체크
     const { isRestricted, nextAvailableTime } = checkTimeRestriction();
@@ -157,9 +161,10 @@ function useMessageProcessing(
       return;
     }
     
-    // 종목과 세션 모두 없는 경우
-    if (!selectedStock && !currentSession) {
-      toast.error('종목이 선택되지 않았거나 활성 세션이 없습니다.');
+    // 종목과 세션 모두 없는 경우 (일반 질문 모드는 예외)
+    if (!selectedStock && !currentSession &&!isGeneralMode)
+    {
+      toast.error('종목이 선택되지 않았습니다.');
       return;
     }
 
@@ -182,7 +187,10 @@ function useMessageProcessing(
       let sessionId = currentSession?.id;
       
       // 현재 세션에서 종목 정보 가져오기 (종목이 선택되지 않은 경우)
-      const stockInfo = selectedStock ? {
+      const stockInfo = isGeneralMode ? {
+        stockName: 'general',
+        stockCode: 'general'
+      } : selectedStock ? {
         stockName: selectedStock.stockName || '',
         stockCode: selectedStock.value || ''
       } : currentSession ? {
@@ -224,26 +232,40 @@ function useMessageProcessing(
       // 채팅 세션이 없으면 새로 생성
       if (!sessionId) {
         try {
-          // 종목이 반드시 있어야 함 (현재 세션이 없는 경우 위에서 이미 체크됨)
-          if (!selectedStock) {
+          // 종목이 반드시 있어야 함 (일반 질문 모드는 예외)
+          if (!selectedStock && !isGeneralMode) {
             throw new Error('세션이 없는 상태에서 종목이 선택되지 않았습니다.');
           }
           
-          // 종목 정보 추출
-          const stockName = selectedStock.stockName || '종목명';
-          const stockCode = selectedStock.value || selectedStock.stockCode || '000000';
+          let stockName: string, stockCode: string, session_name: string, stockInfoData: any;
           
-          // 종목명(종목코드) : 질문내용 형식으로 세션명 생성
-          const session_name = `${stockName}(${stockCode}) : ${inputMessage}`;
-          
-          // 종목 추가 정보 구성 (현재 StockOption 인터페이스의 필드만 사용)
-          const stockInfoData = {
-            value: selectedStock.value,
-            label: selectedStock.label,
-            stockName: selectedStock.stockName,
-            stockCode: selectedStock.stockCode,
-            display: selectedStock.display
-          };
+          if (isGeneralMode) {
+            // 일반 질문 모드일 때
+            stockName = 'general';
+            stockCode = 'general';
+            session_name = `일반 질문 : ${inputMessage}`;
+            stockInfoData = {
+              value: 'general',
+              label: '일반 질문',
+              stockName: 'general',
+              stockCode: 'general',
+              display: '일반 질문'
+            };
+          } else {
+            // 일반 종목 선택 모드일 때
+            stockName = selectedStock!.stockName || '종목명';
+            stockCode = selectedStock!.value || selectedStock!.stockCode || '000000';
+            session_name = `${stockName}(${stockCode}) : ${inputMessage}`;
+            
+            // 종목 추가 정보 구성 (현재 StockOption 인터페이스의 필드만 사용)
+            stockInfoData = {
+              value: selectedStock!.value,
+              label: selectedStock!.label,
+              stockName: selectedStock!.stockName,
+              stockCode: selectedStock!.stockCode,
+              display: selectedStock!.display
+            };
+          }
           
           // 세션 생성 요청 (종목 정보 포함)
           const newSession = await createChatSession(
@@ -369,6 +391,77 @@ function useMessageProcessing(
               created_at: new Date().toISOString()
             });
           },
+          onPreliminaryChart: (data) => {
+            console.log('[MessageProcessing] 임시 차트 수신:', data);
+            
+            // 데이터 유효성 검증
+            try {
+              if (!data) {
+                console.warn('[MessageProcessing] 임시 차트 데이터가 null입니다.');
+                toast.warning('차트 데이터가 없습니다.');
+                return;
+              }
+              
+              if (!data.components || !Array.isArray(data.components)) {
+                console.warn('[MessageProcessing] 임시 차트 컴포넌트가 배열이 아닙니다:', data);
+                toast.warning('차트 컴포넌트 형식이 올바르지 않습니다.');
+                return;
+              }
+              
+              if (data.components.length === 0) {
+                console.warn('[MessageProcessing] 임시 차트 컴포넌트가 비어있습니다.');
+                toast.info('차트 데이터를 준비하고 있습니다...');
+                return;
+              }
+              
+              // 각 컴포넌트의 데이터 구조 검증
+              let validComponentCount = 0;
+              data.components.forEach((component: any, index: number) => {
+                if (component && component.type) {
+                  validComponentCount++;
+                  
+                  // 차트 컴포넌트인 경우 추가 검증
+                  if (component.type.includes('chart') && component.data && component.data.chart_data) {
+                    const chartData = component.data.chart_data;
+                    
+                    if (!chartData.dates || !Array.isArray(chartData.dates)) {
+                      console.warn(`[MessageProcessing] 컴포넌트 ${index}에 날짜 데이터가 없습니다:`, component.type);
+                    }
+                    
+                    const indicatorKeys = Object.keys(chartData).filter(key => 
+                      !['dates', 'close', 'high', 'low', 'volume'].includes(key)
+                    );
+                    
+                    console.log(`[MessageProcessing] 컴포넌트 ${index} (${component.type}) 지표 수: ${indicatorKeys.length}개`);
+                    console.log(`[MessageProcessing] 사용 가능한 지표:`, indicatorKeys);
+                  }
+                } else {
+                  console.warn(`[MessageProcessing] 컴포넌트 ${index}가 유효하지 않습니다:`, component);
+                }
+              });
+              
+              console.log(`[MessageProcessing] 총 ${data.components.length}개 컴포넌트 중 ${validComponentCount}개가 유효함`);
+              
+              if (validComponentCount === 0) {
+                console.warn('[MessageProcessing] 유효한 차트 컴포넌트가 없습니다.');
+                toast.warning('유효한 차트 데이터가 없습니다.');
+                return;
+              }
+              
+              // 콜백 호출 (필드명 매칭: stock_info -> stockInfo)
+              console.log('[MessageProcessing] 원본 data.stock_info:', data.stock_info);
+              const chartData = {
+                ...data,
+                stockInfo: data.stock_info // 백엔드의 stock_info를 stockInfo로 매핑
+              };
+              console.log('[MessageProcessing] 매핑된 chartData.stockInfo:', chartData.stockInfo);
+              onPreliminaryChart(chartData);
+              
+            } catch (error) {
+              console.error('[MessageProcessing] 임시 차트 처리 중 오류:', error);
+              toast.error('차트 데이터 처리 중 오류가 발생했습니다.');
+            }
+          },
           onComplete: (data) => {
             console.log('[MessageProcessing] 처리 완료:', data);
             
@@ -482,8 +575,9 @@ function useMessageProcessing(
               console.log('[MessageProcessing] 상태 메시지가 이미 제거됨');
             }
             
-            // 처리 완료 콜백 호출
+            // 처리 완료 콜백 호출 및 로딩 상태 종료
             onProcessingComplete();
+            setProcessing(false);
 
             // 디버깅 로그 정리 (components 변수 참조 오류 수정)
             console.log('[MessageProcessing] 처리 완료 및 응답 ID:', assistantMessageId.current);

@@ -50,6 +50,11 @@ export default function StockChatHistory({
   const [chatSessions, setChatSessions] = useState<IChatSession[]>([]) // 채팅 세션 목록
   const [isLoadingChatSessions, setIsLoadingChatSessions] = useState(false) // 채팅 세션 로딩 상태
   
+  // 무한 스크롤을 위한 추가 상태
+  const [offset, setOffset] = useState(0) // 페이징 오프셋
+  const [hasMore, setHasMore] = useState(true) // 더 가져올 데이터가 있는지
+  const [isLoadingMore, setIsLoadingMore] = useState(false) // 추가 로딩 상태
+  
   // Zustand 스토어 사용
   const loadChatSession = useChatStore(state => state.loadChatSession)
 
@@ -104,10 +109,35 @@ export default function StockChatHistory({
       
       const lastFetchTime = parseInt(lastFetch, 10);
       
+      // localStorage 값 검증 및 디버깅 정보 추가
+      if (isNaN(lastFetchTime)) {
+        console.warn('[히스토리 패널] localStorage 값이 유효하지 않음:', lastFetch);
+        localStorage.removeItem(CHAT_SESSIONS_LAST_FETCH_KEY);
+        return true;
+      }
+      
+      const timeSinceLastFetch = currentTime - lastFetchTime;
+      
+      // 디버깅을 위한 상세 로그
+      console.log('[히스토리 패널] 시간 디버깅 정보:', {
+        currentTime: new Date(currentTime).toLocaleString(),
+        lastFetchTime: new Date(lastFetchTime).toLocaleString(), 
+        timeSinceLastFetchMs: timeSinceLastFetch,
+        timeSinceLastFetchMinutes: Math.round(timeSinceLastFetch / 1000 / 60),
+        chatSessionsLength: chatSessions.length,
+        localStorage_raw: lastFetch
+      });
+      
+      // 시간이 거꾸로 흐르는 경우 감지 (시스템 시간 변경 등)
+      if (timeSinceLastFetch < 0) {
+        console.warn('[히스토리 패널] 마지막 갱신 시간이 현재 시간보다 늦음 (시스템 시간 변경?), localStorage 초기화');
+        localStorage.removeItem(CHAT_SESSIONS_LAST_FETCH_KEY);
+        return true;
+      }
+      
       // 채팅 세션이 없는 경우 (이전에 오류가 있었을 수 있음), 30초 후 다시 시도
       if (chatSessions.length === 0) {
         const thirtySecondsInMs = 30 * 1000;
-        const timeSinceLastFetch = currentTime - lastFetchTime;
         const needsFetch = timeSinceLastFetch > thirtySecondsInMs;
         
         console.log(`[히스토리 패널] 채팅 세션이 없음. 마지막 갱신 이후 경과 시간: ${Math.round(timeSinceLastFetch / 1000)}초`);
@@ -118,7 +148,6 @@ export default function StockChatHistory({
       
       // 일반적인 경우: 1시간 후 갱신
       const oneHourInMs = 60 * 60 * 1000; // 1시간을 밀리초로 변환
-      const timeSinceLastFetch = currentTime - lastFetchTime;
       const needsFetch = timeSinceLastFetch > oneHourInMs;
       
       console.log(`[히스토리 패널] 마지막 갱신 이후 경과 시간: ${Math.round(timeSinceLastFetch / 1000 / 60)}분`);
@@ -132,16 +161,17 @@ export default function StockChatHistory({
   };
 
   // 마지막 갱신 시간 저장
-  const updateLastFetchTime = () => {
+  const updateLastFetchTime = (reason: string = '일반') => {
     try {
-      localStorage.setItem(CHAT_SESSIONS_LAST_FETCH_KEY, Date.now().toString());
-      console.log('[히스토리 패널] 마지막 갱신 시간 업데이트');
+      const timestamp = Date.now();
+      localStorage.setItem(CHAT_SESSIONS_LAST_FETCH_KEY, timestamp.toString());
+      console.log(`[히스토리 패널] 마지막 갱신 시간 업데이트 (${reason}):`, new Date(timestamp).toLocaleString());
     } catch (error) {
       console.error('[히스토리 패널] 마지막 갱신 시간 저장 오류:', error);
     }
   };
 
-  // 채팅 세션 목록 가져오기
+  // 채팅 세션 목록 가져오기 (초기 로딩)
   const fetchChatSessions = async (forceUpdate = false) => {
     // userId가 없을 경우 쿠키에서 다시 시도
     const currentUserId = userId || getUserInfoFromCookie();
@@ -158,9 +188,9 @@ export default function StockChatHistory({
     
     setIsLoadingChatSessions(true);
     try {
-      // 백엔드 API 호출
+      // 백엔드 API 호출 - 최근 50개만 조회 (offset 0으로 초기화)
       const response = await axios.get<IChatSessionListResponse>(
-        `${API_ENDPOINT_STOCKEASY}/chat/sessions`,
+        `${API_ENDPOINT_STOCKEASY}/chat/sessions?limit=50&offset=0`,
         { withCredentials: true }
       );
       
@@ -168,13 +198,63 @@ export default function StockChatHistory({
         setChatSessions(response.data.sessions);
         console.log('[히스토리 패널] 채팅 세션 로딩 완료', response.data.sessions.length);
         
+        // 상태 초기화 - total을 이용한 더 정확한 hasMore 계산
+        const newOffset = response.data.sessions.length;
+        setOffset(newOffset);
+        setHasMore(newOffset < response.data.total);
+        
+        console.log(`[히스토리 패널] 페이징 상태: offset=${newOffset}, total=${response.data.total}, hasMore=${newOffset < response.data.total}`);
+        
         // 마지막 갱신 시간 업데이트
-        updateLastFetchTime();
+        updateLastFetchTime('채팅세션조회성공');
       }
     } catch (error) {
       console.error('[히스토리 패널] 채팅 세션 가져오기 오류:', error);
     } finally {
       setIsLoadingChatSessions(false);
+    }
+  };
+
+  // 추가 채팅 세션 목록 가져오기 (무한 스크롤)
+  const fetchMoreChatSessions = async () => {
+    // 이미 로딩 중이거나 더 가져올 데이터가 없으면 리턴
+    if (isLoadingMore || !hasMore || isLoadingChatSessions) {
+      return;
+    }
+
+    // userId가 없을 경우 쿠키에서 다시 시도
+    const currentUserId = userId || getUserInfoFromCookie();
+    if (!currentUserId) {
+      console.log('[히스토리 패널] 사용자 ID가 없어 추가 채팅 세션을 가져올 수 없습니다.');
+      return;
+    }
+
+    setIsLoadingMore(true);
+    try {
+      // 백엔드 API 호출 - 다음 50개 조회
+      const response = await axios.get<IChatSessionListResponse>(
+        `${API_ENDPOINT_STOCKEASY}/chat/sessions?limit=50&offset=${offset}`,
+        { withCredentials: true }
+      );
+      
+      if (response.data.ok && Array.isArray(response.data.sessions)) {
+        const newSessions = response.data.sessions;
+        console.log('[히스토리 패널] 추가 채팅 세션 로딩 완료', newSessions.length);
+        
+        // 기존 세션에 새 세션 추가
+        setChatSessions(prev => [...prev, ...newSessions]);
+        
+        // 상태 업데이트 - total을 이용한 더 정확한 hasMore 계산
+        const newOffset = offset + newSessions.length;
+        setOffset(newOffset);
+        setHasMore(newOffset < response.data.total);
+        
+        console.log(`[히스토리 패널] 페이징 상태 업데이트: offset=${newOffset}, total=${response.data.total}, hasMore=${newOffset < response.data.total}`);
+      }
+    } catch (error) {
+      console.error('[히스토리 패널] 추가 채팅 세션 가져오기 오류:', error);
+    } finally {
+      setIsLoadingMore(false);
     }
   };
   
@@ -345,6 +425,11 @@ export default function StockChatHistory({
         }
       }
       
+      // 패널이 열릴 때마다 상태 초기화
+      setOffset(0);
+      setHasMore(true);
+      setChatSessions([]); // 기존 세션 목록 초기화
+      
       // 채팅 세션 목록 가져오기 (필요한 경우에만)
       fetchChatSessions();
     }
@@ -381,10 +466,27 @@ export default function StockChatHistory({
     }
   }, [userId]); // userId가 변경될 때마다 이벤트 리스너 재설정
 
+  // 스크롤 이벤트 핸들러
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    
+    // 스크롤이 맨 아래에서 100px 이내에 도달했을 때 추가 로딩
+    const isNearBottom = scrollHeight - scrollTop <= clientHeight + 100;
+    
+    if (isNearBottom && hasMore && !isLoadingMore && !isLoadingChatSessions) {
+      console.log('[히스토리 패널] 스크롤 맨 아래 도달, 추가 세션 로딩 시작');
+      fetchMoreChatSessions();
+    }
+  };
+
   // 채팅 입력 이벤트 감지 (채팅 입력 시 채팅 세션 강제 갱신)
   useEffect(() => {
     const handleChatMessageSent = () => {
       console.log('[히스토리 패널] 새 채팅 메시지 입력 감지, 세션 목록 갱신');
+      console.log('[히스토리 패널] 다중 탭 환경에서 다른 탭의 메시지일 가능성 있음');
+      // 새 메시지 시 처음부터 다시 로드
+      setOffset(0);
+      setHasMore(true);
       fetchChatSessions(true);
     };
     
@@ -465,6 +567,7 @@ export default function StockChatHistory({
               ? 'opacity 0.3s ease-out 0.15s, transform 0.3s ease-out 0.15s'
               : 'opacity 0.2s ease-in, transform 0.2s ease-in'
           }}
+          onScroll={handleScroll}
         >
           {/* 채팅 세션 섹션 */}
           <div className="mt-4 flex-1">
@@ -488,6 +591,21 @@ export default function StockChatHistory({
                     </div>
                   </button>
                 ))}
+                
+                {/* 추가 로딩 상태 */}
+                {isLoadingMore && (
+                  <div className="flex justify-center items-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-400 mr-2" />
+                    <span className="text-xs text-[#a0a0a0]">더 많은 세션을 불러오는 중...</span>
+                  </div>
+                )}
+                
+                {/* 더 이상 로드할 데이터가 없을 때 */}
+                {!hasMore && chatSessions.length > 0 && (
+                  <div className="text-center py-4">
+                    <span className="text-xs text-[#a0a0a0]">모든 채팅 세션을 불러왔습니다</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="p-2 text-xs text-[#a0a0a0] text-center">
