@@ -104,6 +104,7 @@ async def _fetch_popular_stocks_from_db(hours: int, limit: int, db: AsyncSession
                 StockChatSession.stock_name.is_not(None),
                 StockChatSession.stock_code != "",
                 StockChatSession.stock_name != "",
+                StockChatSession.stock_code != "general",  # 일반 질문 모드 제외
             )
         )
         .group_by(StockChatSession.stock_code, StockChatSession.stock_name)
