@@ -162,14 +162,9 @@ function useMessageProcessing(
     }
     
     // 종목과 세션 모두 없는 경우 (일반 질문 모드는 예외)
-    if (!selectedStock && !isGeneralMode)
+    if (!selectedStock && !currentSession &&!isGeneralMode)
     {
       toast.error('종목이 선택되지 않았습니다.');
-      return;
-    }
-    if (!currentSession && !isGeneralMode)
-    {
-      toast.error('활성 세션이 없습니다.');
       return;
     }
 
