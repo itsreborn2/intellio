@@ -15,8 +15,7 @@ interface SectorData {
   '20일 이격': string;
   '돌파/이탈': string;
   '대표종목(RS)': string;
-  시가총액: string;
-  거래대금: string;
+
   // 문자열 키로 액세스할 수 있도록 인덱스 시그니처 추가
   [key: string]: string;
 }
@@ -201,8 +200,7 @@ export default function NewSectorEnter() {
               <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>20일 이격</th>
               <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파/이탈</th>
               <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-center font-medium" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>대표종목(RS)</th>
-              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>시가총액</th>
-              <th className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right font-medium hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>거래대금</th>
+
             </tr>
           </thead>
           <tbody className="bg-white">
@@ -261,8 +259,7 @@ export default function NewSectorEnter() {
                             })}
                           </div>
                         </td>
-                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right hidden md:table-cell">{stock["시가총액"]}</td>
-                        <td className="text-xs sm:text-sm px-2 py-1 md:px-3 md:py-2 border-b text-right hidden md:table-cell">{stock["거래대금"]}</td>
+
                       </tr>
                     );
                   })}
