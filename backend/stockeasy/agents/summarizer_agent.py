@@ -60,6 +60,9 @@ class SummarizerAgent(BaseAgent):
         # 날짜가 포함된 내부DB 패턴 제거: (내부DB, yyyy-mm-dd) 및 (내부DB,yyyy-mm-dd)
         text = re.sub(r"\(내부DB,\s*\d{4}-\d{2}-\d{2}\)", "", text)
 
+        # 세미콜론으로 구분된 패턴에서 내부DB 부분만 제거: (내부DB, yyyy-mm-dd; 다른내용) -> (다른내용)
+        text = re.sub(r"\(내부DB,\s*\d{4}-\d{2}-\d{2};\s*([^)]+)\)", r"(\1)", text)
+
         # 비공개자료 패턴 제거
         text = text.replace("<비공개자료>", "").replace("(비공개자료)", "")
         text = re.sub(r"\(비공개자료,\s*\d{4}-\d{2}-\d{2}\)", "", text)
