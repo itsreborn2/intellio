@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "cross-env NODE_OPTIONS=--max_old_space_size=8192 next build",
-    "start": "next start"
+    "start": "next start",
+    "serve": "next start -p 3000"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

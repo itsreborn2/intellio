@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3020",
     "build": "cross-env NODE_OPTIONS=--max_old_space_size=8192 next build",
-    "start": "next start -p 3020"
+    "start": "next start -p 3020",
+    "serve": "next start -p 3020"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.0.2",
