@@ -712,7 +712,7 @@ async def main():
     
     print(f"tmp_file_list: {len(tmp_file_list)}")
     #tmp_file_list = tmp_file_list[:1]
-    test_file = ""
+    test_file = "20250301_한화에어로스페이스_012450_운송장비·부품_Q1_DART"
     if test_file:
         tmp_code = test_file.split("_")[2]
         args.company = tmp_code

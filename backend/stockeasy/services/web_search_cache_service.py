@@ -232,7 +232,7 @@ class WebSearchCacheService:
             await self.db.rollback()
             logger.error(f"캐시 히트 카운트 업데이트 중 오류 발생 (ID: {query_cache_id}): {str(e)}", exc_info=True)
 
-    async def cleanup_old_cache(self, max_age_days: int = 15, exclude_min_hits: int = 5) -> int:
+    async def cleanup_old_cache(self, max_age_days: int = 30, exclude_min_hits: int = 5) -> int:
         """
         오래된 캐시 항목을 정리합니다.
 
