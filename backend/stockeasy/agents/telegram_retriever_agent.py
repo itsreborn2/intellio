@@ -119,7 +119,7 @@ class TelegramRetrieverAgent(BaseAgent):
             stock_code = entities.get("stock_code", state.get("stock_code"))
             stock_name = entities.get("stock_name", state.get("stock_name"))
             sector = entities.get("sector", "")
-            subgroup = entities.get("subgroup", [])
+            subgroup = entities.get("subgroup") or []
             # logger.info(f"[텔레그램][process]subgroup: {subgroup}")
             subgroup.append(stock_code)
             subgroup.append(stock_name)
