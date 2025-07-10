@@ -126,7 +126,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
                     if before_text:
-                        before_comp = create_paragraph({"content": before_text})
+                        before_comp = create_paragraph(content=before_text)
                         components.insert(insert_index, before_comp)
                         insert_index += 1
 
@@ -136,7 +136,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
-                        after_comp = create_paragraph({"content": after_text})
+                        after_comp = create_paragraph(content=after_text)
                         components.insert(insert_index, after_comp)
 
                 else:
@@ -348,6 +348,102 @@ class ResponseFormatterAgent(BaseAgent):
                 return field
 
         return None
+
+    async def _try_tool_calling_with_retry(self, llm_with_tools: Any, tool_calling_prompt: str, section_title: str, llm_start_time: datetime) -> tuple[Any, str]:
+        """
+        Tool calling을 시도하고 MALFORMED_FUNCTION_CALL 에러 발생 시 재시도합니다.
+
+        Args:
+            llm_with_tools: LLM 인스턴스
+            tool_calling_prompt: Tool calling 프롬프트
+            section_title: 섹션 제목
+            llm_start_time: LLM 호출 시작 시간
+
+        Returns:
+            tuple: (section_response, llm_generated_text_for_section)
+                   실패 시 (None, "")
+        """
+        max_retries = 1
+
+        for attempt in range(max_retries + 1):  # 0: 첫 시도, 1: 재시도
+            try:
+                section_response = await llm_with_tools.ainvoke(input=tool_calling_prompt)
+
+                llm_end_time = datetime.now()
+                llm_duration = (llm_end_time - llm_start_time).total_seconds()
+                logger.info(f"[LLM호출완료] 섹션 '{section_title}' LLM 호출 완료 - 소요시간: {llm_duration:.2f}초 (시도 {attempt + 1})")
+
+                # MALFORMED_FUNCTION_CALL 에러 감지
+                is_malformed = self._detect_malformed_function_call(section_response, section_title, attempt + 1)
+
+                if is_malformed and attempt < max_retries:
+                    # 재시도 가능한 경우
+                    logger.warning(f"[MALFORMED재시도] 섹션 '{section_title}' MALFORMED_FUNCTION_CALL 감지 - 재시도 진행 (시도 {attempt + 2}/{max_retries + 1})")
+                    await asyncio.sleep(0.2)  # 잠시 대기 후 재시도
+                    continue
+                elif is_malformed and attempt >= max_retries:
+                    # 재시도 횟수 초과
+                    logger.error(f"[MALFORMED최종실패] 섹션 '{section_title}' MALFORMED_FUNCTION_CALL 재시도 실패 - 최대 재시도 횟수 초과")
+                    return None, ""
+                else:
+                    # 정상 응답
+                    llm_generated_text_for_section = section_response.content if hasattr(section_response, "content") else ""
+                    logger.debug(f"[LLM응답분석] 섹션 '{section_title}' - LLM 생성 텍스트 길이: {len(llm_generated_text_for_section)}자 (시도 {attempt + 1})")
+                    return section_response, llm_generated_text_for_section
+
+            except Exception as e:
+                logger.error(f"[LLM호출오류] 섹션 '{section_title}' LLM 호출 중 예외 발생 (시도 {attempt + 1}): {e}")
+                if attempt >= max_retries:
+                    # 재시도 횟수 초과 시 예외 재발생
+                    raise e
+                else:
+                    # 재시도 가능한 경우 잠시 대기 후 계속
+                    await asyncio.sleep(1)
+                    continue
+
+        # 여기까지 오면 안됨 (안전장치)
+        logger.error(f"[LLM호출비정상종료] 섹션 '{section_title}' 비정상적인 재시도 루프 종료")
+        return None, ""
+
+    def _detect_malformed_function_call(self, section_response: Any, section_title: str, attempt_num: int) -> bool:
+        """
+        MALFORMED_FUNCTION_CALL 에러를 감지합니다.
+
+        Args:
+            section_response: LLM 응답 객체
+            section_title: 섹션 제목 (로깅용)
+            attempt_num: 시도 번호 (로깅용)
+
+        Returns:
+            bool: MALFORMED_FUNCTION_CALL 에러인지 여부
+        """
+        try:
+            # 1. response_metadata에서 finish_reason 확인
+            if hasattr(section_response, "response_metadata"):
+                finish_reason = section_response.response_metadata.get("finish_reason")
+                if finish_reason == "MALFORMED_FUNCTION_CALL":
+                    logger.warning(f"[MALFORMED감지] 섹션 '{section_title}' (시도 {attempt_num}) - finish_reason: {finish_reason}")
+                    return True
+
+            # 2. tool_calls와 content가 모두 비어있는지 확인
+            has_tool_calls = hasattr(section_response, "tool_calls") and section_response.tool_calls
+            has_content = hasattr(section_response, "content") and section_response.content.strip()
+
+            if not has_tool_calls and not has_content:
+                logger.warning(f"[MALFORMED감지] 섹션 '{section_title}' (시도 {attempt_num}) - tool_calls와 content 모두 비어있음")
+                return True
+
+            # 3. invalid_tool_calls 확인 (있다면)
+            if hasattr(section_response, "invalid_tool_calls") and section_response.invalid_tool_calls:
+                logger.warning(f"[MALFORMED감지] 섹션 '{section_title}' (시도 {attempt_num}) - invalid_tool_calls 존재: {len(section_response.invalid_tool_calls)}개")
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"[MALFORMED감지오류] 섹션 '{section_title}' (시도 {attempt_num}) MALFORMED_FUNCTION_CALL 감지 중 오류: {e}")
+            # 오류 발생 시 안전하게 False 반환 (정상으로 판단)
+            return False
 
     def _parse_json_fallback(self, text: str, tools: List[Callable], section_title: str) -> List[Dict[str, Any]]:
         """
@@ -582,12 +678,20 @@ class ResponseFormatterAgent(BaseAgent):
         # 이 섹션 내에서 LLM이 생성한 순수 텍스트 (툴 콜 없이 반환된 내용)
         llm_generated_text_for_section = ""
 
+        # 입력 데이터 검증 및 로깅
+        logger.info(f"[섹션처리시작] 섹션 '{section_title}' 처리 시작")
+        logger.debug(f"[섹션데이터검증] section_data 키들: {list(section_data.keys()) if section_data else 'None'}")
+        logger.debug(f"[섹션데이터검증] summary_by_section에 '{section_title}' 존재 여부: {section_title in summary_by_section if section_title else False}")
+        logger.debug(f"[섹션데이터검증] 섹션 내용 길이: {len(summary_by_section.get(section_title, '')) if section_title else 0}자")
+
         if not section_title:
             logger.warning("ResponseFormatterAgent (async): 목차에 제목 없는 섹션 데이터가 있습니다.")
+            logger.warning(f"[섹션처리실패] 섹션 데이터: {section_data}")
             return [], "", ""
 
         if section_title in summary_by_section and summary_by_section[section_title]:
             section_content = summary_by_section[section_title]
+            logger.info(f"[섹션내용확인] 섹션 '{section_title}' 내용 발견 - 길이: {len(section_content)}자")
 
             # 플레이스홀더 처리 - 직접 컴포넌트 생성 방식
             price_chart_component = None
@@ -640,9 +744,7 @@ class ResponseFormatterAgent(BaseAgent):
   1. 분기별/월별/연도별 매출액, 영업이익, 순이익 등의 실적 데이터
   2. YoY(전년 동기 대비), QoQ(전 분기 대비) 증감률 데이터
   3. 시간에 따른 변화를 보여주는 다른 지표들
-- create_line_chart: 연속적인 추세나 시계열 데이터는 선 차트로 표현하세요. 특히 다음과 같은 데이터:
-  1. 주가 추이 데이터
-  2. 장기간에 걸친 성장률이나 지표 변화
+- create_line_chart: 연속적인 추세나 시계열 데이터는 선 차트로 표현하세요.
 - create_mixed_chart: 다음과 같은 경우 혼합 차트(막대 차트 + 선 그래프)를 사용하세요:
   1. 같은 기간에 대해 수치와 비율(%)을 함께 보여줘야 할 때 (예: 매출액과 증감률)
   2. 왼쪽 Y축에는 막대 차트(매출액, 영업이익 등 금액), 오른쪽 Y축에는 선 그래프(YoY, QoQ 등 증감률)
@@ -666,26 +768,42 @@ class ResponseFormatterAgent(BaseAgent):
 
 **중요**: '[CHART_PLACEHOLDER:'로 시작하는 문자열은 create_paragraph 컴포넌트를 호출합니다.
 """
-            try:
-                section_response = await llm_with_tools.ainvoke(input=tool_calling_prompt)
+            llm_start_time = datetime.now()
 
-                llm_generated_text_for_section = section_response.content if hasattr(section_response, "content") else ""
+            # Tool calling 시도 (재시도 로직 포함)
+            try:
+                section_response, llm_generated_text_for_section = await self._try_tool_calling_with_retry(llm_with_tools, tool_calling_prompt, section_title, llm_start_time)
+
+                if section_response is None:
+                    # MALFORMED_FUNCTION_CALL로 인한 최종 실패 - 섹션 생략
+                    logger.error(f"[섹션생략] 섹션 '{section_title}' MALFORMED_FUNCTION_CALL 재시도 실패로 섹션 생략")
+                    return [], "", ""
 
                 if hasattr(section_response, "tool_calls") and section_response.tool_calls:
                     processed_components = []
 
-                    for tool_call in section_response.tool_calls:
+                    for i, tool_call in enumerate(section_response.tool_calls):
                         tool_name = tool_call["name"]
                         tool_args = tool_call["args"]
+                        component_dict = None  # 명시적 초기화
 
                         if "level" in tool_args and isinstance(tool_args["level"], float):
                             tool_args["level"] = int(tool_args["level"])
 
                         tool_func = next((t for t in tools if t.name == tool_name), None)
-                        # logger.info(f"Tool name : {tool_name}, args : {tool_args}, tool_func: {tool_func}")
                         if tool_func:
-                            component_dict = tool_func.invoke(tool_args)
+                            try:
+                                component_dict = tool_func.invoke(tool_args)
+                            except Exception as tool_error:
+                                logger.error(f"[툴콜실패] 섹션 '{section_title}' - {tool_name} 호출 실패: {tool_error}")
+                                logger.exception(f"[툴콜실패상세] 섹션 '{section_title}' - {tool_name} 스택 트레이스")
+                                continue
+                        else:
+                            logger.warning(f"[툴콜누락] 섹션 '{section_title}' - 알 수 없는 tool: {tool_name}")
+                            continue
 
+                        # component_dict가 성공적으로 생성된 경우에만 처리
+                        if component_dict is not None:
                             if component_dict.get("type") == "heading":
                                 heading_content_candidate = component_dict.get("content", "").strip()
                                 # 볼드체(bold)로 시작하거나 불릿 포인트(*, •, -)로 시작하는 텍스트는 heading이 아닌 paragraph나 list로 처리
@@ -749,7 +867,6 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 처리된 컴포넌트들 추가
                     section_components.extend(processed_components)
-
                     # 주가차트 컴포넌트가 있으면 마커를 찾아서 교체
                     if price_chart_component:
                         self._insert_price_chart_at_marker(section_components, price_chart_component)
@@ -767,34 +884,37 @@ class ResponseFormatterAgent(BaseAgent):
                         self._insert_momentum_chart_at_marker(section_components, momentum_chart_component)
 
                 elif llm_generated_text_for_section.strip():  # 툴 콜 없이 텍스트만 반환된 경우
-                    logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에 대해 Tool calling 없이 일반 텍스트 응답을 받았습니다.")
+                    logger.warning(f"[툴콜없음] 섹션 '{section_title}'에 대해 Tool calling 없이 일반 텍스트 응답을 받았습니다.")
 
                     # JSON 형태의 tool calling 결과가 텍스트로 반환된 경우 파싱 시도
                     fallback_components = self._parse_json_fallback(llm_generated_text_for_section, tools, section_title)
 
                     if fallback_components:
                         # JSON 파싱 성공 시 fallback 컴포넌트들 사용
-                        logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에서 JSON fallback 파싱 성공 - {len(fallback_components)}개 컴포넌트 생성")
                         section_components.extend(fallback_components)
 
                         # 주가차트 컴포넌트가 있으면 마커를 찾아서 교체
                         if price_chart_component:
                             self._insert_price_chart_at_marker(section_components, price_chart_component)
+                            logger.info(f"[차트교체완료-Fallback] 섹션 '{section_title}'에서 주가차트 플레이스홀더 교체 완료")
 
                         # 기술적 지표 차트 플레이스홀더 처리 (호환성 유지)
                         if technical_indicator_chart_component:
                             self._insert_technical_indicator_chart_at_marker(section_components, technical_indicator_chart_component)
+                            logger.info(f"[차트교체완료-Fallback] 섹션 '{section_title}'에서 기술적지표차트 플레이스홀더 교체 완료")
 
                         # 추세추종 지표 차트 플레이스홀더 처리
                         if trend_following_chart_component:
                             self._insert_trend_following_chart_at_marker(section_components, trend_following_chart_component)
+                            logger.info(f"[차트교체완료-Fallback] 섹션 '{section_title}'에서 추세추종차트 플레이스홀더 교체 완료")
 
                         # 모멘텀 지표 차트 플레이스홀더 처리
                         if momentum_chart_component:
                             self._insert_momentum_chart_at_marker(section_components, momentum_chart_component)
+                            logger.info(f"[차트교체완료-Fallback] 섹션 '{section_title}'에서 모멘텀차트 플레이스홀더 교체 완료")
                     else:
                         # JSON 파싱 실패 시 기존 텍스트 처리 방식 사용
-                        logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에서 JSON fallback 파싱 실패, 일반 텍스트로 처리")
+                        logger.warning(f"[JSON파싱실패] 섹션 '{section_title}'에서 JSON fallback 파싱 실패, 일반 텍스트로 처리")
                         # 섹션 제목 강제 추가
                         section_components.append(create_heading({"level": 2, "content": section_title}))
 
@@ -805,14 +925,20 @@ class ResponseFormatterAgent(BaseAgent):
 
                         if restored_text.strip():
                             section_components.append(create_paragraph(restored_text))
+                            logger.info(f"[텍스트변환완료] 섹션 '{section_title}'에서 텍스트를 단락 컴포넌트로 변환 완료")
+                else:
+                    logger.warning(f"[LLM응답없음] 섹션 '{section_title}'에서 LLM 응답이 비어있습니다.")
 
-                # 성공적으로 처리되면 (툴콜이 있든 없든) 컴포넌트들과 LLM 텍스트, 제목 반환
-                logger.info(f"섹션 '{section_title}' 처리 완료: 소요시간 {datetime.now() - start_time_process_section}")
                 return section_components, llm_generated_text_for_section, section_title
 
             except Exception as e:
-                logger.error(f"비동기 섹션 '{section_title}' 컴포넌트 생성 중 오류: {str(e)}")
+                error_processing_time = (datetime.now() - start_time_process_section).total_seconds()
+                logger.error(f"[섹션처리오류] 섹션 '{section_title}' 컴포넌트 생성 중 오류 - 소요시간: {error_processing_time:.2f}초")
+                logger.error(f"[섹션처리오류상세] 섹션 '{section_title}' 오류 메시지: {str(e)}")
+                logger.exception(f"[섹션처리오류스택] 섹션 '{section_title}' 스택 트레이스")
+
                 # 오류 발생 시, 이미 추가된 섹션 제목 컴포넌트 외에 원본 내용을 단락으로 추가
+                logger.info(f"[오류복구시작] 섹션 '{section_title}' 오류 복구 시작 - fallback 내용 길이: {len(section_content_fallback)}자")
 
                 # 오류 복구 시에도 마스크를 플레이스홀더로 복원
                 restored_fallback = section_content_fallback
@@ -821,9 +947,13 @@ class ResponseFormatterAgent(BaseAgent):
                 # 오류 시 LLM 생성 텍스트는 없고, 원본 내용을 텍스트로 반환 (오류 복구용)
                 return section_components, restored_fallback, section_title
         else:  # summary_by_section에 내용이 없는 경우
-            logger.info(f"ResponseFormatterAgent (async): 섹션 '{section_title}'에 대한 내용이 summary_by_section에 없습니다. 빈 컴포넌트를 반환합니다.")
+            logger.warning(f"[섹션내용없음] 섹션 '{section_title}'에 대한 내용이 summary_by_section에 없습니다.")
+            logger.debug(f"[섹션내용없음상세] summary_by_section 키들: {list(summary_by_section.keys())}")
+
             # 제목 컴포넌트만 있는 리스트와 빈 텍스트, 제목 반환
-            return [create_heading({"level": 2, "content": section_title}), create_paragraph({"content": "내용 준비 중입니다."})], "", section_title
+            empty_components = [create_heading({"level": 2, "content": section_title}), create_paragraph({"content": "내용 준비 중입니다."})]
+            logger.info(f"[빈섹션처리완료] 섹션 '{section_title}' 빈 컴포넌트 반환 완료")
+            return empty_components, "", section_title
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
