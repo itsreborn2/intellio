@@ -1,7 +1,6 @@
-import logging
+from loguru import logger
 from datetime import datetime, timedelta
-from sqlalchemy import select, delete
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 import asyncio
 
 from stockeasy.core.celery_app import celery
@@ -9,7 +8,7 @@ from stockeasy.models.chat import ShareStockChatSession
 from common.core.database import get_db_session
 from stockeasy.services.web_search_cache_service import WebSearchCacheService
 
-logger = logging.getLogger(__name__)
+
 
 @celery.task(name="stockeasy.workers.maintenance.cleanup_tasks.cleanup_old_data")
 def cleanup_old_data():
@@ -52,37 +51,41 @@ async def _check_expired_sessions():
     세션은 삭제하지 않고, 만료 상태만 확인합니다.
     """
     # 15일 전 날짜 계산
-    cutoff_date = datetime.now() - timedelta(days=15)
+    cutoff_date = datetime.now() - timedelta(days=90)
     expired_count = 0
     
-    async for session in get_db_session():
-        try:
-            # 15일 이상 경과한 세션 조회
-            expired_sessions_query = select(ShareStockChatSession).where(
-                ShareStockChatSession.created_at < cutoff_date
-            )
-            result = await session.execute(expired_sessions_query)
-            expired_sessions = result.scalars().all()
+    # DB 세션 생성 및 사용
+    session = await get_db_session()
+    try:
+        # 15일 이상 경과한 세션 조회
+        expired_sessions_query = select(ShareStockChatSession).where(
+            ShareStockChatSession.created_at < cutoff_date
+        )
+        result = await session.execute(expired_sessions_query)
+        expired_sessions = result.scalars().all()
+        
+        # 로그에 만료된 세션 정보 기록
+        if expired_sessions:
+            expired_count = len(expired_sessions)
+            logger.info(f"만료된 세션 수: {expired_count}")
+            # for expired_session in expired_sessions:
+            #     logger.info(f"만료된 세션: ID={expired_session.id}, 생성일={expired_session.created_at}, 조회수={expired_session.view_count}")
+        else:
+            logger.info("만료된 공유 세션이 없습니다")
             
-            # 로그에 만료된 세션 정보 기록
-            if expired_sessions:
-                expired_count = len(expired_sessions)
-                logger.info(f"만료된 세션 수: {expired_count}")
-                for expired_session in expired_sessions:
-                    logger.info(f"만료된 세션: ID={expired_session.id}, 생성일={expired_session.created_at}, 조회수={expired_session.view_count}")
-            else:
-                logger.info("만료된 공유 세션이 없습니다")
-                
-        except Exception as e:
-            logger.error(f"세션 확인 중 오류 발생: {str(e)}")
-            raise e
+    except Exception as e:
+        logger.error(f"세션 확인 중 오류 발생: {str(e)}")
+        raise e
+    finally:
+        # 세션 정리
+        await session.close()
             
     return expired_count 
 
 ###################
 # 웹 검색 캐시 정리
 ###################
-def cleanup_web_search_cache_task(max_age_days: int = 15, exclude_min_hits: int = 5) -> None:
+def cleanup_web_search_cache_task(max_age_days: int = 30, exclude_min_hits: int = 5) -> None:
     """
     웹 검색 캐시를 정리하는 Celery 작업입니다.
     
@@ -93,7 +96,7 @@ def cleanup_web_search_cache_task(max_age_days: int = 15, exclude_min_hits: int 
     # asyncio를 통해 비동기 함수 실행
     asyncio.run(_cleanup_web_search_cache_async(max_age_days, exclude_min_hits))
     
-async def _cleanup_web_search_cache_async(max_age_days: int = 15, exclude_min_hits: int = 5) -> None:
+async def _cleanup_web_search_cache_async(max_age_days: int = 30, exclude_min_hits: int = 5) -> None:
     """
     웹 검색 캐시를 정리하는 비동기 함수입니다.
     
@@ -103,28 +106,23 @@ async def _cleanup_web_search_cache_async(max_age_days: int = 15, exclude_min_hi
     """
     logger.info(f"웹 검색 캐시 정리 작업 시작: {max_age_days}일 이상 및 {exclude_min_hits} 미만 히트 항목 삭제")
     
+    # DB 세션 생성 및 사용
+    db = await get_db_session()
     try:
-        # DB 세션 생성
-        async for db in get_db_session():
-            try:
-                # 캐시 서비스 초기화
-                cache_service = WebSearchCacheService(db)
-                
-                # 캐시 정리 실행
-                deleted_count = await cache_service.cleanup_old_cache(
-                    max_age_days=max_age_days,
-                    exclude_min_hits=exclude_min_hits
-                )
-                
-                logger.info(f"웹 검색 캐시 정리 완료: {deleted_count}개 항목 삭제됨")
-                
-                # 캐시 통계 수집 (나중에 필요하면 구현)
-                # await collect_cache_statistics(db)
-                
-                break  # 작업이 성공적으로 완료되면 루프 종료
-                
-            except Exception as e:
-                logger.error(f"캐시 정리 중 오류 발생: {str(e)}", exc_info=True)
-                raise
+        # 캐시 서비스 초기화
+        cache_service = WebSearchCacheService(db)
+        
+        # 캐시 정리 실행
+        deleted_count = await cache_service.cleanup_old_cache(
+            max_age_days=max_age_days,
+            exclude_min_hits=exclude_min_hits
+        )
+        
+        logger.info(f"웹 검색 캐시 정리 완료: {deleted_count}개 항목 삭제됨")
+        
     except Exception as e:
-        logger.error(f"DB 세션 생성 중 오류 발생: {str(e)}", exc_info=True)
+        logger.error(f"캐시 정리 중 오류 발생: {str(e)}", exc_info=True)
+        raise
+    finally:
+        # 세션 정리
+        await db.close()

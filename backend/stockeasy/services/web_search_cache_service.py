@@ -1,7 +1,7 @@
 import asyncio
 import csv
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -245,7 +245,7 @@ class WebSearchCacheService:
         """
         try:
             # max_age_days일 전 날짜 계산
-            cutoff_date = datetime.utcnow() - datetime.timedelta(days=max_age_days)
+            cutoff_date = datetime.utcnow() - timedelta(days=max_age_days)
 
             # 삭제 대상 쿼리 ID 조회
             stmt = select(WebSearchQueryCache.id).where(WebSearchQueryCache.created_at < cutoff_date, WebSearchQueryCache.hit_count < exclude_min_hits)
