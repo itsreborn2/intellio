@@ -743,7 +743,7 @@ async def stream_chat_message(
                             stock_code=request.stock_code,
                             stock_name=request.stock_name,
                             metadata=metadata,
-                            agent_results=agent_results,
+                            agent_results=None,  # agent_results를 저장하지 않음
                             components=result.get("components", []),  # 구조화된 컴포넌트 저장
                         )
 
@@ -820,6 +820,7 @@ async def stream_chat_message(
                         stock_code=request.stock_code,
                         stock_name=request.stock_name,
                         metadata={"error": str(e)},
+                        agent_results=None,  # agent_results를 저장하지 않음
                     )
 
                     # 오류 이벤트 전송
