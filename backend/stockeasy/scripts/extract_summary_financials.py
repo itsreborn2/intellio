@@ -163,20 +163,6 @@ async def check_1page_정정신고(report_file_path: str) -> str:
         logger.error(f"정정신고 확인 중 오류 발생: {str(e)}")
         return report_file_path
 
-        ymd = f"{target_year}{target_month:02d}{target_day:02d}"
-        file_name_new = f"{ymd}_{company_name}_{stock_code}_{sector}_{report_type}_DART.pdf"
-        gcs_path_source = f"Stockeasy/classified/정기보고서/{stock_code}/{file_name}"
-        gcs_path_destination = f"Stockeasy/classified/정기보고서/{stock_code}/{file_name_new}"
-
-        await storage_service.move_file(gcs_path_source, gcs_path_destination)
-
-        file_path_old = os.path.join(company_dir, file_name)
-        file_path_new = os.path.join(company_dir, file_name_new)
-        os.rename(file_path_old, file_path_new)
-
-        print(f"파일명: {file_name}, 일자: {target_year}-{target_month:02d}-{target_day:02d}, GCS 수정")
-        print(f"{file_name} -> {file_name_new}\n")
-
 
 async def process_reports(db: AsyncSession, company_code: str, reports_dir: str, test_file: str = None, skip_annual_first: bool = True) -> bool:
     """

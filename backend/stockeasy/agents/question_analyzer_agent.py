@@ -200,7 +200,7 @@ class QuestionAnalyzerAgent(BaseAgent):
         """
         super().__init__(name, db)
         self.agent_llm = get_agent_llm("question_analyzer_agent")
-        self.agent_llm_lite = get_agent_llm("gemini-2.0-flash-lite")
+        self.agent_llm_lite = get_agent_llm("gemini-2.5-flash-lite")  # get_agent_llm("gemini-2.0-flash-lite")
         logger.info(f"QuestionAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.prompt_template = SYSTEM_PROMPT
 
@@ -493,9 +493,12 @@ class QuestionAnalyzerAgent(BaseAgent):
 
                 try:
                     # LLM 호출로 분석 수행
-                    agent_temp = get_agent_llm("gemini-2.0-flash")
-                    # raw_response = await self.agent_llm.with_structured_output(QuestionAnalysis).ainvoke(
-                    raw_response = await agent_temp.with_structured_output(QuestionAnalysis).ainvoke(prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db)
+                    # agent_temp = get_agent_llm("gemini-2.0-flash")
+
+                    # raw_response = await agent_temp.with_structured_output(QuestionAnalysis).ainvoke(prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db)
+                    raw_response = await self.agent_llm_lite.with_structured_output(QuestionAnalysis).ainvoke(
+                        prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db
+                    )
 
                     response: QuestionAnalysis
 
@@ -1027,7 +1030,7 @@ class QuestionAnalyzerAgent(BaseAgent):
 
         print(f"\n📝 {stock_name}의 최근 이슈 요약 중...")
         prompt = f"""
-    다음은 '{stock_name}'에 대한 최근 주요 뉴스 및 이슈 검색 결과입니다. 이 내용을 바탕으로 주요 뉴스 제목, 핵심 이슈, 반복적으로 언급되는 키워드를 간결하게 요약해주세요. 요약은箇条書き(불릿 포인트) 형식을 사용하고, 가장 중요한 순서대로 정렬해주세요.
+    다음은 '{stock_name}'에 대한 최근 주요 뉴스 및 이슈 검색 결과입니다. 이 내용을 바탕으로 주요 뉴스 제목, 핵심 이슈, 반복적으로 언급되는 키워드를 간결하게 요약해주세요. 요약은 글머리 기호(불릿 포인트) 형식을 사용하고, 가장 중요한 순서대로 정렬해주세요..
 
     검색 결과:
     {search_results}
@@ -1352,12 +1355,12 @@ class QuestionAnalyzerAgent(BaseAgent):
         try:
             extraction_prompt = f"""
             다음 질문에서 종목명, 종목코드, 섹터 정보를 추출해주세요:
-            
+
             질문: {query}
-            
+
             - subgroup은 사용자 질문에 포함된 키워드 혹은 사용자 질문이 의도하는 키워드를 포함해야합니다.
             - subgroup은 최소 1개 이상의 키워드를 포함해야합니다.
-            
+
             JSON 형식으로 답변해주세요:
             {{
                 "stock_name": "종목명 또는 null",

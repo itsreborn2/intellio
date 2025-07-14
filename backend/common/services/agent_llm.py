@@ -639,7 +639,31 @@ class AgentLLM:
                     # 문자열 앞뒤 공백 제거
                     content = content.strip()
 
-                    # logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}")
+                    # JSON 파싱 전 추가 정리 (Gemini 2.5 flash lite 대응)
+                    # 1. trailing characters 문제 해결을 위해 완전한 JSON 객체만 추출
+                    import json
+
+                    # JSON 객체의 시작과 끝을 찾아 추출
+                    json_start = content.find("{")
+                    if json_start != -1:
+                        # 중괄호 매칭을 통해 완전한 JSON 객체 추출
+                        brace_count = 0
+                        json_end = json_start
+                        for i, char in enumerate(content[json_start:], json_start):
+                            if char == "{":
+                                brace_count += 1
+                            elif char == "}":
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+
+                        if brace_count == 0:  # 완전한 JSON 객체를 찾은 경우
+                            content = content[json_start:json_end]
+                        else:
+                            logger.warning(f"[구조화된 출력] 불완전한 JSON 구조 감지, 원본 사용: {content[:200]}...")
+
+                    # logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}, 내용 길이: {len(content)}")
 
                     # Pydantic 모델로 파싱
                     if hasattr(self.schema, "model_validate_json"):
@@ -648,8 +672,6 @@ class AgentLLM:
                         parsed_response = self.schema.parse_raw(content)
                     else:
                         # JSON으로 파싱한 후 객체 생성
-                        import json
-
                         data = json.loads(content)
                         parsed_response = self.schema(**data)
 
@@ -661,6 +683,7 @@ class AgentLLM:
 
                 except Exception as e:
                     logger.error(f"[구조화된 출력] 파싱 오류: {str(e)}")
+                    logger.error(f"[구조화된 출력] 파싱 실패한 내용 (첫 500자): {content[:500] if 'content' in locals() else 'content 변수 없음'}")
                     # 파싱 실패 시 원본 응답 반환
                     return raw_response
 
@@ -705,7 +728,31 @@ class AgentLLM:
                     # 문자열 앞뒤 공백 제거
                     content = content.strip()
 
-                    # logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}")
+                    # JSON 파싱 전 추가 정리 (Gemini 2.5 flash lite 대응)
+                    # 1. trailing characters 문제 해결을 위해 완전한 JSON 객체만 추출
+                    import json
+
+                    # JSON 객체의 시작과 끝을 찾아 추출
+                    json_start = content.find("{")
+                    if json_start != -1:
+                        # 중괄호 매칭을 통해 완전한 JSON 객체 추출
+                        brace_count = 0
+                        json_end = json_start
+                        for i, char in enumerate(content[json_start:], json_start):
+                            if char == "{":
+                                brace_count += 1
+                            elif char == "}":
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+
+                        if brace_count == 0:  # 완전한 JSON 객체를 찾은 경우
+                            content = content[json_start:json_end]
+                        else:
+                            logger.warning(f"[구조화된 출력] 불완전한 JSON 구조 감지, 원본 사용: {content[:200]}...")
+
+                    # logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}, 내용 길이: {len(content)}")
 
                     # Pydantic 모델로 파싱
                     if hasattr(self.schema, "model_validate_json"):
@@ -714,8 +761,6 @@ class AgentLLM:
                         parsed_response = self.schema.parse_raw(content)
                     else:
                         # JSON으로 파싱한 후 객체 생성
-                        import json
-
                         data = json.loads(content)
                         parsed_response = self.schema(**data)
 
@@ -727,6 +772,7 @@ class AgentLLM:
 
                 except Exception as e:
                     logger.error(f"[구조화된 출력] 파싱 오류: {str(e)}")
+                    logger.error(f"[구조화된 출력] 파싱 실패한 내용 (첫 500자): {content[:500] if 'content' in locals() else 'content 변수 없음'}")
                     # 파싱 실패 시 원본 응답 반환
                     return raw_response
 

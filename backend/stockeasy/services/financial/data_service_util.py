@@ -88,6 +88,33 @@ def extract_unit_info(text: str) -> str:
     return ""
 
 
+def get_max_abs_value_from_dataframe(df: pd.DataFrame) -> float:
+    """
+    DataFrame에서 숫자 값 중 최대 절댓값을 구합니다.
+
+    Args:
+        df: 분석할 DataFrame
+
+    Returns:
+        float: 최대 절댓값
+    """
+    max_abs_val = 0
+    for col in df.columns:
+        for idx in df.index:
+            val_str = str(df.at[idx, col])
+            if is_numeric_value(val_str):
+                try:
+                    clean_val = val_str.replace(",", "").replace("(", "").replace(")", "")
+                    if clean_val.startswith("-"):
+                        clean_val = clean_val[1:]
+                    num_val = float(clean_val)
+                    if abs(num_val) > max_abs_val:
+                        max_abs_val = abs(num_val)
+                except Exception:
+                    pass
+    return max_abs_val
+
+
 def parse_unit_to_multiplier(unit_str: str) -> float:
     """
     단위 문자열을 배수로 변환합니다.
@@ -964,33 +991,33 @@ def analyze_table_structure_across_pages(all_page_tables: list) -> list:
                 source_unit_clean = unit_info.replace("단위:", "").replace("단위 :", "").strip().lower()
                 target_unit = None
 
-                # 타겟 단위 결정 로직
-                if "백만원" in source_unit_clean:
-                    target_unit = "억원"  # 백만원 -> 십억원
-                elif "천원" in source_unit_clean:
-                    target_unit = "억원"  # 천원 -> 억원
-                elif "원" in source_unit_clean and "억" not in source_unit_clean:
-                    target_unit = "억원"  # "백만원"  # 원 -> 백만원
+                # 타겟 단위 결정 로직 (구체적인 단위부터 먼저 체크)
+                if "조원" in source_unit_clean:
+                    target_unit = None  # 이미 최대 단위이므로 변환하지 않음
+                elif "십억원" in source_unit_clean:
+                    # 십억원일 때도 max 값이 100 이상이면 조원으로 변환
+                    max_abs_val = get_max_abs_value_from_dataframe(merged_df)
+                    if max_abs_val >= 100:
+                        target_unit = "조원"
+                    else:
+                        target_unit = None  # 변환하지 않음
                 elif "억원" in source_unit_clean:
-                    max_abs_val = 0
-                    for col in merged_df.columns:
-                        for idx in merged_df.index:
-                            val_str = str(merged_df.at[idx, col])
-                            if is_numeric_value(val_str):
-                                try:
-                                    clean_val = val_str.replace(",", "").replace("(", "").replace(")", "")
-                                    if clean_val.startswith("-"):
-                                        clean_val = clean_val[1:]
-                                    num_val = float(clean_val)
-                                    if abs(num_val) > max_abs_val:
-                                        max_abs_val = abs(num_val)
-                                except Exception:
-                                    pass
-
+                    # 단순 "억원"인 경우만 처리
+                    max_abs_val = get_max_abs_value_from_dataframe(merged_df)
                     if max_abs_val >= 1000:
                         target_unit = "조원"
                     else:
-                        target_unit = "억원"
+                        target_unit = "십억원"
+                elif "백만원" in source_unit_clean:
+                    target_unit = "십억원"  # 백만원 -> 십억원
+                elif "천원" in source_unit_clean:
+                    target_unit = "십억원"  # 천원 -> 십억원
+                elif "원" in source_unit_clean and "억" not in source_unit_clean:
+                    max_abs_val = get_max_abs_value_from_dataframe(merged_df)
+                    if max_abs_val < 100000000:  # 1억 미만이면, 백만원 단위.
+                        target_unit = "백만원"
+                    else:
+                        target_unit = "십억원"  # 원 -> 십억원
 
                 # 단위 변환 실행
                 if target_unit and target_unit not in source_unit_clean:

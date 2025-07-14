@@ -69,6 +69,7 @@ class SummarizerAgent(BaseAgent):
 
         # 웹검색결과 패턴 제거
         text = text.replace("(웹검색결과)", "").replace("웹검색결과;", "").replace("웹검색결과,", "").replace("; 웹검색결과", "").replace(", 웹검색결과", "")
+        text = text.replace("(web검색결과)", "").replace("web검색결과;", "").replace("web검색결과,", "").replace("; web검색결과", "").replace(", web검색결과", "")
 
         return text
 
@@ -495,11 +496,41 @@ class SummarizerAgent(BaseAgent):
 
             if created_at:
                 try:
-                    dt_obj = datetime.fromisoformat(created_at)
-                    formatted_date = dt_obj.strftime("%Y-%m-%d")
-                except (ValueError, TypeError):
-                    # 날짜 변환 실패 시 원본 값 사용
-                    formatted_date = created_at
+                    # datetime 객체인지 문자열인지 확인
+                    if isinstance(created_at, datetime):
+                        # datetime 객체인 경우 직접 포맷팅
+                        formatted_date = created_at.strftime("%Y-%m-%d")
+                    elif isinstance(created_at, str):
+                        # 문자열인 경우 ISO 형식 처리
+                        # timezone 정보가 포함된 ISO 문자열 처리를 위해 replace 사용
+                        # 예: 2025-07-14 23:07:47.601942+09:00 -> 2025-07-14T23:07:47.601942+09:00
+                        if " " in created_at and "T" not in created_at:
+                            created_at = created_at.replace(" ", "T", 1)
+
+                        dt_obj = datetime.fromisoformat(created_at)
+                        formatted_date = dt_obj.strftime("%Y-%m-%d")
+                    else:
+                        # 다른 타입인 경우 문자열로 변환 후 처리
+                        created_at_str = str(created_at)
+                        import re
+
+                        date_match = re.search(r"(\d{4}-\d{2}-\d{2})", created_at_str)
+                        if date_match:
+                            formatted_date = date_match.group(1)
+                        else:
+                            formatted_date = created_at_str
+                except (ValueError, TypeError) as e:
+                    # 날짜 변환 실패 시 정규식으로 YYYY-MM-DD 추출 시도
+                    import re
+
+                    created_at_str = str(created_at)
+                    date_match = re.search(r"(\d{4}-\d{2}-\d{2})", created_at_str)
+                    if date_match:
+                        formatted_date = date_match.group(1)
+                    else:
+                        # 그래도 실패하면 원본 값 사용
+                        formatted_date = created_at_str
+                    logger.warning(f"[SummarizerAgent] 날짜 변환 실패: {created_at} (타입: {type(created_at)}) -> {e}")
 
             if i > 0:  # 첫 번째 항목이 아닌 경우만 구분선 추가
                 text += "____\n\n"

@@ -53,7 +53,7 @@ class WebSearchAgent(BaseAgent):
         super().__init__(name, db)
         self.retrieved_str = "web_search_results"
         self.agent_llm = get_agent_llm("web_search_agent")
-        self.agent_llm_lite = get_agent_llm("gemini-lite")
+        # self.agent_llm_lite = get_agent_llm("gemini-2.5-flash-lite")  # get_agent_llm("gemini-2.0-flash-lite")
         self.parser = JsonOutputParser()
 
         # self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
@@ -89,8 +89,6 @@ class WebSearchAgent(BaseAgent):
             return content
 
         try:
-            original_length = len(content)
-            original_markdown_count = content.count("#") + content.count("*") + content.count("|")
             # 1. 마크다운 헤더 제거 (### 제목, #### 소제목 등)
             content = re.sub(r"^#{1,6}\s+", "", content, flags=re.MULTILINE)
 
@@ -458,7 +456,7 @@ class WebSearchAgent(BaseAgent):
                 prompt = await self._create_general_prompt(query, final_report_toc)
 
             # LLM 호출
-            response = await self.agent_llm_lite.ainvoke_with_fallback(input=prompt, project_type=ProjectType.STOCKEASY, db=self.db)
+            response = await self.agent_llm.ainvoke_with_fallback(input=prompt, project_type=ProjectType.STOCKEASY, db=self.db)
 
             # 응답 파싱
             content = response.content.strip()
