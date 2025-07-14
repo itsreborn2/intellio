@@ -22,6 +22,7 @@ echo "현재 환경: $CURRENT_ENV"
 # 기본 설정값 정의
 HOST=${HOST:-"0.0.0.0"}
 PORT=${PORT:-"8000"}
+BACKLOG=${BACKLOG:-2048} # Uvicorn 연결 대기열(backlog) 크기. 동시 접속자가 많을 때 이 값을 조정하여 더 많은 연결을 대기시킬 수 있습니다.
 
 # 환경에 따라 RELOAD 기본값 설정
 if [ "$CURRENT_ENV" = "production" ]; then
@@ -78,7 +79,7 @@ else
 fi
 
 # 환경 변수에 따른 실행 옵션 설정
-UVICORN_OPTS="--host $HOST --port $PORT"
+UVICORN_OPTS="--host $HOST --port $PORT --backlog $BACKLOG"
 
 # RELOAD 옵션 설정
 if [ "$RELOAD" = "true" ]; then

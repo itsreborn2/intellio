@@ -36,13 +36,14 @@ class FinancialAnalyzerAgent(BaseAgent):
         """
         super().__init__(name, db)
         self.agent_llm = get_agent_llm("financial_analyzer_agent")
-        self.agent_llm_lite = get_agent_llm("gemini-lite")
+        self.agent_llm_lite = get_agent_llm("gemini-2.5-flash-lite")  # get_agent_llm("gemini-2.0-flash-lite")
         logger.info(f"FinancialAnalyzerAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         self.financial_service_pdf = FinancialDataServicePDF()
         self.financial_service_db = FinancialDataServiceDB(db_session=db)
 
         self.stock_service = StockInfoService()
         self.prompt_template = FINANCIAL_ANALYSIS_SYSTEM_PROMPT
+
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         재무 데이터 분석을 수행합니다.
@@ -119,7 +120,7 @@ class FinancialAnalyzerAgent(BaseAgent):
             logger.info(f"[성능개선] PDF 데이터 조회 완료 - 소요시간: {pdf_duration:.2f}초")
 
             # DB 데이터 조회 (빠름)
-            #logger.info("[성능개선] DB 데이터 조회 시작")
+            # logger.info("[성능개선] DB 데이터 조회 시작")
             db_start_time = datetime.now()
 
             try:
@@ -129,21 +130,15 @@ class FinancialAnalyzerAgent(BaseAgent):
                 db_search_data = {}
 
             db_duration = (datetime.now() - db_start_time).total_seconds()
-            #logger.info(f"[성능개선] DB 데이터 조회 완료 - 소요시간: {db_duration:.2f}초")
+            # logger.info(f"[성능개선] DB 데이터 조회 완료 - 소요시간: {db_duration:.2f}초")
 
             # content를 제외한 메타데이터만 로깅
             log_data = {
                 "stock_code": financial_data.get("stock_code"),
                 "date_range": financial_data.get("date_range", {}),
-                "reports": {
-                    key: {
-                        "metadata": value.get("metadata", {})
-                    }
-                    for key, value in financial_data.get("reports", {}).items()
-                }
+                "reports": {key: {"metadata": value.get("metadata", {})} for key, value in financial_data.get("reports", {}).items()},
             }
-            #logger.info(f"financial_data metadata: {log_data}")
-
+            # logger.info(f"financial_data metadata: {log_data}")
 
             if not financial_data or not financial_data.get("reports"):
                 logger.warning(f"No financial data found for stock {stock_code}")
@@ -160,11 +155,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     "data": {},
                     "error": "재무 데이터를 찾을 수 없습니다.",
                     "execution_time": duration,
-                    "metadata": {
-                        "stock_code": stock_code,
-                        "stock_name": stock_name,
-                        "date_range": date_range
-                    }
+                    "metadata": {"stock_code": stock_code, "stock_name": stock_name, "date_range": date_range},
                 }
 
                 # 타입 주석을 사용한 데이터 할당
@@ -192,10 +183,10 @@ class FinancialAnalyzerAgent(BaseAgent):
                     "error": None,
                     "model_name": self.agent_llm.get_model_name(),
                     "performance_metrics": {
-                        "pdf_data_fetch_duration": pdf_duration if 'pdf_duration' in locals() else 0.0,
-                        "db_data_fetch_duration": db_duration if 'db_duration' in locals() else 0.0,
-                        "total_data_fetch_time": (pdf_duration if 'pdf_duration' in locals() else 0.0) + (db_duration if 'db_duration' in locals() else 0.0)
-                    }
+                        "pdf_data_fetch_duration": pdf_duration if "pdf_duration" in locals() else 0.0,
+                        "db_data_fetch_duration": db_duration if "db_duration" in locals() else 0.0,
+                        "total_data_fetch_time": (pdf_duration if "pdf_duration" in locals() else 0.0) + (db_duration if "db_duration" in locals() else 0.0),
+                    },
                 }
 
                 logger.info(f"FinancialAnalyzerAgent completed in {duration:.2f} seconds, no data found")
@@ -206,24 +197,11 @@ class FinancialAnalyzerAgent(BaseAgent):
             logger.info(f"[FinancialAnalyzerAgent] required_metrics: {required_metrics}")
 
             # 추출된 재무 데이터를 LLM에 전달할 형식으로 변환
-            formatted_data = await self._prepare_financial_data_for_llm(
-                financial_data,
-                db_search_data,
-                query,
-                required_metrics,
-                data_requirements
-            )
-            #logger.info(f"[FinancialAnalyzerAgent] formatted_data: {formatted_data}")
+            formatted_data = await self._prepare_financial_data_for_llm(financial_data, db_search_data, query, required_metrics, data_requirements)
+            # logger.info(f"[FinancialAnalyzerAgent] formatted_data: {formatted_data}")
 
             # 재무 데이터 분석 수행
-            analysis_results = await self._analyze_financial_data(
-                formatted_data,
-                db_search_data,
-                query,
-                stock_code,
-                stock_name or "",
-                classification
-            )
+            analysis_results = await self._analyze_financial_data(formatted_data, db_search_data, query, stock_code, stock_name or "", classification)
 
             # 실행 시간 계산
             end_time = datetime.now()
@@ -236,12 +214,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 "data": analysis_results,
                 "error": None,
                 "execution_time": duration,
-                "metadata": {
-                    "stock_code": stock_code,
-                    "stock_name": stock_name,
-                    "required_metrics": required_metrics,
-                    "date_range": date_range
-                }
+                "metadata": {"stock_code": stock_code, "stock_name": stock_name, "required_metrics": required_metrics, "date_range": date_range},
             }
 
             # 타입 주석을 사용한 데이터 할당
@@ -253,9 +226,7 @@ class FinancialAnalyzerAgent(BaseAgent):
 
             # 목차 항목에 경쟁사가 있다면, 경쟁사의 이름을 llm에게 조회를 한다.
             final_report_toc = state.get("final_report_toc")
-            competitor_infos = await self._get_competitor_info(final_report_toc=final_report_toc,
-                                                              stock_name=stock_name,
-                                                              stock_code=stock_code, date_range=date_range)
+            competitor_infos = await self._get_competitor_info(final_report_toc=final_report_toc, stock_name=stock_name, stock_code=stock_code, date_range=date_range)
             if competitor_infos:
                 state["agent_results"]["financial_analyzer"]["competitor_infos"] = competitor_infos
 
@@ -282,11 +253,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 "status": "completed",
                 "error": None,
                 "model_name": self.agent_llm.get_model_name(),
-                "performance_metrics": {
-                    "pdf_data_fetch_duration": pdf_duration,
-                    "db_data_fetch_duration": db_duration,
-                    "total_data_fetch_time": pdf_duration + db_duration
-                }
+                "performance_metrics": {"pdf_data_fetch_duration": pdf_duration, "db_data_fetch_duration": db_duration, "total_data_fetch_time": pdf_duration + db_duration},
             }
 
             logger.info(f"[성능개선] FinancialAnalyzerAgent 완료 - 총 실행시간: {duration:.2f}초")
@@ -309,11 +276,8 @@ class FinancialAnalyzerAgent(BaseAgent):
                 "metadata": {
                     "stock_code": stock_code,
                     "stock_name": stock_name or "",
-                    "date_range": {
-                        "start_date": datetime.now().strftime("%Y-%m-%d"),
-                        "end_date": datetime.now().strftime("%Y-%m-%d")
-                    }
-                }
+                    "date_range": {"start_date": datetime.now().strftime("%Y-%m-%d"), "end_date": datetime.now().strftime("%Y-%m-%d")},
+                },
             }
 
             # 타입 주석을 사용한 데이터 할당
@@ -342,13 +306,9 @@ class FinancialAnalyzerAgent(BaseAgent):
             error_message: 오류 메시지
         """
         state["errors"] = state.get("errors", [])
-        state["errors"].append({
-            "agent": "financial_analyzer",
-            "error": error_message,
-            "type": "processing_error",
-            "timestamp": datetime.now(),
-            "context": {"query": state.get("query", "")}
-        })
+        state["errors"].append(
+            {"agent": "financial_analyzer", "error": error_message, "type": "processing_error", "timestamp": datetime.now(), "context": {"query": state.get("query", "")}}
+        )
 
     def _determine_date_range(self, query: str, data_requirements: Dict[str, Any]) -> Dict[str, datetime]:
         """
@@ -370,22 +330,22 @@ class FinancialAnalyzerAgent(BaseAgent):
         time_range = data_requirements.get("time_range", "")
         if isinstance(time_range, str) and time_range:
             # "최근 X년" 패턴
-            recent_years_match = re.search(r'최근\s*(\d+)\s*년', time_range)
+            recent_years_match = re.search(r"최근\s*(\d+)\s*년", time_range)
             if recent_years_match:
                 years = int(recent_years_match.group(1))
                 years = min(max(years, 1), 5)  # 1~5년 사이로 제한
-                start_date = end_date - timedelta(days=years*365)
+                start_date = end_date - timedelta(days=years * 365)
                 return {"start_date": start_date, "end_date": end_date}
 
             # "최근 X개월" 패턴
-            recent_months_match = re.search(r'최근\s*(\d+)\s*개월', time_range)
+            recent_months_match = re.search(r"최근\s*(\d+)\s*개월", time_range)
             if recent_months_match:
                 months = int(recent_months_match.group(1))
-                start_date = end_date - timedelta(days=months*30)
+                start_date = end_date - timedelta(days=months * 30)
                 return {"start_date": start_date, "end_date": end_date}
 
             # "YYYY년" 패턴 - 현재 연도와의 차이를 계산
-            year_match = re.search(r'(20\d{2})년', time_range)
+            year_match = re.search(r"(20\d{2})년", time_range)
             if year_match:
                 target_year = int(year_match.group(1))
                 start_date = datetime(target_year, 1, 1)
@@ -393,7 +353,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 return {"start_date": start_date, "end_date": end_date}
 
             # "YY년" 패턴 (2자리 연도) - 20을 앞에 붙여서 4자리 연도로 변환
-            short_year_match = re.search(r'(\d{2})년', time_range)
+            short_year_match = re.search(r"(\d{2})년", time_range)
             if short_year_match:
                 year_suffix = int(short_year_match.group(1))
                 # 2000년대로 가정
@@ -408,7 +368,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 return {"start_date": start_date, "end_date": end_date}
 
             # "X분기" 패턴 - 분기 데이터만 처리
-            quarter_match = re.search(r'(\d)분기', time_range)
+            quarter_match = re.search(r"(\d)분기", time_range)
             if quarter_match:
                 quarter = int(quarter_match.group(1))
                 current_year = end_date.year
@@ -420,12 +380,12 @@ class FinancialAnalyzerAgent(BaseAgent):
                 elif quarter == 2:
                     start_date = datetime(current_year, 7, 1)
                     end_date = datetime(current_year, 8, 16)
-                elif quarter == 3: # 3분기
+                elif quarter == 3:  # 3분기
                     start_date = datetime(current_year, 10, 1)
                     end_date = datetime(current_year, 11, 16)
-                elif quarter == 4: # 4분기는 1~3월에 마감. 연간 사업보고서에는 4분기 실적이 따로 없으므로, 연간보고서 - 3분기실적 으로 처리.
+                elif quarter == 4:  # 4분기는 1~3월에 마감. 연간 사업보고서에는 4분기 실적이 따로 없으므로, 연간보고서 - 3분기실적 으로 처리.
                     start_date = datetime(current_year, 10, 1)
-                    end_date = datetime(current_year+1, 3, 31)
+                    end_date = datetime(current_year + 1, 3, 31)
 
                 return {"start_date": start_date, "end_date": end_date}
 
@@ -434,7 +394,7 @@ class FinancialAnalyzerAgent(BaseAgent):
         # 1. 특정 연도 매칭 패턴 (예: 2023년, 23년)
         year_specific_patterns = [
             r"(20\d{2})년",  # 4자리 연도 (YYYY년)
-            r"(\d{2})년"     # 2자리 연도 (YY년)
+            r"(\d{2})년",  # 2자리 연도 (YY년)
         ]
 
         for pattern in year_specific_patterns:
@@ -443,7 +403,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 try:
                     group = match.group(1)
                     # 연도 처리
-                    if len(group) == 4 and group.startswith('20'):
+                    if len(group) == 4 and group.startswith("20"):
                         target_year = int(group)
                     else:  # 2자리 연도
                         year_suffix = int(group)
@@ -461,16 +421,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     pass
 
         # 2. 기간 매칭 패턴 (예: 3년간, 5년 동안)
-        period_patterns = [
-            r"(\d+)년간",
-            r"(\d+)년\s*동안",
-            r"지난\s*(\d+)년",
-            r"최근\s*(\d+)년",
-            r"(\d+)년치",
-            r"(\d+)년\s*데이터",
-            r"(\d+)\s*년",
-            r"(\d+)\s*years"
-        ]
+        period_patterns = [r"(\d+)년간", r"(\d+)년\s*동안", r"지난\s*(\d+)년", r"최근\s*(\d+)년", r"(\d+)년치", r"(\d+)년\s*데이터", r"(\d+)\s*년", r"(\d+)\s*years"]
 
         for pattern in period_patterns:
             match = re.search(pattern, query)
@@ -478,24 +429,21 @@ class FinancialAnalyzerAgent(BaseAgent):
                 try:
                     year_range = int(match.group(1))
                     year_range = min(max(year_range, 1), 5)  # 1~5년 사이로 제한
-                    start_date = end_date - timedelta(days=year_range*365)
+                    start_date = end_date - timedelta(days=year_range * 365)
                     return {"start_date": start_date, "end_date": end_date}
                 except ValueError:
                     pass
 
         # 특정 키워드에 기반한 범위 결정
-        if any(keyword in query or keyword in str(time_range)
-               for keyword in ["장기", "전체", "역대", "모든", "전부"]):
-            start_date = end_date - timedelta(days=5*365)  # 5년
-        elif any(keyword in query or keyword in str(time_range)
-                for keyword in ["중장기", "3년", "삼년"]):
-            start_date = end_date - timedelta(days=3*365)  # 3년
-        elif any(keyword in query or keyword in str(time_range)
-                for keyword in ["단기", "1년", "일년", "올해"]):
-            start_date = end_date - timedelta(days=1*365)  # 1년
+        if any(keyword in query or keyword in str(time_range) for keyword in ["장기", "전체", "역대", "모든", "전부"]):
+            start_date = end_date - timedelta(days=5 * 365)  # 5년
+        elif any(keyword in query or keyword in str(time_range) for keyword in ["중장기", "3년", "삼년"]):
+            start_date = end_date - timedelta(days=3 * 365)  # 3년
+        elif any(keyword in query or keyword in str(time_range) for keyword in ["단기", "1년", "일년", "올해"]):
+            start_date = end_date - timedelta(days=1 * 365)  # 1년
         else:
             # 기본값: 2년
-            start_date = end_date - timedelta(days=default_years*365)
+            start_date = end_date - timedelta(days=default_years * 365)
 
         return {"start_date": start_date, "end_date": end_date}
 
@@ -533,9 +481,27 @@ class FinancialAnalyzerAgent(BaseAgent):
 
         # 재무 관련 키워드 확인
         financial_keywords = [
-            "매출", "revenue", "영업이익", "operating profit", "순이익", "net profit",
-            "per", "pbr", "eps", "bps", "부채비율", "자기자본비율", "roe", "배당", "dividend",
-            "현금흐름", "cash flow", "fcf", "ebitda", "capex", "자본지출"
+            "매출",
+            "revenue",
+            "영업이익",
+            "operating profit",
+            "순이익",
+            "net profit",
+            "per",
+            "pbr",
+            "eps",
+            "bps",
+            "부채비율",
+            "자기자본비율",
+            "roe",
+            "배당",
+            "dividend",
+            "현금흐름",
+            "cash flow",
+            "fcf",
+            "ebitda",
+            "capex",
+            "자본지출",
         ]
 
         # 쿼리에 재무 관련 키워드가 많을수록 더 많은 지표 포함
@@ -548,12 +514,9 @@ class FinancialAnalyzerAgent(BaseAgent):
         else:
             return default_metrics
 
-    async def _prepare_financial_data_for_llm(self,
-                                     financial_data: Dict[str, Any],
-                                     db_search_data: Dict[str, Any],
-                                     query: str,
-                                     required_metrics: List[str],
-                                     data_requirements: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _prepare_financial_data_for_llm(
+        self, financial_data: Dict[str, Any], db_search_data: Dict[str, Any], query: str, required_metrics: List[str], data_requirements: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         PDF에서 추출한 재무 데이터를 LLM에 전달할 형식으로 변환합니다.
 
@@ -566,30 +529,30 @@ class FinancialAnalyzerAgent(BaseAgent):
         Returns:
             LLM에 전달할 형식의 재무 데이터 리스트
         """
-# """
-# db_search_data 형식
-# {  'stock_code': '000660',
-# 	'period': {'end_date': '2025-04-25', 'start_date': '2023-12-01'},
-#    'quarters': {  202312: {  'net_income': {  'cumulative_value': -9137547.0,
-#                                               'display_unit': '백만원',
-#                                               'period_value': -1379450.0},
-#                              'operating_income': {  'cumulative_value': -7730313.0,
-#                                                     'display_unit': '백만원',
-#                                                     'period_value': 346034.0},
-#                              'revenue': {  'cumulative_value': 32765719.0,
-#                                            'display_unit': '백만원',
-#                                            'period_value': 11305505.0}},
-#                   202403: {  'net_income': {  'cumulative_value': 1917039.0,
-#                                               'display_unit': '백만원',
-#                                               'period_value': 1917039.0},
-#                              'operating_income': {  'cumulative_value': 2886029.0,
-#                                                     'display_unit': '백만원',
-#                                                     'period_value': 2886029.0},
-#                              'revenue': {  'cumulative_value': 12429598.0,
-#                                            'display_unit': '백만원',
-#                                            'period_value': 12429598.0}},
+        # """
+        # db_search_data 형식
+        # {  'stock_code': '000660',
+        # 	'period': {'end_date': '2025-04-25', 'start_date': '2023-12-01'},
+        #    'quarters': {  202312: {  'net_income': {  'cumulative_value': -9137547.0,
+        #                                               'display_unit': '백만원',
+        #                                               'period_value': -1379450.0},
+        #                              'operating_income': {  'cumulative_value': -7730313.0,
+        #                                                     'display_unit': '백만원',
+        #                                                     'period_value': 346034.0},
+        #                              'revenue': {  'cumulative_value': 32765719.0,
+        #                                            'display_unit': '백만원',
+        #                                            'period_value': 11305505.0}},
+        #                   202403: {  'net_income': {  'cumulative_value': 1917039.0,
+        #                                               'display_unit': '백만원',
+        #                                               'period_value': 1917039.0},
+        #                              'operating_income': {  'cumulative_value': 2886029.0,
+        #                                                     'display_unit': '백만원',
+        #                                                     'period_value': 2886029.0},
+        #                              'revenue': {  'cumulative_value': 12429598.0,
+        #                                            'display_unit': '백만원',
+        #                                            'period_value': 12429598.0}},
 
-# """
+        # """
         reports = financial_data.get("reports", {})
         stock_code = financial_data.get("stock_code", "")
         formatted_data = []
@@ -617,9 +580,9 @@ class FinancialAnalyzerAgent(BaseAgent):
                     metrics[metric] = keyword_context
 
             # 보고서 데이터 구조화
-            #print(f"[FIN_FORMAT] 보고서 데이터 구조화: {metadata}")
+            # print(f"[FIN_FORMAT] 보고서 데이터 구조화: {metadata}")
             year = int(metadata.get("year", ""))
-            report_type = metadata.get('type')
+            report_type = metadata.get("type")
             # if( report_type.lower() == "annual" ):
             #     year = year - 1
 
@@ -628,7 +591,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 "date": metadata.get("date", ""),
                 "content": content[:5000] if len(content) > 5000 else content,  # 컨텐츠 제한
                 "financial_indicators": metrics,
-                "metadata": metadata
+                "metadata": metadata,
             }
 
             formatted_data.append(formatted_report)
@@ -682,7 +645,7 @@ class FinancialAnalyzerAgent(BaseAgent):
         if start > 0:
             first_space = context.find(" ")
             if first_space > 0:
-                context = context[first_space + 1:]
+                context = context[first_space + 1 :]
 
         # 단어 경계에서 끝나도록 조정
         if end < len(text):
@@ -692,13 +655,9 @@ class FinancialAnalyzerAgent(BaseAgent):
 
         return context
 
-    async def _analyze_financial_data(self,
-                                     formatted_data: List[Dict[str, Any]],
-                                     db_search_data: Dict[str, Any],
-                                     query: str,
-                                     stock_code: str,
-                                     stock_name: str,
-                                     classification: Dict[str, Any]) -> Dict[str, Any]:
+    async def _analyze_financial_data(
+        self, formatted_data: List[Dict[str, Any]], db_search_data: Dict[str, Any], query: str, stock_code: str, stock_name: str, classification: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         재무 데이터를 분석합니다.
 
@@ -735,15 +694,17 @@ class FinancialAnalyzerAgent(BaseAgent):
 
             messages = [
                 SystemMessage(content=self.prompt_template),
-                HumanMessage(content=FINANCIAL_ANALYSIS_USER_PROMPT.format(
-                    today=datetime.now().strftime("%Y-%m-%d"),
-                    query=query,
-                    financial_data=financial_data_str,
-                    db_search_data=json.dumps(db_search_data, ensure_ascii=False, indent=2),
-                    stock_code=stock_code,
-                    stock_name=stock_name,
-                    classification=classification.get("primary_intent", "")
-                ))
+                HumanMessage(
+                    content=FINANCIAL_ANALYSIS_USER_PROMPT.format(
+                        today=datetime.now().strftime("%Y-%m-%d"),
+                        query=query,
+                        financial_data=financial_data_str,
+                        db_search_data=json.dumps(db_search_data, ensure_ascii=False, indent=2),
+                        stock_code=stock_code,
+                        stock_name=stock_name,
+                        classification=classification.get("primary_intent", ""),
+                    )
+                ),
             ]
 
             # LLM 호출
@@ -751,34 +712,20 @@ class FinancialAnalyzerAgent(BaseAgent):
             user_id = user_context.get("user_id", None)
 
             # 폴백 메커니즘을 사용하여 LLM 호출
-            response: AIMessage = await self.agent_llm.ainvoke_with_fallback(
-                messages,
-                user_id=user_id,
-                project_type=ProjectType.STOCKEASY,
-                db=self.db
-            )
+            response: AIMessage = await self.agent_llm.ainvoke_with_fallback(messages, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db)
 
             # 분석 결과 추출
             analysis_content = response.content if response else "분석 결과를 생성할 수 없습니다."
 
             return {
                 "llm_response": analysis_content,
-                "extracted_data": {
-                    "stock_code": stock_code,
-                    "stock_name": stock_name,
-                    "report_count": len(formatted_data),
-                    "date_range": self._extract_date_range(formatted_data)
-                },
-                "raw_financial_data": formatted_data[:3] if formatted_data else []  # 최대 2개 보고서만 포함
+                "extracted_data": {"stock_code": stock_code, "stock_name": stock_name, "report_count": len(formatted_data), "date_range": self._extract_date_range(formatted_data)},
+                "raw_financial_data": formatted_data[:3] if formatted_data else [],  # 최대 2개 보고서만 포함
             }
 
         except Exception as e:
             logger.exception(f"재무 데이터 분석 중 오류: {str(e)}")
-            return {
-                "llm_response": f"재무 분석 중 오류가 발생했습니다: {str(e)}",
-                "extracted_data": {},
-                "raw_financial_data": []
-            }
+            return {"llm_response": f"재무 분석 중 오류가 발생했습니다: {str(e)}", "extracted_data": {}, "raw_financial_data": []}
 
     def _extract_date_range(self, formatted_data: List[Dict[str, Any]]) -> Dict[str, str]:
         """
@@ -813,30 +760,18 @@ class FinancialAnalyzerAgent(BaseAgent):
         if dates:
             min_date = min(dates)
             max_date = max(dates)
-            return {
-                "start_date": min_date.strftime("%Y-%m-%d"),
-                "end_date": max_date.strftime("%Y-%m-%d"),
-                "included_years": sorted(list(years), reverse=True)
-            }
+            return {"start_date": min_date.strftime("%Y-%m-%d"), "end_date": max_date.strftime("%Y-%m-%d"), "included_years": sorted(list(years), reverse=True)}
 
         # 날짜 정보가 없는 경우 연도 정보만 사용
         if years:
             min_year = min(years)
             max_year = max(years)
-            return {
-                "start_date": f"{min_year}-01-01",
-                "end_date": f"{max_year}-12-31",
-                "included_years": sorted(list(years), reverse=True)
-            }
+            return {"start_date": f"{min_year}-01-01", "end_date": f"{max_year}-12-31", "included_years": sorted(list(years), reverse=True)}
 
         # 아무 정보도 없는 경우 기본값 반환
-        return {
-            "start_date": "",
-            "end_date": "",
-            "included_years": []
-        }
+        return {"start_date": "", "end_date": "", "included_years": []}
 
-    async def _get_competitor_info(self, final_report_toc: Dict[str, Any], stock_name:str, stock_code: str, date_range: Dict[str, datetime]) -> List[Dict[str, Any]]:
+    async def _get_competitor_info(self, final_report_toc: Dict[str, Any], stock_name: str, stock_code: str, date_range: Dict[str, datetime]) -> List[Dict[str, Any]]:
         """
         경쟁사 정보를 조회하고 반환합니다.
 
@@ -867,10 +802,7 @@ class FinancialAnalyzerAgent(BaseAgent):
 
                 # 섹션 제목이나 설명에 경쟁사 키워드가 있는지 확인
                 if any(keyword in section_title or keyword in section_desc for keyword in competitor_keywords):
-                    competitor_sections.append({
-                        "title": section_title,
-                        "description": section_desc
-                    })
+                    competitor_sections.append({"title": section_title, "description": section_desc})
 
                 # 하위 섹션 검사
                 subsections = section.get("subsections", [])
@@ -880,10 +812,7 @@ class FinancialAnalyzerAgent(BaseAgent):
 
                     # 하위 섹션 제목이나 설명에 경쟁사 키워드가 있는지 확인
                     if any(keyword in subsection_title or keyword in subsection_desc for keyword in competitor_keywords):
-                        competitor_sections.append({
-                            "title": subsection_title,
-                            "description": subsection_desc
-                        })
+                        competitor_sections.append({"title": subsection_title, "description": subsection_desc})
 
             # 경쟁사 관련 섹션이 없으면 빈 리스트 반환
             if not competitor_sections:
@@ -891,10 +820,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                 return []
 
             # 경쟁사 섹션 정보를 텍스트로 변환하여 LLM에 전달
-            competitor_text = "\n\n".join([
-                f"섹션: {section['title']}\n설명: {section['description']}"
-                for section in competitor_sections
-            ])
+            competitor_text = "\n\n".join([f"섹션: {section['title']}\n설명: {section['description']}" for section in competitor_sections])
 
             # LLM을 사용하여 경쟁사 이름 추출
             competitors = await self._extract_competitors_from_toc(stock_name, stock_code, competitor_text)
@@ -928,11 +854,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     continue
 
                 # 결과 추가
-                competitors_info_list.append({
-                    "stock_code": competitor_code,
-                    "stock_name": competitor_name,
-                    "db_search_data": competitor_db_search_data
-                })
+                competitors_info_list.append({"stock_code": competitor_code, "stock_name": competitor_name, "db_search_data": competitor_db_search_data})
 
                 # 최대 3개까지만 조회
                 if len(competitors_info_list) >= 3:
@@ -974,24 +896,17 @@ class FinancialAnalyzerAgent(BaseAgent):
 
             messages = [
                 SystemMessage(content="당신은 한국 주식 시장의 기업 정보와 산업 구조에 대해 잘 알고 있는 AI 도우미입니다. JSON 형식으로 정확하게 응답해주세요."),
-                HumanMessage(content=prompt_template.format(
-                    stock_name=stock_name,
-                    stock_code=stock_code
-                ))
+                HumanMessage(content=prompt_template.format(stock_name=stock_name, stock_code=stock_code)),
             ]
 
             # LLM 호출
-            response = await self.agent_llm_lite.ainvoke_with_fallback(
-                messages,
-                project_type=ProjectType.STOCKEASY,
-                db=self.db
-            )
+            response = await self.agent_llm_lite.ainvoke_with_fallback(messages, project_type=ProjectType.STOCKEASY, db=self.db)
 
             # 결과 추출
             response_text = response.content if response else ""
 
             # JSON 형식 찾기
-            json_pattern = r'\[.*?\]'
+            json_pattern = r"\[.*?\]"
             json_match = re.search(json_pattern, response_text, re.DOTALL)
 
             if json_match:
@@ -1004,7 +919,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                     logger.error(f"경쟁사 목록 JSON 파싱 실패: {json_str}")
 
             # JSON 파싱 실패 시 텍스트 기반 추출 시도
-            lines = response_text.split('\n')
+            lines = response_text.split("\n")
             for line in lines:
                 if '["' in line and '"]' in line:
                     try:
@@ -1015,7 +930,7 @@ class FinancialAnalyzerAgent(BaseAgent):
                         continue
 
             # 텍스트에서 회사명 패턴 추출 시도
-            company_pattern = r'([가-힣a-zA-Z0-9]+(?:[가-힣a-zA-Z0-9\s]+)?(?:주식회사|전자|반도체|그룹|회사|컴퍼니|주식|Corp|Inc|Co\.|Ltd\.)?)'
+            company_pattern = r"([가-힣a-zA-Z0-9]+(?:[가-힣a-zA-Z0-9\s]+)?(?:주식회사|전자|반도체|그룹|회사|컴퍼니|주식|Corp|Inc|Co\.|Ltd\.)?)"
             companies = []
 
             # 응답에서 회사명 추출
