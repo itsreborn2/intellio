@@ -629,9 +629,22 @@ class FinancialDataServicePDF:
                 # 페이지 번호 순으로 정렬
                 fs_pages.sort(key=lambda x: x[0])
 
+                # 추출된 텍스트에서 전자공시시스템 관련 줄 제거
+                cleaned_texts = []
+                for page_num, text in fs_pages:
+                    if text:
+                        # 각 줄을 확인하여 전자공시시스템 관련 줄 제거
+                        lines = text.split("\n")
+                        filtered_lines = []
+                        for line in lines:
+                            if "전자공시시스템 dart.fss.or.kr" not in line:
+                                filtered_lines.append(line)
+                        cleaned_text = "\n".join(filtered_lines)
+                        cleaned_texts.append(cleaned_text)
+
                 # 추출된 텍스트 반환
                 # logger.info(f"Extracted {len(fs_pages)} pages from {pdf_path}")
-                return "\n\n------- 페이지 구분선 -------\n\n".join([text for _, text in fs_pages])
+                return "\n\n".join(cleaned_texts)
 
             logger.warning(f"No financial statement pages found in {pdf_path}")
             return ""
