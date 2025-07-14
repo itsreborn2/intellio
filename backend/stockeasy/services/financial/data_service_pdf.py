@@ -726,7 +726,7 @@ class FinancialDataServicePDF:
                             page_data = await extract_page_gemini_style_with_dataframe(page, page_num + 1)
 
                             if page_data.get("text"):
-                                all_page_texts.append(f"=== 페이지 {page_num + 1} ===\n{page_data['text']}")
+                                all_page_texts.append(f"{page_data['text']}")
 
                             if page_data.get("tables"):
                                 all_page_tables.append({"page_num": page_num + 1, "tables": page_data["tables"]})
@@ -741,7 +741,7 @@ class FinancialDataServicePDF:
                 logger.info(f"테이블 병합 완료: {len(merged_tables)}개 그룹")
 
                 # 4. 원본 텍스트에 병합된 테이블 적용
-                original_text = "\n\n".join(all_page_texts)
+                original_text = "\n".join(all_page_texts)
                 if merged_tables:
                     enhanced_text = reconstruct_text_with_merged_tables(original_text, merged_tables)
                     logger.info("재무제표 텍스트 재구성 완료 (Gemini 방식)")
@@ -750,7 +750,7 @@ class FinancialDataServicePDF:
                     return original_text
             else:
                 # 테이블이 없는 경우 텍스트만 반환
-                return "\n\n".join(all_page_texts)
+                return "\n".join(all_page_texts)
 
         except Exception as e:
             logger.exception(f"개선된 재무제표 페이지 추출 중 오류: {pdf_path}: {str(e)}")

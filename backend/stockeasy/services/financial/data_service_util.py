@@ -970,7 +970,7 @@ def analyze_table_structure_across_pages(all_page_tables: list) -> list:
                 elif "천원" in source_unit_clean:
                     target_unit = "억원"  # 천원 -> 억원
                 elif "원" in source_unit_clean and "억" not in source_unit_clean:
-                    target_unit = "백만원"  # 원 -> 백만원
+                    target_unit = "억원"  # "백만원"  # 원 -> 백만원
                 elif "억원" in source_unit_clean:
                     max_abs_val = 0
                     for col in merged_df.columns:
