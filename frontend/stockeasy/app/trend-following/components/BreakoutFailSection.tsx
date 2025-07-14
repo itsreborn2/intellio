@@ -54,57 +54,62 @@ export default function BreakoutFailSection({ data: failItems, updateDate, loadi
           </span>
         )}
       </div>
-      {!loading && !error && failItems.length === 0 && <div className="text-sm" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>표시할 데이터가 없습니다.</div>}
-      {!loading && !error && failItems.length > 0 && (
-        <div className="overflow-x-auto rounded-[6px] overflow-hidden">
-          <table className="min-w-full text-xs sm:text-sm border border-gray-200 rounded-[6px]">
-            <thead className="bg-gray-100">
-              <tr className="bg-gray-50">
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden sm:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>갭</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {failItemsToDisplay.map((item: BreakoutData, idx: number) => {
-                const rsValue = item['RS'] || '-';
-                const mttValue = item['MTT'] || '-';
-                
-                return (
-                  <tr key={idx} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center hidden md:table-cell">{item.Code}</td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-left">{item.Name}</td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">{item['Breakthrough Price'] ? formatPrice(item['Breakthrough Price']) + '원' : '-'}</td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">
-                      <span className={
-                        item['Daily Change %'] && parseFloat(item['Daily Change %']) < 0 ? 'text-blue-500' :
-                        item['Daily Change %'] && parseFloat(item['Daily Change %']) > 0 ? 'text-red-500' :
-                        'text-gray-500'
-                      }>
-                        {item['Daily Change %'] && !isNaN(parseFloat(item['Daily Change %'])) ? 
-                          `${parseFloat(item['Daily Change %']).toFixed(2)}%` : '-'}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right hidden sm:table-cell">
-                      {item['Gap %'] && !isNaN(parseFloat(item['Gap %'])) ? 
-                        `${parseFloat(item['Gap %']).toFixed(2)}%` : '-'}
-                    </td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">{rsValue}</td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">
-                      {mttValue && mttValue !== '0' ? (
-                        <CheckCircleIcon className="h-4 w-4 text-green-500 mx-auto" />
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      {!loading && !error && (
+        failItemsToDisplay.length > 0 ? (
+          <div className="overflow-x-auto rounded-[6px] overflow-hidden">
+            <table className="min-w-full text-xs sm:text-sm border border-gray-200 rounded-[6px]">
+              <thead className="bg-gray-100">
+                <tr className="bg-gray-50">
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden sm:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>갭</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {failItemsToDisplay.map((item: BreakoutData, idx: number) => {
+                  const rsValue = item['RS'] || '-';
+                  const mttValue = item['MTT'] || '-';
+                  
+                  return (
+                    <tr key={idx} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center hidden md:table-cell">{item.Code}</td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-left">{item.Name}</td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">{item['Breakthrough Price'] ? formatPrice(item['Breakthrough Price']) + '원' : '-'}</td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">
+                        <span className={ 
+                          item['Daily Change %'] && parseFloat(item['Daily Change %']) < 0 ? 'text-blue-500' :
+                          item['Daily Change %'] && parseFloat(item['Daily Change %']) > 0 ? 'text-red-500' :
+                          'text-gray-500'
+                        }>
+                          {item['Daily Change %'] && !isNaN(parseFloat(item['Daily Change %'])) ? 
+                            `${parseFloat(item['Daily Change %']).toFixed(2)}%` : '-'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right hidden sm:table-cell">
+                        {item['Gap %'] && !isNaN(parseFloat(item['Gap %'])) ? 
+                          `${parseFloat(item['Gap %']).toFixed(2)}%` : '-'}
+                      </td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">{rsValue}</td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">
+                        {mttValue && mttValue !== '0' ? (
+                          <CheckCircleIcon className="h-4 w-4 text-green-500 mx-auto" />
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-4 text-sm text-gray-500">
+            조건을 만족하는 데이터가 없습니다.
+          </div>
+        )
       )}
     </section>
   );

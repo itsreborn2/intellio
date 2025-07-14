@@ -417,11 +417,33 @@ export default function BreakoutSustainChart() {
       <div className="p-4">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-700 my-2">
-            돌파 성공 차트
+            돌파 지속 차트
           </h3>
+          {updateDate && (
+            <p className="text-sm text-gray-500">업데이트: {updateDate}</p>
+          )}
         </div>
         <div className="bg-red-50 border border-red-200 rounded p-4 text-red-600 text-sm">
           {error}
+        </div>
+      </div>
+    );
+  }
+
+  // 데이터가 없는 경우 메시지 표시
+  if (!loading && !error && chartInfos.length === 0) {
+    return (
+      <div className="p-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-gray-700 my-2">
+            돌파 지속 차트
+          </h3>
+          {updateDate && (
+            <p className="text-sm text-gray-500">업데이트: {updateDate}</p>
+          )}
+        </div>
+        <div className="text-center py-4 text-gray-500">
+          조건을 만족하는 데이터가 없습니다.
         </div>
       </div>
     );
