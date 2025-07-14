@@ -174,8 +174,8 @@ class FinancialDataServicePDF:
                     local_path = await self._ensure_local_file(file_path)
 
                     if local_path:
-                        # 페이지 추출 및 데이터 추가
-                        financial_statement_pages = await self._extract_financial_statement_pages(local_path)
+                        # 페이지 추출 및 데이터 추가 (개선된 Gemini 방식)
+                        financial_statement_pages = await self._extract_financial_statement_pages_enhanced(local_path)
                         if financial_statement_pages:
                             report_type = file_info.get("type", "unknown")
                             report_year = file_info.get("year", 0)
@@ -652,6 +652,111 @@ class FinancialDataServicePDF:
         except Exception as e:
             logger.exception(f"Error extracting financial statement pages from {pdf_path}: {str(e)}")
             return ""
+
+    async def _extract_financial_statement_pages_enhanced(self, pdf_path: str) -> str:
+        """
+        PDF에서 재무제표 페이지를 추출합니다 (개선된 버전 - Gemini 방식).
+        테이블 구조를 정확하게 추출하고 단위 변환을 수행합니다.
+
+        Args:
+            pdf_path: PDF 파일 경로
+
+        Returns:
+            추출된 재무제표 페이지 텍스트 (테이블 구조화 및 단위 변환 완료)
+        """
+        try:
+            from .data_service_util import analyze_table_structure_across_pages, extract_page_gemini_style_with_dataframe, reconstruct_text_with_merged_tables
+
+            keywords = ["연결재무상태표", "연결현금흐름표", "재무상태표", "재무에 관한 사항", "연결재무제표", "요약재무정보"]
+
+            # 1. fitz로 목차 페이지 찾기
+            doc = await asyncio.to_thread(fitz.open, pdf_path)
+            target_pages = set()
+
+            try:
+                # 목차 정보 가져오기
+                toc = await asyncio.to_thread(doc.get_toc)
+
+                # 목차에서 재무제표 관련 페이지 찾기
+                for item in toc:
+                    level, title, page_num = item
+                    if any(keyword in title for keyword in keywords):
+                        # PDF 페이지 번호는 0-based로 변환
+                        target_page = page_num - 1
+                        if 0 <= target_page < len(doc):
+                            # 현재 페이지와 뒤따르는 2페이지 추가
+                            for i in range(3):  # 현재 페이지 포함 3페이지
+                                check_page = target_page + i
+                                if 0 <= check_page < len(doc):
+                                    target_pages.add(check_page)
+
+                # 목차에서 페이지를 찾지 못한 경우 키워드로 검색
+                if not target_pages:
+                    logger.info("목차에서 페이지를 찾지 못하여 키워드로 검색합니다...")
+                    for page_num in range(len(doc)):
+                        page = doc[page_num]
+                        text = await asyncio.to_thread(page.get_text)
+                        if any(keyword in text for keyword in keywords):
+                            # 키워드가 발견된 페이지와 뒤따르는 2페이지 추가
+                            for i in range(3):  # 현재 페이지 포함 3페이지
+                                check_page = page_num + i
+                                if 0 <= check_page < len(doc):
+                                    target_pages.add(check_page)
+
+            finally:
+                await asyncio.to_thread(doc.close)
+
+            if not target_pages:
+                logger.warning(f"재무제표 페이지를 찾을 수 없습니다: {pdf_path}")
+                return ""
+
+            # 2. pdfplumber로 각 페이지에서 구조화된 데이터 추출
+            all_page_tables = []
+            all_page_texts = []
+
+            async def extract_enhanced_data():
+                nonlocal all_page_tables, all_page_texts
+
+                with pdfplumber.open(pdf_path) as pdf:
+                    for page_num in sorted(target_pages):
+                        if page_num < len(pdf.pages):
+                            page = pdf.pages[page_num]
+
+                            # Gemini 방식으로 페이지 데이터 추출
+                            page_data = await extract_page_gemini_style_with_dataframe(page, page_num + 1)
+
+                            if page_data.get("text"):
+                                all_page_texts.append(f"=== 페이지 {page_num + 1} ===\n{page_data['text']}")
+
+                            if page_data.get("tables"):
+                                all_page_tables.append({"page_num": page_num + 1, "tables": page_data["tables"]})
+
+            # 비동기 추출 실행
+            await extract_enhanced_data()
+
+            # 3. 테이블 구조 분석 및 병합
+            if all_page_tables:
+                logger.info(f"재무제표 테이블 구조 분석 시작: {len(all_page_tables)}개 페이지")
+                merged_tables = analyze_table_structure_across_pages(all_page_tables)
+                logger.info(f"테이블 병합 완료: {len(merged_tables)}개 그룹")
+
+                # 4. 원본 텍스트에 병합된 테이블 적용
+                original_text = "\n\n".join(all_page_texts)
+                if merged_tables:
+                    enhanced_text = reconstruct_text_with_merged_tables(original_text, merged_tables)
+                    logger.info("재무제표 텍스트 재구성 완료 (Gemini 방식)")
+                    return enhanced_text
+                else:
+                    return original_text
+            else:
+                # 테이블이 없는 경우 텍스트만 반환
+                return "\n\n".join(all_page_texts)
+
+        except Exception as e:
+            logger.exception(f"개선된 재무제표 페이지 추출 중 오류: {pdf_path}: {str(e)}")
+            # 오류 발생 시 기존 방식으로 폴백
+            logger.info("오류 발생으로 기존 방식으로 폴백합니다.")
+            return await self._extract_financial_statement_pages(pdf_path)
 
     async def extract_revenue_breakdown_data(self, target_report: str, business_report_info: Dict[str, Any]):
         """
