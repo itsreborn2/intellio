@@ -443,58 +443,66 @@ export default function BreakoutFailChart() {
         {updateDate && <span className="text-xs sm:mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>updated {updateDate}</span>}
       </div>
       
-      {chunkedCharts.map((chartRow, rowIndex) => (
-        <div key={`row-${rowIndex}`} className="flex flex-wrap -mx-2 mb-2">
-          {chartRow.map((chartInfo, colIndex) => (
-            <div key={`chart-${rowIndex}-${colIndex}`} className="w-full sm:w-1/2 px-2 mb-2">
-              <div className="border border-gray-200 rounded-[6px] overflow-hidden shadow-sm">
-                <div className="bg-gray-50 py-1 px-2 border-b">
-                  <div className="flex flex-wrap items-center justify-between">
-                    <div className="flex flex-wrap items-center">
-                      <span className="font-medium" style={{ fontSize: 'calc(14px)', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>{chartInfo.name}</span>
-                      <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded bg-blue-100 text-blue-800" style={{ fontSize: 'calc(14px)' }}>
-                        {chartInfo.market}
-                      </span>
-                      <span className={`ml-2 font-medium ${Number(chartInfo.changeRate) < 0 ? 'text-blue-600' : 'text-red-600'}`} style={{ fontSize: 'calc(14px)' }}>
-                        {Number(chartInfo.changeRate) < 0 ? '' : '+'}{chartInfo.changeRate}%
-                      </span>
-                    </div>
-                    <div className="flex items-center mt-1 sm:mt-0">
-                      <span className="mr-1" style={{ fontSize: 'calc(14px)', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>RS</span>
-                      <span className="font-medium text-blue-600" style={{ fontSize: 'calc(14px)' }}>{chartInfo.rsValue}</span>
+      {chunkedCharts.length > 0 ? (
+        chunkedCharts.map((chartRow, rowIndex) => (
+          <div key={`row-${rowIndex}`} className="flex flex-wrap -mx-2 mb-2">
+            {chartRow.map((chartInfo, colIndex) => (
+              <div key={`chart-${rowIndex}-${colIndex}`} className="w-full sm:w-1/2 px-2 mb-2">
+                <div className="border border-gray-200 rounded-[6px] overflow-hidden shadow-sm">
+                  <div className="bg-gray-50 py-1 px-2 border-b">
+                    <div className="flex flex-wrap items-center justify-between">
+                      <div className="flex flex-wrap items-center">
+                        <span className="font-medium" style={{ fontSize: 'calc(14px)', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>{chartInfo.name}</span>
+                        <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded bg-blue-100 text-blue-800" style={{ fontSize: 'calc(14px)' }}>
+                          {chartInfo.market}
+                        </span>
+                        {chartInfo.changeRate && (
+                          <span className={`ml-2 font-medium ${Number(chartInfo.changeRate) < 0 ? 'text-blue-600' : 'text-red-600'}`} style={{ fontSize: 'calc(14px)' }}>
+                            {Number(chartInfo.changeRate) < 0 ? '' : '+'}{chartInfo.changeRate}%
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center mt-1 sm:mt-0">
+                        <span className="mr-1" style={{ fontSize: 'calc(14px)', color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>RS</span>
+                        <span className="font-medium text-blue-600" style={{ fontSize: 'calc(14px)' }}>{chartInfo.rsValue}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="h-[260px] overflow-hidden">
-                  {chartInfo.error ? (
-                    <div className="flex items-center justify-center h-full bg-red-50 text-red-600 text-sm p-4">
-                      {chartInfo.error}
-                    </div>
-                  ) : chartInfo.data.length === 0 ? (
-                    <div className="flex items-center justify-center h-full bg-gray-50 text-sm" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
-                      데이터가 없습니다
-                    </div>
-                  ) : (
-                    <ChartComponentDaily
-                      data={chartInfo.data}
-                      title=""
-                      subtitle=""
-                      height={260}
-                      width="100%"
-                      showVolume={true}
-                      marketType={chartInfo.market}
-                      stockName={chartInfo.name}
-                      showMA20={false}
-                      parentComponent="BreakoutFailChart"
-                      breakthroughPrice={chartInfo.breakthroughPrice}
-                    />
-                  )}
+                  <div className="h-[260px] overflow-hidden">
+                    {chartInfo.error ? (
+                      <div className="flex items-center justify-center h-full bg-red-50 text-red-600 text-sm p-4">
+                        {chartInfo.error}
+                      </div>
+                    ) : chartInfo.data.length === 0 ? (
+                      <div className="flex items-center justify-center h-full bg-gray-50 text-sm" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+                        조건을 만족하는 데이터가 없습니다.
+                      </div>
+                    ) : (
+                      <ChartComponentDaily
+                        data={chartInfo.data}
+                        title=""
+                        subtitle=""
+                        height={260}
+                        width="100%"
+                        showVolume={true}
+                        marketType={chartInfo.market}
+                        stockName={chartInfo.name}
+                        showMA20={false}
+                        parentComponent="BreakoutFailChart"
+                        breakthroughPrice={chartInfo.breakthroughPrice}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        ))
+      ) : (
+        <div className="text-sm text-gray-500 py-4">
+          조건을 만족하는 데이터가 없습니다.
         </div>
-      ))}
+      )}
     </div>
   );
 }

@@ -201,8 +201,20 @@ function parseCSV(csvText: string): { headers: string[]; rows: Record<string, an
   }
 };
 
+// 행 위치 정보를 위한 인터페이스
+interface RowPosition {
+  bottom: number; // 행의 하단 위치 (Y 좌표)
+  top: number;    // 행의 상단 위치 (Y 좌표)
+  left: number;   // 행의 좌측 위치 (X 좌표)
+  width: number;  // 행의 너비
+}
+
 // ETF 현재가 테이블 컴포넌트
-export default function ETFCurrentTable() {
+interface ETFCurrentTableProps {
+  onETFClick?: (code: string, name: string, rowPosition?: RowPosition) => void;
+}
+
+export default function ETFCurrentTable({ onETFClick }: ETFCurrentTableProps = {}) {
   // 상태 관리
   const [csvData, setCsvData] = useState<{ headers: string[]; rows: Record<string, any>[]; groupedData: GroupedData; errors: any[] }>({ headers: [], rows: [], groupedData: {}, errors: [] });
   const [loading, setLoading] = useState<boolean>(true);
@@ -875,33 +887,49 @@ const orderedIndustries = Object.keys(sortedData);
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '140px', height: '16px' }}>
+                    <td 
+                      className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200 cursor-pointer hover:bg-gray-50" 
+                      style={{ width: '140px', height: '16px' }}
+                      onClick={(event) => {
+                        const etfName = row['종목명'] || tickerMappingInfo.stockNameMap[row['티커']] || '';
+                        const etfCode = row['티커'] || '';
+                        if (onETFClick && etfName && etfCode) {
+                          // 클릭한 요소의 위치 정보 계산
+                          const clickedElement = event.currentTarget as HTMLElement;
+                          const rect = clickedElement.getBoundingClientRect();
+                          const rowPosition = {
+                            bottom: rect.bottom + window.scrollY,
+                            top: rect.top + window.scrollY,
+                            left: rect.left + window.scrollX,
+                            width: clickedElement.closest('tr')?.offsetWidth || 0
+                          };
+                          
+                          onETFClick(etfCode, etfName, rowPosition);
+                        }
+                      }}
+                      title="차트 보기"
+                    >
                       {row['종목명'] || tickerMappingInfo.stockNameMap[row['티커']] || ''}
                     </td>
-                    {filteredHeaders.filter(header => header === '등락율').map((header) => {
-                      const stockName = row['종목명'] as string;
-                      const maData = maListMap[stockName?.trim()];
-                      const changeRateText = maData ? maData['등락률'] : '-';
+                    {/* 등락률 셀 렌더링 */}
+                    <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200 text-right tabular-nums" style={{ width: '60px', height: '16px' }}>
+                      {(() => {
+                        const stockName = row['종목명'] as string;
+                        const maData = maListMap[stockName?.trim()];
+                        const changeRateText = maData ? maData['등락률'] : '-';
                       
-                      let textColorClass = 'text-gray-500'; // 기본값
-                      if (changeRateText && changeRateText !== '-') {
-                        // '%' 기호 제거 및 숫자로 변환 시도
-                        const changeRateValue = parseFloat(changeRateText.replace('%', ''));
-                        if (!isNaN(changeRateValue)) {
-                          textColorClass = changeRateValue > 0 ? 'text-red-500' : changeRateValue < 0 ? 'text-blue-500' : 'text-gray-500';
+                        let textColorClass = 'text-gray-500'; // 기본값
+                        if (changeRateText && changeRateText !== '-') {
+                          // '%' 기호 제거 및 숫자로 변환 시도
+                          const changeRateValue = parseFloat(changeRateText.replace('%', ''));
+                          if (!isNaN(changeRateValue)) {
+                            textColorClass = changeRateValue > 0 ? 'text-red-500' : changeRateValue < 0 ? 'text-blue-500' : 'text-gray-500';
+                          }
                         }
-                      }
                       
-                      return (
-                        <td
-                          key={header}
-                          className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200 text-right tabular-nums"
-                          style={{ width: '60px', height: '16px' }}
-                        >
-                          <span className={textColorClass}>{changeRateText || '-'}</span>
-                        </td>
-                      );
-                    })}
+                        return <span className={textColorClass}>{changeRateText || '-'}</span>;
+                      })()} 
+                    </td>
                     <td className="px-4 py-1 whitespace-nowrap text-xs border border-gray-200" style={{ width: '78px', height: '16px' }}>
                       {/* 포지션 상태 표시 */}
                       <div className="flex items-center justify-center">

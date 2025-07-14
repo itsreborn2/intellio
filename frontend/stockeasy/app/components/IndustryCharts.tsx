@@ -234,14 +234,20 @@ export default function IndustryCharts() {
       setStockChartData([]);
 
       try {
-        const listRes = await fetch('/requestfile/etf_industry/file_list.json');
-        if (!listRes.ok) throw new Error('file_list.json 파일을 찾을 수 없습니다.');
+        const listRes = await fetch('/requestfile/etf_industry/maintain_list.json');
+        if (!listRes.ok) throw new Error('maintain_list.json 파일을 찾을 수 없습니다.');
         const { files }: { files: string[] } = await listRes.json();
 
-        // 파일명에서 코드, 종목명, 등락률, 섹터, 유지일 추출
+        // 파일명에서 코드, 종목명, 등락률, 섹터, 상태, 유지일 추출
         const initialInfos: ChartInfo[] = files.map(filename => {
-          const [code, name, changeStr, sector, durationStr] = filename.split('_');
-          const durationDays = parseInt(durationStr.replace('.csv', ''), 10);
+          // 새로운 파일명 형식: 코드_ETF명_수익률_섹터_유지_일수.csv
+          const parts = filename.split('_');
+          const code = parts[0];
+          const name = parts[1];
+          const changeStr = parts[2];
+          const sector = parts[3];
+          // 마지막 부분에서 숫자만 추출 (확장자 제거)
+          const durationDays = parseInt(parts[parts.length - 1].replace('.csv', ''), 10);
           const changePercent = parseFloat(changeStr);
           return {
             code,

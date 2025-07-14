@@ -626,6 +626,34 @@ export const copyTableAsImage = async (
       (cell as HTMLElement).style.alignItems = 'center';
       (cell as HTMLElement).style.height = '100%';
     });
+    // '신호' 컬럼 중앙 정렬을 위한 새로운 접근
+    const headers = Array.from(tableClone.querySelectorAll('thead th'));
+    let signalIndex = -1;
+
+    headers.forEach((header, index) => {
+      if (header.textContent?.trim() === '신호') {
+        signalIndex = index;
+      }
+    });
+
+    if (signalIndex !== -1) {
+      const rows = tableClone.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        const cell = row.querySelector(`td:nth-child(${signalIndex + 1})`) as HTMLElement;
+        if (cell) {
+          // td 요소에 flex를 적용하지 않고, 표준 정렬 속성을 사용합니다.
+          cell.style.textAlign = 'center';
+          cell.style.verticalAlign = 'middle';
+
+          // 내부 div를 inline-block으로 만들어 text-align의 영향을 받도록 합니다.
+          const innerDiv = cell.querySelector('div');
+          if (innerDiv) {
+            innerDiv.style.display = 'inline-block';
+            innerDiv.style.margin = '0 auto'; // 좌우 중앙 정렬을 위해 margin 조정
+          }
+        }
+      });
+    }
     // --- END 캔들 중앙정렬 패치 ---
 
     

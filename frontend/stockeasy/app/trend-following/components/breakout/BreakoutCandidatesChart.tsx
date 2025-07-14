@@ -472,8 +472,8 @@ export default function BreakoutCandidatesChart() {
                       {chartInfo.error}
                     </div>
                   ) : chartInfo.data.length === 0 ? (
-                    <div className="flex items-center justify-center h-full bg-gray-50 text-sm" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
-                      데이터가 없습니다
+                    <div className="text-sm text-gray-500 py-4">
+                      조건을 만족하는 데이터가 없습니다.
                     </div>
                   ) : (
                     <ChartComponentDaily

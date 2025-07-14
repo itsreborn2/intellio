@@ -46,64 +46,69 @@ export default function BreakoutCandidatesSection({ data: candidatesData, update
       </div>
       {error && <div className="text-red-500">{error}</div>}
       {!loading && !error && (
-        <div className="overflow-x-auto rounded-[6px] overflow-hidden">
-          <table className="min-w-full text-xs sm:text-sm border border-gray-200 rounded-[6px]">
-            <thead className="bg-gray-100">
-              <tr className="bg-gray-50">
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden sm:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>갭</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
-                <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {candidatesToDisplay.map((item: BreakoutData, idx: number) => {
-                const stockCode = item['Code'] || '-';
-                const stockName = item['Name'] || '-';
-                const breakoutPriceValue = item['Breakthrough Price'];
-                const dailyChange = item['Daily Change %'];
-                const dailyChangeNumeric = dailyChange && !isNaN(Number(dailyChange)) ? Number(dailyChange) : null;
-                const dailyChangeColorClass = dailyChangeNumeric === null ? '' : dailyChangeNumeric > 0 ? 'text-red-500' : dailyChangeNumeric < 0 ? 'text-blue-500' : '';
-                const gapPercentValue = item['Remaining %'];
-                const rsValue = item['RS'] || '-';
-                const mttValue = item['MTT'] || '-';
+        candidatesToDisplay.length > 0 ? (
+          <div className="overflow-x-auto rounded-[6px] overflow-hidden">
+            <table className="min-w-full text-xs sm:text-sm border border-gray-200 rounded-[6px]">
+              <thead className="bg-gray-100">
+                <tr className="bg-gray-50">
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden md:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목코드</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-left" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>종목명</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>돌파 가격</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-right" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>등락률</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center hidden sm:table-cell" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>갭</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>RS</th>
+                  <th className="px-2 py-1 md:px-3 md:py-2 border-b font-medium text-center" style={{ color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>MTT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidatesToDisplay.map((item: BreakoutData, idx: number) => {
+                  const stockCode = item['Code'] || '-';
+                  const stockName = item['Name'] || '-';
+                  const breakoutPriceValue = item['Breakthrough Price'];
+                  const dailyChange = item['Daily Change %'];
+                  const dailyChangeNumeric = dailyChange && !isNaN(Number(dailyChange)) ? Number(dailyChange) : null;
+                  const dailyChangeColorClass = dailyChangeNumeric === null ? '' : dailyChangeNumeric > 0 ? 'text-red-500' : dailyChangeNumeric < 0 ? 'text-blue-500' : '';
+                  const gapPercentValue = item['Remaining %'];
+                  const rsValue = item['RS'] || '-';
+                  const mttValue = item['MTT'] || '-';
 
-                // 디버깅 로그 (필요시 주석 해제)
-                // if (idx < 2) { // 처음 2개 항목만 로그 출력
-                //   console.log(`항목 ${idx} 원본 데이터:`, item);
-                //   console.log(`항목 ${idx} 테이블 표시용 값:`, {
-                //     stockCode, stockName, currentPriceValue, breakoutPriceValue, dailyChange, gapPercentValue, rsValue, mttValue
-                //   });
-                // }
+                  // if (idx < 2) { // 처음 2개 항목만 로그 출력
+                  //   console.log(`항목 ${idx} 원본 데이터:`, item);
+                  //   console.log(`항목 ${idx} 테이블 표시용 값:`, {
+                  //     stockCode, stockName, currentPriceValue, breakoutPriceValue, dailyChange, gapPercentValue, rsValue, mttValue
+                  //   });
+                  // }
 
-                return (
-                  <tr key={idx} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center hidden md:table-cell">{item['Code']}</td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-left">{stockName}</td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">
-                      {breakoutPriceValue && !isNaN(Number(breakoutPriceValue)) ? Number(breakoutPriceValue).toLocaleString('ko-KR') + '원' : '-'}
-                    </td>
-                    <td className={`px-2 py-1 md:px-3 md:py-2 border-b text-right ${dailyChangeColorClass}`}>
-                      {dailyChangeNumeric !== null ? `${dailyChangeNumeric.toFixed(2)}%` : (dailyChange || '-')}
-                    </td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right hidden sm:table-cell">
-                      {gapPercentValue && !isNaN(Number(gapPercentValue)) ? `${Number(gapPercentValue).toFixed(2)}%` : (gapPercentValue || '-')}
-                    </td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">{rsValue}</td>
-                    <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">
-                      {mttValue && mttValue !== '0' ? (
-                        <CheckCircleIcon className="h-4 w-4 text-green-500 mx-auto" />
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  return (
+                    <tr key={idx} className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center hidden md:table-cell">{item['Code']}</td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-left">{stockName}</td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right">
+                        {breakoutPriceValue && !isNaN(Number(breakoutPriceValue)) ? Number(breakoutPriceValue).toLocaleString('ko-KR') + '원' : '-'}
+                      </td>
+                      <td className={`px-2 py-1 md:px-3 md:py-2 border-b text-right ${dailyChangeColorClass}`}>
+                        {dailyChangeNumeric !== null ? `${dailyChangeNumeric.toFixed(2)}%` : (dailyChange || '-')}
+                      </td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-right hidden sm:table-cell">
+                        {gapPercentValue && !isNaN(Number(gapPercentValue)) ? `${Number(gapPercentValue).toFixed(2)}%` : (gapPercentValue || '-')}
+                      </td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">{rsValue}</td>
+                      <td className="px-2 py-1 md:px-3 md:py-2 border-b text-center">
+                        {mttValue && mttValue !== '0' ? (
+                          <CheckCircleIcon className="h-4 w-4 text-green-500 mx-auto" />
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-4 text-sm text-gray-500">
+            조건을 만족하는 데이터가 없습니다.
+          </div>
+        )
       )}
     </section>
   );
