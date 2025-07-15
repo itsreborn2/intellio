@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 from langchain_core.output_parsers import JsonOutputParser
 from loguru import logger
 
-#from pydantic.v1 import BaseModel, Field
+# from pydantic.v1 import BaseModel, Field
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +26,7 @@ from stockeasy.prompts.knowledge_integrator_prompts import format_knowledge_inte
 class CoreInsights(BaseModel):
     주요_인사이트1: Optional[str] = Field(default=None, description="통합된 첫 번째 주요 인사이트")
     주요_인사이트2: Optional[str] = Field(default=None, description="통합된 두 번째 주요 인사이트")
-    주요_인사이트3: Optional[str] = Field( default=None, description="통합된 세 번째 주요 인사이트")
+    주요_인사이트3: Optional[str] = Field(default=None, description="통합된 세 번째 주요 인사이트")
 
 
 class ConfidenceAssessment(BaseModel):
@@ -37,7 +37,7 @@ class ConfidenceAssessment(BaseModel):
 
 class KnowledgeIntegratorOutput(BaseModel):
     핵심_결론: CoreInsights = Field(..., description="통합된 핵심 결론과 인사이트")
-    신뢰도_평가: ConfidenceAssessment = Field(...,  description="정보 영역별 신뢰도 평가")
+    신뢰도_평가: ConfidenceAssessment = Field(..., description="정보 영역별 신뢰도 평가")
     불확실_영역: List[str] = Field(..., description="부족하거나 불확실한 정보 영역 목록")
     통합_응답: str = Field(..., description="사용자 질문에 대한 종합적인 답변")
 
@@ -88,7 +88,9 @@ class KnowledgeIntegratorAgent(BaseAgent):
             keywords = question_analysis.get("keywords", [])
             important_keywords = ""
             if keywords:
-                important_keywords = ", ".join(keywords[:3])  # 상위 3개 키워드 사용
+                # None 값을 필터링하여 문자열이 아닌 항목을 제거
+                safe_keywords = [str(k) for k in keywords if k is not None]
+                important_keywords = ", ".join(safe_keywords[:3])  # 상위 3개 키워드 사용
 
             # 엔티티에서 종목 정보 추출
             stock_code = entities.get("stock_code", state.get("stock_code"))
@@ -120,8 +122,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 result_stock_code = metadata.get("stock_code")
 
                 # 종목 정보가 있는 경우 현재 종목과 일치하는지 확인
-                if (result_stock_name and stock_name and result_stock_name != stock_name) or \
-                   (result_stock_code and stock_code and result_stock_code != stock_code):
+                if (result_stock_name and stock_name and result_stock_name != stock_name) or (result_stock_code and stock_code and result_stock_code != stock_code):
                     logger.warning(f"에이전트 {agent_name}의 결과가 현재 쿼리의 종목과 일치하지 않습니다. 건너뜁니다.")
                     continue
 
@@ -146,7 +147,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
             if "report_analyzer" in agent_results:
                 report_agent = agent_results["report_analyzer"]
                 if report_agent.get("status") == "success" and report_agent.get("data"):
-                    report_results = self._format_report_results(report_agent)#report_agent["data"])
+                    report_results = self._format_report_results(report_agent)  # report_agent["data"])
 
             # 재무 분석 결과 추출
             financial_results = "정보 없음"
@@ -160,7 +161,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
             if "industry_analyzer" in agent_results:
                 industry_agent = agent_results["industry_analyzer"]
                 if industry_agent.get("status") == "success" and industry_agent.get("data"):
-                    #logger.info(f"산업 분석 결과: {industry_agent['data']}")
+                    # logger.info(f"산업 분석 결과: {industry_agent['data']}")
                     analysis = industry_agent["data"].get("analysis", {})
                     if analysis:
                         if isinstance(analysis, dict):
@@ -176,7 +177,6 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 confidential_agent = agent_results["confidential_analyzer"]
                 if confidential_agent.get("status") == "success" and confidential_agent.get("data"):
                     confidential_results = self._format_confidential_results(confidential_agent)
-
 
             # 검증 결과 로깅
             logger.info(f"쿼리 '{query}'에 대한 검증된 에이전트 결과: {list(agent_results.keys())}")
@@ -206,7 +206,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 report_importance=report_importance,
                 financial_importance=financial_importance,
                 industry_importance=industry_importance,
-                confidential_importance=confidential_importance
+                confidential_importance=confidential_importance,
             )
 
             # user_id 추출
@@ -214,51 +214,85 @@ class KnowledgeIntegratorAgent(BaseAgent):
             user_id = user_context.get("user_id", None)
 
             # LLM 호출로 통합 수행
-            #integration_result = await self.chain.ainvoke(prompt)
+            # integration_result = await self.chain.ainvoke(prompt)
             integration_result = await self.agent_llm.with_structured_output(KnowledgeIntegratorOutput).ainvoke(
-                prompt,
-                user_id=user_id,
-                project_type=ProjectType.STOCKEASY,
-                db=self.db
+                prompt, user_id=user_id, project_type=ProjectType.STOCKEASY, db=self.db
             )
             logger.info("Knowledge integration completed successfully")
 
-            # 형식 변환: Pydantic 모델을 IntegratedKnowledge 타입으로 변환
-            # 핵심 인사이트 변환
-            core_insights = []
-            if integration_result.핵심_결론.주요_인사이트1:
-                core_insights.append(integration_result.핵심_결론.주요_인사이트1)
-            if integration_result.핵심_결론.주요_인사이트2:
-                core_insights.append(integration_result.핵심_결론.주요_인사이트2)
-            if integration_result.핵심_결론.주요_인사이트3:
-                core_insights.append(integration_result.핵심_결론.주요_인사이트3)
-
-            # 신뢰도 평가 정보를 analysis 딕셔너리에 포함
-            confidence_info = integration_result.신뢰도_평가.dict()
-
-            # 통합된 지식 베이스 생성 (IntegratedKnowledge 타입 형식으로)
-            integrated_knowledge: IntegratedKnowledge = {
-                "integrated_response": integration_result.통합_응답,
-                "core_insights": core_insights,
-                "facts": [],  # 현재 모델에서는 별도 facts를 제공하지 않음
-                "opinions": [],  # 현재 모델에서는 별도 opinions를 제공하지 않음
-                "analysis": {
-                    "confidence_assessment": confidence_info,
-                    "uncertain_areas": integration_result.불확실_영역
-                },
-                "sources": {
-                    "telegram": self._extract_sources(agent_results, "telegram_retriever"),
-                    "reports": self._extract_sources(agent_results, "report_analyzer"),
-                    "financial": self._extract_sources(agent_results, "financial_analyzer"),
-                    "industry": self._extract_sources(agent_results, "industry_analyzer")
+            # 파싱 결과 검증 및 처리
+            if hasattr(integration_result, "_parsing_failed") and integration_result._parsing_failed:
+                logger.warning("구조화된 출력 파싱이 실패했습니다. 기본 응답을 생성합니다.")
+                # 파싱 실패 시 기본 응답 생성
+                integrated_knowledge: IntegratedKnowledge = {
+                    "integrated_response": "죄송합니다. 정보를 통합하는 중 오류가 발생했습니다. 다시 시도해 주세요.",
+                    "core_insights": ["정보 통합 중 오류가 발생했습니다."],
+                    "facts": [],
+                    "opinions": [],
+                    "analysis": {"confidence_assessment": {}, "uncertain_areas": ["정보 통합 실패"]},
+                    "sources": {
+                        "telegram": self._extract_sources(agent_results, "telegram_retriever"),
+                        "reports": self._extract_sources(agent_results, "report_analyzer"),
+                        "financial": self._extract_sources(agent_results, "financial_analyzer"),
+                        "industry": self._extract_sources(agent_results, "industry_analyzer"),
+                    },
                 }
-            }
+            elif not hasattr(integration_result, "핵심_결론"):
+                # 파싱이 완전히 실패한 경우 (AIMessage 객체가 반환된 경우)
+                logger.error("구조화된 출력 파싱이 완전히 실패했습니다. 원본 응답을 사용합니다.")
+
+                # 원본 응답에서 텍스트 추출
+                raw_text = integration_result.content if hasattr(integration_result, "content") else str(integration_result)
+
+                # 기본 응답 생성
+                integrated_knowledge: IntegratedKnowledge = {
+                    "integrated_response": raw_text if raw_text else "죄송합니다. 정보를 통합하는 중 오류가 발생했습니다.",
+                    "core_insights": ["구조화된 출력 파싱 실패"],
+                    "facts": [],
+                    "opinions": [],
+                    "analysis": {"confidence_assessment": {}, "uncertain_areas": ["구조화된 출력 파싱 실패"]},
+                    "sources": {
+                        "telegram": self._extract_sources(agent_results, "telegram_retriever"),
+                        "reports": self._extract_sources(agent_results, "report_analyzer"),
+                        "financial": self._extract_sources(agent_results, "financial_analyzer"),
+                        "industry": self._extract_sources(agent_results, "industry_analyzer"),
+                    },
+                }
+            else:
+                # 정상적인 파싱 결과 처리
+                # 형식 변환: Pydantic 모델을 IntegratedKnowledge 타입으로 변환
+                # 핵심 인사이트 변환
+                core_insights = []
+                if integration_result.핵심_결론.주요_인사이트1:
+                    core_insights.append(integration_result.핵심_결론.주요_인사이트1)
+                if integration_result.핵심_결론.주요_인사이트2:
+                    core_insights.append(integration_result.핵심_결론.주요_인사이트2)
+                if integration_result.핵심_결론.주요_인사이트3:
+                    core_insights.append(integration_result.핵심_결론.주요_인사이트3)
+
+                # 신뢰도 평가 정보를 analysis 딕셔너리에 포함
+                confidence_info = integration_result.신뢰도_평가.dict()
+
+                # 통합된 지식 베이스 생성 (IntegratedKnowledge 타입 형식으로)
+                integrated_knowledge: IntegratedKnowledge = {
+                    "integrated_response": integration_result.통합_응답,
+                    "core_insights": core_insights,
+                    "facts": [],  # 현재 모델에서는 별도 facts를 제공하지 않음
+                    "opinions": [],  # 현재 모델에서는 별도 opinions를 제공하지 않음
+                    "analysis": {"confidence_assessment": confidence_info, "uncertain_areas": integration_result.불확실_영역},
+                    "sources": {
+                        "telegram": self._extract_sources(agent_results, "telegram_retriever"),
+                        "reports": self._extract_sources(agent_results, "report_analyzer"),
+                        "financial": self._extract_sources(agent_results, "financial_analyzer"),
+                        "industry": self._extract_sources(agent_results, "industry_analyzer"),
+                    },
+                }
 
             # 통합된 지식 저장 # 굳이 AgentState 최상위에 둘 필요없음.
-            #state["integrated_knowledge"] = integrated_knowledge
+            # state["integrated_knowledge"] = integrated_knowledge
 
             # 추가 정보 (API 호환성 유지)
-            #state["integrated_response"] = integration_result.통합_응답
+            # state["integrated_response"] = integration_result.통합_응답
 
             # 에이전트 결과 업데이트
             state["agent_results"] = state.get("agent_results", {})
@@ -275,11 +309,11 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 "error": None,
                 "execution_time": (datetime.now() - start_time).total_seconds(),
                 "metadata": {
-                    "total_sources": len(self._extract_sources(agent_results, "telegram_retriever")) +
-                                    len(self._extract_sources(agent_results, "report_analyzer")) +
-                                    len(self._extract_sources(agent_results, "financial_analyzer")) +
-                                    len(self._extract_sources(agent_results, "industry_analyzer"))
-                }
+                    "total_sources": len(self._extract_sources(agent_results, "telegram_retriever"))
+                    + len(self._extract_sources(agent_results, "report_analyzer"))
+                    + len(self._extract_sources(agent_results, "financial_analyzer"))
+                    + len(self._extract_sources(agent_results, "industry_analyzer"))
+                },
             }
 
             # 성능 지표 업데이트
@@ -294,7 +328,7 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.agent_llm.get_model_name()
+                "model_name": self.agent_llm.get_model_name(),
             }
 
             # 상태 업데이트 - 콜백 함수 사용
@@ -320,13 +354,9 @@ class KnowledgeIntegratorAgent(BaseAgent):
 
             # 오류 정보 추가
             state["errors"] = state.get("errors", [])
-            state["errors"].append({
-                "agent": "knowledge_integrator",
-                "error": str(e),
-                "type": "processing_error",
-                "timestamp": datetime.now(),
-                "context": {"query": state.get("query", "")}
-            })
+            state["errors"].append(
+                {"agent": "knowledge_integrator", "error": str(e), "type": "processing_error", "timestamp": datetime.now(), "context": {"query": state.get("query", "")}}
+            )
 
             # 에이전트 결과 업데이트 (오류)
             state["agent_results"] = state.get("agent_results", {})
@@ -335,8 +365,8 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 "status": "failed",
                 "data": {},
                 "error": str(e),
-                "execution_time": (datetime.now() - start_time).total_seconds() if 'start_time' in locals() else 0,
-                "metadata": {}
+                "execution_time": (datetime.now() - start_time).total_seconds() if "start_time" in locals() else 0,
+                "metadata": {},
             }
 
             # 상태 업데이트 - 콜백 함수 사용
@@ -369,9 +399,9 @@ class KnowledgeIntegratorAgent(BaseAgent):
                 formatted += "내부DB 검색 결과 상세:\n"
                 for i, msg in enumerate(messages):
                     # 채널명 삭제.
-                    #formatted += f"[{i+1}] 출처: {msg.get('channel_name', '알 수 없음')}\n"
+                    # formatted += f"[{i+1}] 출처: {msg.get('channel_name', '알 수 없음')}\n"
                     formatted += f"내용: {msg.get('content', '내용 없음')}\n"
-                    if msg.get('message_created_at'):
+                    if msg.get("message_created_at"):
                         formatted += f"작성일: {msg.get('message_created_at')}\n"
                     formatted += "---\n"
             else:
@@ -389,8 +419,8 @@ class KnowledgeIntegratorAgent(BaseAgent):
         searched_reports = report_data.get("searched_reports", [])
 
         formatted = f"기업 리포트 검색 결과[{len(searched_reports)}개]:\n"
-        if analysis: # 분석결과가 있으면 결과만 리턴.
-            #analysis = report["analysis"]
+        if analysis:  # 분석결과가 있으면 결과만 리턴.
+            # analysis = report["analysis"]
             # llm_response 키 사용 (report_analyzer_agent의 실제 출력 키)
             if "llm_response" in analysis:
                 formatted += f"분석 결과: {analysis.get('llm_response', '')}\n"
@@ -407,16 +437,16 @@ class KnowledgeIntegratorAgent(BaseAgent):
         else:
             # 분석결과가 없다면, 찾은 문서 내용을 리턴.
             for i, report in enumerate(searched_reports):
-                formatted += f"[{i+1}] 제목: {report.get('title', '제목 없음')}\n"
+                formatted += f"[{i + 1}] 제목: {report.get('title', '제목 없음')}\n"
                 formatted += f"출처: {report.get('source', '알 수 없음')}\n"
                 formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
-                content = report.get('content', '내용 없음')
+                content = report.get("content", "내용 없음")
                 formatted += f"내용: {content}\n"
-
 
                 formatted += "---\n"
 
         return formatted
+
     def _format_confidential_results(self, confidential_agent: List[Dict[str, Any]]) -> str:
         """기업 리포트 결과를 문자열로 포맷팅"""
 
@@ -427,16 +457,16 @@ class KnowledgeIntegratorAgent(BaseAgent):
         searched_reports = confidential_data.get("searched_reports", [])
 
         formatted = f"비공개 자료 검색 결과[{len(searched_reports)}개]:\n"
-        if analysis: # 분석결과가 있으면 결과만 리턴.
+        if analysis:  # 분석결과가 있으면 결과만 리턴.
             if "llm_response" in analysis:
                 formatted += f"분석 결과: {analysis.get('llm_response', '')}\n"
         else:
             # 분석결과가 없다면, 찾은 문서 내용을 리턴.
             for i, report in enumerate(searched_reports):
-                formatted += f"[{i+1}] 제목: {report.get('title', '제목 없음')}\n"
+                formatted += f"[{i + 1}] 제목: {report.get('title', '제목 없음')}\n"
                 formatted += "출처: 비공개자료\n"
-                #formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
-                content = report.get('content', '내용 없음')
+                # formatted += f"날짜: {report.get('date', '날짜 정보 없음')}\n"
+                content = report.get("content", "내용 없음")
                 formatted += f"내용: {content}\n"
 
                 formatted += "---\n"
@@ -497,9 +527,9 @@ class KnowledgeIntegratorAgent(BaseAgent):
             formatted += "상세 보고서 정보:\n"
             for i, report in enumerate(raw_data, 1):
                 formatted += f"[{i}] {report.get('source', '보고서 정보 없음')}\n"
-                if report.get('financial_indicators'):
+                if report.get("financial_indicators"):
                     formatted += "주요 지표:\n"
-                    for metric, value in report['financial_indicators'].items():
+                    for metric, value in report["financial_indicators"].items():
                         formatted += f"- {metric}: {value[:200] if len(value) > 200 else value}\n"
                 formatted += "---\n"
 

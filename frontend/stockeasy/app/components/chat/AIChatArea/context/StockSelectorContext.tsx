@@ -4,6 +4,7 @@
  */
 import React, { createContext, useContext, useReducer, ReactNode, useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { StockOption, StockSearchState, StockSearchAction } from '../types';
+import { parseCookies } from 'nookies';
 import Papa from 'papaparse';
 
 // 로컬 스토리지 키 상수 정의
@@ -18,7 +19,10 @@ const initialState: StockSearchState = {
   isLoading: false,
   error: null,
   searchMode: true, // 새로고침 시 처음부터 '종목명 또는 종목코드 검색' 표시하도록 설정
-  stockOptions: [] // 종목 목록 추가
+  stockOptions: [], // 종목 목록 추가
+  // 일반 질문 모드 관련 상태 추가
+  isGeneralMode: false,
+  isAdminUser: false,
 };
 
 // 리듀서 함수 정의
@@ -121,6 +125,19 @@ function stockSearchReducer(state: StockSearchState, action: StockSearchAction):
         stockOptions: action.payload
       };
       
+    // 일반 질문 모드 관련 액션 처리
+    case 'SET_GENERAL_MODE':
+      return {
+        ...state,
+        isGeneralMode: action.payload
+      };
+      
+    case 'SET_ADMIN_USER':
+      return {
+        ...state,
+        isAdminUser: action.payload
+      };
+      
     default:
       return state;
   }
@@ -142,6 +159,10 @@ type StockSelectorContextType = {
   clearRecentStocks: () => void;
   setStockOptions: (stocks: StockOption[]) => void;
   fetchStockList: () => Promise<void>;
+  // 일반 질문 모드 관련 함수들
+  setGeneralMode: (isGeneral: boolean) => void;
+  setAdminUser: (isAdmin: boolean) => void;
+  checkAdminUser: () => void;
 };
 
 // 컨텍스트 생성
@@ -158,6 +179,39 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
   const isLoadingRef = useRef(false);
   const hasLoggedRef = useRef(false);
   
+  // 관리자 체크 함수
+  const checkAdminUser = useCallback(() => {
+    try {
+      const adminIds = JSON.parse(process.env.NEXT_PUBLIC_ADMIN_IDS || "[]");
+      const cookies = parseCookies();
+      
+      let userEmail = '';
+      
+      // 쿠키에서 이메일 가져오기
+      if (cookies.user_email) {
+        userEmail = cookies.user_email;
+      } else if (cookies.user) {
+        try {
+          let jsonString = decodeURIComponent(cookies.user);
+          if (jsonString.startsWith('"') && jsonString.endsWith('"')) {
+            jsonString = jsonString.slice(1, -1).replace(/\\"/g, '"');
+          }
+          const userInfo = JSON.parse(jsonString);
+          userEmail = userInfo.email || '';
+        } catch (e) {
+          console.error('사용자 정보 파싱 오류:', e);
+        }
+      }
+      
+      const isAdmin = adminIds.includes(userEmail);
+      dispatch({ type: 'SET_ADMIN_USER', payload: isAdmin });
+      
+      console.log('관리자 체크:', { userEmail, isAdmin, adminIds });
+    } catch (error) {
+      console.error('관리자 체크 오류:', error);
+    }
+  }, []);
+
   // 종목 목록 가져오기 함수 (useCallback으로 안정화)
   const fetchStockList = useCallback(async () => {
     // 이미 로드 중이면 중복 호출 방지
@@ -353,6 +407,9 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setIsMounted(true);
     
+    // 관리자 체크
+    checkAdminUser();
+    
     // 로컬 스토리지에서 최근 조회 종목 가져오기
     try {
       const savedStocks = localStorage.getItem(LOCAL_STORAGE_RECENT_STOCKS_KEY);
@@ -364,7 +421,7 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
     }
-  }, []);
+  }, [checkAdminUser]);
 
   // 컴포넌트 마운트 시 종목 리스트 가져오기 (최초 한 번만)
   useEffect(() => {
@@ -427,8 +484,14 @@ export function StockSelectorProvider({ children }: { children: ReactNode }) {
     },
     setStockOptions: (stocks: StockOption[]) => 
       dispatch({ type: 'SET_STOCK_OPTIONS', payload: stocks }),
-    fetchStockList // 종목 목록 가져오기 함수 추가
-  }), [state, dispatch, isMounted]);
+    fetchStockList, // 종목 목록 가져오기 함수 추가
+    // 일반 질문 모드 관련 함수들
+    setGeneralMode: (isGeneral: boolean) => 
+      dispatch({ type: 'SET_GENERAL_MODE', payload: isGeneral }),
+    setAdminUser: (isAdmin: boolean) => 
+      dispatch({ type: 'SET_ADMIN_USER', payload: isAdmin }),
+    checkAdminUser
+  }), [state, dispatch, isMounted, checkAdminUser]);
   
   return (
     <StockSelectorContext.Provider value={contextValue}>

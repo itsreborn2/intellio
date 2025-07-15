@@ -100,6 +100,13 @@ class ReportAnalyzerAgent(BaseAgent):
             stock_code = entities.get("stock_code", state.get("stock_code"))
             stock_name = entities.get("stock_name", state.get("stock_name"))
 
+            # 일반 질문 모드 처리
+            is_general_mode = stock_code == "general"
+            if is_general_mode:
+                logger.info("일반 질문 모드: 종목 독립적 검색 수행")
+                stock_code = None  # 종목 필터 제거
+                stock_name = None
+
             if not query:
                 logger.warning("Empty query provided to ReportAnalyzerAgent")
                 self._add_error(state, "검색 쿼리가 제공되지 않았습니다.")
@@ -266,8 +273,8 @@ class ReportAnalyzerAgent(BaseAgent):
         """
         search_query = query
 
-        # 종목 정보 추가
-        if stock_name and stock_name not in query:
+        # 종목 정보 추가 (일반 질문 모드가 아닐 때만)
+        if stock_name and stock_name not in query and stock_name != "general":
             search_query = f"{stock_name} {search_query}"
 
         # question_analyzer_agent의 분류 정보 기반 검색 키워드 추가
@@ -355,11 +362,11 @@ class ReportAnalyzerAgent(BaseAgent):
         # 리포트 타입 필터 (항상 기업리포트로 제한)
         metadata_filter["report_type"] = {"$eq": "기업리포트"}
 
-        # 종목 코드가 있으면 해당 종목으로 제한
-        if stock_code:
+        # 종목 코드가 있으면 해당 종목으로 제한 (일반 질문 모드가 아닐 때만)
+        if stock_code and stock_code != "general":
             metadata_filter["stock_code"] = {"$eq": stock_code}
-        # 종목명이 있고 코드가 없으면 종목명으로 제한
-        elif stock_name:
+        # 종목명이 있고 코드가 없으면 종목명으로 제한 (일반 질문 모드가 아닐 때만)
+        elif stock_name and stock_name != "general":
             metadata_filter["stock_name"] = {"$eq": stock_name}
 
         # 산업 분류가 있으면 해당 산업으로 제한 (옵션)

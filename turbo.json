@@ -18,6 +18,25 @@
       "dependsOn": [
         "build"
       ]
+    },
+    "serve": {
+      "dependsOn": [
+        "serve:main",
+        "serve:doceasy",
+        "serve:stockeasy"
+      ]
+    },
+    "serve:main": {
+      "cache": false,
+      "persistent": true
+    },
+    "serve:doceasy": {
+      "cache": false,
+      "persistent": true
+    },
+    "serve:stockeasy": {
+      "cache": false,
+      "persistent": true
     }
   }
 }

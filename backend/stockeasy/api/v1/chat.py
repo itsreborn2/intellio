@@ -210,6 +210,7 @@ async def create_chat_session(
             user_message = "데이터베이스 연결에 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
         else:
             user_message = "채팅 세션 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+            logger.error(f"채팅 세션 생성 중 오류 발생: {user_message}, {error_message}")
 
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=user_message)
 
@@ -742,7 +743,7 @@ async def stream_chat_message(
                             stock_code=request.stock_code,
                             stock_name=request.stock_name,
                             metadata=metadata,
-                            agent_results=agent_results,
+                            agent_results=None,  # agent_results를 저장하지 않음
                             components=result.get("components", []),  # 구조화된 컴포넌트 저장
                         )
 
@@ -819,6 +820,7 @@ async def stream_chat_message(
                         stock_code=request.stock_code,
                         stock_name=request.stock_name,
                         metadata={"error": str(e)},
+                        agent_results=None,  # agent_results를 저장하지 않음
                     )
 
                     # 오류 이벤트 전송

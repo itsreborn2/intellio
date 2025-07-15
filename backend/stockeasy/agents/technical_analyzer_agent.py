@@ -81,6 +81,24 @@ class TechnicalAnalyzerAgent(BaseAgent):
             stock_name = state.get("stock_name", "")
             query = state.get("query", "")
 
+            # 일반 질문 모드일 때 스킵
+            if stock_code == "general":
+                logger.info("일반 질문 모드: 기술적 분석 패스")
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["technical_analyzer"] = "skipped"
+
+                # 메트릭 기록
+                state["metrics"] = state.get("metrics", {})
+                state["metrics"]["technical_analyzer"] = {
+                    "start_time": start_time,
+                    "end_time": datetime.now(),
+                    "duration": (datetime.now() - start_time).total_seconds(),
+                    "status": "skipped",
+                    "reason": "general_question_mode",
+                }
+
+                return state
+
             if not stock_code:
                 logger.warning("종목코드가 없어 기술적 분석을 수행할 수 없습니다.")
                 self._add_error(state, "종목코드가 필요합니다.")

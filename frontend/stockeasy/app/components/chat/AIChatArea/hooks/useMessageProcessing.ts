@@ -38,7 +38,8 @@ interface MessageProcessingHook {
     inputMessage: string, 
     selectedStock: StockOption | null, 
     recentStocks: StockOption[],
-    isFollowUp?: boolean
+    isFollowUp?: boolean,
+    isGeneralMode?: boolean
   ) => Promise<void>;
   saveAsPdf: (sessionId: string, expertMode?: boolean) => Promise<void>;
   isPdfLoading: boolean;
@@ -143,7 +144,8 @@ function useMessageProcessing(
     inputMessage: string,
     selectedStock: StockOption | null,
     recentStocks: StockOption[],
-    isFollowUp: boolean = false
+    isFollowUp: boolean = false,
+    isGeneralMode: boolean = false
   ) => {
     // 시간 제한 체크
     const { isRestricted, nextAvailableTime } = checkTimeRestriction();
@@ -159,9 +161,10 @@ function useMessageProcessing(
       return;
     }
     
-    // 종목과 세션 모두 없는 경우
-    if (!selectedStock && !currentSession) {
-      toast.error('종목이 선택되지 않았거나 활성 세션이 없습니다.');
+    // 종목과 세션 모두 없는 경우 (일반 질문 모드는 예외)
+    if (!selectedStock && !currentSession &&!isGeneralMode)
+    {
+      toast.error('종목이 선택되지 않았습니다.');
       return;
     }
 
@@ -184,7 +187,10 @@ function useMessageProcessing(
       let sessionId = currentSession?.id;
       
       // 현재 세션에서 종목 정보 가져오기 (종목이 선택되지 않은 경우)
-      const stockInfo = selectedStock ? {
+      const stockInfo = isGeneralMode ? {
+        stockName: 'general',
+        stockCode: 'general'
+      } : selectedStock ? {
         stockName: selectedStock.stockName || '',
         stockCode: selectedStock.value || ''
       } : currentSession ? {
@@ -226,26 +232,40 @@ function useMessageProcessing(
       // 채팅 세션이 없으면 새로 생성
       if (!sessionId) {
         try {
-          // 종목이 반드시 있어야 함 (현재 세션이 없는 경우 위에서 이미 체크됨)
-          if (!selectedStock) {
+          // 종목이 반드시 있어야 함 (일반 질문 모드는 예외)
+          if (!selectedStock && !isGeneralMode) {
             throw new Error('세션이 없는 상태에서 종목이 선택되지 않았습니다.');
           }
           
-          // 종목 정보 추출
-          const stockName = selectedStock.stockName || '종목명';
-          const stockCode = selectedStock.value || selectedStock.stockCode || '000000';
+          let stockName: string, stockCode: string, session_name: string, stockInfoData: any;
           
-          // 종목명(종목코드) : 질문내용 형식으로 세션명 생성
-          const session_name = `${stockName}(${stockCode}) : ${inputMessage}`;
-          
-          // 종목 추가 정보 구성 (현재 StockOption 인터페이스의 필드만 사용)
-          const stockInfoData = {
-            value: selectedStock.value,
-            label: selectedStock.label,
-            stockName: selectedStock.stockName,
-            stockCode: selectedStock.stockCode,
-            display: selectedStock.display
-          };
+          if (isGeneralMode) {
+            // 일반 질문 모드일 때
+            stockName = 'general';
+            stockCode = 'general';
+            session_name = `일반 질문 : ${inputMessage}`;
+            stockInfoData = {
+              value: 'general',
+              label: '일반 질문',
+              stockName: 'general',
+              stockCode: 'general',
+              display: '일반 질문'
+            };
+          } else {
+            // 일반 종목 선택 모드일 때
+            stockName = selectedStock!.stockName || '종목명';
+            stockCode = selectedStock!.value || selectedStock!.stockCode || '000000';
+            session_name = `${stockName}(${stockCode}) : ${inputMessage}`;
+            
+            // 종목 추가 정보 구성 (현재 StockOption 인터페이스의 필드만 사용)
+            stockInfoData = {
+              value: selectedStock!.value,
+              label: selectedStock!.label,
+              stockName: selectedStock!.stockName,
+              stockCode: selectedStock!.stockCode,
+              display: selectedStock!.display
+            };
+          }
           
           // 세션 생성 요청 (종목 정보 포함)
           const newSession = await createChatSession(

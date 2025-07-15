@@ -104,6 +104,7 @@ async def _fetch_popular_stocks_from_db(hours: int, limit: int, db: AsyncSession
                 StockChatSession.stock_name.is_not(None),
                 StockChatSession.stock_code != "",
                 StockChatSession.stock_name != "",
+                StockChatSession.stock_code != "general",  # 일반 질문 모드 제외
             )
         )
         .group_by(StockChatSession.stock_code, StockChatSession.stock_name)
@@ -243,7 +244,7 @@ async def get_popular_stocks(
 
         data_7d = PopularStocksPeriodData(stocks=stocks_7d_with_changes, period_hours=168, total_count=len(stocks_7d_with_changes), from_cache=from_cache_7d)
 
-        logger.info(f"인기 종목 조회 완료: 24시간 {len(stocks_24h_with_changes)}개, 7일 {len(stocks_7d_with_changes)}개")
+        logger.info(f"인기 종목 조회 완료 메롱 테스트: 24시간 {len(stocks_24h_with_changes)}개, 7일 {len(stocks_7d_with_changes)}개")
 
         # 순위 변동 포맷팅 함수 (공통 사용)
         def format_rank_change(stock):

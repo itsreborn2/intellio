@@ -53,7 +53,7 @@ class WebSearchAgent(BaseAgent):
         super().__init__(name, db)
         self.retrieved_str = "web_search_results"
         self.agent_llm = get_agent_llm("web_search_agent")
-        self.agent_llm_lite = get_agent_llm("gemini-lite")
+        # self.agent_llm_lite = get_agent_llm("gemini-2.5-flash-lite")  # get_agent_llm("gemini-2.0-flash-lite")
         self.parser = JsonOutputParser()
 
         # self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
@@ -89,8 +89,6 @@ class WebSearchAgent(BaseAgent):
             return content
 
         try:
-            original_length = len(content)
-            original_markdown_count = content.count("#") + content.count("*") + content.count("|")
             # 1. 마크다운 헤더 제거 (### 제목, #### 소제목 등)
             content = re.sub(r"^#{1,6}\s+", "", content, flags=re.MULTILINE)
 
@@ -444,12 +442,80 @@ class WebSearchAgent(BaseAgent):
         Returns:
             생성된 검색 쿼리 목록
         """
-        try:
-            # 기술적 분석 섹션을 제거한 새로운 목차 생성
-            filtered_toc = self._filter_technical_analysis_from_toc(final_report_toc)
+        # 종목 정보 유무 확인 (일반 질문 vs 주식 관련 질문)
+        is_stock_related = bool(stock_code and stock_code.strip()) or bool(stock_name and stock_name.strip())
 
-            # 프롬프트 구성
-            prompt = f"""
+        try:
+            if is_stock_related:
+                # 주식 관련 질문용 프롬프트
+                logger.info(f"종목 관련 질문으로 판단: stock_code={stock_code}, stock_name={stock_name}")
+                prompt = await self._create_stock_related_prompt(query, stock_code, stock_name, final_report_toc)
+            else:
+                # 일반 질문용 프롬프트
+                logger.info(f"일반 질문으로 판단: stock_code={stock_code}, stock_name={stock_name}")
+                prompt = await self._create_general_prompt(query, final_report_toc)
+
+            # LLM 호출
+            response = await self.agent_llm.ainvoke_with_fallback(input=prompt, project_type=ProjectType.STOCKEASY, db=self.db)
+
+            # 응답 파싱
+            content = response.content.strip()
+            content = remove_json_block(content)
+
+            # JSON 부분만 추출 (프롬프트 무시 방지)
+            json_match = re.search(r"({.*})", content, re.DOTALL)
+            if json_match:
+                content = json_match.group(1)
+
+            # JSON 파싱
+            try:
+                result = json.loads(content)
+                search_queries = result.get("search_queries", [])
+
+                # 최대 쿼리 개수 제한
+                return search_queries[: self.max_queries]
+            except json.JSONDecodeError:
+                # JSON 파싱 실패 시 텍스트에서 쿼리 추출 시도
+                queries = []
+                for line in content.split("\n"):
+                    if line.strip() and not line.startswith("{") and not line.endswith("}"):
+                        queries.append(line.strip().strip('"').strip("'"))
+                        if len(queries) >= self.max_queries:
+                            break
+
+                if queries:
+                    return queries
+
+                # 모든 방법 실패 시 기본 쿼리 생성
+                default_query = f"{stock_name if stock_name else ''} {query}".strip()
+                return [default_query]
+
+        except Exception as e:
+            logger.error(f"Error generating search queries: {str(e)}", exc_info=True)
+            # 오류 발생 시 기본 쿼리 생성
+            if is_stock_related:
+                default_query = f"{stock_name if stock_name else ''} {query}".strip()
+            else:
+                default_query = query.strip()
+            return [default_query]
+
+    async def _create_stock_related_prompt(self, query: str, stock_code: Optional[str], stock_name: Optional[str], final_report_toc: Dict[str, Any]) -> str:
+        """
+        주식 관련 질문을 위한 프롬프트를 생성합니다.
+
+        Args:
+            query: 원본 사용자 쿼리
+            stock_code: 종목 코드
+            stock_name: 종목 이름
+            final_report_toc: 문서 최종 목차
+
+        Returns:
+            주식 관련 검색 쿼리 생성용 프롬프트
+        """
+        # 기술적 분석 섹션을 제거한 새로운 목차 생성
+        filtered_toc = self._filter_technical_analysis_from_toc(final_report_toc)
+
+        return f"""
 당신은 주식 및 금융 정보 검색 전문가입니다. 사용자의 질문과 주식 정보를 분석하여 효과적인 웹 검색 쿼리를 생성해주세요.
 
 사용자 질문: {query}
@@ -489,46 +555,47 @@ class WebSearchAgent(BaseAgent):
 }}
 """
 
-            # LLM 호출
-            response = await self.agent_llm_lite.ainvoke_with_fallback(input=prompt, project_type=ProjectType.STOCKEASY, db=self.db)
+    async def _create_general_prompt(self, query: str, final_report_toc: Dict[str, Any]) -> str:
+        """
+        일반 질문을 위한 프롬프트를 생성합니다.
 
-            # 응답 파싱
-            content = response.content.strip()
-            content = remove_json_block(content)
+        Args:
+            query: 원본 사용자 쿼리
+            final_report_toc: 문서 최종 목차
 
-            # JSON 부분만 추출 (프롬프트 무시 방지)
-            json_match = re.search(r"({.*})", content, re.DOTALL)
-            if json_match:
-                content = json_match.group(1)
+        Returns:
+            일반 검색 쿼리 생성용 프롬프트
+        """
+        return f"""
+당신은 정보 검색 전문가입니다. 사용자의 질문을 분석하여 효과적인 웹 검색 쿼리를 생성해주세요.
 
-            # JSON 파싱
-            try:
-                result = json.loads(content)
-                search_queries = result.get("search_queries", [])
+사용자 질문: {query}
 
-                # 최대 쿼리 개수 제한
-                return search_queries[: self.max_queries]
-            except json.JSONDecodeError:
-                # JSON 파싱 실패 시 텍스트에서 쿼리 추출 시도
-                queries = []
-                for line in content.split("\n"):
-                    if line.strip() and not line.startswith("{") and not line.endswith("}"):
-                        queries.append(line.strip().strip('"').strip("'"))
-                        if len(queries) >= self.max_queries:
-                            break
+문서 목차 (참고용):
+{json.dumps(final_report_toc, ensure_ascii=False, indent=2) if final_report_toc else "목차 정보가 없습니다."}
 
-                if queries:
-                    return queries
+검색 쿼리를 생성할 때 다음 사항을 고려하세요:
+1. **질문 의도 파악**: 사용자가 원하는 정보가 무엇인지 명확히 파악하여 관련 검색 쿼리를 생성하세요.
+   - 핵심 키워드를 추출하고, 동의어나 관련 용어도 포함하세요.
+   - 질문의 맥락과 배경을 고려한 검색 쿼리를 설계하세요.
 
-                # 모든 방법 실패 시 기본 쿼리 생성
-                default_query = f"{stock_name if stock_name else ''} {query}".strip()
-                return [default_query]
+2. **다각도 검색 전략**:
+   - 기본 정보, 정의, 특징, 동향, 최신 뉴스 등 다양한 관점에서 접근하는 쿼리를 생성하세요.
+   - 주제와 관련된 여러 측면을 다루는 포괄적인 검색이 가능하도록 하세요.
 
-        except Exception as e:
-            logger.error(f"Error generating search queries: {str(e)}", exc_info=True)
-            # 오류 발생 시 기본 쿼리 생성
-            default_query = f"{stock_name if stock_name else ''} {query}".strip()
-            return [default_query]
+3. **쿼리 구성 요소**:
+   - 쿼리는 구체적이고, 명확하며, 검색 가능한 형태로 작성되어야 합니다.
+   - 관련 키워드, 전문용어, 최신 이벤트 등 검색에 유용한 요소를 포함하세요.
+   - 너무 복잡하지 않으면서도 정확한 결과를 얻을 수 있는 쿼리를 만드세요.
+
+4. **최대 {self.max_queries}개의 검색 쿼리**를 생성해주세요.
+
+# 출력 형식: JSON
+검색 쿼리 목록만 반환하세요. 다음 형식으로 JSON을 반환하세요:
+{{
+  "search_queries": ["쿼리1", "쿼리2", "쿼리3"]
+}}
+"""
 
     @async_retry(retries=0, delay=1.0, exceptions=(Exception,))
     async def _perform_web_searches(self, search_queries: List[str], stock_code: Optional[str] = None, stock_name: Optional[str] = None) -> List[Dict[str, Any]]:

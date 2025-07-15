@@ -14,6 +14,7 @@ import {
   LatestUpdates
 } from './components';
 import { PreliminaryChartDisplay } from './components/PreliminaryChartDisplay';
+import { GeneralModeToggle } from './components/GeneralModeToggle';
 
 import { useMessageProcessing } from './hooks';
 import { useIsMobile } from './hooks';
@@ -357,9 +358,14 @@ function AIChatAreaContent() {
 
     console.log(`[AIChatAreaContent] 메시지 전송 요청 : ${stockState.searchTerm.trim()}`);
 
-    // 선택된 종목과 입력 메시지 확인
-    if ((!selectedStock && !currentSession) || !stockState.searchTerm.trim()) {
-      console.error('종목이 선택되지 않았거나 활성 세션이 없거나 메시지가 없습니다.');
+    // 일반 질문 모드가 아닌 경우 선택된 종목과 입력 메시지 확인
+    if (!stockState.isGeneralMode && (!selectedStock && !currentSession)) {
+      console.error('종목이 선택되지 않았거나 활성 세션이 없습니다.');
+      return;
+    }
+    
+    if (!stockState.searchTerm.trim()) {
+      console.error('메시지가 없습니다.');
       return;
     }
     
@@ -397,8 +403,19 @@ function AIChatAreaContent() {
       
       // 세션 정보 및 종목 정보 준비
       const sessionId = currentSession?.id || '';
-      const stockName = currentStock?.stockName || currentSession?.stock_name || '';
-      const stockCode = currentStock?.stockCode || currentSession?.stock_code || '';
+      
+      // 일반 질문 모드일 때 처리
+      let stockName: string;
+      let stockCode: string;
+      
+      if (stockState.isGeneralMode) {
+        stockName = 'general';
+        stockCode = 'general';
+        console.log('[AIChatAreaContent] 일반 질문 모드: stock_code와 stock_name을 general로 설정');
+      } else {
+        stockName = currentStock?.stockName || currentSession?.stock_name || '';
+        stockCode = currentStock?.stockCode || currentSession?.stock_code || '';
+      }
       
       // 메시지 ID 생성 (UUID 사용)
       const userMessageId = `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -430,7 +447,8 @@ function AIChatAreaContent() {
         currentMessage,
         currentStock || null, // 종목이 선택되지 않아도 null로 전달
         currentRecentStocks,
-        currentSession !== null // 현재 세션이 있으면 후속질문으로 간주
+        currentSession !== null, // 현재 세션이 있으면 후속질문으로 간주
+        stockState.isGeneralMode // 일반 질문 모드 상태 전달
       );
       
       // 기존 로그 대신 사용자 메시지 추적 로그 추가
@@ -550,6 +568,9 @@ function AIChatAreaContent() {
     return (
       <>
         {/* 메시지 목록 영역 */}
+        {/* 관리자 전용 일반 질문 모드 토글 */}
+        <GeneralModeToggle className="mb-4" />
+        
         {!isInputCentered && uiMessages.length > 0 && (
           <MessageList
             ref={messageListRef}
@@ -605,6 +626,7 @@ function AIChatAreaContent() {
             scrollToBottom={() => messageListRef.current?.scrollToBottom && messageListRef.current.scrollToBottom()}
             showTitle={showTitle}
             currentChatSession={currentSession}
+            isGeneralMode={stockState.isGeneralMode}
           />
         )}
         
@@ -635,8 +657,10 @@ function AIChatAreaContent() {
           </div>
         )}
         
-        {/* 종목 제안 영역 - 메모이제이션된 props 사용 */}
-        <StockSuggestions {...stockSuggestionsProps} />
+        {/* 종목 제안 영역 - 일반 질문 모드가 아닐 때만 표시 */}
+        {!stockState.isGeneralMode && (
+          <StockSuggestions {...stockSuggestionsProps} />
+        )}
       </>
     );
 };

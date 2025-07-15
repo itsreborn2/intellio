@@ -34,6 +34,7 @@ interface InputAreaProps {
   scrollToBottom?: () => void;
   showTitle?: boolean;
   currentChatSession?: any; // 현재 채팅 세션 정보 추가
+  isGeneralMode?: boolean; // 일반 질문 모드 여부 추가
 }
 
 export function InputArea({
@@ -56,7 +57,8 @@ export function InputArea({
   onClearRecentStocks,
   scrollToBottom,
   showTitle,
-  currentChatSession
+  currentChatSession,
+  isGeneralMode = false
 }: InputAreaProps) {
   // 입력창 텍스트 길이에 따라 높이 자동 조절
   useEffect(() => {
@@ -397,8 +399,8 @@ export function InputArea({
   
   // 입력 필드 포커스 시 종목 추천 목록 표시
   const handleInputFocus = () => {
-    // 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
-    if (currentChatSession) {
+    // 일반 질문 모드이거나 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
+    if (isGeneralMode || currentChatSession) {
       return;
     }
     
@@ -438,8 +440,8 @@ export function InputArea({
     // 입력값을 먼저 설정하여 UI가 즉시 업데이트되도록 함
     setInputMessage(value);
     
-    // 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
-    if (currentChatSession) {
+    // 일반 질문 모드이거나 활성 세션이 있으면 종목 제안 팝업을 표시하지 않음
+    if (isGeneralMode || currentChatSession) {
       return;
     }
     
@@ -476,6 +478,7 @@ export function InputArea({
     searchMode, 
     onShowStockSuggestions, 
     onSearchModeChange, 
+    isGeneralMode,
     currentChatSession, 
     filterStocks,
     recentStocks,
@@ -520,22 +523,22 @@ export function InputArea({
       return;
     }
 
-    // 종목이 선택되어 있거나 현재 채팅 세션이 있는 경우 메시지 전송 가능
-    if ((selectedStock || hasActiveSession) && inputMessage.trim() !== '' && !isProcessing) {
+    // 일반 질문 모드이거나, 종목이 선택되어 있거나, 현재 채팅 세션이 있는 경우 메시지 전송 가능
+    if ((isGeneralMode || selectedStock || hasActiveSession) && inputMessage.trim() !== '' && !isProcessing) {
       onSendMessage();
       // scrollToBottom이 제공되었다면 호출
       if (scrollToBottom) {
         scrollToBottom();
       }
-    } else if (!selectedStock && !hasActiveSession) {
+    } else if (!isGeneralMode && !selectedStock && !hasActiveSession) {
       // 전송 불가 상태
     }
-  }, [selectedStock, inputMessage, isProcessing, onSendMessage, scrollToBottom, hasActiveSession]);
+  }, [isGeneralMode, selectedStock, inputMessage, isProcessing, onSendMessage, scrollToBottom, hasActiveSession]);
   
   // 컴포넌트 마운트 시 초기 상태 설정
   useEffect(() => {
-    // 초기 마운트 시 종목이 선택되어 있지 않고 활성 세션도 없는 경우 검색 모드 활성화
-    if (!selectedStock && !currentChatSession && !isInputCentered) {
+    // 일반 질문 모드가 아닌 경우에만 종목 선택 팝업 표시
+    if (!isGeneralMode && !selectedStock && !currentChatSession && !isInputCentered) {
       onSearchModeChange(true);
 
       // 종목 추천 팝업도 표시
@@ -591,7 +594,7 @@ export function InputArea({
               transition: 'all 0.3s ease-in-out',
               display: isMobile ? 'none' : 'block'
             }}>
-              종목 선택 후 분석을 요청하세요.
+              {isGeneralMode ? "일반 질문을 입력하세요." : "종목 선택 후 분석을 요청하세요."}
             </h1>
           </div>
         )}
@@ -618,11 +621,13 @@ export function InputArea({
           
           <textarea
             ref={inputRef}
-            placeholder={showStockSuggestions || searchMode 
-              ? "종목명 또는 종목코드 검색" 
-              : (hasActiveSession
-                ? "생성된 문서 내에서 이어지는 질문을 해보세요. 다른 종목은 새 채팅을 시작해주세요."
-                : "이 종목에 관하여 궁금한 점을 물어보세요.")}
+            placeholder={isGeneralMode 
+              ? "일반 질문을 입력하세요. (예: 2024년 AI 업계 동향은?)"
+              : (showStockSuggestions || searchMode 
+                ? "종목명 또는 종목코드 검색" 
+                : (hasActiveSession
+                  ? "생성된 문서 내에서 이어지는 질문을 해보세요. 다른 종목은 새 채팅을 시작해주세요."
+                  : "이 종목에 관하여 궁금한 점을 물어보세요."))}
             className="integrated-input-field"
             value={inputMessage}
             onChange={handleInputChange}
@@ -655,7 +660,7 @@ export function InputArea({
           {/* 전송 아이콘 */}
           <SendButton
             onClick={handleSendButtonClick}
-            disabled={isProcessing || !inputMessage.trim() || (!selectedStock && !hasActiveSession)}
+            disabled={isProcessing || !inputMessage.trim() || (!isGeneralMode && !selectedStock && !hasActiveSession)}
             isProcessing={isProcessing}
           />
         </div>

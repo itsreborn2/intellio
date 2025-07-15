@@ -27,12 +27,13 @@ from stockeasy.models.agent_io import QuestionAnalysisResult
 
 class AgentConfigModel(BaseModel):
     """에이전트 실행 설정"""
+
     agent_name: str = Field(..., description="에이전트 이름")
     enabled: bool = Field(..., description="활성화 여부")
     priority: int = Field(..., description="우선순위 (1-10)")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="에이전트별 매개변수")
 
-    @field_validator('parameters', mode='before')
+    @field_validator("parameters", mode="before")
     @classmethod
     def validate_parameters(cls, v):
         """
@@ -53,6 +54,7 @@ class AgentConfigModel(BaseModel):
 
 class ExecutionPlanModel(BaseModel):
     """실행 계획"""
+
     agents: List[AgentConfigModel] = Field(..., description="실행할 에이전트 목록")
     execution_order: List[str] = Field(..., description="실행 순서")
     integration_strategy: str = Field(..., description="정보 통합 전략")
@@ -97,7 +99,7 @@ class OrchestratorAgent(BaseAgent):
             "knowledge_integrator": "정보 통합 에이전트",
             "summarizer": "요약 에이전트",
             "response_formatter": "응답 형식화 에이전트",
-            "fallback_manager": "오류 처리 에이전트"
+            "fallback_manager": "오류 처리 에이전트",
         }
         # VectorStoreManager 지연 초기화 (실제 사용 시점에 초기화)
         self.vs_manager = None
@@ -129,17 +131,25 @@ class OrchestratorAgent(BaseAgent):
             query = state.get("query", "")
             stock_code = state.get("stock_code", "")
             stock_name = state.get("stock_name", "")
-            question_analysis:QuestionAnalysisResult = state.get("question_analysis", {})
+            question_analysis: QuestionAnalysisResult = state.get("question_analysis", {})
 
             if not question_analysis:
                 logger.warning("Question analysis not found in state")
                 self._add_error(state, "질문 분석 결과가 없습니다.")
-                return self._create_default_plan(state)
+                # 기본 실행 계획 생성 (question_analysis가 없는 경우 기본값 사용)
+                execution_plan = self._create_default_plan(0, False, stock_code)  # report_cnt=0, technical_analysis_needed=False
+                state["execution_plan"] = execution_plan
+
+                # 처리 상태 업데이트
+                state["processing_status"] = state.get("processing_status", {})
+                state["processing_status"]["orchestrator"] = "completed_with_default_plan"
+
+                return state
 
             # 필요한 정보 추출
             question_analysis.get("entities", {})
             classification = question_analysis.get("classification", {})
-            data_requirements =question_analysis.get("data_requirements", {})
+            data_requirements = question_analysis.get("data_requirements", {})
             technical_analysis_needed = data_requirements.get("technical_analysis_needed", False)
             question_analysis.get("keywords", [])
             question_analysis.get("detail_level", "보통")
@@ -148,7 +158,6 @@ class OrchestratorAgent(BaseAgent):
             logger.info(f"OrchestratorAgent processing query: {query}")
             logger.info(f"Classification: {classification}")
             logger.info(f"Data requirements: {data_requirements}")
-
 
             # user_id 추출
             user_context = state.get("user_context", {})
@@ -193,11 +202,11 @@ class OrchestratorAgent(BaseAgent):
             logger.info(f"[오케스트레이터] Report count: {report_cnt}")
             # 기본 실행 계획 생성 및 상태 업데이트
             if report_cnt >= self.web_search_threshold:
-                final_plan = self._create_default_plan(report_cnt, technical_analysis_needed)
+                final_plan = self._create_default_plan(report_cnt, technical_analysis_needed, stock_code)
                 state["question_analysis"]["data_requirements"]["web_search_needed"] = False
             else:
                 logger.info("[오케스트레이터] 웹 검색 에이전트를 활성화합니다.")
-                final_plan = self._create_default_plan(report_cnt, technical_analysis_needed) # 웹검색 모드 On
+                final_plan = self._create_default_plan(report_cnt, technical_analysis_needed, stock_code)  # 웹검색 모드 On
                 state["question_analysis"]["data_requirements"]["web_search_needed"] = True
             state["execution_plan"] = final_plan
 
@@ -221,7 +230,7 @@ class OrchestratorAgent(BaseAgent):
                 "duration": duration,
                 "status": "completed",
                 "error": None,
-                "model_name": self.agent_llm.get_model_name()
+                "model_name": self.agent_llm.get_model_name(),
             }
 
             logger.info(f"OrchestratorAgent completed in {duration:.2f} seconds")
@@ -231,8 +240,11 @@ class OrchestratorAgent(BaseAgent):
             logger.exception(f"Error in OrchestratorAgent: {str(e)}")
             self._add_error(state, f"오케스트레이터 에이전트 오류: {str(e)}")
 
-            # 기본 실행 계획 생성 및 상태 업데이트
-            execution_plan = self._create_default_plan(state)
+            # stock_code 변수가 정의되지 않았을 가능성 대비
+            stock_code = state.get("stock_code", "")
+
+            # 기본 실행 계획 생성 및 상태 업데이트 (예외 발생 시 기본값 사용)
+            execution_plan = self._create_default_plan(0, False, stock_code)  # report_cnt=0, technical_analysis_needed=False
             state["execution_plan"] = execution_plan
 
             # 처리 상태 업데이트
@@ -245,7 +257,7 @@ class OrchestratorAgent(BaseAgent):
 
             return state
 
-    def _create_default_plan(self,report_cnt: int, technical_analysis_needed: bool = False) -> Dict[str, Any]:
+    def _create_default_plan(self, report_cnt: int, technical_analysis_needed: bool = False, stock_code: str = "") -> Dict[str, Any]:
         """
         기본 실행 계획을 생성합니다 (오류 발생 시 fallback).
 
@@ -262,7 +274,6 @@ class OrchestratorAgent(BaseAgent):
         # 모든 에이전트를 포함하는 기본 계획 생성
         agents_list = []
 
-
         # 에이전트별 우선순위 설정
         if web_search_mode:
             priority_map = {
@@ -273,7 +284,7 @@ class OrchestratorAgent(BaseAgent):
                 "knowledge_integrator": 4,
                 "summarizer": 3,
                 "response_formatter": 2,
-                "fallback_manager": 1
+                "fallback_manager": 1,
             }
 
             # report_cnt > 0인 경우 report_analyzer 추가
@@ -289,9 +300,9 @@ class OrchestratorAgent(BaseAgent):
                 "knowledge_integrator": 4,
                 "summarizer": 3,
                 "response_formatter": 2,
-                "fallback_manager": 1
+                "fallback_manager": 1,
             }
-            if report_cnt < 7: # 리포트가 6개 이하이면, 비공개 자료도 검색
+            if report_cnt < 7:  # 리포트가 6개 이하이면, 비공개 자료도 검색
                 priority_map["confidential_analyzer"] = 5
                 priority_map["technical_analyzer"] = 4.5
 
@@ -308,7 +319,7 @@ class OrchestratorAgent(BaseAgent):
                 "knowledge_integrator",
                 "summarizer",
                 "response_formatter",
-                "fallback_manager"
+                "fallback_manager",
             ]
 
             # report_cnt > 0인 경우 report_analyzer 추가
@@ -325,43 +336,30 @@ class OrchestratorAgent(BaseAgent):
                 "knowledge_integrator",
                 "summarizer",
                 "response_formatter",
-                "fallback_manager"
+                "fallback_manager",
             ]
-            if report_cnt < 7: # 리포트가 6개 이하이면, 비공개 자료도 검색
+            if report_cnt < 7:  # 리포트가 6개 이하이면, 비공개 자료도 검색
                 execution_order.insert(execution_order.index("industry_analyzer") + 1, "confidential_analyzer")
 
         if technical_analysis_needed:
             execution_order.insert(execution_order.index("knowledge_integrator") - 1, "technical_analyzer")
 
-        # 기능 테스트 모드용. 기술적 분석 에이전트만 실행
-        test_mode = settings.TEST_TECH_AGENT
-        if test_mode:
-            priority_map = {
-                "technical_analyzer": 6,
-                "knowledge_integrator": 4,
-                "summarizer": 3,
-                "response_formatter": 2,
-                "fallback_manager": 1
-            }
-            execution_order = [
-                "technical_analyzer",
-                "knowledge_integrator",
-                "summarizer",
-                "response_formatter",
-                "fallback_manager"
-            ]
+        if stock_code == "general":
+            # 일반 질문인 경우 financial_analyzer와 revenue_breakdown 제거
+            if "financial_analyzer" in execution_order:
+                execution_order.remove("financial_analyzer")
+            if "revenue_breakdown" in execution_order:
+                execution_order.remove("revenue_breakdown")
+            if "financial_analyzer" in priority_map:
+                priority_map.pop("financial_analyzer")
+            if "revenue_breakdown" in priority_map:
+                priority_map.pop("revenue_breakdown")
+            logger.info("일반 질문 모드: financial_analyzer와 revenue_breakdown 에이전트 제거됨")
 
-         # execution_order에 있는 것만 포함.
+        # execution_order에 있는 것만 포함.
         for agent_name in self.available_agents.keys():
             if agent_name in execution_order:
-                agents_list.append({
-                    "agent_name": agent_name,
-                    "enabled": True,
-                    "priority": priority_map.get(agent_name, 1),
-                    "parameters": {}
-                })
-
-
+                agents_list.append({"agent_name": agent_name, "enabled": True, "priority": priority_map.get(agent_name, 1), "parameters": {}})
 
         default_plan = {
             "plan_id": str(uuid.uuid4()),
@@ -370,7 +368,7 @@ class OrchestratorAgent(BaseAgent):
             "execution_order": execution_order,
             "integration_strategy": "모든 검색 결과를 종합하여 통합된 응답 생성",
             "expected_output": "다양한 소스의 정보를 종합한 종합적인 분석 결과",
-            "fallback_strategy": "일부 에이전트 실패 시에도 가용한 데이터를 기반으로 최선의 답변 제공"
+            "fallback_strategy": "일부 에이전트 실패 시에도 가용한 데이터를 기반으로 최선의 답변 제공",
         }
 
         # 상태 객체를 직접 업데이트하지 않고 계획만 반환
@@ -385,20 +383,18 @@ class OrchestratorAgent(BaseAgent):
             error_message: 오류 메시지
         """
         state["errors"] = state.get("errors", [])
-        state["errors"].append({
-            "agent": "orchestrator",
-            "error": error_message,
-            "type": "processing_error",
-            "timestamp": datetime.now(),
-            "context": {
-                "query": state.get("query", ""),
-                "question_analysis": state.get("question_analysis", {})
+        state["errors"].append(
+            {
+                "agent": "orchestrator",
+                "error": error_message,
+                "type": "processing_error",
+                "timestamp": datetime.now(),
+                "context": {"query": state.get("query", ""), "question_analysis": state.get("question_analysis", {})},
             }
-        })
+        )
 
     @measure_time_async
-    async def get_report_cnt(self, query: str, stock_code: str, stock_name: str,
-                             user_id: Optional[Union[str, uuid.UUID]] = None) -> int:
+    async def get_report_cnt(self, query: str, stock_code: str, stock_name: str, user_id: Optional[Union[str, uuid.UUID]] = None) -> int:
         """
         파인콘 DB에서 기업리포트 검색
 
@@ -420,9 +416,7 @@ class OrchestratorAgent(BaseAgent):
                 from stockeasy.graph.agent_registry import get_cached_vector_store_manager
 
                 self.vs_manager = get_cached_vector_store_manager(
-                    embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE,
-                    namespace=settings.PINECONE_NAMESPACE_STOCKEASY,
-                    project_name="stockeasy"
+                    embedding_model_type=EmbeddingModelType.OPENAI_3_LARGE, namespace=settings.PINECONE_NAMESPACE_STOCKEASY, project_name="stockeasy"
                 )
                 logger.debug("글로벌 캐시에서 VectorStoreManager 가져오기 완료")
 
@@ -443,30 +437,23 @@ class OrchestratorAgent(BaseAgent):
             try:
                 # 시맨틱 검색 설정. 조건 느슨하게
                 semantic_retriever = SemanticRetriever(
-                    config=SemanticRetrieverConfig(min_score=0.05,
-                                                user_id=parsed_user_id,
-                                                project_type=ProjectType.STOCKEASY),
-                    vs_manager=self.vs_manager
+                    config=SemanticRetrieverConfig(min_score=0.05, user_id=parsed_user_id, project_type=ProjectType.STOCKEASY), vs_manager=self.vs_manager
                 )
 
                 metadata_filter["stock_code"] = {"$eq": stock_code}
                 # 오늘로부터 6개월 이전까지.
                 six_months_ago = datetime.now() - timedelta(days=180)
-                six_months_ago_str = six_months_ago.strftime('%Y%m%d')
+                six_months_ago_str = six_months_ago.strftime("%Y%m%d")
                 six_months_ago_int = int(six_months_ago_str)
                 metadata_filter["document_date"] = {"$gte": six_months_ago_int}
                 # 검색 수행
-                retrieval_result: RetrievalResult = await semantic_retriever.retrieve(
-                    query=query,
-                    top_k=200,
-                    filters=metadata_filter
-                )
+                retrieval_result: RetrievalResult = await semantic_retriever.retrieve(query=query, top_k=200, filters=metadata_filter)
 
                 # 문서의 개수 카운트. 중복 제거
                 unique_file_names = set()
                 for doc in retrieval_result.documents:
-                    if hasattr(doc, 'metadata') and 'file_name' in doc.metadata:
-                        unique_file_names.add(doc.metadata['file_name'])
+                    if hasattr(doc, "metadata") and "file_name" in doc.metadata:
+                        unique_file_names.add(doc.metadata["file_name"])
 
                 logger.info(f"{stock_name}({stock_code}) 기업리포트 청크 수 : {len(retrieval_result.documents)} 청크, 문서 개수 : {len(unique_file_names)} 개")
 
