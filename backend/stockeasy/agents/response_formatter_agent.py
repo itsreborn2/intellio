@@ -126,7 +126,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
                     if before_text:
-                        before_comp = create_paragraph(content=before_text)
+                        before_comp = create_paragraph({"content": before_text})
                         components.insert(insert_index, before_comp)
                         insert_index += 1
 
@@ -136,7 +136,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
-                        after_comp = create_paragraph(content=after_text)
+                        after_comp = create_paragraph({"content": after_text})
                         components.insert(insert_index, after_comp)
 
                 else:
@@ -174,7 +174,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
                     if before_text:
-                        before_comp = create_paragraph(before_text)
+                        before_comp = create_paragraph({"content": before_text})
                         components.insert(insert_index, before_comp)
                         insert_index += 1
 
@@ -184,7 +184,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
-                        after_comp = create_paragraph(after_text)
+                        after_comp = create_paragraph({"content": after_text})
                         components.insert(insert_index, after_comp)
 
                 else:
@@ -223,7 +223,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
                     if before_text:
-                        before_comp = create_paragraph(before_text)
+                        before_comp = create_paragraph({"content": before_text})
                         components.insert(insert_index, before_comp)
                         insert_index += 1
 
@@ -233,7 +233,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
-                        after_comp = create_paragraph(after_text)
+                        after_comp = create_paragraph({"content": after_text})
                         components.insert(insert_index, after_comp)
 
                 else:
@@ -272,7 +272,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 앞 텍스트가 있으면 단락 컴포넌트로 추가
                     if before_text:
-                        before_comp = create_paragraph(before_text)
+                        before_comp = create_paragraph({"content": before_text})
                         components.insert(insert_index, before_comp)
                         insert_index += 1
 
@@ -282,7 +282,7 @@ class ResponseFormatterAgent(BaseAgent):
 
                     # 마커 뒤 텍스트가 있으면 단락 컴포넌트로 추가
                     if after_text:
-                        after_comp = create_paragraph(after_text)
+                        after_comp = create_paragraph({"content": after_text})
                         components.insert(insert_index, after_comp)
 
                 else:
@@ -924,7 +924,7 @@ class ResponseFormatterAgent(BaseAgent):
                         restored_text = cleaned_text
 
                         if restored_text.strip():
-                            section_components.append(create_paragraph(restored_text))
+                            section_components.append(create_paragraph({"content": restored_text}))
                             logger.info(f"[텍스트변환완료] 섹션 '{section_title}'에서 텍스트를 단락 컴포넌트로 변환 완료")
                 else:
                     logger.warning(f"[LLM응답없음] 섹션 '{section_title}'에서 LLM 응답이 비어있습니다.")
@@ -943,7 +943,7 @@ class ResponseFormatterAgent(BaseAgent):
                 # 오류 복구 시에도 마스크를 플레이스홀더로 복원
                 restored_fallback = section_content_fallback
 
-                section_components.append(create_paragraph(restored_fallback))
+                section_components.append(create_paragraph({"content": restored_fallback}))
                 # 오류 시 LLM 생성 텍스트는 없고, 원본 내용을 텍스트로 반환 (오류 복구용)
                 return section_components, restored_fallback, section_title
         else:  # summary_by_section에 내용이 없는 경우
@@ -2391,7 +2391,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
 
     if not dates:
         logger.warning("[기술지표차트] 날짜 데이터가 없어 기술적 지표 차트를 생성할 수 없습니다")
-        return create_paragraph("기술적 지표 차트 데이터가 없습니다.")
+        return create_paragraph({"content": "기술적 지표 차트 데이터가 없습니다."})
 
     # 지표 데이터 목록 생성 (최대 5개)
     indicators = []
@@ -2474,7 +2474,7 @@ def create_trend_following_chart_component_directly(tech_agent_result: Dict[str,
     # 지표가 없는 경우 처리
     if not indicators:
         logger.warning("[기술지표차트] 사용 가능한 기술적 지표 데이터가 없습니다")
-        return create_paragraph("기술적 지표 데이터가 충분하지 않습니다.")
+        return create_paragraph({"content": "기술적 지표 데이터가 충분하지 않습니다."})
 
     # Y축 설정
     y_axis_configs = {"primary": {"title": "ADX / DI 값", "position": "left", "color": "#3b82f6"}, "secondary": {"title": "가격(원)", "position": "right", "color": "#f59e0b"}}
@@ -2542,7 +2542,7 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
 
     if not dates:
         logger.warning("[모멘텀지표차트] 날짜 데이터가 없어 모멘텀 지표 차트를 생성할 수 없습니다")
-        return create_paragraph("모멘텀 지표 차트 데이터가 없습니다.")
+        return create_paragraph({"content": "모멘텀 지표 차트 데이터가 없습니다."})
 
     # 지표 데이터 목록 생성
     indicators = []
@@ -2601,7 +2601,7 @@ def create_momentum_chart_component_directly(tech_agent_result: Dict[str, Any], 
     # 지표가 없는 경우 처리
     if not indicators:
         logger.warning("[모멘텀지표차트] 사용 가능한 모멘텀 지표 데이터가 없습니다")
-        return create_paragraph("모멘텀 지표 데이터가 충분하지 않습니다.")
+        return create_paragraph({"content": "모멘텀 지표 데이터가 충분하지 않습니다."})
 
     # Y축 설정
     y_axis_configs = {
