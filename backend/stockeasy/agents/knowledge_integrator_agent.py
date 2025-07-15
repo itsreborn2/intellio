@@ -220,33 +220,73 @@ class KnowledgeIntegratorAgent(BaseAgent):
             )
             logger.info("Knowledge integration completed successfully")
 
-            # 형식 변환: Pydantic 모델을 IntegratedKnowledge 타입으로 변환
-            # 핵심 인사이트 변환
-            core_insights = []
-            if integration_result.핵심_결론.주요_인사이트1:
-                core_insights.append(integration_result.핵심_결론.주요_인사이트1)
-            if integration_result.핵심_결론.주요_인사이트2:
-                core_insights.append(integration_result.핵심_결론.주요_인사이트2)
-            if integration_result.핵심_결론.주요_인사이트3:
-                core_insights.append(integration_result.핵심_결론.주요_인사이트3)
+            # 파싱 결과 검증 및 처리
+            if hasattr(integration_result, "_parsing_failed") and integration_result._parsing_failed:
+                logger.warning("구조화된 출력 파싱이 실패했습니다. 기본 응답을 생성합니다.")
+                # 파싱 실패 시 기본 응답 생성
+                integrated_knowledge: IntegratedKnowledge = {
+                    "integrated_response": "죄송합니다. 정보를 통합하는 중 오류가 발생했습니다. 다시 시도해 주세요.",
+                    "core_insights": ["정보 통합 중 오류가 발생했습니다."],
+                    "facts": [],
+                    "opinions": [],
+                    "analysis": {"confidence_assessment": {}, "uncertain_areas": ["정보 통합 실패"]},
+                    "sources": {
+                        "telegram": self._extract_sources(agent_results, "telegram_retriever"),
+                        "reports": self._extract_sources(agent_results, "report_analyzer"),
+                        "financial": self._extract_sources(agent_results, "financial_analyzer"),
+                        "industry": self._extract_sources(agent_results, "industry_analyzer"),
+                    },
+                }
+            elif not hasattr(integration_result, "핵심_결론"):
+                # 파싱이 완전히 실패한 경우 (AIMessage 객체가 반환된 경우)
+                logger.error("구조화된 출력 파싱이 완전히 실패했습니다. 원본 응답을 사용합니다.")
 
-            # 신뢰도 평가 정보를 analysis 딕셔너리에 포함
-            confidence_info = integration_result.신뢰도_평가.dict()
+                # 원본 응답에서 텍스트 추출
+                raw_text = integration_result.content if hasattr(integration_result, "content") else str(integration_result)
 
-            # 통합된 지식 베이스 생성 (IntegratedKnowledge 타입 형식으로)
-            integrated_knowledge: IntegratedKnowledge = {
-                "integrated_response": integration_result.통합_응답,
-                "core_insights": core_insights,
-                "facts": [],  # 현재 모델에서는 별도 facts를 제공하지 않음
-                "opinions": [],  # 현재 모델에서는 별도 opinions를 제공하지 않음
-                "analysis": {"confidence_assessment": confidence_info, "uncertain_areas": integration_result.불확실_영역},
-                "sources": {
-                    "telegram": self._extract_sources(agent_results, "telegram_retriever"),
-                    "reports": self._extract_sources(agent_results, "report_analyzer"),
-                    "financial": self._extract_sources(agent_results, "financial_analyzer"),
-                    "industry": self._extract_sources(agent_results, "industry_analyzer"),
-                },
-            }
+                # 기본 응답 생성
+                integrated_knowledge: IntegratedKnowledge = {
+                    "integrated_response": raw_text if raw_text else "죄송합니다. 정보를 통합하는 중 오류가 발생했습니다.",
+                    "core_insights": ["구조화된 출력 파싱 실패"],
+                    "facts": [],
+                    "opinions": [],
+                    "analysis": {"confidence_assessment": {}, "uncertain_areas": ["구조화된 출력 파싱 실패"]},
+                    "sources": {
+                        "telegram": self._extract_sources(agent_results, "telegram_retriever"),
+                        "reports": self._extract_sources(agent_results, "report_analyzer"),
+                        "financial": self._extract_sources(agent_results, "financial_analyzer"),
+                        "industry": self._extract_sources(agent_results, "industry_analyzer"),
+                    },
+                }
+            else:
+                # 정상적인 파싱 결과 처리
+                # 형식 변환: Pydantic 모델을 IntegratedKnowledge 타입으로 변환
+                # 핵심 인사이트 변환
+                core_insights = []
+                if integration_result.핵심_결론.주요_인사이트1:
+                    core_insights.append(integration_result.핵심_결론.주요_인사이트1)
+                if integration_result.핵심_결론.주요_인사이트2:
+                    core_insights.append(integration_result.핵심_결론.주요_인사이트2)
+                if integration_result.핵심_결론.주요_인사이트3:
+                    core_insights.append(integration_result.핵심_결론.주요_인사이트3)
+
+                # 신뢰도 평가 정보를 analysis 딕셔너리에 포함
+                confidence_info = integration_result.신뢰도_평가.dict()
+
+                # 통합된 지식 베이스 생성 (IntegratedKnowledge 타입 형식으로)
+                integrated_knowledge: IntegratedKnowledge = {
+                    "integrated_response": integration_result.통합_응답,
+                    "core_insights": core_insights,
+                    "facts": [],  # 현재 모델에서는 별도 facts를 제공하지 않음
+                    "opinions": [],  # 현재 모델에서는 별도 opinions를 제공하지 않음
+                    "analysis": {"confidence_assessment": confidence_info, "uncertain_areas": integration_result.불확실_영역},
+                    "sources": {
+                        "telegram": self._extract_sources(agent_results, "telegram_retriever"),
+                        "reports": self._extract_sources(agent_results, "report_analyzer"),
+                        "financial": self._extract_sources(agent_results, "financial_analyzer"),
+                        "industry": self._extract_sources(agent_results, "industry_analyzer"),
+                    },
+                }
 
             # 통합된 지식 저장 # 굳이 AgentState 최상위에 둘 필요없음.
             # state["integrated_knowledge"] = integrated_knowledge
