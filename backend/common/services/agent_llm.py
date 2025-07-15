@@ -601,6 +601,85 @@ class AgentLLM:
                 self.schema = schema
                 self.kwargs = kwargs
 
+            def _clean_json_string(self, content: str) -> str:
+                """JSON 파싱 전 제어 문자 및 불필요한 문자 정리"""
+                import re
+
+                # 1. 제어 문자 제거 (U+0000-U+001F)
+                content = re.sub(r"[\u0000-\u001F]", "", content)
+
+                # 2. Markdown 코드 블록 제거
+                content = re.sub(r"^```(?:json)?\s*\n?(.*?)\n?```\s*$", r"\1", content, flags=re.DOTALL)
+                content = re.sub(r"^```(?:json)?\s*\n?", "", content, flags=re.DOTALL)
+                content = re.sub(r"\n?```\s*$", "", content, flags=re.DOTALL)
+
+                # 3. 문자열 앞뒤 공백 제거
+                content = content.strip()
+
+                # 4. 완전한 JSON 객체만 추출
+                json_start = content.find("{")
+                if json_start != -1:
+                    brace_count = 0
+                    json_end = json_start
+                    for i, char in enumerate(content[json_start:], json_start):
+                        if char == "{":
+                            brace_count += 1
+                        elif char == "}":
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_end = i + 1
+                                break
+
+                    if brace_count == 0:
+                        content = content[json_start:json_end]
+                    else:
+                        logger.warning(f"[구조화된 출력] 불완전한 JSON 구조 감지: {content[:200]}...")
+
+                return content
+
+            def _create_fallback_response(self, original_response):
+                """파싱 실패 시 기본 구조를 가진 응답 생성"""
+                try:
+                    # 스키마에서 필드 정보 추출
+                    if hasattr(self.schema, "model_fields"):
+                        fields = self.schema.model_fields
+                        fallback_data = {}
+
+                        for field_name, field_info in fields.items():
+                            # 필드 타입에 따른 기본값 설정
+                            if hasattr(field_info, "default") and field_info.default is not None:
+                                fallback_data[field_name] = field_info.default
+                            elif hasattr(field_info, "annotation"):
+                                annotation = field_info.annotation
+                                if annotation == str:
+                                    fallback_data[field_name] = "응답 생성 중 오류가 발생했습니다."
+                                elif annotation == list:
+                                    fallback_data[field_name] = []
+                                elif annotation == dict:
+                                    fallback_data[field_name] = {}
+                                elif hasattr(annotation, "__origin__") and annotation.__origin__ is list:
+                                    fallback_data[field_name] = []
+                                else:
+                                    fallback_data[field_name] = None
+                            else:
+                                fallback_data[field_name] = None
+
+                        # 스키마 인스턴스 생성
+                        fallback_response = self.schema(**fallback_data)
+
+                        # 원본 메타데이터 보존
+                        setattr(fallback_response, "_original_message", original_response)
+                        setattr(fallback_response, "_parsing_failed", True)
+
+                        logger.warning(f"[구조화된 출력] 파싱 실패로 기본 구조 반환: {type(fallback_response)}")
+                        return fallback_response
+
+                except Exception as e:
+                    logger.error(f"[구조화된 출력] 기본 구조 생성 실패: {str(e)}")
+
+                # 기본 구조 생성도 실패한 경우 원본 응답 반환
+                return original_response
+
             async def ainvoke(self, *args, **kwargs):
                 llm = self.agent_llm.get_llm()
 
@@ -617,53 +696,19 @@ class AgentLLM:
                 if args and not isinstance(args[0], list):
                     # LLM에게 JSON 형식으로 응답하도록 요청하는 프리픽스 추가
                     schema_str = self.schema.model_json_schema() if hasattr(self.schema, "model_json_schema") else str(self.schema)
-                    json_instruction = f"\n반드시 다음 JSON 스키마에 맞는 형식으로 응답하고, 요청하지 않은 데이터값은 응답하지 마시오. {schema_str}\n\n중요: 절대로 Markdown 코드 블록(```)을 사용하지 마세요. 코드 블록 표시 없이 순수한 JSON 형식으로만 응답해주세요. 응답의 시작과 끝에 ```json이나 ``` 기호를 포함하지 마세요.\n\n"
+                    json_instruction = f"\n반드시 다음 JSON 스키마에 맞는 형식으로 응답하고, 요청하지 않은 데이터값은 응답하지 마시오. {schema_str}\n\n중요: 절대로 Markdown 코드 블록(```)을 사용하지 마세요. 코드 블록 표시 없이 순수한 JSON 형식으로만 응답해주세요. 응답의 시작과 끝에 ```json이나 ``` 기호를 포함하지 마세요. 제어 문자나 특수 문자는 사용하지 마세요.\n\n"
 
                     if isinstance(args[0], str):
                         args = ([HumanMessage(content=args[0] + json_instruction)],) + args[1:]
 
                 raw_response = await self.agent_llm.ainvoke_with_fallback(*args, user_id=user_id, project_type=project_type, db=db, **kwargs)
+
                 # 2단계: 응답 내용을 수동으로 Pydantic 모델로 파싱
                 try:
                     content = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
 
-                    # Markdown 코드 블록 제거 - 다양한 패턴 처리
-                    import re
-
-                    # 전체 문자열이 코드 블록으로 감싸진 경우
-                    content = re.sub(r"^```(?:json)?\s*\n?(.*?)\n?```\s*$", r"\1", content, flags=re.DOTALL)
-                    # 시작 부분에 ```json이 있는 경우
-                    content = re.sub(r"^```(?:json)?\s*\n?", "", content, flags=re.DOTALL)
-                    # 끝 부분에 ``` 가 있는 경우
-                    content = re.sub(r"\n?```\s*$", "", content, flags=re.DOTALL)
-                    # 문자열 앞뒤 공백 제거
-                    content = content.strip()
-
-                    # JSON 파싱 전 추가 정리 (Gemini 2.5 flash lite 대응)
-                    # 1. trailing characters 문제 해결을 위해 완전한 JSON 객체만 추출
-                    import json
-
-                    # JSON 객체의 시작과 끝을 찾아 추출
-                    json_start = content.find("{")
-                    if json_start != -1:
-                        # 중괄호 매칭을 통해 완전한 JSON 객체 추출
-                        brace_count = 0
-                        json_end = json_start
-                        for i, char in enumerate(content[json_start:], json_start):
-                            if char == "{":
-                                brace_count += 1
-                            elif char == "}":
-                                brace_count -= 1
-                                if brace_count == 0:
-                                    json_end = i + 1
-                                    break
-
-                        if brace_count == 0:  # 완전한 JSON 객체를 찾은 경우
-                            content = content[json_start:json_end]
-                        else:
-                            logger.warning(f"[구조화된 출력] 불완전한 JSON 구조 감지, 원본 사용: {content[:200]}...")
-
-                    # logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}, 내용 길이: {len(content)}")
+                    # JSON 문자열 정리
+                    content = self._clean_json_string(content)
 
                     # Pydantic 모델로 파싱
                     if hasattr(self.schema, "model_validate_json"):
@@ -672,6 +717,8 @@ class AgentLLM:
                         parsed_response = self.schema.parse_raw(content)
                     else:
                         # JSON으로 파싱한 후 객체 생성
+                        import json
+
                         data = json.loads(content)
                         parsed_response = self.schema(**data)
 
@@ -684,8 +731,9 @@ class AgentLLM:
                 except Exception as e:
                     logger.error(f"[구조화된 출력] 파싱 오류: {str(e)}")
                     logger.error(f"[구조화된 출력] 파싱 실패한 내용 (첫 500자): {content[:500] if 'content' in locals() else 'content 변수 없음'}")
-                    # 파싱 실패 시 원본 응답 반환
-                    return raw_response
+
+                    # 파싱 실패 시 기본 구조 반환
+                    return self._create_fallback_response(raw_response)
 
             def invoke(self, *args, **kwargs):
                 llm = self.agent_llm.get_llm()
@@ -703,7 +751,7 @@ class AgentLLM:
                 if args and not isinstance(args[0], list):
                     # LLM에게 JSON 형식으로 응답하도록 요청하는 프리픽스 추가
                     schema_str = self.schema.model_json_schema() if hasattr(self.schema, "model_json_schema") else str(self.schema)
-                    json_instruction = f"반드시 다음 JSON 스키마에 맞는 형식으로 응답하고, 요청하지 않은 데이터값은 응답하지 마시오.\n{schema_str}\n\n중요: 절대로 Markdown 코드 블록(```)을 사용하지 마세요. 코드 블록 표시 없이 순수한 JSON 형식으로만 응답해주세요. 응답의 시작과 끝에 ```json이나 ``` 기호를 포함하지 마세요.\n\n"
+                    json_instruction = f"반드시 다음 JSON 스키마에 맞는 형식으로 응답하고, 요청하지 않은 데이터값은 응답하지 마시오.\n{schema_str}\n\n중요: 절대로 Markdown 코드 블록(```)을 사용하지 마세요. 코드 블록 표시 없이 순수한 JSON 형식으로만 응답해주세요. 응답의 시작과 끝에 ```json이나 ``` 기호를 포함하지 마세요. 제어 문자나 특수 문자는 사용하지 마세요.\n\n"
 
                     if isinstance(args[0], str):
                         args = ([HumanMessage(content=json_instruction + args[0])],) + args[1:]
@@ -716,43 +764,8 @@ class AgentLLM:
                 try:
                     content = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
 
-                    # Markdown 코드 블록 제거 - 다양한 패턴 처리
-                    import re
-
-                    # 전체 문자열이 코드 블록으로 감싸진 경우
-                    content = re.sub(r"^```(?:json)?\s*\n?(.*?)\n?```\s*$", r"\1", content, flags=re.DOTALL)
-                    # 시작 부분에 ```json이 있는 경우
-                    content = re.sub(r"^```(?:json)?\s*\n?", "", content, flags=re.DOTALL)
-                    # 끝 부분에 ``` 가 있는 경우
-                    content = re.sub(r"\n?```\s*$", "", content, flags=re.DOTALL)
-                    # 문자열 앞뒤 공백 제거
-                    content = content.strip()
-
-                    # JSON 파싱 전 추가 정리 (Gemini 2.5 flash lite 대응)
-                    # 1. trailing characters 문제 해결을 위해 완전한 JSON 객체만 추출
-                    import json
-
-                    # JSON 객체의 시작과 끝을 찾아 추출
-                    json_start = content.find("{")
-                    if json_start != -1:
-                        # 중괄호 매칭을 통해 완전한 JSON 객체 추출
-                        brace_count = 0
-                        json_end = json_start
-                        for i, char in enumerate(content[json_start:], json_start):
-                            if char == "{":
-                                brace_count += 1
-                            elif char == "}":
-                                brace_count -= 1
-                                if brace_count == 0:
-                                    json_end = i + 1
-                                    break
-
-                        if brace_count == 0:  # 완전한 JSON 객체를 찾은 경우
-                            content = content[json_start:json_end]
-                        else:
-                            logger.warning(f"[구조화된 출력] 불완전한 JSON 구조 감지, 원본 사용: {content[:200]}...")
-
-                    # logger.info(f"[구조화된 출력] 파싱 시도: {type(self.schema)}, 내용 길이: {len(content)}")
+                    # JSON 문자열 정리
+                    content = self._clean_json_string(content)
 
                     # Pydantic 모델로 파싱
                     if hasattr(self.schema, "model_validate_json"):
@@ -761,6 +774,8 @@ class AgentLLM:
                         parsed_response = self.schema.parse_raw(content)
                     else:
                         # JSON으로 파싱한 후 객체 생성
+                        import json
+
                         data = json.loads(content)
                         parsed_response = self.schema(**data)
 
@@ -773,8 +788,9 @@ class AgentLLM:
                 except Exception as e:
                     logger.error(f"[구조화된 출력] 파싱 오류: {str(e)}")
                     logger.error(f"[구조화된 출력] 파싱 실패한 내용 (첫 500자): {content[:500] if 'content' in locals() else 'content 변수 없음'}")
-                    # 파싱 실패 시 원본 응답 반환
-                    return raw_response
+
+                    # 파싱 실패 시 기본 구조 반환
+                    return self._create_fallback_response(raw_response)
 
         return StructuredOutputAgentLLM(self, schema, **kwargs)
 
