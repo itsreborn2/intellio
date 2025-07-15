@@ -54,22 +54,51 @@ class SummarizerAgent(BaseAgent):
         if not text:
             return text
 
-        # 기본 내부DB 패턴 제거
-        text = text.replace("<내부DB>", "").replace("(내부DB)", "").replace("내부DB;", "").replace(", 내부DB)", "").replace("; 내부DB)", "")
+        # 제거 대상 키워드들 정의
+        remove_keywords = ["내부DB", "비공개자료", "웹검색결과", "web검색결과"]
 
-        # 날짜가 포함된 내부DB 패턴 제거: (내부DB, yyyy-mm-dd) 및 (내부DB,yyyy-mm-dd)
-        text = re.sub(r"\(내부DB,\s*\d{4}-\d{2}-\d{2}\)", "", text)
+        # 단순 패턴들 먼저 제거 (괄호 없는 경우)
+        for keyword in remove_keywords:
+            text = text.replace(f"<{keyword}>", "")
+            text = text.replace(f"({keyword})", "")
+            text = text.replace(f"{keyword};", "")
+            text = text.replace(f", {keyword})", "")
+            text = text.replace(f"; {keyword})", "")
+            text = text.replace(f", {keyword}", "")
+            text = text.replace(f"; {keyword}", "")
 
-        # 세미콜론으로 구분된 패턴에서 내부DB 부분만 제거: (내부DB, yyyy-mm-dd; 다른내용) -> (다른내용)
-        text = re.sub(r"\(내부DB,\s*\d{4}-\d{2}-\d{2};\s*([^)]+)\)", r"(\1)", text)
+        # 괄호 안의 복합 패턴 처리
+        def process_parentheses_content(match):
+            content = match.group(1)  # 괄호 안의 내용
 
-        # 비공개자료 패턴 제거
-        text = text.replace("<비공개자료>", "").replace("(비공개자료)", "")
-        text = re.sub(r"\(비공개자료,\s*\d{4}-\d{2}-\d{2}\)", "", text)
+            # 세미콜론으로 분리된 항목들 분석
+            items = [item.strip() for item in content.split(";")]
+            remaining_items = []
 
-        # 웹검색결과 패턴 제거
-        text = text.replace("(웹검색결과)", "").replace("웹검색결과;", "").replace("웹검색결과,", "").replace("; 웹검색결과", "").replace(", 웹검색결과", "")
-        text = text.replace("(web검색결과)", "").replace("web검색결과;", "").replace("web검색결과,", "").replace("; web검색결과", "").replace(", web검색결과", "")
+            for item in items:
+                # 각 항목이 제거 대상인지 확인
+                should_remove = False
+                for keyword in remove_keywords:
+                    # "키워드" 또는 "키워드, 날짜" 형태인지 확인
+                    if item == keyword or item.startswith(f"{keyword},") or re.match(rf"^{re.escape(keyword)}\s*,\s*\d{{4}}-\d{{2}}-\d{{2}}$", item):
+                        should_remove = True
+                        break
+
+                if not should_remove:
+                    remaining_items.append(item)
+
+            # 남은 항목이 있으면 괄호 유지, 없으면 전체 제거
+            if remaining_items:
+                return f"({'; '.join(remaining_items)})"
+            else:
+                return ""
+
+        # 괄호로 둘러싸인 모든 패턴 처리
+        text = re.sub(r"\(([^)]+)\)", process_parentheses_content, text)
+
+        # 연속된 공백 정리
+        text = re.sub(r"\s+", " ", text)
+        text = text.strip()
 
         return text
 
@@ -269,7 +298,19 @@ class SummarizerAgent(BaseAgent):
             seen_telegram_msgs = set()
             deduplicated_list_tele_msgs = []
             for msg in current_section_telegram_msgs:
-                msg_key = hashlib.sha256(msg.get("content", "")[:100].encode("utf-8")).hexdigest()
+                # content가 리스트인 경우 (예: [{'type': 'text', 'content': '...'}]) 텍스트 내용 추출
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    # 리스트에서 텍스트 내용 추출
+                    text_content = ""
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            text_content += item.get("content", "")
+                    content = text_content
+                elif not isinstance(content, str):
+                    content = str(content)
+
+                msg_key = hashlib.sha256(content[:100].encode("utf-8")).hexdigest()
                 if msg_key not in seen_telegram_msgs:
                     seen_telegram_msgs.add(msg_key)
                     deduplicated_list_tele_msgs.append(msg)
@@ -475,7 +516,18 @@ class SummarizerAgent(BaseAgent):
             text += f"- **출처**: {report.get('source', '미상')}\n"
             text += f"- **날짜**: {report.get('publish_date', '날짜 정보 없음')}\n"
 
+            # content가 리스트인 경우 (예: [{'type': 'text', 'content': '...'}]) 텍스트 내용 추출
             sContent = report.get("content", "내용 없음")
+            if isinstance(sContent, list):
+                # 리스트에서 텍스트 내용 추출
+                text_content = ""
+                for item in sContent:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text_content += item.get("content", "")
+                sContent = text_content if text_content else "내용 없음"
+            elif not isinstance(sContent, str):
+                sContent = str(sContent)
+
             sContent = sContent.replace("\n\n", "\n")
             text += f"- **내용**:\n{sContent}\n\n"
 
@@ -535,8 +587,20 @@ class SummarizerAgent(BaseAgent):
             if i > 0:  # 첫 번째 항목이 아닌 경우만 구분선 추가
                 text += "____\n\n"
 
+            # content가 리스트인 경우 (예: [{'type': 'text', 'content': '...'}]) 텍스트 내용 추출
+            content = message.get("content", "내용 없음")
+            if isinstance(content, list):
+                # 리스트에서 텍스트 내용 추출
+                text_content = ""
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text_content += item.get("content", "")
+                content = text_content if text_content else "내용 없음"
+            elif not isinstance(content, str):
+                content = str(content)
+
             text += f"- **날짜**: {formatted_date}\n"
-            text += f"- **내용**: {message.get('content', '내용 없음')}\n\n"
+            text += f"- **내용**: {content}\n\n"
 
         return text
 

@@ -30,7 +30,7 @@ from common.services.retrievers.semantic import SemanticRetriever, SemanticRetri
 from common.utils.util import async_retry
 from stockeasy.agents.base import BaseAgent
 from stockeasy.models.agent_io import RetrievedTelegramMessage
-from stockeasy.prompts.telegram_prompts import TELEGRAM_SUMMARY_PROMPT, TELEGRAM_SUMMARY_PROMPT_2
+from stockeasy.prompts.telegram_prompts import TELEGRAM_SUMMARY_PROMPT_2
 from stockeasy.services.telegram.embedding import TelegramEmbeddingService, securities_mapping
 
 
@@ -54,7 +54,7 @@ class TelegramRetrieverAgent(BaseAgent):
         duration = end_time - start_time
         logger.info(f"TelegramRetrieverAgent initialization time only llm: {duration:.2f} seconds")
         self.parser = JsonOutputParser()
-        self.prompt_template = TELEGRAM_SUMMARY_PROMPT
+        self.prompt_template = TELEGRAM_SUMMARY_PROMPT_2
         logger.info(f"TelegramRetrieverAgent initialized with provider: {self.agent_llm.get_provider()}, model: {self.agent_llm.get_model_name()}")
         # VectorStoreManager 캐시된 인스턴스 사용 (지연 초기화)
         self.vs_manager = None  # 실제 사용 시점에 AgentRegistry에서 가져옴

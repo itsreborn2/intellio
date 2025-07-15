@@ -3,7 +3,7 @@
 이 모듈은 산업 및 시장 동향 분석을 위한 프롬프트를 정의합니다.
 """
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 # 산업 분석 프롬프트
 INDUSTRY_ANALYSIS_PROMPT = """당신은 산업 및 시장 동향 분석 전문가입니다. 제공된 산업 리포트 데이터를 분석하여 심층적인 산업 인사이트를 도출하세요:
@@ -41,7 +41,7 @@ INDUSTRY_ANALYSIS_PROMPT = """당신은 산업 및 시장 동향 분석 전문�
    - 투자자 관점에서의 시사점
 
 모든 분석에 데이터 출처와 발표 시기를 명확히 표시하고, 사실과 의견을 구분하여 제시하세요.
-
+ 
 산업 데이터:
 {industry_data}
 
@@ -90,6 +90,12 @@ INDUSTRY_ANALYSIS_SYSTEM_PROMPT = """
 
 모든 분석에 데이터 출처와 발표 시기를 명확히 표시하고, 사실과 의견을 구분하여 제시하세요.
 
+# 테이블 출력 지침
+- 테이블은 반드시 다음 형식에 맞춰 파이프(|) 사이에 공백 없이 작성합니다.
+|항목|값1|값2|비고(선택적)|
+|---|---|---|---|
+|데이터1|내용1|내용2|설명1|
+
 """
 
 INDUSTRY_ANALYSIS_USER_PROMPT = """
@@ -104,6 +110,7 @@ INDUSTRY_ANALYSIS_USER_PROMPT = """
 {industry_data}
 """
 
+
 def format_industry_data(industry_data: List[Dict[str, Any]]) -> str:
     """산업 데이터를 문자열로 포맷팅합니다.
 
@@ -115,26 +122,26 @@ def format_industry_data(industry_data: List[Dict[str, Any]]) -> str:
     """
     if not industry_data:
         return "산업 데이터가 없습니다."
-    
+
     formatted_data = []
-    
-    for i,item in enumerate(industry_data):
+
+    for i, item in enumerate(industry_data):
         source = item.get("source", "알 수 없는 출처")
         date = item.get("publish_date", "날짜 없음")
         title = item.get("title", "제목 없음")
         content = item.get("content", "")
-        data_str = f"### 산업데이터 {i+1}\n"
+        data_str = f"### 산업데이터 {i + 1}\n"
         data_str += f" 출처: ||{source}||\n"
         data_str += f" 날짜: ||{date}||\n"
         data_str += f" 내용: {content}\n"
-        
+
         # 주요 트렌드 정보가 있는 경우
         key_trends = item.get("key_trends", [])
         if key_trends:
             data_str += "\n주요 트렌드:\n"
             for trend in key_trends:
                 data_str += f"- {trend}\n"
-        
+
         # 시장 데이터가 있는 경우
         market_data = item.get("market_data", {})
         if market_data:
@@ -142,7 +149,7 @@ def format_industry_data(industry_data: List[Dict[str, Any]]) -> str:
             for key, value in market_data.items():
                 data_str += f"- {key}: {value}\n"
 
-        data_str += '-------\n'
+        data_str += "-------\n"
         formatted_data.append(data_str)
-    
-    return "\n\n".join(formatted_data) 
+
+    return "\n\n".join(formatted_data)
