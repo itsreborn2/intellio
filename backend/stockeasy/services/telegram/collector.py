@@ -337,19 +337,7 @@ class CollectorService:
             Optional[Dict[str, Any]]: 처리된 메시지 객체 또는 None
         """
         try:
-            # 메시지 디버깅을 위한 상세 로깅
-            logger.info(f"메시지 ID {message.id} 분석,추출 시작")
-            if message.text is not None:
-                if len(message.text) > 50:
-                    tt = message.text[:50]
-                else:
-                    tt = message.text
-                if len(tt) > 0:
-                    logger.info(f"message.text: {tt}")
-            #logger.info(f"message.text: {message.text!r}")
-            #logger.info(f"message.message: {message.message!r}")
-            #logger.info(f"message.raw_text: {message.raw_text!r}")
-            #logger.info(f"message.media: {message.media!r}")
+            # 메시지 처리 시작 (상세 로그 제거)
             
             # 전달된 메시지 확인
             is_forwarded = False
@@ -388,7 +376,7 @@ class CollectorService:
                     else:
                         forward_from_id = str(message.fwd_from.from_id)
                 
-                logger.info(f"전달된 메시지 감지: {forward_from_name or '알 수 없음'}({forward_from_id or '알 수 없음'})")
+                logger.debug(f"전달된 메시지 감지: {forward_from_name or '알 수 없음'}({forward_from_id or '알 수 없음'})")
             
             # 메시지 텍스트 추출
             message_text = ""
@@ -460,7 +448,6 @@ class CollectorService:
                     
                     document_size = document.size
                     
-                    logger.info(f"문서 다운로드 시작: {document_name}")
                     # 문서 다운로드
                     file_data = io.BytesIO()
                     await message.download_media(file=file_data)
@@ -476,7 +463,7 @@ class CollectorService:
                         target_full_path = target_path + document_name
 
                         document_gcs_path = await self.storage_service.upload_from_BytesIO(target_full_path, file_data)
-                        logger.info(f"문서 GCS 저장 성공: {document_gcs_path}")
+                        logger.debug(f"문서 GCS 저장 성공: {document_name}")
                     else:
                         date_folder = message.date.strftime("%Y-%m-%d")
                         local_dir = f"telegram_files/{date_folder}"
@@ -487,7 +474,7 @@ class CollectorService:
                         # 로컬에 파일 저장
                         with open(local_path, 'wb') as f:
                             f.write(file_data.getvalue())
-                        logger.info(f"문서 로컬 저장 성공: {local_path}")
+                        logger.debug(f"문서 로컬 저장 성공: {document_name}")
                     
                 except Exception as e:
                     logger.error(f"문서 처리 중 오류 발생 (message_id: {message.id}): {str(e)}")
@@ -504,27 +491,19 @@ class CollectorService:
             
             # 노션 링크가 있으면 크롤링하여 텍스트에 추가
             if message_text and message_text != "(내용 없음)" and "notion" in message_text.lower():
-                logger.info(f"메시지 ID {message.id}: 노션 링크 처리 시작")
-                logger.debug(f"메시지 텍스트 (처음 200자): {message_text[:200]}")
-                
-                # 노션 링크 추출하여 로그에 기록
+                # 노션 링크 추출
                 notion_links = self._extract_notion_links(message_text)
                 if notion_links:
-                    logger.info(f"발견된 노션 링크: {notion_links}")
+                    logger.debug(f"발견된 노션 링크: {notion_links}")
                 
                 try:
                     enhanced_message_text = await self._enhance_message_with_notion_content(message_text)
                     if enhanced_message_text != message_text:
-                        logger.info(f"메시지 ID {message.id}에 노션 콘텐츠가 추가되었습니다 (원본: {len(message_text)}자 -> 확장: {len(enhanced_message_text)}자)")
+                        logger.debug(f"메시지 ID {message.id}에 노션 콘텐츠가 추가되었습니다 (원본: {len(message_text)}자 -> 확장: {len(enhanced_message_text)}자)")
                         message_text = enhanced_message_text
-                    else:
-                        logger.warning(f"메시지 ID {message.id}: 노션 링크({len(notion_links)}개)가 있지만 콘텐츠 추가 실패 - 원본 메시지만 저장")
                 except Exception as e:
                     logger.error(f"노션 콘텐츠 추가 중 오류 발생 (message_id: {message.id}): {str(e)}", exc_info=True)
-                    logger.info(f"노션 크롤링 실패로 원본 메시지만 저장합니다")
                     # 오류가 발생해도 원본 message_text는 유지
-            else:
-                logger.debug(f"메시지 ID {message.id}: 노션 링크 처리 조건 불만족 - text존재: {bool(message_text)}, 내용있음: {message_text != '(내용 없음)'}, notion포함: {'notion' in message_text.lower() if message_text else False}")
 
             # Dict 객체 생성
             return {

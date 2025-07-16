@@ -358,6 +358,24 @@ class FinancialDataServicePDF:
                         self._file_list_cache[stock_code] = {"data": cached_data[stock_code], "timestamp": now}
                         print(f"Using file cached list for stock {stock_code}")
                         return cached_data[stock_code]
+            except UnicodeDecodeError as e:
+                logger.warning(f"캐시 파일 인코딩 오류: {str(e)}")
+                print("캐시 파일을 삭제하고 재생성합니다.")
+                # 깨진 캐시 파일 삭제
+                try:
+                    os.remove(self.file_list_cache_path)
+                    print("캐시 파일이 삭제되었습니다.")
+                except Exception as remove_error:
+                    logger.warning(f"캐시 파일 삭제 중 오류: {str(remove_error)}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"캐시 파일 JSON 파싱 오류: {str(e)}")
+                print("캐시 파일을 삭제하고 재생성합니다.")
+                # 깨진 캐시 파일 삭제
+                try:
+                    os.remove(self.file_list_cache_path)
+                    print("캐시 파일이 삭제되었습니다.")
+                except Exception as remove_error:
+                    logger.warning(f"캐시 파일 삭제 중 오류: {str(remove_error)}")
             except Exception as e:
                 logger.warning(f"Failed to load cached file list: {str(e)}")
 
@@ -429,6 +447,26 @@ class FinancialDataServicePDF:
                 print(f"종목({stock_code})에 대한 타임스탬프 정보가 없습니다. 유효하지 않음.")
                 return False
 
+        except UnicodeDecodeError as e:
+            print(f"캐시 파일 인코딩 오류: {str(e)}")
+            print("캐시 파일을 삭제하고 재생성합니다.")
+            # 깨진 캐시 파일 삭제
+            try:
+                os.remove(self.file_list_cache_path)
+                print("캐시 파일이 삭제되었습니다.")
+            except Exception as remove_error:
+                print(f"캐시 파일 삭제 중 오류: {str(remove_error)}")
+            return False
+        except json.JSONDecodeError as e:
+            print(f"캐시 파일 JSON 파싱 오류: {str(e)}")
+            print("캐시 파일을 삭제하고 재생성합니다.")
+            # 깨진 캐시 파일 삭제
+            try:
+                os.remove(self.file_list_cache_path)
+                print("캐시 파일이 삭제되었습니다.")
+            except Exception as remove_error:
+                print(f"캐시 파일 삭제 중 오류: {str(remove_error)}")
+            return False
         except Exception as e:
             print(f"캐시 파일 읽기 오류: {str(e)}")
             return False
@@ -446,8 +484,19 @@ class FinancialDataServicePDF:
             # 기존 캐시 데이터 로드
             cached_data = {}
             if os.path.exists(self.file_list_cache_path):
-                with open(self.file_list_cache_path, "r", encoding="utf-8") as f:
-                    cached_data = json.load(f)
+                try:
+                    with open(self.file_list_cache_path, "r", encoding="utf-8") as f:
+                        cached_data = json.load(f)
+                except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                    logger.warning(f"기존 캐시 파일 읽기 오류: {str(e)}")
+                    print("기존 캐시 파일을 삭제하고 새로 생성합니다.")
+                    # 깨진 캐시 파일 삭제
+                    try:
+                        os.remove(self.file_list_cache_path)
+                        print("기존 캐시 파일이 삭제되었습니다.")
+                    except Exception as remove_error:
+                        logger.warning(f"캐시 파일 삭제 중 오류: {str(remove_error)}")
+                    cached_data = {}
 
             # 타임스탬프 관리 구조 초기화
             if "_timestamps" not in cached_data:
@@ -460,14 +509,32 @@ class FinancialDataServicePDF:
             # 새 데이터 추가/업데이트
             cached_data[stock_code] = file_list
 
-            # 캐시 파일 저장
-            with open(self.file_list_cache_path, "w", encoding="utf-8") as f:
-                json.dump(cached_data, f, ensure_ascii=False, indent=2)
-
-            # 메모리 캐시 업데이트
-            self._file_list_cache[stock_code] = {"data": file_list, "timestamp": now}
-
-            print(f"종목({stock_code})의 파일 목록 캐시가 갱신되었습니다. 타임스탬프: {now.isoformat()}")
+            # 캐시 파일 저장 (안전한 방식으로)
+            try:
+                # 임시 파일에 먼저 저장
+                temp_file_path = f"{self.file_list_cache_path}.tmp"
+                with open(temp_file_path, "w", encoding="utf-8") as f:
+                    json.dump(cached_data, f, ensure_ascii=False, indent=2)
+                
+                # 성공적으로 저장되면 원본 파일로 이동
+                import shutil
+                shutil.move(temp_file_path, self.file_list_cache_path)
+                
+                # 메모리 캐시 업데이트
+                self._file_list_cache[stock_code] = {"data": file_list, "timestamp": now}
+                
+                print(f"종목({stock_code})의 파일 목록 캐시가 갱신되었습니다. 타임스탬프: {now.isoformat()}")
+                
+            except Exception as write_error:
+                logger.warning(f"캐시 파일 저장 중 오류: {str(write_error)}")
+                print(f"캐시 파일 저장 실패: {str(write_error)}")
+                # 임시 파일이 존재하면 삭제
+                temp_file_path = f"{self.file_list_cache_path}.tmp"
+                if os.path.exists(temp_file_path):
+                    try:
+                        os.remove(temp_file_path)
+                    except Exception:
+                        pass
 
         except Exception as e:
             logger.warning(f"Failed to update file list cache: {str(e)}")

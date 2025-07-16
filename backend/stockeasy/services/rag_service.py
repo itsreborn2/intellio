@@ -90,16 +90,43 @@ class StockRAGService:
                     try:
                         # 현재 세션의 모든 상태에 대해 메모리 정리 실행
                         if hasattr(self.graph, 'current_state') and self.graph.current_state:
+                            session_count = len(self.graph.current_state)
                             for session_key, state in self.graph.current_state.items():
                                 await self._cleanup_memory(state)
+                            
+                            # current_state 딕셔너리 완전히 비우기
+                            self.graph.current_state.clear()
+                            logger.info(f"[RAG 서비스] {session_count}개의 세션 상태가 완전히 정리되었습니다.")
+                        
                         logger.info("[RAG 서비스] 메모리 정리 완료")
                     except Exception as e:
                         logger.error(f"[RAG 서비스] 메모리 정리 중 오류: {str(e)}")
+                    
+                    # graph 참조 해제
+                    self.graph = None
+                    logger.info("[RAG 서비스] Graph 참조 해제 완료")
+                
+                # agent_registry 참조 해제
+                if hasattr(self, 'agent_registry') and self.agent_registry:
+                    self.agent_registry = None
+                    logger.info("[RAG 서비스] AgentRegistry 참조 해제 완료")
+                
+                # 사용자 컨텍스트 정리
+                if hasattr(self, '_user_contexts') and self._user_contexts:
+                    context_count = len(self._user_contexts)
+                    self._user_contexts.clear()
+                    logger.info(f"[RAG 서비스] {context_count}개의 사용자 컨텍스트가 정리되었습니다.")
                 
                 # DB 세션 닫기
                 logger.info("StockRAGService DB 세션 닫기")
                 await self.db.close()
                 self.db = None
+                
+                # 강제 가비지 컬렉션 실행
+                import gc
+                collected = gc.collect()
+                logger.info(f"[RAG 서비스] 가비지 컬렉션 완료 - {collected}개 객체 수거")
+                
             except Exception as e:
                 logger.error(f"DB 세션 닫기 중 오류 발생: {str(e)}")
     
@@ -107,15 +134,25 @@ class StockRAGService:
         """
         소멸자 - 리소스 정리
         """
-        if hasattr(self, 'db') and self.db:
-            try:
+        try:
+            # 동기적으로 처리 가능한 참조들 먼저 정리
+            if hasattr(self, 'graph'):
+                self.graph = None
                 
-                # DB 세션 닫기 (비동기 함수를 동기적으로 호출)
-                logger.warning("소멸자에서 DB 세션 닫기 시도 - 비추천 방식")
+            if hasattr(self, 'agent_registry'):
+                self.agent_registry = None
                 
-                # 주의: 소멸자에서 비동기 함수를 실행하는 것은 문제가 있으므로
-                # 가능하면 명시적 close() 호출을 권장
+            if hasattr(self, '_user_contexts'):
+                self._user_contexts = None
+            
+            # DB 세션이 있으면 닫기 시도
+            if hasattr(self, 'db') and self.db:
                 try:
+                    # DB 세션 닫기 (비동기 함수를 동기적으로 호출)
+                    logger.warning("소멸자에서 DB 세션 닫기 시도 - 비추천 방식")
+                    
+                    # 주의: 소멸자에서 비동기 함수를 실행하는 것은 문제가 있으므로
+                    # 가능하면 명시적 close() 호출을 권장
                     import asyncio
                     # 이미 이벤트 루프가 있는 경우와 없는 경우 모두 처리
                     loop = asyncio.get_event_loop() if asyncio.get_event_loop_policy().get_event_loop().is_running() else None
@@ -127,8 +164,11 @@ class StockRAGService:
                         asyncio.run(self.db.close())
                 except Exception as e:
                     logger.error(f"소멸자에서 DB 세션 닫기 실패: {str(e)}")
-            except Exception as e:
-                logger.error(f"소멸자에서 리소스 정리 중 오류: {str(e)}")
+                finally:
+                    self.db = None
+                    
+        except Exception as e:
+            logger.error(f"소멸자에서 리소스 정리 중 오류: {str(e)}")
     
     # 비동기 컨텍스트 매니저 메소드 (선택 사항)
     async def __aenter__(self):

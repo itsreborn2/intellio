@@ -144,9 +144,14 @@ class ParallelSearchAgent(BaseAgent):
 
         # 그래프에 병렬 검색 에이전트 자체의 처리 상태 업데이트
         session_id = state.get("session_id")
-        if self.graph and session_id and hasattr(self.graph, "current_state"):
+        if self.graph and session_id and hasattr(self.graph, "current_state") and self.graph.current_state is not None:
             try:
                 async with self.graph.state_lock:
+                    # current_state가 clear된 상태인지 확인
+                    if self.graph.current_state is None:
+                        logger.warning("그래프의 current_state가 이미 정리되었습니다.")
+                        return state
+                        
                     if session_id not in self.graph.current_state:
                         self.graph.current_state[session_id] = {}
 
@@ -156,6 +161,8 @@ class ParallelSearchAgent(BaseAgent):
                     # 병렬 검색 에이전트 자체의 상태 업데이트
                     self.graph.current_state[session_id]["processing_status"]["parallel_search"] = "processing"
                     # logger.debug(f"ParallelSearchAgent: 처리 시작 상태를 그래프에 업데이트")
+            except (AttributeError, KeyError) as e:
+                logger.warning(f"그래프 상태가 이미 정리되었거나 없습니다: {str(e)}")
             except Exception as e:
                 logger.error(f"그래프 상태 업데이트 중 오류 발생 (병렬 검색 에이전트): {str(e)}")
 
