@@ -424,6 +424,10 @@ class ResponseFormatterAgent(BaseAgent):
                 if finish_reason == "MALFORMED_FUNCTION_CALL":
                     logger.warning(f"[MALFORMED감지] 섹션 '{section_title}' (시도 {attempt_num}) - finish_reason: {finish_reason}")
                     return True
+                elif finish_reason == "MAX_TOKENS":
+                    # MAX_TOKENS인 경우 재시도하지 않고 현재 content를 활용
+                    logger.warning(f"[MAX_TOKENS감지] 섹션 '{section_title}' (시도 {attempt_num}) - finish_reason: {finish_reason}, 현재 content 활용")
+                    return False  # MAX_TOKENS는 MALFORMED가 아니므로 False 반환
 
             # 2. tool_calls와 content가 모두 비어있는지 확인
             has_tool_calls = hasattr(section_response, "tool_calls") and section_response.tool_calls
@@ -445,6 +449,79 @@ class ResponseFormatterAgent(BaseAgent):
             # 오류 발생 시 안전하게 False 반환 (정상으로 판단)
             return False
 
+    def _detect_truncated_json(self, text: str) -> bool:
+        """
+        텍스트가 MAX_TOKENS로 인해 잘린 JSON인지 감지합니다.
+
+        Args:
+            text: 검사할 텍스트
+
+        Returns:
+            bool: 잘린 JSON인지 여부
+        """
+        try:
+            import re
+            
+            # 1. ```json으로 시작하지만 ```로 끝나지 않는 경우
+            if text.strip().startswith('```json') and not text.strip().endswith('```'):
+                logger.debug("[잘린JSON감지] ```json으로 시작하지만 ```로 끝나지 않음")
+                return True
+            
+            # 2. [ 로 시작하지만 ] 로 끝나지 않는 경우
+            json_array_pattern = r"\[.*"
+            if re.search(json_array_pattern, text, re.DOTALL):
+                if not text.strip().endswith(']'):
+                    logger.debug("[잘린JSON감지] [로 시작하지만 ]로 끝나지 않음")
+                    return True
+            
+            # 3. JSON 객체가 중간에 끊어진 경우 (불완전한 중괄호)
+            brace_count = 0
+            in_string = False
+            escape_next = False
+            
+            for char in text:
+                if escape_next:
+                    escape_next = False
+                    continue
+                    
+                if char == '\\':
+                    escape_next = True
+                    continue
+                    
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+            
+            # 중괄호가 맞지 않으면 잘린 것으로 판단
+            if brace_count != 0:
+                logger.debug(f"[잘린JSON감지] 중괄호 불균형 (brace_count: {brace_count})")
+                return True
+            
+            # 4. JSON 문자열이 끝나지 않은 채로 끝나는 경우
+            if text.strip().endswith('"') and text.count('"') % 2 != 0:
+                logger.debug("[잘린JSON감지] 문자열이 닫히지 않음")
+                return True
+                
+            # 5. 일반적인 잘림 패턴들
+            # - 마지막이 콤마나 콜론으로 끝나는 경우
+            # - "content": "...로 끝나는 경우 (완성되지 않은 content 필드)
+            last_line = text.strip().split('\n')[-1].strip()
+            if (last_line.endswith(',') or last_line.endswith(':') or 
+                last_line.endswith('"content":') or last_line.endswith('"content": "')):
+                logger.debug(f"[잘린JSON감지] 일반적인 잘림 패턴: {last_line[-20:]}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"[잘린JSON감지] 잘린 JSON 감지 중 오류: {e}")
+            return False
+
     def _parse_json_fallback(self, text: str, tools: List[Callable], section_title: str) -> List[Dict[str, Any]]:
         """
         LLM이 tool calling 대신 JSON 텍스트로 응답한 경우를 파싱하여 컴포넌트를 생성합니다.
@@ -461,6 +538,13 @@ class ResponseFormatterAgent(BaseAgent):
             import json
             import re
 
+            # MAX_TOKENS로 인해 잘린 JSON인지 감지
+            is_truncated_json = self._detect_truncated_json(text)
+            
+            if is_truncated_json:
+                logger.info(f"[JSON처리] 섹션 '{section_title}' 잘린 JSON 감지, 부분 파싱 시도")
+                return self._parse_partial_json(text, tools, section_title)
+
             # JSON 블록 추출 (```json ... ``` 또는 단순 JSON 배열)
             json_pattern = r"```json\s*(\[.*?\])\s*```"
             json_match = re.search(json_pattern, text, re.DOTALL)
@@ -475,18 +559,21 @@ class ResponseFormatterAgent(BaseAgent):
                     json_text = json_array_match.group(1)
                 else:
                     logger.warning(f"JSON 패턴을 찾을 수 없음: {text[:200]}...")
-                    return []
+                    # 패턴을 찾을 수 없는 경우에도 부분 파싱 시도
+                    return self._parse_partial_json(text, tools, section_title)
 
             # JSON 파싱
             try:
                 components_data = json.loads(json_text)
             except json.JSONDecodeError as e:
                 logger.error(f"JSON 파싱 오류: {e}, JSON 텍스트: {json_text[:200]}...")
-                return []
+                # JSON 파싱 실패 시 부분 파싱 시도
+                logger.info(f"[JSON처리] 섹션 '{section_title}' 표준 JSON 파싱 실패, 부분 파싱 시도")
+                return self._parse_partial_json(text, tools, section_title)
 
             if not isinstance(components_data, list):
                 logger.warning(f"JSON이 배열 형태가 아님: {type(components_data)}")
-                return []
+                return self._parse_partial_json(text, tools, section_title)
 
             # 컴포넌트 생성
             processed_components = []
@@ -656,6 +743,353 @@ class ResponseFormatterAgent(BaseAgent):
         except Exception as e:
             logger.error(f"JSON fallback 파싱 중 오류: {e}")
             return []
+
+    def _parse_partial_json(self, text: str, tools: List[Callable], section_title: str) -> List[Dict[str, Any]]:
+        """
+        MAX_TOKENS로 인해 잘린 JSON을 가능한 한 파싱하여 컴포넌트를 생성합니다.
+
+        Args:
+            text: LLM이 반환한 텍스트 (불완전한 JSON 포함)
+            tools: 사용 가능한 tool 함수들
+            section_title: 섹션 제목
+
+        Returns:
+            파싱된 컴포넌트들의 리스트
+        """
+        try:
+            import json
+            import re
+
+            logger.info(f"[부분JSON파싱] 섹션 '{section_title}' 부분 JSON 파싱 시작")
+
+            # JSON 블록 추출 (```json ... ``` 또는 단순 JSON 배열)
+            json_pattern = r"```json\s*(.*?)(?:```|$)"
+            json_match = re.search(json_pattern, text, re.DOTALL)
+
+            raw_json_text = ""
+            if json_match:
+                raw_json_text = json_match.group(1).strip()
+            else:
+                # ```json``` 블록이 없는 경우, [ 로 시작하는 부분부터 끝까지
+                json_array_pattern = r"(\[.*?)(?:\s*$)"
+                json_array_match = re.search(json_array_pattern, text, re.DOTALL)
+                if json_array_match:
+                    raw_json_text = json_array_match.group(1).strip()
+                else:
+                    logger.warning(f"[부분JSON파싱] JSON 패턴을 찾을 수 없음: {text[:200]}...")
+                    return self._fallback_to_text_parsing(text, tools, section_title)
+
+            if not raw_json_text:
+                logger.warning(f"[부분JSON파싱] 추출된 JSON 텍스트가 비어있음")
+                return self._fallback_to_text_parsing(text, tools, section_title)
+
+            # 완전한 JSON 객체들만 추출하려고 시도
+            processed_components = []
+            
+            # 1. 먼저 완전한 JSON 배열로 파싱 시도
+            try:
+                # 닫는 괄호 추가하여 완성 시도
+                if raw_json_text.startswith('[') and not raw_json_text.rstrip().endswith(']'):
+                    complete_json_text = raw_json_text.rstrip()
+                    # 마지막 완전하지 않은 객체 제거
+                    if complete_json_text.endswith(','):
+                        complete_json_text = complete_json_text[:-1]
+                    complete_json_text += ']'
+                    
+                    components_data = json.loads(complete_json_text)
+                    logger.info(f"[부분JSON파싱] 완성된 JSON으로 파싱 성공: {len(components_data)}개 객체")
+                    
+                    # 성공적으로 파싱된 경우 컴포넌트 생성
+                    processed_components = self._create_components_from_data(components_data, tools, section_title)
+                    
+                    if processed_components:
+                        return processed_components
+                        
+            except json.JSONDecodeError:
+                logger.info(f"[부분JSON파싱] 완성된 JSON 파싱 실패, 개별 객체 파싱 시도")
+                pass
+
+            # 2. 개별 JSON 객체들을 하나씩 파싱 시도
+            json_objects = self._extract_individual_json_objects(raw_json_text)
+            logger.info(f"[부분JSON파싱] 추출된 개별 JSON 객체 수: {len(json_objects)}")
+            
+            for i, obj_text in enumerate(json_objects):
+                try:
+                    component_data = json.loads(obj_text)
+                    if isinstance(component_data, dict) and "type" in component_data:
+                        component = self._create_single_component(component_data, tools, section_title, processed_components)
+                        if component:
+                            processed_components.append(component)
+                            logger.debug(f"[부분JSON파싱] 객체 {i+1} 파싱 성공: {component_data.get('type')}")
+                    
+                except json.JSONDecodeError as e:
+                    logger.warning(f"[부분JSON파싱] 객체 {i+1} 파싱 실패: {e}")
+                    continue
+                except Exception as e:
+                    logger.error(f"[부분JSON파싱] 객체 {i+1} 처리 중 오류: {e}")
+                    continue
+
+            # 3. 아무것도 파싱되지 않은 경우 텍스트 기반 처리
+            if not processed_components:
+                logger.warning(f"[부분JSON파싱] JSON 파싱 완전 실패, 텍스트 기반 처리로 전환")
+                return self._fallback_to_text_parsing(text, tools, section_title)
+
+            # 섹션 제목 추가
+            if not any(comp.get("type") == "heading" and comp.get("content", "").strip() == section_title.strip() for comp in processed_components):
+                section_heading = create_heading({"level": 2, "content": section_title})
+                processed_components.insert(0, section_heading)
+
+            logger.info(f"[부분JSON파싱] 섹션 '{section_title}' 부분 JSON 파싱 완료: {len(processed_components)}개 컴포넌트 생성")
+            return processed_components
+
+        except Exception as e:
+            logger.error(f"[부분JSON파싱] 섹션 '{section_title}' 부분 JSON 파싱 중 오류: {e}")
+            return self._fallback_to_text_parsing(text, tools, section_title)
+
+    def _extract_individual_json_objects(self, json_text: str) -> List[str]:
+        """
+        JSON 텍스트에서 개별 객체들을 추출합니다.
+        """
+        objects = []
+        try:
+            # [ 다음부터 시작하여 { } 쌍을 찾아 개별 객체 추출
+            if not json_text.strip().startswith('['):
+                return objects
+                
+            content = json_text.strip()[1:]  # 첫 번째 [ 제거
+            
+            brace_count = 0
+            current_object = ""
+            in_string = False
+            escape_next = False
+            
+            for char in content:
+                if escape_next:
+                    current_object += char
+                    escape_next = False
+                    continue
+                    
+                if char == '\\':
+                    escape_next = True
+                    current_object += char
+                    continue
+                    
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    
+                current_object += char
+                
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        
+                        if brace_count == 0:
+                            # 완전한 객체 발견
+                            objects.append(current_object.strip().rstrip(',').strip())
+                            current_object = ""
+                            
+            return objects
+            
+        except Exception as e:
+            logger.error(f"[개별객체추출] JSON 객체 추출 중 오류: {e}")
+            return objects
+
+    def _create_components_from_data(self, components_data: List[Dict], tools: List[Callable], section_title: str) -> List[Dict[str, Any]]:
+        """
+        파싱된 JSON 데이터에서 컴포넌트들을 생성합니다.
+        """
+        processed_components = []
+        first_component_added = False
+        
+        for component_data in components_data:
+            if not isinstance(component_data, dict) or "type" not in component_data:
+                continue
+                
+            component = self._create_single_component(component_data, tools, section_title, processed_components)
+            if component:
+                processed_components.append(component)
+                if not first_component_added:
+                    first_component_added = True
+                    
+        return processed_components
+
+    def _create_single_component(self, component_data: Dict, tools: List[Callable], section_title: str, existing_components: List) -> Dict[str, Any]:
+        """
+        단일 컴포넌트 데이터에서 컴포넌트를 생성합니다.
+        """
+        try:
+            component_type = component_data.get("type")
+            
+            if component_type == "heading":
+                level = component_data.get("level", 2)
+                content = component_data.get("content", "")
+                if isinstance(level, float):
+                    level = int(level)
+                    
+                tool_func = next((t for t in tools if t.name == "create_heading"), None)
+                if tool_func:
+                    return tool_func.invoke({"level": level, "content": content})
+                    
+            elif component_type == "paragraph":
+                content = component_data.get("content", "")
+                tool_func = next((t for t in tools if t.name == "create_paragraph"), None)
+                if tool_func:
+                    return tool_func.invoke({"content": content})
+                    
+            elif component_type == "list":
+                ordered = component_data.get("ordered", False)
+                items = component_data.get("items", [])
+                
+                if isinstance(items, list) and all(isinstance(item, str) for item in items):
+                    tool_func = next((t for t in tools if t.name == "create_list"), None)
+                    if tool_func:
+                        return tool_func.invoke({"ordered": ordered, "items": items})
+                        
+            elif component_type == "table":
+                title = component_data.get("title")
+                headers = component_data.get("headers", [])
+                rows = component_data.get("rows", [])
+                
+                tool_func = next((t for t in tools if t.name == "create_table"), None)
+                if tool_func:
+                    return tool_func.invoke({"headers": headers, "rows": rows, "title": title})
+                    
+            elif component_type == "bar_chart":
+                title = component_data.get("title", "")
+                labels = component_data.get("labels", [])
+                datasets = component_data.get("datasets", [])
+                
+                tool_func = next((t for t in tools if t.name == "create_bar_chart"), None)
+                if tool_func:
+                    return tool_func.invoke({"title": title, "labels": labels, "datasets": datasets})
+                    
+            elif component_type == "line_chart":
+                title = component_data.get("title", "")
+                labels = component_data.get("labels", [])
+                datasets = component_data.get("datasets", [])
+                
+                tool_func = next((t for t in tools if t.name == "create_line_chart"), None)
+                if tool_func:
+                    return tool_func.invoke({"title": title, "labels": labels, "datasets": datasets})
+                    
+            elif component_type == "mixed_chart":
+                title = component_data.get("title", "")
+                labels = component_data.get("labels", [])
+                bar_datasets = component_data.get("bar_datasets", [])
+                line_datasets = component_data.get("line_datasets", [])
+                y_axis_left_title = component_data.get("y_axis_left_title")
+                y_axis_right_title = component_data.get("y_axis_right_title")
+                
+                tool_func = next((t for t in tools if t.name == "create_mixed_chart"), None)
+                if tool_func:
+                    return tool_func.invoke({
+                        "title": title,
+                        "labels": labels,
+                        "bar_datasets": bar_datasets,
+                        "line_datasets": line_datasets,
+                        "y_axis_left_title": y_axis_left_title,
+                        "y_axis_right_title": y_axis_right_title,
+                    })
+                    
+            elif component_type == "code_block":
+                language = component_data.get("language")
+                content = component_data.get("content", "")
+                
+                tool_func = next((t for t in tools if t.name == "create_code_block"), None)
+                if tool_func:
+                    return tool_func.invoke({"language": language, "content": content})
+                    
+            else:
+                logger.warning(f"[단일컴포넌트생성] 지원하지 않는 컴포넌트 타입: {component_type}")
+                # 지원하지 않는 타입의 경우 content를 paragraph로 변환
+                content = component_data.get("content", str(component_data))
+                if content and content.strip():
+                    tool_func = next((t for t in tools if t.name == "create_paragraph"), None)
+                    if tool_func:
+                        return tool_func.invoke({"content": content})
+            
+        except Exception as e:
+            logger.error(f"[단일컴포넌트생성] 컴포넌트 생성 오류 (타입: {component_data.get('type')}): {e}")
+            
+        return None
+
+    def _fallback_to_text_parsing(self, text: str, tools: List[Callable], section_title: str) -> List[Dict[str, Any]]:
+        """
+        JSON 파싱이 완전히 실패한 경우 텍스트 기반으로 컴포넌트를 생성합니다.
+        """
+        components = []
+        
+        # 섹션 제목 추가
+        components.append(create_heading({"level": 2, "content": section_title}))
+        
+        # JSON 마커나 불완전한 구조 제거하고 의미있는 텍스트만 추출
+        cleaned_text = self._extract_meaningful_text(text)
+        
+        if cleaned_text.strip():
+            components.append(create_paragraph({"content": cleaned_text}))
+            logger.info(f"[텍스트기반처리] 섹션 '{section_title}' 텍스트 기반 컴포넌트 생성 완료")
+        else:
+            components.append(create_paragraph({"content": "내용을 불러오는 중 문제가 발생했습니다."}))
+            logger.warning(f"[텍스트기반처리] 섹션 '{section_title}' 의미있는 텍스트를 찾을 수 없음")
+        
+        return components
+
+    def _extract_meaningful_text(self, text: str) -> str:
+        """
+        텍스트에서 의미있는 내용만 추출합니다.
+        """
+        # JSON 구조나 마커 제거
+        import re
+        
+        # ```json ... ``` 블록 제거
+        text = re.sub(r'```json.*?```', '', text, flags=re.DOTALL)
+        
+        meaningful_parts = []
+        
+        # 1. content": "..." 패턴에서 내용 추출
+        content_matches = re.findall(r'"content":\s*"([^"]*)"', text)
+        for content in content_matches:
+            if content.strip() and len(content.strip()) > 3:  # 의미있는 길이의 텍스트만
+                meaningful_parts.append(content.strip())
+        
+        # 2. 잘린 content": "... 패턴 처리 (마지막에 끝나지 않은 경우)
+        truncated_content_match = re.search(r'"content":\s*"([^"]*?)(?:\s*$)', text)
+        if truncated_content_match and truncated_content_match.group(1).strip():
+            truncated_content = truncated_content_match.group(1).strip()
+            if len(truncated_content) > 10 and truncated_content not in meaningful_parts:
+                meaningful_parts.append(truncated_content)
+                logger.debug(f"[의미텍스트추출] 잘린 content 추출: {truncated_content[:50]}...")
+        
+        # 3. 한국어 문장이 포함된 부분을 직접 추출
+        korean_sentences = re.findall(r'[가-힣][가-힣\s\.\,\(\)\-\d]+[가-힣\.]', text)
+        for sentence in korean_sentences:
+            if len(sentence.strip()) > 15:  # 충분히 긴 문장만
+                meaningful_parts.append(sentence.strip())
+        
+        # 4. content가 없으면 일반 텍스트에서 추출
+        if not meaningful_parts:
+            # JSON 구조 문자들 제거하고 의미있는 텍스트만 남기기
+            cleaned = re.sub(r'[{}\[\],:"\\]', ' ', text)
+            cleaned = re.sub(r'\s+', ' ', cleaned)
+            cleaned = cleaned.strip()
+            
+            # type, level, content 등 키워드 제거
+            cleaned = re.sub(r'\b(type|level|content|heading|paragraph|list|ordered|items)\b', '', cleaned)
+            cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+            
+            if cleaned and len(cleaned) > 10:
+                meaningful_parts.append(cleaned)
+        
+        # 중복 제거 및 정리
+        unique_parts = []
+        for part in meaningful_parts:
+            if part not in unique_parts and part.strip():
+                unique_parts.append(part.strip())
+        
+        result = ' '.join(unique_parts)
+        return result.strip() if result else ""
 
     async def _process_section_async(
         self,
@@ -886,8 +1320,24 @@ class ResponseFormatterAgent(BaseAgent):
                 elif llm_generated_text_for_section.strip():  # 툴 콜 없이 텍스트만 반환된 경우
                     logger.warning(f"[툴콜없음] 섹션 '{section_title}'에 대해 Tool calling 없이 일반 텍스트 응답을 받았습니다.")
 
+                    # MAX_TOKENS인지 확인 (section_response의 finish_reason 체크)
+                    is_max_tokens = False
+                    if hasattr(section_response, "response_metadata"):
+                        finish_reason = section_response.response_metadata.get("finish_reason")
+                        if finish_reason == "MAX_TOKENS":
+                            is_max_tokens = True
+                            logger.info(f"[MAX_TOKENS처리] 섹션 '{section_title}' MAX_TOKENS로 인한 텍스트 응답, 부분 파싱 진행")
+
                     # JSON 형태의 tool calling 결과가 텍스트로 반환된 경우 파싱 시도
-                    fallback_components = self._parse_json_fallback(llm_generated_text_for_section, tools, section_title)
+                    if is_max_tokens:
+                        # MAX_TOKENS인 경우 부분 파싱 우선 시도
+                        fallback_components = self._parse_partial_json(llm_generated_text_for_section, tools, section_title)
+                        if not fallback_components:
+                            # 부분 파싱도 실패한 경우 일반 fallback 시도
+                            fallback_components = self._parse_json_fallback(llm_generated_text_for_section, tools, section_title)
+                    else:
+                        # 일반적인 경우 기존 fallback 처리
+                        fallback_components = self._parse_json_fallback(llm_generated_text_for_section, tools, section_title)
 
                     if fallback_components:
                         # JSON 파싱 성공 시 fallback 컴포넌트들 사용
