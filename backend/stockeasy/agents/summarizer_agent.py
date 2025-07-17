@@ -96,9 +96,11 @@ class SummarizerAgent(BaseAgent):
         # 괄호로 둘러싸인 모든 패턴 처리
         text = re.sub(r"\(([^)]+)\)", process_parentheses_content, text)
 
-        # 연속된 공백 정리
-        text = re.sub(r"\s+", " ", text)
-        text = text.strip()
+        # # 연속된 공백 정리 (줄바꿈은 보존하고 연속된 스페이스와 탭만 제거)
+        # text = re.sub(r"[ \t]+", " ", text)  # 스페이스와 탭만 하나로 정리
+        # text = re.sub(r"\n[ \t]+", "\n", text)  # 줄바꿈 뒤의 불필요한 공백 제거
+        # text = re.sub(r"[ \t]+\n", "\n", text)  # 줄바꿈 앞의 불필요한 공백 제거
+        # text = text.strip()
 
         return text
 
