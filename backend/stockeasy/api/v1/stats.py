@@ -17,15 +17,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.core.database import get_db_async
 from common.core.deps import get_current_session
-from common.core.redis import AsyncRedisClient
+from common.core.redis import async_redis_client
 from common.models.user import Session
 from stockeasy.models.chat import StockChatSession
 
 # 통계 라우터 정의
 stats_router = APIRouter(prefix="/stats", tags=["통계"])
 
-# Redis 클라이언트 초기화
-redis_client = AsyncRedisClient()
+# Redis 클라이언트 초기화 (싱글톤 인스턴스 사용)
+redis_client = async_redis_client
 
 
 class RankChangeType(str, Enum):

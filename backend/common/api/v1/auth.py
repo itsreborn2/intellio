@@ -6,7 +6,7 @@ from httpx import request
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
-from common.core.redis import RedisClient
+from common.core.redis import redis_client # RedisClient 클래스 대신 싱글톤 인스턴스 import
 from common.core.exceptions import AuthenticationRedirectException
 from common.core.database import get_db_async
 from common.models.user import Session
@@ -230,13 +230,12 @@ async def oauth_callback(
         # state: http://localhost:3000/::token_string, redirect_uri: None
 
                 
-        redis_client = RedisClient()
+        # redis_client = RedisClient() # 직접 생성하는 대신 싱글톤 인스턴스 사용
         key = f"oauth_state:{state}"
-        
-        stored_state = redis_client.get_key(key)
-        logger.info(f"Auth REDIS get key: {key} - {stored_state}")
-        if not stored_state or stored_state != state:
-            logger.info(f"oauth_callback - stored_state: {stored_state}, state: {state}")
+        saved_state = redis_client.get_key(key)
+        logger.info(f"Auth REDIS get key: {key} - {saved_state}")
+        if not saved_state or saved_state != state:
+            logger.info(f"oauth_callback - stored_state: {saved_state}, state: {state}")
             raise HTTPException(
                 status_code=400,
                 detail="Invalid OAuth state parameter"
