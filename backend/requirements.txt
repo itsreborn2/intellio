@@ -279,3 +279,4 @@ yarg==0.1.9
 yarl==1.20.0
 zstandard==0.23.0
 ruff>=0.12.0
+mplfinance>=0.1

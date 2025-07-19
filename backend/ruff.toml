@@ -48,6 +48,12 @@ select = [
     "I",  # isort
 ]
 
+# Ignore specific rules
+ignore = [
+    "E722",  # Do not use bare `except`
+    "F841", # assgined never used
+]
+
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
 unfixable = []

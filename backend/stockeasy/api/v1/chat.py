@@ -725,7 +725,7 @@ async def stream_chat_message(
 
                     # 에이전트 응답 저장
                     async with AsyncSessionLocal() as save_db:
-                        # 사용자 메시지 저장
+                    # 사용자 메시지 저장녀
                         logger.debug("[STREAM_CHAT] 사용자 메시지 저장 중...")
                         user_message = await ChatService.create_chat_message(
                             db=save_db, chat_session_id=chat_session_id, role="user", content=request.message, stock_code=request.stock_code, stock_name=request.stock_name

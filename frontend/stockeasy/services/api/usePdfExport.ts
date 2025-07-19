@@ -51,11 +51,20 @@ export function usePdfExport(): UsePdfExportReturn {
       
       const data = await response.json();
       
-      // PDF 다운로드 링크 열기
+      // PDF 다운로드 처리
       if (data.download_url) {
-        // 새 탭에서 다운로드 링크 열기
-        window.open(data.download_url, '_blank');
-        // 성공 메시지는 표시하지 않음 (불필요한 토스트 제거)
+        // 더 확실한 다운로드 방법: a 태그를 동적으로 생성하여 클릭
+        const link = document.createElement('a');
+        link.href = data.download_url;
+        link.download = data.file_name || 'stockeasy_chat.pdf'; // 파일명 설정
+        link.target = '_blank'; // 새 탭에서 열기 (다운로드가 안 될 경우 대비)
+        
+        // DOM에 추가하지 않고 직접 클릭 (보이지 않는 링크)
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.success('PDF 다운로드가 시작되었습니다.');
       } else {
         toast.error('PDF 다운로드 URL이 제공되지 않았습니다.');
       }

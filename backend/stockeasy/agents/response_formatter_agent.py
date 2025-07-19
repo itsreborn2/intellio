@@ -2185,12 +2185,6 @@ def create_mixed_chart(
     ).dict()
 
 
-@tool
-def create_code_block(language: Optional[str], content: str) -> Dict:
-    """코드 블록 컴포넌트를 생성합니다. language는 언어(선택), content는 코드 내용입니다."""
-    return CodeBlockComponent(language=language, content=content).dict()
-
-
 def create_price_chart(
     symbol: str,
     name: str,
