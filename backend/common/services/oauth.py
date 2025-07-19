@@ -7,7 +7,7 @@ from common.core.config import settings
 from loguru import logger
 import ssl
 import secrets
-from common.core.redis import RedisClient
+from common.core.redis import redis_client # RedisClient 클래스 대신 싱글톤 인스턴스 import
 import json
 import time
 
@@ -188,9 +188,10 @@ class OAuthService:
         # 32바이트 랜덤 문자열 추가생성
         state_add_token = state + "__" + secrets.token_hex(16)
         
-        redis_client = RedisClient()
-        redis_client.set_key(f"oauth_state:{state_add_token}", state_add_token, expire=180)
-        logger.info(f"Auth REDIS set key :  'oauth_state:{state_add_token}'")
+        # redis_client = RedisClient() # 직접 생성하는 대신 싱글톤 인스턴스 사용
+        key = f"oauth_state:{state_add_token}"
+        redis_client.set_key(key, state_add_token, expire=300) # 5분간 유효
+        logger.info(f"Oauth REDIS set key: {key} - {state_add_token}")
         
         # Intent 방식을 위한 Deep Link URI 설정
         if use_deep_link:
@@ -345,7 +346,8 @@ class OAuthService:
         try:
             # Redis에 임시 세션 데이터 저장
             bridge_token = secrets.token_hex(32)
-            redis_client = RedisClient()
+            # redis_client = RedisClient() # 직접 생성하는 대신 싱글톤 인스턴스 사용
+            key = f"oauth_bridge:{bridge_token}"
             
             bridge_data = {
                 "provider": provider,
@@ -357,7 +359,7 @@ class OAuthService:
             
             # 5분간 유효한 브리지 토큰
             redis_client.set_key(
-                f"oauth_bridge:{bridge_token}", 
+                key, 
                 json.dumps(bridge_data), 
                 expire=300
             )

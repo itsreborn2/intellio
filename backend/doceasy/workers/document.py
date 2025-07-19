@@ -12,7 +12,7 @@ from typing import List, Optional
 from common.models.token_usage import ProjectType, TokenType
 from common.app import LoadEnvGlobal
 from common.core.database import SessionLocal, get_db_async, AsyncSessionLocal
-from common.core.redis import RedisClient
+from common.core.redis import redis_client
 from common.services.embedding import EmbeddingService
 from common.services.textsplitter import TextSplitter
 from common.services.vector_store_manager import VectorStoreManager
@@ -44,7 +44,7 @@ def init_worker(sender=None, **kwargs):
         LoadEnvGlobal()
         logger.info(f"Document Worker 초기화 [ProcessID: {os.getpid()}]")
         global redis_client_for_document
-        redis_client_for_document = RedisClient()
+        redis_client_for_document = redis_client  # 싱글톤 인스턴스 사용
 
         # 토큰 사용량 추적 초기화
         try:

@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field, validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.core.config import settings
-from common.core.redis import AsyncRedisClient
+from common.core.redis import async_redis_client  # AsyncRedisClient 클래스 대신 싱글톤 인스턴스를 가져옵니다.
 from common.models.token_usage import ProjectType
 from common.services.agent_llm import get_agent_llm
 
@@ -206,7 +206,7 @@ class QuestionAnalyzerAgent(BaseAgent):
 
         # self.tavily_search = TavilySearch(api_key=settings.TAVILY_API_KEY)
         self.tavily_service = TavilyService()
-        self.redis_client = AsyncRedisClient()
+        self.redis_client = async_redis_client  # 직접 인스턴스를 생성하는 대신 싱글톤 인스턴스를 사용합니다.
 
         # 기술적 분석 관련 키워드 정의
         self.technical_analysis_keywords = {
