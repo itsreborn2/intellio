@@ -461,63 +461,62 @@ class ResponseFormatterAgent(BaseAgent):
         """
         try:
             import re
-            
+
             # 1. ```json으로 시작하지만 ```로 끝나지 않는 경우
-            if text.strip().startswith('```json') and not text.strip().endswith('```'):
+            if text.strip().startswith("```json") and not text.strip().endswith("```"):
                 logger.debug("[잘린JSON감지] ```json으로 시작하지만 ```로 끝나지 않음")
                 return True
-            
+
             # 2. [ 로 시작하지만 ] 로 끝나지 않는 경우
             json_array_pattern = r"\[.*"
             if re.search(json_array_pattern, text, re.DOTALL):
-                if not text.strip().endswith(']'):
+                if not text.strip().endswith("]"):
                     logger.debug("[잘린JSON감지] [로 시작하지만 ]로 끝나지 않음")
                     return True
-            
+
             # 3. JSON 객체가 중간에 끊어진 경우 (불완전한 중괄호)
             brace_count = 0
             in_string = False
             escape_next = False
-            
+
             for char in text:
                 if escape_next:
                     escape_next = False
                     continue
-                    
-                if char == '\\':
+
+                if char == "\\":
                     escape_next = True
                     continue
-                    
+
                 if char == '"' and not escape_next:
                     in_string = not in_string
-                    
+
                 if not in_string:
-                    if char == '{':
+                    if char == "{":
                         brace_count += 1
-                    elif char == '}':
+                    elif char == "}":
                         brace_count -= 1
-            
+
             # 중괄호가 맞지 않으면 잘린 것으로 판단
             if brace_count != 0:
                 logger.debug(f"[잘린JSON감지] 중괄호 불균형 (brace_count: {brace_count})")
                 return True
-            
+
             # 4. JSON 문자열이 끝나지 않은 채로 끝나는 경우
             if text.strip().endswith('"') and text.count('"') % 2 != 0:
                 logger.debug("[잘린JSON감지] 문자열이 닫히지 않음")
                 return True
-                
+
             # 5. 일반적인 잘림 패턴들
             # - 마지막이 콤마나 콜론으로 끝나는 경우
             # - "content": "...로 끝나는 경우 (완성되지 않은 content 필드)
-            last_line = text.strip().split('\n')[-1].strip()
-            if (last_line.endswith(',') or last_line.endswith(':') or 
-                last_line.endswith('"content":') or last_line.endswith('"content": "')):
+            last_line = text.strip().split("\n")[-1].strip()
+            if last_line.endswith(",") or last_line.endswith(":") or last_line.endswith('"content":') or last_line.endswith('"content": "'):
                 logger.debug(f"[잘린JSON감지] 일반적인 잘림 패턴: {last_line[-20:]}")
                 return True
-            
+
             return False
-            
+
         except Exception as e:
             logger.error(f"[잘린JSON감지] 잘린 JSON 감지 중 오류: {e}")
             return False
@@ -540,7 +539,7 @@ class ResponseFormatterAgent(BaseAgent):
 
             # MAX_TOKENS로 인해 잘린 JSON인지 감지
             is_truncated_json = self._detect_truncated_json(text)
-            
+
             if is_truncated_json:
                 logger.info(f"[JSON처리] 섹션 '{section_title}' 잘린 JSON 감지, 부분 파싱 시도")
                 return self._parse_partial_json(text, tools, section_title)
@@ -780,39 +779,39 @@ class ResponseFormatterAgent(BaseAgent):
                     return self._fallback_to_text_parsing(text, tools, section_title)
 
             if not raw_json_text:
-                logger.warning(f"[부분JSON파싱] 추출된 JSON 텍스트가 비어있음")
+                logger.warning("[부분JSON파싱] 추출된 JSON 텍스트가 비어있음")
                 return self._fallback_to_text_parsing(text, tools, section_title)
 
             # 완전한 JSON 객체들만 추출하려고 시도
             processed_components = []
-            
+
             # 1. 먼저 완전한 JSON 배열로 파싱 시도
             try:
                 # 닫는 괄호 추가하여 완성 시도
-                if raw_json_text.startswith('[') and not raw_json_text.rstrip().endswith(']'):
+                if raw_json_text.startswith("[") and not raw_json_text.rstrip().endswith("]"):
                     complete_json_text = raw_json_text.rstrip()
                     # 마지막 완전하지 않은 객체 제거
-                    if complete_json_text.endswith(','):
+                    if complete_json_text.endswith(","):
                         complete_json_text = complete_json_text[:-1]
-                    complete_json_text += ']'
-                    
+                    complete_json_text += "]"
+
                     components_data = json.loads(complete_json_text)
                     logger.info(f"[부분JSON파싱] 완성된 JSON으로 파싱 성공: {len(components_data)}개 객체")
-                    
+
                     # 성공적으로 파싱된 경우 컴포넌트 생성
                     processed_components = self._create_components_from_data(components_data, tools, section_title)
-                    
+
                     if processed_components:
                         return processed_components
-                        
+
             except json.JSONDecodeError:
-                logger.info(f"[부분JSON파싱] 완성된 JSON 파싱 실패, 개별 객체 파싱 시도")
+                logger.info("[부분JSON파싱] 완성된 JSON 파싱 실패, 개별 객체 파싱 시도")
                 pass
 
             # 2. 개별 JSON 객체들을 하나씩 파싱 시도
             json_objects = self._extract_individual_json_objects(raw_json_text)
             logger.info(f"[부분JSON파싱] 추출된 개별 JSON 객체 수: {len(json_objects)}")
-            
+
             for i, obj_text in enumerate(json_objects):
                 try:
                     component_data = json.loads(obj_text)
@@ -820,18 +819,18 @@ class ResponseFormatterAgent(BaseAgent):
                         component = self._create_single_component(component_data, tools, section_title, processed_components)
                         if component:
                             processed_components.append(component)
-                            logger.debug(f"[부분JSON파싱] 객체 {i+1} 파싱 성공: {component_data.get('type')}")
-                    
+                            logger.debug(f"[부분JSON파싱] 객체 {i + 1} 파싱 성공: {component_data.get('type')}")
+
                 except json.JSONDecodeError as e:
-                    logger.warning(f"[부분JSON파싱] 객체 {i+1} 파싱 실패: {e}")
+                    logger.warning(f"[부분JSON파싱] 객체 {i + 1} 파싱 실패: {e}")
                     continue
                 except Exception as e:
-                    logger.error(f"[부분JSON파싱] 객체 {i+1} 처리 중 오류: {e}")
+                    logger.error(f"[부분JSON파싱] 객체 {i + 1} 처리 중 오류: {e}")
                     continue
 
             # 3. 아무것도 파싱되지 않은 경우 텍스트 기반 처리
             if not processed_components:
-                logger.warning(f"[부분JSON파싱] JSON 파싱 완전 실패, 텍스트 기반 처리로 전환")
+                logger.warning("[부분JSON파싱] JSON 파싱 완전 실패, 텍스트 기반 처리로 전환")
                 return self._fallback_to_text_parsing(text, tools, section_title)
 
             # 섹션 제목 추가
@@ -853,45 +852,45 @@ class ResponseFormatterAgent(BaseAgent):
         objects = []
         try:
             # [ 다음부터 시작하여 { } 쌍을 찾아 개별 객체 추출
-            if not json_text.strip().startswith('['):
+            if not json_text.strip().startswith("["):
                 return objects
-                
+
             content = json_text.strip()[1:]  # 첫 번째 [ 제거
-            
+
             brace_count = 0
             current_object = ""
             in_string = False
             escape_next = False
-            
+
             for char in content:
                 if escape_next:
                     current_object += char
                     escape_next = False
                     continue
-                    
-                if char == '\\':
+
+                if char == "\\":
                     escape_next = True
                     current_object += char
                     continue
-                    
+
                 if char == '"' and not escape_next:
                     in_string = not in_string
-                    
+
                 current_object += char
-                
+
                 if not in_string:
-                    if char == '{':
+                    if char == "{":
                         brace_count += 1
-                    elif char == '}':
+                    elif char == "}":
                         brace_count -= 1
-                        
+
                         if brace_count == 0:
                             # 완전한 객체 발견
-                            objects.append(current_object.strip().rstrip(',').strip())
+                            objects.append(current_object.strip().rstrip(",").strip())
                             current_object = ""
-                            
+
             return objects
-            
+
         except Exception as e:
             logger.error(f"[개별객체추출] JSON 객체 추출 중 오류: {e}")
             return objects
@@ -902,17 +901,17 @@ class ResponseFormatterAgent(BaseAgent):
         """
         processed_components = []
         first_component_added = False
-        
+
         for component_data in components_data:
             if not isinstance(component_data, dict) or "type" not in component_data:
                 continue
-                
+
             component = self._create_single_component(component_data, tools, section_title, processed_components)
             if component:
                 processed_components.append(component)
                 if not first_component_added:
                     first_component_added = True
-                    
+
         return processed_components
 
     def _create_single_component(self, component_data: Dict, tools: List[Callable], section_title: str, existing_components: List) -> Dict[str, Any]:
@@ -921,59 +920,59 @@ class ResponseFormatterAgent(BaseAgent):
         """
         try:
             component_type = component_data.get("type")
-            
+
             if component_type == "heading":
                 level = component_data.get("level", 2)
                 content = component_data.get("content", "")
                 if isinstance(level, float):
                     level = int(level)
-                    
+
                 tool_func = next((t for t in tools if t.name == "create_heading"), None)
                 if tool_func:
                     return tool_func.invoke({"level": level, "content": content})
-                    
+
             elif component_type == "paragraph":
                 content = component_data.get("content", "")
                 tool_func = next((t for t in tools if t.name == "create_paragraph"), None)
                 if tool_func:
                     return tool_func.invoke({"content": content})
-                    
+
             elif component_type == "list":
                 ordered = component_data.get("ordered", False)
                 items = component_data.get("items", [])
-                
+
                 if isinstance(items, list) and all(isinstance(item, str) for item in items):
                     tool_func = next((t for t in tools if t.name == "create_list"), None)
                     if tool_func:
                         return tool_func.invoke({"ordered": ordered, "items": items})
-                        
+
             elif component_type == "table":
                 title = component_data.get("title")
                 headers = component_data.get("headers", [])
                 rows = component_data.get("rows", [])
-                
+
                 tool_func = next((t for t in tools if t.name == "create_table"), None)
                 if tool_func:
                     return tool_func.invoke({"headers": headers, "rows": rows, "title": title})
-                    
+
             elif component_type == "bar_chart":
                 title = component_data.get("title", "")
                 labels = component_data.get("labels", [])
                 datasets = component_data.get("datasets", [])
-                
+
                 tool_func = next((t for t in tools if t.name == "create_bar_chart"), None)
                 if tool_func:
                     return tool_func.invoke({"title": title, "labels": labels, "datasets": datasets})
-                    
+
             elif component_type == "line_chart":
                 title = component_data.get("title", "")
                 labels = component_data.get("labels", [])
                 datasets = component_data.get("datasets", [])
-                
+
                 tool_func = next((t for t in tools if t.name == "create_line_chart"), None)
                 if tool_func:
                     return tool_func.invoke({"title": title, "labels": labels, "datasets": datasets})
-                    
+
             elif component_type == "mixed_chart":
                 title = component_data.get("title", "")
                 labels = component_data.get("labels", [])
@@ -981,26 +980,28 @@ class ResponseFormatterAgent(BaseAgent):
                 line_datasets = component_data.get("line_datasets", [])
                 y_axis_left_title = component_data.get("y_axis_left_title")
                 y_axis_right_title = component_data.get("y_axis_right_title")
-                
+
                 tool_func = next((t for t in tools if t.name == "create_mixed_chart"), None)
                 if tool_func:
-                    return tool_func.invoke({
-                        "title": title,
-                        "labels": labels,
-                        "bar_datasets": bar_datasets,
-                        "line_datasets": line_datasets,
-                        "y_axis_left_title": y_axis_left_title,
-                        "y_axis_right_title": y_axis_right_title,
-                    })
-                    
+                    return tool_func.invoke(
+                        {
+                            "title": title,
+                            "labels": labels,
+                            "bar_datasets": bar_datasets,
+                            "line_datasets": line_datasets,
+                            "y_axis_left_title": y_axis_left_title,
+                            "y_axis_right_title": y_axis_right_title,
+                        }
+                    )
+
             elif component_type == "code_block":
                 language = component_data.get("language")
                 content = component_data.get("content", "")
-                
+
                 tool_func = next((t for t in tools if t.name == "create_code_block"), None)
                 if tool_func:
                     return tool_func.invoke({"language": language, "content": content})
-                    
+
             else:
                 logger.warning(f"[단일컴포넌트생성] 지원하지 않는 컴포넌트 타입: {component_type}")
                 # 지원하지 않는 타입의 경우 content를 paragraph로 변환
@@ -1009,10 +1010,10 @@ class ResponseFormatterAgent(BaseAgent):
                     tool_func = next((t for t in tools if t.name == "create_paragraph"), None)
                     if tool_func:
                         return tool_func.invoke({"content": content})
-            
+
         except Exception as e:
             logger.error(f"[단일컴포넌트생성] 컴포넌트 생성 오류 (타입: {component_data.get('type')}): {e}")
-            
+
         return None
 
     def _fallback_to_text_parsing(self, text: str, tools: List[Callable], section_title: str) -> List[Dict[str, Any]]:
@@ -1020,20 +1021,20 @@ class ResponseFormatterAgent(BaseAgent):
         JSON 파싱이 완전히 실패한 경우 텍스트 기반으로 컴포넌트를 생성합니다.
         """
         components = []
-        
+
         # 섹션 제목 추가
         components.append(create_heading({"level": 2, "content": section_title}))
-        
+
         # JSON 마커나 불완전한 구조 제거하고 의미있는 텍스트만 추출
         cleaned_text = self._extract_meaningful_text(text)
-        
+
         if cleaned_text.strip():
             components.append(create_paragraph({"content": cleaned_text}))
             logger.info(f"[텍스트기반처리] 섹션 '{section_title}' 텍스트 기반 컴포넌트 생성 완료")
         else:
             components.append(create_paragraph({"content": "내용을 불러오는 중 문제가 발생했습니다."}))
             logger.warning(f"[텍스트기반처리] 섹션 '{section_title}' 의미있는 텍스트를 찾을 수 없음")
-        
+
         return components
 
     def _extract_meaningful_text(self, text: str) -> str:
@@ -1042,18 +1043,18 @@ class ResponseFormatterAgent(BaseAgent):
         """
         # JSON 구조나 마커 제거
         import re
-        
+
         # ```json ... ``` 블록 제거
-        text = re.sub(r'```json.*?```', '', text, flags=re.DOTALL)
-        
+        text = re.sub(r"```json.*?```", "", text, flags=re.DOTALL)
+
         meaningful_parts = []
-        
+
         # 1. content": "..." 패턴에서 내용 추출
         content_matches = re.findall(r'"content":\s*"([^"]*)"', text)
         for content in content_matches:
             if content.strip() and len(content.strip()) > 3:  # 의미있는 길이의 텍스트만
                 meaningful_parts.append(content.strip())
-        
+
         # 2. 잘린 content": "... 패턴 처리 (마지막에 끝나지 않은 경우)
         truncated_content_match = re.search(r'"content":\s*"([^"]*?)(?:\s*$)', text)
         if truncated_content_match and truncated_content_match.group(1).strip():
@@ -1061,34 +1062,34 @@ class ResponseFormatterAgent(BaseAgent):
             if len(truncated_content) > 10 and truncated_content not in meaningful_parts:
                 meaningful_parts.append(truncated_content)
                 logger.debug(f"[의미텍스트추출] 잘린 content 추출: {truncated_content[:50]}...")
-        
+
         # 3. 한국어 문장이 포함된 부분을 직접 추출
-        korean_sentences = re.findall(r'[가-힣][가-힣\s\.\,\(\)\-\d]+[가-힣\.]', text)
+        korean_sentences = re.findall(r"[가-힣][가-힣\s\.\,\(\)\-\d]+[가-힣\.]", text)
         for sentence in korean_sentences:
             if len(sentence.strip()) > 15:  # 충분히 긴 문장만
                 meaningful_parts.append(sentence.strip())
-        
+
         # 4. content가 없으면 일반 텍스트에서 추출
         if not meaningful_parts:
             # JSON 구조 문자들 제거하고 의미있는 텍스트만 남기기
-            cleaned = re.sub(r'[{}\[\],:"\\]', ' ', text)
-            cleaned = re.sub(r'\s+', ' ', cleaned)
+            cleaned = re.sub(r'[{}\[\],:"\\]', " ", text)
+            cleaned = re.sub(r"\s+", " ", cleaned)
             cleaned = cleaned.strip()
-            
+
             # type, level, content 등 키워드 제거
-            cleaned = re.sub(r'\b(type|level|content|heading|paragraph|list|ordered|items)\b', '', cleaned)
-            cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-            
+            cleaned = re.sub(r"\b(type|level|content|heading|paragraph|list|ordered|items)\b", "", cleaned)
+            cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
             if cleaned and len(cleaned) > 10:
                 meaningful_parts.append(cleaned)
-        
+
         # 중복 제거 및 정리
         unique_parts = []
         for part in meaningful_parts:
             if part not in unique_parts and part.strip():
                 unique_parts.append(part.strip())
-        
-        result = ' '.join(unique_parts)
+
+        result = " ".join(unique_parts)
         return result.strip() if result else ""
 
     async def _process_section_async(
@@ -1154,6 +1155,22 @@ class ResponseFormatterAgent(BaseAgent):
             # section_heading_component = create_heading({"level": 2, "content": section_title})
             # section_components.append(section_heading_component)
 
+            # 섹션 내용에 실제로 플레이스홀더가 있는지 확인하고 동적으로 지시사항 생성
+            placeholder_instructions = []
+            if self.chart_placeholder in section_content:
+                placeholder_instructions.append(" - '[CHART_PLACEHOLDER:PRICE_CHART]'로 시작하는 문자열은 create_paragraph 컴포넌트를 호출합니다.")
+            if self.technical_indicator_chart_placeholder in section_content:
+                placeholder_instructions.append(" - '[CHART_PLACEHOLDER:TECHNICAL_INDICATOR_CHART]'로 시작하는 문자열은 create_paragraph 컴포넌트를 호출합니다.")
+            if self.trend_following_chart_placeholder in section_content:
+                placeholder_instructions.append(" - '[CHART_PLACEHOLDER:TREND_FOLLOWING_CHART]'로 시작하는 문자열은 create_paragraph 컴포넌트를 호출합니다.")
+            if self.momentum_chart_placeholder in section_content:
+                placeholder_instructions.append(" - '[CHART_PLACEHOLDER:MOMENTUM_CHART]'로 시작하는 문자열은 create_paragraph 컴포넌트를 호출합니다.")
+
+            # 플레이스홀더 지시사항 문자열 생성
+            placeholder_section = ""
+            if placeholder_instructions:
+                placeholder_section = "\n\n**중요 - 차트 플레이스홀더 처리**: \n" + "\n".join(placeholder_instructions)
+
             tool_calling_prompt = f"""
 다음 섹션의 내용을 구조화된 컴포넌트로 변환하세요:
 
@@ -1198,9 +1215,7 @@ class ResponseFormatterAgent(BaseAgent):
 
 표, 차트, 목록 등은 내용에 적합한 경우에만 사용하세요.
 섹션 제목은 이미 추가되었으니 다시 추가하지 마세요.
-주의: 마크다운 볼드체(**text** 또는 __text__)는 반드시 컴포넌트의 실제 내용 값에 포함되어야 합니다.
-
-**중요**: '[CHART_PLACEHOLDER:'로 시작하는 문자열은 create_paragraph 컴포넌트를 호출합니다.
+주의: 마크다운 볼드체(**text** 또는 __text__)는 반드시 컴포넌트의 실제 내용 값에 포함되어야 합니다.{placeholder_section}
 """
             llm_start_time = datetime.now()
 
