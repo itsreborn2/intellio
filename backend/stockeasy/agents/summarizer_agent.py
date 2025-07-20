@@ -226,7 +226,7 @@ class SummarizerAgent(BaseAgent):
         """
         logger.info("[SummarizerAgent] 동적 목차 기반 섹션별 요약 생성 시작 (v2: 핵심요약 후생성)")
         competitor_keywords = ["경쟁사", "경쟁업체", "경쟁기업", "라이벌", "경쟁자", "업계 경쟁", "경쟁 업체"]
-        technical_analysis_keywords = ["기술적", "기술적분석", "차트", "차트분석", "기술분석", "매매신호", "기술지표", "트레이딩"]
+        technical_analysis_keywords = ["기술적분석", "차트분석", "패턴분석", "추세추종"]
 
         if technical_analysis_only:
             logger.info("[SummarizerAgent] 기술적 분석 섹션만 생성하는 테스트 모드로 실행됩니다.")
@@ -325,8 +325,8 @@ class SummarizerAgent(BaseAgent):
             formatted_report_docs = self._format_documents_for_section(current_section_company_report)
             formatted_telegram_msgs = self._format_telegram_messages_for_section(current_section_telegram_msgs)
 
-            # 기술적 분석 섹션인지 확인
-            is_technical_analysis_section = any(keyword in current_section_title.lower() for keyword in technical_analysis_keywords)
+            # 기술적 분석 섹션인지 확인 (공백 제거하여 비교)
+            is_technical_analysis_section = any(keyword in current_section_title.lower().replace(" ", "") for keyword in technical_analysis_keywords)
 
             if is_technical_analysis_section:
                 # 기술적 분석 섹션은 기술적 분석 데이터만 사용 (토큰 절약)
@@ -345,8 +345,8 @@ class SummarizerAgent(BaseAgent):
                     continue
                 combined_context_for_current_section = f"{formatted_report_docs}\n\n{formatted_telegram_msgs}\n\n{other_agents_context_str}"
 
-            # 경쟁사 목차이면, 경쟁사의 최근 분기별 재무데이터 추가.
-            if any(keyword in current_section_title.lower() for keyword in competitor_keywords):
+            # 경쟁사 목차이면, 경쟁사의 최근 분기별 재무데이터 추가. (공백 제거하여 비교)
+            if any(keyword in current_section_title.lower().replace(" ", "") for keyword in competitor_keywords):
                 logger.info("[SummarizerAgent] 경쟁사 목차 - 경쟁사의 최근 분기별 재무데이터 추가")
                 formatted_data = self._format_competitor_financial_data(competitors_infos)
                 combined_context_for_current_section += f"\n<경쟁사 분기별 재무데이터>\n{formatted_data}\n</경쟁사 분기별 재무데이터>"
