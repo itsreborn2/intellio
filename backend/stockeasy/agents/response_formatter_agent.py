@@ -1115,9 +1115,6 @@ class ResponseFormatterAgent(BaseAgent):
 
         # 입력 데이터 검증 및 로깅
         logger.info(f"[섹션처리시작] 섹션 '{section_title}' 처리 시작")
-        logger.debug(f"[섹션데이터검증] section_data 키들: {list(section_data.keys()) if section_data else 'None'}")
-        logger.debug(f"[섹션데이터검증] summary_by_section에 '{section_title}' 존재 여부: {section_title in summary_by_section if section_title else False}")
-        logger.debug(f"[섹션데이터검증] 섹션 내용 길이: {len(summary_by_section.get(section_title, '')) if section_title else 0}자")
 
         if not section_title:
             logger.warning("ResponseFormatterAgent (async): 목차에 제목 없는 섹션 데이터가 있습니다.")

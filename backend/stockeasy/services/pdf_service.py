@@ -830,7 +830,6 @@ class PDFService:
             plt.savefig(buffer, format="png", dpi=300, bbox_inches="tight", facecolor="white", edgecolor="none")
             buffer.seek(0)
 
-            logger.debug(f"바 차트 이미지 메모리 버퍼 생성 완료, 크기: {len(buffer.getvalue())} bytes")
             return buffer
         except Exception as e:
             logger.error(f"바 차트 이미지 생성 오류: {str(e)}")
@@ -1379,7 +1378,6 @@ class PDFService:
                     try:
                         # 문자열 날짜 형식 (YYYY-MM-DD)
                         date_obj = pd.to_datetime(time_str, format="%Y-%m-%d")
-                        logger.debug(f"기술적지표 날짜 변환 성공: {time_str} -> {date_obj}")
                     except Exception as date_error:
                         logger.warning(f"기술적지표 날짜 변환 실패: {time_str}, 오류: {date_error}")
                         # 다른 형식으로 시도

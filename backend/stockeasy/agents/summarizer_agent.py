@@ -60,10 +60,7 @@ class SummarizerAgent(BaseAgent):
         # 단순 패턴들 먼저 제거 (괄호 없는 경우)
         for keyword in remove_keywords:
             text = text.replace(f"<{keyword}>", "")
-            text = text.replace(f"({keyword})", "")
             text = text.replace(f"{keyword};", "")
-            text = text.replace(f", {keyword})", "")
-            text = text.replace(f"; {keyword})", "")
             text = text.replace(f", {keyword}", "")
             text = text.replace(f"; {keyword}", "")
 
@@ -95,6 +92,9 @@ class SummarizerAgent(BaseAgent):
 
         # 괄호로 둘러싸인 모든 패턴 처리
         text = re.sub(r"\(([^)]+)\)", process_parentheses_content, text)
+
+        # 빈 괄호 패턴 제거 (괄호만 남은 경우)
+        text = re.sub(r"\(\s*\)", "", text)
 
         # # 연속된 공백 정리 (줄바꿈은 보존하고 연속된 스페이스와 탭만 제거)
         # text = re.sub(r"[ \t]+", " ", text)  # 스페이스와 탭만 하나로 정리

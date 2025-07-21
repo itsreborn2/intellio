@@ -844,7 +844,6 @@ def reconstruct_text_with_merged_tables(original_text: str, merged_tables: list)
 
             # 이미 처리된 병합된 테이블인 경우 해당 영역을 제거만 함
             if merged_table_idx in processed_merged_tables:
-                logger.debug(f"원본 테이블 {original_table_order} 영역 제거 (이미 병합됨)")
                 # 해당 테이블 영역을 빈 공간으로 대체
                 result_lines[start_idx : end_idx + 1] = []
                 continue
