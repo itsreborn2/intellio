@@ -29,7 +29,13 @@ from common.services.tavily import TavilyService
 from common.utils.util import extract_json_from_text, remove_json_block
 from stockeasy.agents.base import BaseAgent
 from stockeasy.models.agent_io import QuestionAnalysisResult
-from stockeasy.prompts.question_analyzer_prompts import PROMPT_DYNAMIC_GENERAL_TOC, PROMPT_DYNAMIC_TOC, SYSTEM_PROMPT, format_question_analyzer_prompt
+from stockeasy.prompts.question_analyzer_prompts import (
+    PROMPT_DYNAMIC_GENERAL_TOC,
+    PROMPT_DYNAMIC_TOC,
+    SYSTEM_PROMPT,
+    TECHNICAL_ANALYSIS_SECTION_PROMPT,
+    format_question_analyzer_prompt,
+)
 from stockeasy.services.financial.stock_info_service import StockInfoService
 
 
@@ -720,7 +726,16 @@ class QuestionAnalyzerAgent(BaseAgent):
                     log_message_prefix = "관리자 요청으로 갱신된 " if is_admin_and_prod else ""
                     logger.info(f"{log_message_prefix}최근 이슈 요약을 캐시에 저장 (만료: {expire_time}초): {cache_key}")
 
-                final_report_toc = await self.generate_dynamic_toc(query, recent_issues_summary, user_id)
+                # 기술적 분석 결과에서 신규상장종목 여부 확인
+                is_new_listing = False
+                technical_analysis_result = state.get("agent_results", {}).get("technical_analyzer", {}).get("data", {})
+                if technical_analysis_result:
+                    is_new_listing = technical_analysis_result.get("is_new_listing", False)
+                    logger.info(f"기술적 분석 결과에서 신규상장종목 여부 확인: {is_new_listing}")
+                else:
+                    logger.info("기술적 분석 결과를 찾을 수 없음, 일반 종목으로 처리")
+
+                final_report_toc = await self.generate_dynamic_toc(query, recent_issues_summary, user_id, is_new_listing)
                 return {"recent_issues_summary": recent_issues_summary, "final_report_toc": final_report_toc.model_dump()}
 
             # 두 작업 병렬 실행
@@ -904,21 +919,33 @@ class QuestionAnalyzerAgent(BaseAgent):
         state["processing_status"]["question_analyzer"] = "failed"
 
     # 동적 목차 생성 함수 추가
-    async def generate_dynamic_toc(self, query: str, recent_issues_summary: str, user_id: str) -> DynamicTocOutput:
+    async def generate_dynamic_toc(self, query: str, recent_issues_summary: str, user_id: str, is_new_listing: bool = False) -> DynamicTocOutput:
         """
         사용자의 질문과 최근 이슈 요약을 바탕으로 동적인 목차를 생성하는 함수
 
         Args:
             query (str): 사용자의 초기 질문
             recent_issues_summary (str): 최근 이슈 요약
+            user_id (str): 사용자 ID
+            is_new_listing (bool): 신규상장종목 여부
 
         Returns:
             DynamicTocOutput: 생성된 목차 구조
         """
-        logger.info("\n📋 동적 목차 생성 중...")
+        logger.info(f"\n📋 동적 목차 생성 중... (신규상장종목: {is_new_listing})")
+
+        # 신규상장종목 여부에 따라 기술적 분석 섹션 포함/제외
+        if is_new_listing:
+            # 신규상장종목의 경우 기술적 분석 섹션 제외
+            technical_analysis_section = ""
+            logger.info("신규상장종목: 기술적 분석 섹션 제외")
+        else:
+            # 일반 종목의 경우 기술적 분석 섹션 포함
+            technical_analysis_section = TECHNICAL_ANALYSIS_SECTION_PROMPT
+            logger.info("일반 종목: 기술적 분석 섹션 포함")
 
         prompt_template = ChatPromptTemplate.from_template(PROMPT_DYNAMIC_TOC).partial(
-            query=query, recent_issues_summary=recent_issues_summary, today_date=datetime.now().strftime("%Y-%m-%d")
+            query=query, recent_issues_summary=recent_issues_summary, today_date=datetime.now().strftime("%Y-%m-%d"), technical_analysis_section=technical_analysis_section
         )
         formatted_prompt = prompt_template.format_prompt()
 

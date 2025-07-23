@@ -114,38 +114,45 @@ class TechnicalAnalyzerAgent(BaseAgent):
             async with self:
                 technical_analysis_result = await self._perform_technical_analysis(stock_code, stock_name, query, user_id)
 
-            # 차트 컴포넌트 생성 및 스트리밍 전송
-            preliminary_components = await self._create_preliminary_chart_components(technical_analysis_result, stock_code, stock_name)
+            # 신규상장종목이 아닌 경우에만 차트 컴포넌트 생성 및 스트리밍 전송
+            preliminary_components = None
+            if not technical_analysis_result.get("is_new_listing", False):
+                preliminary_components = await self._create_preliminary_chart_components(technical_analysis_result, stock_code, stock_name)
 
             # preliminary_chart_callback으로 즉시 전송
             send_preliminary_chart = state.get("send_preliminary_chart")
-            logger.info(
-                f"preliminary_chart 전송 시작: send_preliminary_chart={send_preliminary_chart is not None}, preliminary_components={len(preliminary_components) if preliminary_components else 0}개"
-            )
 
-            if send_preliminary_chart and preliminary_components:
-                try:
-                    message = f"📊 {stock_name}의 기술적 분석 차트가 준비되었습니다. 추가 분석을 진행하는 동안 차트를 먼저 확인해보세요."
-                    elapsed_time = (datetime.now() - start_time).total_seconds()
+            # 신규상장종목이 아니고 preliminary_components가 있을 때만 전송
+            if not technical_analysis_result.get("is_new_listing", False):
+                logger.info(
+                    f"preliminary_chart 전송 시작: send_preliminary_chart={send_preliminary_chart is not None}, preliminary_components={len(preliminary_components) if preliminary_components else 0}개"
+                )
 
-                    # 종목 기본 정보도 함께 전송 (이미 수집한 데이터 재사용)
-                    stock_info = technical_analysis_result.get("stock_info", {})
-                    # preliminary_chart_callback 호출 (event: preliminary_chart 형태로 전송)
-                    success = await send_preliminary_chart(preliminary_components, message, elapsed_time, stock_info)
+                if send_preliminary_chart and preliminary_components:
+                    try:
+                        message = f"📊 {stock_name}의 기술적 분석 차트가 준비되었습니다. 추가 분석을 진행하는 동안 차트를 먼저 확인해보세요."
+                        elapsed_time = (datetime.now() - start_time).total_seconds()
 
-                    if success:
-                        logger.info(f"preliminary_chart 이벤트 전송 완료: {stock_name}({stock_code})")
-                    else:
-                        logger.warning(f"preliminary_chart 이벤트 전송 실패: {stock_name}({stock_code})")
+                        # 종목 기본 정보도 함께 전송 (이미 수집한 데이터 재사용)
+                        stock_info = technical_analysis_result.get("stock_info", {})
+                        # preliminary_chart_callback 호출 (event: preliminary_chart 형태로 전송)
+                        success = await send_preliminary_chart(preliminary_components, message, elapsed_time, stock_info)
 
-                except Exception as stream_error:
-                    logger.error(f"preliminary_chart 이벤트 전송 중 오류: {str(stream_error)}", exc_info=True)
-                    # 전송 실패해도 계속 진행
+                        if success:
+                            logger.info(f"preliminary_chart 이벤트 전송 완료: {stock_name}({stock_code})")
+                        else:
+                            logger.warning(f"preliminary_chart 이벤트 전송 실패: {stock_name}({stock_code})")
+
+                    except Exception as stream_error:
+                        logger.error(f"preliminary_chart 이벤트 전송 중 오류: {str(stream_error)}", exc_info=True)
+                        # 전송 실패해도 계속 진행
+                else:
+                    if not send_preliminary_chart:
+                        logger.warning("send_preliminary_chart 콜백 함수가 None입니다.")
+                    if not preliminary_components:
+                        logger.warning("preliminary_components가 비어있습니다.")
             else:
-                if not send_preliminary_chart:
-                    logger.warning("send_preliminary_chart 콜백 함수가 None입니다.")
-                if not preliminary_components:
-                    logger.warning("preliminary_components가 비어있습니다.")
+                logger.info(f"신규상장종목 {stock_name}({stock_code}): preliminary_chart 전송 스킵")
 
             # 결과를 상태에 저장
             state["agent_results"] = state.get("agent_results", {})
@@ -155,7 +162,7 @@ class TechnicalAnalyzerAgent(BaseAgent):
                 "data": technical_analysis_result,
                 "error": None,
                 "execution_time": (datetime.now() - start_time).total_seconds(),
-                "preliminary_sent": bool(send_preliminary_chart and preliminary_components),
+                "preliminary_sent": bool(send_preliminary_chart and preliminary_components and not technical_analysis_result.get("is_new_listing", False)),
                 "metadata": {"stock_code": stock_code, "stock_name": stock_name, "analysis_date": datetime.now()},
             }
 
@@ -214,6 +221,29 @@ class TechnicalAnalyzerAgent(BaseAgent):
         chart_data = await self._fetch_chart_data(stock_code, period="2y", interval="1d")
         if not chart_data:
             raise Exception("주가 데이터를 가져올 수 없습니다.")
+
+        # 신규상장종목 체크: 일봉 데이터가 20개 미만이면 기술적 분석 스킵
+        if len(chart_data) < 20:
+            logger.info(f"신규상장종목으로 판단: 일봉 {len(chart_data)}개 < 20개, 기술적 분석 스킵")
+            return {
+                "stock_code": stock_code,
+                "stock_name": stock_name,
+                "analysis_date": datetime.now(),
+                "current_price": float(chart_data[-1]["close"]) if chart_data else 0.0,
+                "stock_info": await self._fetch_stock_info(stock_code),
+                "chart_patterns": {},
+                "chart_data": chart_data,
+                "chart_indicators_data": {},
+                "supply_demand_data": None,
+                "technical_indicators": {},
+                "trading_signals": {},
+                "market_sentiment": {},
+                "rs_data": None,
+                "market_indices": None,
+                "summary": f"{stock_name}은 신규상장종목으로 일봉 데이터가 부족하여 기술적 분석을 수행하지 않습니다.",
+                "recommendations": ["신규상장종목으로 충분한 데이터 축적 후 분석을 권장합니다."],
+                "is_new_listing": True,  # 신규상장 여부 플래그 추가
+            }
 
         # 3. 수급 데이터 수집
         supply_demand_data = await self._fetch_supply_demand_data(stock_code)
