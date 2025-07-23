@@ -1,5 +1,4 @@
-// frontend/stockeasy/app/trend-following/components/SectorLeaderSection.tsx
-'use client';
+ 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
 import Papa from 'papaparse';

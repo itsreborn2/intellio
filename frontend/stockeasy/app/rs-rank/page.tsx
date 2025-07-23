@@ -13,7 +13,11 @@ import TableCopyButton from '../components/TableCopyButton';
 import { GuideTooltip } from 'intellio-common/components/ui/GuideTooltip';
 import { CheckIcon } from '@heroicons/react/24/solid'; // CheckIcon import 추가
 import { CheckCircleIcon } from '@heroicons/react/24/solid'; // CheckCircleIcon 추가
+import { StarIcon } from '@heroicons/react/24/solid'; // 즐겨찾기 별표 아이콘 추가
+import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'; // 빈 별표 아이콘 추가
 import MTTtopchart from './MTTtopchart'; // MTT 상위 차트 컴포넌트 추가
+// RS 즐겨찾기 API 함수들 import
+import { getRSFavorites, toggleRSFavorite, getRSFavoriteStockCodes, RSFavoriteResponse } from '../utils/rsFavoritesApi';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -107,6 +111,9 @@ export default function RSRankPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [sortKey, setSortKey] = useState<string>('RS');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  // 메인 탭 상태 추가 ('rs-rank', 'rs-chart', 'mtt-chart')
+  const [activeTab, setActiveTab] = useState<'rs-rank' | 'rs-chart' | 'mtt-chart'>('rs-rank');
+  // 기존 차트 탭 상태 유지 ('rs' | 'mtt')
   const [chartTab, setChartTab] = useState<'rs' | 'mtt'>('rs');
   const rsTableRef = useRef<HTMLDivElement>(null);
   const rsHeaderRef = useRef<HTMLDivElement>(null);
@@ -135,6 +142,18 @@ export default function RSRankPage() {
   const [chartRsValues, setChartRsValues] = useState<string[]>(Array.from({length: 21}, () => ''));
   const [kospiIndexData, setKospiIndexData] = useState<CandleData[]>([]);
   const [kosdaqIndexData, setKosdaqIndexData] = useState<CandleData[]>([]);
+  // 차트 데이터 로드 완료 상태 추가
+  const [isChartDataLoaded, setIsChartDataLoaded] = useState<boolean>(false);
+  
+  // --- RS 즐겨찾기 관련 상태 ---
+  // 사용자의 즐겨찾기 종목 코드 목록
+  const [favoriteStockCodes, setFavoriteStockCodes] = useState<string[]>([]);
+  // 즐겨찾기 데이터 로딩 상태
+  const [favoritesLoading, setFavoritesLoading] = useState<boolean>(false);
+  // 즐겨찾기 토글 중인 종목 코드들 (로딩 상태 관리용)
+  const [togglingStocks, setTogglingStocks] = useState<Set<string>>(new Set());
+  // 즐겨찾기 종목들의 상세 정보
+  const [favoriteStocks, setFavoriteStocks] = useState<RSFavoriteResponse[]>([]);
   
   useEffect(() => {
     // 페이지 로드 시 데이터 로드
@@ -158,10 +177,20 @@ export default function RSRankPage() {
         // CSV 파싱 및 데이터 처리
         const parsedData = parseCSV(csvText);
         
-        setCsvData(parsedData);
+        // 첫 번째 데이터 행에서 저장시간 추출
+        if (parsedData.rows && parsedData.rows.length > 0) {
+          const firstRow = parsedData.rows[0];
+          const saveTime = firstRow['저장시간'];
+          if (saveTime) {
+            setUpdateDate(saveTime);
+          }
+        }
         
-        // RS 순위 데이터 로드 후 차트 데이터 로드
-        await loadAllChartData(parsedData);
+        setCsvData(parsedData);
+
+        // 52주 신고가/신저가 데이터 로드
+        loadHighData(parsedData);
+        
       } catch (err) {
         console.error('RS 순위 데이터 로드 오류:', err);
         setError(`데이터를 로드하는데 실패했습니다: ${err instanceof Error ? err.message : '알 수 없는 오류'}`);
@@ -170,90 +199,20 @@ export default function RSRankPage() {
       }
     };
     
-    const loadHighData = async () => {
+    const loadHighData = async (parsedData: CSVData) => {
       setHighDataLoading(true);
       setHighDataError(null);
       
       try {
-        // 로컬 캐시 파일에서 직접 로드
-        try {
-          // 로컬 캐시 파일 경로
-          const cacheFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv'; // stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv 파일만 사용하도록 경로 수정
-          // const rsDataFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv'; // RS 데이터 파일 로드 로직 제거
-          
-          // 로컬 캐시 파일 로드
-          const response = await fetch(cacheFilePath, { cache: 'no-store' });
-          
-          if (!response.ok) {
-            throw new Error(`캐시 파일 로드 실패: ${response.status}`);
-          }
-          
-          const csvText = await response.text();
-          
-          // RS 데이터 파일 로드 로직 제거
-          // const rsResponse = await fetch(rsDataFilePath, { cache: 'no-store' });
-          // 
-          // if (!rsResponse.ok) {
-          //   console.error(`RS 데이터 파일 로드 실패: ${response.status}`);
-          //   throw new Error(`RS 데이터 파일 로드 실패: ${response.status}`);
-          // }
-          // 
-          // const rsCsvText = await rsResponse.text();
-          
-          // CSV 파싱 및 데이터 처리
-          const parsedData = parseCSV(csvText);
-          // const rsParsedData = parseCSV(rsCsvText); // RS 데이터 파싱 로직 제거
-          
-          // RS 데이터를 종목명으로 매핑하여 빠르게 검색할 수 있도록 Map 생성 로직 제거
-          // const rsDataMap = new Map();
-          // rsParsedData.rows.forEach(row => {
-          //   if (row['종목명']) {
-          //     // 시가총액을 억 단위로 변환 로직 제거
-          //     // let marketCapBillion = 0;
-          //     // if (row['시가총액']) {
-          //     //   const marketCap = String(row['시가총액']).replace(/,/g, '');
-          //     //   marketCapBillion = Math.floor(Number(marketCap) / 100000000); // 억 단위로 변환
-          //     // }
-          //     
-          //     rsDataMap.set(row['종목명'], {
-          //       RS: row['RS'] || '',
-          //       시가총액: row['시가총액'], // 시가총액 직접 사용
-          //       테마명: row['테마명'] || ''
-          //     });
-          //   }
-          // });
-          
-          // 데이터 변환 로직 제거 - stock_1mbee4o9_nonpfiaexi4vin8qcn8bttxz.csv 파일의 데이터를 그대로 사용
-          // const transformedData = {
-          //   headers: parsedData.headers,
-          //   rows: parsedData.rows.map(row => {
-          //     // 종목명으로 RS 데이터 매핑 로직 제거
-          //     // const stockName = row['종목명'];
-          //     // 
-          //     // const rsData = rsDataMap.get(stockName) || { RS: '', 시가총액: '', 테마명: '' }; // 테마명 추가
-          //     // 
-          //     return {
-          //       // stockName: stockName, // 필요시 종목명 컬럼명 변경 가능
-          //       // rs: rsData.RS || row['거래대금'], // RS 데이터가 있으면 사용, 없으면 거래대금 사용
-          //       // 시가총액: rsData.시가총액,
-          //       ...row
-          //     };
-          //   }),
-          //   errors: parsedData.errors
-          // };
-          
-          setHighData(parsedData); // parsedData를 직접 사용
-        } catch (error) {
-          console.error('서버 캐시 파일 로드 실패:', error);
-          throw new Error(`서버 캐시 파일 로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
-        }
-      } catch (err) {
-        console.error('52주 신고가 데이터 로드 오류:', err);
-        setHighDataError(`데이터를 로드하는데 실패했습니다: ${err instanceof Error ? err.message : '알 수 없는 오류'}`);
+        setHighData(parsedData);
+      } catch (error) {
+        console.error('52주 신고/신저가 데이터 처리 오류:', error);
+        setHighDataError(`데이터 처리 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
       } finally {
         setHighDataLoading(false);
       }
     };
+
     
     const loadStockPriceData = async () => {
       try {
@@ -305,57 +264,7 @@ export default function RSRankPage() {
       }
     };
     
-    const loadUpdateDate = async () => {
-      try {
-        // 주식 데이터 CSV 파일에서 마지막 수정 날짜 가져오기
-        const cacheFilePath = '/requestfile/stock-data/stock_1uyjvdmzfxarsxs0jy16fegfrqy9fs8yd.csv';
-        
-        // 헤더만 가져와서 Last-Modified 확인
-        const response = await fetch(cacheFilePath, { cache: 'no-store' });
-        
-        if (!response.ok) {
-          throw new Error(`주식 데이터 파일 로드 실패: ${response.status}`);
-        }
-        
-        // 응답 헤더에서 Last-Modified 값 추출
-        const lastModified = response.headers.get('Last-Modified');
-        
-        if (lastModified) {
-          // Last-Modified 헤더에서 날짜와 시간 추출하여 포맷팅
-          const modifiedDate = new Date(lastModified);
-          const month = modifiedDate.getMonth() + 1; // getMonth()는 0부터 시작하므로 1 더함
-          const day = modifiedDate.getDate();
-          const hours = modifiedDate.getHours();
-          const minutes = modifiedDate.getMinutes();
-          
-          // M/DD HH:MM 형식으로 포맷팅
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-        } else {
-          // Last-Modified 헤더가 없는 경우 현재 날짜/시간 사용
-          const now = new Date();
-          const month = now.getMonth() + 1;
-          const day = now.getDate();
-          const hours = now.getHours();
-          const minutes = now.getMinutes();
-          
-          const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          setUpdateDate(formattedDate);
-          console.warn('주식 데이터 파일의 Last-Modified 헤더를 찾을 수 없어 현재 시간을 사용합니다.');
-        }
-      } catch (err) {
-        console.error('업데이트 날짜 로드 실패:', err);
-        // 오류 발생 시 현재 날짜/시간을 사용
-        const now = new Date();
-        const month = now.getMonth() + 1;
-        const day = now.getDate();
-        const hours = now.getHours();
-        const minutes = now.getMinutes();
-        
-        const formattedDate = `${month}/${day.toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-        setUpdateDate(formattedDate);
-      }
-    };
+    // loadUpdateDate 함수 제거 - loadData에서 CSV 파싱 시 저장시간 추출로 대체
     
     // Helper function to parse various date string formats
     const parseDateString = (dateInput: unknown): Date | null => {
@@ -413,82 +322,74 @@ export default function RSRankPage() {
       return null;
     };
 
-    const loadMarketIndexData = async () => {
-      try {
-        // KOSPI 주간 데이터 로드
-        const kospiResponse = await fetch('/requestfile/market-index/kospiwk.csv', { cache: 'no-store' });
-        if (!kospiResponse.ok) {
-          throw new Error(`KOSPI 데이터 로드 실패: ${kospiResponse.status}`);
-        }
-        const kospiCsvText = await kospiResponse.text();
-        const kospiParsedData = parseCSV(kospiCsvText);
-        // 데이터 형식 변환 (CandleData)
-        const kospiFormattedData = kospiParsedData.rows.reduce((acc, row) => {
-          const rawDateValue = row['날짜'] || row['일자'] || row['Date']; // 다양한 컬럼명 처리
-          const parsedDate = parseDateString(rawDateValue);
+    // loadMarketIndexData 함수 제거 - loadAllChartData에서 동일한 기능 수행
 
-          if (parsedDate) { // parseDateString returns valid Date or null
-            acc.push({
-              time: format(parsedDate, 'yyyy-MM-dd'), // 날짜 형식 통일
-              open: parseFloat(row['시가']),
-              high: parseFloat(row['고가']),
-              low: parseFloat(row['저가']),
-              close: parseFloat(row['종가']),
-              volume: parseFloat(row['거래량'])
-            });
-          } else {
-            if (rawDateValue !== undefined && rawDateValue !== null && String(rawDateValue).trim() !== '') {
-              // parseDateString will log the specific parsing failure
-              // console.warn(`KOSPI: Row skipped due to unparseable date. Input: '${String(rawDateValue)}'`);
-            }
-          }
-          return acc;
-        }, [] as CandleData[]).sort((a: CandleData, b: CandleData) => new Date(a.time).getTime() - new Date(b.time).getTime()); // 타입 명시
-        setKospiIndexData(kospiFormattedData);
-
-        // KOSDAQ 주간 데이터 로드
-        const kosdaqResponse = await fetch('/requestfile/market-index/kosdaqwk.csv', { cache: 'no-store' });
-        if (!kosdaqResponse.ok) {
-          throw new Error(`KOSDAQ 데이터 로드 실패: ${kosdaqResponse.status}`);
-        }
-        const kosdaqCsvText = await kosdaqResponse.text();
-        const kosdaqParsedData = parseCSV(kosdaqCsvText);
-        // 데이터 형식 변환 (CandleData)
-        const kosdaqFormattedData = kosdaqParsedData.rows.reduce((acc, row) => {
-          const rawDateValue = row['날짜'] || row['일자'] || row['Date']; // 다양한 컬럼명 처리
-          const parsedDate = parseDateString(rawDateValue);
-          
-          if (parsedDate) { // parseDateString returns valid Date or null
-            acc.push({
-              time: format(parsedDate, 'yyyy-MM-dd'),
-              open: parseFloat(row['시가']),
-              high: parseFloat(row['고가']),
-              low: parseFloat(row['저가']),
-              close: parseFloat(row['종가']),
-              volume: parseFloat(row['거래량'])
-            });
-          } else {
-            if (rawDateValue !== undefined && rawDateValue !== null && String(rawDateValue).trim() !== '') {
-              // parseDateString will log the specific parsing failure
-              // console.warn(`KOSDAQ: Row skipped due to unparseable date. Input: '${String(rawDateValue)}'`);
-            }
-          }
-          return acc;
-        }, [] as CandleData[]).sort((a: CandleData, b: CandleData) => new Date(a.time).getTime() - new Date(b.time).getTime()); // 타입 명시
-        setKosdaqIndexData(kosdaqFormattedData);
-
-      } catch (err) {
-        console.error('시장 지수 데이터 로드 오류:', err);
-        // 필요에 따라 사용자에게 오류 메시지를 표시할 수 있습니다.
-      }
-    };
-
-    loadData();
-    loadHighData();
-    loadUpdateDate();
-    loadMarketIndexData(); // 시장 지수 데이터 로드 함수 호출
+    loadData(); // CSV 파싱 시 저장시간도 함께 추출
+    // loadMarketIndexData(); // 차트 탭에서만 필요하므로 초기 로드에서 제거
     // loadStockPriceData();
   }, []);
+
+  // RS 즐겨찾기 데이터 로드 함수
+  const loadRSFavorites = useCallback(async () => {
+    try {
+      setFavoritesLoading(true);
+      const favoriteStockCodes = await getRSFavoriteStockCodes();
+      setFavoriteStockCodes(favoriteStockCodes);
+      
+      const favoritesList = await getRSFavorites();
+      setFavoriteStocks(favoritesList);
+    } catch (error) {
+      console.error('즐겨찾기 데이터 로드 실패:', error);
+    } finally {
+      setFavoritesLoading(false);
+    }
+  }, []);
+
+  // RS 즐겨찾기 토글 함수
+  const handleRSFavoriteToggle = async (stockCode: string, stockName: string) => {
+    try {
+      // 토글 중인 상태로 설정
+      setTogglingStocks(prev => new Set(prev).add(stockCode));
+      
+      const result = await toggleRSFavorite({ stock_code: stockCode, stock_name: stockName });
+      
+      if (result.is_favorite) {
+        // 즐겨찾기 추가
+        setFavoriteStockCodes(prev => [...prev, stockCode]);
+      } else {
+        // 즐겨찾기 제거
+        setFavoriteStockCodes(prev => prev.filter(code => code !== stockCode));
+      }
+      
+      // 즐겨찾기 목록 다시 로드
+      await loadRSFavorites();
+    } catch (error) {
+      console.error('즐겨찾기 토글 실패:', error);
+    } finally {
+      // 토글 중인 상태 해제
+      setTogglingStocks(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(stockCode);
+        return newSet;
+      });
+    }
+  };
+
+  // 종목이 즐겨찾기인지 확인하는 함수
+  const isStockFavorite = (stockCode: string): boolean => {
+    return favoriteStockCodes.includes(stockCode);
+  };
+
+  // 즐겨찾기 종목 데이터 가져오기
+  const getFavoriteStocksData = () => {
+    if (!csvData || !csvData.rows) return [];
+    return csvData.rows.filter(row => favoriteStockCodes.includes(row.종목코드));
+  };
+
+  // RS 즐겨찾기 데이터 로드
+  useEffect(() => {
+    loadRSFavorites();
+  }, [loadRSFavorites]);
 
   // 차트 데이터 로드 함수
   const loadAllChartData = async (rsData?: CSVData) => {
@@ -779,10 +680,15 @@ export default function RSRankPage() {
       setKospiIndexData(kospiIndexData);
       setKosdaqIndexData(kosdaqIndexData);
       
+      // 차트 데이터 로드 완료 상태 업데이트
+      setIsChartDataLoaded(true);
+      
     } catch (error) {
       console.error('차트 데이터 로드 오류:', error);
       setChartLoadingArray(Array.from({length: 21}, () => false)); // 크기 21로 변경
       setChartErrorArray(Array.from({length: 21}, () => `데이터 로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`)); // 크기 21로 변경
+      // 오류 발생 시도 로드 완료 상태로 설정 (재시도 방지)
+      setIsChartDataLoaded(true);
     }
   };
 
@@ -906,6 +812,9 @@ export default function RSRankPage() {
     // 기본값은 좌측 정렬
     return 'text-left';
   };
+
+  // --- RS 즐겨찾기 관련 함수들 ---
+
 
   // 시가총액을 억 단위로 포맷팅하는 함수 제거
   // const formatMarketCap = (value: any): string => {
@@ -1259,15 +1168,172 @@ export default function RSRankPage() {
     <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
       {/* 메인 콘텐츠 영역 - 모바일 최적화 */}
       <div className="w-full max-w-[1280px] mx-auto">
-        {/* 테이블 섹션 컨테이너 */}
-        <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden mb-6">
-          {/* RS 순위 테이블 & 52주 신고/신저가 */}
-          <div className="bg-white rounded-md shadow">
-            <div className="p-2 md:p-4"> 
-              <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
-                {/* RS 순위 및 52주 신고/신저가 테이블 영역 */}
-                <div className="flex flex-col gap-6">
+        {/* 탭 메뉴 추가 - ETF-Sector 페이지와 동일한 방식 */}
+        <div className="border-b border-gray-200">
+          <div className="flex w-max space-x-0">
+            <button
+              className={`px-4 py-2 text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${activeTab === 'rs-rank' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+              onClick={() => setActiveTab('rs-rank')}
+              style={{ 
+                color: activeTab === 'rs-rank' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
+                fontWeight: activeTab === 'rs-rank' ? 700 : 400
+              }}
+            >
+              RS 순위
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium border-t border-r border-gray-200 ${activeTab === 'rs-chart' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+              onClick={() => {
+                setActiveTab('rs-chart');
+                // RS 차트 탭을 클릭했을 때만 차트 데이터 로드 (중복 로딩 방지)
+                if (activeTab !== 'rs-chart' && csvData.rows.length > 0 && !isChartDataLoaded) {
+                  loadAllChartData(csvData);
+                }
+              }}
+              style={{ 
+                color: activeTab === 'rs-chart' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
+                fontWeight: activeTab === 'rs-chart' ? 700 : 400
+              }}
+            >
+              RS상위 차트
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${activeTab === 'mtt-chart' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
+              onClick={() => setActiveTab('mtt-chart')}
+              style={{ 
+                color: activeTab === 'mtt-chart' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
+                fontWeight: activeTab === 'mtt-chart' ? 700 : 400
+              }}
+            >
+              MTT 상위 차트
+            </button>
+          </div>
+        </div>
+
+        {/* RS 순위 탭 컨텐츠 */}
+        {activeTab === 'rs-rank' && (
+          <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden mb-6">
+            {/* RS 순위 테이블 & 52주 신고/신저가 */}
+            <div className="bg-white rounded-md shadow">
+              <div className="p-2 md:p-4"> 
+                <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
+                  {/* RS 순위 및 52주 신고/신저가 테이블 영역 */}
+                  <div className="flex flex-col gap-6">
                   
+                  {/* 즐겨찾기 종목 테이블 섹션 */}
+                  {favoriteStockCodes.length > 0 && (
+                    <div className="flex-1 mb-6">
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-sm md:text-base font-semibold" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
+                          <StarIcon className="w-4 h-4 inline mr-2 text-yellow-500" />
+                          즐겨찾기 종목
+                        </h3>
+                        <span className="text-xs text-gray-500">
+                          {favoriteStockCodes.length}개 종목
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+                          <table className="w-full bg-white border border-gray-200 table-fixed">
+                            <thead>
+                              <tr className="bg-yellow-50">
+                                {(() => {
+                                  // 즐겨찾기 테이블용 헤더 순서 정의 - 기존 RS 테이블과 동일
+                                  const favoriteHeaders = ['즐겨찾기', '종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
+                                  const availableHeaders = csvData.headers || [];
+                                  const orderedHeaders = favoriteHeaders.filter(header => 
+                                    header === '즐겨찾기' || availableHeaders.includes(header)
+                                  );
+
+                                  return orderedHeaders.map((header, index) => (
+                                    <th 
+                                      key={header}
+                                      className={`px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer border border-gray-200 text-xs
+                                        ${header === '업종' ? 'text-center' : ''} // 업종 헤더 가운데 정렬
+                                        ${
+                                        // 모바일 화면에서 숨길 컬럼들
+                                        (header === '업종' || header === 'RS_3M' || header === 'RS_6M' || header === '시가총액' || header === '종목코드') ? 'hidden md:table-cell' : 
+                                        ''
+                                      }`}
+                                       style={{
+                                         width: header === '즐겨찾기' ? '50px' :
+                                                header === 'RS' || header === 'RS_1M' || header === 'RS_3M' || header === 'RS_6M' || header === 'MTT' ? '70px' :
+                                                header === '시가총액' || header === '거래대금' ? '110px' :
+                                                header === '종목명' ? '200px' :
+                                                header === '종목코드' ? '90px' :
+                                                header === '업종' ? '150' : // 업종 너비 자동
+                                                'auto',
+                                         minWidth: header === '업종' ? '100px' : undefined, // 업종 최소 너비
+                                         height: '35px', // 높이 적용
+                                       }}
+                                    >
+                                      {header === '즐겨찾기' ? (
+                                        <StarIcon className="w-4 h-4 mx-auto" style={{ color: 'oklch(0.372 0.044 257.287)' }} />
+                                      ) : (
+                                        <span style={{ color: 'oklch(0.372 0.044 257.287)' }}>{formatHeaderName(header)}</span>
+                                      )}
+                                    </th>
+                                  ))
+                                })()}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {getFavoriteStocksData().map((row, rowIndex) => (
+                                <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-yellow-25' : 'bg-white'}>
+                                  {(() => {
+                                    const favoriteHeaders = ['즐겨찾기', '종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
+                                    const availableHeaders = csvData.headers || [];
+                                    const orderedHeaders = favoriteHeaders.filter(header => 
+                                      header === '즐겨찾기' || availableHeaders.includes(header)
+                                    );
+
+                                    return orderedHeaders.map((header, colIndex) => (
+                                      <td 
+                                        key={header}
+                                        className={`py-1 px-1 sm:py-1.5 sm:px-2 border-b border-r ${getCellAlignment(header)} whitespace-nowrap overflow-hidden text-ellipsis text-xs
+                                          ${
+                                          // 모바일 화면에서 숨길 컬럼들 (종목명, RS, RS_1M, MTT는 항상 표시)
+                                          (header === '업종' || header === 'RS_3M' || header === 'RS_6M' || header === '시가총액' || header === '종목코드') ? 'hidden md:table-cell' : 
+                                          ''
+                                        }`}
+                                        style={{ 
+                                          height: '35px', // 높이 적용
+                                        }}
+                                        title={header === '업종' ? row[header] : ''} // 업종 셀에 툴팁 추가
+                                      >
+                                        {header === '즐겨찾기' ? (
+                                          <div className="flex items-center justify-center h-full w-full">
+                                            <button
+                                              onClick={() => handleRSFavoriteToggle(row['종목코드'], row['종목명'])}
+                                              disabled={togglingStocks.has(row['종목코드'])}
+                                              className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+                                            >
+                                              {togglingStocks.has(row['종목코드']) ? (
+                                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
+                                              ) : (
+                                                <StarIcon className="w-4 h-4 text-yellow-500" />
+                                              )}
+                                            </button>
+                                          </div>
+                                        ) : header === 'MTT' ? (
+                                          String(row[header]).toLowerCase() === 'y' ? (
+                                            <div className="flex items-center justify-center h-full w-full">
+                                              <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                                            </div>
+                                          ) : null
+                                        ) : formatCellValue(header, row[header])}
+                                      </td>
+                                    ))
+                                  })()}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* RS 순위 테이블 섹션 */}
                   <div className="flex-1">
                     <div ref={rsHeaderRef} className="flex justify-between items-center mb-2">
@@ -1361,10 +1427,13 @@ export default function RSRankPage() {
                           <thead>
                             <tr className="bg-gray-100">
                               {(() => {
-                                // 표시할 헤더 순서 정의
-                                const desiredOrder = ['종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
-                                // '테마명' 제외하고 원하는 순서대로 정렬
-                                const orderedHeaders = DESIRED_COLUMNS;
+                                // 표시할 헤더 순서 정의 - 즐겨찾기 컴럼 추가
+                                const desiredOrder = ['즐겨찾기', '종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
+                                // CSV 데이터에서 사용 가능한 헤더들만 필터링
+                                const availableHeaders = csvData.headers || [];
+                                const orderedHeaders = desiredOrder.filter(header => 
+                                  header === '즐겨찾기' || availableHeaders.includes(header)
+                                );
 
                                 return orderedHeaders.map((header, index) => (
                                   <th 
@@ -1377,7 +1446,8 @@ export default function RSRankPage() {
                                       ''
                                     }`}
                                     style={{
-                                      width: header === 'RS' || header === 'RS_1M' || header === 'RS_3M' || header === 'RS_6M' || header === 'MTT' ? '70px' :
+                                      width: header === '즐겨찾기' ? '50px' :
+                                             header === 'RS' || header === 'RS_1M' || header === 'RS_3M' || header === 'RS_6M' || header === 'MTT' ? '70px' :
                                              header === '시가총액' || header === '거래대금' ? '110px' :
                                              header === '종목명' ? '200px' :
                                              header === '종목코드' ? '90px' :
@@ -1387,7 +1457,7 @@ export default function RSRankPage() {
                                       // maxWidth: header === '업종' ? '200px' : undefined, // 필요시 최대 너비 설정
                                       height: '35px', // 높이 적용
                                     }}
-                                    onClick={() => requestSort(header)}
+                                    onClick={() => header !== '즐겨찾기' && requestSort(header)}
                                   >
                                     <div className={`flex items-center ${header === '업종' ? 'justify-center' : 'justify-center'}`}> {/* 헤더 텍스트 정렬 */} 
                                       {header === 'RS' ? (
@@ -1470,6 +1540,8 @@ export default function RSRankPage() {
       {formatHeaderName(header)}
     </span>
   </GuideTooltip>
+) : header === '즐겨찾기' ? (
+  <StarIcon className="w-4 h-4" style={{ color: 'oklch(0.372 0.044 257.287)' }} />
 ) : (
   <span style={{ color: 'oklch(0.372 0.044 257.287)' }}>{formatHeaderName(header)}</span>
 )}
@@ -1488,9 +1560,12 @@ export default function RSRankPage() {
                             {currentPageData.map((row, rowIndex) => (
                               <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                                 {(() => {
-                                  // 헤더와 동일한 순서로 셀 렌더링
-                                  const desiredOrder = ['종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
-                                  const orderedHeaders = DESIRED_COLUMNS;
+                                  // 헤더와 동일한 순서로 셀 렌더링 - 즐겨찾기 컴럼 추가
+                                  const desiredOrder = ['즐겨찾기', '종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
+                                  const availableHeaders = csvData.headers || [];
+                                  const orderedHeaders = desiredOrder.filter(header => 
+                                    header === '즐겨찾기' || availableHeaders.includes(header)
+                                  );
 
                                   return orderedHeaders.map((header, colIndex) => (
                                     <td 
@@ -1506,13 +1581,29 @@ export default function RSRankPage() {
                                       }}
                                       title={header === '업종' ? row[header] : ''} // 업종 셀에 툴팁 추가
                                     >
-                                      {header === 'MTT' ? (
-                                        String(row[header]).toLowerCase() === 'y' ? (
-                                          <div className="flex items-center justify-center h-full w-full">
-                                            <CheckCircleIcon className="h-5 w-5 text-green-500" />
-                                          </div>
-                                        ) : null
-                                      ) : formatCellValue(header, row[header])}
+                                       {header === '즐겨찾기' ? (
+                                         <div className="flex items-center justify-center h-full w-full">
+                                           <button
+                                             onClick={() => handleRSFavoriteToggle(row['종목코드'], row['종목명'])}
+                                             disabled={togglingStocks.has(row['종목코드'])}
+                                             className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+                                           >
+                                             {togglingStocks.has(row['종목코드']) ? (
+                                               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+                                             ) : isStockFavorite(row['종목코드']) ? (
+                                               <StarIcon className="w-4 h-4 text-yellow-500" />
+                                             ) : (
+                                               <StarOutlineIcon className="w-4 h-4 text-gray-400" />
+                                             )}
+                                           </button>
+                                         </div>
+                                       ) : header === 'MTT' ? (
+                                         String(row[header]).toLowerCase() === 'y' ? (
+                                           <div className="flex items-center justify-center h-full w-full">
+                                             <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                                           </div>
+                                         ) : null
+                                       ) : formatCellValue(header, row[header])}
                                     </td>
                                   ))
                                 })()}
@@ -1609,40 +1700,15 @@ export default function RSRankPage() {
                   </div>
 
                   
-                </div>
-              </Suspense>
+                  </div>
+                </Suspense>
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* 차트 섹션 탭 메뉴 - 컨테이너 외부로 배치 */}
-        <div className="border-b border-gray-200">
-          <div className="flex w-max space-x-0">
-            <button
-              className={`px-4 py-2 text-sm font-medium rounded-tl-[6px] border-t border-l border-r border-gray-200 ${chartTab === 'rs' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
-              onClick={() => setChartTab('rs')}
-              style={{ 
-                color: chartTab === 'rs' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
-                fontWeight: chartTab === 'rs' ? 700 : 400
-              }}
-            >
-              RS상위 차트
-            </button>
-            <button
-              className={`px-4 py-2 text-sm font-medium rounded-tr-[6px] border-t border-r border-gray-200 ${chartTab === 'mtt' ? 'bg-white font-extrabold text-base' : 'hover:bg-gray-100 border-b'}`}
-              onClick={() => setChartTab('mtt')}
-              style={{ 
-                color: chartTab === 'mtt' ? 'var(--primary-text-color, var(--primary-text-color-fallback))' : 'var(--text-muted-color, var(--text-muted-color-fallback))',
-                fontWeight: chartTab === 'mtt' ? 700 : 400
-              }}
-            >
-              MTT 상위 차트
-            </button>
-          </div>
-        </div>
+        )}
         
         {/* RS상위 차트 탭 컨텐츠 */}
-        {chartTab === 'rs' && (
+        {activeTab === 'rs-chart' && (
           <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
             <div className="p-2 md:p-4">
               <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
@@ -1680,32 +1746,10 @@ export default function RSRankPage() {
         )}
         
         {/* MTT 상위 차트 탭 컨텐츠 */}
-        {chartTab === 'mtt' && (
+        {activeTab === 'mtt-chart' && (
           <div className="bg-white rounded-md shadow p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
             <div className="p-2 md:p-4">
               <Suspense fallback={<div className="h-80 flex items-center justify-center">로딩 중...</div>}>
-                <div className="mb-3 flex justify-between items-center">
-                  <GuideTooltip
-                    title="MTT상위 시장 비교차트"
-                    description={`MTT 상위 종목의 차트를 해당 종목이 속한 시장 지수(KOSPI, KOSDAQ)와 함께, 주봉 기준으로 52주간의 가격 변화를 비교합니다.`}
-                    side="top"
-                    width={360}
-                    collisionPadding={{ left: 260 }}
-                  >
-                    <span className="inline-flex items-center">
-                      <h2 className="text-sm md:text-base font-semibold cursor-help" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }} data-state="closed">
-                        MTT상위 시장 비교차트
-                      </h2>
-                    </span>
-                  </GuideTooltip>
-                  {/* 업데이트 날짜 표시 */}
-                  {updateDate && (
-                    <span className="text-xs mr-2" style={{ fontSize: 'clamp(0.7rem, 0.7vw, 0.7rem)', color: 'var(--text-muted-color, var(--text-muted-color-fallback))' }}>
-                      updated {updateDate}
-                    </span>
-                  )}
-                </div>
-                {/* MTT 상위 차트 컴포넌트 렌더링 */}
                 <MTTtopchart />
               </Suspense>
             </div>

@@ -29,6 +29,28 @@ export default function ETFSectorPage() {
   const [chartError, setChartError] = useState<string | null>(null);
   // 팝업 참조 - 외부 클릭 감지용
   const popupRef = useRef<HTMLDivElement | null>(null);
+  // 파일 목록 상태 - 최초 1회 로드 후 캐시
+  const [fileList, setFileList] = useState<string[]>([]);
+
+  // 컴포넌트 마운트 시 ETF 파일 목록 미리 로드
+  useEffect(() => {
+    const fetchFileList = async () => {
+      try {
+        const listRes = await fetch('/requestfile/etf_industry/file_list.json?t=' + Date.now());
+        if (!listRes.ok) {
+          throw new Error('file_list.json 파일을 찾을 수 없습니다.');
+        }
+        const { files }: { files: string[] } = await listRes.json();
+        setFileList(files);
+        console.log('ETF 파일 목록을 성공적으로 로드했습니다.');
+      } catch (error) {
+        console.error('ETF 파일 목록 로드 오류:', error);
+        // 필요시 사용자에게 오류를 알리는 상태 설정
+      }
+    };
+
+    fetchFileList();
+  }, []); // 빈 의존성 배열로 마운트 시 한 번만 실행
 
   // ETF 차트 데이터 로드 함수
   const loadETFChartData = async (code: string, name: string) => {
@@ -39,22 +61,14 @@ export default function ETFSectorPage() {
     console.log(`ETF 차트 데이터 로드 시도 - 코드: ${code}, 이름: ${name}`);
     
     try {
-      // 사용자가 확인한 정확한 경로 패턴 사용
-      const chartFilePath = `/requestfile/etf_industry/${code}_${encodeURIComponent(name.replace(/\//g, '-'))}_*.csv`;
-      console.log(`실제 파일 패턴: ${chartFilePath}`);
-      
-      // IndustryCharts처럼 file_list.json 가져와서 해당 코드를 가진 파일 찾기
-      const listRes = await fetch('/requestfile/etf_industry/file_list.json?t=' + Date.now());
-      
-      if (!listRes.ok) {
-        throw new Error('file_list.json 파일을 찾을 수 없습니다.');
+      if (fileList.length === 0) {
+        throw new Error('ETF 파일 목록이 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요.');
       }
-      
-      const { files }: { files: string[] } = await listRes.json();
-      console.log('찾은 파일 목록:', files);
-      
+
+      console.log('캐시된 파일 목록 사용:', fileList);
+
       // 코드로 시작하는 파일 찾기
-      const matchingFile = files.find(filename => filename.startsWith(`${code}_`));
+      const matchingFile = fileList.find(filename => filename.startsWith(`${code}_`));
       
       if (!matchingFile) {
         throw new Error(`코드 ${code}에 해당하는 차트 파일을 찾을 수 없습니다.`);

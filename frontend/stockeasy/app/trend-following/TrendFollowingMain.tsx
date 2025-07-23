@@ -1,7 +1,9 @@
 // trend-following 페이지 전체 레이아웃 및 섹션 컴포넌트 배치 (임시)
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // useRef 추가
+import { X } from 'lucide-react'; // X 아이콘 추가
+import ChartComponent from '../components/ChartComponent'; // 차트 컴포넌트 추가
 import Papa from 'papaparse';
 import MarketSignalSection from './components/MarketSignalSection';
 import SectorLeaderSection from './components/SectorLeaderSection';
@@ -36,6 +38,21 @@ interface BreakoutData {
   [key: string]: string | undefined;
 }
 
+// ETF 차트 데이터 타입 정의 (etf-sector/page.tsx와 동일)
+interface ETFChartData {
+  code: string;
+  name: string;
+  chartData: any[];
+}
+
+// 행 위치 정보를 위한 인터페이스 (etf-sector/page.tsx와 동일)
+interface RowPosition {
+  bottom: number;
+  top: number;
+  left: number;
+  width: number;
+}
+
 export default function TrendFollowingMain() {
   // 탭 선택 상태 관리 ("trend": 추세추종, "monitor": 시장지표)
   const [activeTab, setActiveTab] = useState<'trend' | 'monitor'>('trend');
@@ -53,6 +70,16 @@ export default function TrendFollowingMain() {
   const [breakoutFailData, setBreakoutFailData] = useState<BreakoutData[]>([]);
   const [breakoutLoading, setBreakoutLoading] = useState<boolean>(true);
   const [breakoutError, setBreakoutError] = useState<string | null>(null);
+
+  // --- 차트 팝업 관련 상태 (etf-sector/page.tsx에서 가져옴) ---
+  const [showChartPopup, setShowChartPopup] = useState<boolean>(false);
+  const [selectedETF, setSelectedETF] = useState<{code?: string; name?: string} | null>(null);
+  const [etfChartData, setETFChartData] = useState<any[]>([]);
+  const [isChartLoading, setIsChartLoading] = useState<boolean>(false);
+  const [chartError, setChartError] = useState<string | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const [fileList, setFileList] = useState<string[]>([]);
+  const [rowPosition, setRowPosition] = useState<RowPosition | null>(null);
   
   // breakout.csv 데이터 로드 (최초 마운트 시 한 번만 실행)
   useEffect(() => {
@@ -153,6 +180,152 @@ export default function TrendFollowingMain() {
       setBreakoutFailData([]);
     }
   }, [allBreakoutData]);
+
+  // --- 차트 팝업 관련 로직 (etf-sector/page.tsx에서 가져옴) ---
+
+  // 컴포넌트 마운트 시 ETF 파일 목록 미리 로드
+  useEffect(() => {
+    const fetchFileList = async () => {
+      try {
+        const listRes = await fetch('/requestfile/etf_industry/file_list.json?t=' + Date.now());
+        if (!listRes.ok) {
+          throw new Error('file_list.json 파일을 찾을 수 없습니다.');
+        }
+        const { files }: { files: string[] } = await listRes.json();
+        setFileList(files);
+      } catch (error) {
+        console.error('ETF 파일 목록 로드 오류:', error);
+      }
+    };
+
+    fetchFileList();
+  }, []);
+
+  // ETF 차트 데이터 로드 함수
+  const loadETFChartData = async (code: string, name: string) => {
+    setIsChartLoading(true);
+    setChartError(null);
+    setETFChartData([]);
+    
+    try {
+      if (fileList.length === 0) {
+        throw new Error('ETF 파일 목록이 아직 로드되지 않았습니다.');
+      }
+
+      const matchingFile = fileList.find(filename => filename.startsWith(`${code}_`));
+      
+      if (!matchingFile) {
+        throw new Error(`코드 ${code}에 해당하는 차트 파일을 찾을 수 없습니다.`);
+      }
+      
+      const response = await fetch(`/requestfile/etf_industry/${matchingFile}?t=${Date.now()}`, { cache: 'no-store' });
+      
+      if (!response.ok) {
+        throw new Error(`차트 데이터 로드 실패 (${response.status})`);
+      }
+      
+      const csvText = await response.text();
+      
+      if (!csvText || csvText.trim().length === 0) {
+        throw new Error('비어있는 CSV 파일');
+      }
+      
+      const parsedData = parseChartData(csvText);
+      
+      if (parsedData && parsedData.length > 0) {
+        setETFChartData(parsedData);
+      } else {
+        throw new Error('파싱된 데이터가 비어 있습니다.');
+      }
+    } catch (error: any) {
+      console.error('ETF 차트 데이터 로드 오류:', error);
+      setChartError(`차트 데이터를 불러오는 중 오류가 발생했습니다: ${error.message || ''}`);
+      setETFChartData([]);
+    } finally {
+      setIsChartLoading(false);
+    }
+  };
+
+  // CSV 차트 데이터 파싱 함수
+  const parseChartData = (csvText: string) => {
+    const rows = csvText.trim().split('\n');
+    const headers = rows[0].split(',');
+    const candleData = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i].split(',');
+      if (row.length < 6) continue;
+      const time = row[0].trim();
+      const open = parseFloat(row[1]);
+      const high = parseFloat(row[2]);
+      const low = parseFloat(row[3]);
+      const close = parseFloat(row[4]);
+      const volume = parseFloat(row[5]);
+      if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) continue;
+      candleData.push({ time, open, high, low, close, volume });
+    }
+    return candleData.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+  };
+
+  // ETF 클릭 이벤트 핸들러
+  const handleETFClick = (code: string, name: string, position?: RowPosition) => {
+    setSelectedETF({ code, name });
+    if (position) {
+      setRowPosition(position);
+    } else {
+      setRowPosition(null);
+    }
+    loadETFChartData(code, name);
+    setShowChartPopup(true);
+  };
+
+  // 팝업 닫기 핸들러
+  const handleClosePopup = () => {
+    setShowChartPopup(false);
+    setSelectedETF(null);
+    setETFChartData([]);
+  };
+  
+  // 팝업 위치 계산 함수
+  const calculatePopupPosition = (position: RowPosition | null) => {
+    if (!position) return {
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      maxWidth: '600px'
+    };
+    
+    const popupHeight = 350;
+    const bottomMargin = 20;
+    const viewportHeight = window.innerHeight;
+    const isNearBottom = position.bottom + popupHeight > viewportHeight - bottomMargin;
+    
+    return {
+      top: isNearBottom ? `${position.top - popupHeight - 10}px` : `${position.bottom + 10}px`,
+      left: `${position.left}px`,
+      transform: 'none',
+      maxWidth: `${position.width}px`
+    };
+  };
+
+  // 외부 클릭 감지 핸들러
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
+        handleClosePopup();
+      }
+    };
+    
+    if (showChartPopup) {
+      setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 100);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showChartPopup]);
+
   return (
     <div className="flex-1 p-0 sm:p-2 md:p-4 overflow-auto w-full">
       <div className="w-full max-w-[1280px] mx-auto">
@@ -223,12 +396,12 @@ export default function TrendFollowingMain() {
             </div>
             <div className="mb-2 md:mb-4">
               <div className="bg-white rounded-[6px] shadow p-2 md:p-4 border border-gray-200">
-                <NewSectorEnter />
+                <NewSectorEnter onETFClick={handleETFClick} />
               </div>
             </div>
             <div className="mb-2 md:mb-4">
               <div className="bg-white rounded-[6px] shadow p-2 md:p-4 border border-gray-200">
-                <NewSectorOut />
+                <NewSectorOut onETFClick={handleETFClick} />
               </div>
             </div>
             {/* 52주 신고가 주요 종목 섹션 - rs-rank/page.tsx와 완전히 동일하게 동작 */}
@@ -329,6 +502,60 @@ export default function TrendFollowingMain() {
           </div>
         )}
       </div>
+
+      {/* ETF 차트 팝업 모달 (etf-sector/page.tsx에서 가져옴) */}
+      {showChartPopup && selectedETF && (
+        <div
+          ref={popupRef}
+          className="fixed bg-white rounded-md shadow-lg w-7/12 md:w-2/5 lg:w-1/3 max-w-2xl max-h-[70vh] overflow-hidden flex flex-col z-50"
+          style={{
+            borderRadius: '6px',
+            ...calculatePopupPosition(rowPosition)
+          }}>
+          <div className="flex justify-between items-center px-3 py-2 border-b border-gray-200 bg-gray-100">
+            <h3 className="text-sm font-medium">
+              {selectedETF.name} 
+              {selectedETF.code && (
+                <span className="ml-2 text-xs text-gray-600">({selectedETF.code})</span>
+              )}
+            </h3>
+            <button
+              onClick={handleClosePopup}
+              className="text-gray-400 hover:text-gray-600 focus:outline-none"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          
+          <div className="p-4 overflow-auto flex-grow">
+            {isChartLoading ? (
+              <div className="h-64 flex items-center justify-center">
+                <p className="text-gray-500">차트 데이터 로딩 중...</p>
+              </div>
+            ) : chartError ? (
+              <div className="h-64 flex items-center justify-center">
+                <p className="text-red-500">{chartError}</p>
+              </div>
+            ) : etfChartData.length > 0 ? (
+              <div className="w-full">
+                <ChartComponent 
+                  data={etfChartData} 
+                  title={selectedETF.name} 
+                  subtitle={`(${selectedETF.code})`}
+                  height={210} 
+                  showVolume={true}
+                  showMA20={true}
+                  parentComponent="ETFSector"
+                />
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center">
+                <p className="text-gray-500">차트 데이터가 없습니다.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

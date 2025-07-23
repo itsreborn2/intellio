@@ -16,9 +16,23 @@ interface SectorData {
   '20일 이격': string;
   '돌파/이탈': string;
   '대표종목(RS)': string;
+  '종목코드': string;
 
   // 문자열 키로 액세스할 수 있도록 인덱스 시그니처 추가
   [key: string]: string;
+}
+
+// 행 위치 정보를 위한 인터페이스
+interface RowPosition {
+  bottom: number;
+  top: number;
+  left: number;
+  width: number;
+}
+
+// 컴포넌트 Props 정의
+interface NewSectorOutProps {
+  onETFClick?: (code: string, name: string, position: RowPosition) => void;
 }
 
 // 신호등 색상 값 정의
@@ -76,7 +90,7 @@ interface CSVParseResult {
   errors: any[];
 }
 
-export default function NewSectorOut() {
+export default function NewSectorOut({ onETFClick }: NewSectorOutProps) {
   const [data, setData] = useState<GroupedSectorData>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -224,7 +238,7 @@ export default function NewSectorOut() {
               headerRef={headerContainerRef}
               tableName="신규 이탈 섹터" 
               options={{
-                copyrightText: "© intellio.kr",
+                copyrightText: " intellio.kr",
                 scale: 4
               }}
               updateDateText={updateDate ? `updated ${updateDate}` : undefined}
@@ -257,8 +271,22 @@ export default function NewSectorOut() {
                       
                     return (
                       <tr 
-                        key={`${sector}-${stockIndex}`}
-                        className="hover:bg-gray-50 transition-colors"
+                        key={`${sector}-${stock['종목코드']}-${stockIndex}`}
+                        className="hover:bg-gray-50 transition-colors cursor-pointer"
+                        onClick={(e: React.MouseEvent<HTMLTableRowElement>) => {
+                          if (onETFClick) {
+                            const rowElement = e.currentTarget;
+                            const rowPosition = rowElement.getBoundingClientRect();
+                            const stockCode = stock['종목코드']?.trim() || '';
+                            const stockName = stock['종목명']?.trim() || '';
+                            onETFClick(stockCode, stockName, {
+                              bottom: rowPosition.bottom,
+                              top: rowPosition.top,
+                              left: rowPosition.left,
+                              width: rowPosition.width,
+                            });
+                          }
+                        }}
                       >
                         {showSector && (
                           <td 
