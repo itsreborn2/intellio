@@ -16,8 +16,10 @@ import { CheckCircleIcon } from '@heroicons/react/24/solid'; // CheckCircleIcon 
 import { StarIcon } from '@heroicons/react/24/solid'; // 즐겨찾기 별표 아이콘 추가
 import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'; // 빈 별표 아이콘 추가
 import MTTtopchart from './MTTtopchart'; // MTT 상위 차트 컴포넌트 추가
-// RS 즐겨찾기 API 함수들 import
-import { getRSFavorites, toggleRSFavorite, getRSFavoriteStockCodes, RSFavoriteResponse } from '../utils/rsFavoritesApi';
+// 관심기업(즐겨찾기) API 함수들 import
+import StockFavoritesApi, { StockFavorite, StockFavoriteToggleRequest } from '../utils/stockFavoritesApi';
+// 관심기업(즐겨찾기) Zustand 스토어 import
+import { useStockFavoritesStore } from '../../stores/stockFavoritesStore';
 
 // CSV 파일을 파싱하는 함수 (PapaParse 사용)
 const parseCSV = (csvText: string): CSVData => {
@@ -145,15 +147,19 @@ export default function RSRankPage() {
   // 차트 데이터 로드 완료 상태 추가
   const [isChartDataLoaded, setIsChartDataLoaded] = useState<boolean>(false);
   
-  // --- RS 즐겨찾기 관련 상태 ---
-  // 사용자의 즐겨찾기 종목 코드 목록
-  const [favoriteStockCodes, setFavoriteStockCodes] = useState<string[]>([]);
-  // 즐겨찾기 데이터 로딩 상태
-  const [favoritesLoading, setFavoritesLoading] = useState<boolean>(false);
-  // 즐겨찾기 토글 중인 종목 코드들 (로딩 상태 관리용)
-  const [togglingStocks, setTogglingStocks] = useState<Set<string>>(new Set());
-  // 즐겨찾기 종목들의 상세 정보
-  const [favoriteStocks, setFavoriteStocks] = useState<RSFavoriteResponse[]>([]);
+  // --- 관심기업(즐겨찾기) 관련 상태 (Zustand 스토어 사용) ---
+  // Zustand 스토어에서 관심기업(즐겨찾기) 관련 상태와 액션들을 가져옴
+  const {
+    favoriteStockCodes,
+    favorites: favoriteStocks,
+    isToggling: togglingStocks,
+    isLoading: favoritesLoading,
+    error: favoritesError,
+    loadFavoriteStockCodes,
+    toggleFavorite,
+    isFavorite: isStockFavorite,
+    clearError
+  } = useStockFavoritesStore();
   
   useEffect(() => {
     // 페이지 로드 시 데이터 로드
@@ -329,67 +335,20 @@ export default function RSRankPage() {
     // loadStockPriceData();
   }, []);
 
-  // RS 즐겨찾기 데이터 로드 함수
-  const loadRSFavorites = useCallback(async () => {
-    try {
-      setFavoritesLoading(true);
-      const favoriteStockCodes = await getRSFavoriteStockCodes();
-      setFavoriteStockCodes(favoriteStockCodes);
-      
-      const favoritesList = await getRSFavorites();
-      setFavoriteStocks(favoritesList);
-    } catch (error) {
-      console.error('즐겨찾기 데이터 로드 실패:', error);
-    } finally {
-      setFavoritesLoading(false);
-    }
-  }, []);
-
-  // RS 즐겨찾기 토글 함수
+  // 관심기업(즐겨찾기) 토글 핸들러 함수 (Zustand 스토어의 toggleFavorite 사용)
   const handleRSFavoriteToggle = async (stockCode: string, stockName: string) => {
-    try {
-      // 토글 중인 상태로 설정
-      setTogglingStocks(prev => new Set(prev).add(stockCode));
-      
-      const result = await toggleRSFavorite({ stock_code: stockCode, stock_name: stockName });
-      
-      if (result.is_favorite) {
-        // 즐겨찾기 추가
-        setFavoriteStockCodes(prev => [...prev, stockCode]);
-      } else {
-        // 즐겨찾기 제거
-        setFavoriteStockCodes(prev => prev.filter(code => code !== stockCode));
-      }
-      
-      // 즐겨찾기 목록 다시 로드
-      await loadRSFavorites();
-    } catch (error) {
-      console.error('즐겨찾기 토글 실패:', error);
-    } finally {
-      // 토글 중인 상태 해제
-      setTogglingStocks(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(stockCode);
-        return newSet;
-      });
-    }
+    const toggleData: StockFavoriteToggleRequest = {
+      stock_code: stockCode,
+      stock_name: stockName,
+      category: 'default'
+    };
+    await toggleFavorite(toggleData);
   };
 
-  // 종목이 즐겨찾기인지 확인하는 함수
-  const isStockFavorite = (stockCode: string): boolean => {
-    return favoriteStockCodes.includes(stockCode);
-  };
-
-  // 즐겨찾기 종목 데이터 가져오기
-  const getFavoriteStocksData = () => {
-    if (!csvData || !csvData.rows) return [];
-    return csvData.rows.filter(row => favoriteStockCodes.includes(row.종목코드));
-  };
-
-  // RS 즐겨찾기 데이터 로드
+  // 관심기업(즐겨찾기) 데이터 로드 (페이지 로드 시)
   useEffect(() => {
-    loadRSFavorites();
-  }, [loadRSFavorites]);
+    loadFavoriteStockCodes();
+  }, [loadFavoriteStockCodes]);
 
   // 차트 데이터 로드 함수
   const loadAllChartData = async (rsData?: CSVData) => {
@@ -1221,7 +1180,7 @@ export default function RSRankPage() {
                   <div className="flex flex-col gap-6">
                   
                   {/* 즐겨찾기 종목 테이블 섹션 */}
-                  {favoriteStockCodes.length > 0 && (
+                  {favoriteStockCodes.size > 0 && (
                     <div className="flex-1 mb-6">
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="text-sm md:text-base font-semibold" style={{ color: 'var(--primary-text-color, var(--primary-text-color-fallback))' }}>
@@ -1229,7 +1188,7 @@ export default function RSRankPage() {
                           즐겨찾기 종목
                         </h3>
                         <span className="text-xs text-gray-500">
-                          {favoriteStockCodes.length}개 종목
+                          {favoriteStockCodes.size}개 종목
                         </span>
                       </div>
                       <div className="relative">
@@ -1278,7 +1237,7 @@ export default function RSRankPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {getFavoriteStocksData().map((row, rowIndex) => (
+                              {csvData.rows.filter((row: any) => favoriteStockCodes.has(row['종목코드'])).map((row: any, rowIndex: any) => (
                                 <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-yellow-25' : 'bg-white'}>
                                   {(() => {
                                     const favoriteHeaders = ['즐겨찾기', '종목코드', '종목명', '업종', 'RS', 'RS_1M', 'RS_3M', 'RS_6M', 'MTT', '시가총액'];
@@ -1305,10 +1264,10 @@ export default function RSRankPage() {
                                           <div className="flex items-center justify-center h-full w-full">
                                             <button
                                               onClick={() => handleRSFavoriteToggle(row['종목코드'], row['종목명'])}
-                                              disabled={togglingStocks.has(row['종목코드'])}
+                                              disabled={togglingStocks}
                                               className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
                                             >
-                                              {togglingStocks.has(row['종목코드']) ? (
+                                              {togglingStocks ? (
                                                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
                                               ) : (
                                                 <StarIcon className="w-4 h-4 text-yellow-500" />
@@ -1585,12 +1544,12 @@ export default function RSRankPage() {
                                          <div className="flex items-center justify-center h-full w-full">
                                            <button
                                              onClick={() => handleRSFavoriteToggle(row['종목코드'], row['종목명'])}
-                                             disabled={togglingStocks.has(row['종목코드'])}
+                                              disabled={togglingStocks}
                                              className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
                                            >
-                                             {togglingStocks.has(row['종목코드']) ? (
+                                              {togglingStocks ? (
                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-                                             ) : isStockFavorite(row['종목코드']) ? (
+                                             ) : favoriteStockCodes.has(row['종목코드']) ? (
                                                <StarIcon className="w-4 h-4 text-yellow-500" />
                                              ) : (
                                                <StarOutlineIcon className="w-4 h-4 text-gray-400" />
