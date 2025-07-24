@@ -11,7 +11,6 @@ import StockFavoritesApi, {
   StockFavorite, 
   StockFavoriteCreate, 
   StockFavoriteUpdate,
-  StockFavoriteToggleRequest,
   CategoryInfo,
   StockFavoritesByCategory
 } from '../app/utils/stockFavoritesApi';
@@ -39,7 +38,7 @@ interface StockFavoritesState {
   addFavorite: (favoriteData: StockFavoriteCreate) => Promise<StockFavorite | null>;
   updateFavorite: (favoriteId: number, updateData: StockFavoriteUpdate) => Promise<StockFavorite | null>;
   removeFavorite: (favoriteId: number) => Promise<boolean>;
-  toggleFavorite: (toggleData: StockFavoriteToggleRequest) => Promise<boolean>;
+
   
   checkFavorite: (stockCode: string, category?: string) => Promise<boolean>;
   isFavorite: (stockCode: string, category?: string) => boolean;
@@ -258,56 +257,7 @@ export const useStockFavoritesStore = create<StockFavoritesState>()(
         }
       },
 
-      /**
-       * 관심기업 상태를 토글합니다.
-       * @param toggleData 토글할 종목 정보
-       * @returns 토글 후 즐겨찾기 여부
-       */
-      toggleFavorite: async (toggleData: StockFavoriteToggleRequest) => {
-        set({ isToggling: true, error: null });
-        
-        try {
-          const result = await StockFavoritesApi.toggleFavorite(toggleData);
-          
-          const { favorites, favoriteStockCodes } = get();
-          
-          if (result.is_favorite && result.favorite) {
-            // 추가된 경우
-            const updatedFavorites = [...favorites, result.favorite];
-            const updatedStockCodes = new Set(Array.from(favoriteStockCodes).concat([result.favorite.stock_code]));
-            
-            set({ 
-              favorites: updatedFavorites,
-              favoriteStockCodes: updatedStockCodes
-            });
-          } else {
-            // 제거된 경우
-            const updatedFavorites = favorites.filter(f => 
-              !(f.stock_code === toggleData.stock_code && f.category === (toggleData.category || 'default'))
-            );
-            const updatedStockCodes = new Set(updatedFavorites.map(f => f.stock_code));
-            
-            set({ 
-              favorites: updatedFavorites,
-              favoriteStockCodes: updatedStockCodes
-            });
-          }
-          
-          set({ isToggling: false });
-          
-          // 카테고리 목록도 업데이트
-          get().loadCategories();
-          
-          return result.is_favorite;
-        } catch (error) {
-          console.error('관심기업 토글 실패:', error);
-          set({ 
-            error: '관심기업 상태 변경에 실패했습니다.',
-            isToggling: false 
-          });
-          return false;
-        }
-      },
+
 
       /**
        * 특정 종목이 관심기업에 포함되어 있는지 서버에서 확인합니다.

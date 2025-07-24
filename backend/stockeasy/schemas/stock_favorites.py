@@ -81,50 +81,6 @@ class StockFavoriteResponse(BaseModel):
         }
 
 
-class StockFavoriteToggleRequest(BaseModel):
-    """관심기업(즐겨찾기) 토글 요청 모델"""
-    
-    stock_code: str = Field(..., description="종목 코드", max_length=10)
-    stock_name: Optional[str] = Field(None, description="종목명", max_length=100)
-    category: str = Field(default="default", description="카테고리명", max_length=50)
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "stock_code": "005930",
-                "stock_name": "삼성전자",
-                "category": "default"
-            }
-        }
-
-
-class StockFavoriteToggleResponse(BaseModel):
-    """관심기업(즐겨찾기) 토글 응답 모델"""
-    
-    is_favorite: bool = Field(..., description="즐겨찾기 여부")
-    message: str = Field(..., description="응답 메시지")
-    favorite: Optional[StockFavoriteResponse] = Field(None, description="즐겨찾기 정보 (추가된 경우)")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "is_favorite": True,
-                "message": "관심기업에 추가되었습니다.",
-                "favorite": {
-                    "id": 1,
-                    "user_id": "550e8400-e29b-41d4-a716-446655440000",
-                    "stock_code": "005930",
-                    "stock_name": "삼성전자",
-                    "category": "default",
-                    "display_order": 1,
-                    "memo": None,
-                    "created_at": "2025-07-24T06:00:00Z",
-                    "updated_at": "2025-07-24T06:00:00Z"
-                }
-            }
-        }
-
-
 class CategoryResponse(BaseModel):
     """카테고리 응답 모델"""
     

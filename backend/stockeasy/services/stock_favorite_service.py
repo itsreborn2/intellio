@@ -271,43 +271,7 @@ class StockFavoriteService:
             logger.error(f"관심기업 제거 중 오류: {e}")
             raise
     
-    @staticmethod
-    async def toggle_favorite(
-        db: AsyncSession, 
-        user_id: UUID, 
-        stock_code: str, 
-        stock_name: Optional[str] = None,
-        category: str = "default"
-    ) -> Tuple[bool, Optional[UserStockFavorite]]:
-        """관심기업(즐겨찾기) 상태를 토글합니다.
-        
-        Args:
-            db: 데이터베이스 세션
-            user_id: 사용자 ID
-            stock_code: 종목 코드
-            stock_name: 종목명 (선택사항)
-            category: 카테고리명 (기본값: "default")
-            
-        Returns:
-            (즐겨찾기 여부, 관심기업 객체 또는 None)
-        """
-        try:
-            # 기존 즐겨찾기 확인
-            existing = await StockFavoriteService.check_favorite(db, user_id, stock_code, category)
-            
-            if existing:
-                # 제거
-                await StockFavoriteService.remove_favorite(db, user_id, stock_code, category)
-                return False, None
-            else:
-                # 추가
-                favorite = await StockFavoriteService.add_favorite(db, user_id, stock_code, stock_name, category)
-                return True, favorite
-                
-        except Exception as e:
-            logger.error(f"관심기업 토글 중 오류: {e}")
-            raise
-    
+
     @staticmethod
     async def check_favorite(
         db: AsyncSession, 

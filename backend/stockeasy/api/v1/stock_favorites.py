@@ -20,8 +20,6 @@ from stockeasy.schemas.stock_favorites import (
     StockFavoriteCreate,
     StockFavoriteUpdate,
     StockFavoriteResponse,
-    StockFavoriteToggleRequest,
-    StockFavoriteToggleResponse,
     CategoryResponse,
     StockFavoritesByCategory
 )
@@ -81,7 +79,19 @@ async def get_favorites_by_category(
         for category, favorites in favorites_by_category.items():
             result.append(StockFavoritesByCategory(
                 category=category,
-                favorites=[StockFavoriteResponse.from_attributes(fav) for fav in favorites]
+                favorites=[
+                    StockFavoriteResponse(
+                        id=fav.id,
+                        user_id=fav.user_id,
+                        stock_code=fav.stock_code,
+                        stock_name=fav.stock_name,
+                        category=fav.category,
+                        display_order=fav.display_order,
+                        memo=fav.memo,
+                        created_at=fav.created_at,
+                        updated_at=fav.updated_at
+                    ) for fav in favorites
+                ]
             ))
         
         return result
@@ -160,7 +170,17 @@ async def add_stock_favorite(
             category=favorite_data.category,
             memo=favorite_data.memo
         )
-        return StockFavoriteResponse.from_attributes(favorite)
+        return StockFavoriteResponse(
+            id=favorite.id,
+            user_id=favorite.user_id,
+            stock_code=favorite.stock_code,
+            stock_name=favorite.stock_name,
+            category=favorite.category,
+            display_order=favorite.display_order,
+            memo=favorite.memo,
+            created_at=favorite.created_at,
+            updated_at=favorite.updated_at
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -242,57 +262,6 @@ async def remove_stock_favorite(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="관심기업 제거 중 오류가 발생했습니다."
-        )
-
-
-@stock_favorites_router.post(
-    "/toggle",
-    response_model=StockFavoriteToggleResponse,
-    summary="관심기업 토글",
-    description="관심기업 상태를 토글합니다 (추가/제거)."
-)
-async def toggle_stock_favorite(
-    toggle_data: StockFavoriteToggleRequest,
-    session: Session = Depends(get_current_session),
-    db: AsyncSession = Depends(get_db_async)
-):
-    """관심기업 상태를 토글합니다."""
-    try:
-        is_favorite, favorite = await StockFavoriteService.toggle_favorite(
-            db=db,
-            user_id=session.user_id,
-            stock_code=toggle_data.stock_code,
-            stock_name=toggle_data.stock_name,
-            category=toggle_data.category
-        )
-        
-        if is_favorite:
-            return StockFavoriteToggleResponse(
-                is_favorite=True,
-                message="관심기업에 추가되었습니다.",
-                favorite=StockFavoriteResponse(
-                    id=favorite.id,
-                    user_id=favorite.user_id,
-                    stock_code=favorite.stock_code,
-                    stock_name=favorite.stock_name,
-                    category=favorite.category,
-                    display_order=favorite.display_order,
-                    memo=favorite.memo,
-                    created_at=favorite.created_at,
-                    updated_at=favorite.updated_at
-                ) if favorite else None
-            )
-        else:
-            return StockFavoriteToggleResponse(
-                is_favorite=False,
-                message="관심기업에서 제거되었습니다.",
-                favorite=None
-            )
-    except Exception as e:
-        logger.error(f"관심기업 토글 중 오류: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="관심기업 상태 변경 중 오류가 발생했습니다."
         )
 
 

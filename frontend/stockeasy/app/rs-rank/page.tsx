@@ -17,7 +17,7 @@ import { StarIcon } from '@heroicons/react/24/solid'; // 즐겨찾기 별표 아
 import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'; // 빈 별표 아이콘 추가
 import MTTtopchart from './MTTtopchart'; // MTT 상위 차트 컴포넌트 추가
 // 관심기업(즐겨찾기) API 함수들 import
-import StockFavoritesApi, { StockFavorite, StockFavoriteToggleRequest } from '../utils/stockFavoritesApi';
+import StockFavoritesApi, { StockFavorite } from '../utils/stockFavoritesApi';
 // 관심기업(즐겨찾기) Zustand 스토어 import
 import { useStockFavoritesStore } from '../../stores/stockFavoritesStore';
 
@@ -151,12 +151,13 @@ export default function RSRankPage() {
   // Zustand 스토어에서 관심기업(즐겨찾기) 관련 상태와 액션들을 가져옴
   const {
     favoriteStockCodes,
-    favorites: favoriteStocks,
+    favorites,
     isToggling: togglingStocks,
     isLoading: favoritesLoading,
     error: favoritesError,
     loadFavoriteStockCodes,
-    toggleFavorite,
+    addFavorite,
+    removeFavorite,
     isFavorite: isStockFavorite,
     clearError
   } = useStockFavoritesStore();
@@ -335,20 +336,35 @@ export default function RSRankPage() {
     // loadStockPriceData();
   }, []);
 
-  // 관심기업(즐겨찾기) 토글 핸들러 함수 (Zustand 스토어의 toggleFavorite 사용)
+  // 관심기업(즐겨찾기) 핸들러 함수 (add/remove 방식)
   const handleRSFavoriteToggle = async (stockCode: string, stockName: string) => {
-    const toggleData: StockFavoriteToggleRequest = {
-      stock_code: stockCode,
-      stock_name: stockName,
-      category: 'default'
-    };
-    await toggleFavorite(toggleData);
+    // 현재 즐겨찾기 상태 확인
+    const isCurrentlyFavorite = favoriteStockCodes.has(stockCode);
+    
+    if (isCurrentlyFavorite) {
+      // 이미 즐겨찾기에 있으면 제거
+      // 'default' 카테고리 또는 다른 카테고리에서 해당 종목 코드를 가진 첫 번째 항목을 찾습니다.
+      const favoriteToRemove = favorites.find(f => f.stock_code === stockCode);
+
+      if (favoriteToRemove) {
+        await removeFavorite(favoriteToRemove.id);
+      }
+    } else {
+      // 즐겨찾기에 없으면 추가
+      await addFavorite({
+        stock_code: stockCode,
+        stock_name: stockName,
+        category: 'default' // RS랭킹 화면에서는 'default' 카테고리로 추가
+      });
+    }
   };
 
   // 관심기업(즐겨찾기) 데이터 로드 (페이지 로드 시)
   useEffect(() => {
-    loadFavoriteStockCodes();
-  }, [loadFavoriteStockCodes]);
+    // 전체 즐겨찾기 목록을 로드하여 favorites 배열도 채움
+    const { loadFavoritesByCategory } = useStockFavoritesStore.getState();
+    loadFavoritesByCategory();
+  }, []);
 
   // 차트 데이터 로드 함수
   const loadAllChartData = async (rsData?: CSVData) => {

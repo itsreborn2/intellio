@@ -46,17 +46,7 @@ export interface StockFavoriteUpdate {
   memo?: string;
 }
 
-export interface StockFavoriteToggleRequest {
-  stock_code: string;
-  stock_name?: string;
-  category?: string;
-}
 
-export interface StockFavoriteToggleResponse {
-  is_favorite: boolean;
-  message: string;
-  favorite?: StockFavorite;
-}
 
 export interface CategoryInfo {
   category: string;
@@ -82,7 +72,7 @@ export class StockFavoritesApi {
   static async getFavorites(category?: string): Promise<StockFavorite[]> {
     try {
       const params = category ? { category } : {};
-      const response = await apiClient.get(this.BASE_URL, { params });
+      const response = await apiClient.get(`${this.BASE_URL}/`, { params });
       return response.data;
     } catch (error) {
       console.error('관심기업 목록 조회 실패:', error);
@@ -125,7 +115,7 @@ export class StockFavoritesApi {
    */
   static async addFavorite(favoriteData: StockFavoriteCreate): Promise<StockFavorite> {
     try {
-      const response = await apiClient.post(this.BASE_URL, favoriteData);
+      const response = await apiClient.post(`${this.BASE_URL}/`, favoriteData);
       return response.data;
     } catch (error) {
       console.error('관심기업 추가 실패:', error);
@@ -164,20 +154,7 @@ export class StockFavoritesApi {
     }
   }
 
-  /**
-   * 관심기업 상태를 토글합니다.
-   * @param toggleData 토글할 종목 정보
-   * @returns 토글 결과
-   */
-  static async toggleFavorite(toggleData: StockFavoriteToggleRequest): Promise<StockFavoriteToggleResponse> {
-    try {
-      const response = await apiClient.post(`${this.BASE_URL}/toggle`, toggleData);
-      return response.data;
-    } catch (error) {
-      console.error('관심기업 토글 실패:', error);
-      throw error;
-    }
-  }
+
 
   /**
    * 특정 종목이 관심기업에 포함되어 있는지 확인합니다.

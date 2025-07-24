@@ -31,13 +31,12 @@ class UserStockFavorite(Base):
     stock_code = Column(String(10), nullable=False)
     stock_name = Column(String(100), nullable=True)
     
-    # PM 지시사항에 따른 새로운 필드들
+    # 지시사항에 따른 새로운 필드들
     category = Column(String(50), nullable=False, default='default', comment='사용자 정의 카테고리명 (기본값: "default")')
     display_order = Column(Integer, nullable=False, default=0, comment='카테고리 내 표시 순서')
     memo = Column(Text, nullable=True, comment='사용자 메모')
     
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    # created_at, updated_at은 Base 클래스에서 상속받음
     
     def __repr__(self):
         return f"<UserStockFavorite(id={self.id}, user_id={self.user_id}, stock_code={self.stock_code}, stock_name={self.stock_name}, category={self.category})>"
