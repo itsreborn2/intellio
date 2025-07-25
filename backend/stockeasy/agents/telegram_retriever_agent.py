@@ -260,7 +260,7 @@ class TelegramRetrieverAgent(BaseAgent):
 
             return state
 
-    @async_retry(retries=0, delay=2.0, exceptions=(Exception,))
+    @async_retry(retries=0, delay=1.0, exceptions=(Exception,))
     async def summarize(
         self,
         query: str,
@@ -767,6 +767,29 @@ class TelegramRetrieverAgent(BaseAgent):
             logger.warning(f"시간 가중치 계산 오류: {str(e)}")
             return 0.5  # 오류 시 중간값 반환
 
+    def _calculate_channel_weight(self, channel_id: str) -> float:
+        """
+        특정 채널 기반의 가중치를 계산합니다.
+
+        Args:
+            channel_id: 채널 ID
+
+        Returns:
+            채널 기반 가중치 (0.5 ~ 1.0)
+        """
+        try:
+            # 우선순위 채널 ID (사용자가 직접 관리하는 채널)
+            priority_channel_id = "2487015441"
+
+            if channel_id == priority_channel_id:
+                return 1.0  # 최고 가중치
+            else:
+                return 0.1  # 기본 가중치
+
+        except Exception as e:
+            logger.warning(f"채널 가중치 계산 오류: {str(e)}")
+            return 0.1  # 오류 시 기본값 반환
+
     def _make_search_query(self, query: str, stock_code: Optional[str], stock_name: Optional[str], classification: Dict[str, Any], sector: Optional[str] = None) -> str:
         """
         검색 쿼리를 구성합니다.
@@ -852,12 +875,18 @@ class TelegramRetrieverAgent(BaseAgent):
             unique_securities = list(set(securities_values))
             foreign_filters = {"keywords": {"$in": unique_securities}}
 
+            # 우선순위 채널 필터 준비
+            priority_channel_id = "2487015441"
+            priority_filters = {"channel_id": priority_channel_id}
+
             # 병렬 검색 태스크 준비
             search_tasks = [
                 # 일반 검색
                 semantic_retriever.retrieve(query=search_query, top_k=initial_k),
                 # 외국계 증권사 필터 검색
                 semantic_retriever.retrieve(query=search_query, top_k=initial_k, filters=foreign_filters),
+                # 우선순위 채널 전용 검색 (반드시 포함)
+                semantic_retriever.retrieve(query=search_query, top_k=initial_k, filters=priority_filters),
             ]
 
             # subgroup이 존재하고 비어있지 않을 때만 subgroup 필터 검색 추가
@@ -883,10 +912,11 @@ class TelegramRetrieverAgent(BaseAgent):
             # 결과 분리
             result = search_results[0]  # 일반 검색
             result_foreign = search_results[1]  # 외국계 증권사 검색
-            result_subgroup = search_results[2] if subgroup_task_added else None  # 서브그룹 검색
+            result_priority = search_results[2]  # 우선순위 채널 검색
+            result_subgroup = search_results[3] if subgroup_task_added else None  # 서브그룹 검색
 
             logger.info(
-                f"[병렬검색 완료] 일반: {len(result.documents)}개, 외국계: {len(result_foreign.documents)}개, 서브그룹: {len(result_subgroup.documents) if result_subgroup else 0}개"
+                f"[병렬검색 완료] 일반: {len(result.documents)}개, 외국계: {len(result_foreign.documents)}개, 우선순위채널: {len(result_priority.documents)}개, 서브그룹: {len(result_subgroup.documents) if result_subgroup else 0}개"
             )
 
             # 검색 결과 통합
@@ -907,6 +937,13 @@ class TelegramRetrieverAgent(BaseAgent):
                     combined_documents.append(doc)
                     doc_ids.add(doc_id)
 
+            # 우선순위 채널 검색 결과 추가 (중복 제외)
+            for doc in result_priority.documents:
+                doc_id = f"{doc.metadata.get('channel_id')}_{doc.metadata.get('message_id')}"
+                if doc_id not in doc_ids:
+                    combined_documents.append(doc)
+                    doc_ids.add(doc_id)
+
             # 서브그룹 필터 검색 결과 추가 (중복 제외)
             if result_subgroup:
                 for doc in result_subgroup.documents:
@@ -919,7 +956,7 @@ class TelegramRetrieverAgent(BaseAgent):
                 logger.warning(f"No telegram messages found for query: {search_query}")
                 return []
             logger.info(
-                f"Found {len(combined_documents)} telegram messages after combining results (general: {len(result.documents)}, foreign securities: {len(result_foreign.documents)})"
+                f"Found {len(combined_documents)} telegram messages after combining results (general: {len(result.documents)}, foreign securities: {len(result_foreign.documents)}, priority channel: {len(result_priority.documents)}, subgroup: {len(result_subgroup.documents) if result_subgroup else 0})"
             )
 
             # 중복 메시지 필터링 및 점수 계산
@@ -958,7 +995,7 @@ class TelegramRetrieverAgent(BaseAgent):
             ) as reranker:
                 reranked_results = await reranker.rerank(query=search_query, documents=remove_duplicated_result, top_k=k)
 
-            logger.info(f"리랭킹 완료 - 결과: {len(result.documents)} -> {len(reranked_results.documents)} 문서")
+            logger.info(f"리랭킹 완료 - 결과: {len(remove_duplicated_result)} -> {len(reranked_results.documents)} 문서")
 
             # 종복 제거된 것으로
             for doc in reranked_results.documents:
@@ -1003,9 +1040,14 @@ class TelegramRetrieverAgent(BaseAgent):
 
                 time_weight = self._calculate_time_weight(message_created_at)
 
-                # 최종 점수 = 유사도 * 중요도 * 시간 가중치
-                # final_score = doc.score * importance_score * time_weight
-                final_score = (doc.score * 0.65) + (time_weight * 0.35)
+                # 채널 가중치 계산
+                channel_id = doc_metadata.get("channel_id", "")
+
+                channel_weight = self._calculate_channel_weight(channel_id)
+                logger.info(f"채널 가중치 계산 - 채널 ID: {channel_id}, 가중치: {channel_weight}")
+
+                # 최종 점수 = 검색 점수(60%) + 채널 가중치(20%) + 시간 가중치(20%)
+                final_score = (doc.score * 0.6) + (channel_weight * 0.25) + (time_weight * 0.15)
                 # 메시지 데이터 구성
                 message: RetrievedTelegramMessage = {
                     "content": content,
