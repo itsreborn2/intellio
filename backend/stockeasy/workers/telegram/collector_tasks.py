@@ -60,7 +60,7 @@ class CollectorTask(Task):
         # 현재 시간과 마지막 실행 시간의 차이를 계산
         time_diff = now - self._last_execution_time
         
-        if current_hour >= 17 or current_hour < 7:
+        if current_hour > 19 or current_hour < 7:
             # 17시 ~ 7시: 20분마다 실행
             should_run = time_diff.total_seconds() >= 20 * 60  # 20분
         else:
