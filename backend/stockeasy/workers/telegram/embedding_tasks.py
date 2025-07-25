@@ -70,7 +70,7 @@ class EmbeddingTask(Task):
         time_diff = now - last_execution_with_tz
 
         # 400개 3분. 800개 6분.
-        if current_hour >= 17 or current_hour < 7:
+        if current_hour > 19 or current_hour < 7:
             # 17시 ~ 7시: 20분마다 실행
             should_run = time_diff.total_seconds() >= 30 * 60  # 60분
         else:
